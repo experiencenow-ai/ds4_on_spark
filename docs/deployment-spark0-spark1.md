@@ -49,7 +49,7 @@ If you want repeatable user/dir bring-up via sysusers/tmpfiles, run the `sysuser
 On Spark0:
 
 ```bash
-sudo install -m 0644 /tmp/ds4-systemd/*.service /etc/systemd/system/
+sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
 sudo systemctl daemon-reload
@@ -59,7 +59,7 @@ sudo systemctl start ds4-preflight@spark0.service
 On Spark1:
 
 ```bash
-sudo install -m 0644 /tmp/ds4-systemd/*.service /etc/systemd/system/
+sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 sudo install -m 0640 /tmp/ds4-config/ds4-spark1.env.example /etc/ds4/ds4-spark1.env
 sudo install -m 0640 /tmp/ds4-config/ds4-spark1.yaml.example /etc/ds4/ds4-spark1.yaml
 sudo systemctl daemon-reload
@@ -109,3 +109,4 @@ journalctl -u ds4-preflight@spark0.service -n 200 --no-pager
 - Logging + metrics: `docs/ops-logging-metrics.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=2 readiness checklist: `docs/ops-tp2-readiness.md`
+- Optional Spark standalone systemd: `docs/deployment-spark-standalone-systemd.md`
