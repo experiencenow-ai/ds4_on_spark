@@ -16,9 +16,9 @@ Implication:
 - cuBLASLt should be treated as the “works-first” baseline for GEMM paths on GB10.
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
 
-Next probe step:
+Probe:
 
-- Add a tiny cuBLASLt matmul smoke test that compiles for `sm_121` and runs on Spark0 (kept probe-only).
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
 
 ## CUTLASS
 
@@ -43,4 +43,3 @@ Implication:
 Next probe step:
 
 - Build and run the smallest DeepGEMM example on Spark0, capture exact failure mode, then decide whether to patch arch detection or switch to CUTLASS/cuBLASLt for the early kernels.
-

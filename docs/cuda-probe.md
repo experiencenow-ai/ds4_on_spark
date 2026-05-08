@@ -17,6 +17,7 @@ What it does:
 - Runs:
   - `cuda_device_props` (runtime + device properties)
   - `cuda_sm121_probe` (sanity kernel compiled for `sm_121`)
+  - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
 
 Environment overrides:
 
@@ -30,6 +31,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
+It compiles both `cuda_sm121_probe` and `cuda_cublaslt_smoke` for `sm_121`.
 
 ## Current Spark0 Results (2026-05-08)
 
@@ -43,8 +45,9 @@ Commands run:
 Observed:
 
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
-- `-arch=sm_121` compiles and links
-- Runtime launches a tiny kernel successfully
+- `-arch=sm_121` compiles and links (including `-lcublasLt`)
+- Runtime launches a tiny `sm_121` kernel successfully
+- cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 
 Selected output excerpt:
@@ -54,10 +57,10 @@ cudaDriverGetVersion=13000 cudaRuntimeGetVersion=13000
 cudaGetDeviceCount=1
 device[0]=NVIDIA GB10 cc=12.1 clock_khz=2418000 mem=128518373376
 kernel wrote 0xc0d3cafe
+cuBLASLt sgemm smoke max_abs_err=0
 ```
 
 ## Where The Probe Lives
 
 - Probe sources: `tools/cuda_probe/`
 - Spark runner scripts: `scripts/cuda_probe*_spark0.sh`
-
