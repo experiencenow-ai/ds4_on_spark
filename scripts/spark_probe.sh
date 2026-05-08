@@ -2,8 +2,9 @@
 set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
+SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
 
-ssh "$target" 'set -eu
+ssh $SSH_OPTS "$target" 'set -eu
 echo "== identity =="
 hostname
 id
@@ -28,6 +29,7 @@ nvidia-smi || true
 echo
 echo "== cuda =="
 command -v nvcc >/dev/null 2>&1 && nvcc --version || true
+[ -x /usr/local/cuda/bin/nvcc ] && /usr/local/cuda/bin/nvcc --version || true
 command -v python3 >/dev/null 2>&1 && python3 - <<'"'"'PY'"'"' || true
 try:
     import torch
@@ -43,5 +45,8 @@ echo
 echo "== network =="
 ip addr || true
 ip route || true
+echo
+echo "== storage =="
+df -h / /home || true
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS || true
 '
-
