@@ -74,6 +74,7 @@ class SimConfig:
     hi_burst: int
     promote_ms: float
     adaptive_k: AdaptiveKConfig
+    k_signal: str = "global"
 
 
 @dataclass
@@ -124,6 +125,12 @@ class SimMetrics:
     makespan_ms: float = 0.0
     token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    admitted_tokens: int = 0
+    admitted_tokens_interactive: int = 0
+    admitted_tokens_batch: int = 0
+    dropped_tokens_backpressure: int = 0
+    dropped_tokens_backpressure_interactive: int = 0
+    dropped_tokens_backpressure_batch: int = 0
     task_queue_wait_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
@@ -210,6 +217,14 @@ class SimMetrics:
                 "token_latency_ms": {
                     "interactive": summarize(self.token_lat_ms_interactive),
                     "batch": summarize(self.token_lat_ms_batch),
+                },
+                "tokens": {
+                    "admitted": self.admitted_tokens,
+                    "admitted_interactive": self.admitted_tokens_interactive,
+                    "admitted_batch": self.admitted_tokens_batch,
+                    "dropped_backpressure_all": self.dropped_tokens_backpressure,
+                    "dropped_backpressure_all_interactive": self.dropped_tokens_backpressure_interactive,
+                    "dropped_backpressure_all_batch": self.dropped_tokens_backpressure_batch,
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -544,6 +559,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if cfg.promote_ms < 0.0:
         raise ValueError("promote_ms must be >= 0")
 
+    k_signal = cfg.k_signal.strip().lower()
+    if k_signal not in ("global", "candidates"):
+        raise ValueError("k_signal must be 'global' or 'candidates'")
+
     for route in trace:
         if len(route.candidates) == 0:
             raise ValueError("trace route candidates must be non-empty")
@@ -609,7 +628,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         if ev.kind == EventKind.TOKEN_ARRIVAL:
             tid = ev.task.token_id if ev.task is not None else -1
             route = trace[tid]
-            max_pending = max(experts[e].pending() for e in range(cfg.num_experts))
+            if k_signal == "global":
+                max_pending = max(experts[e].pending() for e in range(cfg.num_experts))
+            else:
+                max_pending = max(experts[e].pending() for e in route.candidates)
             k = choose_k(cfg.adaptive_k, route.cls, max_pending)
 
             tokens[tid].chosen_k = k
@@ -646,12 +668,18 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
 
             if tokens[tid].remaining == 0:
-                tokens[tid].done_ms = now_ms
-                lat_ms = (now_ms - tokens[tid].submit_ms)
+                metrics.dropped_tokens_backpressure += 1
                 if route.cls == LatencyClass.INTERACTIVE:
-                    metrics.token_lat_ms_interactive.append(lat_ms)
+                    metrics.dropped_tokens_backpressure_interactive += 1
                 else:
-                    metrics.token_lat_ms_batch.append(lat_ms)
+                    metrics.dropped_tokens_backpressure_batch += 1
+                tokens[tid].done_ms = now_ms
+            else:
+                metrics.admitted_tokens += 1
+                if route.cls == LatencyClass.INTERACTIVE:
+                    metrics.admitted_tokens_interactive += 1
+                else:
+                    metrics.admitted_tokens_batch += 1
 
         elif ev.kind == EventKind.TASK_DONE:
             if ev.task is None:
@@ -726,6 +754,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--k-max-batch", type=int, default=2)
     p.add_argument("--q-low", type=int, default=16)
     p.add_argument("--q-high", type=int, default=128)
+    p.add_argument("--k-signal", type=str, default="global", help="Adaptive-K congestion signal: global (max pending across all experts) or candidates (max pending among this token's candidates).")
 
     p.add_argument("--json", action="store_true", help="Print JSON metrics only.")
     return(p.parse_args(argv))
@@ -786,6 +815,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         hi_burst=args.hi_burst,
         promote_ms=args.promote_ms,
         adaptive_k=adapt,
+        k_signal=args.k_signal,
     )
 
     metrics = run_simulation(sim_cfg, trace)

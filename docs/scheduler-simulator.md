@@ -16,6 +16,7 @@ Work units:
 - A *token* arrives at time `t_ms` with a latency class.
 - The router provides an ordered list of candidate experts.
 - The scheduler chooses `K` (adaptive) and admits up to `K` expert tasks, skipping experts that are at `--expert-queue-max` (backpressure).
+- If no expert tasks can be admitted for a token because all candidates are full, the token is counted as dropped by backpressure.
 - Each expert is a small server with:
   - fixed parallelism (`--expert-parallelism`)
   - two FIFO queues (interactive first, then batch)
@@ -37,8 +38,13 @@ Two optional knobs let us explore fairness / anti-starvation strategies:
 
 ## Adaptive K
 
-`K` is chosen independently for interactive and batch tokens based on the
-current worst-case expert pending depth:
+`K` is chosen independently for interactive and batch tokens based on a
+congestion signal derived from expert pending depth:
+
+- `--k-signal global` (default): `max_pending` is max pending across all experts
+- `--k-signal candidates`: `max_pending` is max pending among this token's candidates
+
+Then:
 
 - if `max_pending <= --q-low` then `K = K_max`
 - if `max_pending >= --q-high` then `K = K_min`
@@ -92,7 +98,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-expe
 The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
-- `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max
+- `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max (admitted tokens only)
+- `tokens`: token-level admitted vs dropped-by-backpressure counts
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
 - `tasks`: total + per-latency-class admitted/dropped/starved counters

@@ -136,6 +136,90 @@ class SchedulerSimTest(unittest.TestCase):
         m = scheduler_sim.run_simulation(cfg, trace)
         self.assertGreater(m.dropped_tasks_backpressure, 0)
 
+    def test_backpressure_drops_tokens_and_excludes_latency(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+            )
+            for i in range(100)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=2,
+                k_max_batch=2,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertGreater(m.dropped_tokens_backpressure, 0)
+        self.assertEqual(len(m.token_lat_ms_batch), m.admitted_tokens_batch)
+
+    def test_k_signal_candidates_ignores_unrelated_congestion(self) -> None:
+        trace = []
+        for i in range(50):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.001,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.0025,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(1,),
+            )
+        )
+        trace.sort(key=lambda r: r.t_ms)
+
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=0,
+            q_high=1,
+        )
+        cfg_global = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            k_signal="global",
+        )
+        cfg_candidates = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            k_signal="candidates",
+        )
+        mg = scheduler_sim.run_simulation(cfg_global, trace)
+        mc = scheduler_sim.run_simulation(cfg_candidates, trace)
+        idx = next(i for i, r in enumerate(trace) if r.candidates == (1,))
+        self.assertLessEqual(mg.chosen_k_batch[idx], mc.chosen_k_batch[idx])
+
     def test_starvation_counts_queue_wait(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
