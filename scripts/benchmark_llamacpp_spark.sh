@@ -132,6 +132,10 @@ with open(log_raw, "w", encoding="utf-8") as f:
 end = time.monotonic()
 
 ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+max_rss_native = int(ru.ru_maxrss)
+max_rss_bytes = max_rss_native
+if sys.platform.startswith("linux"):
+    max_rss_bytes = max_rss_native * 1024
 
 def _last_float_before(haystack: str, needle: str):
     if needle not in haystack:
@@ -161,7 +165,8 @@ if first_output_s is None:
 else:
     summary_lines.append("ttft_first_output_s=%.6f" % first_output_s)
 summary_lines.append("wall_s=%.6f" % (end - start))
-summary_lines.append("max_rss_kb=%d" % int(ru.ru_maxrss))
+summary_lines.append("max_rss_native=%d" % max_rss_native)
+summary_lines.append("max_rss_bytes=%d" % max_rss_bytes)
 if prefill_tps is not None:
     summary_lines.append("prefill_tps=%.6f" % prefill_tps)
 if prefill_ms_per_tok is not None:

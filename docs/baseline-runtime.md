@@ -68,9 +68,11 @@ All baseline scripts share the same safety gates (these are passed through by `s
 - `ALLOW_BUILD=1` to compile (can take minutes)
 - `ALLOW_RUN=1` to run inference (can be long / expensive)
 
+When using `scripts/run_baseline_existing_runtime.sh`, the model path inputs (`MODEL_GGUF`, `VLLM_MODEL`, and `LLAMA_DIR`) are also passed through to the remote benchmark scripts.
+
 Per-script useful env vars:
 
-- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`
+- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
