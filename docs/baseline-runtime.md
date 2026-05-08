@@ -38,7 +38,35 @@ This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
 - llama.cpp baseline (optional build/run depending on gates)
-- vLLM presence/version probe (no installs)
+- vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
+
+## One-command entrypoint (Mac local: antirez/ds4)
+
+Run from the Mac:
+
+```sh
+scripts/benchmark_ds4_macos.sh
+```
+
+Notes:
+
+- If `DS4_DIR` is missing, set `ALLOW_FETCH=1` to clone `antirez/ds4` into `./upstreams/ds4` (ignored by git).
+- The ds4 upstream model download step is intentionally **not** automated here; see `docs/baseline-fixtures.md`.
+
+## Script knobs (common)
+
+All baseline scripts share the same safety gates:
+
+- `ALLOW_FETCH=1` to clone upstream repos (code only; still explicit)
+- `ALLOW_BUILD=1` to compile (can take minutes)
+- `ALLOW_RUN=1` to run inference (can be long / expensive)
+
+Per-script useful env vars:
+
+- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`
+- `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
+- `scripts/benchmark_vllm_spark.sh`: `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `OUT_DIR`
+- `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 
 ## Required Fixtures
 
@@ -47,4 +75,3 @@ See `docs/baseline-fixtures.md` for artifact handling and the fixture manifest t
 ## Baseline Report Format
 
 Use `docs/baseline-template.md` as the canonical structure for reports committed to this repo.
-
