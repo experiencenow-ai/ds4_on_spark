@@ -53,6 +53,8 @@ if(DS4_ENABLE_TESTS)
 		tests/test_main.c
 		tests/test_arena.c
 		tests/test_config.c
+		tests/test_ctx.c
+		tests/test_cuda.c
 	)
 	target_link_libraries(ds4_tests PRIVATE ds4)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})

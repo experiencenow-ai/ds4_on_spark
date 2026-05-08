@@ -2,6 +2,11 @@
 
 This repo uses CMake and ships a thin `Makefile` wrapper.
 
+See also:
+
+- `docs/build-macos.md`
+- `docs/build-linux.md`
+
 ## Mac (no CUDA)
 
 ```bash

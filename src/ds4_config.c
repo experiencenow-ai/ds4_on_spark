@@ -1,5 +1,7 @@
 #include "ds4/config.h"
 
+#include <stdio.h>
+
 static int32_t ds4_span_eq(const char *a,int32_t alen,const char *b)
 {
 	int32_t i;
@@ -167,5 +169,47 @@ int32_t ds4_config_parse_mem(ds4_config_t *cfg,const uint8_t *buf,int32_t len)
 			line0 = (i + 1);
 		}
 	}
+	return(0);
+}
+
+int32_t ds4_config_parse_file(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len)
+{
+	FILE *fp;
+	int32_t n,err;
+	size_t n0;
+	if ( cfg == 0 )
+		return(-1);
+	if ( path == 0 )
+		return(-2);
+	if ( buf == 0 )
+		return(-3);
+	if ( cap <= 0 )
+		return(-4);
+	fp = fopen(path,"rb");
+	if ( fp == 0 )
+		return(-5);
+	n0 = fread(buf,1,(size_t)cap,fp);
+	n = (int32_t)n0;
+	if ( (n < 0) || (n > cap) )
+	{
+		fclose(fp);
+		return(-6);
+	}
+	if ( ferror(fp) != 0 )
+	{
+		fclose(fp);
+		return(-7);
+	}
+	if ( feof(fp) == 0 )
+	{
+		fclose(fp);
+		return(-8);
+	}
+	fclose(fp);
+	if ( out_len != 0 )
+		*out_len = n;
+	err = ds4_config_parse_mem(cfg,buf,n);
+	if ( err < 0 )
+		return(-9);
 	return(0);
 }
