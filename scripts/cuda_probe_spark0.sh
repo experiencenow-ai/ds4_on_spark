@@ -49,4 +49,7 @@ echo \"== run: cuda_sm121_arch_report ==\"
 echo
 echo \"== run: cuda_cublaslt_smoke ==\"
 \"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
+echo
+echo \"== run: cuda_sm121_smem_optin ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin
 "

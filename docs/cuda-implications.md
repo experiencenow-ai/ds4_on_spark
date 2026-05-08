@@ -9,6 +9,8 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0)
 - `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
+- `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints `cudaDevAttrMaxSharedMemoryPerBlockOptin` and validates an opt-in dynamic shared-memory launch
+  - Observed on Spark0 (2026-05-08): `MaxSharedMemoryPerBlockOptin=101376` bytes
 
 ## cuBLASLt
 
@@ -31,6 +33,7 @@ Implication:
 Next probe step:
 
 - Verify a minimal CUTLASS example can compile for `sm_121` and run on Spark0 before committing to a larger CUTLASS-based kernel path.
+- Confirm the required shared-memory footprint fits within `cudaDevAttrMaxSharedMemoryPerBlockOptin` for any CUTLASS kernels we plan to bring up.
 
 ## DeepGEMM
 
@@ -44,3 +47,4 @@ Implication:
 Next probe step:
 
 - Build and run the smallest DeepGEMM example on Spark0, capture exact failure mode, then decide whether to patch arch detection or switch to CUTLASS/cuBLASLt for the early kernels.
+- If DeepGEMM depends on large dynamic shared memory, use `cuda_sm121_smem_optin` output as the initial feasibility gate before deeper porting work.
