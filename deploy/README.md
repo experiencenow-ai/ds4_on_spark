@@ -19,6 +19,9 @@ edit host-specific values, then enable services with `systemctl`.
 - `ds4@.service` expects:
   - an env file at `/etc/ds4/ds4-%i.env`
   - an optional config at `/etc/ds4/ds4-%i.yaml`
+- Optional Spark standalone examples:
+  - `spark-master@.service`
+  - `spark-worker@.service`
 
 The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 
@@ -45,10 +48,11 @@ sudo systemd-tmpfiles --create || true
 - `ds4-spark0.yaml.example`, `ds4-spark1.yaml.example` : runtime config placeholders (schema TBD)
 - `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
+- `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
 
 ## Staging Helper
 
 `scripts/ops_stage_deploy_assets.sh` rsyncs templates to `/tmp` on a Spark and
-prints the next `sudo` commands to apply them.
+prints the next `sudo` commands to apply them. By default it only installs `ds4*.service` units; Spark units are staged but optional.

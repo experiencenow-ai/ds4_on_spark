@@ -59,7 +59,7 @@ rsync -av deploy/tmpfiles.d/ <user>@spark0.local:/tmp/ds4-tmpfiles/
 Then on the Spark:
 
 ```bash
-sudo install -m 0644 /tmp/ds4-systemd/*.service /etc/systemd/system/
+sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
 sudo systemctl daemon-reload
 ```
@@ -76,3 +76,4 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Do not put secrets in the repo. Keep `/etc/ds4/*.env` local to each Spark.
 - Prefer journald over file logs until retention/rotation is designed.
 - Tighten systemd sandboxing only after CUDA + distributed smoke tests pass.
+- Optional Spark standalone systemd templates exist, but are not required for DS4: `docs/deployment-spark-standalone-systemd.md`.

@@ -18,6 +18,9 @@ Avoid mixing Wi‑Fi + wired paths in the same benchmark run.
 These are conventions for the templates in this repo; adjust only with an explicit note in your run log.
 
 - SSH: `22/tcp`
+- Spark standalone master: `7077/tcp`
+- Spark standalone master web UI: `8080/tcp`
+- Spark standalone worker web UI: `8081/tcp`
 - DS4 metrics: `${DS4_METRICS_PORT}` (default `9090/tcp`)
 - DS4 distributed master: `${DS4_MASTER_PORT}` (default `29500/tcp`)
 
@@ -50,4 +53,3 @@ Use explicit SSH options and keep known-hosts isolated:
 SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts'
 ssh $SSH_OPTS spark0@<spark0-host> hostname
 ```
-

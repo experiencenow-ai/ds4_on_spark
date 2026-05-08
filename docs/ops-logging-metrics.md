@@ -58,3 +58,14 @@ Recommended baseline metrics:
 - `ds4_cuda_oom_total`
 
 Prometheus scrape snippet example: `deploy/config/prometheus-scrape.ds4.yml.example`.
+
+## Spark (Optional)
+
+If Spark is managed via systemd (see `docs/deployment-spark-standalone-systemd.md`), prefer journald for unit logs:
+
+```bash
+journalctl -u spark-master@spark0.service -n 200 --no-pager
+journalctl -u spark-worker@spark1.service -n 200 --no-pager
+```
+
+For troubleshooting distributed runs, also consider enabling Spark event logs and recording the event log directory in your run notes.
