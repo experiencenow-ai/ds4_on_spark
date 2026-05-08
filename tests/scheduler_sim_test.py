@@ -25,6 +25,26 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertTrue(all(r.t_ms >= 0.0 for r in t0))
         self.assertTrue(all(len(r.candidates) == 4 for r in t0))
 
+    def test_hotset_trace_deterministic_and_rotates(self) -> None:
+        cfg = scheduler_sim.HotsetTraceConfig(
+            num_tokens=4,
+            num_experts=8,
+            num_candidates=2,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            hotset_size=2,
+            hotset_bias=1.0,
+            hotset_rotate_every_tokens=1,
+            seed=123,
+        )
+        t0 = scheduler_sim.generate_hotset_trace(cfg)
+        t1 = scheduler_sim.generate_hotset_trace(cfg)
+        self.assertEqual(t0, t1)
+        self.assertEqual(len(t0), 4)
+        self.assertNotEqual(set(t0[0].candidates), set(t0[1].candidates))
+
     def test_adaptive_k_hits_min_and_max(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
@@ -53,6 +73,35 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreaterEqual(len(m.chosen_k_batch), 1)
         self.assertEqual(min(m.chosen_k_batch), 1)
         self.assertEqual(max(m.chosen_k_batch), 4)
+
+    def test_task_queue_wait_and_utilization_metrics_consistent(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.1,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE if (i % 2) == 0 else scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+            )
+            for i in range(50)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=2,
+                k_max_interactive=2,
+                k_min_batch=2,
+                k_max_batch=2,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.admitted_tasks, len(m.task_queue_wait_ms_interactive) + len(m.task_queue_wait_ms_batch))
+        self.assertTrue(all(0.0 <= x <= 1.0 for x in m.mean_utilization_per_expert))
+        self.assertTrue(all(0.0 <= x <= 1.0 for x in m.saturated_time_frac_per_expert))
 
     def test_backpressure_drops_tasks(self) -> None:
         trace = [

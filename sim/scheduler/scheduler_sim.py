@@ -40,6 +40,21 @@ class TraceConfig:
 
 
 @dataclass(frozen=True)
+class HotsetTraceConfig:
+    num_tokens: int
+    num_experts: int
+    num_candidates: int
+    interactive_prob: float
+    arrival_rate_tps: float
+    burst_prob: float
+    burst_scale: float
+    hotset_size: int
+    hotset_bias: float
+    hotset_rotate_every_tokens: int
+    seed: int
+
+
+@dataclass(frozen=True)
 class AdaptiveKConfig:
     k_min_interactive: int
     k_max_interactive: int
@@ -106,13 +121,23 @@ class SimMetrics:
     makespan_ms: float = 0.0
     token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    task_queue_wait_ms_interactive: List[float] = dataclasses.field(default_factory=list)
+    task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
     admitted_tasks: int = 0
+    admitted_tasks_interactive: int = 0
+    admitted_tasks_batch: int = 0
     dropped_tasks_backpressure: int = 0
+    dropped_tasks_backpressure_interactive: int = 0
+    dropped_tasks_backpressure_batch: int = 0
     starved_tasks: int = 0
+    starved_tasks_interactive: int = 0
+    starved_tasks_batch: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
     mean_pending_per_expert: List[float] = dataclasses.field(default_factory=list)
+    mean_utilization_per_expert: List[float] = dataclasses.field(default_factory=list)
+    saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
 
     def to_jsonable(self) -> Dict[str, object]:
         def percentile(xs_sorted: Sequence[float], p: float) -> float:
@@ -150,6 +175,25 @@ class SimMetrics:
                 }
             )
 
+        def summarize_ints(xs: Sequence[int]) -> Dict[str, float]:
+            if len(xs) == 0:
+                return({"count": 0})
+            xs_f = [float(x) for x in xs]
+            return(summarize(xs_f))
+
+        def summarize_experts(xs: Sequence[float]) -> Dict[str, float]:
+            if len(xs) == 0:
+                return({"count": 0})
+            xs_sorted = sorted(xs)
+            return(
+                {
+                    "count": len(xs_sorted),
+                    "p50": percentile(xs_sorted, 0.50),
+                    "p95": percentile(xs_sorted, 0.95),
+                    "max": float(xs_sorted[-1]),
+                }
+            )
+
         return(
             {
                 "sim": {
@@ -161,6 +205,10 @@ class SimMetrics:
                 "token_latency_ms": {
                     "interactive": summarize(self.token_lat_ms_interactive),
                     "batch": summarize(self.token_lat_ms_batch),
+                },
+                "task_queue_wait_ms": {
+                    "interactive": summarize(self.task_queue_wait_ms_interactive),
+                    "batch": summarize(self.task_queue_wait_ms_batch),
                 },
                 "chosen_k": {
                     "interactive": {
@@ -178,8 +226,14 @@ class SimMetrics:
                 },
                 "tasks": {
                     "admitted": self.admitted_tasks,
+                    "admitted_interactive": self.admitted_tasks_interactive,
+                    "admitted_batch": self.admitted_tasks_batch,
                     "dropped_backpressure": self.dropped_tasks_backpressure,
+                    "dropped_backpressure_interactive": self.dropped_tasks_backpressure_interactive,
+                    "dropped_backpressure_batch": self.dropped_tasks_backpressure_batch,
                     "starved": self.starved_tasks,
+                    "starved_interactive": self.starved_tasks_interactive,
+                    "starved_batch": self.starved_tasks_batch,
                 },
                 "expert_queue": {
                     "num_experts": len(self.max_pending_per_expert),
@@ -188,6 +242,8 @@ class SimMetrics:
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                 },
+                "expert_utilization": summarize_experts(self.mean_utilization_per_expert),
+                "expert_saturation": summarize_experts(self.saturated_time_frac_per_expert),
             }
         )
 
@@ -211,6 +267,55 @@ def _sample_unique_ordered(rng: random.Random, population_size: int, weights: Se
         tries += 1
     if len(chosen) != k:
         for idx in range(population_size):
+            if idx not in chosen_set:
+                chosen.append(idx)
+                if len(chosen) == k:
+                    break
+    return(tuple(chosen[:k]))
+
+
+def _generate_arrival_times_ms(rng: random.Random, num_tokens: int, arrival_rate_tps: float, burst_prob: float, burst_scale: float) -> List[float]:
+    t_ms = 0.0
+    times: List[float] = []
+    mean_interarrival_ms = (1000.0 / arrival_rate_tps)
+    for _i in range(num_tokens):
+        if rng.random() < burst_prob:
+            interarrival_ms = rng.expovariate(1.0 / (mean_interarrival_ms / burst_scale))
+        else:
+            interarrival_ms = rng.expovariate(1.0 / mean_interarrival_ms)
+        t_ms += interarrival_ms
+        times.append(t_ms)
+    return(times)
+
+
+def _hotset_for_token(perm: List[int], hotset_size: int, hotset_rotate_every_tokens: int, token_index: int) -> List[int]:
+    if hotset_size <= 0:
+        return([])
+    if hotset_rotate_every_tokens <= 0:
+        return(perm[:hotset_size])
+    phase = (token_index // hotset_rotate_every_tokens)
+    offset = ((phase * hotset_size) % len(perm))
+    rotated = perm[offset:] + perm[:offset]
+    return(rotated[:hotset_size])
+
+
+def _sample_hotset_candidates(rng: random.Random, num_experts: int, hotset: Sequence[int], hotset_bias: float, k: int) -> Tuple[int, ...]:
+    if k <= 0:
+        return(())
+    chosen: List[int] = []
+    chosen_set = set()
+    tries = 0
+    while len(chosen) < k and tries < (k * 200):
+        if len(hotset) != 0 and rng.random() < hotset_bias:
+            idx = hotset[rng.randrange(0, len(hotset))]
+        else:
+            idx = rng.randrange(0, num_experts)
+        if idx not in chosen_set:
+            chosen.append(idx)
+            chosen_set.add(idx)
+        tries += 1
+    if len(chosen) != k:
+        for idx in range(num_experts):
             if idx not in chosen_set:
                 chosen.append(idx)
                 if len(chosen) == k:
@@ -242,17 +347,48 @@ def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
     weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
     routes: List[TokenRoute] = []
 
-    t_ms = 0.0
-    mean_interarrival_ms = (1000.0 / cfg.arrival_rate_tps)
-    for _i in range(cfg.num_tokens):
-        if rng.random() < cfg.burst_prob:
-            interarrival_ms = rng.expovariate(1.0 / (mean_interarrival_ms / cfg.burst_scale))
-        else:
-            interarrival_ms = rng.expovariate(1.0 / mean_interarrival_ms)
-        t_ms += interarrival_ms
-
+    arrivals = _generate_arrival_times_ms(rng, cfg.num_tokens, cfg.arrival_rate_tps, cfg.burst_prob, cfg.burst_scale)
+    for t_ms in arrivals:
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
         candidates = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
+        routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+
+    routes.sort(key=lambda r: r.t_ms)
+    return(routes)
+
+
+def generate_hotset_trace(cfg: HotsetTraceConfig) -> List[TokenRoute]:
+    if cfg.num_experts <= 0:
+        raise ValueError("num_experts must be > 0")
+    if cfg.num_candidates <= 0:
+        raise ValueError("num_candidates must be > 0")
+    if cfg.num_candidates > cfg.num_experts:
+        raise ValueError("num_candidates must be <= num_experts")
+    if cfg.num_tokens <= 0:
+        raise ValueError("num_tokens must be > 0")
+    if cfg.arrival_rate_tps <= 0.0:
+        raise ValueError("arrival_rate_tps must be > 0")
+    if cfg.interactive_prob < 0.0 or cfg.interactive_prob > 1.0:
+        raise ValueError("interactive_prob must be within [0,1]")
+    if cfg.burst_prob < 0.0 or cfg.burst_prob > 1.0:
+        raise ValueError("burst_prob must be within [0,1]")
+    if cfg.burst_scale <= 0.0:
+        raise ValueError("burst_scale must be > 0")
+    if cfg.hotset_size <= 0 or cfg.hotset_size > cfg.num_experts:
+        raise ValueError("hotset_size must be within [1,num_experts]")
+    if cfg.hotset_bias < 0.0 or cfg.hotset_bias > 1.0:
+        raise ValueError("hotset_bias must be within [0,1]")
+
+    rng = random.Random(cfg.seed)
+    perm = list(range(cfg.num_experts))
+    rng.shuffle(perm)
+
+    arrivals = _generate_arrival_times_ms(rng, cfg.num_tokens, cfg.arrival_rate_tps, cfg.burst_prob, cfg.burst_scale)
+    routes: List[TokenRoute] = []
+    for i, t_ms in enumerate(arrivals):
+        hotset = _hotset_for_token(perm, cfg.hotset_size, cfg.hotset_rotate_every_tokens, i)
+        cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
+        candidates = _sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates)
         routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
 
     routes.sort(key=lambda r: r.t_ms)
@@ -336,7 +472,7 @@ def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, max_pending: int) -> int
     return(_clamp_i32(k, k_min, k_max))
 
 
-def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int, evq: List[Event], seq_ref: List[int], starved_ref: List[int]) -> None:
+def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int, evq: List[Event], seq_ref: List[int], metrics: SimMetrics) -> None:
     while eq.in_flight < cfg.expert_parallelism:
         if len(eq.hi) != 0:
             task = eq.hi.popleft()
@@ -347,7 +483,15 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
 
         wait_ms = (now_ms - task.enqueue_ms)
         if wait_ms >= cfg.starvation_ms:
-            starved_ref[0] += 1
+            metrics.starved_tasks += 1
+            if task.cls == LatencyClass.INTERACTIVE:
+                metrics.starved_tasks_interactive += 1
+            else:
+                metrics.starved_tasks_batch += 1
+        if task.cls == LatencyClass.INTERACTIVE:
+            metrics.task_queue_wait_ms_interactive.append(wait_ms)
+        else:
+            metrics.task_queue_wait_ms_batch.append(wait_ms)
         task.start_ms = now_ms
         eq.in_flight += 1
         seq_ref[0] += 1
@@ -375,14 +519,24 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
-    metrics = SimMetrics(num_tokens=len(trace), max_pending_per_expert=[0 for _ in range(cfg.num_experts)], mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)])
+    metrics = SimMetrics(
+        num_tokens=len(trace),
+        max_pending_per_expert=[0 for _ in range(cfg.num_experts)],
+        mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)],
+        mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
+        saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
+    )
 
     # Time-weighted pending depth: integral pending(t) dt / makespan.
     pending_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
+    inflight_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
+    saturated_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
     last_t_ms = 0.0
     last_pending: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_inflight: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
 
-    def update_queue_areas(now_ms: float) -> None:
+    def integrate_areas(now_ms: float) -> None:
         nonlocal last_t_ms
         dt = (now_ms - last_t_ms)
         if dt < 0.0:
@@ -390,9 +544,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         if dt != 0.0:
             for e in range(cfg.num_experts):
                 pending_area[e] += (float(last_pending[e]) * dt)
+                inflight_area[e] += (float(last_inflight[e]) * dt)
+                saturated_area[e] += (float(last_saturated[e]) * dt)
         last_t_ms = now_ms
+
+    def snapshot_state() -> None:
         for e in range(cfg.num_experts):
             last_pending[e] = experts[e].pending()
+            last_inflight[e] = experts[e].in_flight
+            last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             if last_pending[e] > metrics.max_pending_per_expert[e]:
                 metrics.max_pending_per_expert[e] = last_pending[e]
 
@@ -405,12 +565,12 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         tokens[tid] = TokenState(cls=route.cls, submit_ms=route.t_ms, chosen_k=0, remaining=0)
 
     now_ms = 0.0
-    starved_ref = [0]
+    snapshot_state()
 
     while len(evq) != 0:
         ev = heapq.heappop(evq)
         now_ms = ev.t_ms
-        update_queue_areas(now_ms)
+        integrate_areas(now_ms)
 
         if ev.kind == EventKind.TOKEN_ARRIVAL:
             tid = ev.task.token_id if ev.task is not None else -1
@@ -432,6 +592,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 eq = experts[expert_id]
                 if eq.pending() >= cfg.expert_queue_max:
                     metrics.dropped_tasks_backpressure += 1
+                    if route.cls == LatencyClass.INTERACTIVE:
+                        metrics.dropped_tasks_backpressure_interactive += 1
+                    else:
+                        metrics.dropped_tasks_backpressure_batch += 1
                     continue
                 task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms)
                 if route.cls == LatencyClass.INTERACTIVE:
@@ -440,8 +604,12 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     eq.lo.append(task)
                 tokens[tid].remaining += 1
                 metrics.admitted_tasks += 1
+                if route.cls == LatencyClass.INTERACTIVE:
+                    metrics.admitted_tasks_interactive += 1
+                else:
+                    metrics.admitted_tasks_batch += 1
                 admitted += 1
-                _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, starved_ref)
+                _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
 
             if tokens[tid].remaining == 0:
                 tokens[tid].done_ms = now_ms
@@ -477,11 +645,11 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 else:
                     metrics.token_lat_ms_batch.append(lat_ms)
 
-            _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, starved_ref)
+            _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
         else:
             raise RuntimeError("unknown event kind")
 
-    metrics.starved_tasks = starved_ref[0]
+        snapshot_state()
 
     makespan_ms = max((t.done_ms or 0.0) for t in tokens.values()) if len(tokens) != 0 else 0.0
     if makespan_ms <= 0.0:
@@ -489,12 +657,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     metrics.makespan_ms = makespan_ms
     for e in range(cfg.num_experts):
         metrics.mean_pending_per_expert[e] = (pending_area[e] / makespan_ms)
+        metrics.mean_utilization_per_expert[e] = (inflight_area[e] / (makespan_ms * float(cfg.expert_parallelism)))
+        metrics.saturated_time_frac_per_expert[e] = (saturated_area[e] / makespan_ms)
     return(metrics)
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates).")
+    p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default) or hotset.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
@@ -503,6 +674,9 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--burst-prob", type=float, default=0.05)
     p.add_argument("--burst-scale", type=float, default=8.0)
     p.add_argument("--zipf-alpha", type=float, default=1.1)
+    p.add_argument("--hotset-size", type=int, default=8, help="Hotset trace: number of 'hot' experts.")
+    p.add_argument("--hotset-bias", type=float, default=0.9, help="Hotset trace: probability a candidate is drawn from the hotset.")
+    p.add_argument("--hotset-rotate-every-tokens", type=int, default=2000, help="Hotset trace: rotate hotset every N tokens (0 = never).")
     p.add_argument("--seed", type=int, default=1)
 
     p.add_argument("--expert-parallelism", type=int, default=2)
@@ -527,18 +701,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.trace_jsonl != "":
         trace = load_trace_jsonl(args.trace_jsonl)
     else:
-        trace_cfg = TraceConfig(
-            num_tokens=args.num_tokens,
-            num_experts=args.num_experts,
-            num_candidates=args.num_candidates,
-            interactive_prob=args.interactive_prob,
-            arrival_rate_tps=args.arrival_rate_tps,
-            burst_prob=args.burst_prob,
-            burst_scale=args.burst_scale,
-            zipf_alpha=args.zipf_alpha,
-            seed=args.seed,
-        )
-        trace = generate_synthetic_trace(trace_cfg)
+        mode = args.trace_mode.strip().lower()
+        if mode == "zipf":
+            trace_cfg = TraceConfig(
+                num_tokens=args.num_tokens,
+                num_experts=args.num_experts,
+                num_candidates=args.num_candidates,
+                interactive_prob=args.interactive_prob,
+                arrival_rate_tps=args.arrival_rate_tps,
+                burst_prob=args.burst_prob,
+                burst_scale=args.burst_scale,
+                zipf_alpha=args.zipf_alpha,
+                seed=args.seed,
+            )
+            trace = generate_synthetic_trace(trace_cfg)
+        elif mode == "hotset":
+            trace_cfg = HotsetTraceConfig(
+                num_tokens=args.num_tokens,
+                num_experts=args.num_experts,
+                num_candidates=args.num_candidates,
+                interactive_prob=args.interactive_prob,
+                arrival_rate_tps=args.arrival_rate_tps,
+                burst_prob=args.burst_prob,
+                burst_scale=args.burst_scale,
+                hotset_size=args.hotset_size,
+                hotset_bias=args.hotset_bias,
+                hotset_rotate_every_tokens=args.hotset_rotate_every_tokens,
+                seed=args.seed,
+            )
+            trace = generate_hotset_trace(trace_cfg)
+        else:
+            raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf or hotset.")
 
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,

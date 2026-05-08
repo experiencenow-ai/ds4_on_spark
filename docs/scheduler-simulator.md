@@ -43,6 +43,21 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+### Synthetic Trace Modes
+
+Default synthetic mode is Zipf-skewed expert popularity:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode zipf --zipf-alpha 1.1 --json
+```
+
+Hotset mode creates a small moving set of "hot" experts (router candidates are biased toward the hotset),
+which is useful for stress-testing backpressure, queue depth, and adaptive-K oscillations:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --hotset-size 8 --hotset-bias 0.9 --hotset-rotate-every-tokens 2000 --json
+```
+
 ### Trace Replay (JSONL)
 
 Replay mode reads one JSON object per line with required fields:
@@ -67,9 +82,12 @@ The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max
+- `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
-- `tasks.{admitted,dropped_backpressure,starved}`
+- `tasks`: total + per-latency-class admitted/dropped/starved counters
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
+- `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
+- `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`
 
 ## Next Steps
 
