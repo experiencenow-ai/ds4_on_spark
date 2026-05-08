@@ -43,10 +43,29 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+### Trace Replay (JSONL)
+
+Replay mode reads one JSON object per line with required fields:
+
+- `t_ms` (number): arrival time in milliseconds
+- `cls` (`"interactive"` or `"batch"`)
+- `candidates` (list[int]): ordered expert candidates
+
+Example:
+
+```bash
+cat > /tmp/route.jsonl <<'EOF'
+{"t_ms":0.0,"cls":"interactive","candidates":[3,7,1,0]}
+{"t_ms":0.2,"cls":"batch","candidates":[7,2,3,5]}
+EOF
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-experts 8 --json
+```
+
 ## Metrics
 
 The simulator prints a JSON object with:
 
+- `sim`: makespan + token/task throughput
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
 - `tasks.{admitted,dropped_backpressure,starved}`
@@ -59,4 +78,3 @@ The simulator prints a JSON object with:
   expert GEMM shapes are pinned down.
 - Use this harness to define production invariants (interactive p95 bounds,
   max starvation rate, acceptable drop rate) before CUDA integration.
-

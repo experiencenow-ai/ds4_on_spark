@@ -102,6 +102,8 @@ class Event:
 
 @dataclass
 class SimMetrics:
+    num_tokens: int = 0
+    makespan_ms: float = 0.0
     token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
@@ -150,6 +152,12 @@ class SimMetrics:
 
         return(
             {
+                "sim": {
+                    "num_tokens": self.num_tokens,
+                    "makespan_ms": self.makespan_ms,
+                    "token_throughput_tps": (float(self.num_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
+                    "task_throughput_tps": (float(self.admitted_tasks) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
+                },
                 "token_latency_ms": {
                     "interactive": summarize(self.token_lat_ms_interactive),
                     "batch": summarize(self.token_lat_ms_batch),
@@ -251,6 +259,56 @@ def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
     return(routes)
 
 
+def load_trace_jsonl(path: str) -> List[TokenRoute]:
+    routes: List[TokenRoute] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.strip()
+            if line == "":
+                continue
+            obj = json.loads(line)
+            if not isinstance(obj, dict):
+                raise ValueError(f"{path}:{lineno}: expected JSON object")
+
+            if "t_ms" not in obj:
+                raise ValueError(f"{path}:{lineno}: missing t_ms")
+            if "cls" not in obj:
+                raise ValueError(f"{path}:{lineno}: missing cls")
+            if "candidates" not in obj:
+                raise ValueError(f"{path}:{lineno}: missing candidates")
+
+            t_ms = float(obj["t_ms"])
+            if t_ms < 0.0:
+                raise ValueError(f"{path}:{lineno}: t_ms must be >= 0")
+
+            cls_raw = obj["cls"]
+            if not isinstance(cls_raw, str):
+                raise ValueError(f"{path}:{lineno}: cls must be a string")
+            cls_norm = cls_raw.strip().lower()
+            if cls_norm == "interactive":
+                cls = LatencyClass.INTERACTIVE
+            elif cls_norm == "batch":
+                cls = LatencyClass.BATCH
+            else:
+                raise ValueError(f"{path}:{lineno}: cls must be 'interactive' or 'batch'")
+
+            cand_raw = obj["candidates"]
+            if not isinstance(cand_raw, list):
+                raise ValueError(f"{path}:{lineno}: candidates must be a JSON list")
+            candidates: List[int] = []
+            for c in cand_raw:
+                if not isinstance(c, int):
+                    raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                candidates.append(c)
+            if len(candidates) == 0:
+                raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=tuple(candidates)))
+
+    routes.sort(key=lambda r: r.t_ms)
+    return(routes)
+
+
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
     if v < lo:
         return(lo)
@@ -308,9 +366,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if cfg.starvation_ms <= 0.0:
         raise ValueError("starvation_ms must be > 0")
 
+    for route in trace:
+        if len(route.candidates) == 0:
+            raise ValueError("trace route candidates must be non-empty")
+        for expert_id in route.candidates:
+            if expert_id < 0 or expert_id >= cfg.num_experts:
+                raise ValueError("trace route has expert_id out of range")
+
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
-    metrics = SimMetrics(max_pending_per_expert=[0 for _ in range(cfg.num_experts)], mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)])
+    metrics = SimMetrics(num_tokens=len(trace), max_pending_per_expert=[0 for _ in range(cfg.num_experts)], mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)])
 
     # Time-weighted pending depth: integral pending(t) dt / makespan.
     pending_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
@@ -421,6 +486,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     makespan_ms = max((t.done_ms or 0.0) for t in tokens.values()) if len(tokens) != 0 else 0.0
     if makespan_ms <= 0.0:
         makespan_ms = 1.0
+    metrics.makespan_ms = makespan_ms
     for e in range(cfg.num_experts):
         metrics.mean_pending_per_expert[e] = (pending_area[e] / makespan_ms)
     return(metrics)
@@ -428,6 +494,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
+    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates).")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
@@ -457,18 +524,21 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
 
-    trace_cfg = TraceConfig(
-        num_tokens=args.num_tokens,
-        num_experts=args.num_experts,
-        num_candidates=args.num_candidates,
-        interactive_prob=args.interactive_prob,
-        arrival_rate_tps=args.arrival_rate_tps,
-        burst_prob=args.burst_prob,
-        burst_scale=args.burst_scale,
-        zipf_alpha=args.zipf_alpha,
-        seed=args.seed,
-    )
-    trace = generate_synthetic_trace(trace_cfg)
+    if args.trace_jsonl != "":
+        trace = load_trace_jsonl(args.trace_jsonl)
+    else:
+        trace_cfg = TraceConfig(
+            num_tokens=args.num_tokens,
+            num_experts=args.num_experts,
+            num_candidates=args.num_candidates,
+            interactive_prob=args.interactive_prob,
+            arrival_rate_tps=args.arrival_rate_tps,
+            burst_prob=args.burst_prob,
+            burst_scale=args.burst_scale,
+            zipf_alpha=args.zipf_alpha,
+            seed=args.seed,
+        )
+        trace = generate_synthetic_trace(trace_cfg)
 
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,
