@@ -91,12 +91,23 @@ echo
 echo "== network =="
 ip addr 2>/dev/null || true
 ip route 2>/dev/null || true
+ip link 2>/dev/null || true
 echo
 
 if [ "$peer" != "" ]; then
     echo "== peer ping ($peer) =="
     ping -c 3 "$peer" 2>/dev/null || true
     echo
+
+    if [ "${DS4_MASTER_PORT:-}" != "" ]; then
+        echo "== peer tcp check ($peer:$DS4_MASTER_PORT) =="
+        if command -v nc >/dev/null 2>&1; then
+            nc -z -w 2 "$peer" "$DS4_MASTER_PORT" 2>/dev/null && echo "tcp ok" || echo "tcp failed"
+        else
+            echo "nc missing; skip tcp check"
+        fi
+        echo
+    fi
 fi
 
 if [ "$peer_ssh" != "" ]; then

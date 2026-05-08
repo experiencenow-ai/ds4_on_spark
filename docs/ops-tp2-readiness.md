@@ -42,6 +42,12 @@ ping -c 3 <peer-host-or-ip>
 ssh -o BatchMode=yes <peer-user>@<peer-host> hostname
 ```
 
+Optional TCP reachability check (if `nc` is installed):
+
+```bash
+nc -z -w 2 <peer-host-or-ip> 29500
+```
+
 Optional bandwidth check (only if both ends have `iperf3` installed):
 
 ```bash
