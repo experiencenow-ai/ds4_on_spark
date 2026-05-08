@@ -20,6 +20,21 @@ fi
 
 REPORT_MD="$OUT_DIR/baseline_existing_runtime.md"
 
+extract_baseline_summary()
+{
+    in="$1"
+    if [ ! -r "$in" ]; then
+        return 0
+    fi
+    awk '
+        found==1 {
+            if ($0 ~ /^== /) exit
+            print
+        }
+        $0 == "== baseline summary (approx) ==" { found=1 }
+    ' "$in" 2>/dev/null || true
+}
+
 {
     echo "# Existing Runtime Baseline (Spark)"
     echo
@@ -52,6 +67,17 @@ ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp
 {
     echo "## llama.cpp (Spark)"
     echo
+    echo "Summary (best-effort):"
+    echo
+    echo '```'
+    extract_baseline_summary "$OUT_DIR/remote_llamacpp_stdout.txt"
+    echo '```'
+    echo
+    echo "Full logs:"
+    echo
+    echo "- stdout: $OUT_DIR/remote_llamacpp_stdout.txt"
+    echo "- stderr: $OUT_DIR/remote_llamacpp_stderr.txt"
+    echo
     echo "Stdout:"
     echo
     echo '```'
@@ -73,6 +99,11 @@ ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/ben
 {
     echo "## vLLM (Spark)"
     echo
+    echo "Full logs:"
+    echo
+    echo "- stdout: $OUT_DIR/remote_vllm_stdout.txt"
+    echo "- stderr: $OUT_DIR/remote_vllm_stderr.txt"
+    echo
     echo "Stdout:"
     echo
     echo '```'
@@ -88,4 +119,3 @@ ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/ben
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
-
