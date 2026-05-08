@@ -7,9 +7,24 @@
 - Commit: `d615ab08c8bce9b8242963ecece5aed6b5a79367`
 - License: MIT (see upstream `LICENSE`)
 
+## What it is
+
+`ds4` is a DeepSeek-V4-Flash-specific inference engine (CLI + HTTP server), written as a narrow native implementation rather than a generic GGUF runtime. Upstream is Metal-first (macOS) and includes model-specific loading, prompt rendering, KV/cache logic, and validation harnesses.
+
 ## Why we track it
 
-`ds4` is the smallest upstream in scope and can serve as a compact reference implementation (and/or a sanity target for build + style decisions) without pulling in a heavyweight runtime.
+We track `ds4` as a compact reference point for:
+
+- DeepSeek-V4-Flash execution semantics as implemented by a dedicated engine,
+- KV-cache design choices (including disk-oriented cache ideas), and
+- end-to-end ergonomics (CLI/server flags, test vectors, validation posture).
+
+This repo must not vendor large third-party trees or model weights: treat `ds4` as read-only reference material.
+
+## Build notes (upstream)
+
+- Build is Makefile-based (`make`); upstream builds `ds4` and `ds4-server` binaries.
+- Upstream includes scripts that download large GGUF model artifacts from Hugging Face; do not run those download paths from this repo/intake process.
 
 ## Fetch
 
