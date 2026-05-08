@@ -21,6 +21,21 @@ Use instance names matching the host role:
 
 Each instance loads `/etc/ds4/ds4-%i.env` via `EnvironmentFile=`.
 
+## Prereqs (Human Runbook)
+
+Before starting services, ensure the `ds4` user and base directories exist.
+
+If you stage assets to `/tmp` (see `scripts/ops_stage_deploy_assets.sh`), you can
+use the included sysusers/tmpfiles templates:
+
+```bash
+sudo install -d -m 0755 /etc/sysusers.d /etc/tmpfiles.d
+sudo install -m 0644 /tmp/ds4-sysusers/ds4.conf /etc/sysusers.d/ds4.conf
+sudo install -m 0644 /tmp/ds4-tmpfiles/ds4.conf /etc/tmpfiles.d/ds4.conf
+sudo systemd-sysusers || true
+sudo systemd-tmpfiles --create || true
+```
+
 ## Enable/Start (Human Runbook)
 
 ```bash

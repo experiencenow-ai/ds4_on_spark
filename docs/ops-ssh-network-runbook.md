@@ -8,7 +8,7 @@ From the Mac, prefer key auth and explicit known-hosts storage:
 
 ```bash
 SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts'
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local hostname
+ssh $SSH_OPTS <user>@spark0.local hostname
 ```
 
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark

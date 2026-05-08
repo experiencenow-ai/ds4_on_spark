@@ -22,6 +22,20 @@ edit host-specific values, then enable services with `systemctl`.
 
 The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 
+## Sysusers + Tmpfiles
+
+Optional (recommended) templates for repeatable host bring-up:
+
+- `deploy/sysusers.d/ds4.conf` → `/etc/sysusers.d/ds4.conf`
+- `deploy/tmpfiles.d/ds4.conf` → `/etc/tmpfiles.d/ds4.conf`
+
+Then (human-run on Spark):
+
+```bash
+sudo systemd-sysusers || true
+sudo systemd-tmpfiles --create || true
+```
+
 ## Config Examples
 
 `deploy/config/` contains:
@@ -30,3 +44,8 @@ The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 - `ds4-spark0.env.example`, `ds4-spark1.env.example` : per-host starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
+
+## Staging Helper
+
+`scripts/ops_stage_deploy_assets.sh` rsyncs templates to `/tmp` on a Spark and
+prints the next `sudo` commands to apply them.
