@@ -9,6 +9,9 @@ Current observed Spark identity:
 - Spark wired IPv4: configured by user as `10.0.0.2`
 - Mac wired IPv4 observed during bootstrap: `192.168.100.1/16`
 - Mac Wi-Fi IPv4 observed during bootstrap: `172.16.11.245/24`
+- Spark Wi-Fi IPv4 observed during probe: `172.16.11.228/24`
+- Spark wired interface: `enP7s7`, MTU 9000
+- SSH key authentication from the Mac is now working for `spark0`.
 
 ## Diagnosis
 
@@ -18,12 +21,12 @@ Direct `ssh spark0@10.0.0.2` times out from the Mac because the Mac wired port
 is not currently in `10.0.0.0/24`. The hostname works because macOS resolves a
 reachable link-local address.
 
-The blocker is account authentication. The `spark0` account reaches password
-authentication but rejects the tested password.
+Account authentication is now fixed. The Mac public key is installed in
+`~spark0/.ssh/authorized_keys`.
 
-## Recommended Fix From Spark Console
+## If Account Auth Needs Reset Again
 
-On the Spark local console, reset the account password and install the Mac key.
+On the Spark local console, reset the account password and reinstall the Mac key.
 
 ```bash
 sudo passwd spark0
@@ -50,4 +53,3 @@ ssh spark0@10.0.0.2 hostname
 ```
 
 Use the hostname path until the alias is needed for scripts or benchmarking.
-
