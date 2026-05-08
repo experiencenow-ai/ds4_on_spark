@@ -99,6 +99,12 @@ ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/ben
 {
     echo "## vLLM (Spark)"
     echo
+    echo "Summary (best-effort):"
+    echo
+    echo '```'
+    extract_baseline_summary "$OUT_DIR/remote_vllm_stdout.txt"
+    echo '```'
+    echo
     echo "Full logs:"
     echo
     echo "- stdout: $OUT_DIR/remote_vllm_stdout.txt"
