@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
+DEFAULT_OUT = FIX / "contract_summary.json"
+
+
+def load_json(path: Path):
+	with path.open("r", encoding="utf-8") as f:
+		return json.load(f)
+
+
+def dump_json(path: Path, obj) -> None:
+	path.parent.mkdir(parents=True, exist_ok=True)
+	tmp = path.with_suffix(path.suffix + ".tmp")
+	with tmp.open("w", encoding="utf-8") as f:
+		json.dump(obj, f, indent=2, sort_keys=True)
+		f.write("\n")
+	tmp.replace(path)
+
+
+def layer_type_from_ratio(ratio: int) -> str:
+	if ratio == 0:
+		return "sliding"
+	if ratio == 4:
+		return "csa"
+	return "hca"
+
+
+def build_contract() -> dict:
+	cfg = load_json(FIX / "config.json")
+	inf = load_json(FIX / "inference" / "config.json")
+	tok_cfg = load_json(FIX / "tokenizer_config.json")
+	idx = load_json(FIX / "model.safetensors.index.json")
+
+	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
+	compress_ratios = list(cfg["compress_ratios"])
+	n_layers = int(cfg["num_hidden_layers"])
+	mtp_ratios = compress_ratios[n_layers:]
+	layer_types = [layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
+	type_counts = {t: layer_types.count(t) for t in ("sliding", "csa", "hca")}
+
+	weight_map = idx.get("weight_map", {})
+	weight_keys = sorted(weight_map.keys())
+
+	contract = {
+		"format_version": 1,
+		"model": "deepseek_v4_flash",
+		"upstream": {
+			"hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
+			"hf_revision": "main",
+			"x_repo_commit": upstream_commit,
+			"fixtures": {
+				"config_json": "config.json",
+				"inference_config_json": "inference/config.json",
+				"inference_model_py": "inference/model.py",
+				"inference_kernel_py": "inference/kernel.py",
+				"tokenizer_json": "tokenizer.json",
+				"tokenizer_config_json": "tokenizer_config.json",
+				"weight_index_json": "model.safetensors.index.json",
+				"encoding_oracle": "encoding/tests/*",
+			},
+		},
+		"topology": {
+			"vocab_size": int(cfg["vocab_size"]),
+			"hidden_size": int(cfg["hidden_size"]),
+			"num_hidden_layers": n_layers,
+			"num_attention_heads": int(cfg["num_attention_heads"]),
+			"num_key_value_heads": int(cfg["num_key_value_heads"]),
+			"head_dim": int(cfg["head_dim"]),
+			"rope_head_dim": int(cfg["qk_rope_head_dim"]),
+			"nope_head_dim": int(cfg["head_dim"]) - int(cfg["qk_rope_head_dim"]),
+			"q_lora_rank": int(cfg["q_lora_rank"]),
+			"o_groups": int(cfg["o_groups"]),
+			"o_lora_rank": int(cfg["o_lora_rank"]),
+			"sliding_window": int(cfg["sliding_window"]),
+		},
+		"yarn_rope": {
+			"rope_theta": float(cfg.get("rope_theta", 10000)),
+			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
+			"original_seq_len": int(cfg.get("original_max_position_embeddings", inf.get("original_seq_len", 0))),
+			"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
+			"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
+			"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
+		},
+		"attention_schedule": {
+			"compress_ratios": [int(r) for r in compress_ratios],
+			"main_layer_types": layer_types,
+			"type_counts": type_counts,
+			"mtp_compress_ratios": [int(r) for r in mtp_ratios],
+		},
+		"cache": {
+			"window_size": int(cfg["sliding_window"]),
+			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
+			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+			"prefill": {
+				"compressed_index_offset": "seqlen",
+				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
+				"compress_indices": {"csa": "Indexer(...)", "hca": "get_compress_topk_idxs(...,offset=seqlen)"},
+			},
+			"decode": {
+				"compressed_index_offset": "window_size",
+				"window_indices": "get_window_topk_idxs(window_size,...,start_pos>0)",
+				"compress_indices": {"csa": "Indexer(...,offset=window_size)", "hca": "get_compress_topk_idxs(...,offset=window_size)"},
+			},
+		},
+		"moe": {
+			"n_routed_experts": int(cfg["n_routed_experts"]),
+			"n_shared_experts": int(cfg["n_shared_experts"]),
+			"n_activated_experts": int(cfg["num_experts_per_tok"]),
+			"moe_inter_dim": int(cfg["moe_intermediate_size"]),
+			"scoring_func": str(cfg["scoring_func"]),
+			"route_scale": float(cfg["routed_scaling_factor"]),
+			"n_hash_layers": int(cfg["num_hash_layers"]),
+			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
+			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+		},
+		"mtp": {
+			"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
+			"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+			"namespace_prefix": "mtp.{j}.",
+		},
+		"tokenizer": {
+			"tokenizer_class": tok_cfg.get("tokenizer_class"),
+			"model_max_length": int(tok_cfg.get("model_max_length")),
+			"add_bos_token": bool(tok_cfg.get("add_bos_token")),
+			"add_eos_token": bool(tok_cfg.get("add_eos_token")),
+			"bos_token": tok_cfg.get("bos_token", {}).get("content"),
+			"eos_token": tok_cfg.get("eos_token", {}).get("content"),
+			"bos_token_id": int(cfg["bos_token_id"]),
+			"eos_token_id": int(cfg["eos_token_id"]),
+			"pad_token_is_eos": True,
+			"encoding_oracle_dir": "encoding/tests",
+		},
+		"tensor_keys": {
+			"tensor_key_count": len(weight_keys),
+			"required_top_level": [
+				"embed.weight",
+				"norm.weight",
+				"head.weight",
+				"hc_head_fn",
+				"hc_head_base",
+				"hc_head_scale",
+			],
+			"weight_index_source": "model.safetensors.index.json:weight_map",
+		},
+	}
+	return contract
+
+
+def main() -> int:
+	ap = argparse.ArgumentParser(description="Build DeepSeek V4 Flash contract_summary.json from fixtures.")
+	ap.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output JSON path.")
+	ap.add_argument("--check", action="store_true", help="Exit non-zero if output differs from existing file.")
+	args = ap.parse_args()
+
+	contract = build_contract()
+	out_path: Path = args.out
+
+	if args.check and out_path.exists():
+		prev = json.loads(out_path.read_text(encoding="utf-8"))
+		if prev != contract:
+			print(f"ERROR: {out_path} is stale; re-run without --check to regenerate")
+			return 1
+		print(f"OK: {out_path} up to date")
+		return 0
+
+	dump_json(out_path, contract)
+	print(f"OK: wrote {out_path.relative_to(ROOT)}")
+	return 0
+
+
+if __name__ == "__main__":
+	raise SystemExit(main())
+

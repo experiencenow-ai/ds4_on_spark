@@ -52,6 +52,15 @@ def main() -> int:
 	if not re.fullmatch(r"[0-9a-f]{40}", upstream_commit):
 		failures.append(Failure(1, f"fixtures must include a pinned upstream commit hash in {upstream_commit_path}"))
 
+	# Contract summary must be generated from fixtures and stay in sync.
+	contract_summary = FIX / "contract_summary.json"
+	if not contract_summary.exists():
+		failures.append(Failure(11, f"missing contract summary fixture: {contract_summary} (run scripts/model_contract_build_deepseek_v4_flash_contract.py)"))
+	else:
+		r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_contract_build_deepseek_v4_flash_contract.py"), "--check"], cwd=str(ROOT))
+		if r.returncode != 0:
+			failures.append(Failure(12, f"contract summary fixture is stale: {contract_summary} (re-run scripts/model_contract_build_deepseek_v4_flash_contract.py)"))
+
 	# Cross-check the two config sources for the fields they share.
 	for k in ("vocab_size", "hidden_size", "num_hidden_layers", "num_attention_heads", "head_dim", "q_lora_rank", "o_groups", "o_lora_rank", "compress_ratios"):
 		if k not in cfg:

@@ -11,6 +11,7 @@ Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
+- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption)
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
@@ -60,7 +61,38 @@ Notes on config sources:
   - `original_seq_len` / `original_max_position_embeddings`: 65536
   - `rope_factor`: 16
   - `beta_fast`: 32
-  - `beta_slow`: 1
+- `beta_slow`: 1
+
+## Logical parameter shapes (from `inference/model.py` + configs)
+
+These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below).
+
+Top-level:
+
+- `embed.weight`: `[vocab_size, hidden_size]`
+- `norm.weight`: `[hidden_size]`
+- `head.weight`: `[vocab_size, hidden_size]`
+- `hc_head_{fn,base,scale}`: `[mix_hc,hc_mult*hidden_size]`, `[mix_hc]`, `[3]` where `mix_hc=(2+hc_mult)*hc_mult`
+
+Per-layer attention (`layers.{i}.attn.*`):
+
+- `wq_a.weight`: `[q_lora_rank, hidden_size]` (low-rank Q factor A)
+- `q_norm.weight`: `[q_lora_rank]` (RMSNorm in fp32)
+- `wq_b.weight`: `[num_attention_heads*head_dim, q_lora_rank]` (low-rank Q factor B)
+- `wkv.weight`: `[head_dim, hidden_size]` (shared KV latent)
+- `kv_norm.weight`: `[head_dim]`
+- `wo_a.weight`: `[o_groups*o_lora_rank, (num_attention_heads*head_dim)/o_groups]` (grouped low-rank O factor A)
+- `wo_b.weight`: `[hidden_size, o_groups*o_lora_rank]` (low-rank O factor B)
+
+Per-layer MoE (`layers.{i}.ffn.*`):
+
+- `gate.weight`: `[n_routed_experts, hidden_size]`
+- Hash gate (layers `0..n_hash_layers-1`): `gate.tid2eid`: `[vocab_size, n_activated_experts]` (int32)
+- Score gate (layers `n_hash_layers..n_layers-1`): `gate.bias`: `[n_routed_experts]` (float32; selection-only)
+- Expert FFN (logical shapes for each `experts.{eid}.w{1,2,3}`):
+  - `w1`: `[moe_inter_dim, hidden_size]`
+  - `w2`: `[hidden_size, moe_inter_dim]`
+  - `w3`: `[moe_inter_dim, hidden_size]`
 
 ## Attention schedule (sliding vs CSA vs HCA)
 
