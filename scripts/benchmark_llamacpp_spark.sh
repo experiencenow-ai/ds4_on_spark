@@ -11,7 +11,7 @@ N_TOKENS="${N_TOKENS:-256}"
 N_GPU_LAYERS="${N_GPU_LAYERS:-99}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
-OUT_DIR="${OUT_DIR:-$PWD/baseline_llamacpp}"
+OUT_DIR="${OUT_DIR:-/tmp/baseline_llamacpp}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"

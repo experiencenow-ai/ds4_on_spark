@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-OUT_DIR="${OUT_DIR:-$PWD/baseline_vllm}"
+OUT_DIR="${OUT_DIR:-/tmp/baseline_vllm}"
 mkdir -p "$OUT_DIR"
 
 ALLOW_RUN="${ALLOW_RUN:-0}"

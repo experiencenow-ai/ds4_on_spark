@@ -12,7 +12,7 @@ CTX="${CTX:-32768}"
 N_TOKENS="${N_TOKENS:-256}"
 EXTRA_ARGS="${EXTRA_ARGS:---nothink}"
 
-OUT_DIR="${OUT_DIR:-$PWD/baseline_ds4_macos}"
+OUT_DIR="${OUT_DIR:-/private/tmp/baseline_ds4_macos}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
@@ -162,4 +162,3 @@ print("\\n== baseline summary (approx) ==")
 print("\\n".join(summary_lines))
 sys.exit(rc)
 PY
-
