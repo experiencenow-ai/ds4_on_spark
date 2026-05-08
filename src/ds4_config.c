@@ -21,6 +21,35 @@ static int32_t ds4_span_eq(const char *a,int32_t alen,const char *b)
 	return(1);
 }
 
+static uint8_t ds4_ascii_lower(uint8_t c)
+{
+	if ( c >= 'A' && c <= 'Z' )
+		return((uint8_t)(c + ('a' - 'A')));
+	return(c);
+}
+
+static int32_t ds4_span_eq_ci(const char *a,int32_t alen,const char *b)
+{
+	int32_t i;
+	uint8_t ca,cb;
+	if ( a == 0 )
+		return(0);
+	if ( alen <= 0 )
+		return(0);
+	for (i=0; b[i]!=0; i++)
+	{
+		if ( i >= alen )
+			return(0);
+		ca = ds4_ascii_lower((uint8_t)a[i]);
+		cb = ds4_ascii_lower((uint8_t)b[i]);
+		if ( ca != cb )
+			return(0);
+	}
+	if ( i != alen )
+		return(0);
+	return(1);
+}
+
 static int32_t ds4_parse_i32(const char *s,int32_t slen,int32_t *out)
 {
 	int32_t i,neg,v;
@@ -50,6 +79,37 @@ static int32_t ds4_parse_i32(const char *s,int32_t slen,int32_t *out)
 	return(0);
 }
 
+static int32_t ds4_parse_bool(const char *s,int32_t slen,int32_t *out)
+{
+	int32_t iv;
+	if ( s == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( slen <= 0 )
+		return(-3);
+	if ( ds4_parse_i32(s,slen,&iv) == 0 )
+	{
+		if ( iv == 0 || iv == 1 )
+		{
+			*out = iv;
+			return(0);
+		}
+		return(-4);
+	}
+	if ( ds4_span_eq_ci(s,slen,"true") != 0 || ds4_span_eq_ci(s,slen,"yes") != 0 || ds4_span_eq_ci(s,slen,"on") != 0 )
+	{
+		*out = 1;
+		return(0);
+	}
+	if ( ds4_span_eq_ci(s,slen,"false") != 0 || ds4_span_eq_ci(s,slen,"no") != 0 || ds4_span_eq_ci(s,slen,"off") != 0 )
+	{
+		*out = 0;
+		return(0);
+	}
+	return(-5);
+}
+
 int32_t ds4_config_defaults(ds4_config_t *cfg)
 {
 	if ( cfg == 0 )
@@ -76,13 +136,17 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 	{
 		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
 			return(-6);
+		if ( iv < 0 )
+			return(-7);
+		if ( iv > 3 )
+			return(-8);
 		cfg->log_level = iv;
 		return(0);
 	}
 	if ( ds4_span_eq(k,klen,"enable_cuda") != 0 )
 	{
-		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
-			return(-7);
+		if ( ds4_parse_bool(v,vlen,&iv) < 0 )
+			return(-9);
 		cfg->enable_cuda = iv;
 		return(0);
 	}

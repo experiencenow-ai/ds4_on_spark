@@ -10,6 +10,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+Or via the Makefile wrapper:
+
+```bash
+make clean
+make check
+```
+
 ## CUDA (requires CUDA toolkit)
 
 ```bash
@@ -18,5 +25,11 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-If CUDA is not available, configuration fails with an explicit error when `DS4_ENABLE_CUDA=ON`.
+Or via the Makefile wrapper:
 
+```bash
+make clean
+make check-cuda
+```
+
+If CUDA is not available, configuration fails with an explicit error when `DS4_ENABLE_CUDA=ON`.

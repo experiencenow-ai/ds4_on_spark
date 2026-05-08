@@ -15,6 +15,13 @@ make build
 make test
 ```
 
+For a portable, CPU-only strict build (warnings-as-errors), use:
+
+```bash
+make clean
+make check
+```
+
 ## Linux (optional CUDA)
 
 To enable CUDA, configure with:

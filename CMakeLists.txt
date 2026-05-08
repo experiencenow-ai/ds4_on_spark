@@ -53,6 +53,7 @@ if(DS4_ENABLE_TESTS)
 		tests/test_main.c
 		tests/test_arena.c
 		tests/test_config.c
+		tests/test_log.c
 		tests/test_ctx.c
 		tests/test_cuda.c
 	)

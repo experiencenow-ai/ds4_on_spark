@@ -15,3 +15,17 @@ typedef void (*ds4_log_sink_fn)(void *ctx,int32_t level,const char *msg);
 int32_t ds4_log_set_level(int32_t level);
 int32_t ds4_log_set_sink(ds4_log_sink_fn fn,void *ctx);
 int32_t ds4_logf(int32_t level,const char *fmt,...);
+
+#define DS4_LOGE(...) ds4_logf(DS4_LOG_ERROR,__VA_ARGS__)
+#define DS4_LOGW(...) ds4_logf(DS4_LOG_WARN,__VA_ARGS__)
+#define DS4_LOGI(...) ds4_logf(DS4_LOG_INFO,__VA_ARGS__)
+#define DS4_LOGD(...) ds4_logf(DS4_LOG_DEBUG,__VA_ARGS__)
+
+typedef struct
+{
+	char *buf;
+	int32_t cap,used,truncated;
+} ds4_log_buf_t;
+
+int32_t ds4_log_buf_init(ds4_log_buf_t *lb,char *buf,int32_t cap);
+void ds4_log_buf_sink(void *ctx,int32_t level,const char *msg);
