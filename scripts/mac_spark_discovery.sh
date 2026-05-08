@@ -18,6 +18,7 @@ Environment:
 
 Examples:
   ./scripts/mac_spark_discovery.sh
+  REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
   ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
 EOF
 }
@@ -32,7 +33,7 @@ esac
 if [ "$#" -gt 0 ]; then
 	targets="$*"
 else
-	targets="aitopatom-9ab9.local 10.0.0.2 192.168.100.2 192.168.100.10 192.168.100.11"
+	targets="aitopatom-9ab9.local spark1.local 10.0.0.2 192.168.100.2 192.168.100.10 192.168.100.11"
 fi
 
 tmp="$(mktemp /private/tmp/ds4_mac_spark_discovery.XXXXXX)"

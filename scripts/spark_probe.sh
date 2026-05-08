@@ -3,7 +3,7 @@ set -eu
 
 usage()
 {
-	cat <<'EOF'
+	cat <<'USAGE'
 usage: spark_probe.sh [user@host]
 
 Environment:
@@ -13,7 +13,7 @@ Environment:
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
-EOF
+USAGE
 }
 
 case "${1:-}" in
@@ -29,7 +29,13 @@ SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChec
 tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
-ssh $SSH_OPTS "$target" 'set -eu
+{
+	echo "== local meta =="
+	date -u
+	echo "probe target: $target"
+	echo
+	ssh $SSH_OPTS "$target" 'set -eu
+export LANG=C LC_ALL=C
 echo "== probe meta =="
 date -u
 echo "target user: $(id -un 2>/dev/null || true)"
@@ -85,6 +91,9 @@ else
 	echo "nvcc not found"
 fi
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
+echo
+echo "== cuda libraries (ldconfig, first hits) =="
+ldconfig -p 2>/dev/null | grep -E "libcuda\\.so\\.1|libcudart\\.so" | head -n 20 || true
 echo
 echo "== cuda runtime probe (nvcc, no deps) =="
 if [ "$nvcc_bin" != "" ]; then
@@ -150,10 +159,26 @@ echo "== network =="
 ip -br -4 addr 2>/dev/null || ip -brief addr 2>/dev/null || ip addr || true
 ip -4 route 2>/dev/null || ip route || true
 echo
+echo "== network links (no IPs) =="
+ip -br link 2>/dev/null || true
+if command -v ethtool >/dev/null 2>&1; then
+	for iface in enP7s7 wlP9s9; do
+		echo "-- ethtool $iface --"
+		ethtool "$iface" 2>/dev/null | head -n 30 || true
+	done
+fi
+echo
 echo "== storage =="
 df -h / /home 2>/dev/null || df -h / || true
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null || true
-' >"$tmp"
+echo
+echo "== disks (summary) =="
+lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null | head -n 20 || true
+echo
+echo "== nvidia driver (proc) =="
+cat /proc/driver/nvidia/version 2>/dev/null | head -n 40 || true
+'
+} >"$tmp"
 
 if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \

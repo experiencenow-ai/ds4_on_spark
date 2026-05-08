@@ -17,6 +17,12 @@ Current observed Spark identity:
 
 From the Mac repo root, use the scripts in `scripts/` to keep probes consistent and safe-to-commit.
 
+Notes:
+
+- These scripts write SSH host key state to `/private/tmp/ds4_spark_known_hosts` (not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
+- Use `REDACT=1` for any output you plan to commit.
+
+
 ### Mac-side Discovery (mDNS + reachability)
 
 ```bash
@@ -36,13 +42,14 @@ This prints:
 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
 ```
 
-The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting MAC addresses or host keys. Use `REDACT=1` when saving output for commit; the redacted snapshot is suitable to paste into `docs/spark0-*.md`.
+The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting host keys. Use `REDACT=1` when saving output for commit; the redacted snapshot is suitable to paste into `docs/spark0-*.md`.
 
 ## Spark1 Ready Checklist
 
 When Spark1 exists (or a second Spark is provisioned), the same scripts should work with a new target:
 
 ```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh spark1.local
 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
 ```
 

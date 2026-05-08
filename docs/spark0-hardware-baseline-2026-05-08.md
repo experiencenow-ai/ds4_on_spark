@@ -28,9 +28,10 @@ High-level facts observed (from the probe output below):
 - CUDA toolkit (nvcc): 13.0 (V13.0.88)
 - `nvcc` path: `/usr/local/cuda/bin/nvcc` (not on default `PATH`)
 - PyTorch: not present in default `python3` env
-- Wired NIC: `enP7s7`, MTU 9000
+- Wired NIC: `enP7s7`, MTU 9000, link speed 10Gb/s (ethtool)
 - Default route: via Wi-Fi during probe
-- Root filesystem: ~3.7 TiB NVMe, ~38 GiB used during probe
+- Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
+- NVIDIA driver (proc): Open Kernel Module `580.142` build timestamp `2026-03-03`
 
 ## Spark Probe Output (Redacted)
 
@@ -40,8 +41,12 @@ Notes:
 - Re-run without `REDACT=1` only for local debugging; do not commit raw network identifiers.
 
 ```text
+== local meta ==
+Fri May  8 22:36:16 UTC 2026
+probe target: spark0@aitopatom-9ab9.local
+
 == probe meta ==
-Fri May  8 22:10:59 UTC 2026
+Fri May  8 22:36:17 UTC 2026
 target user: spark0
 
 == identity ==
@@ -122,7 +127,7 @@ Vulnerability Vmscape:                   Not affected
 
 == memory ==
                total        used        free      shared  buff/cache   available
-Mem:           119Gi       4.3Gi       113Gi        61Mi       2.4Gi       115Gi
+Mem:           119Gi       4.9Gi       113Gi        61Mi       2.4Gi       114Gi
 Swap:           15Gi          0B        15Gi
 
 == toolchain ==
@@ -142,7 +147,7 @@ Python 3.12.3
 000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1)
 
 == nvidia-smi summary ==
-Sat May  9 07:10:59 2026       
+Sat May  9 07:36:17 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 13.0     |
 +-----------------------------------------+------------------------+----------------------+
@@ -179,6 +184,11 @@ Cuda compilation tools, release 13.0, V13.0.88
 Build cuda_13.0.r13.0/compiler.36424714_0
 -rwxr-xr-x 1 root root 24513032 Aug 21  2025 /usr/local/cuda/bin/nvcc
 
+== cuda libraries (ldconfig, first hits) ==
+	libcudart.so.13 (libc6,AArch64) => /usr/local/cuda/targets/sbsa-linux/lib/libcudart.so.13
+	libcudart.so (libc6,AArch64) => /usr/local/cuda/targets/sbsa-linux/lib/libcudart.so
+	libcuda.so.1 (libc6,AArch64) => /lib/aarch64-linux-gnu/libcuda.so.1
+
 == cuda runtime probe (nvcc, no deps) ==
 cuda devices: 1
 device0 name: NVIDIA GB10
@@ -199,6 +209,50 @@ default via <redacted-ipv4> dev wlP9s9 proto dhcp src <redacted-ipv4> metric 600
 <redacted-ipv4>/24 dev enP7s7 proto kernel scope link src <redacted-ipv4> metric 100 
 <redacted-ipv4>/24 dev wlP9s9 proto kernel scope link src <redacted-ipv4> metric 600 
 <redacted-ipv4>/16 dev docker0 proto kernel scope link src <redacted-ipv4> linkdown 
+
+== network links (no IPs) ==
+lo               UNKNOWN        <redacted-mac> <LOOPBACK,UP,LOWER_UP> 
+enP7s7           UP             <redacted-mac> <BROADCAST,MULTICAST,UP,LOWER_UP> 
+enp1s0f0np0      DOWN           <redacted-mac> <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enp1s0f1np1      DOWN           <redacted-mac> <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enP2p1s0f0np0    DOWN           <redacted-mac> <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+enP2p1s0f1np1    DOWN           <redacted-mac> <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+wlP9s9           UP             <redacted-mac> <BROADCAST,MULTICAST,UP,LOWER_UP> 
+docker0          DOWN           <redacted-mac> <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+-- ethtool enP7s7 --
+Settings for enP7s7:
+	Supported ports: [ TP ]
+	Supported link modes:   10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	                        10000baseT/Full
+	                        2500baseT/Full
+	                        5000baseT/Full
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Supported FEC modes: Not reported
+	Advertised link modes:  10baseT/Half 10baseT/Full
+	                        100baseT/Half 100baseT/Full
+	                        1000baseT/Full
+	                        10000baseT/Full
+	                        2500baseT/Full
+	                        5000baseT/Full
+	Advertised pause frame use: Symmetric Receive-only
+	Advertised auto-negotiation: Yes
+	Advertised FEC modes: Not reported
+	Link partner advertised link modes:  10baseT/Full
+	                                     100baseT/Full
+	                                     1000baseT/Full
+	                                     10000baseT/Full
+	                                     2500baseT/Full
+	                                     5000baseT/Full
+	Link partner advertised pause frame use: Symmetric Receive-only
+	Link partner advertised auto-negotiation: Yes
+	Link partner advertised FEC modes: Not reported
+	Speed: 10000Mb/s
+-- ethtool wlP9s9 --
+Settings for wlP9s9:
+	Link detected: yes
 
 == storage ==
 Filesystem      Size  Used Avail Use% Mounted on
@@ -222,6 +276,30 @@ loop13        552K loop /snap/snapd-desktop-integration/316
 loop14         10M loop /snap/snap-store/1271
 loop15      234.8M loop /snap/firefox/8278
 nvme0n1       3.7T disk 
-├─nvme0n1p1   512M part /boot/efi
-└─nvme0n1p2   3.7T part /
+|-nvme0n1p1   512M part /boot/efi
+`-nvme0n1p2   3.7T part /
+
+== disks (summary) ==
+NAME      SIZE MODEL                      ROTA TYPE
+loop0       4K                               0 loop
+loop1      69M                               0 loop
+loop2    61.9M                               0 loop
+loop3    10.2M                               0 loop
+loop4   241.1M                               0 loop
+loop5    15.6M                               0 loop
+loop6     503M                               0 loop
+loop7    12.2M                               0 loop
+loop8   552.9M                               0 loop
+loop9   174.6M                               0 loop
+loop10   91.7M                               0 loop
+loop11   42.6M                               0 loop
+loop12  221.2M                               0 loop
+loop13    552K                               0 loop
+loop14     10M                               0 loop
+loop15  234.8M                               0 loop
+nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
+
+== nvidia driver (proc) ==
+NVRM version: NVIDIA UNIX Open Kernel Module for aarch64  580.142  Release Build  (dvs-builder@U22-I3-H10-02-1)  Tue Mar  3 19:08:06 UTC 2026
+GCC version:  gcc version 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 
 ```
