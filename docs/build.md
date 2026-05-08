@@ -6,6 +6,7 @@ See also:
 
 - `docs/build-macos.md`
 - `docs/build-linux.md`
+- `docs/build-config.md`
 
 ## Mac (no CUDA)
 

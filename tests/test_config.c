@@ -1,6 +1,7 @@
 #include "ds4/config.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "test_suite.h"
 
@@ -21,5 +22,19 @@ int32_t test_config(void)
 		return(-5);
 	if ( cfg.enable_cuda != 1 )
 		return(-6);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-7);
+	if ( setenv("DS4_LOG_LEVEL","1",1) != 0 )
+		return(-8);
+	if ( setenv("DS4_ENABLE_CUDA","yes",1) != 0 )
+		return(-9);
+	if ( ds4_config_parse_env(&cfg) < 0 )
+		return(-10);
+	if ( cfg.log_level != 1 )
+		return(-11);
+	if ( cfg.enable_cuda != 1 )
+		return(-12);
+	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
 	return(0);
 }

@@ -1,5 +1,6 @@
 #include "ds4/config.h"
 
+#include <stdlib.h>
 #include <stdio.h>
 
 static int32_t ds4_span_eq(const char *a,int32_t alen,const char *b)
@@ -110,12 +111,55 @@ static int32_t ds4_parse_bool(const char *s,int32_t slen,int32_t *out)
 	return(-5);
 }
 
+static int32_t ds4_cstr_len_i32(const char *s)
+{
+	int32_t n;
+	if ( s == 0 )
+		return(0);
+	for (n=0; s[n]!=0; n++)
+		;
+	return(n);
+}
+
 int32_t ds4_config_defaults(ds4_config_t *cfg)
 {
 	if ( cfg == 0 )
 		return(-1);
 	cfg->log_level = 2;
 	cfg->enable_cuda = 0;
+	return(0);
+}
+
+int32_t ds4_config_parse_env(ds4_config_t *cfg)
+{
+	const char *v;
+	int32_t vlen,iv;
+	if ( cfg == 0 )
+		return(-1);
+	v = getenv("DS4_LOG_LEVEL");
+	if ( v != 0 )
+	{
+		vlen = ds4_cstr_len_i32(v);
+		if ( vlen <= 0 )
+			return(-2);
+		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+			return(-3);
+		if ( iv < 0 )
+			return(-4);
+		if ( iv > 3 )
+			return(-5);
+		cfg->log_level = iv;
+	}
+	v = getenv("DS4_ENABLE_CUDA");
+	if ( v != 0 )
+	{
+		vlen = ds4_cstr_len_i32(v);
+		if ( vlen <= 0 )
+			return(-6);
+		if ( ds4_parse_bool(v,vlen,&iv) < 0 )
+			return(-7);
+		cfg->enable_cuda = iv;
+	}
 	return(0);
 }
 
