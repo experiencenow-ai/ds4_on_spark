@@ -21,4 +21,3 @@ llama.cpp is a useful Spark reference point for:
 ```bash
 ./scripts/fetch_upstreams.sh llama_cpp
 ```
-

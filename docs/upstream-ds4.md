@@ -16,4 +16,3 @@
 ```bash
 ./scripts/fetch_upstreams.sh ds4
 ```
-

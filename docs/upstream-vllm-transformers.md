@@ -27,4 +27,3 @@ Fetch:
 ```bash
 ./scripts/fetch_upstreams.sh transformers
 ```
-

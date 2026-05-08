@@ -21,4 +21,3 @@ DeepGEMM provides optimized GEMM kernels and related CUDA plumbing that may be r
 ```bash
 ./scripts/fetch_upstreams.sh deepgemm
 ```
-

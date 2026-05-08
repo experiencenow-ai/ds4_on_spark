@@ -22,4 +22,3 @@ We use DeepSeek-V3 as a reference point for:
 ```bash
 ./scripts/fetch_upstreams.sh deepseek_v3
 ```
-
