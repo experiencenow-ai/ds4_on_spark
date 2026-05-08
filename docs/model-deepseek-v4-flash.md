@@ -14,16 +14,23 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
-- `inference/config.json`, `inference/model.py`, `inference/kernel.py` (reference execution semantics: CSA/HCA caches, MoE routing, MTP block)
+- `inference/config.json`, `inference/model.py`, `inference/kernel.py` (reference execution semantics: MLA, sliding/CSA/HCA caches, MoE routing, MTP block)
 
-## Topology constants (from `config.json`)
+Notes on config sources:
+
+- `config.json` is the canonical Transformers config and contains all architectural constants.
+- `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
+
+## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280
 - `hidden_size` / model `dim`: 4096
 - `num_hidden_layers` / `n_layers`: 43
-- `num_attention_heads`: 64
+- `num_attention_heads` / `n_heads`: 64
 - `head_dim`: 512
-- `num_key_value_heads`: 1 (MQA: one KV head shared by all Q heads)
+- `qk_rope_head_dim` / `rope_head_dim`: 64 (RoPE applies to the **trailing** 64 dims of each head)
+- `qk_nope_head_dim` / `nope_head_dim`: 448 (`head_dim - rope_head_dim`, non-positional slice)
+- `num_key_value_heads`: 1 (shared KV; upstream uses a single latent KV vector per token)
 - `q_lora_rank`: 1024
 - `o_groups`: 8
 - `o_lora_rank`: 1024
@@ -38,6 +45,13 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
   - `num_nextn_predict_layers`: 1
+- YaRN / RoPE scaling (from `config.json` `rope_scaling` and `compress_rope_theta`, plus `inference/config.json`):
+  - `rope_theta`: 10000
+  - `compress_rope_theta`: 160000
+  - `original_seq_len` / `original_max_position_embeddings`: 65536
+  - `rope_factor`: 16
+  - `beta_fast`: 32
+  - `beta_slow`: 1
 
 ## Attention schedule (sliding vs CSA vs HCA)
 
@@ -47,14 +61,14 @@ Interpretation (from `inference/model.py`):
 
 - `compress_ratio == 0`: **sliding-window attention only**
   - KV cache stores only the local window.
-  - YaRN is disabled for these layers (uses base `rope_theta`).
+  - YaRN is disabled for these layers (uses base `rope_theta` and `original_seq_len=0`).
 - `compress_ratio == 4`: **CSA** (Compressed Sparse Attention)
   - Uses a learned **Indexer** to pick `index_topk` compressed blocks per query.
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 4`.
 - `compress_ratio != 0 and != 4` (V4 Flash uses `128`): **HCA** (hybrid compressed attention)
   - No Indexer path; compressed top-k indices come from the deterministic `get_compress_topk_idxs(...)`.
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 128`.
-  - YaRN is enabled in these layers (uses `compress_rope_theta` and `original_seq_len`).
+  - YaRN is enabled in these layers (uses `compress_rope_theta` and `original_seq_len=65536`).
 
 Layer-by-layer `compress_ratio` schedule for the 43 main blocks:
 
@@ -75,7 +89,10 @@ Reference implementation: `inference/model.py` (`Attention.forward`).
 Per-layer KV cache allocation:
 
 - `kv_cache_size = window_size + (max_seq_len // compress_ratio if compress_ratio else 0)`
-- Cache buffer name: `layers.{i}.attn.kv_cache` (runtime buffer; not in checkpoint)
+- Cache buffer name: `layers.{i}.attn.kv_cache` (runtime buffer; **not** in checkpoint)
+- Cache buffer shape: `[max_batch_size, kv_cache_size, head_dim]`
+  - `kv_cache[:,:window_size]` is a **ring buffer** for the sliding window (index `t % window_size` in decode).
+  - `kv_cache[:,window_size:]` is a **linear** compressed segment (index `t // compress_ratio` in decode for `compress_ratio != 0`).
 
 Runtime update rules:
 
@@ -92,6 +109,23 @@ Sparse attention index selection:
 - If `compress_ratio != 0`, concatenates compressed indices:
   - CSA (`ratio==4`): `Indexer(...)` chooses indices.
   - HCA (`ratio==128`): `get_compress_topk_idxs(...)` chooses indices.
+
+### MLA positional semantics (partial RoPE + inverse on output)
+
+Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
+
+- Query path:
+  - `qr = q_norm(wq_a(x))`
+  - `q = wq_b(qr)` reshaped to `[B,S,n_heads,head_dim]`
+  - `apply_rotary_emb(q[..., -rope_head_dim:], freqs_cis)`
+- KV path (shared KV, no per-head split):
+  - `kv = kv_norm(wkv(x))` shaped `[B,S,head_dim]`
+  - `apply_rotary_emb(kv[..., -rope_head_dim:], freqs_cis)`
+- Attention output:
+  - `o = sparse_attn(q, kv_cache_or_concat, attn_sink, topk_idxs, softmax_scale)`
+  - `apply_rotary_emb(o[..., -rope_head_dim:], freqs_cis, inverse=True)` (**de-rotation** via complex conjugate)
+
+DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
 
 ## MoE routing semantics (hash + score routing)
 
@@ -183,6 +217,55 @@ Quantized linear layers include per-block scale tensors:
   - `{...}.scale`
 
 DS4 must treat the `model.safetensors.index.json` key set as authoritative for loader compatibility.
+
+### Tensor key patterns (loader contract)
+
+The weight map contains 69,187 tensor keys. DS4 should validate **patterns**, not enumerate individual keys in source.
+
+Top-level keys:
+
+- `embed.weight`
+- `norm.weight`
+- `head.weight`
+- `hc_head_fn`, `hc_head_base`, `hc_head_scale`
+
+Per-layer keys (for `layers.{i}.*`, `i ∈ [0,42]`):
+
+- Always present:
+  - `layers.{i}.attn.attn_sink`
+  - `layers.{i}.attn.wq_a.{weight,scale}`
+  - `layers.{i}.attn.q_norm.weight`
+  - `layers.{i}.attn.wq_b.{weight,scale}`
+  - `layers.{i}.attn.wkv.{weight,scale}`
+  - `layers.{i}.attn.kv_norm.weight`
+  - `layers.{i}.attn.wo_a.{weight,scale}`
+  - `layers.{i}.attn.wo_b.{weight,scale}`
+  - `layers.{i}.attn_norm.weight`
+  - `layers.{i}.ffn.gate.weight`
+  - `layers.{i}.ffn.shared_experts.w{1,2,3}.{weight,scale}`
+  - `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` for all `eid ∈ [0,255]`
+  - `layers.{i}.ffn_norm.weight`
+  - `layers.{i}.hc_attn_{fn,base,scale}`, `layers.{i}.hc_ffn_{fn,base,scale}`
+- MoE gate conditional:
+  - Hash layers (`i < 3`): `layers.{i}.ffn.gate.tid2eid` present and `layers.{i}.ffn.gate.bias` absent
+  - Score layers (`i >= 3`): `layers.{i}.ffn.gate.bias` present and `layers.{i}.ffn.gate.tid2eid` absent
+- Cache compression conditional:
+  - `compress_ratio == 0`: no `layers.{i}.attn.compressor.*` and no `layers.{i}.attn.indexer.*`
+  - `compress_ratio == 4` (CSA): must include:
+    - `layers.{i}.attn.compressor.{ape,norm.weight,wgate.weight,wkv.weight}`
+    - `layers.{i}.attn.indexer.wq_b.{weight,scale}`
+    - `layers.{i}.attn.indexer.weights_proj.weight`
+    - `layers.{i}.attn.indexer.compressor.{ape,norm.weight,wgate.weight,wkv.weight}`
+  - `compress_ratio == 128` (HCA): must include `layers.{i}.attn.compressor.{...}` and must **not** include `layers.{i}.attn.indexer.*`
+
+MTP block (`mtp.0.*`):
+
+- Includes the same attention/MoE/HC keys as a score-routed sliding-only layer, plus:
+  - `mtp.0.e_proj.{weight,scale}`, `mtp.0.h_proj.{weight,scale}`
+  - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
+  - `mtp.0.hc_head_{fn,base,scale}`
+
+This repo includes a verifier for these invariants: `scripts/model_contract_verify_deepseek_v4_flash.py`.
 
 ## Next steps (oracle + remaining unknowns)
 
