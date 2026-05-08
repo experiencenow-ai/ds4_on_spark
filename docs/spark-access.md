@@ -19,7 +19,7 @@ From the Mac repo root, use the scripts in `scripts/` to keep probes consistent 
 
 Notes:
 
-- These scripts write SSH host key state to `/private/tmp/ds4_spark_known_hosts` (not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
+- These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
 - Use `REDACT=1` for any output you plan to commit.
 
 

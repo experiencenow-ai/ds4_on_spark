@@ -54,6 +54,10 @@ for iface in en0 en1; do
 	' || true
 done
 echo
+echo "== routes (redacted) =="
+netstat -rn -f inet 2>/dev/null | head -n 40 || true
+netstat -rn -f inet6 2>/dev/null | head -n 40 || true
+echo
 echo "== arp =="
 arp -an 2>/dev/null | sed -E 's/ at [^ ]+ on / on /' || true
 echo

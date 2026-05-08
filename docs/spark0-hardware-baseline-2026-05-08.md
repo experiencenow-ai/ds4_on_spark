@@ -11,7 +11,7 @@ Host:
 Commands run:
 
 ```bash
-REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe-2026-05-08-2329z.txt
 ```
 
 High-level facts observed (from the probe output below):
@@ -42,11 +42,11 @@ Notes:
 
 ```text
 == local meta ==
-Fri May  8 22:36:16 UTC 2026
+Fri May  8 23:29:28 UTC 2026
 probe target: spark0@aitopatom-9ab9.local
 
 == probe meta ==
-Fri May  8 22:36:17 UTC 2026
+Fri May  8 23:29:29 UTC 2026
 target user: spark0
 
 == identity ==
@@ -127,7 +127,7 @@ Vulnerability Vmscape:                   Not affected
 
 == memory ==
                total        used        free      shared  buff/cache   available
-Mem:           119Gi       4.9Gi       113Gi        61Mi       2.4Gi       114Gi
+Mem:           119Gi       4.1Gi       114Gi        61Mi       2.4Gi       115Gi
 Swap:           15Gi          0B        15Gi
 
 == toolchain ==
@@ -147,7 +147,7 @@ Python 3.12.3
 000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1)
 
 == nvidia-smi summary ==
-Sat May  9 07:36:17 2026       
+Sat May  9 08:29:29 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 13.0     |
 +-----------------------------------------+------------------------+----------------------+
@@ -156,7 +156,7 @@ Sat May  9 07:36:17 2026
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
 |   0  NVIDIA GB10                    On  |   0000000F:01:00.0 Off |                  N/A |
-| N/A   47C    P0             12W /  N/A  | Not Supported          |      0%      Default |
+| N/A   46C    P0             11W /  N/A  | Not Supported          |      0%      Default |
 |                                         |                        |                  N/A |
 +-----------------------------------------+------------------------+----------------------+
 
@@ -171,7 +171,7 @@ Sat May  9 07:36:17 2026
 +-----------------------------------------------------------------------------------------+
 
 == nvidia-smi query (driver + compute capability) ==
-NVIDIA GB10, 580.142, 12.1, 47, P0, [N/A]
+NVIDIA GB10, 580.142, 12.1, 46, P0, [N/A]
 
 == nvidia-smi cuda version ==
 CUDA Version                                           : 13.0
@@ -221,35 +221,10 @@ wlP9s9           UP             <redacted-mac> <BROADCAST,MULTICAST,UP,LOWER_UP>
 docker0          DOWN           <redacted-mac> <NO-CARRIER,BROADCAST,MULTICAST,UP> 
 -- ethtool enP7s7 --
 Settings for enP7s7:
-	Supported ports: [ TP ]
-	Supported link modes:   10baseT/Half 10baseT/Full
-	                        100baseT/Half 100baseT/Full
-	                        1000baseT/Full
-	                        10000baseT/Full
-	                        2500baseT/Full
-	                        5000baseT/Full
-	Supported pause frame use: Symmetric Receive-only
-	Supports auto-negotiation: Yes
-	Supported FEC modes: Not reported
-	Advertised link modes:  10baseT/Half 10baseT/Full
-	                        100baseT/Half 100baseT/Full
-	                        1000baseT/Full
-	                        10000baseT/Full
-	                        2500baseT/Full
-	                        5000baseT/Full
-	Advertised pause frame use: Symmetric Receive-only
-	Advertised auto-negotiation: Yes
-	Advertised FEC modes: Not reported
-	Link partner advertised link modes:  10baseT/Full
-	                                     100baseT/Full
-	                                     1000baseT/Full
-	                                     10000baseT/Full
-	                                     2500baseT/Full
-	                                     5000baseT/Full
-	Link partner advertised pause frame use: Symmetric Receive-only
-	Link partner advertised auto-negotiation: Yes
-	Link partner advertised FEC modes: Not reported
 	Speed: 10000Mb/s
+	Duplex: Full
+	Auto-negotiation: on
+	Link detected: yes
 -- ethtool wlP9s9 --
 Settings for wlP9s9:
 	Link detected: yes

@@ -29,7 +29,7 @@ REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local | tee /private/tmp/spark1-
 
 Notes:
 
-- The probe writes SSH host keys to `/private/tmp/ds4_spark_known_hosts` by default.
+- The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 
 ## What To Record In `docs/spark0-*.md`

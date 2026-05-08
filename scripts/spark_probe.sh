@@ -24,7 +24,10 @@ case "${1:-}" in
 esac
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts -o ServerAliveInterval=5 -o ServerAliveCountMax=2}"
+SPARK_KNOWN_HOSTS="${SPARK_KNOWN_HOSTS:-/private/tmp/ds4_spark_known_hosts}"
+if [ "${SSH_OPTS:-}" = "" ]; then
+	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SPARK_KNOWN_HOSTS -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
+fi
 
 tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
@@ -90,6 +93,8 @@ if [ "$nvcc_bin" != "" ]; then
 else
 	echo "nvcc not found"
 fi
+[ -e /usr/local/cuda ] && ls -ld /usr/local/cuda || true
+command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null || true
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
@@ -158,6 +163,7 @@ echo
 echo "== network =="
 ip -br -4 addr 2>/dev/null || ip -brief addr 2>/dev/null || ip addr || true
 ip -4 route 2>/dev/null || ip route || true
+ip -6 route 2>/dev/null || true
 echo
 echo "== network links (no IPs) =="
 ip -br link 2>/dev/null || true
