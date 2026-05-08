@@ -2,11 +2,18 @@
 set -eu
 
 echo "== interfaces =="
-ifconfig en0 || true
-ifconfig en1 || true
+for iface in en0 en1; do
+    echo "-- $iface --"
+    ifconfig "$iface" 2>/dev/null | awk '
+        /^\\tstatus:/ { print; next }
+        /^\\tmtu/ { print; next }
+        /^\\tinet / { print; next }
+        /^\\tinet6 / { print; next }
+    ' || true
+done
 echo
 echo "== arp =="
-arp -a || true
+arp -an 2>/dev/null | sed -E 's/ at [^ ]+ on / on /' || true
 echo
 echo "== ssh service browse, 5 seconds =="
 dns-sd -B _ssh._tcp local &
@@ -20,4 +27,3 @@ for host in aitopatom-9ab9.local 10.0.0.2 192.168.100.2 192.168.100.10 192.168.1
     printf "%s: " "$host"
     nc -vz -G 2 "$host" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
 done
-

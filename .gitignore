@@ -5,3 +5,6 @@ build/
 *.so
 *.dylib
 *.exe
+__pycache__/
+*.pyc
+upstreams/
