@@ -16,6 +16,7 @@ def load_json(path: Path):
 
 def main() -> int:
     cfg = load_json(FIX / "config.json")
+    inf = load_json(FIX / "inference" / "config.json")
     tok_cfg = load_json(FIX / "tokenizer_config.json")
     idx = load_json(FIX / "model.safetensors.index.json")
 
@@ -40,6 +41,8 @@ def main() -> int:
     print(f"- num_hidden_layers: {cfg['num_hidden_layers']}")
     print(f"- num_attention_heads: {cfg['num_attention_heads']}")
     print(f"- head_dim: {cfg['head_dim']}")
+    if 'qk_rope_head_dim' in cfg:
+        print(f"- qk_rope_head_dim: {cfg['qk_rope_head_dim']}")
     print(f"- num_key_value_heads: {cfg['num_key_value_heads']}")
     print(f"- sliding_window: {cfg['sliding_window']}")
     print(f"- n_routed_experts: {cfg['n_routed_experts']}")
@@ -50,6 +53,15 @@ def main() -> int:
     print(f"- routed_scaling_factor: {cfg['routed_scaling_factor']}")
     print(f"- num_hash_layers: {cfg['num_hash_layers']}")
     print(f"- num_nextn_predict_layers: {cfg['num_nextn_predict_layers']}")
+    print("")
+    print("Reference runtime config (inference/config.json)")
+    print(f"- dim: {inf.get('dim')}")
+    print(f"- moe_inter_dim: {inf.get('moe_inter_dim')}")
+    print(f"- rope_head_dim: {inf.get('rope_head_dim')}")
+    print(f"- original_seq_len: {inf.get('original_seq_len')}")
+    print(f"- rope_theta: {inf.get('rope_theta')}")
+    print(f"- compress_rope_theta: {inf.get('compress_rope_theta')}")
+    print(f"- rope_factor: {inf.get('rope_factor')}")
     print("")
     print("Attention schedule (from compress_ratios)")
     print(f"- compress_ratios_len: {len(compress_ratios)} (main={n_layers} mtp={len(mtp_ratios)})")
