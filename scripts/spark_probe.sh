@@ -162,9 +162,10 @@ echo
 echo "== network links (no IPs) =="
 ip -br link 2>/dev/null || true
 if command -v ethtool >/dev/null 2>&1; then
-	for iface in enP7s7 wlP9s9; do
+	ifaces="$(ip -br link 2>/dev/null | awk '"'"'$1 != "lo" && ($2 == "UP" || $2 == "UNKNOWN") { print $1 }'"'"' | tr '"'"'\n'"'"' '"'"' '"'"' || true)"
+	for iface in $ifaces; do
 		echo "-- ethtool $iface --"
-		ethtool "$iface" 2>/dev/null | head -n 30 || true
+		ethtool "$iface" 2>/dev/null | grep -E "^(Settings for|\\s*Speed:|\\s*Duplex:|\\s*Auto-negotiation:|\\s*Link detected:)" || true
 	done
 fi
 echo

@@ -29,6 +29,9 @@ Notes:
 REDACT=1 ./scripts/mac_spark_discovery.sh
 ```
 
+Default targets (when no args are provided): `aitopatom-9ab9.local` and `spark1.local`.
+Pass additional hostnames/IPs explicitly if you need extra checks.
+
 This prints:
 
 - IPv4/IPv6 addresses for `en0`/`en1` (no MAC addresses)

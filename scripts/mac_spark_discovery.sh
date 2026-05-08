@@ -33,7 +33,7 @@ esac
 if [ "$#" -gt 0 ]; then
 	targets="$*"
 else
-	targets="aitopatom-9ab9.local spark1.local 10.0.0.2 192.168.100.2 192.168.100.10 192.168.100.11"
+	targets="aitopatom-9ab9.local spark1.local"
 fi
 
 tmp="$(mktemp /private/tmp/ds4_mac_spark_discovery.XXXXXX)"

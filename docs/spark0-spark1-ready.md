@@ -16,6 +16,8 @@ Use discovery first to confirm which `*.local` targets resolve and whether TCP/2
 REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 ```
 
+Omit args to use the same default targets.
+
 ## Spark Probe (Redacted)
 
 Always use `REDACT=1` when saving output for commit.
