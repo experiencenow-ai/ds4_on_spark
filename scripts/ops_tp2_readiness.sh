@@ -7,7 +7,7 @@ usage()
 ops_tp2_readiness.sh -- safe DS4 TP=2 readiness checks
 
 Usage:
-  ops_tp2_readiness.sh --self <name> [--peer <host>] [--peer-ssh <user@host>]
+  ops_tp2_readiness.sh --self <name> [--peer <host>] [--peer-ssh <user@host>] [--env <path>]
 
 Environment:
   SSH_OPTS            Optional ssh options override.
@@ -19,12 +19,14 @@ Environment:
 Notes:
   - This script is non-destructive and should not require sudo.
   - It does not modify networking, systemd, or GPU settings.
+  - `--env` sources the env file; use only on trusted content.
 EOF
 }
 
 self=""
 peer=""
 peer_ssh=""
+env_path=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -38,6 +40,10 @@ while [ $# -gt 0 ]; do
             ;;
         --peer-ssh)
             peer_ssh="${2:-}"
+            shift 2
+            ;;
+        --env)
+            env_path="${2:-}"
             shift 2
             ;;
         -h|--help)
@@ -56,6 +62,17 @@ if [ "$self" = "" ]; then
     echo "--self is required" >&2
     usage >&2
     exit 2
+fi
+
+if [ "$env_path" != "" ]; then
+    if [ ! -f "$env_path" ]; then
+        echo "missing env file: $env_path" >&2
+        exit 2
+    fi
+    set -a
+    # shellcheck disable=SC1090
+    . "$env_path"
+    set +a
 fi
 
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/var/tmp/ds4_known_hosts}"

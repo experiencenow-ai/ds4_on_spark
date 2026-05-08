@@ -40,7 +40,11 @@ From this repo root (on the Mac):
 
 This copies systemd templates + config examples to `/tmp/` on each Spark and prints the next human-run commands.
 
+It also stages safe ops scripts (preflight + env sanity checks) under `/tmp/ds4-scripts/`.
+
 ## On Each Spark: Install Systemd + Config
+
+If you want repeatable user/dir bring-up via sysusers/tmpfiles, run the `sysusers.d`/`tmpfiles.d` install commands printed by `ops_stage_deploy_assets.sh` first.
 
 On Spark0:
 

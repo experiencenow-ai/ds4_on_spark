@@ -23,11 +23,14 @@ root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 echo "== staging deploy assets to $target (instance=$instance) =="
 
+ssh "$target" "mkdir -p /tmp/ds4-systemd /tmp/ds4-config /tmp/ds4-sysusers /tmp/ds4-tmpfiles /tmp/ds4-scripts"
+
 rsync -av "$root/deploy/systemd/" "$target:/tmp/ds4-systemd/"
 rsync -av "$root/deploy/config/" "$target:/tmp/ds4-config/"
 rsync -av "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
 rsync -av "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
-rsync -av "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ops_tp2_readiness.sh"
+rsync -av "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
+rsync -av "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
 
 cat <<EOF
 
@@ -39,8 +42,16 @@ sudo systemd-sysusers || true
 sudo systemd-tmpfiles --create || true
 sudo install -m 0644 /tmp/ds4-systemd/*.service /etc/systemd/system/
 sudo install -m 0640 /tmp/ds4-config/ds4-${instance}.env.example /etc/ds4/ds4-${instance}.env
+sudo install -m 0640 /tmp/ds4-config/ds4-${instance}.yaml.example /etc/ds4/ds4-${instance}.yaml
 sudo install -d -m 0755 /opt/ds4/scripts
-sudo install -m 0755 /tmp/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
+sudo /opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-${instance}.env
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@${instance}.service
+
+== optional (journald persistence, human-run) ==
+sudo install -d -m 0755 /etc/systemd/journald.conf.d
+sudo install -m 0644 /tmp/ds4-config/journald.ds4.conf.example /etc/systemd/journald.conf.d/ds4.conf
+sudo systemctl restart systemd-journald
 EOF
