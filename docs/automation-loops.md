@@ -3,6 +3,8 @@
 Each loop should run in roughly 30 minutes and leave a short status note:
 what changed, what was measured, what blocked, and the next command.
 
+All loops must follow `docs/automation-github-protocol.md`.
+
 ## Loop 1: Spark Access
 
 Goal: make `ssh spark0@aitopatom-9ab9.local` passwordless from the Mac.
@@ -100,4 +102,3 @@ Tasks:
 - Measure queue fill, starvation, K selection, and oscillation.
 
 Exit: scheduler simulator with tests and plots/logs.
-
