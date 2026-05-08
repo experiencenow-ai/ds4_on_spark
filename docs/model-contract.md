@@ -18,6 +18,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
 - Fetch/refresh script: `scripts/model_contract_fetch_deepseek_v4_flash.sh`
 - Contract verifier: `scripts/model_contract_verify_deepseek_v4_flash.py`
+  - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).
 
 ## Correctness Oracles (requirements)
 

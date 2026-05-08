@@ -2,6 +2,8 @@
 
 import json
 import re
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -226,6 +228,15 @@ def main() -> int:
 		):
 			req_mtp(suffix)
 
+	# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
+	enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
+	if not enc_test.exists():
+		failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
+	else:
+		r = subprocess.run([sys.executable, str(enc_test)], cwd=str(enc_test.parent))
+		if r.returncode != 0:
+			failures.append(Failure(41, "DeepSeek V4 encoding oracle failed (see test output above)"))
+
 	if failures:
 		for f in failures:
 			print(f"ERROR[{f.code}]: {f.msg}")
@@ -237,4 +248,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	raise SystemExit(main())
-

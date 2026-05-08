@@ -35,12 +35,21 @@ Notes on config sources:
 - `o_groups`: 8
 - `o_lora_rank`: 1024
 - `sliding_window` / `window_size`: 128
+- CSA Indexer (from `config.json` + `inference/config.json`):
+  - `index_n_heads`: 64
+  - `index_head_dim`: 128
+  - `index_topk`: 512
+- Hyper-Connections (mHC):
+  - `hc_mult`: 4
+  - `hc_sinkhorn_iters`: 20
+  - `hc_eps`: 1e-6
 - `num_hash_layers` / `n_hash_layers`: 3 (first 3 MoE layers are hash-routed)
 - MoE:
   - `n_routed_experts`: 256
   - `n_shared_experts`: 1
   - `num_experts_per_tok` / `n_activated_experts`: 6
   - `moe_intermediate_size` / `moe_inter_dim`: 2048
+  - `swiglu_limit`: 10.0 (clamps expert activations in the reference code)
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
@@ -63,10 +72,12 @@ Interpretation (from `inference/model.py`):
   - KV cache stores only the local window.
   - YaRN is disabled for these layers (uses base `rope_theta` and `original_seq_len=0`).
 - `compress_ratio == 4`: **CSA** (Compressed Sparse Attention)
-  - Uses a learned **Indexer** to pick `index_topk` compressed blocks per query.
+  - Uses a learned **Indexer** to pick up to `index_topk` compressed positions per query.
+  - Compression uses overlapping windows (`Compressor.overlap == true` for `compress_ratio==4`).
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 4`.
 - `compress_ratio != 0 and != 4` (V4 Flash uses `128`): **HCA** (hybrid compressed attention)
   - No Indexer path; compressed top-k indices come from the deterministic `get_compress_topk_idxs(...)`.
+  - Compression uses non-overlapping windows (`Compressor.overlap == false`).
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 128`.
   - YaRN is enabled in these layers (uses `compress_rope_theta` and `original_seq_len=65536`).
 
@@ -110,6 +121,11 @@ Sparse attention index selection:
   - CSA (`ratio==4`): `Indexer(...)` chooses indices.
   - HCA (`ratio==128`): `get_compress_topk_idxs(...)` chooses indices.
 
+Important indexing details (from `Attention.forward`):
+
+- Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
+- Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
+
 ### MLA positional semantics (partial RoPE + inverse on output)
 
 Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
@@ -117,15 +133,25 @@ Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
 - Query path:
   - `qr = q_norm(wq_a(x))`
   - `q = wq_b(qr)` reshaped to `[B,S,n_heads,head_dim]`
+  - `q *= rsqrt(mean(q^2) + eps)` (extra per-token normalization in the reference code)
   - `apply_rotary_emb(q[..., -rope_head_dim:], freqs_cis)`
 - KV path (shared KV, no per-head split):
   - `kv = kv_norm(wkv(x))` shaped `[B,S,head_dim]`
   - `apply_rotary_emb(kv[..., -rope_head_dim:], freqs_cis)`
+  - `act_quant(kv[..., :-rope_head_dim], group=64, ...)` (non-RoPE dims only; RoPE dims stay BF16)
 - Attention output:
   - `o = sparse_attn(q, kv_cache_or_concat, attn_sink, topk_idxs, softmax_scale)`
   - `apply_rotary_emb(o[..., -rope_head_dim:], freqs_cis, inverse=True)` (**de-rotation** via complex conjugate)
 
 DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
+
+### Attention sink semantics (`attn_sink`)
+
+Reference implementation: `inference/kernel.py` (`sparse_attn`).
+
+- Each attention head has a learned scalar `attn_sink[h]`.
+- The sink contributes to the **softmax denominator** as an extra `exp(attn_sink[h])` term (i.e. it is a null/sink logit with no value vector contribution).
+- DS4 must treat `layers.{i}.attn.attn_sink` as semantically significant, not a no-op parameter.
 
 ## MoE routing semantics (hash + score routing)
 
@@ -269,5 +295,6 @@ This repo includes a verifier for these invariants: `scripts/model_contract_veri
 
 ## Next steps (oracle + remaining unknowns)
 
+- The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
 - Add a Spark-side logit oracle generator that runs the upstream reference implementation against a small prompt set **when weights are locally available** (do not auto-download shards).
 - Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.
