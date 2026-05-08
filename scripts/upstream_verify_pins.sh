@@ -54,9 +54,9 @@ check_ref "ds4" "https://github.com/antirez/ds4.git" "refs/heads/main" "d615ab08
 check_ref "DeepGEMM" "https://github.com/deepseek-ai/DeepGEMM.git" "refs/tags/v2.1.1.post3" "c9f8b34dcdacc20aa746b786f983492c51072870" || fail=1
 check_ref "DeepSeek-V3" "https://github.com/deepseek-ai/DeepSeek-V3.git" "refs/tags/v1.0.0" "f6e34dd26772dd4a216be94a8899276c5dca9e43" || fail=1
 check_ref "DeepSeek-V4-Flash (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash" "refs/heads/main" "6976c7ff1b30a1b2cb7805021b8ba4684041f136" || fail=1
+check_ref "DeepSeek-V4-Flash-Base (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base" "refs/heads/main" "8855555deef230a27a21a8d6f294b7b7497759b6" || fail=1
 check_ref "vLLM" "https://github.com/vllm-project/vllm.git" "refs/tags/v0.20.2" "bc150f50299199599673614f80d12a196f377655" || fail=1
 check_ref "Transformers" "https://github.com/huggingface/transformers.git" "refs/tags/v5.8.0" "a9e70365af64e028d40d8c7909deb7f138b49857" || fail=1
 check_ref "llama.cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/heads/master" "b46812de78f8fbcb6cf0154947e8633ebc78d9ac" || fail=1
 
 exit "${fail}"
-

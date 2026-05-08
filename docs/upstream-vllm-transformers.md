@@ -16,6 +16,12 @@ Fetch:
 ./scripts/fetch_upstreams.sh vllm
 ```
 
+Build notes (Spark / GPU nodes, high level):
+
+- Treat vLLM as an external runtime: prefer `pip install vllm==<version>` (or wheel) over building in-tree.
+- CUDA compatibility is a triple constraint: driver + CUDA runtime + PyTorch build; pin all three in deployment docs.
+- Validate that DeepSeek-V4 configs resolve correctly from the HF metadata repo (Flash vs Flash-Base differences).
+
 ## Transformers
 
 - Repo: `https://github.com/huggingface/transformers`
@@ -29,3 +35,8 @@ Fetch:
 ```bash
 ./scripts/fetch_upstreams.sh transformers
 ```
+
+Build notes (Spark / packaging, high level):
+
+- Prefer pinned wheels (`pip install transformers==<version>`) plus a pinned tokenizer stack (`tokenizers`, `sentencepiece` if required).
+- Treat Transformers as the canonical reference for config/tokenization semantics; avoid re-implementing unless required for performance.

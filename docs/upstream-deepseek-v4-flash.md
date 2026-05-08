@@ -9,11 +9,12 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
 
-Optional related checkpoint:
+Related checkpoint (same “official configs” approach):
 
 - `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base`
   - Ref: `refs/heads/main`
   - Commit: `8855555deef230a27a21a8d6f294b7b7497759b6`
+  - License: MIT (see HF `LICENSE`)
 
 ## vLLM references
 
@@ -33,4 +34,10 @@ The fetch script disables Git LFS smudge/filters (and sets `GIT_LFS_SKIP_SMUDGE=
 
 ```bash
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf
+```
+
+To fetch the Flash-Base HF metadata (no weights):
+
+```bash
+./scripts/fetch_upstreams.sh deepseek_v4_flash_base_hf
 ```

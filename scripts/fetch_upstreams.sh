@@ -18,6 +18,7 @@ Targets:
   deepgemm
   deepseek_v3
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   vllm
   transformers
   llama_cpp
@@ -90,6 +91,10 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			clone_or_update_nolfs "deepseek_v4_flash_hf" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash" "refs/heads/main"
 			;;
+		deepseek_v4_flash_base_hf)
+			# HF metadata/config only: do not download weights.
+			clone_or_update_nolfs "deepseek_v4_flash_base_hf" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base" "refs/heads/main"
+			;;
 		vllm)
 			clone_or_update "vllm" "https://github.com/vllm-project/vllm.git" "refs/tags/v0.20.2"
 			;;
@@ -119,6 +124,7 @@ main()
 		fetch_one deepgemm
 		fetch_one deepseek_v3
 		fetch_one deepseek_v4_flash_hf
+		fetch_one deepseek_v4_flash_base_hf
 		fetch_one vllm
 		fetch_one transformers
 		fetch_one llama_cpp

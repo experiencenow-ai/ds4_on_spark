@@ -20,6 +20,12 @@ llama.cpp is a useful Spark reference point for:
 
 - NVIDIA DGX Spark playbook: `https://build.nvidia.com/spark/llama-cpp` (end-to-end build + run notes).
 
+## Build notes (Spark relevance, high level)
+
+- CPU baseline: enable AVX2 (and consider NUMA pinning) for realistic Spark node behavior.
+- GPU builds (when applicable): prefer explicit build flags (CUDA/HIP/Vulkan) and validate the device CC / backend at runtime.
+- Treat llama.cpp as a reference runtime for “no Python” deployments and for tooling patterns (convert + serve).
+
 ## Fetch
 
 ```bash
