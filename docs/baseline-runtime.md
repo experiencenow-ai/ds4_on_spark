@@ -34,9 +34,16 @@ Run from the Mac:
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+Optionally include the local `antirez/ds4` Mac/Metal probe in the same report:
+
+```sh
+RUN_DS4_MACOS=1 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
 This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
+- best-effort Spark host metadata (`lscpu`, `free`, `df`, etc.)
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
 
@@ -55,7 +62,7 @@ Notes:
 
 ## Script knobs (common)
 
-All baseline scripts share the same safety gates:
+All baseline scripts share the same safety gates (these are passed through by `scripts/run_baseline_existing_runtime.sh` to remote runs for the duration of the SSH session):
 
 - `ALLOW_FETCH=1` to clone upstream repos (code only; still explicit)
 - `ALLOW_BUILD=1` to compile (can take minutes)
