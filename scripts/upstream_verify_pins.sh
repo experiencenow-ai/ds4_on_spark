@@ -57,6 +57,6 @@ check_ref "DeepSeek-V4-Flash (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-
 check_ref "DeepSeek-V4-Flash-Base (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base" "refs/heads/main" "8855555deef230a27a21a8d6f294b7b7497759b6" || fail=1
 check_ref "vLLM" "https://github.com/vllm-project/vllm.git" "refs/tags/v0.20.2" "bc150f50299199599673614f80d12a196f377655" || fail=1
 check_ref "Transformers" "https://github.com/huggingface/transformers.git" "refs/tags/v5.8.0" "a9e70365af64e028d40d8c7909deb7f138b49857" || fail=1
-check_ref "llama.cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/heads/master" "b46812de78f8fbcb6cf0154947e8633ebc78d9ac" || fail=1
+check_ref "llama.cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/tags/b8833" "45cac7ca703fb9085eae62b9121fca01d20177f6" || fail=1
 
 exit "${fail}"

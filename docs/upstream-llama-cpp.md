@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/heads/master`
-- Commit: `b46812de78f8fbcb6cf0154947e8633ebc78d9ac`
+- Ref: `refs/tags/b8833`
+- Commit: `45cac7ca703fb9085eae62b9121fca01d20177f6`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -22,9 +22,9 @@ llama.cpp is a useful Spark reference point for:
 
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b8833/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b8833/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b8833/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 
