@@ -17,6 +17,11 @@ Required upstream artifacts (see upstream `download_model.sh`):
 - DS4 Flash GGUF q2 or q4 (large)
 - Optional MTP draft GGUF (large)
 
+Notes:
+
+- Upstream defaults to `./ds4flash.gguf` in the ds4 repo directory.
+- The ds4 upstream download script pulls from Hugging Face and may require an auth token; this repo's baseline scripts intentionally do **not** run it automatically.
+
 Local placement guidance:
 
 - Keep all DS4 GGUF artifacts under one directory (example: `~/models/ds4/gguf/`).
@@ -61,4 +66,3 @@ Fixture:
   size_bytes: <bytes>
   notes: <quant, source, etc>
 ```
-
