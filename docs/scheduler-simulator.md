@@ -24,6 +24,17 @@ Work units:
 Starvation is counted when a task waits in an expert queue for at least
 `--starvation-ms` before it starts service.
 
+### Per-Expert Service Discipline
+
+By default experts serve interactive tasks before batch tasks (strict priority).
+Two optional knobs let us explore fairness / anti-starvation strategies:
+
+- `--hi-burst N`: after starting `N` interactive tasks consecutively on an expert,
+  the simulator forces one batch task start if any batch tasks are queued
+  (`0` keeps strict priority).
+- `--promote-ms T`: if a batch task waits at least `T` ms in the batch queue,
+  it is promoted into the interactive queue (`0` disables aging).
+
 ## Adaptive K
 
 `K` is chosen independently for interactive and batch tokens based on the
@@ -85,6 +96,8 @@ The simulator prints a JSON object with:
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
+- `tasks.promoted`: number of batch tasks promoted by `--promote-ms`
+- `tasks.forced_batch_starts`: number of times `--hi-burst` forced a batch start
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
 - `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`

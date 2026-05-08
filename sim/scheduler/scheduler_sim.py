@@ -71,6 +71,8 @@ class SimConfig:
     expert_queue_max: int
     service_ms: float
     starvation_ms: float
+    hi_burst: int
+    promote_ms: float
     adaptive_k: AdaptiveKConfig
 
 
@@ -96,6 +98,7 @@ class ExpertQueue:
     hi: Deque[Task] = dataclasses.field(default_factory=deque)
     lo: Deque[Task] = dataclasses.field(default_factory=deque)
     in_flight: int = 0
+    hi_burst: int = 0
 
     def pending(self) -> int:
         return(len(self.hi) + len(self.lo))
@@ -134,6 +137,8 @@ class SimMetrics:
     starved_tasks: int = 0
     starved_tasks_interactive: int = 0
     starved_tasks_batch: int = 0
+    promoted_tasks: int = 0
+    forced_batch_starts: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
     mean_pending_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_utilization_per_expert: List[float] = dataclasses.field(default_factory=list)
@@ -234,6 +239,8 @@ class SimMetrics:
                     "starved": self.starved_tasks,
                     "starved_interactive": self.starved_tasks_interactive,
                     "starved_batch": self.starved_tasks_batch,
+                    "promoted": self.promoted_tasks,
+                    "forced_batch_starts": self.forced_batch_starts,
                 },
                 "expert_queue": {
                     "num_experts": len(self.max_pending_per_expert),
@@ -246,6 +253,20 @@ class SimMetrics:
                 "expert_saturation": summarize_experts(self.saturated_time_frac_per_expert),
             }
         )
+
+
+def _promote_aged_batch(now_ms: float, cfg: SimConfig, eq: ExpertQueue, metrics: SimMetrics) -> None:
+    if cfg.promote_ms <= 0.0:
+        return
+    while len(eq.lo) != 0:
+        t0 = eq.lo[0]
+        if t0.cls != LatencyClass.BATCH:
+            break
+        if (now_ms - t0.enqueue_ms) < cfg.promote_ms:
+            break
+        eq.lo.popleft()
+        eq.hi.append(t0)
+        metrics.promoted_tasks += 1
 
 
 def _zipf_weights(num_experts: int, alpha: float) -> List[float]:
@@ -473,11 +494,20 @@ def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, max_pending: int) -> int
 
 
 def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int, evq: List[Event], seq_ref: List[int], metrics: SimMetrics) -> None:
+    _promote_aged_batch(now_ms, cfg, eq, metrics)
     while eq.in_flight < cfg.expert_parallelism:
+        task: Optional[Task] = None
         if len(eq.hi) != 0:
-            task = eq.hi.popleft()
+            if cfg.hi_burst > 0 and eq.hi_burst >= cfg.hi_burst and len(eq.lo) != 0:
+                task = eq.lo.popleft()
+                eq.hi_burst = 0
+                metrics.forced_batch_starts += 1
+            else:
+                task = eq.hi.popleft()
+                eq.hi_burst += 1
         elif len(eq.lo) != 0:
             task = eq.lo.popleft()
+            eq.hi_burst = 0
         else:
             break
 
@@ -509,6 +539,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("service_ms must be > 0")
     if cfg.starvation_ms <= 0.0:
         raise ValueError("starvation_ms must be > 0")
+    if cfg.hi_burst < 0:
+        raise ValueError("hi_burst must be >= 0")
+    if cfg.promote_ms < 0.0:
+        raise ValueError("promote_ms must be >= 0")
 
     for route in trace:
         if len(route.candidates) == 0:
@@ -683,6 +717,8 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--expert-queue-max", type=int, default=256)
     p.add_argument("--service-ms", type=float, default=0.15)
     p.add_argument("--starvation-ms", type=float, default=50.0)
+    p.add_argument("--hi-burst", type=int, default=0, help="Per-expert fairness: after starting N interactive tasks consecutively, force one batch start if any are queued (0 = strict priority).")
+    p.add_argument("--promote-ms", type=float, default=0.0, help="Per-expert aging: promote batch tasks to interactive queue once they wait this long (0 = disabled).")
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -747,6 +783,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         expert_queue_max=args.expert_queue_max,
         service_ms=args.service_ms,
         starvation_ms=args.starvation_ms,
+        hi_burst=args.hi_burst,
+        promote_ms=args.promote_ms,
         adaptive_k=adapt,
     )
 

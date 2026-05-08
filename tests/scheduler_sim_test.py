@@ -60,6 +60,8 @@ class SchedulerSimTest(unittest.TestCase):
             expert_queue_max=10_000,
             service_ms=10.0,
             starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
             adaptive_k=scheduler_sim.AdaptiveKConfig(
                 k_min_interactive=2,
                 k_max_interactive=4,
@@ -89,6 +91,8 @@ class SchedulerSimTest(unittest.TestCase):
             expert_queue_max=10_000,
             service_ms=1.0,
             starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
             adaptive_k=scheduler_sim.AdaptiveKConfig(
                 k_min_interactive=2,
                 k_max_interactive=2,
@@ -118,6 +122,8 @@ class SchedulerSimTest(unittest.TestCase):
             expert_queue_max=1,
             service_ms=1000.0,
             starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
             adaptive_k=scheduler_sim.AdaptiveKConfig(
                 k_min_interactive=1,
                 k_max_interactive=1,
@@ -145,6 +151,8 @@ class SchedulerSimTest(unittest.TestCase):
             expert_queue_max=10_000,
             service_ms=10.0,
             starvation_ms=1.0,
+            hi_burst=0,
+            promote_ms=0.0,
             adaptive_k=scheduler_sim.AdaptiveKConfig(
                 k_min_interactive=1,
                 k_max_interactive=1,
@@ -175,6 +183,8 @@ class SchedulerSimTest(unittest.TestCase):
                 expert_queue_max=10,
                 service_ms=1.0,
                 starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
                 adaptive_k=scheduler_sim.AdaptiveKConfig(
                     k_min_interactive=1,
                     k_max_interactive=1,
@@ -200,6 +210,8 @@ class SchedulerSimTest(unittest.TestCase):
             expert_queue_max=10,
             service_ms=1.0,
             starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
             adaptive_k=scheduler_sim.AdaptiveKConfig(
                 k_min_interactive=1,
                 k_max_interactive=1,
@@ -211,6 +223,95 @@ class SchedulerSimTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             scheduler_sim.run_simulation(cfg, trace)
+
+    def test_hi_burst_forces_batch_starts(self) -> None:
+        trace = []
+        for i in range(40):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.01,
+                    cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                    candidates=(0,),
+                )
+            )
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.01,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=2,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertGreater(m.forced_batch_starts, 0)
+
+    def test_promote_ms_reduces_starvation(self) -> None:
+        trace = []
+        for i in range(200):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.01,
+                    cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                    candidates=(0,),
+                )
+            )
+        for i in range(50):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.01,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        trace.sort(key=lambda r: r.t_ms)
+
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=5.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        aged_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=5.0,
+            hi_burst=0,
+            promote_ms=1.0,
+            adaptive_k=base_cfg.adaptive_k,
+        )
+        m0 = scheduler_sim.run_simulation(base_cfg, trace)
+        m1 = scheduler_sim.run_simulation(aged_cfg, trace)
+        self.assertGreater(m1.promoted_tasks, 0)
+        self.assertLessEqual(m1.starved_tasks, m0.starved_tasks)
 
 
 if __name__ == "__main__":
