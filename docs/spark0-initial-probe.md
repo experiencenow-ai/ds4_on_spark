@@ -57,3 +57,8 @@ Immediate implications:
 - Until that alias is set, SSH by hostname may route over Wi-Fi/link-local.
 - The next useful probe is a tiny CUDA device property binary compiled with
   `/usr/local/cuda/bin/nvcc`, because `torch.cuda` is unavailable.
+
+Follow-ups:
+
+- `nvcc` is installed under `/usr/local/cuda/bin/nvcc` and may not be on `$PATH`.
+- A reproducible probe run (including a tiny `nvcc`-compiled device properties binary that confirms compute capability) is captured in `docs/spark0-probe-2026-05-08.md`.
