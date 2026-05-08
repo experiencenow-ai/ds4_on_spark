@@ -17,7 +17,15 @@ Optional related checkpoint:
 
 ## vLLM references
 
-DeepSeek-V4 support is documented/implemented in vLLM (see `vllm.model_executor.models.deepseek_v4`).
+DeepSeek-V4 support is documented/implemented in vLLM (see `vllm.model_executor.models.deepseek_v4`):
+
+- `https://docs.vllm.ai/en/latest/api/vllm/model_executor/models/deepseek_v4/`
+
+## Transformers references
+
+Transformers publishes an architecture + integration reference for `deepseek_v4`:
+
+- `https://huggingface.co/docs/transformers/model_doc/deepseek_v4`
 
 ## Fetch (metadata only)
 

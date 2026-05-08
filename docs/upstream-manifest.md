@@ -29,6 +29,12 @@ To see the current HEAD commits upstream (without cloning), run:
 ./scripts/upstream_ls_remote.sh
 ```
 
+To verify that the **pinned** refs/commits in this manifest still resolve upstream, run:
+
+```bash
+./scripts/upstream_verify_pins.sh
+```
+
 ## Per-Upstream Notes
 
 - [`docs/upstream-ds4.md`](upstream-ds4.md)
