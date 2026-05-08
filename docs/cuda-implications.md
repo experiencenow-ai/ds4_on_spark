@@ -8,6 +8,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0)
+- `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
 
 ## cuBLASLt
 
