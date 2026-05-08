@@ -199,6 +199,20 @@ Reference implementation: `inference/model.py` (`MTPBlock`, `Transformer.mtp`).
 - `Transformer.forward(...)` returns normal next-token logits and does **not** invoke `mtp` by default.
   - MTP is a separate callable for speculative/next-n prediction and must be explicitly integrated by DS4.
 
+`MTPBlock.forward(...)` contract (from `inference/model.py`):
+
+- Inputs:
+  - `x`: hidden state shaped `[B,S,hc_mult,dim]` (same HC stream layout as the main trunk)
+  - `input_ids`: `[B,S]` token ids for the same positions
+- Computation:
+  1. `e = embed(input_ids)` then `e = enorm(e)`
+  2. `x = hnorm(x)`
+  3. `x = e_proj(e).unsqueeze(2) + h_proj(x)`
+  4. Run the normal `Block` forward (attention + MoE + HC mixing).
+  5. Compute logits with a **separate** HC head: `hc_head_{fn,base,scale}` under `mtp.0.*`.
+
+DS4 must treat `mtp.*` as a distinct draft-model path with its own HC head weights, not just an alias to the main head.
+
 ## Tokenizer + encoding contract
 
 Tokenizer (from `tokenizer_config.json`):
@@ -296,5 +310,8 @@ This repo includes a verifier for these invariants: `scripts/model_contract_veri
 ## Next steps (oracle + remaining unknowns)
 
 - The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
-- Add a Spark-side logit oracle generator that runs the upstream reference implementation against a small prompt set **when weights are locally available** (do not auto-download shards).
+- A Spark-side logit oracle generator is provided:
+  - Prompt cases: `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`
+  - Generator (weights required): `scripts/model_contract_generate_deepseek_v4_flash_oracle.py`
+  - Output (commit only after review): `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`
 - Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.

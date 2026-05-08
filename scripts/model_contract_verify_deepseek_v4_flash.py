@@ -237,6 +237,26 @@ def main() -> int:
 		if r.returncode != 0:
 			failures.append(Failure(41, "DeepSeek V4 encoding oracle failed (see test output above)"))
 
+	# Optional: structural validation for a Spark-generated logits oracle (weights are not shipped here).
+	oracle_path = FIX / "oracle" / "logits_oracle.json"
+	if oracle_path.exists():
+		try:
+			oracle = load_json(oracle_path)
+		except Exception as e:
+			failures.append(Failure(50, f"failed to parse logits oracle JSON {oracle_path}: {e}"))
+			oracle = None
+		if oracle is not None:
+			if int(oracle.get("format_version", 0)) != 1:
+				failures.append(Failure(51, f"logits oracle has unexpected format_version (expected 1): {oracle_path}"))
+			cases = oracle.get("cases")
+			if not isinstance(cases, list) or not cases:
+				failures.append(Failure(52, f"logits oracle must contain non-empty cases[]: {oracle_path}"))
+			else:
+				for c in cases[:4]:
+					if "id" not in c or "prompt_tokens" not in c or "trace" not in c:
+						failures.append(Failure(53, f"logits oracle case missing required keys: {oracle_path}"))
+						break
+
 	if failures:
 		for f in failures:
 			print(f"ERROR[{f.code}]: {f.msg}")
