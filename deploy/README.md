@@ -42,6 +42,9 @@ sudo systemd-tmpfiles --create || true
 
 - `ds4.env.example` : base env keys (single-Spark and dual-Spark placeholders)
 - `ds4-spark0.env.example`, `ds4-spark1.env.example` : per-host starting points
+- `ds4-spark0.yaml.example`, `ds4-spark1.yaml.example` : runtime config placeholders (schema TBD)
+- `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
+- `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
 

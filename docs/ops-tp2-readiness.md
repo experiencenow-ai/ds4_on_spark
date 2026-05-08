@@ -83,3 +83,9 @@ repo-provided checks via the systemd oneshot:
 ```bash
 sudo systemctl start ds4-preflight@spark0.service
 ```
+
+For ad-hoc runs without systemd, the script supports sourcing the env file:
+
+```bash
+/opt/ds4/scripts/ops_tp2_readiness.sh --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh ds4@spark1.local
+```

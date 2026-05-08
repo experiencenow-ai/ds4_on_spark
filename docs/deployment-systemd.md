@@ -36,6 +36,8 @@ sudo systemd-sysusers || true
 sudo systemd-tmpfiles --create || true
 ```
 
+The staging helper also copies safe ops scripts to `/tmp/ds4-scripts/`; install them under `/opt/ds4/scripts/` so systemd units can reference them.
+
 ## Enable/Start (Human Runbook)
 
 ```bash
