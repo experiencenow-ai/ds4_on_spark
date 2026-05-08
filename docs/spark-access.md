@@ -6,10 +6,10 @@ Current observed Spark identity:
 - SSH service: advertised via Bonjour as `aitopatom-9ab9 SSH`
 - SSH port: reachable on port 22
 - Link-local IPv6: reachable through the Mac wired interface
-- Spark wired IPv4: configured by user as `10.0.0.2`
-- Mac wired IPv4 observed during bootstrap: `192.168.100.1/16`
-- Mac Wi-Fi IPv4 observed during bootstrap: `172.16.11.245/24`
-- Spark Wi-Fi IPv4 observed during probe: `172.16.11.228/24`
+- Spark wired IPv4: configured by user as `<redacted-ipv4>`
+- Mac wired IPv4 observed during bootstrap: `<redacted-ipv4>/16`
+- Mac Wi-Fi IPv4 observed during bootstrap: `<redacted-ipv4>/24`
+- Spark Wi-Fi IPv4 observed during probe: `<redacted-ipv4>/24`
 - Spark wired interface: `enP7s7`, MTU 9000
 - SSH key authentication from the Mac is now working for `spark0`.
 
@@ -20,7 +20,7 @@ From the Mac repo root, use the scripts in `scripts/` to keep probes consistent 
 ### Mac-side Discovery (mDNS + reachability)
 
 ```bash
-./scripts/mac_spark_discovery.sh
+REDACT=1 ./scripts/mac_spark_discovery.sh
 ```
 
 This prints:
@@ -28,21 +28,22 @@ This prints:
 - IPv4/IPv6 addresses for `en0`/`en1` (no MAC addresses)
 - `_ssh._tcp` browse results (mDNS instance names)
 - Quick SSH port checks against known targets
+- Optional mDNS resolution output for `*.local` targets
 
 ### Spark Hardware + Toolchain Probe
 
 ```bash
-./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
 ```
 
-The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting MAC addresses or host keys. For a snapshot you can commit, redirect output and summarize the key facts in `docs/spark0-*.md`.
+The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting MAC addresses or host keys. Use `REDACT=1` when saving output for commit; the redacted snapshot is suitable to paste into `docs/spark0-*.md`.
 
 ## Spark1 Ready Checklist
 
 When Spark1 exists (or a second Spark is provisioned), the same scripts should work with a new target:
 
 ```bash
-./scripts/spark_probe.sh spark0@spark1.local
+REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
 ```
 
 If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
@@ -51,8 +52,8 @@ If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
 
 `ssh spark0@aitopatom-9ab9.local` reaches the Spark SSH server.
 
-Direct `ssh spark0@10.0.0.2` times out from the Mac because the Mac wired port
-is not currently in `10.0.0.0/24`. The hostname works because macOS resolves a
+Direct `ssh spark0@<spark-wired-ipv4>` times out from the Mac because the Mac wired port
+is not currently in the Spark wired subnet. The hostname works because macOS resolves a
 reachable link-local address.
 
 Account authentication is now fixed. The Mac public key is installed in
@@ -78,12 +79,12 @@ ssh spark0@aitopatom-9ab9.local hostname
 
 ## Optional Wired IPv4 Alias On Mac
 
-To make `10.0.0.2` reachable directly from the Mac wired port:
+To make the Spark wired IPv4 reachable directly from the Mac wired port:
 
 ```bash
-sudo ifconfig en0 inet 10.0.0.1 netmask 255.255.255.0 alias
-ping 10.0.0.2
-ssh spark0@10.0.0.2 hostname
+sudo ifconfig en0 inet <mac-wired-ipv4> netmask 255.255.255.0 alias
+ping <spark-wired-ipv4>
+ssh spark0@<spark-wired-ipv4> hostname
 ```
 
 Use the hostname path until the alias is needed for scripts or benchmarking.

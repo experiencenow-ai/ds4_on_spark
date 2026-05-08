@@ -9,14 +9,14 @@ Host:
 Commands run from the Mac:
 
 ```bash
-./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
 ```
 
 Notes:
 
 - `nvidia-smi` reports the driver CUDA compatibility version (`CUDA Version: 13.0`).
 - `nvcc` is installed at `/usr/local/cuda/bin/nvcc` (may not be on `$PATH` by default).
-- The probe script avoids MAC addresses and host keys so output is safe to commit.
+- Use `REDACT=1` when saving probe output for commit; see `docs/spark0-hardware-baseline-2026-05-08.md` for a full redacted snapshot.
 
 ## Key facts
 
@@ -45,8 +45,8 @@ Storage:
 
 Network:
 
-- Wired: `enP7s7` `10.0.0.2/24` (not the default route)
-- Wi-Fi: `wlP9s9` `172.16.11.228/24` (default route)
+- Wired: `enP7s7` `<redacted-ipv4>/24` (not the default route)
+- Wi-Fi: `wlP9s9` `<redacted-ipv4>/24` (default route)
 
 ## Probe excerpts
 

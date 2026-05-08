@@ -1,0 +1,227 @@
+# Spark0 Hardware Baseline
+
+Date: 2026-05-08 (UTC) from the Mac Studio workspace.
+
+Host:
+
+- mDNS name used for probes: `aitopatom-9ab9.local`
+- Linux hostname: `aitopatom-9ab9`
+- Login user used for probes: `spark0`
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+```
+
+High-level facts observed (from the probe output below):
+
+- OS: Ubuntu 24.04.4 LTS (Noble)
+- Kernel: `6.17.0-1014-nvidia`
+- Architecture: `aarch64` (little-endian)
+- CPU: 20 cores total (10x Cortex-X925 + 10x Cortex-A725)
+- Memory: 119 GiB total RAM, 15 GiB swap
+- GPU: `NVIDIA GB10`
+- Driver (nvidia-smi): `580.142`
+- CUDA version reported by nvidia-smi: `13.0`
+- CUDA compute capability (nvidia-smi + nvcc probe): `12.1`
+- CUDA toolkit (nvcc): 13.0 (V13.0.88)
+- `nvcc` path: `/usr/local/cuda/bin/nvcc` (not on default `PATH`)
+- PyTorch: not present in default `python3` env
+- Wired NIC: `enP7s7`, MTU 9000
+- Default route: via Wi-Fi during probe
+- Root filesystem: ~3.7 TiB NVMe, ~38 GiB used during probe
+
+## Spark Probe Output (Redacted)
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- Re-run without `REDACT=1` only for local debugging; do not commit raw network identifiers.
+
+```text
+== probe meta ==
+Fri May  8 22:10:59 UTC 2026
+target user: spark0
+
+== identity ==
+aitopatom-9ab9
+uid=1000(spark0) gid=1000(spark0) groups=1000(spark0),4(adm),27(sudo),29(audio),30(dip),46(plugdev),100(users),122(lpadmin)
+Linux aitopatom-9ab9 6.17.0-1014-nvidia #14-Ubuntu SMP PREEMPT_DYNAMIC Tue Mar 17 19:01:40 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+
+== os ==
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.4 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=noble
+LOGO=ubuntu-logo
+
+== cpu ==
+Architecture:                            aarch64
+CPU op-mode(s):                          64-bit
+Byte Order:                              Little Endian
+CPU(s):                                  20
+On-line CPU(s) list:                     0-19
+Vendor ID:                               ARM
+Model name:                              Cortex-X925
+Model:                                   1
+Thread(s) per core:                      1
+Core(s) per socket:                      10
+Socket(s):                               1
+Stepping:                                r0p1
+Frequency boost:                         disabled
+CPU(s) scaling MHz:                      100%
+CPU max MHz:                             3900.0000
+CPU min MHz:                             1378.0000
+BogoMIPS:                                2000.00
+Flags:                                   fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti ecv afp wfxt
+Model name:                              Cortex-A725
+Model:                                   1
+Thread(s) per core:                      1
+Core(s) per socket:                      10
+Socket(s):                               1
+Stepping:                                r0p1
+CPU(s) scaling MHz:                      100%
+CPU max MHz:                             2808.0000
+CPU min MHz:                             338.0000
+BogoMIPS:                                2000.00
+Flags:                                   fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 svesm4 flagm2 frint svei8mm svebf16 i8mm bf16 dgh bti ecv afp wfxt
+L1d cache:                               1.3 MiB (20 instances)
+L1i cache:                               1.3 MiB (20 instances)
+L2 cache:                                25 MiB (20 instances)
+L3 cache:                                24 MiB (2 instances)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-19
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; CSV2, BHB
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Not affected
+
+== memory ==
+               total        used        free      shared  buff/cache   available
+Mem:           119Gi       4.3Gi       113Gi        61Mi       2.4Gi       115Gi
+Swap:           15Gi          0B        15Gi
+
+== toolchain ==
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+GNU Make 4.3
+Python 3.12.3
+
+== pci nvidia ==
+0000:00:00.0 PCI bridge: NVIDIA Corporation Device 22ce (rev 01)
+0002:00:00.0 PCI bridge: NVIDIA Corporation Device 22ce (rev 01)
+0004:00:00.0 PCI bridge: NVIDIA Corporation Device 22ce (rev 01)
+0007:00:00.0 PCI bridge: NVIDIA Corporation Device 22d0 (rev 01)
+0009:00:00.0 PCI bridge: NVIDIA Corporation Device 22d0 (rev 01)
+000f:00:00.0 PCI bridge: NVIDIA Corporation Device 22d1
+000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1)
+
+== nvidia-smi summary ==
+Sat May  9 07:10:59 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GB10                    On  |   0000000F:01:00.0 Off |                  N/A |
+| N/A   47C    P0             12W /  N/A  | Not Supported          |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            4008      G   /usr/lib/xorg/Xorg                      101MiB |
+|    0   N/A  N/A            4120    C+G   ...c/gnome-remote-desktop-daemon        176MiB |
+|    0   N/A  N/A            4187      G   /usr/bin/gnome-shell                     44MiB |
++-----------------------------------------------------------------------------------------+
+
+== nvidia-smi query (driver + compute capability) ==
+NVIDIA GB10, 580.142, 12.1, 47, P0, [N/A]
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== cuda toolkit ==
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Wed_Aug_20_01:57:39_PM_PDT_2025
+Cuda compilation tools, release 13.0, V13.0.88
+Build cuda_13.0.r13.0/compiler.36424714_0
+-rwxr-xr-x 1 root root 24513032 Aug 21  2025 /usr/local/cuda/bin/nvcc
+
+== cuda runtime probe (nvcc, no deps) ==
+cuda devices: 1
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+driver version: 13000
+runtime version: 13000
+global mem (bytes): 128518373376
+
+== python cuda probe (optional) ==
+torch probe failed: No module named 'torch'
+
+== network ==
+lo               UNKNOWN        <redacted-ipv4>/8 
+enP7s7           UP             <redacted-ipv4>/24 
+wlP9s9           UP             <redacted-ipv4>/24 
+docker0          DOWN           <redacted-ipv4>/16 
+default via <redacted-ipv4> dev wlP9s9 proto dhcp src <redacted-ipv4> metric 600 
+<redacted-ipv4>/24 dev enP7s7 proto kernel scope link src <redacted-ipv4> metric 100 
+<redacted-ipv4>/24 dev wlP9s9 proto kernel scope link src <redacted-ipv4> metric 600 
+<redacted-ipv4>/16 dev docker0 proto kernel scope link src <redacted-ipv4> linkdown 
+
+== storage ==
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p2  3.7T   39G  3.5T   2% /
+/dev/nvme0n1p2  3.7T   39G  3.5T   2% /
+NAME          SIZE TYPE MOUNTPOINTS
+loop0           4K loop /snap/bare/5
+loop1          69M loop /snap/core22/2412
+loop2        61.9M loop /snap/core24/1588
+loop3        10.2M loop /snap/firmware-updater/168
+loop4       241.1M loop /snap/firefox/8242
+loop5        15.6M loop /snap/firmware-updater/227
+loop6         503M loop /snap/gnome-42-2204/245
+loop7        12.2M loop /snap/snap-store/1217
+loop8       552.9M loop /snap/gnome-46-2404/154
+loop9       174.6M loop /snap/mesa-2404/1166
+loop10       91.7M loop /snap/gtk-common-themes/1535
+loop11       42.6M loop /snap/snapd/26869
+loop12      221.2M loop /snap/thunderbird/1092
+loop13        552K loop /snap/snapd-desktop-integration/316
+loop14         10M loop /snap/snap-store/1271
+loop15      234.8M loop /snap/firefox/8278
+nvme0n1       3.7T disk 
+├─nvme0n1p1   512M part /boot/efi
+└─nvme0n1p2   3.7T part /
+```
