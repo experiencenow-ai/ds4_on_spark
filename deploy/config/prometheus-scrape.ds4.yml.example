@@ -1,0 +1,16 @@
+# Prometheus scrape example snippet for DS4 metrics endpoints.
+#
+# If your Prometheus runs elsewhere, adapt targets to reachable hostnames/IPs.
+
+- job_name: ds4
+  metrics_path: /metrics
+  scrape_interval: 5s
+  static_configs:
+    - targets:
+        - aitopatom-9ab9.local:9090
+      labels:
+        ds4_instance: spark0
+    - targets:
+        - spark1.local:9090
+      labels:
+        ds4_instance: spark1

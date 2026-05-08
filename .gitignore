@@ -1,0 +1,10 @@
+build/
+.cache/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+__pycache__/
+*.pyc
+upstreams/
