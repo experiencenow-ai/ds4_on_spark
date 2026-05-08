@@ -1,5 +1,7 @@
 # Spark0 Initial Probe
 
+
+See `docs/spark0-hardware-baseline-2026-05-08.md` for the full redacted probe output.
 Date: 2026-05-08 from the Mac Studio workspace.
 
 Host:

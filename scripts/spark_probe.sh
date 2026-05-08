@@ -1,10 +1,39 @@
 #!/usr/bin/env sh
 set -eu
 
+usage()
+{
+	cat <<'EOF'
+usage: spark_probe.sh [user@host]
+
+Environment:
+  SSH_OPTS   Extra ssh options (default includes BatchMode + temp known_hosts)
+  REDACT=1   Redact IPv4/IPv6/MAC addresses from output
+
+Examples:
+  ./scripts/spark_probe.sh
+  REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
+EOF
+}
+
+case "${1:-}" in
+	-h|--help)
+		usage
+		exit 0
+		;;
+esac
+
 target="${1:-spark0@aitopatom-9ab9.local}"
-SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
+SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts -o ServerAliveInterval=5 -o ServerAliveCountMax=2}"
+
+tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
 ssh $SSH_OPTS "$target" 'set -eu
+echo "== probe meta =="
+date -u
+echo "target user: $(id -un 2>/dev/null || true)"
+echo
 echo "== identity =="
 hostname
 id
@@ -12,7 +41,7 @@ uname -a
 echo
 echo "== os =="
 if [ -r /etc/os-release ]; then
-    cat /etc/os-release
+	cat /etc/os-release
 fi
 echo
 echo "== cpu =="
@@ -21,15 +50,90 @@ echo
 echo "== memory =="
 free -h || true
 echo
+echo "== toolchain =="
+command -v gcc >/dev/null 2>&1 && gcc --version | head -n 1 || true
+command -v g++ >/dev/null 2>&1 && g++ --version | head -n 1 || true
+command -v clang >/dev/null 2>&1 && clang --version | head -n 1 || true
+command -v cmake >/dev/null 2>&1 && cmake --version | head -n 1 || true
+command -v ninja >/dev/null 2>&1 && ninja --version || true
+command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
+command -v python3 >/dev/null 2>&1 && python3 --version || true
+echo
 echo "== pci nvidia =="
 lspci | grep -i nvidia || true
 echo
-echo "== nvidia-smi =="
+echo "== nvidia-smi summary =="
 nvidia-smi || true
 echo
-echo "== cuda =="
-command -v nvcc >/dev/null 2>&1 && nvcc --version || true
-[ -x /usr/local/cuda/bin/nvcc ] && /usr/local/cuda/bin/nvcc --version || true
+echo "== nvidia-smi query (driver + compute capability) =="
+nvidia-smi --query-gpu=gpu_name,driver_version,compute_cap,temperature.gpu,pstate --format=csv,noheader,nounits 2>/dev/null || true
+echo
+echo "== nvidia-smi cuda version =="
+nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true
+echo
+echo "== cuda toolkit =="
+nvcc_bin=""
+if command -v nvcc >/dev/null 2>&1; then
+	nvcc_bin="$(command -v nvcc)"
+elif [ -x /usr/local/cuda/bin/nvcc ]; then
+	nvcc_bin="/usr/local/cuda/bin/nvcc"
+fi
+if [ "$nvcc_bin" != "" ]; then
+	"$nvcc_bin" --version || true
+	ls -l "$nvcc_bin" || true
+else
+	echo "nvcc not found"
+fi
+[ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
+echo
+echo "== cuda runtime probe (nvcc, no deps) =="
+if [ "$nvcc_bin" != "" ]; then
+	cu_src="/tmp/ds4_cuda_probe.$$.cu"
+	cu_bin="/tmp/ds4_cuda_probe.$$"
+	nvcc_log="/tmp/ds4_cuda_probe_nvcc.$$.log"
+	cat >"$cu_src" <<'"'"'CU'"'"'
+#include <cstdio>
+#include <cuda_runtime.h>
+int main()
+{
+	int device_count = 0,dev = 0;
+	cudaDeviceProp prop;
+	int runtime_v = 0,driver_v = 0;
+	if ( cudaGetDeviceCount(&device_count) != cudaSuccess )
+	{
+		std::printf("cudaGetDeviceCount failed\n");
+		return(1);
+	}
+	std::printf("cuda devices: %d\n",device_count);
+	if ( device_count <= 0 )
+		return(0);
+	if ( cudaGetDeviceProperties(&prop,dev) != cudaSuccess )
+	{
+		std::printf("cudaGetDeviceProperties failed\n");
+		return(2);
+	}
+	cudaRuntimeGetVersion(&runtime_v);
+	cudaDriverGetVersion(&driver_v);
+	std::printf("device0 name: %s\n",prop.name);
+	std::printf("device0 cc: %d.%d\n",prop.major,prop.minor);
+	std::printf("driver version: %d\n",driver_v);
+	std::printf("runtime version: %d\n",runtime_v);
+	std::printf("global mem (bytes): %llu\n",(unsigned long long)prop.totalGlobalMem);
+	return(0);
+}
+CU
+	if "$nvcc_bin" -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
+		"$cu_bin" || true
+	else
+		echo "nvcc compile failed:"
+		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
+	fi
+	rm -f "$cu_src" "$cu_bin" "$nvcc_log" >/dev/null 2>&1 || true
+else
+	echo "nvcc not found"
+fi
+echo
+echo "== python cuda probe (optional) =="
 command -v python3 >/dev/null 2>&1 && python3 - <<'"'"'PY'"'"' || true
 try:
     import torch
@@ -43,10 +147,20 @@ except Exception as e:
 PY
 echo
 echo "== network =="
-ip addr || true
+ip -brief addr 2>/dev/null || ip addr || true
 ip route || true
 echo
 echo "== storage =="
-df -h / /home || true
-lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS || true
-'
+df -h / /home 2>/dev/null || df -h / || true
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null || true
+' >"$tmp"
+
+if [ "${REDACT:-0}" = "1" ]; then
+	sed -E \
+		-e 's/([0-9]{1,3}\.){3}[0-9]{1,3}/<redacted-ipv4>/g' \
+		-e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/<redacted-mac>/g' \
+		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+		"$tmp"
+else
+	cat "$tmp"
+fi
