@@ -30,6 +30,10 @@ llama.cpp is a useful Spark reference point for:
 
 - CPU baseline: enable AVX2 (and consider NUMA pinning) for realistic Spark node behavior.
 - GPU builds (when applicable): prefer explicit build flags (CUDA/HIP/Vulkan) and validate the device CC / backend at runtime.
+- Example CUDA build invocation (from upstream build docs):
+  - `cmake -B build -DGGML_CUDA=ON`
+  - Optionally pin compute capabilities explicitly: `-DCMAKE_CUDA_ARCHITECTURES="86;89"` (set this for your Spark GPUs).
+- Unified-memory fallback (Linux): upstream documents `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` as a way to swap to system RAM when VRAM is exhausted (often slower, but can avoid OOM crashes).
 - Treat llama.cpp as a reference runtime for “no Python” deployments and for tooling patterns (convert + serve).
 
 ## Fetch
