@@ -8,6 +8,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0)
+- `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
 
 ## cuBLASLt
 
@@ -16,9 +17,9 @@ Implication:
 - cuBLASLt should be treated as the “works-first” baseline for GEMM paths on GB10.
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
 
-Next probe step:
+Probe:
 
-- Add a tiny cuBLASLt matmul smoke test that compiles for `sm_121` and runs on Spark0 (kept probe-only).
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
 
 ## CUTLASS
 
@@ -43,4 +44,3 @@ Implication:
 Next probe step:
 
 - Build and run the smallest DeepGEMM example on Spark0, capture exact failure mode, then decide whether to patch arch detection or switch to CUTLASS/cuBLASLt for the early kernels.
-

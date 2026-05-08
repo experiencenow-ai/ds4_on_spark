@@ -33,8 +33,8 @@ else
 	exit 3
 fi
 echo
-echo \"== compile-only sm_121 probe ==\"
+echo \"== compile-only sm_121 probes ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_sm121_probe
+make bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke
 "

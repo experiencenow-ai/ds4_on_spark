@@ -1,0 +1,9 @@
+# DS4 runtime config example for Spark1.
+#
+# Copy to: /etc/ds4/ds4-spark1.yaml
+#
+# NOTE: The DS4 runtime config schema is intentionally TBD until the engine
+# skeleton lands. Keep this file minimal and add keys only after the schema is
+# defined in-tree.
+{}
+

@@ -2,6 +2,8 @@
 Description=DS4 service (%i)
 Wants=network-online.target
 After=network-online.target
+Wants=ds4-preflight@%i.service
+After=ds4-preflight@%i.service
 
 [Service]
 Type=simple

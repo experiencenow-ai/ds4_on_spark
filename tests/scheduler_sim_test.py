@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+import os
 
 from sim.scheduler import scheduler_sim
 
@@ -106,7 +108,61 @@ class SchedulerSimTest(unittest.TestCase):
         m = scheduler_sim.run_simulation(cfg, trace)
         self.assertGreater(m.starved_tasks, 0)
 
+    def test_trace_jsonl_replay_loads_and_sorts(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.2,"cls":"batch","candidates":[1,0]}\n')
+                f.write('{"t_ms":0.0,"cls":"interactive","candidates":[0,1]}\n')
+            trace = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual(len(trace), 2)
+            self.assertEqual(trace[0].t_ms, 0.0)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+            self.assertEqual(trace[1].cls, scheduler_sim.LatencyClass.BATCH)
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=2,
+                expert_parallelism=1,
+                expert_queue_max=10,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.num_tokens, 2)
+            self.assertGreater(m.makespan_ms, 0.0)
+        finally:
+            os.unlink(path)
+
+    def test_trace_replay_expert_id_range_checked(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(2,)),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        with self.assertRaises(ValueError):
+            scheduler_sim.run_simulation(cfg, trace)
+
 
 if __name__ == "__main__":
     unittest.main()
-
