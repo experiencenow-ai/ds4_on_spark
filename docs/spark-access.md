@@ -13,6 +13,40 @@ Current observed Spark identity:
 - Spark wired interface: `enP7s7`, MTU 9000
 - SSH key authentication from the Mac is now working for `spark0`.
 
+## Reproducible Probes
+
+From the Mac repo root, use the scripts in `scripts/` to keep probes consistent and safe-to-commit.
+
+### Mac-side Discovery (mDNS + reachability)
+
+```bash
+./scripts/mac_spark_discovery.sh
+```
+
+This prints:
+
+- IPv4/IPv6 addresses for `en0`/`en1` (no MAC addresses)
+- `_ssh._tcp` browse results (mDNS instance names)
+- Quick SSH port checks against known targets
+
+### Spark Hardware + Toolchain Probe
+
+```bash
+./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+```
+
+The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting MAC addresses or host keys. For a snapshot you can commit, redirect output and summarize the key facts in `docs/spark0-*.md`.
+
+## Spark1 Ready Checklist
+
+When Spark1 exists (or a second Spark is provisioned), the same scripts should work with a new target:
+
+```bash
+./scripts/spark_probe.sh spark0@spark1.local
+```
+
+If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
+
 ## Diagnosis
 
 `ssh spark0@aitopatom-9ab9.local` reaches the Spark SSH server.
