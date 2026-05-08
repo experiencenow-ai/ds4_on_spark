@@ -43,4 +43,7 @@ echo \"== run: cuda_device_props ==\"
 echo
 echo \"== run: cuda_sm121_probe ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_probe
+echo
+echo \"== run: cuda_cublaslt_smoke ==\"
+\"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
 "
