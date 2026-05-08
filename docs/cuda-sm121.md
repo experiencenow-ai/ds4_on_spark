@@ -24,3 +24,9 @@ If you need clocks or other dynamic properties, use:
 
 The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pattern.
 
+## Verifying `nvcc` Arch Mapping
+
+`tools/cuda_probe/bin/cuda_sm121_arch_report` prints both:
+
+- Runtime CC from `cudaGetDeviceProperties` (e.g. `12.1`)
+- The compiled device macro `__CUDA_ARCH__` from a `-arch=sm_121` build (expected `1210`)

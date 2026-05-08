@@ -13,6 +13,7 @@ Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
 
 ## Run
@@ -20,6 +21,7 @@ Expected outputs:
 ```bash
 ./tools/cuda_probe/bin/cuda_device_props
 ./tools/cuda_probe/bin/cuda_sm121_probe
+./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
 ```
 
