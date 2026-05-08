@@ -36,5 +36,5 @@ echo
 echo \"== compile-only sm_121 probes ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke
+make bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_sm121_smem_optin
 "

@@ -30,3 +30,14 @@ The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pat
 
 - Runtime CC from `cudaGetDeviceProperties` (e.g. `12.1`)
 - The compiled device macro `__CUDA_ARCH__` from a `-arch=sm_121` build (expected `1210`)
+
+## Shared Memory Opt-In (CUTLASS-style kernels)
+
+Template GEMMs often rely on large dynamic shared-memory allocations gated by:
+
+- `cudaDevAttrMaxSharedMemoryPerBlockOptin`
+- `cudaFuncAttributeMaxDynamicSharedMemorySize` via `cudaFuncSetAttribute`
+
+The probe `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints the device limit and validates a launch that opts in to the reported maximum.
+
+Observed on Spark0 (2026-05-08): `MaxSharedMemoryPerBlockOptin=101376` bytes.

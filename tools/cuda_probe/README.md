@@ -15,6 +15,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 
 ## Run
 
@@ -23,6 +24,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_probe
 ./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
+./tools/cuda_probe/bin/cuda_sm121_smem_optin
 ```
 
 ## Notes
@@ -31,5 +33,7 @@ Expected outputs:
   or the installed toolkit does not recognize `sm_121`.
 - `cuda_cublaslt_smoke` is a minimal “link + run” check for `-lcublasLt` on
   `sm_121`.
+- `cuda_sm121_smem_optin` is an opt-in shared-memory sanity check used by
+  CUTLASS-style kernels that rely on `cudaFuncAttributeMaxDynamicSharedMemorySize`.
 - Both probes intentionally keep dependencies tiny and print errors verbatim so
   failures can be pasted into an issue/PR.
