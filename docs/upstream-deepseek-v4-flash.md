@@ -9,11 +9,25 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
 
-Optional related checkpoint:
+Related checkpoint (same “official configs” approach):
 
 - `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base`
   - Ref: `refs/heads/main`
   - Commit: `8855555deef230a27a21a8d6f294b7b7497759b6`
+  - License: MIT (see HF `LICENSE`)
+
+## What we read from HF (no weights)
+
+- `config.json`, `generation_config.json`
+- `tokenizer.json`, `tokenizer_config.json`
+- `encoding/` (tokenizer-related assets)
+- `DeepSeek_V4.pdf` (technical report)
+
+## Weight download risk (Git LFS)
+
+- The HF repos include many `model-*.safetensors` files tracked by Git LFS.
+- When fetched via `scripts/fetch_upstreams.sh` with LFS disabled, these appear as small pointer stubs (first line `version https://git-lfs.github.com/spec/v1`), not actual weights.
+- Do not run `git lfs pull` (or any alternative fetch that resolves LFS blobs) inside `upstreams/deepseek_v4_*`.
 
 ## vLLM references
 
@@ -33,4 +47,10 @@ The fetch script disables Git LFS smudge/filters (and sets `GIT_LFS_SKIP_SMUDGE=
 
 ```bash
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf
+```
+
+To fetch the Flash-Base HF metadata (no weights):
+
+```bash
+./scripts/fetch_upstreams.sh deepseek_v4_flash_base_hf
 ```
