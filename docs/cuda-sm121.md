@@ -47,6 +47,21 @@ If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATIO
 
 Observed on Spark0 (2026-05-09): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
 
+## nvcc Extended Lambda + Relaxed Constexpr Gate
+
+Many CUTLASS/DeepGEMM-style codebases rely on `nvcc` accepting and correctly compiling with flags like:
+
+- `--extended-lambda`
+- `--expt-relaxed-constexpr`
+
+The probe `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` is a tiny compile/run check that:
+
+- builds for `-arch=sm_121` with `-std=c++20`
+- uses a device lambda in a kernel (exercises `--extended-lambda`)
+- runs a one-word sanity writeback (`0x12345679`)
+
+Observed on Spark0 (2026-05-09): probe prints `nvcc_flags_probe ok out=0x12345679`.
+
 ## nvJitLink JIT Link For `sm_121` (PTX → CUBIN)
 
 Some JIT pipelines compile CUDA source to PTX and then use nvJitLink to link PTX into an `sm_121` CUBIN before loading via the CUDA Driver API.
