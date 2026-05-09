@@ -475,6 +475,11 @@ To inspect a trunk+sidecar pair, pass both paths:
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json
 ```
 
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`:
+
+- Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
+- If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
+
 ## Next steps (oracle + remaining unknowns)
 
 - The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
