@@ -19,6 +19,11 @@ tokenizer/chat format, and memory envelope are real.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
 - The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
+  - When the repo-default `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, this output also includes:
+    - `trunk_contract` (upstream tensor-key completeness for top-level + `layers.{i}.*`)
+    - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
+    - `topology_contract` (GGUF header metadata vs expected `hidden_size`, `block_count`, head counts, vocab size)
+    - For trunk+sidecar inspections (multiple `--path`), the JSON includes both per-artifact and `combined.*` summaries; use `combined.topology_contract_source_path` to see which GGUF header was used for the combined topology check.
 - If the run fails, the report preserves the exact failure mode: unsupported
   architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat
   mismatch, or runtime crash.
@@ -81,6 +86,7 @@ Interpreting the result:
   actually loads and uses those tensors. Still require correctness oracles
   before trusting MTP outputs.
 - For GGUF, record `tensor_type_counts` (and `mtp_tensor_type_counts` when present) to capture the exact quant formats the runtime must support (e.g. `Q2_K`, `Q3_K`, `BF16`, `MXFP4`).
+  - If `topology_contract.checked == true` and `topology_contract.mismatches` is non-empty, treat the artifact as **suspect** (topology mismatch) until a human explains the discrepancy.
 
 Acceptance checks before DS4 can trust MTP:
 
