@@ -18,6 +18,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.
+- `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`: compile/run a `__pipeline_memcpy_async` (cp.async-style) copy from global->shared.
 
 ## Run
 
@@ -29,6 +30,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_smem_optin
 ./tools/cuda_probe/bin/cuda_sm121_devattrs
 ./tools/cuda_probe/bin/cuda_sm121_fp8_conv
+./tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async
 ```
 
 ## Notes
@@ -42,5 +44,6 @@ Expected outputs:
 - `cuda_sm121_devattrs` records device limits and runtime feature gates that commonly gate
   CUTLASS / custom GEMM kernel bring-up.
 - `cuda_sm121_fp8_conv` is a compile/run check for CUDA’s FP8 conversion helpers.
+- `cuda_sm121_pipeline_memcpy_async` is a compile/run check for CUDA pipeline primitives (`cuda_pipeline_primitives.h`) used by cp.async-style kernels.
 - These probes intentionally keep dependencies tiny and print errors verbatim so
   failures can be pasted into an issue/PR.

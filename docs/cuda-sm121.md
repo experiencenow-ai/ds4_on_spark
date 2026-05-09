@@ -51,3 +51,13 @@ The probe `tools/cuda_probe/bin/cuda_sm121_fp8_conv` is a tiny compile/run check
 - includes `cuda_fp8.h`
 - converts a `float` to FP8 storage (`e4m3` and `e5m2`)
 - converts back to `__half_raw` and prints the raw bits
+
+## Pipeline memcpy-async (cp.async-style mainloops)
+
+Many CUTLASS and custom GEMM kernels rely on CUDA pipeline primitives (cp.async-style) to move data from global memory into shared memory efficiently.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` is a tiny compile/run check that:
+
+- includes `cuda_pipeline_primitives.h`
+- issues a single `__pipeline_memcpy_async` from global->shared
+- commits, waits, and copies the shared value back to global for verification

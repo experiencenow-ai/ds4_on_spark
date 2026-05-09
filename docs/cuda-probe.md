@@ -22,6 +22,7 @@ What it does:
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
   - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
+  - `cuda_sm121_pipeline_memcpy_async` (`__pipeline_memcpy_async` global->shared copy probe)
 
 Environment overrides:
 
@@ -35,7 +36,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, and `cuda_sm121_fp8_conv` for `sm_121`.
+It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, and `cuda_sm121_pipeline_memcpy_async` for `sm_121`.
 
 ## Current Spark0 Results (2026-05-09)
 
@@ -54,6 +55,7 @@ Observed:
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
+- Pipeline memcpy-async probe succeeds (cp.async-style global->shared copy)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 
 Selected output excerpt:
@@ -68,6 +70,7 @@ cuBLASLt sgemm smoke max_abs_err=0
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
 fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
+pipeline_memcpy_async out=11111111 22222222 33333333 44444444
 ```
 
 ## Where The Probe Lives
