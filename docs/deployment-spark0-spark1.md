@@ -57,6 +57,8 @@ sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark0.service
+# optional strict variant (fails non-zero on missing/invalid TP=2 inputs):
+# sudo systemctl start ds4-preflight-strict@spark0.service
 ```
 
 On Spark1:
@@ -69,6 +71,8 @@ sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.env.example /etc/ds4/ds4-
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.yaml.example /etc/ds4/ds4-spark1.yaml
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark1.service
+# optional strict variant (fails non-zero on missing/invalid TP=2 inputs):
+# sudo systemctl start ds4-preflight-strict@spark1.service
 ```
 
 Notes:
