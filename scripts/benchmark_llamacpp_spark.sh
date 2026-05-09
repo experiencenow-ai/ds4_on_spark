@@ -32,6 +32,7 @@ CTX="${CTX:-8192}"
 N_TOKENS="${N_TOKENS:-256}"
 N_GPU_LAYERS="${N_GPU_LAYERS:-99}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
+SKIP_MODEL_SHA="${SKIP_MODEL_SHA:-0}"
 
 OUT_DIR="${OUT_DIR:-/tmp/baseline_llamacpp}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
@@ -185,7 +186,9 @@ echo "model_source=$MODEL_SOURCE"
 echo "model_quant=$MODEL_QUANT"
 ls -lh "$MODEL_GGUF" || true
 wc -c "$MODEL_GGUF" || true
-if command -v sha256sum >/dev/null 2>&1; then
+if [ "$SKIP_MODEL_SHA" = "1" ]; then
+    echo "sha256sum skipped (SKIP_MODEL_SHA=1)"
+elif command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$MODEL_GGUF" || true
 elif command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$MODEL_GGUF" || true
@@ -203,7 +206,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v shasum >/dev/null 2>&1; then
     echo "prompt_sha256=$(printf %s \"$PROMPT\" | shasum -a 256 | awk '{print $1}')"
 fi
-echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS --timings $EXTRA_ARGS"
+echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS --perf $EXTRA_ARGS"
 echo
 
 LLAMA_CLI_SHA256=""
@@ -227,7 +230,7 @@ import hashlib, json, math, os, resource, re, subprocess, sys, time, shlex
 
 llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, llama_cli_sha256, llama_cli_version, gpu_poll_csv = sys.argv[1:]
 
-cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl, "--timings"]
+cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl, "--perf"]
 if extra_args.strip():
     cmd.extend(shlex.split(extra_args))
 
@@ -495,7 +498,7 @@ with open(log_raw, "w", encoding="utf-8") as f:
                     _record_evt_metrics(evt)
             except Exception:
                 pass
-        if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line):
+        if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line) or ("Prompt:" in line and "Generation:" in line):
             timings_lines.append(line.strip())
         _emit_text(line)
 
@@ -573,6 +576,13 @@ for tl in timings_lines:
     elif tl.startswith("eval time") or " eval time" in tl:
         gen_tps = _last_float_before(tl, "tokens per second")
         gen_ms_per_tok = _last_float_before(tl, "ms per token")
+    elif "Prompt:" in tl and "Generation:" in tl:
+        mp = re.search(r"Prompt:\s*([0-9]+(?:\.[0-9]+)?)\s*t/s", tl)
+        mg = re.search(r"Generation:\s*([0-9]+(?:\.[0-9]+)?)\s*t/s", tl)
+        if mp is not None:
+            prefill_tps = float(mp.group(1))
+        if mg is not None:
+            gen_tps = float(mg.group(1))
 
 gpu_used_mib = []
 if gpu_poll_csv and os.path.exists(gpu_poll_csv):
