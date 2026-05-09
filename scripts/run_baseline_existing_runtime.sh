@@ -5,6 +5,9 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
+REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
+REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -51,6 +54,23 @@ extract_baseline_summary()
     echo "- ALLOW_FETCH=1"
     echo "- ALLOW_BUILD=1"
     echo "- ALLOW_RUN=1"
+    echo "- REMOTE_BENCH_ENV='...'"
+    echo "- REMOTE_LLAMA_ENV='...'"
+    echo "- REMOTE_VLLM_ENV='...'"
+    echo
+    echo "Remote llama env:"
+    echo
+    echo "Do not put secrets in REMOTE_* env values; this report records them."
+    echo
+    echo '```'
+    echo "$REMOTE_LLAMA_ENV"
+    echo '```'
+    echo
+    echo "Remote vLLM env:"
+    echo
+    echo '```'
+    echo "$REMOTE_VLLM_ENV"
+    echo '```'
     echo
     echo "## Spark Probe"
     echo
@@ -61,7 +81,7 @@ extract_baseline_summary()
 } >"$REPORT_MD"
 
 echo "== running llama.cpp benchmark script on spark (may be gated) =="
-ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && /tmp/benchmark_llamacpp_spark.sh' <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
+ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && $REMOTE_LLAMA_ENV /tmp/benchmark_llamacpp_spark.sh" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
     >"$OUT_DIR/remote_llamacpp_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_stderr.txt" || true
 
 {
@@ -93,7 +113,7 @@ ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp
 } >>"$REPORT_MD"
 
 echo "== running vLLM probe script on spark =="
-ssh $SSH_OPTS "$target" 'cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && /tmp/benchmark_vllm_spark.sh' <"$repo_root/scripts/benchmark_vllm_spark.sh" \
+ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && $REMOTE_VLLM_ENV /tmp/benchmark_vllm_spark.sh" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
     >"$OUT_DIR/remote_vllm_stdout.txt" 2>"$OUT_DIR/remote_vllm_stderr.txt" || true
 
 {
