@@ -312,14 +312,23 @@ emit_sysfs_pcie_link()
 							chain="$(printf "%s" "$devpath" | tr "/" "\n" | grep -E "^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}[.][0-7]$" | paste -sd " " - 2>/dev/null || true)"
 							if [ "$chain" != "" ]; then
 								echo "path: $chain"
-								for dev in $chain; do
-									p="/sys/bus/pci/devices/$dev"
-									[ -r "$p/current_link_speed" ] && echo "path $dev current_link_speed: $(cat "$p/current_link_speed" 2>/dev/null || true)"
-									[ -r "$p/current_link_width" ] && echo "path $dev current_link_width: $(cat "$p/current_link_width" 2>/dev/null || true)"
-									[ -r "$p/max_link_speed" ] && echo "path $dev max_link_speed: $(cat "$p/max_link_speed" 2>/dev/null || true)"
-									[ -r "$p/max_link_width" ] && echo "path $dev max_link_width: $(cat "$p/max_link_width" 2>/dev/null || true)"
-								done
-							fi
+									for dev in $chain; do
+										p="/sys/bus/pci/devices/$dev"
+										[ -r "$p/current_link_speed" ] && echo "path $dev current_link_speed: $(cat "$p/current_link_speed" 2>/dev/null || true)"
+										[ -r "$p/current_link_width" ] && echo "path $dev current_link_width: $(cat "$p/current_link_width" 2>/dev/null || true)"
+										[ -r "$p/max_link_speed" ] && echo "path $dev max_link_speed: $(cat "$p/max_link_speed" 2>/dev/null || true)"
+										[ -r "$p/max_link_width" ] && echo "path $dev max_link_width: $(cat "$p/max_link_width" 2>/dev/null || true)"
+										if command -v lspci >/dev/null 2>&1; then
+											vv="$(lspci -vv -s "$dev" 2>/dev/null || true)"
+											if [ "$vv" != "" ]; then
+												link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
+												if [ "$link_lines" != "" ]; then
+													printf "%s\n" "$link_lines" | sed -E "s/^/path $dev /"
+												fi
+											fi
+										fi
+									done
+								fi
 						fi
 					fi
 					[ -r "$sys/vendor" ] && echo "vendor: $(cat "$sys/vendor" 2>/dev/null || true)"
