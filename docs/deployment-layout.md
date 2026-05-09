@@ -56,6 +56,8 @@ rsync -av deploy/sysusers.d/ <user>@spark0.local:/tmp/ds4-sysusers/
 rsync -av deploy/tmpfiles.d/ <user>@spark0.local:/tmp/ds4-tmpfiles/
 ```
 
+If you prefer a single command that also stages safe ops scripts, use `scripts/ops_stage_deploy_assets.sh` (it supports `SSH_OPTS` for stable known-hosts handling).
+
 Then on the Spark:
 
 ```bash
