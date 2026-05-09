@@ -7,12 +7,17 @@ usage()
 usage: spark_probe.sh [user@host]
 
 Environment:
-  SSH_OPTS   Extra ssh options (default includes BatchMode + temp known_hosts)
-  REDACT=1   Redact IPv4/IPv6/MAC addresses from output
+  SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
+  SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
+  REDACT=1             Redact IPv4/IPv6/MAC addresses from output
+  NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
+  PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
+  CUDA_RUNTIME_PROBE=0 Skip the tiny `nvcc` runtime probe compile/run
 
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
+  REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
 USAGE
 }
 
@@ -25,6 +30,10 @@ esac
 
 target="${1:-spark0@aitopatom-9ab9.local}"
 SPARK_KNOWN_HOSTS="${SPARK_KNOWN_HOSTS:-/private/tmp/ds4_spark_known_hosts}"
+NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
+PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
+CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
+
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SPARK_KNOWN_HOSTS -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
 fi
@@ -39,6 +48,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo
 	ssh $SSH_OPTS "$target" 'set -eu
 export LANG=C LC_ALL=C
+nvidia_smi_full='"$NVIDIA_SMI_FULL"'
+pytorch_probe='"$PYTORCH_PROBE"'
+cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
 echo "== probe meta =="
 date -u
 echo "target user: $(id -un 2>/dev/null || true)"
@@ -71,15 +83,21 @@ echo
 echo "== pci nvidia =="
 lspci | grep -i nvidia || true
 echo
-echo "== nvidia-smi summary =="
-nvidia-smi || true
-echo
 echo "== nvidia-smi query (driver + compute capability) =="
-nvidia-smi --query-gpu=gpu_name,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true
+if command -v nvidia-smi >/dev/null 2>&1; then
+	nvidia-smi --query-gpu=gpu_name,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true
+else
+	echo "nvidia-smi not found"
+fi
 echo
 echo "== nvidia-smi cuda version =="
 nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true
 echo
+if [ "$nvidia_smi_full" = "1" ]; then
+	echo "== nvidia-smi full (verbose) =="
+	nvidia-smi || true
+	echo
+fi
 echo "== cuda toolkit =="
 nvcc_bin=""
 if command -v nvcc >/dev/null 2>&1; then
@@ -101,7 +119,7 @@ echo "== cuda libraries (ldconfig, first hits) =="
 ldconfig -p 2>/dev/null | grep -E "libcuda\\.so\\.1|libcudart\\.so" | head -n 20 || true
 echo
 echo "== cuda runtime probe (nvcc, no deps) =="
-if [ "$nvcc_bin" != "" ]; then
+if [ "$cuda_runtime_probe" = "1" ] && [ "$nvcc_bin" != "" ]; then
 	cu_src="/tmp/ds4_cuda_probe.$$.cu"
 	cu_bin="/tmp/ds4_cuda_probe.$$"
 	nvcc_log="/tmp/ds4_cuda_probe_nvcc.$$.log"
@@ -143,12 +161,15 @@ CU
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
 	fi
 	rm -f "$cu_src" "$cu_bin" "$nvcc_log" >/dev/null 2>&1 || true
-else
+elif [ "$cuda_runtime_probe" = "1" ]; then
 	echo "nvcc not found"
+else
+	echo "skipped"
 fi
 echo
-echo "== python cuda probe (optional) =="
-command -v python3 >/dev/null 2>&1 && python3 - <<'"'"'PY'"'"' || true
+if [ "$pytorch_probe" = "1" ]; then
+	echo "== python cuda probe (optional) =="
+	command -v python3 >/dev/null 2>&1 && python3 - <<'"'"'PY'"'"' || true
 try:
     import torch
     print("torch", torch.__version__)
@@ -159,7 +180,8 @@ try:
 except Exception as e:
     print("torch probe failed:", e)
 PY
-echo
+	echo
+fi
 echo "== network =="
 ip -br -4 addr 2>/dev/null || ip -brief addr 2>/dev/null || ip addr || true
 ip -4 route 2>/dev/null || ip route || true
