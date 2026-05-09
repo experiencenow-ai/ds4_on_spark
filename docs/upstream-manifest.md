@@ -46,6 +46,18 @@ To see the current HEAD commits upstream (without cloning), run:
 ./scripts/upstream_ls_remote.sh
 ```
 
+To print the current resolution of the **pinned** refs (without cloning), run:
+
+```bash
+./scripts/upstream_ls_remote.sh --pinned
+```
+
+To print both reports (HEAD + pinned), run:
+
+```bash
+./scripts/upstream_ls_remote.sh --all
+```
+
 To verify that the **pinned** refs/commits in this manifest still resolve upstream, run:
 
 ```bash

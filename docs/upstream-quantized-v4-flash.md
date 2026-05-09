@@ -20,6 +20,7 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | Plausible (headroom for KV/cache still required) |
 | `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | Plausible but tight (limited KV/cache headroom) |
 | `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | Plausible but tight (limited KV/cache headroom) |
+| `lovedheart/DeepSeek-V4-Flash-GGUF` | `Q2_K (23 shards)` | 100451521792 | 93.6 | Plausible but tight (license UNKNOWN; sharded; requires V4-capable llama.cpp) |
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) |
 
 ## Reproducing the size numbers (no downloads)
