@@ -509,6 +509,8 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co
 
 Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
 
+As of 2026-05-09, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
+
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
 - Also record and review:
