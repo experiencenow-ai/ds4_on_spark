@@ -4,6 +4,21 @@ This repo does **not** vendor model weights. The entries below are **references 
 
 For a runtime+artifact pairing matrix (what runs where), see [`docs/upstream-single-spark-v4-flash.md`](upstream-single-spark-v4-flash.md).
 
+## Discovery (HF search, no downloads)
+
+To discover new community GGUF repos without cloning or downloading weights, search the Hugging Face model index:
+
+```bash
+./scripts/upstream_hf_search.sh "DeepSeek-V4-Flash GGUF" --sort downloads --limit 50
+```
+
+Then inspect a promising repo’s GGUF footprint and LFS sha256 via the per-repo API report:
+
+```bash
+./scripts/upstream_hf_api_report.sh <org>/<repo> --sum-gguf
+./scripts/upstream_hf_api_report.sh <org>/<repo> --top-oids 50 | rg '\\.gguf$'
+```
+
 ## Single-Spark memory baseline (Spark0)
 
 Based on [`docs/spark0-hardware-baseline-2026-05-09.md`](spark0-hardware-baseline-2026-05-09.md), Spark0 has:
