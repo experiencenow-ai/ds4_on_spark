@@ -79,6 +79,11 @@ congestion signal derived from expert pending depth:
   queue (interactive or batch) plus in-flight work, across all experts (helps
   decouple interactive K from batch backlog under strict priority)
 
+You can also choose whether pending depth is measured in **task counts** or **work units**:
+
+- `--pending-units tasks` (default): pending is outstanding task count (queued + in-flight)
+- `--pending-units work`: pending is sum of `cost_scale` for queued + in-flight work (draft micro-tokens with low `--mtp-draft-cost-scale` contribute less)
+
 When the trace contains multiple MoE layers (`layers[]`), you can choose whether the controller
 produces one `K` per trace entry or one `K` per layer:
 
