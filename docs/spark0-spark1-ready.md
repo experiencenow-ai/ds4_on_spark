@@ -69,6 +69,7 @@ Notes:
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported).
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available).
 - `nvcc` path and version (toolkit version).
+- `nvcc --list-gpu-arch` output (capped) to confirm supported SM targets (useful when `NVCC_ARCH=...` overrides fail).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - Any `warning:` line emitted by the probe when `nvcc release` and `cuda.h` disagree.
 - Any `note:` line emitted by the probe when `nvidia-smi` CUDA major differs from the `nvcc` toolkit major (driver vs toolkit).
