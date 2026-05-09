@@ -80,6 +80,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		fi
 	fi
 	echo "probe targets: $*"
+	echo "ssh opts: $SSH_OPTS"
 	for t in "$@"; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
@@ -271,6 +272,11 @@ emit_sysfs_pcie_link()
 				sys="/sys/bus/pci/devices/$short_bus"
 				echo "-- $bus -> $short_bus --"
 				if [ -d "$sys" ]; then
+					[ -r "$sys/vendor" ] && echo "vendor: $(cat "$sys/vendor" 2>/dev/null || true)"
+					[ -r "$sys/device" ] && echo "device: $(cat "$sys/device" 2>/dev/null || true)"
+					[ -r "$sys/subsystem_vendor" ] && echo "subsystem_vendor: $(cat "$sys/subsystem_vendor" 2>/dev/null || true)"
+					[ -r "$sys/subsystem_device" ] && echo "subsystem_device: $(cat "$sys/subsystem_device" 2>/dev/null || true)"
+					[ -r "$sys/class" ] && echo "class: $(cat "$sys/class" 2>/dev/null || true)"
 					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
 					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
 					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
