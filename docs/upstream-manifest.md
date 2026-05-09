@@ -9,7 +9,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 
 | Name | Upstream | Ref | Commit | License | Notes |
 | --- | --- | --- | --- | --- | --- |
-| ds4 | `antirez/ds4` | `refs/heads/main` | `baa084482020263a17a3b33a238f6f0809b425fd` | MIT | DeepSeek-V4-Flash-specific native engine (Metal-first); semantics + KV-cache design reference; do not run upstream model-download scripts. |
+| ds4 | `antirez/ds4` | `refs/heads/main` | `8e7575be0ef44bd97c5ebaccf49ef85e05048b7b` | MIT | DeepSeek-V4-Flash-specific native engine (Metal-first); semantics + KV-cache design reference; do not run upstream model-download scripts. |
 | DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/tags/v2.1.1.post3` | `c9f8b34dcdacc20aa746b786f983492c51072870` | MIT | CUDA GEMM kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); pinned to a release tag (vs `main`). |
 | FlashMLA | `deepseek-ai/FlashMLA` | `refs/heads/main` | `9241ae3ef9bac614dd25e45e507e089f888280e0` | MIT | Efficient Multi-head Latent Attention kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); treat as kernel-design reference for V4-Flash-style MLA. |
 | DeepSeek-V3 (code) | `deepseek-ai/DeepSeek-V3` | `refs/tags/v1.0.0` | `f6e34dd26772dd4a216be94a8899276c5dca9e43` | MIT (code) | Repo has distinct code vs model/weights licensing. |
@@ -17,7 +17,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | DeepSeek-V4-Flash-Base (HF) | `huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base` | `refs/heads/main` | `8855555deef230a27a21a8d6f294b7b7497759b6` | MIT | Optional checkpoint; fetch metadata-only (no weights) via `GIT_LFS_SKIP_SMUDGE=1`; commit here is from git transport (`git ls-remote`), not the HF web UI revision string. |
 | vLLM | `vllm-project/vllm` | `refs/tags/v0.20.2` | `bc150f50299199599673614f80d12a196f377655` | Apache-2.0 | Inference runtime reference; includes DeepSeek-V4 model support docs. |
 | Transformers | `huggingface/transformers` | `refs/tags/v5.8.0` | `049d2bf1220747b6d39e2a978b9f5fe0defa1dca` | Apache-2.0 | Reference for HF config/tokenization + model wrappers. |
-| SGLang | `sgl-project/sglang` | `refs/heads/main` | `8087e07d52eede91414d7c1b9b323c98b1cf2dbf` | Apache-2.0 | Serving runtime reference with explicit DeepSeek-V4 docs/tests (newer than latest release tag); track alongside vLLM for V4-Flash bring-up context. |
+| SGLang | `sgl-project/sglang` | `refs/heads/main` | `12f42f2e7e7520bef573230cadbdf6c10241aa61` | Apache-2.0 | Serving runtime reference with explicit DeepSeek-V4 docs/tests (newer than latest release tag); track alongside vLLM for V4-Flash bring-up context. |
 | llama.cpp | `ggml-org/llama.cpp` | `refs/tags/b9085` | `046e2844370208007c116fab448ed4033d77653f` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling (pinned to a release tag). |
 | llama.cpp (DeepSeek V4 Flash fork) | `antirez/llama.cpp-deepseek-v4-flash` | `refs/heads/main` | `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` | MIT | Flash-specific fork widely referenced by community GGUFs; not in upstream `ggml-org/llama.cpp` yet. |
 | llama.cpp (DeepSeek V4 support WIP) | `nisparks/llama.cpp` | `refs/heads/wip/deepseek-v4-support` | `9d364087024da141510267e6b269ee495ca45176` | MIT | WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter; required by some “native FP4/FP8” GGUF artifacts. |
