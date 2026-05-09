@@ -66,6 +66,12 @@ congestion signal derived from expert pending depth:
 - `--k-signal global` (default): `max_pending` is max pending across all experts
 - `--k-signal candidates`: `max_pending` is max pending among this token's candidates
 
+When the trace contains multiple MoE layers (`layers[]`), you can choose whether the controller
+produces one `K` per trace entry or one `K` per layer:
+
+- `--k-scope token` (default): compute one `K` and apply it to every layer
+- `--k-scope layer`: compute `K` independently for each layer using that layer's `candidates`
+
 Then:
 
 - if `max_pending <= --q-low` then `K = K_max`
@@ -96,6 +102,12 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mo
 
 This is useful for validating the queueing/backpressure/MTP layers against a real schedule before
 tuning the controller.
+
+### `chosen_k_total` Metric
+
+For multi-layer traces, the metrics JSON includes `chosen_k_total.{interactive,batch}` summarizing the
+*total desired verify work per trace entry* (sum over layers of `min(k_layer, len(layer.candidates))`).
+This is helpful when comparing `--k-scope token` vs `--k-scope layer` on the same trace.
 
 ## MTP (Draft/Accept) Model
 
