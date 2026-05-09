@@ -618,6 +618,7 @@
     "inference_config": {
       "dtype": "fp8",
       "expert_dtype": "fp4",
+      "scale_dtype": "fp8",
       "scale_fmt": "ue8m0"
     },
     "inference_model_constants": {
@@ -647,6 +648,14 @@
         "weight_shape": "[out_features, in_features]"
       },
       "reference_source": "inference/model.py:Linear"
+    },
+    "modelargs_defaults": {
+      "dtype": "fp8",
+      "expert_dtype": null,
+      "max_batch_size": 4,
+      "max_seq_len": 4096,
+      "scale_dtype": "fp8",
+      "scale_fmt": "ue8m0"
     },
     "reference_defaults": {
       "max_batch_size": 4,
