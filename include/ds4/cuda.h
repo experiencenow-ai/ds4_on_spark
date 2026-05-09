@@ -22,6 +22,21 @@ typedef struct
 	char name[128];
 } ds4_cuda_device_info_t;
 
+typedef struct
+{
+	void *h;
+} ds4_cuda_stream_t;
+
+typedef struct
+{
+	void *h;
+} ds4_cuda_event_t;
+
+#define DS4_CUDA_STREAM_FLAGS_DEFAULT 0
+
+#define DS4_CUDA_EVENT_FLAGS_DEFAULT 0
+#define DS4_CUDA_EVENT_FLAGS_DISABLE_TIMING 1
+
 DS4_EXTERN_C_BEGIN
 ds4_cuda_status_t ds4_cuda_ok(void);
 ds4_cuda_status_t ds4_cuda_fail(int32_t code);
@@ -37,6 +52,14 @@ ds4_cuda_status_t ds4_cuda_check_last_error(const char *file,int32_t line);
 ds4_cuda_status_t ds4_cuda_check_peek_last_error(const char *file,int32_t line);
 ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count);
 ds4_cuda_status_t ds4_cuda_device_info(ds4_cuda_device_info_t *out,int32_t dev_index);
+ds4_cuda_status_t ds4_cuda_stream_create(ds4_cuda_stream_t *out,int32_t flags);
+ds4_cuda_status_t ds4_cuda_stream_destroy(ds4_cuda_stream_t *s);
+ds4_cuda_status_t ds4_cuda_stream_synchronize(ds4_cuda_stream_t s);
+ds4_cuda_status_t ds4_cuda_event_create(ds4_cuda_event_t *out,int32_t flags);
+ds4_cuda_status_t ds4_cuda_event_destroy(ds4_cuda_event_t *e);
+ds4_cuda_status_t ds4_cuda_event_record(ds4_cuda_event_t e,ds4_cuda_stream_t s);
+ds4_cuda_status_t ds4_cuda_event_synchronize(ds4_cuda_event_t e);
+ds4_cuda_status_t ds4_cuda_event_elapsed_ms(float *out_ms,ds4_cuda_event_t start,ds4_cuda_event_t end);
 ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes);
 ds4_cuda_status_t ds4_cuda_free(void *ptr);
 ds4_cuda_status_t ds4_cuda_malloc_host(void **out,int64_t bytes);
