@@ -119,6 +119,20 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 	return(ds4_cuda_fail(cuda_err));
 }
 
+ds4_cuda_status_t ds4_cuda_check_last_error(const char *file,int32_t line)
+{
+	cudaError_t err;
+	err = cudaGetLastError();
+	return(ds4_cuda_check_i32((int32_t)err,"cudaGetLastError()",file,line));
+}
+
+ds4_cuda_status_t ds4_cuda_check_peek_last_error(const char *file,int32_t line)
+{
+	cudaError_t err;
+	err = cudaPeekAtLastError();
+	return(ds4_cuda_check_i32((int32_t)err,"cudaPeekAtLastError()",file,line));
+}
+
 ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count)
 {
 	int dev_count;

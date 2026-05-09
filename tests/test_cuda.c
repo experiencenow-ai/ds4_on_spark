@@ -21,6 +21,14 @@ int32_t test_cuda(void)
 	s = ds4_cuda_errstr(st1);
 	if ( s == 0 )
 		return(-4);
+	st2 = DS4_CUDA_CHECK_LAST_ERROR();
+	s = ds4_cuda_errstr(st2);
+	if ( s == 0 )
+		return(-50);
+	st3 = DS4_CUDA_CHECK_PEEK_LAST_ERROR();
+	s = ds4_cuda_errstr(st3);
+	if ( s == 0 )
+		return(-51);
 	st2 = ds4_cuda_last_error();
 	s = ds4_cuda_errstr(st2);
 	if ( s == 0 )
