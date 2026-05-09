@@ -58,4 +58,7 @@ echo \"== run: cuda_sm121_devattrs ==\"
 echo
 echo \"== run: cuda_sm121_fp8_conv ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_fp8_conv
+echo
+echo \"== run: cuda_sm121_pipeline_memcpy_async ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_pipeline_memcpy_async
 "
