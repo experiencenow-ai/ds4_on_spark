@@ -259,6 +259,35 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 ```
 
+## Update: Probe Refresh (2026-05-09 20:06Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2006Z_loop_v6.txt
+```
+
+```text
+== local meta ==
+Sat May  9 20:06:37 UTC 2026
+git: 25a8c94
+probe targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 46, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== nvcc supported gpu arch (capped) ==
+compute_120
+compute_121
+```
+
 ```text
 == pci link (sysfs, current/max) ==
 -- 0000000F:01:00.0 -> 000f:01:00.0 --
