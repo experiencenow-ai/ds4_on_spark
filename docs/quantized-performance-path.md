@@ -66,6 +66,8 @@ offset draft overhead for realistic accept rates.
 Tip: for synthetic traces, `--arrival-units output_tokens` keeps output-token
 demand fixed while varying MTP accept rates.
 
+Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
+
 ## Phase 1: Real Router Trace Replay
 
 Once the baseline quantized runtime can emit per-token routing, capture a trace

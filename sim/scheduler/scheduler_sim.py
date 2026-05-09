@@ -63,6 +63,7 @@ class TraceConfig:
     burst_scale: float
     zipf_alpha: float
     seed: int
+    num_layers: int = 1
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class HotsetTraceConfig:
     hotset_bias: float
     hotset_rotate_every_tokens: int
     seed: int
+    num_layers: int = 1
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ class MarkovTraceConfig:
     zipf_alpha: float
     stay_prob: float
     seed: int
+    num_layers: int = 1
 
 
 @dataclass(frozen=True)
@@ -608,6 +611,17 @@ def _sample_hotset_candidates(rng: random.Random, num_experts: int, hotset: Sequ
     return(tuple(chosen[:k]))
 
 
+def _union_candidates_for_layers(layer_candidates: Sequence[Tuple[int, ...]]) -> Tuple[int, ...]:
+    union: List[int] = []
+    seen = set()
+    for lcands in layer_candidates:
+        for c in lcands:
+            if c not in seen:
+                union.append(int(c))
+                seen.add(int(c))
+    return(tuple(union))
+
+
 def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
     if cfg.num_experts <= 0:
         raise ValueError("num_experts must be > 0")
@@ -627,6 +641,8 @@ def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
         raise ValueError("burst_scale must be > 0")
     if cfg.zipf_alpha <= 0.0:
         raise ValueError("zipf_alpha must be > 0")
+    if cfg.num_layers <= 0:
+        raise ValueError("num_layers must be > 0")
 
     rng = random.Random(cfg.seed)
     weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
@@ -635,8 +651,16 @@ def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
     arrivals = _generate_arrival_times_ms(rng, cfg.num_tokens, cfg.arrival_rate_tps, cfg.burst_prob, cfg.burst_scale)
     for t_ms in arrivals:
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
-        candidates = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
-        routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+        if cfg.num_layers <= 1:
+            candidates = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+        else:
+            layer_candidates: List[Tuple[int, ...]] = []
+            for _li in range(cfg.num_layers):
+                layer_candidates.append(_sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates))
+            union = _union_candidates_for_layers(layer_candidates)
+            layers = tuple(LayerRoute(candidates=lc) for lc in layer_candidates)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=layers))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -663,6 +687,8 @@ def generate_hotset_trace(cfg: HotsetTraceConfig) -> List[TokenRoute]:
         raise ValueError("hotset_size must be within [1,num_experts]")
     if cfg.hotset_bias < 0.0 or cfg.hotset_bias > 1.0:
         raise ValueError("hotset_bias must be within [0,1]")
+    if cfg.num_layers <= 0:
+        raise ValueError("num_layers must be > 0")
 
     rng = random.Random(cfg.seed)
     perm = list(range(cfg.num_experts))
@@ -673,8 +699,16 @@ def generate_hotset_trace(cfg: HotsetTraceConfig) -> List[TokenRoute]:
     for i, t_ms in enumerate(arrivals):
         hotset = _hotset_for_token(perm, cfg.hotset_size, cfg.hotset_rotate_every_tokens, i)
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
-        candidates = _sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates)
-        routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+        if cfg.num_layers <= 1:
+            candidates = _sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+        else:
+            layer_candidates: List[Tuple[int, ...]] = []
+            for _li in range(cfg.num_layers):
+                layer_candidates.append(_sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates))
+            union = _union_candidates_for_layers(layer_candidates)
+            layers = tuple(LayerRoute(candidates=lc) for lc in layer_candidates)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=layers))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -724,6 +758,8 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
         raise ValueError("zipf_alpha must be > 0")
     if cfg.stay_prob < 0.0 or cfg.stay_prob > 1.0:
         raise ValueError("stay_prob must be within [0,1]")
+    if cfg.num_layers <= 0:
+        raise ValueError("num_layers must be > 0")
 
     rng = random.Random(cfg.seed)
     weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
@@ -735,9 +771,18 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
         if rng.random() > cfg.stay_prob:
             primary = rng.choices(range(cfg.num_experts), weights=weights, k=1)[0]
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
-        others = _sample_unique_ordered_excluding(rng, cfg.num_experts, weights, cfg.num_candidates - 1, excluded=(primary,))
-        candidates = (primary,) + others
-        routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+        if cfg.num_layers <= 1:
+            others = _sample_unique_ordered_excluding(rng, cfg.num_experts, weights, cfg.num_candidates - 1, excluded=(primary,))
+            candidates = (primary,) + others
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+        else:
+            layer_candidates: List[Tuple[int, ...]] = []
+            for _li in range(cfg.num_layers):
+                others = _sample_unique_ordered_excluding(rng, cfg.num_experts, weights, cfg.num_candidates - 1, excluded=(primary,))
+                layer_candidates.append((primary,) + others)
+            union = _union_candidates_for_layers(layer_candidates)
+            layers = tuple(LayerRoute(candidates=lc) for lc in layer_candidates)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=layers))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -2485,12 +2530,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
-    p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file (t_ms, cls, candidates) before simulation.")
-    p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file (t_ms, cls, candidates) before simulation.")
+    p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
+    p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
+    p.add_argument("--num-layers", type=int, default=1, help="Synthetic trace: number of MoE layers per token (1 = candidates only; >1 emits per-layer routing under `layers`).")
     p.add_argument("--interactive-prob", type=float, default=0.3)
     p.add_argument("--arrival-rate-tps", type=float, default=5000.0)
     p.add_argument("--arrival-units", type=str, default="steps", help="Interpret --arrival-rate-tps as steps (verify steps) or output_tokens (rescale by expected MTP accept length when enabled). Synthetic traces only.")
@@ -2613,6 +2659,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 burst_scale=args.burst_scale,
                 zipf_alpha=args.zipf_alpha,
                 seed=args.seed,
+                num_layers=args.num_layers,
             )
             trace = generate_synthetic_trace(trace_cfg)
         elif mode == "hotset":
@@ -2628,6 +2675,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 hotset_bias=args.hotset_bias,
                 hotset_rotate_every_tokens=args.hotset_rotate_every_tokens,
                 seed=args.seed,
+                num_layers=args.num_layers,
             )
             trace = generate_hotset_trace(trace_cfg)
         elif mode == "markov":
@@ -2642,6 +2690,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 zipf_alpha=args.zipf_alpha,
                 stay_prob=args.markov_stay_prob,
                 seed=args.seed,
+                num_layers=args.num_layers,
             )
             trace = generate_markov_trace(trace_cfg)
         else:

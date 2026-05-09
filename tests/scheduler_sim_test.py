@@ -29,6 +29,36 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertTrue(all(r.t_ms >= 0.0 for r in t0))
         self.assertTrue(all(len(r.candidates) == 4 for r in t0))
 
+    def test_synthetic_trace_num_layers_emits_layers_and_union_candidates(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=8,
+            num_experts=8,
+            num_candidates=3,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            num_layers=3,
+        )
+        t0 = scheduler_sim.generate_synthetic_trace(cfg)
+        t1 = scheduler_sim.generate_synthetic_trace(cfg)
+        self.assertEqual(t0, t1)
+        self.assertEqual(len(t0), 8)
+        for r in t0:
+            self.assertIsNotNone(r.layers)
+            self.assertEqual(len(r.layers or ()), 3)
+            union: list[int] = []
+            seen: set[int] = set()
+            for lr in r.layers or ():
+                self.assertEqual(len(lr.candidates), 3)
+                for c in lr.candidates:
+                    if c not in seen:
+                        union.append(c)
+                        seen.add(c)
+            self.assertEqual(r.candidates, tuple(union))
+
     def test_hotset_trace_deterministic_and_rotates(self) -> None:
         cfg = scheduler_sim.HotsetTraceConfig(
             num_tokens=4,

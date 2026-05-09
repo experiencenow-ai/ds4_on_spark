@@ -208,6 +208,16 @@ Markov mode creates temporal locality by reusing the previous token's primary ex
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
+### Synthetic Multi-Layer Routes
+
+To approximate multi-MoE-layer models before real quantized-runtime traces are available, synthetic traces can emit per-layer routing:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-layers 4 --num-candidates 8 --json
+```
+
+When `--num-layers > 1`, each generated trace record includes a `layers` array with one candidate list per layer. The top-level `candidates` field is set to the union of all layer candidates (first-seen order) for compatibility with `--k-signal candidates` and trace replay tooling.
+
 ### Trace Replay (JSONL or CSV)
 
 Replay mode can read either JSONL (`--trace-jsonl`) or CSV (`--trace-csv`).
