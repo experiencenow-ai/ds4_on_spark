@@ -1,5 +1,4 @@
 #include "ds4/ds4.h"
-#include "ds4/str.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -115,7 +114,7 @@ int main(int argc,char **argv)
 	ds4_config_t cfg;
 	const char *cfg_path,*log_level,*enable_cuda;
 	uint8_t cfg_buf[4096];
-	int32_t dump_cfg,print_ver,err,vlen;
+	int32_t dump_cfg,print_ver,err;
 	dump_cfg = 0;
 	print_ver = 0;
 	cfg_path = 0;
@@ -139,19 +138,13 @@ int main(int argc,char **argv)
 	}
 	if ( log_level != 0 )
 	{
-		vlen = ds4_cstr_len_i32(log_level);
-		if ( vlen <= 0 )
-			return(1);
-		err = ds4_config_parse_kv(&cfg,"log_level",9,log_level,vlen);
+		err = ds4_config_parse_kv_cstr(&cfg,"log_level",log_level);
 		if ( err != 0 )
 			return(1);
 	}
 	if ( enable_cuda != 0 )
 	{
-		vlen = ds4_cstr_len_i32(enable_cuda);
-		if ( vlen <= 0 )
-			return(1);
-		err = ds4_config_parse_kv(&cfg,"enable_cuda",11,enable_cuda,vlen);
+		err = ds4_config_parse_kv_cstr(&cfg,"enable_cuda",enable_cuda);
 		if ( err != 0 )
 			return(1);
 	}

@@ -46,6 +46,16 @@ int32_t test_config(void)
 	uint8_t io_cap_buf[12];
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
+	if ( ds4_config_parse_kv_cstr(&cfg,"log_level","debug") != 0 )
+		return(-60);
+	if ( cfg.log_level != 3 )
+		return(-61);
+	if ( ds4_config_parse_kv_cstr(&cfg,"enable_cuda","true") != 0 )
+		return(-62);
+	if ( cfg.enable_cuda != 1 )
+		return(-63);
+	if ( ds4_config_parse_kv_cstr(&cfg,0,"1") >= 0 )
+		return(-64);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
 		return(-2);
 	if ( cfg.log_level != 3 )
