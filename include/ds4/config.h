@@ -6,10 +6,13 @@ typedef struct
 {
 	int32_t log_level;
 	int32_t enable_cuda;
+	int32_t cuda_device;
 } ds4_config_t;
 
 #define DS4_LOG_LEVEL_MIN 0
 #define DS4_LOG_LEVEL_MAX 3
+
+#define DS4_CUDA_DEVICE_AUTO (-1)
 
 DS4_EXTERN_C_BEGIN
 int32_t ds4_config_defaults(ds4_config_t *cfg);
