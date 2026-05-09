@@ -33,3 +33,11 @@ Notes:
 
 - `ds4_ring_push` / `ds4_ring_pop`: push/pop fixed-size elements by copying.
 - Useful for bounded event queues, message passing between components, or simple telemetry buffers.
+
+## Log Ring (`ds4_log_ring_t`)
+
+`ds4_log_ring_t` is a simple fixed-size log capture sink built on `ds4_ring_t`:
+
+- Initialize with caller-provided `ds4_log_entry_t` storage.
+- Wire into the logger with `ds4_log_set_sink(ds4_log_ring_sink,&ring)`.
+- When full, it evicts the oldest entry and keeps the newest.
