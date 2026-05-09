@@ -9,6 +9,7 @@ VLLM_MODEL="${VLLM_MODEL:-}"
 PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 MAX_TOKENS="${MAX_TOKENS:-256}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
+MEASURE_TTFT="${MEASURE_TTFT:-1}"
 
 echo "== vLLM probe (Spark) =="
 date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
@@ -52,7 +53,8 @@ cat "$OUT_DIR/torch_cuda_probe.txt"
 echo
 echo "== baseline notes =="
 echo "- This script does not install vLLM or download weights."
-echo "- TTFT is not measured (Python API returns after generation completes)."
+echo "- TTFT is best-effort: when MEASURE_TTFT=1, try vLLM async streaming APIs."
+echo "- If streaming APIs are unavailable in the installed vLLM, TTFT is reported as NA."
 
 if [ "$ALLOW_RUN" != "1" ]; then
     echo
@@ -67,21 +69,23 @@ if [ "$VLLM_MODEL" = "" ]; then
 fi
 
 echo
-echo "== vLLM generate probe (approx; no streaming TTFT) =="
+echo "== vLLM generate probe (best-effort TTFT when possible) =="
 echo "model=$VLLM_MODEL"
 echo "tp=$TENSOR_PARALLEL_SIZE"
 echo "max_tokens=$MAX_TOKENS"
+echo "measure_ttft=$MEASURE_TTFT"
 echo
 
 LOG_RAW="$OUT_DIR/vllm_generate_probe.txt"
 LOG_SUMMARY="$OUT_DIR/vllm_generate_probe.summary.txt"
 
-python3 - <<'PY' "$VLLM_MODEL" "$PROMPT" "$MAX_TOKENS" "$TENSOR_PARALLEL_SIZE" "$LOG_RAW" "$LOG_SUMMARY"
-import resource, sys, time
+python3 - <<'PY' "$VLLM_MODEL" "$PROMPT" "$MAX_TOKENS" "$TENSOR_PARALLEL_SIZE" "$MEASURE_TTFT" "$LOG_RAW" "$LOG_SUMMARY"
+import asyncio, resource, sys, time
 
-model, prompt, max_tokens_s, tp_s, log_raw, log_summary = sys.argv[1:]
+model, prompt, max_tokens_s, tp_s, measure_ttft_s, log_raw, log_summary = sys.argv[1:]
 max_tokens = int(max_tokens_s)
 tp = int(tp_s)
+measure_ttft = (measure_ttft_s == "1")
 
 start = time.monotonic()
 utc_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -89,7 +93,10 @@ utc_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 rc = 0
 load_s = None
 generate_wall_s = None
+ttft_first_output_s = None
 generated_tokens = 0
+generated_chars = 0
+ttft_method = "none"
 
 raw_lines = []
 raw_lines.append("utc_start=" + utc_start)
@@ -98,23 +105,71 @@ raw_lines.append("tp=%d" % tp)
 raw_lines.append("max_tokens=%d" % max_tokens)
 
 try:
-    from vllm import LLM, SamplingParams
-    sampling = SamplingParams(max_tokens=max_tokens, temperature=0.0)
+    if measure_ttft:
+        try:
+            from vllm import SamplingParams
+            from vllm.engine.arg_utils import AsyncEngineArgs
+            from vllm.sampling_params import RequestOutputKind
+            from vllm.v1.engine.async_llm import AsyncLLM
 
-    llm = LLM(model=model, tensor_parallel_size=tp)
-    loaded = time.monotonic()
-    load_s = loaded - start
+            async def _run_stream():
+                nonlocal load_s, generate_wall_s, ttft_first_output_s, generated_tokens, generated_chars, ttft_method
 
-    outs = llm.generate([prompt], sampling)
-    end = time.monotonic()
-    generate_wall_s = end - loaded
+                engine_args = AsyncEngineArgs(model=model, tensor_parallel_size=tp)
+                engine = AsyncLLM.from_engine_args(engine_args)
+                loaded = time.monotonic()
+                load_s = loaded - start
 
-    try:
-        o0 = outs[0].outputs[0]
-        if hasattr(o0, "token_ids") and o0.token_ids is not None:
-            generated_tokens = len(o0.token_ids)
-    except Exception:
-        pass
+                sampling = SamplingParams(max_tokens=max_tokens, temperature=0.0, output_kind=RequestOutputKind.DELTA)
+
+                req_start = time.monotonic()
+                saw_any = False
+                async for out in engine.generate(request_id="baseline", prompt=prompt, sampling_params=sampling):
+                    for completion in getattr(out, "outputs", []) or []:
+                        txt = getattr(completion, "text", "")
+                        if txt != "":
+                            if not saw_any:
+                                saw_any = True
+                                ttft_first_output_s = (time.monotonic() - req_start)
+                                ttft_method = "vllm_async_stream_delta"
+                            generated_chars += len(txt)
+                        token_ids = getattr(completion, "token_ids", None)
+                        if token_ids is not None:
+                            try:
+                                generated_tokens += len(token_ids)
+                            except Exception:
+                                pass
+                    if getattr(out, "finished", False):
+                        break
+                generate_wall_s = (time.monotonic() - req_start)
+
+                try:
+                    engine.shutdown()
+                except Exception:
+                    pass
+
+            asyncio.run(_run_stream())
+        except Exception:
+            measure_ttft = False
+
+    if not measure_ttft:
+        from vllm import LLM, SamplingParams
+        sampling = SamplingParams(max_tokens=max_tokens, temperature=0.0)
+
+        llm = LLM(model=model, tensor_parallel_size=tp)
+        loaded = time.monotonic()
+        load_s = loaded - start
+
+        outs = llm.generate([prompt], sampling)
+        end = time.monotonic()
+        generate_wall_s = end - loaded
+
+        try:
+            o0 = outs[0].outputs[0]
+            if hasattr(o0, "token_ids") and o0.token_ids is not None:
+                generated_tokens = len(o0.token_ids)
+        except Exception:
+            pass
 except Exception as e:
     rc = 3
     raw_lines.append("error=" + repr(e))
@@ -135,11 +190,13 @@ summary.append("exit_code=%d" % rc)
 summary.append("model_path=%s" % model)
 summary.append("tensor_parallel_size=%d" % tp)
 summary.append("max_tokens=%d" % max_tokens)
-summary.append("ttft_first_output_s=NA")
+summary.append("ttft_first_output_s=%s" % _fmt_float(ttft_first_output_s))
+summary.append("ttft_method=%s" % ttft_method)
 summary.append("load_s=" + _fmt_float(load_s))
 summary.append("generate_wall_s=" + _fmt_float(generate_wall_s))
 summary.append("wall_s=%.6f" % (time.monotonic() - start))
 summary.append("generated_tokens=%d" % int(generated_tokens))
+summary.append("generated_chars=%d" % int(generated_chars))
 if generate_wall_s is not None and generate_wall_s > 0 and generated_tokens > 0:
     summary.append("generation_tps=%.6f" % (generated_tokens / max(1e-9, generate_wall_s)))
 summary.append("max_rss_native=%d" % max_rss_native)
