@@ -77,6 +77,10 @@ class SimConfig:
     adaptive_k: AdaptiveKConfig
     k_signal: str = "global"
     admit_policy: str = "ordered"
+    batch_max_interactive: int = 1
+    batch_max_batch: int = 1
+    service_base_ms: float = 0.0
+    service_per_task_ms: float = -1.0
 
 
 @dataclass
@@ -117,8 +121,8 @@ class Event:
     t_ms: float
     kind: EventKind
     seq: int
-    expert_id: int = -1
-    task: Optional[Task] = None
+    expert_id: int = dataclasses.field(default=-1, compare=False)
+    tasks: Optional[Tuple[Task, ...]] = dataclasses.field(default=None, compare=False)
 
 
 @dataclass
@@ -137,6 +141,11 @@ class SimMetrics:
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
+    effective_k_interactive: List[int] = dataclasses.field(default_factory=list)
+    effective_k_batch: List[int] = dataclasses.field(default_factory=list)
+    partial_admit_tokens: int = 0
+    partial_admit_tokens_interactive: int = 0
+    partial_admit_tokens_batch: int = 0
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -227,6 +236,9 @@ class SimMetrics:
                     "dropped_backpressure_all": self.dropped_tokens_backpressure,
                     "dropped_backpressure_all_interactive": self.dropped_tokens_backpressure_interactive,
                     "dropped_backpressure_all_batch": self.dropped_tokens_backpressure_batch,
+                    "partial_admit": self.partial_admit_tokens,
+                    "partial_admit_interactive": self.partial_admit_tokens_interactive,
+                    "partial_admit_batch": self.partial_admit_tokens_batch,
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -245,6 +257,10 @@ class SimMetrics:
                         "min": min(self.chosen_k_batch) if len(self.chosen_k_batch) != 0 else 0,
                         "max": max(self.chosen_k_batch) if len(self.chosen_k_batch) != 0 else 0,
                     },
+                },
+                "effective_k": {
+                    "interactive": summarize_ints(self.effective_k_interactive),
+                    "batch": summarize_ints(self.effective_k_batch),
                 },
                 "tasks": {
                     "admitted": self.admitted_tasks,
@@ -534,39 +550,69 @@ def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: T
     raise ValueError("admit_policy must be 'ordered' or 'least_pending'")
 
 
+def _service_time_ms(cfg: SimConfig, batch_size: int) -> float:
+    per_task_ms = cfg.service_per_task_ms if cfg.service_per_task_ms >= 0.0 else cfg.service_ms
+    return(cfg.service_base_ms + (per_task_ms * float(batch_size)))
+
+
 def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int, evq: List[Event], seq_ref: List[int], metrics: SimMetrics) -> None:
     _promote_aged_batch(now_ms, cfg, eq, metrics)
     while eq.in_flight < cfg.expert_parallelism:
-        task: Optional[Task] = None
+        q: Optional[Deque[Task]] = None
+        batch_max = 1
+        serving_hi = False
+
         if len(eq.hi) != 0:
             if cfg.hi_burst > 0 and eq.hi_burst >= cfg.hi_burst and len(eq.lo) != 0:
-                task = eq.lo.popleft()
+                q = eq.lo
+                batch_max = cfg.batch_max_batch
                 eq.hi_burst = 0
                 metrics.forced_batch_starts += 1
             else:
-                task = eq.hi.popleft()
-                eq.hi_burst += 1
+                q = eq.hi
+                batch_max = cfg.batch_max_interactive
+                serving_hi = True
         elif len(eq.lo) != 0:
-            task = eq.lo.popleft()
+            q = eq.lo
+            batch_max = cfg.batch_max_batch
             eq.hi_burst = 0
         else:
             break
 
-        wait_ms = (now_ms - task.enqueue_ms)
-        if wait_ms >= cfg.starvation_ms:
-            metrics.starved_tasks += 1
-            if task.cls == LatencyClass.INTERACTIVE:
-                metrics.starved_tasks_interactive += 1
-            else:
-                metrics.starved_tasks_batch += 1
-        if task.cls == LatencyClass.INTERACTIVE:
-            metrics.task_queue_wait_ms_interactive.append(wait_ms)
+        if q is None:
+            break
+        if batch_max <= 0:
+            raise RuntimeError("batch_max must be > 0")
+
+        n = min(batch_max, len(q))
+        tasks: List[Task] = []
+        for _i in range(n):
+            tasks.append(q.popleft())
+        if len(tasks) == 0:
+            break
+
+        if serving_hi:
+            eq.hi_burst += len(tasks)
         else:
-            metrics.task_queue_wait_ms_batch.append(wait_ms)
-        task.start_ms = now_ms
+            eq.hi_burst = 0
+
+        for task in tasks:
+            wait_ms = (now_ms - task.enqueue_ms)
+            if wait_ms >= cfg.starvation_ms:
+                metrics.starved_tasks += 1
+                if task.cls == LatencyClass.INTERACTIVE:
+                    metrics.starved_tasks_interactive += 1
+                else:
+                    metrics.starved_tasks_batch += 1
+            if task.cls == LatencyClass.INTERACTIVE:
+                metrics.task_queue_wait_ms_interactive.append(wait_ms)
+            else:
+                metrics.task_queue_wait_ms_batch.append(wait_ms)
+            task.start_ms = now_ms
+
         eq.in_flight += 1
         seq_ref[0] += 1
-        heapq.heappush(evq, Event(t_ms=(now_ms + cfg.service_ms), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, task=task))
+        heapq.heappush(evq, Event(t_ms=(now_ms + _service_time_ms(cfg, len(tasks))), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
 
 
 def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
@@ -576,8 +622,18 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("expert_parallelism must be > 0")
     if cfg.expert_queue_max <= 0:
         raise ValueError("expert_queue_max must be > 0")
-    if cfg.service_ms <= 0.0:
+    if cfg.service_ms <= 0.0 and cfg.service_per_task_ms < 0.0:
         raise ValueError("service_ms must be > 0")
+    if cfg.service_base_ms < 0.0:
+        raise ValueError("service_base_ms must be >= 0")
+    if cfg.service_per_task_ms < -1.0:
+        raise ValueError("service_per_task_ms must be >= -1")
+    if cfg.batch_max_interactive <= 0:
+        raise ValueError("batch_max_interactive must be > 0")
+    if cfg.batch_max_batch <= 0:
+        raise ValueError("batch_max_batch must be > 0")
+    if _service_time_ms(cfg, 1) <= 0.0:
+        raise ValueError("service model must produce >0ms for batch_size=1")
     if cfg.starvation_ms <= 0.0:
         raise ValueError("starvation_ms must be > 0")
     if cfg.hi_burst < 0:
@@ -646,7 +702,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
     for tid, route in enumerate(trace):
         seq_ref[0] += 1
-        heapq.heappush(evq, Event(t_ms=route.t_ms, kind=EventKind.TOKEN_ARRIVAL, seq=seq_ref[0], expert_id=-1, task=Task(token_id=tid, cls=route.cls, enqueue_ms=route.t_ms)))
+        heapq.heappush(
+            evq,
+            Event(
+                t_ms=route.t_ms,
+                kind=EventKind.TOKEN_ARRIVAL,
+                seq=seq_ref[0],
+                expert_id=-1,
+                tasks=(Task(token_id=tid, cls=route.cls, enqueue_ms=route.t_ms),),
+            ),
+        )
         tokens[tid] = TokenState(cls=route.cls, submit_ms=route.t_ms, chosen_k=0, remaining=0)
 
     now_ms = 0.0
@@ -658,7 +723,9 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         integrate_areas(now_ms)
 
         if ev.kind == EventKind.TOKEN_ARRIVAL:
-            tid = ev.task.token_id if ev.task is not None else -1
+            if ev.tasks is None or len(ev.tasks) != 1:
+                raise RuntimeError("TOKEN_ARRIVAL missing task")
+            tid = ev.tasks[0].token_id
             route = trace[tid]
             if k_signal == "global":
                 max_pending = max(experts[e].pending() for e in range(cfg.num_experts))
@@ -710,12 +777,21 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 metrics.admitted_tokens += 1
                 if route.cls == LatencyClass.INTERACTIVE:
                     metrics.admitted_tokens_interactive += 1
+                    metrics.effective_k_interactive.append(admitted)
                 else:
                     metrics.admitted_tokens_batch += 1
+                    metrics.effective_k_batch.append(admitted)
+                desired = min(k, len(route.candidates))
+                if admitted < desired:
+                    metrics.partial_admit_tokens += 1
+                    if route.cls == LatencyClass.INTERACTIVE:
+                        metrics.partial_admit_tokens_interactive += 1
+                    else:
+                        metrics.partial_admit_tokens_batch += 1
 
         elif ev.kind == EventKind.TASK_DONE:
-            if ev.task is None:
-                raise RuntimeError("TASK_DONE missing task")
+            if ev.tasks is None or len(ev.tasks) == 0:
+                raise RuntimeError("TASK_DONE missing tasks")
             if ev.expert_id < 0 or ev.expert_id >= cfg.num_experts:
                 raise RuntimeError("TASK_DONE invalid expert_id")
 
@@ -724,20 +800,21 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 raise RuntimeError("in_flight underflow")
             eq.in_flight -= 1
 
-            tid = ev.task.token_id
-            if tid not in tokens:
-                raise RuntimeError("unknown token_id")
-            ts = tokens[tid]
-            if ts.remaining <= 0:
-                raise RuntimeError("token remaining underflow")
-            ts.remaining -= 1
-            if ts.remaining == 0 and ts.done_ms is None:
-                ts.done_ms = now_ms
-                lat_ms = (now_ms - ts.submit_ms)
-                if ts.cls == LatencyClass.INTERACTIVE:
-                    metrics.token_lat_ms_interactive.append(lat_ms)
-                else:
-                    metrics.token_lat_ms_batch.append(lat_ms)
+            for task in ev.tasks:
+                tid = task.token_id
+                if tid not in tokens:
+                    raise RuntimeError("unknown token_id")
+                ts = tokens[tid]
+                if ts.remaining <= 0:
+                    raise RuntimeError("token remaining underflow")
+                ts.remaining -= 1
+                if ts.remaining == 0 and ts.done_ms is None:
+                    ts.done_ms = now_ms
+                    lat_ms = (now_ms - ts.submit_ms)
+                    if ts.cls == LatencyClass.INTERACTIVE:
+                        metrics.token_lat_ms_interactive.append(lat_ms)
+                    else:
+                        metrics.token_lat_ms_batch.append(lat_ms)
 
             _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
         else:
@@ -776,6 +853,10 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--expert-parallelism", type=int, default=2)
     p.add_argument("--expert-queue-max", type=int, default=256)
     p.add_argument("--service-ms", type=float, default=0.15)
+    p.add_argument("--service-base-ms", type=float, default=0.0, help="Batch service model: fixed overhead per started expert batch.")
+    p.add_argument("--service-per-task-ms", type=float, default=-1.0, help="Batch service model: incremental cost per task in a started expert batch (-1 = use --service-ms).")
+    p.add_argument("--batch-max-interactive", type=int, default=1, help="Max tasks started per expert batch for interactive queue (1 = no batching).")
+    p.add_argument("--batch-max-batch", type=int, default=1, help="Max tasks started per expert batch for batch queue (1 = no batching).")
     p.add_argument("--starvation-ms", type=float, default=50.0)
     p.add_argument("--hi-burst", type=int, default=0, help="Per-expert fairness: after starting N interactive tasks consecutively, force one batch start if any are queued (0 = strict priority).")
     p.add_argument("--promote-ms", type=float, default=0.0, help="Per-expert aging: promote batch tasks to interactive queue once they wait this long (0 = disabled).")
@@ -844,6 +925,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         expert_parallelism=args.expert_parallelism,
         expert_queue_max=args.expert_queue_max,
         service_ms=args.service_ms,
+        service_base_ms=args.service_base_ms,
+        service_per_task_ms=args.service_per_task_ms,
+        batch_max_interactive=args.batch_max_interactive,
+        batch_max_batch=args.batch_max_batch,
         starvation_ms=args.starvation_ms,
         hi_burst=args.hi_burst,
         promote_ms=args.promote_ms,
