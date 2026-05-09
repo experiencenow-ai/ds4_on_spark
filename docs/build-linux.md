@@ -34,6 +34,7 @@ If CUDA is not available, configuration fails with an explicit error when `DS4_E
 If the CUDA toolkit is present but no CUDA-capable device is available at runtime, `ds4_cuda_init()` returns `DS4_CUDA_ERR_NO_DEVICE` and unit tests treat that case as a soft pass.
 For lightweight diagnostics, the CUDA wrapper also exposes `ds4_cuda_device_count` and `ds4_cuda_device_info` (device 0).
 For host-side transfer staging, the wrapper also exposes pinned host allocation helpers `ds4_cuda_malloc_host` and `ds4_cuda_free_host` (stubbed to `DS4_CUDA_ERR_DISABLED` in CPU-only builds).
+For async sequencing (future kernels), the wrapper also exposes `ds4_cuda_stream_*` and `ds4_cuda_event_*` helpers (stubbed to `DS4_CUDA_ERR_DISABLED` in CPU-only builds).
 
 ## Sanitizers (CPU-only)
 
