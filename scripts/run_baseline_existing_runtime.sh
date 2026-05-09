@@ -31,8 +31,8 @@ DS4_MODEL_GGUF="${DS4_MODEL_GGUF:-}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
 REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
-REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
-REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-}"
+REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -86,18 +86,131 @@ b64_enc()
     printf %s "$1" | base64 | tr -d '\n'
 }
 
+b64_dec()
+{
+    if [ "${1:-}" = "" ]; then
+        return 0
+    fi
+    if command -v base64 >/dev/null 2>&1; then
+        if printf %s "$1" | base64 -d >/dev/null 2>&1; then
+            printf %s "$1" | base64 -d
+            return 0
+        fi
+        if printf %s "$1" | base64 --decode >/dev/null 2>&1; then
+            printf %s "$1" | base64 --decode
+            return 0
+        fi
+        if printf %s "$1" | base64 -D >/dev/null 2>&1; then
+            printf %s "$1" | base64 -D
+            return 0
+        fi
+    fi
+    python3 - <<'PY' "$1" 2>/dev/null || return 1
+import base64,sys
+print(base64.b64decode(sys.argv[1].encode("utf-8")).decode("utf-8"),end="")
+PY
+}
+
+parse_env_kv_b64()
+{
+    if [ "${1:-}" = "" ]; then
+        return 0
+    fi
+    python3 - <<'PY' "$1" 2>/dev/null || true
+import base64, shlex, sys
+
+s = sys.argv[1]
+try:
+    toks = shlex.split(s, posix=True)
+except Exception:
+    toks = s.split()
+
+for t in toks:
+    if "=" not in t:
+        continue
+    k, v = t.split("=", 1)
+    if not k:
+        continue
+    b64 = base64.b64encode(v.encode("utf-8")).decode("utf-8")
+    sys.stdout.write(k + "\t" + b64 + "\n")
+PY
+}
+
+apply_overrides()
+{
+    env_str="${1:-}"
+    scope="${2:-}"
+    if [ "$env_str" = "" ]; then
+        return 0
+    fi
+    parsed="$(parse_env_kv_b64 "$env_str" || true)"
+    if [ "$parsed" = "" ]; then
+        return 0
+    fi
+    tab="$(printf '\t')"
+    while IFS="$tab" read -r k vb64; do
+        if [ "$k" = "" ]; then
+            continue
+        fi
+        v="$(b64_dec "$vb64" || echo "")"
+        case "$scope:$k" in
+            bench:ALLOW_FETCH|llama:ALLOW_FETCH|vllm:ALLOW_FETCH) ALLOW_FETCH="$v" ;;
+            bench:ALLOW_BUILD|llama:ALLOW_BUILD|vllm:ALLOW_BUILD) ALLOW_BUILD="$v" ;;
+            bench:ALLOW_RUN|llama:ALLOW_RUN|vllm:ALLOW_RUN) ALLOW_RUN="$v" ;;
+            bench:GPU_SAMPLE|llama:GPU_SAMPLE|vllm:GPU_SAMPLE) GPU_SAMPLE="$v" ;;
+            bench:GPU_SAMPLE_INTERVAL_S|llama:GPU_SAMPLE_INTERVAL_S|vllm:GPU_SAMPLE_INTERVAL_S) GPU_SAMPLE_INTERVAL_S="$v" ;;
+
+            llama:LLAMA_DIR) LLAMA_DIR="$v" ;;
+            llama:MODEL_GGUF) MODEL_GGUF="$v" ;;
+            llama:LLAMA_CLI) LLAMA_CLI="$v" ;;
+            llama:RUNTIME_LABEL) RUNTIME_LABEL="$v" ;;
+            llama:MODEL_SOURCE) MODEL_SOURCE="$v" ;;
+            llama:MODEL_QUANT) MODEL_QUANT="$v" ;;
+            llama:LLAMA_PROMPT) LLAMA_PROMPT="$v" ;;
+            llama:CTX) CTX="$v" ;;
+            llama:N_TOKENS) N_TOKENS="$v" ;;
+            llama:N_GPU_LAYERS) N_GPU_LAYERS="$v" ;;
+            llama:EXTRA_ARGS) EXTRA_ARGS="$v" ;;
+
+            vllm:VLLM_MODEL) VLLM_MODEL="$v" ;;
+            vllm:VLLM_PROMPT) VLLM_PROMPT="$v" ;;
+            vllm:MAX_TOKENS) MAX_TOKENS="$v" ;;
+            vllm:TENSOR_PARALLEL_SIZE) TENSOR_PARALLEL_SIZE="$v" ;;
+            vllm:MEASURE_TTFT) MEASURE_TTFT="$v" ;;
+        esac
+    done <<EOF
+$parsed
+EOF
+}
+
 LLAMA_PROMPT_B64="$(b64_enc "$LLAMA_PROMPT")"
 VLLM_PROMPT_B64="$(b64_enc "$VLLM_PROMPT")"
 EXTRA_ARGS_B64="$(b64_enc "$EXTRA_ARGS")"
 
+apply_overrides "$REMOTE_BENCH_ENV" bench
+apply_overrides "${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}" llama
+apply_overrides "${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}" vllm
+
+LLAMA_PROMPT_B64="$(b64_enc "$LLAMA_PROMPT")"
+VLLM_PROMPT_B64="$(b64_enc "$VLLM_PROMPT")"
+EXTRA_ARGS_B64="$(b64_enc "$EXTRA_ARGS")"
+
+LLAMA_DIR_B64="$(b64_enc "$LLAMA_DIR")"
+MODEL_GGUF_B64="$(b64_enc "$MODEL_GGUF")"
+LLAMA_CLI_B64="$(b64_enc "$LLAMA_CLI")"
+RUNTIME_LABEL_B64="$(b64_enc "$RUNTIME_LABEL")"
+MODEL_SOURCE_B64="$(b64_enc "$MODEL_SOURCE")"
+MODEL_QUANT_B64="$(b64_enc "$MODEL_QUANT")"
+VLLM_MODEL_B64="$(b64_enc "$VLLM_MODEL")"
+
 REMOTE_LLAMA_OUT_DIR="/tmp/baseline_llamacpp_${ts}"
 REMOTE_VLLM_OUT_DIR="/tmp/baseline_vllm_${ts}"
 
-REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S LLAMA_DIR='${LLAMA_DIR}' MODEL_GGUF='${MODEL_GGUF}' LLAMA_CLI='${LLAMA_CLI}' RUNTIME_LABEL='${RUNTIME_LABEL}' MODEL_SOURCE='${MODEL_SOURCE}' MODEL_QUANT='${MODEL_QUANT}' PROMPT_B64='${LLAMA_PROMPT_B64}' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
-REMOTE_LLAMA_CMD_PRINT="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S LLAMA_DIR='${LLAMA_DIR}' MODEL_GGUF='${MODEL_GGUF}' LLAMA_CLI='${LLAMA_CLI}' RUNTIME_LABEL='${RUNTIME_LABEL}' MODEL_SOURCE='${MODEL_SOURCE}' MODEL_QUANT='${MODEL_QUANT}' PROMPT_B64='<omitted>' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
+REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S LLAMA_DIR='' LLAMA_DIR_B64='${LLAMA_DIR_B64}' MODEL_GGUF='' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_CLI='' LLAMA_CLI_B64='${LLAMA_CLI_B64}' RUNTIME_LABEL='' RUNTIME_LABEL_B64='${RUNTIME_LABEL_B64}' MODEL_SOURCE='' MODEL_SOURCE_B64='${MODEL_SOURCE_B64}' MODEL_QUANT='' MODEL_QUANT_B64='${MODEL_QUANT_B64}' PROMPT_B64='${LLAMA_PROMPT_B64}' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
+REMOTE_LLAMA_CMD_PRINT="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S LLAMA_DIR_B64='${LLAMA_DIR_B64}' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_CLI_B64='${LLAMA_CLI_B64}' RUNTIME_LABEL_B64='${RUNTIME_LABEL_B64}' MODEL_SOURCE_B64='${MODEL_SOURCE_B64}' MODEL_QUANT_B64='${MODEL_QUANT_B64}' PROMPT_B64='<omitted>' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
 
-REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL='${VLLM_MODEL}' PROMPT_B64='${VLLM_PROMPT_B64}' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
-REMOTE_VLLM_CMD_PRINT="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL='${VLLM_MODEL}' PROMPT_B64='<omitted>' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
+REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL='' VLLM_MODEL_B64='${VLLM_MODEL_B64}' PROMPT_B64='${VLLM_PROMPT_B64}' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
+REMOTE_VLLM_CMD_PRINT="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL_B64='${VLLM_MODEL_B64}' PROMPT_B64='<omitted>' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
 
 LLAMA_PROMPT_META="$(prompt_meta_line "$LLAMA_PROMPT")"
 VLLM_PROMPT_META="$(prompt_meta_line "$VLLM_PROMPT")"

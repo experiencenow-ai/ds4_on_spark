@@ -47,6 +47,25 @@ if [ "${EXTRA_ARGS_B64:-}" != "" ]; then
     EXTRA_ARGS="$(b64_dec "$EXTRA_ARGS_B64" || echo "$EXTRA_ARGS")"
 fi
 
+if [ "${LLAMA_DIR_B64:-}" != "" ]; then
+    LLAMA_DIR="$(b64_dec "$LLAMA_DIR_B64" || echo "$LLAMA_DIR")"
+fi
+if [ "${MODEL_GGUF_B64:-}" != "" ]; then
+    MODEL_GGUF="$(b64_dec "$MODEL_GGUF_B64" || echo "$MODEL_GGUF")"
+fi
+if [ "${LLAMA_CLI_B64:-}" != "" ]; then
+    LLAMA_CLI="$(b64_dec "$LLAMA_CLI_B64" || echo "$LLAMA_CLI")"
+fi
+if [ "${RUNTIME_LABEL_B64:-}" != "" ]; then
+    RUNTIME_LABEL="$(b64_dec "$RUNTIME_LABEL_B64" || echo "$RUNTIME_LABEL")"
+fi
+if [ "${MODEL_SOURCE_B64:-}" != "" ]; then
+    MODEL_SOURCE="$(b64_dec "$MODEL_SOURCE_B64" || echo "$MODEL_SOURCE")"
+fi
+if [ "${MODEL_QUANT_B64:-}" != "" ]; then
+    MODEL_QUANT="$(b64_dec "$MODEL_QUANT_B64" || echo "$MODEL_QUANT")"
+fi
+
 mkdir -p "$OUT_DIR"
 
 echo "== $target_note =="

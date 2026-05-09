@@ -42,6 +42,7 @@ Required local artifact:
 Record:
 
 - runtime repo + commit, especially when using a fork or early-access runtime
+- if using a prebuilt `LLAMA_CLI` binary, record its sha256 and `--version` output (the Spark baseline script captures these when possible)
 - declared base model and quant type
 - sha256 + size of GGUF
 - any runtime flags that affect memory/perf: context, batch, `-ngl`, `--flash-attn`, etc.

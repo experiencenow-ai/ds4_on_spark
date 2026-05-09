@@ -63,11 +63,21 @@ REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-re
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
-Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
-`REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime. See
-`docs/quantized-single-spark.md` for the milestone definition and failure
-triage. These env strings are recorded in the generated report, so do not put
-tokens or other secrets in them.
+Use `REMOTE_BENCH_ENV` for env vars shared by both Spark benchmark scripts, or
+`REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime.
+
+These strings are parsed on the **Mac** side as `KEY=VALUE` tokens (quotes
+allowed) and override the corresponding `scripts/run_baseline_existing_runtime.sh`
+env vars before the SSH call. Unknown keys are ignored.
+
+Recognized keys (non-exhaustive):
+
+- Shared: `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
+- llama.cpp: `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`
+- vLLM: `VLLM_MODEL`, `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`
+
+These env strings are recorded in the generated report, so do not put tokens or
+other secrets in them.
 
 ## One-command entrypoint (Mac local: antirez/ds4)
 
