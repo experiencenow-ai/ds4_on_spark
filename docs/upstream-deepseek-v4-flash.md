@@ -70,6 +70,13 @@ DeepSeek-V4 support is documented/implemented in vLLM (see `vllm.model_executor.
 
 - `https://docs.vllm.ai/en/latest/api/vllm/model_executor/models/deepseek_v4/`
 
+Flash vs Flash-Base (important runtime semantic):
+
+- vLLM keys MoE expert handling off `expert_dtype` in the HF config:
+  - Flash: `expert_dtype="fp4"` (MXFP4 experts + UE8M0 FP8 linear scales)
+  - Flash-Base: `expert_dtype="fp8"` (FP8 block experts + float32 FP8 scales)
+- Treat “Flash vs Base” as more than just weights: it changes which expert kernels and scale dtypes are correct.
+
 ## Transformers references
 
 Transformers publishes an architecture + integration reference for `deepseek_v4`:

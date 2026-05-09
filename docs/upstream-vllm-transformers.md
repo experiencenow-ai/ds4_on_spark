@@ -2,6 +2,8 @@
 
 These are tracked as “runtime + reference” components for Spark deployment work.
 
+The pins below are validated by `./scripts/upstream_verify_pins.sh`. If you want to sanity-check that the pinned versions still contain DeepSeek-V4 support codepaths, see `./scripts/upstream_feature_probe.sh` (requires local `./upstreams/*` checkouts).
+
 ## vLLM
 
 - Repo: `https://github.com/vllm-project/vllm`
@@ -15,6 +17,19 @@ Fetch:
 ```bash
 ./scripts/fetch_upstreams.sh vllm
 ```
+
+Pinned DeepSeek-V4 implementation pointers (local clone):
+
+- Model entrypoint: `upstreams/vllm/vllm/model_executor/models/deepseek_v4.py`
+- DeepSeek-V4 attention ops: `upstreams/vllm/vllm/v1/attention/ops/deepseek_v4_ops/`
+- Fused KV insert kernel: `upstreams/vllm/csrc/fused_deepseek_v4_qnorm_rope_kv_insert_kernel.cu`
+
+DeepSeek-V4-Flash vs Flash-Base (why we care):
+
+- The vLLM DeepSeek-V4 FP8 config distinguishes MoE expert formats:
+  - Flash: `expert_dtype="fp4"` (MXFP4 experts + UE8M0 FP8 linear scales)
+  - Flash-Base: `expert_dtype="fp8"` (FP8 block experts + float32 scales)
+- If we mis-detect `expert_dtype`, we can silently route the wrong expert-kernel path (compiles, but is wrong).
 
 Build notes (Spark / GPU nodes, high level):
 
@@ -35,6 +50,11 @@ Fetch:
 ```bash
 ./scripts/fetch_upstreams.sh transformers
 ```
+
+Pinned DeepSeek-V4 implementation pointers (local clone):
+
+- Model code: `upstreams/transformers/src/transformers/models/deepseek_v4/`
+- Model docs: `upstreams/transformers/docs/source/en/model_doc/deepseek_v4.md`
 
 Build notes (Spark / packaging, high level):
 
