@@ -12,6 +12,7 @@ typedef enum
 
 typedef void (*ds4_log_sink_fn)(void *ctx,int32_t level,const char *msg);
 
+const char *ds4_log_level_name(int32_t level);
 int32_t ds4_log_set_level(int32_t level);
 int32_t ds4_log_set_sink(ds4_log_sink_fn fn,void *ctx);
 int32_t ds4_logf(int32_t level,const char *fmt,...);

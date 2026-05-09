@@ -1,4 +1,5 @@
 #include "ds4/config.h"
+#include "ds4/log.h"
 #include "ds4/str.h"
 
 #include <stdlib.h>
@@ -372,6 +373,7 @@ int32_t ds4_config_load_auto(ds4_config_t *cfg,const char *path,uint8_t *buf,int
 
 int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
 {
+	const char *lvl;
 	int32_t n;
 	if ( cfg == 0 )
 		return(-1);
@@ -379,7 +381,13 @@ int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
 		return(-2);
 	if ( cap <= 0 )
 		return(-3);
-	n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\n",cfg->log_level,cfg->enable_cuda);
+	lvl = 0;
+	if ( cfg->log_level >= DS4_LOG_LEVEL_MIN && cfg->log_level <= DS4_LOG_LEVEL_MAX )
+		lvl = ds4_log_level_name(cfg->log_level);
+	if ( lvl != 0 )
+		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%s\nenable_cuda=%d\n",lvl,cfg->enable_cuda);
+	else
+		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\n",cfg->log_level,cfg->enable_cuda);
 	if ( n < 0 )
 		return(-4);
 	out[cap - 1] = 0;

@@ -9,14 +9,29 @@ static int32_t g_level = 2;
 static ds4_log_sink_fn g_sink = 0;
 static void *g_sink_ctx = 0;
 
+const char *ds4_log_level_name(int32_t level)
+{
+	if ( level == DS4_LOG_ERROR )
+		return("error");
+	if ( level == DS4_LOG_WARN )
+		return("warn");
+	if ( level == DS4_LOG_INFO )
+		return("info");
+	if ( level == DS4_LOG_DEBUG )
+		return("debug");
+	return("unknown");
+}
+
 static void ds4_default_sink(void *ctx,int32_t level,const char *msg)
 {
+	const char *lvl;
 	DS4_UNUSED(ctx);
-	DS4_UNUSED(level);
 	if ( msg == 0 )
 		return;
-	fputs(msg,stderr);
-	fputc('\n',stderr);
+	lvl = ds4_log_level_name(level);
+	if ( lvl == 0 )
+		lvl = "?";
+	fprintf(stderr,"%s: %s\n",lvl,msg);
 }
 
 int32_t ds4_log_set_level(int32_t level)

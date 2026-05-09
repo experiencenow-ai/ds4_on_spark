@@ -133,6 +133,12 @@ int32_t test_config(void)
 		unlink(path);
 		return(-29);
 	}
+	n = ds4_cstr_len_i32(out);
+	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\n") == 0 )
+	{
+		unlink(path);
+		return(-49);
+	}
 	unlink(path);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
