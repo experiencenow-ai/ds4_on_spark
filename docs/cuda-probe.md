@@ -13,6 +13,7 @@ From the Mac (this repo checkout):
 What it does:
 
 - Ships `tools/cuda_probe/` to Spark0 (no remote git clone required).
+- Uses `tar --no-xattrs --no-mac-metadata` + `LC_ALL=C` to avoid macOS xattr/provenance noise during transfer.
 - Builds with `/usr/local/cuda/bin/nvcc`.
 - Runs:
   - `cuda_device_props_tiny` (one-line runtime + device summary)

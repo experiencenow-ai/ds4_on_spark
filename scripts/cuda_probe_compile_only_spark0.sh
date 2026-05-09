@@ -18,8 +18,8 @@ rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
 "
 
-env COPYFILE_DISABLE=1 tar -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
-tar -C \"$REMOTE_DIR\" -xf -
+LC_ALL=C env COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
+LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
 "
 
 ssh $SSH_OPTS "$target" "set -eu
