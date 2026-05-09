@@ -216,6 +216,10 @@ JSONL reads one JSON object per line with required fields:
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+- Inline metadata records are also accepted in JSONL and ignored by the simulator's event stream:
+  - `{"type":"meta","meta":{...}}` (preferred), or
+  - `{"meta":{...}}` when no other routing fields are present
+  - You can also pass a sidecar metadata JSON via `--trace-meta-json` (its keys are merged into the trace summary; inline records override it).
 - `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
   - `candidates` (list[int]): ordered expert candidates for that layer (required)
   - `scores` (optional list[number]): per-candidate router scores (same length as that layer's `candidates`)
@@ -309,10 +313,12 @@ The simulator prints a JSON object with:
   - also includes controller update/change counts when `--k-update-ms` / `--k-slew` are used
 - `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates}`); useful for choosing `--q-low/--q-high`
 - `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
+- `effective_k_total.{interactive,batch}`: like `effective_k`, but summed across all routing layers when `layers` is present
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
 - `tasks.promoted`: number of batch tasks promoted by `--promote-ms`
 - `tasks.forced_batch_starts`: number of times `--hi-burst` forced a batch start
 - `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
+- `tokens.partial_admit_any_layer*`: like `tokens.partial_admit*`, but triggers when *any* routing layer under-admits during the verify step
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
   - also includes time-weighted pending-depth percentiles across expert-time (`pending_depth_time_weighted.p{50,95,99}`)
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
