@@ -66,6 +66,9 @@ def skip_gguf_value(f: BinaryIO, value_type: int) -> None:
 	if value_type in (4, 5, 6):  # u32, i32, f32
 		read_bytes(f, 4)
 		return
+	if value_type in (10, 11, 12):  # u64, i64, f64
+		read_bytes(f, 8)
+		return
 	if value_type == 8:  # string
 		_ = read_gguf_string(f)
 		return
@@ -194,4 +197,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	raise SystemExit(main())
-
