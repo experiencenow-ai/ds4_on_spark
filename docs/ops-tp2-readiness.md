@@ -105,6 +105,10 @@ env/config is missing or invalid):
 sudo /opt/ds4/scripts/ops_tp2_readiness.sh --strict --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0
 ```
 
+If `DS4_METRICS_PORT` is set and `curl` is available, `ops_tp2_readiness.sh` also
+attempts a fast HTTP probe of `http://<metrics-host>:<port>/metrics` (best-effort,
+non-fatal). When `DS4_METRICS_ADDR=0.0.0.0`, it probes `127.0.0.1`.
+
 ## Optional: Spark Standalone Sanity
 
 If Spark is managed locally via systemd, you can also sanity check the Spark env (non-destructive):
