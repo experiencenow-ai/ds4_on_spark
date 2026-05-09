@@ -705,6 +705,10 @@ class SchedulerSimTest(unittest.TestCase):
             m = scheduler_sim.run_simulation(cfg, trace)
             self.assertEqual(m.mtp_accept_len_per_step, [1, 2, 3])
             self.assertEqual(m.mtp_output_tokens, 6)
+            self.assertEqual(m.mtp_draft_tokens_total, 6)
+            self.assertEqual(m.mtp_draft_tokens_accepted, 3)
+            self.assertEqual(m.mtp_draft_tokens_rejected, 3)
+            self.assertEqual(m.mtp_bonus_tokens, 1)
         finally:
             os.unlink(path)
 
@@ -742,6 +746,10 @@ class SchedulerSimTest(unittest.TestCase):
             m = scheduler_sim.run_simulation(cfg, trace)
             self.assertEqual(m.mtp_accept_len_per_step, [1, 2, 3])
             self.assertEqual(m.mtp_output_tokens, 6)
+            self.assertEqual(m.mtp_draft_tokens_total, 6)
+            self.assertEqual(m.mtp_draft_tokens_accepted, 3)
+            self.assertEqual(m.mtp_draft_tokens_rejected, 3)
+            self.assertEqual(m.mtp_bonus_tokens, 1)
         finally:
             os.unlink(path)
 

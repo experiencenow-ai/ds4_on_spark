@@ -1914,7 +1914,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     else:
                         metrics.partial_admit_tokens_batch += 1
                 if mtp_enabled:
-                    if route.mtp_accept_len is not None and admitted_verify > 0:
+                    if admitted_verify > 0 and (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None):
                         _record_mtp_accept_len(cfg, metrics, accept_len)
                     if admitted_verify == 0:
                         metrics.mtp_accept_len_per_step.append(0)
