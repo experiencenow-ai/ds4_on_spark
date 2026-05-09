@@ -21,6 +21,7 @@ Examples:
   ./scripts/mac_spark_discovery.sh
   REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
   ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
+  ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local
 EOF
 }
 
@@ -62,7 +63,7 @@ for iface in en0 en1; do
 	' || true
 done
 echo
-echo "== routes (redacted) =="
+echo "== routes =="
 netstat -rn -f inet 2>/dev/null | head -n 40 || true
 netstat -rn -f inet6 2>/dev/null | head -n 40 || true
 echo
@@ -78,10 +79,11 @@ wait "$pid" >/dev/null 2>&1 || true
 echo
 echo "== mdns resolution, 3 seconds each =="
 for host in $targets; do
-	case "$host" in
+	host_only="${host#*@}"
+	case "$host_only" in
 		*.local)
-			echo "-- $host --"
-			dns-sd -G v4v6 "$host" &
+			echo "-- $host_only --"
+			dns-sd -G v4v6 "$host_only" &
 			pid="$!"
 			sleep 3
 			kill "$pid" >/dev/null 2>&1 || true
@@ -95,7 +97,8 @@ echo
 echo "== known target checks =="
 for host in $targets; do
 	printf "%s: " "$host"
-	nc -vz -G 2 "$host" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
+	host_only="${host#*@}"
+	nc -vz -G 2 "$host_only" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
 done
 } >"$tmp"
 

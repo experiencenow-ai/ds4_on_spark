@@ -133,6 +133,74 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+## Update: Discovery Refresh (2026-05-09 07:27Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T0727Z_probe9.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- `scripts/mac_spark_discovery.sh` now accepts `user@host` targets and strips the `user@` prefix for mDNS resolution and TCP/22 checks.
+
+```text
+== meta ==
+Sat May  9 07:27:14 UTC 2026
+git: 9172681
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+ 7:27:14.301  Add        3  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+DATE: ---Sat 09 May 2026---
+Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
+ 7:27:19.311  Add  40000003      10  aitopatom-9ab9.local.                  <redacted-ipv6>%en0  120
+ 7:27:19.311  Add  40000003      10  aitopatom-9ab9.local.                  <redacted-ipv4>                                     120
+-- spark1.local --
+
+== known target checks ==
+spark0@aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 08:27Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T0827Z_probe11.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- The `== routes ==` label is emitted unconditionally; redaction is controlled by `REDACT=1`.
+
+```text
+== meta ==
+Sat May  9 08:27:01 UTC 2026
+git: 0984f56
+
+== routes ==
+Routing tables
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+DATE: ---Sat 09 May 2026---
+-- spark1.local --
+
+== known target checks ==
+spark0@aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
 ## Update: Discovery Refresh (2026-05-09 06:26Z)
 
 Commands run:
