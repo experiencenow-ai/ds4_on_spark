@@ -227,6 +227,145 @@ with open(log_raw, "w", encoding="utf-8") as f:
     f.write("llama_cli_version=" + llama_cli_version + "\n")
     f.flush()
 
+    def gguf_probe(path: str):
+        info = {
+            "is_gguf": False,
+            "version": None,
+            "architecture": None,
+            "alignment": None,
+            "has_mtp": None,
+            "mtp_tensor_count": None,
+        }
+        try:
+            with open(path, "rb") as bf:
+                magic = bf.read(4)
+                if magic == b"GGUF":
+                    endian = "<"
+                elif magic == b"FUGG":
+                    endian = ">"
+                else:
+                    return info
+                import struct
+                info["is_gguf"] = True
+                (version,) = struct.unpack(endian + "I", bf.read(4))
+                info["version"] = int(version)
+                (tensor_count,) = struct.unpack(endian + "Q", bf.read(8))
+                (kv_count,) = struct.unpack(endian + "Q", bf.read(8))
+
+                def read_u32():
+                    (v,) = struct.unpack(endian + "I", bf.read(4))
+                    return int(v)
+
+                def read_u64():
+                    (v,) = struct.unpack(endian + "Q", bf.read(8))
+                    return int(v)
+
+                def read_i32():
+                    (v,) = struct.unpack(endian + "i", bf.read(4))
+                    return int(v)
+
+                def read_string():
+                    n = read_u64()
+                    if n <= 0:
+                        return ""
+                    b = bf.read(n)
+                    return b.decode("utf-8", errors="replace")
+
+                GGUF_TYPE_UINT8 = 0
+                GGUF_TYPE_INT8 = 1
+                GGUF_TYPE_UINT16 = 2
+                GGUF_TYPE_INT16 = 3
+                GGUF_TYPE_UINT32 = 4
+                GGUF_TYPE_INT32 = 5
+                GGUF_TYPE_FLOAT32 = 6
+                GGUF_TYPE_BOOL = 7
+                GGUF_TYPE_STRING = 8
+                GGUF_TYPE_ARRAY = 9
+                GGUF_TYPE_UINT64 = 10
+                GGUF_TYPE_INT64 = 11
+                GGUF_TYPE_FLOAT64 = 12
+
+                def skip_value(vt: int):
+                    if vt in (GGUF_TYPE_UINT8, GGUF_TYPE_INT8, GGUF_TYPE_BOOL):
+                        bf.read(1)
+                        return
+                    if vt in (GGUF_TYPE_UINT16, GGUF_TYPE_INT16):
+                        bf.read(2)
+                        return
+                    if vt in (GGUF_TYPE_UINT32, GGUF_TYPE_INT32, GGUF_TYPE_FLOAT32):
+                        bf.read(4)
+                        return
+                    if vt in (GGUF_TYPE_UINT64, GGUF_TYPE_INT64, GGUF_TYPE_FLOAT64):
+                        bf.read(8)
+                        return
+                    if vt == GGUF_TYPE_STRING:
+                        n = read_u64()
+                        if n > 0:
+                            bf.read(n)
+                        return
+                    if vt == GGUF_TYPE_ARRAY:
+                        elem_type = read_i32()
+                        count = read_u64()
+                        if elem_type == GGUF_TYPE_STRING:
+                            for _ in range(int(count)):
+                                n = read_u64()
+                                if n > 0:
+                                    bf.read(n)
+                            return
+                        elem_sizes = {
+                            GGUF_TYPE_UINT8: 1,
+                            GGUF_TYPE_INT8: 1,
+                            GGUF_TYPE_BOOL: 1,
+                            GGUF_TYPE_UINT16: 2,
+                            GGUF_TYPE_INT16: 2,
+                            GGUF_TYPE_UINT32: 4,
+                            GGUF_TYPE_INT32: 4,
+                            GGUF_TYPE_FLOAT32: 4,
+                            GGUF_TYPE_UINT64: 8,
+                            GGUF_TYPE_INT64: 8,
+                            GGUF_TYPE_FLOAT64: 8,
+                        }
+                        sz = elem_sizes.get(elem_type)
+                        if sz is None:
+                            return
+                        bf.read(int(count) * int(sz))
+                        return
+
+                # metadata kv
+                for _ in range(int(kv_count)):
+                    key = read_string()
+                    vt = read_i32()
+                    if key == "general.architecture" and vt == GGUF_TYPE_STRING:
+                        info["architecture"] = read_string()
+                        continue
+                    if key == "general.alignment" and vt in (GGUF_TYPE_UINT32, GGUF_TYPE_INT32):
+                        info["alignment"] = read_u32()
+                        continue
+                    skip_value(vt)
+
+                # tensor infos
+                mtp_count = 0
+                for _ in range(int(tensor_count)):
+                    name = read_string()
+                    if name.startswith("mtp.0.") or name == "mtp.0":
+                        mtp_count += 1
+                    n_dims = read_u32()
+                    if n_dims > 0:
+                        bf.read(int(n_dims) * 8)
+                    bf.read(4)  # ggml_type
+                    bf.read(8)  # offset
+
+                info["mtp_tensor_count"] = int(mtp_count)
+                info["has_mtp"] = (mtp_count > 0)
+                return info
+        except Exception:
+            return info
+
+    gguf_info = gguf_probe(model)
+    with open(os.path.join(os.path.dirname(log_raw), "gguf_probe.txt"), "w", encoding="utf-8") as gf:
+        for k in ("is_gguf", "version", "architecture", "alignment", "has_mtp", "mtp_tensor_count"):
+            gf.write(f"{k}={gguf_info.get(k)}\n")
+
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     first_output_s = None
     for line in proc.stdout:
@@ -284,6 +423,12 @@ if model_size_bytes is None:
     summary_lines.append("model_size_bytes=NA")
 else:
     summary_lines.append("model_size_bytes=%d" % model_size_bytes)
+summary_lines.append("gguf_is_gguf=%s" % str(gguf_info.get("is_gguf")))
+summary_lines.append("gguf_version=%s" % (str(gguf_info.get("version")) if gguf_info.get("version") is not None else "NA"))
+summary_lines.append("gguf_architecture=%s" % (gguf_info.get("architecture") or "NA"))
+summary_lines.append("gguf_alignment=%s" % (str(gguf_info.get("alignment")) if gguf_info.get("alignment") is not None else "NA"))
+summary_lines.append("gguf_has_mtp=%s" % (str(gguf_info.get("has_mtp")) if gguf_info.get("has_mtp") is not None else "NA"))
+summary_lines.append("gguf_mtp_tensor_count=%s" % (str(gguf_info.get("mtp_tensor_count")) if gguf_info.get("mtp_tensor_count") is not None else "NA"))
 summary_lines.append("ctx=%s" % ctx)
 summary_lines.append("n_tokens=%s" % n_tokens)
 summary_lines.append("n_gpu_layers=%s" % ngl)

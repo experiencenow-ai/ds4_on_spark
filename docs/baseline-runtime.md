@@ -49,6 +49,7 @@ This writes a markdown report to a local output directory and includes:
 - Spark identity + `nvidia-smi` snapshot
 - best-effort Spark host metadata (`lscpu`, `free`, `df`, etc.)
 - the exact remote `ssh` invocations used (copy/pasteable)
+- (default) a copy of the remote benchmark output directories (including `nvidia_smi_poll.csv`) under `spark_llamacpp_artifacts/` and `spark_vllm_artifacts/` within the same local report directory (disable with `FETCH_REMOTE_ARTIFACTS=0`)
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is best-effort via async streaming when available; otherwise reported as `NA` and you should rely on load + generation wall time)
 - quantized single-Spark milestone guidance: see `docs/quantized-single-spark.md` (no downloads are automated)
@@ -93,6 +94,7 @@ When using `scripts/run_baseline_existing_runtime.sh`, the model path inputs (`M
 
 Per-script useful env vars:
 - `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
+- `scripts/run_baseline_existing_runtime.sh`: `FETCH_REMOTE_ARTIFACTS` (default `1`)
 - `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`

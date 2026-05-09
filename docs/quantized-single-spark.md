@@ -9,6 +9,7 @@ This is an intermediate execution milestone, not the final architecture. A slow 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family quantized artifact.
 - The run records exact runtime source + revision (or binary hash/version), model source, quant, file size, sha256, command line, context length, token count, TTFT, tokens/sec where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
 - The report records whether the artifact preserves the upstream MTP namespace (`mtp.0.*`) and whether MTP was enabled/disabled for the run.
+- When the artifact is a GGUF, the llama.cpp Spark baseline script attempts a cheap tensor-name scan and records `gguf_has_mtp` / `gguf_mtp_tensor_count` in the baseline summary (and writes `gguf_probe.txt` into the fetched Spark artifacts directory).
 - If the run fails, the report preserves the exact failure mode: unsupported architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat mismatch, or runtime crash.
 - No automation downloads large model files unless a human explicitly approves the exact command and target path.
 
@@ -78,4 +79,3 @@ If it loads and generates, rerun with:
 - Upstream intake owns quantized artifact and runtime-fork provenance.
 - Model contract owns tokenizer/encoding and quant-format compatibility notes.
 - Build skeleton/native DS4 work should not block this milestone; it uses the results as a measured baseline.
-
