@@ -33,4 +33,5 @@ typedef struct
 DS4_EXTERN_C_BEGIN
 int32_t ds4_log_buf_init(ds4_log_buf_t *lb,char *buf,int32_t cap);
 void ds4_log_buf_sink(void *ctx,int32_t level,const char *msg);
+void ds4_log_buf_sink_prefixed(void *ctx,int32_t level,const char *msg);
 DS4_EXTERN_C_END

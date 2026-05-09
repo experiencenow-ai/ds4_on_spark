@@ -11,6 +11,7 @@ See also:
 - `docs/build-memory.md`
 - `docs/build-config.md`
 - `docs/build-cli.md`
+- `docs/build-logging.md`
 - `docs/build-install.md`
 - `docs/build-gguf.md`
 

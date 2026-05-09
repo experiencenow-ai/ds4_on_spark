@@ -47,6 +47,15 @@ int32_t test_log(void)
 		return(-9);
 	if ( lb.used <= used0 )
 		return(-10);
+	if ( ds4_log_buf_init(&lb,buf,(int32_t)sizeof(buf)) < 0 )
+		return(-11);
+	if ( ds4_log_set_sink(ds4_log_buf_sink_prefixed,&lb) < 0 )
+		return(-12);
+	if ( ds4_log_set_level(DS4_LOG_INFO) < 0 )
+		return(-13);
+	if ( DS4_LOGI("hello") < 0 )
+		return(-14);
+	if ( ds4_cstr_starts_with(buf,"info: hello\n") == 0 )
+		return(-15);
 	return(0);
 }
-
