@@ -196,6 +196,7 @@ int main(int argc,char **argv)
 	(void)argc;
 	(void)argv;
 	cuda_probe_print_versions();
+	printf("cublasLtGetVersion=%zu cublasLtGetCudartVersion=%zu\n",cublasLtGetVersion(),cublasLtGetCudartVersion());
 	do
 	{
 		rc = cuda_probe_check(cudaMalloc((void **)&d_a,(size_t)k * (size_t)m),-1,"cudaMalloc(A fp8)");
