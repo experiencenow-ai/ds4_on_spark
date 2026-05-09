@@ -64,6 +64,19 @@ It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then c
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
 Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using the `__cluster_dims__` attribute (`tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu`) and prints whether it compiled or the first lines of the error output.
 
+## Spark0: Disassemble (`cuobjdump` / `nvdisasm`)
+
+```bash
+./scripts/cuda_probe_disasm_spark0.sh
+```
+
+This script builds a small subset of the probes and then dumps the first lines of:
+
+- `cuobjdump --dump-sass` output (to confirm the toolkit can decode `sm_121` SASS)
+- `nvdisasm` output (to confirm the disassembler recognizes `sm_121`)
+
+This is useful when bringing up CUTLASS/DeepGEMM-style kernels, because it validates that the developer tooling can inspect the generated kernels on Spark0.
+
 ## Current Spark0 Results (2026-05-09)
 
 Commands run:
@@ -77,6 +90,7 @@ Observed:
 
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `-arch=sm_121` compiles and links (including `-lcublasLt`)
+- `cuobjdump --dump-sass` and `nvdisasm` decode `sm_121` binaries on Spark0 (see `./scripts/cuda_probe_disasm_spark0.sh`)
 - `nvcc -arch=sm_121` accepts the `__cluster_dims__` kernel annotation (compile-only check prints `cluster_dims_attr_compile: OK`)
 - `-arch=sm_120` binaries run on GB10 (`sm_121`) successfully (probe prints `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - Runtime launches a tiny `sm_121` kernel successfully
