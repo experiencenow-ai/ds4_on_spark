@@ -134,24 +134,22 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
-## Update: Discovery Refresh (2026-05-09 17:07Z)
+## Update: Discovery Refresh (2026-05-09 17:35Z)
 
 Commands run:
 
 ```bash
-REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_probe_loop_1778346408 DS4_GIT_WORK_TREE="/Users/mac/.codex/worktrees/0734/New project 4" ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T170752Z.txt
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T173515Z_probe8.txt
 ```
-
-Notes:
-
-- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
 
 ```text
 == meta ==
-Sat May  9 17:07:55 UTC 2026
+Sat May  9 17:35:15 UTC 2026
 git: ad143d0
 targets: aitopatom-9ab9.local spark1.local
+```
 
+```text
 == known target checks ==
 aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
