@@ -24,6 +24,10 @@ root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 echo "== staging deploy assets to $target (instance=$instance) =="
 
+if [ -x "$root/scripts/ops_validate_deploy_assets.sh" ]; then
+    "$root/scripts/ops_validate_deploy_assets.sh"
+fi
+
 if [ "${SSH_OPTS:-}" = "" ]; then
     known_hosts="/tmp/ds4_spark_known_hosts"
     if [ -d "/private/tmp" ]; then

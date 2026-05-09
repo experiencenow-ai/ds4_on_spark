@@ -386,6 +386,27 @@ check_metrics_endpoint()
     return 0
 }
 
+check_peer_metrics_endpoint()
+{
+    peer_host="${1:-}"
+    port="${2:-}"
+    if [ "$peer_host" = "" ] || [ "$port" = "" ]; then
+        echo "peer metrics: skip"
+        return 0
+    fi
+    host="$(metrics_url_host "$peer_host")"
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsS --max-time 2 "http://${host}:${port}/metrics" >/dev/null 2>&1; then
+            echo "peer metrics: http ok (${host}:${port})"
+        else
+            echo "peer metrics: http failed (${host}:${port})"
+        fi
+        return 0
+    fi
+    echo "peer metrics: curl missing; skip (${host}:${port})"
+    return 0
+}
+
 echo "== ds4 tp=2 preflight =="
 echo "self: $self"
 date -Is 2>/dev/null || date || true
@@ -400,6 +421,12 @@ echo
 
 echo "== time =="
 timedatectl status 2>/dev/null || true
+if command -v timedatectl >/dev/null 2>&1; then
+    synced="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || true)"
+    if [ "${synced:-}" != "" ]; then
+        echo "NTPSynchronized=$synced"
+    fi
+fi
 echo
 
 if [ "$strict" -ne 0 ]; then
@@ -456,6 +483,10 @@ ip link 2>/dev/null || true
 echo
 
 if [ "$peer" != "" ]; then
+    echo "== peer metrics endpoint (optional) =="
+    check_peer_metrics_endpoint "$peer" "${DS4_METRICS_PORT:-}"
+    echo
+
     echo "== peer ping ($peer) =="
     if ping -c 3 "$peer" 2>/dev/null; then
         echo "ping ok"
