@@ -450,6 +450,79 @@ class SchedulerSimTest(unittest.TestCase):
         m1 = scheduler_sim.run_simulation(cfg_least, trace)
         self.assertGreater(m0.token_lat_ms_interactive[0], m1.token_lat_ms_interactive[0])
 
+    def test_effective_k_and_partial_admit_metrics(self) -> None:
+        trace = []
+        for i in range(2):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=0.0,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+            )
+        )
+
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=2,
+                k_max_batch=2,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(len(m.effective_k_batch), m.admitted_tokens_batch)
+        self.assertGreater(m.partial_admit_tokens, 0)
+
+    def test_batching_service_model_reduces_makespan(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for _ in range(4)
+        ]
+        base = dict(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.1,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            service_base_ms=1.0,
+            service_per_task_ms=0.1,
+        )
+        serial_cfg = scheduler_sim.SimConfig(**base, batch_max_batch=1)
+        batch_cfg = scheduler_sim.SimConfig(**base, batch_max_batch=4)
+        m0 = scheduler_sim.run_simulation(serial_cfg, trace)
+        m1 = scheduler_sim.run_simulation(batch_cfg, trace)
+        self.assertLess(m1.makespan_ms, m0.makespan_ms)
+
 
 if __name__ == "__main__":
     unittest.main()
