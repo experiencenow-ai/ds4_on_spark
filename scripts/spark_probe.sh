@@ -144,9 +144,9 @@ fi
 echo
 echo "== lspci gpu link state (capped) =="
 if command -v lspci >/dev/null 2>&1; then
-	gpu_buses="$(lspci -D -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk "{ print \\$1 }" | head -n 16 || true)"
+	gpu_buses="$(lspci -D -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
 	if [ "$gpu_buses" = "" ]; then
-		gpu_buses="$(lspci -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk "{ print \\$1 }" | head -n 16 || true)"
+		gpu_buses="$(lspci -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
 	fi
 	if [ "$gpu_buses" != "" ]; then
 		for bus in $gpu_buses; do
