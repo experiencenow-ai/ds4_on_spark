@@ -153,6 +153,16 @@ Use `--strict` if you want fail-fast gating on missing/invalid TP=2 inputs:
 /tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0 --strict
 ```
 
+## Optional: Capture A Support Bundle (Spark Side)
+
+If preflight fails or routing/metrics look suspicious, capture a support bundle (non-destructive; review before sharing):
+
+```bash
+/opt/ds4/scripts/ops_collect_support_bundle.sh --instance spark0 --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
+```
+
+Details: `docs/ops-support-bundle.md`.
+
 ## Optional: Env Sanity Check (Spark Side)
 
 Before enabling long-running services, you can validate the env file contents:

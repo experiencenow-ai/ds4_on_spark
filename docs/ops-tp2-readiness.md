@@ -130,6 +130,16 @@ The script also prints best-effort host resolution and `ip route get` output for
 the master/peer targets (when `getent` + `ip` are present). This helps catch
 accidental Wi‑Fi vs wired routing early without changing any system settings.
 
+## If Preflight Fails: Capture A Support Bundle
+
+If `ds4-preflight@...` fails (or you see suspicious routing/metrics output), capture a support bundle on the Spark and attach it to the debug thread:
+
+```bash
+/opt/ds4/scripts/ops_collect_support_bundle.sh --instance spark0 --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
+```
+
+See `docs/ops-support-bundle.md` for details on what gets captured and redaction guidance.
+
 ## Optional: Periodic Preflight (Systemd Timer)
 
 If you want readiness checks to run automatically on boot and periodically after,

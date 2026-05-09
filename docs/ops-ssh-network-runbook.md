@@ -84,5 +84,15 @@ ping -c 2 <peer-ip-or-hostname>
 ss -lntp | head
 ```
 
+## If Networking Looks Wrong: Capture A Support Bundle
+
+To capture `ip route` / `ip route get` output + systemd/journald context in one place (non-destructive):
+
+```bash
+/opt/ds4/scripts/ops_collect_support_bundle.sh --instance spark0 --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
+```
+
+See `docs/ops-support-bundle.md` for details.
+
 Do not change firewall rules or routing as part of automation loops; document
 proposed changes for human approval.
