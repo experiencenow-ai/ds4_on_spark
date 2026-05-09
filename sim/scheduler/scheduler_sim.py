@@ -24,6 +24,7 @@ class TokenRoute:
     t_ms: float
     cls: LatencyClass
     candidates: Tuple[int, ...]
+    scores: Optional[Tuple[float, ...]] = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ class SimConfig:
     promote_ms: float
     adaptive_k: AdaptiveKConfig
     k_signal: str = "global"
+    admit_policy: str = "ordered"
 
 
 @dataclass
@@ -475,7 +477,21 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
             if len(candidates) == 0:
                 raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
 
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=tuple(candidates)))
+            scores: Optional[Tuple[float, ...]] = None
+            if "scores" in obj and obj["scores"] is not None:
+                scores_raw = obj["scores"]
+                if not isinstance(scores_raw, list):
+                    raise ValueError(f"{path}:{lineno}: scores must be a JSON list")
+                if len(scores_raw) != len(candidates):
+                    raise ValueError(f"{path}:{lineno}: scores must have same length as candidates")
+                scores_list: List[float] = []
+                for s in scores_raw:
+                    if not isinstance(s, (int, float)):
+                        raise ValueError(f"{path}:{lineno}: scores must be numbers")
+                    scores_list.append(float(s))
+                scores = tuple(scores_list)
+
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=tuple(candidates), scores=scores))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -506,6 +522,16 @@ def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, max_pending: int) -> int
     frac = float(max_pending - adapt.q_low) / float(span_q)
     k = int(round(float(k_max) - (frac * float(k_max - k_min))))
     return(_clamp_i32(k, k_min, k_max))
+
+
+def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
+    if admit_policy == "ordered":
+        return(route.candidates)
+    if admit_policy == "least_pending":
+        ranked = [(experts[e].pending(), i, e) for i, e in enumerate(route.candidates)]
+        ranked.sort()
+        return([e for _p, _i, e in ranked])
+    raise ValueError("admit_policy must be 'ordered' or 'least_pending'")
 
 
 def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int, evq: List[Event], seq_ref: List[int], metrics: SimMetrics) -> None:
@@ -563,9 +589,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if k_signal not in ("global", "candidates"):
         raise ValueError("k_signal must be 'global' or 'candidates'")
 
+    admit_policy = cfg.admit_policy.strip().lower()
+    if admit_policy not in ("ordered", "least_pending"):
+        raise ValueError("admit_policy must be 'ordered' or 'least_pending'")
+
     for route in trace:
         if len(route.candidates) == 0:
             raise ValueError("trace route candidates must be non-empty")
+        if route.scores is not None and len(route.scores) != len(route.candidates):
+            raise ValueError("trace route scores must have same length as candidates")
         for expert_id in route.candidates:
             if expert_id < 0 or expert_id >= cfg.num_experts:
                 raise ValueError("trace route has expert_id out of range")
@@ -642,7 +674,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 metrics.chosen_k_batch.append(k)
 
             admitted = 0
-            for expert_id in route.candidates:
+            for expert_id in _candidate_order(admit_policy, experts, route):
                 if admitted >= k:
                     break
                 eq = experts[expert_id]
@@ -755,6 +787,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--q-low", type=int, default=16)
     p.add_argument("--q-high", type=int, default=128)
     p.add_argument("--k-signal", type=str, default="global", help="Adaptive-K congestion signal: global (max pending across all experts) or candidates (max pending among this token's candidates).")
+    p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order) or least_pending (pick least pending experts among candidates).")
 
     p.add_argument("--json", action="store_true", help="Print JSON metrics only.")
     return(p.parse_args(argv))
@@ -816,6 +849,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         promote_ms=args.promote_ms,
         adaptive_k=adapt,
         k_signal=args.k_signal,
+        admit_policy=args.admit_policy,
     )
 
     metrics = run_simulation(sim_cfg, trace)

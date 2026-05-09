@@ -254,12 +254,13 @@ class SchedulerSimTest(unittest.TestCase):
         try:
             with os.fdopen(fd, "w") as f:
                 f.write('{"t_ms":0.2,"cls":"batch","candidates":[1,0]}\n')
-                f.write('{"t_ms":0.0,"cls":"interactive","candidates":[0,1]}\n')
+                f.write('{"t_ms":0.0,"cls":"interactive","candidates":[0,1],"scores":[0.9,0.1]}\n')
             trace = scheduler_sim.load_trace_jsonl(path)
             self.assertEqual(len(trace), 2)
             self.assertEqual(trace[0].t_ms, 0.0)
             self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
             self.assertEqual(trace[1].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[0].scores, (0.9, 0.1))
 
             cfg = scheduler_sim.SimConfig(
                 num_experts=2,
@@ -281,6 +282,16 @@ class SchedulerSimTest(unittest.TestCase):
             m = scheduler_sim.run_simulation(cfg, trace)
             self.assertEqual(m.num_tokens, 2)
             self.assertGreater(m.makespan_ms, 0.0)
+        finally:
+            os.unlink(path)
+
+    def test_trace_jsonl_scores_length_must_match_candidates(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"interactive","candidates":[0,1],"scores":[0.9]}\n')
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(path)
         finally:
             os.unlink(path)
 
@@ -396,6 +407,48 @@ class SchedulerSimTest(unittest.TestCase):
         m1 = scheduler_sim.run_simulation(aged_cfg, trace)
         self.assertGreater(m1.promoted_tasks, 0)
         self.assertLessEqual(m1.starved_tasks, m0.starved_tasks)
+
+    def test_admit_policy_least_pending_reduces_latency(self) -> None:
+        trace = []
+        for i in range(50):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=0.0,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0, 1),
+            )
+        )
+
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        base = dict(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+        )
+        cfg_ordered = scheduler_sim.SimConfig(**base, admit_policy="ordered")
+        cfg_least = scheduler_sim.SimConfig(**base, admit_policy="least_pending")
+        m0 = scheduler_sim.run_simulation(cfg_ordered, trace)
+        m1 = scheduler_sim.run_simulation(cfg_least, trace)
+        self.assertGreater(m0.token_lat_ms_interactive[0], m1.token_lat_ms_interactive[0])
 
 
 if __name__ == "__main__":

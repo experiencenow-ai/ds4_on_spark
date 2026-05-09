@@ -25,6 +25,14 @@ Work units:
 Starvation is counted when a task waits in an expert queue for at least
 `--starvation-ms` before it starts service.
 
+### Candidate Admission Policy
+
+When `K < len(candidates)`, the simulator must pick which experts receive tasks.
+Two policies are supported:
+
+- `--admit-policy ordered` (default): admit in router-provided order
+- `--admit-policy least_pending`: admit the least-pending experts among the candidates (ties broken by router order)
+
 ### Per-Expert Service Discipline
 
 By default experts serve interactive tasks before batch tasks (strict priority).
@@ -82,6 +90,7 @@ Replay mode reads one JSON object per line with required fields:
 - `t_ms` (number): arrival time in milliseconds
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
 
 Example:
 
