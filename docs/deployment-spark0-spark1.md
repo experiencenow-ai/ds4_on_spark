@@ -43,6 +43,15 @@ This copies systemd templates + config examples to `/tmp/` on each Spark and pri
 
 It also stages safe ops scripts (preflight + env sanity checks) under `/tmp/ds4-scripts/`.
 
+### Optional: Mesh Check Before Staging
+
+If you want a quick sanity check that both Sparks are reachable and can ping each other:
+
+```bash
+SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts' \
+./scripts/ops_spark01_mesh_check.sh spark0@<spark0-host> spark1@<spark1-host>
+```
+
 ## On Each Spark: Install Systemd + Config
 
 If you want repeatable user/dir bring-up via sysusers/tmpfiles, run the `sysusers.d`/`tmpfiles.d` install commands printed by `ops_stage_deploy_assets.sh` first.

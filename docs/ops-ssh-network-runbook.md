@@ -14,6 +14,15 @@ ssh $SSH_OPTS <user>@spark0.local hostname
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark
 console.
 
+## Mac-Side Mesh Check (Optional)
+
+To quickly sanity-check both Sparks plus basic peer ping reachability:
+
+```bash
+SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts' \
+./scripts/ops_spark01_mesh_check.sh spark0@<spark0-host> spark1@<spark1-host>
+```
+
 ## Peer SSH From DS4 Preflight (Optional)
 
 `deploy/systemd/ds4-preflight@.service` runs `scripts/ops_tp2_readiness.sh` as the
