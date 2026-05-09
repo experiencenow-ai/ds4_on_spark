@@ -45,7 +45,7 @@ External runtimes and conversion pipelines may drop or ignore this namespace.
 
 Before DS4 enables or trusts MTP/draft decoding:
 
-- Confirm the tested artifact preserves `mtp.0.*` tensor keys (see `scripts/model_contract_inspect_quantized_artifact.py`).
+- Confirm the tested artifact preserves `mtp.0.*` tensor keys (see `scripts/model_contract_inspect_quantized_artifact.py`) and record its GGUF `tensor_type_counts` plus `metadata.general.*` fields when applicable.
 - Add an explicit MTP oracle fixture (weights required) that exercises
   `MTPBlock.forward(...)` and validates `mtp.0.hc_head_*` behavior, not just the
   main trunk `Transformer.forward(...)`.

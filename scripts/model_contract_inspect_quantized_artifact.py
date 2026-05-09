@@ -7,13 +7,15 @@ import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Optional
 
 
 @dataclass(frozen=True)
 class InspectResult:
 	path: str
 	artifact_type: str
+	gguf_version: Optional[int]
+	metadata: dict[str, Any]
 	tensor_count: int
 	tensor_type_counts: dict[str, int]
 	mtp_present: bool
@@ -84,6 +86,92 @@ def skip_gguf_value(f: BinaryIO, value_type: int) -> None:
 	raise ValueError(f"unsupported gguf value_type={value_type}")
 
 
+def read_i8(f: BinaryIO) -> int:
+	b = read_bytes(f, 1)
+	return int(struct.unpack("<b", b)[0])
+
+
+def read_u8(f: BinaryIO) -> int:
+	b = read_bytes(f, 1)
+	return int(struct.unpack("<B", b)[0])
+
+
+def read_i16_le(f: BinaryIO) -> int:
+	b = read_bytes(f, 2)
+	return int(struct.unpack("<h", b)[0])
+
+
+def read_u16_le(f: BinaryIO) -> int:
+	b = read_bytes(f, 2)
+	return int(struct.unpack("<H", b)[0])
+
+
+def read_i32_le(f: BinaryIO) -> int:
+	b = read_bytes(f, 4)
+	return int(struct.unpack("<i", b)[0])
+
+
+def read_f32_le(f: BinaryIO) -> float:
+	b = read_bytes(f, 4)
+	return float(struct.unpack("<f", b)[0])
+
+
+def read_i64_le(f: BinaryIO) -> int:
+	b = read_bytes(f, 8)
+	return int(struct.unpack("<q", b)[0])
+
+
+def read_f64_le(f: BinaryIO) -> float:
+	b = read_bytes(f, 8)
+	return float(struct.unpack("<d", b)[0])
+
+
+def read_gguf_value(f: BinaryIO, value_type: int) -> Any:
+	# Values follow gguf spec: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
+	if value_type == 0:
+		return read_u8(f)
+	if value_type == 1:
+		return read_i8(f)
+	if value_type == 2:
+		return read_u16_le(f)
+	if value_type == 3:
+		return read_i16_le(f)
+	if value_type == 4:
+		return read_u32_le(f)
+	if value_type == 5:
+		return read_i32_le(f)
+	if value_type == 6:
+		return read_f32_le(f)
+	if value_type == 7:
+		return (read_u8(f) != 0)
+	if value_type == 8:
+		return read_gguf_string(f)
+	if value_type == 10:
+		return read_u64_le(f)
+	if value_type == 11:
+		return read_i64_le(f)
+	if value_type == 12:
+		return read_f64_le(f)
+	if value_type == 9:
+		# Arrays can be huge (e.g. tokenizer.ggml.tokens). Avoid loading them here.
+		skip_gguf_value(f, value_type)
+		return "<array omitted>"
+	raise ValueError(f"unsupported gguf value_type={value_type}")
+
+
+def should_capture_gguf_metadata(key: str, value_type: int) -> bool:
+	# Keep output small: capture stable scalar/string keys used for provenance.
+	if value_type == 9:
+		return False
+	if key.startswith("general."):
+		return True
+	if key == "tokenizer.ggml.model":
+		return True
+	if key.endswith(".context_length") or key.endswith(".embedding_length") or key.endswith(".block_count"):
+		return True
+	return False
+
+
 def inspect_weight_keys(weight_keys: list[str], path: str, artifact_type: str) -> InspectResult:
 	mtp_keys = [k for k in weight_keys if k.startswith("mtp.")]
 	mtp_layer_ids = set()
@@ -98,6 +186,8 @@ def inspect_weight_keys(weight_keys: list[str], path: str, artifact_type: str) -
 	return InspectResult(
 		path=path,
 		artifact_type=artifact_type,
+		gguf_version=None,
+		metadata={},
 		tensor_count=len(weight_keys),
 		tensor_type_counts={},
 		mtp_present=bool(mtp_keys),
@@ -163,14 +253,18 @@ def inspect_gguf(path: Path) -> InspectResult:
 		magic = read_bytes(f, 4)
 		if magic != b"GGUF":
 			raise ValueError(f"{path} does not look like a GGUF file (bad magic {magic!r})")
-		_vers = read_u32_le(f)
+		vers = int(read_u32_le(f))
 		n_tensors = read_u64_le(f)
 		n_kv = read_u64_le(f)
 
+		metadata: dict[str, Any] = {}
 		for _ in range(int(n_kv)):
-			_ = read_gguf_string(f)
+			key = read_gguf_string(f)
 			vtype = read_u32_le(f)
-			skip_gguf_value(f, int(vtype))
+			if should_capture_gguf_metadata(key, int(vtype)):
+				metadata[key] = read_gguf_value(f, int(vtype))
+			else:
+				skip_gguf_value(f, int(vtype))
 
 		weight_keys: list[str] = []
 		weight_types: list[int] = []
@@ -190,6 +284,8 @@ def inspect_gguf(path: Path) -> InspectResult:
 	return InspectResult(
 		path=res.path,
 		artifact_type=res.artifact_type,
+		gguf_version=vers,
+		metadata=metadata,
 		tensor_count=res.tensor_count,
 		tensor_type_counts=dict(sorted(type_counts.items())),
 		mtp_present=res.mtp_present,
@@ -232,6 +328,8 @@ def main() -> int:
 				{
 					"path": res.path,
 					"artifact_type": res.artifact_type,
+					"gguf_version": res.gguf_version,
+					"metadata": res.metadata,
 					"tensor_count": res.tensor_count,
 					"tensor_type_counts": res.tensor_type_counts,
 					"mtp_present": res.mtp_present,
@@ -247,6 +345,10 @@ def main() -> int:
 	else:
 		print(f"path: {res.path}")
 		print(f"artifact_type: {res.artifact_type}")
+		if res.gguf_version is not None:
+			print(f"gguf_version: {res.gguf_version}")
+		for k in sorted(res.metadata.keys()):
+			print(f"metadata: {k}={res.metadata[k]}")
 		print(f"tensor_count: {res.tensor_count}")
 		if res.tensor_type_counts:
 			for k in sorted(res.tensor_type_counts.keys()):
