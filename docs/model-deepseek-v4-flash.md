@@ -439,11 +439,18 @@ Official-source safetensors **do** include the MTP namespace:
 For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
+- Some community GGUF conversions ship `mtp.0.*` as a **separate sidecar** file rather than embedding it in the trunk GGUF. Treat MTP presence as a property of the artifact **set**, not just one file.
 - Treat MTP as **disabled/untrusted** unless the artifact is inspected and proven to contain `mtp.0.*` weights (and, ideally, MTP passes an oracle check; see below).
 - Record whether the runtime can expose draft logits or draft token IDs.
 - A successful MTP speedup is not enough by itself; the acceptance path must be
   reproducible under deterministic sampling and must be disableable for oracle
   comparisons.
+
+To inspect a trunk+sidecar pair, pass both paths:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json
+```
 
 ## Next steps (oracle + remaining unknowns)
 
