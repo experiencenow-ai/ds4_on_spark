@@ -33,6 +33,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async`: compile/run `cuda::memcpy_async(..., barrier)` using CCCL’s `<cuda/barrier>` API.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx`: compile/run an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
 - `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_1d`: compile/run a minimal TMA `cp.async.bulk.tensor.1d` load using `cuTensorMapEncodeTiled` + `cuda::device::experimental::cp_async_bulk_tensor_1d_global_to_shared` (CUTLASS TMA gate).
+- `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_2d`: compile/run a minimal TMA `cp.async.bulk.tensor.2d` load using `cuTensorMapEncodeTiled` + `cuda::device::experimental::cp_async_bulk_tensor_2d_global_to_shared` (2D traversal gate).
 - `tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref`: compile/run CCCL `cuda::atomic_ref` (device-scope + block-scope) atomics on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke`: compile/run CUDA graph capture → instantiate → launch smoke test on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit`: compile PTX via NVRTC (`--gpu-architecture=compute_121`), load via CUDA Driver API, and launch a tiny kernel.
@@ -67,6 +68,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx
 ./tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_1d
+./tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_2d
 ./tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref
 ./tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke
 ./tools/cuda_probe/bin/cuda_sm121_nvrtc_jit
@@ -111,6 +113,7 @@ Expected outputs:
 - `cuda_sm121_barrier_memcpy_async` is a compile/run check for CCCL’s higher-level `cuda::barrier` + `cuda::memcpy_async` API (commonly used by templated kernels).
 - `cuda_sm121_cp_async_bulk_tx` is a compile/run check for CCCL’s internal `cuda::device::memcpy_async_tx` helper, which lowers to an explicit `cp.async.bulk` global->shared copy path on SM90+.
 - `cuda_sm121_tma_bulk_tensor_1d` is a compile/run check for the TMA PTX wrapper `cuda::device::experimental::cp_async_bulk_tensor_1d_global_to_shared`, using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (CUTLASS-style TMA load gate).
+- `cuda_sm121_tma_bulk_tensor_2d` is a compile/run check for the TMA PTX wrapper `cuda::device::experimental::cp_async_bulk_tensor_2d_global_to_shared`, using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (CUTLASS-style 2D traversal gate).
 - `cuda_sm121_cccl_atomic_ref` is a compile/run check for CCCL atomics (`cuda::atomic_ref`), which many template kernels use for counters, epilogues, and synchronization-side channels.
 - `cuda_sm121_cuda_graph_smoke` is a compile/run check that CUDA graph stream capture, instantiation, and launch work correctly for `sm_121`.
 - `cuda_sm121_nvrtc_jit` is a compile/run check for NVRTC + the driver PTX loader; it validates `--gpu-architecture=compute_121` and a minimal “compile PTX → load module → launch kernel” path used by JIT compilation flows.

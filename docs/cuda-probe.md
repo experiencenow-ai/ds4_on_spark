@@ -37,6 +37,7 @@ What it does:
   - `cuda_sm121_barrier_memcpy_async` (`cuda::barrier` + `cuda::memcpy_async` copy probe)
   - `cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` global->shared copy via CCCL `cuda::device::memcpy_async_tx`)
   - `cuda_sm121_tma_bulk_tensor_1d` (TMA `cp.async.bulk.tensor.1d` load via `cuTensorMapEncodeTiled` + `cuda::device::experimental::cp_async_bulk_tensor_1d_global_to_shared`)
+  - `cuda_sm121_tma_bulk_tensor_2d` (TMA `cp.async.bulk.tensor.2d` load via `cuTensorMapEncodeTiled` + `cuda::device::experimental::cp_async_bulk_tensor_2d_global_to_shared`)
   - `cuda_sm121_cccl_atomic_ref` (CCCL `cuda::atomic_ref` device-scope + block-scope atomics)
   - `cuda_sm121_cuda_graph_smoke` (CUDA graph capture → instantiate → launch smoke test)
   - `cuda_sm121_nvrtc_jit` (NVRTC compile-to-PTX + Driver API module load/launch for `compute_121`)
@@ -59,7 +60,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_cublaslt_fp4_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_tma_bulk_tensor_1d`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, `cuda_sm121_nvrtc_cxx20_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_cublaslt_fp4_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_tma_bulk_tensor_1d`, `cuda_sm121_tma_bulk_tensor_2d`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, `cuda_sm121_nvrtc_cxx20_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
 Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using the `__cluster_dims__` attribute (`tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu`) and prints whether it compiled or the first lines of the error output.
 
@@ -93,6 +94,7 @@ Observed:
 - Barrier memcpy-async probe succeeds (`cuda::barrier` + `cuda::memcpy_async`)
 - Explicit `cp.async.bulk` (CCCL `memcpy_async_tx`) probe succeeds (`cuda_sm121_cp_async_bulk_tx`)
 - TMA bulk-tensor probe succeeds (`cuda_sm121_tma_bulk_tensor_1d` uses `cuTensorMapEncodeTiled` + `cp.async.bulk.tensor`)
+- TMA bulk-tensor probe succeeds (`cuda_sm121_tma_bulk_tensor_2d` uses `cuTensorMapEncodeTiled` + `cp.async.bulk.tensor`)
 - CCCL atomic-ref probe succeeds (`cuda::atomic_ref`)
 - CUDA graph smoke probe succeeds (stream capture + instantiate + launch)
 - NVRTC JIT probe succeeds (`nvrtc supportedArchs` includes `121`; driver loads PTX and launches kernel)
@@ -130,6 +132,8 @@ bf16_conv x=1.250000 raw_x=0x3fa0 x_back=1.250000 y=-2.500000 raw_y=0xc020 y_bac
 fp4_conv x=1.250000 e2m1_storage=0x02 e2m1_nibble=0x2 halfraw_e2m1=0x3c00
 pipeline_memcpy_async out=11111111 22222222 33333333 44444444
 barrier_memcpy_async ok first=decaf000 last=decaf01f
+tma_bulk_tensor_1d rc=0 out0=00 out127=7f
+tma_bulk_tensor_2d rc=0 out0=00 out127=7f
 cluster_dims_attr_compile: OK
 cuda_graph_smoke out=22222222
 nvrtcVersion=13.0
