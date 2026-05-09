@@ -126,6 +126,10 @@ non-fatal). When `DS4_METRICS_ADDR=0.0.0.0`, it probes `127.0.0.1`.
 If `DS4_PEER_HOST` is set, it also attempts a best-effort peer probe of
 `http://<peer-host>:<DS4_METRICS_PORT>/metrics` (useful for catching firewall/routing issues early).
 
+The script also prints best-effort host resolution and `ip route get` output for
+the master/peer targets (when `getent` + `ip` are present). This helps catch
+accidental Wi‑Fi vs wired routing early without changing any system settings.
+
 ## Optional: Periodic Preflight (Systemd Timer)
 
 If you want readiness checks to run automatically on boot and periodically after,

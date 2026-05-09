@@ -409,6 +409,80 @@ check_peer_metrics_endpoint()
     return 0
 }
 
+is_ipv4()
+{
+    v="${1:-}"
+    if [ "$v" = "" ]; then
+        return 1
+    fi
+    case "$v" in
+        *[!0-9.]*)
+            return 1
+            ;;
+        *.*.*.*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+resolve_ipv4_best_effort()
+{
+    host="${1:-}"
+    if [ "$host" = "" ]; then
+        return 1
+    fi
+    if is_ipv4 "$host"; then
+        echo "$host"
+        return 0
+    fi
+    if command -v getent >/dev/null 2>&1; then
+        ip="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1 {print $1}')"
+        if [ "${ip:-}" != "" ]; then
+            echo "$ip"
+            return 0
+        fi
+        ip="$(getent hosts "$host" 2>/dev/null | awk 'NR==1 {print $1}')"
+        if [ "${ip:-}" != "" ]; then
+            echo "$ip"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+print_host_resolution()
+{
+    label="$1"
+    host="${2:-}"
+    if [ "$host" = "" ]; then
+        return 0
+    fi
+
+    echo "$label: $host"
+
+    ip="$(resolve_ipv4_best_effort "$host" 2>/dev/null || true)"
+    if [ "$ip" != "" ] && [ "$ip" != "$host" ]; then
+        echo "$label ipv4: $ip"
+    fi
+
+    route_ip="$host"
+    if [ "$ip" != "" ]; then
+        route_ip="$ip"
+    fi
+
+    if command -v ip >/dev/null 2>&1; then
+        if is_ipv4 "$route_ip"; then
+            route="$(ip -4 route get "$route_ip" 2>/dev/null | sed -n '1p' || true)"
+            if [ "${route:-}" != "" ]; then
+                echo "$label route: $route"
+            fi
+        fi
+    fi
+
+    return 0
+}
+
 peer_backcheck_via_ssh()
 {
     target="$1"
@@ -515,6 +589,15 @@ print_if_set DS4_METRICS_PORT
 print_if_set DS4_CONFIG_PATH
 print_if_set DS4_PEER_HOST
 print_if_set DS4_PEER_SSH
+echo
+
+echo "== host resolution + routes (best effort) =="
+print_host_resolution "master" "${DS4_MASTER_ADDR:-}"
+if [ "$peer" != "" ]; then
+    print_host_resolution "peer" "$peer"
+else
+    print_host_resolution "peer" "${DS4_PEER_HOST:-}"
+fi
 echo
 
 echo "== ds4 filesystem (optional) =="
