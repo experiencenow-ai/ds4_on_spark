@@ -4,6 +4,7 @@ set -eu
 target="${1:-}"
 if [ "$target" = "" ]; then
     echo "usage: ops_stage_deploy_assets.sh <user@host> [instance]" >&2
+    echo "env: SSH_OPTS (optional ssh options override)" >&2
     exit 2
 fi
 
@@ -23,15 +24,35 @@ root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 echo "== staging deploy assets to $target (instance=$instance) =="
 
-ssh "$target" "mkdir -p /tmp/ds4-systemd /tmp/ds4-config /tmp/ds4-sysusers /tmp/ds4-tmpfiles /tmp/ds4-scripts"
+if [ "${SSH_OPTS:-}" = "" ]; then
+    known_hosts="/tmp/ds4_spark_known_hosts"
+    if [ -d "/private/tmp" ]; then
+        known_hosts="/private/tmp/ds4_spark_known_hosts"
+    fi
+    SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
+fi
 
-rsync -av "$root/deploy/systemd/" "$target:/tmp/ds4-systemd/"
-rsync -av "$root/deploy/config/" "$target:/tmp/ds4-config/"
-rsync -av "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
-rsync -av "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
-rsync -av "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
-rsync -av "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
-rsync -av "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-scripts/"
+ssh_run()
+{
+    target="$1"
+    shift
+    ssh $SSH_OPTS "$target" "$@"
+}
+
+rsync_run()
+{
+    rsync -av -e "ssh $SSH_OPTS" "$@"
+}
+
+ssh_run "$target" "mkdir -p /tmp/ds4-systemd /tmp/ds4-config /tmp/ds4-sysusers /tmp/ds4-tmpfiles /tmp/ds4-scripts"
+
+rsync_run "$root/deploy/systemd/" "$target:/tmp/ds4-systemd/"
+rsync_run "$root/deploy/config/" "$target:/tmp/ds4-config/"
+rsync_run "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
+rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
+rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-scripts/"
 
 cat <<EOF
 

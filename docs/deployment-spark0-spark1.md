@@ -43,6 +43,17 @@ This copies systemd templates + config examples to `/tmp/` on each Spark and pri
 
 It also stages safe ops scripts (preflight + env sanity checks) under `/tmp/ds4-scripts/`.
 
+### Optional: SSH Options For Staging
+
+If you want stable non-interactive SSH (identity + dedicated known-hosts path), set `SSH_OPTS`:
+
+```bash
+SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts' \
+./scripts/ops_stage_deploy_assets.sh spark0@<spark0-host> spark0
+```
+
+If `SSH_OPTS` is not set, `ops_stage_deploy_assets.sh` uses a safe default with a dedicated known-hosts file under `/private/tmp` (or `/tmp` when `/private/tmp` is absent).
+
 ### Optional: Mesh Check Before Staging
 
 If you want a quick sanity check that both Sparks are reachable and can ping each other:

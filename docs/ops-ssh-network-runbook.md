@@ -11,6 +11,8 @@ SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 ssh $SSH_OPTS <user>@spark0.local hostname
 ```
 
+`scripts/ops_stage_deploy_assets.sh` and `scripts/ops_spark01_mesh_check.sh` both respect `SSH_OPTS`.
+
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark
 console.
 
