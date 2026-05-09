@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 option(DS4_ENABLE_TESTS "Build unit tests" ON)
+option(DS4_ENABLE_CLI "Build CLI stub" ON)
 option(DS4_WERROR "Treat warnings as errors" OFF)
 option(DS4_ENABLE_ASAN "Enable AddressSanitizer (CPU builds only)" OFF)
 option(DS4_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (CPU builds only)" OFF)
@@ -67,4 +68,13 @@ if(DS4_ENABLE_TESTS)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})
 	ds4_target_sanitizers(ds4_tests ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 	add_test(NAME ds4_tests COMMAND ds4_tests)
+endif()
+
+if(DS4_ENABLE_CLI)
+	add_executable(ds4_cli
+		src/ds4_cli.c
+	)
+	target_link_libraries(ds4_cli PRIVATE ds4)
+	ds4_target_warnings(ds4_cli ${DS4_WERROR})
+	ds4_target_sanitizers(ds4_cli ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 endif()

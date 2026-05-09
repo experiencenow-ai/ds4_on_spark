@@ -8,6 +8,7 @@ See also:
 - `docs/build-linux.md`
 - `docs/build-memory.md`
 - `docs/build-config.md`
+- `docs/build-cli.md`
 
 ## Mac (no CUDA)
 

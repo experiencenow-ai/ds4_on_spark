@@ -43,6 +43,7 @@ int32_t test_config(void)
 	static const uint8_t buf1[] = "enable_cuda=ON\n";
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
 	char path[64];
+	char out[64];
 	int32_t fd,plen,n;
 	uint8_t io_buf[64];
 	if ( ds4_config_defaults(&cfg) < 0 )
@@ -110,6 +111,16 @@ int32_t test_config(void)
 	{
 		unlink(path);
 		return(-19);
+	}
+	if ( ds4_config_format(&cfg,out,(int32_t)sizeof(out)) < 0 )
+	{
+		unlink(path);
+		return(-20);
+	}
+	if ( out[0] == 0 )
+	{
+		unlink(path);
+		return(-21);
 	}
 	unlink(path);
 	unsetenv("DS4_LOG_LEVEL");

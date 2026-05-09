@@ -340,3 +340,21 @@ int32_t ds4_config_load(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t 
 		return(-4);
 	return(0);
 }
+
+int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
+{
+	int32_t n;
+	if ( cfg == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( cap <= 0 )
+		return(-3);
+	n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\n",cfg->log_level,cfg->enable_cuda);
+	if ( n < 0 )
+		return(-4);
+	out[cap - 1] = 0;
+	if ( n >= cap )
+		return(-5);
+	return(n);
+}

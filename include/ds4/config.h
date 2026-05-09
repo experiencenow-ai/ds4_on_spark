@@ -17,3 +17,4 @@ int32_t ds4_config_parse_mem(ds4_config_t *cfg,const uint8_t *buf,int32_t len);
 int32_t ds4_config_parse_file(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len);
 int32_t ds4_config_parse_env(ds4_config_t *cfg);
 int32_t ds4_config_load(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len);
+int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap);
