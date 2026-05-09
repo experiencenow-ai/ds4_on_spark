@@ -36,7 +36,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 
 ## Fetching
 
-Use [`scripts/fetch_upstreams.sh`](../scripts/fetch_upstreams.sh) to clone pinned refs into a local `upstreams/` directory (ignored by git). For Hugging Face repos, the script sets `GIT_LFS_SKIP_SMUDGE=1` so large weight blobs are not downloaded.
+Use [`scripts/fetch_upstreams.sh`](../scripts/fetch_upstreams.sh) to clone pinned refs into a local `upstreams/` directory (ignored by git). The script verifies that the checked-out commit matches the pinned `Commit` in this manifest. For Hugging Face repos, the script sets `GIT_LFS_SKIP_SMUDGE=1` so large weight blobs are not downloaded.
 
 ## Refreshing Pins
 
