@@ -5,16 +5,14 @@ This project defaults to `DS4_ENABLE_CUDA=OFF` on macOS.
 ## Quick (Makefile)
 
 ```bash
-make clean
-make build
-make test
+make build BUILD_DIR=build_macos
+make test BUILD_DIR=build_macos
 ```
 
 ## Strict warnings (Makefile)
 
 ```bash
-make clean
-make check
+make check BUILD_DIR=build_macos_check
 ```
 
 ## Strict warnings (CMake)
