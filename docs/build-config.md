@@ -20,7 +20,7 @@ Rules:
 
 Supported keys:
 
-- `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`)
+- `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`) or a case-insensitive name (`error`, `warn`/`warning`, `info`, `debug`)
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
 
 ## CUDA gating
