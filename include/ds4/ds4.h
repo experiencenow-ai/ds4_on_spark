@@ -14,5 +14,7 @@ typedef struct
 	ds4_arena_t arena;
 } ds4_ctx_t;
 
+DS4_EXTERN_C_BEGIN
 int32_t ds4_ctx_init(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_mem,int32_t arena_size);
 int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg);
+DS4_EXTERN_C_END
