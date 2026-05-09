@@ -80,7 +80,13 @@ if [ "$env_path" != "" ]; then
     set +a
 fi
 
-SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/var/tmp/ds4_known_hosts}"
+if [ "${SSH_OPTS:-}" = "" ]; then
+    known_hosts="/var/lib/ds4/ssh/known_hosts"
+    if [ ! -d "/var/lib/ds4/ssh" ]; then
+        known_hosts="/var/tmp/ds4_known_hosts"
+    fi
+    SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
+fi
 
 if [ "$peer" = "" ]; then
     peer="${DS4_PEER_HOST:-}"

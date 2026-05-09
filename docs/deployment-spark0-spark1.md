@@ -50,6 +50,8 @@ On Spark0:
 
 ```bash
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
+# optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
+# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
 sudo systemctl daemon-reload
@@ -60,6 +62,8 @@ On Spark1:
 
 ```bash
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
+# optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
+# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -m 0640 /tmp/ds4-config/ds4-spark1.env.example /etc/ds4/ds4-spark1.env
 sudo install -m 0640 /tmp/ds4-config/ds4-spark1.yaml.example /etc/ds4/ds4-spark1.yaml
 sudo systemctl daemon-reload
@@ -76,13 +80,13 @@ Notes:
 Before enabling long-running services, you can validate the env file contents:
 
 ```bash
-/opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-spark0.env
+sudo /opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-spark0.env
 ```
 
 If you haven't installed scripts under `/opt/ds4/scripts/` yet, run directly from the repo checkout:
 
 ```bash
-./scripts/ops_ds4_env_check.sh /etc/ds4/ds4-spark0.env
+sudo ./scripts/ops_ds4_env_check.sh /etc/ds4/ds4-spark0.env
 ```
 
 ## Enable/Start Services

@@ -21,6 +21,7 @@ Use instance names matching the host role:
 - `ds4@spark1`
 
 Each instance loads `/etc/ds4/ds4-%i.env` via `EnvironmentFile=`.
+Optionally, you can also provide shared defaults in `/etc/ds4/ds4.env` (loaded before `ds4-%i.env`).
 
 ## Prereqs (Human Runbook)
 
@@ -43,7 +44,6 @@ The staging helper also copies safe ops scripts to `/tmp/ds4-scripts/`; install 
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable ds4-preflight@spark0.service
 sudo systemctl start  ds4-preflight@spark0.service
 
 sudo systemctl enable ds4@spark0.service
