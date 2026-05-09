@@ -20,6 +20,7 @@ tokenizer/chat format, and memory envelope are real.
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
 - The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
   - When the repo-default `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, this output also includes:
+    - `tensor_key_namespace_guess` + `first_tensor_keys` (quick signal for whether the artifact appears to preserve upstream tensor key namespaces; many GGUF conversions are `llama.cpp`)
     - `trunk_contract` (upstream tensor-key completeness for top-level + `layers.{i}.*`)
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
     - `topology_contract` (GGUF header metadata vs expected `hidden_size`, `block_count`, head counts, vocab size)
@@ -77,6 +78,12 @@ For each tested quantized artifact, record whether `mtp.0.*` is present:
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf
 ```
 
+For Hugging Face-hosted GGUFs, you can capture the same header/tensor-table metadata without downloading the full file (range reads only). Record the `url_prefix_bytes` from the JSON output:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
+```
+
 Interpreting the result:
 
 - If `mtp_present == false`, treat the artifact as **MTP-disabled** even if it
@@ -85,8 +92,19 @@ Interpreting the result:
 - If `mtp_present == true`, the artifact is only **MTP-capable** if the runtime
   actually loads and uses those tensors. Still require correctness oracles
   before trusting MTP outputs.
+- If `tensor_key_namespace_guess != deepseek-upstream`, assume the artifact does **not** preserve upstream tensor key namespaces by default. In that case:
+  - `trunk_contract.checked` is expected to be `false` (it only applies when `layers.{i}.*` keys are preserved).
+  - The absence of `mtp.0.*` keys (`mtp_present == false`) means upstream MTP preservation is *not* proven; treat MTP as disabled/untrusted.
 - For GGUF, record `tensor_type_counts` (and `mtp_tensor_type_counts` when present) to capture the exact quant formats the runtime must support (e.g. `Q2_K`, `Q3_K`, `BF16`, `MXFP4`).
   - If `topology_contract.checked == true` and `topology_contract.mismatches` is non-empty, treat the artifact as **suspect** (topology mismatch) until a human explains the discrepancy.
+
+Observed metadata-only inspections (2026-05-09):
+
+| Artifact URL | `tensor_key_namespace_guess` | `mtp_present` | `url_prefix_bytes` |
+| --- | --- | --- | --- |
+| `https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/main/DeepSeek-V4-Flash-Q4_K_M.gguf` | `llama.cpp` | `false` | `8388608` |
+| `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/main/DeepSeek-V4-Flash-FP4-FP8-native.gguf` | `llama.cpp` | `false` | `8388608` |
+| `https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` | `llama.cpp` | `false` | `8388608` |
 
 Acceptance checks before DS4 can trust MTP:
 

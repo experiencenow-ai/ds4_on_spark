@@ -486,6 +486,12 @@ To inspect a trunk+sidecar pair, pass both paths:
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json
 ```
 
+For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` can also do range-read inspection (header + tensor table only; no full download). Record the `url_prefix_bytes`:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
+```
+
 When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`.
 
 When multiple `--path` values are provided, the tool emits both:
@@ -506,7 +512,8 @@ Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antire
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
 - Also record and review:
-  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`)
+  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
+  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
   - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
 
 ## Next steps (oracle + remaining unknowns)
