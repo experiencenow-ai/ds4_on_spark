@@ -180,6 +180,9 @@ or remaining scheduler overhead.
 `scripts/benchmark_llamacpp_server_sweep.py` was added to make loaded-server
 measurements repeatable. It starts `llama-server`, waits for `/health`, runs
 deterministic `/completion` prompts, and writes JSONL plus a markdown summary.
+It also emits a bounded `fattn_reservation_probe.json` (parsed from the server
+log) so baseline runs can record whether Flash Attention was disabled during
+reservation.
 
 Command shape:
 
@@ -285,7 +288,7 @@ that implementation is currently Metal-first.
 
 1. Turn the Flash-Attention reservation fix into a narrow patch/probe artifact
    and add a regression check that `__fattn__` nodes stay on CUDA for DS4
-   reservation and long-prompt graphs.
+   reservation and long-prompt graphs (see `docs/baseline-fattn-reservation.md`).
 2. Profile the remaining DS4 CUDA graph bottlenecks now that Flash Attention
    schedules on GPU: expert routing/dispatch, quantized matmuls, compressed
    cache/indexer work, and scheduler overhead.

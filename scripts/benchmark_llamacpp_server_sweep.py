@@ -4,6 +4,7 @@
 import hashlib
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -133,6 +134,53 @@ def write_summary(path, rows, meta):
             )
 
 
+def scan_fattn_reservation(log_path):
+    out = {
+        "log_path": log_path,
+        "seen_fattn_disabled": False,
+        "seen_sched_reserve_cpu_fattn": False,
+        "fattn_line_count": 0,
+        "fattn_node_unique": 0,
+        "fattn_cpu_line_count": 0,
+        "fattn_cuda_line_count": 0,
+        "match_lines": [],
+        "fattn_nodes_sample": [],
+    }
+    if not log_path or not os.path.exists(log_path):
+        return out
+    nodes = set()
+    match_lines = []
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                ln = line.rstrip("\n")
+                is_match = False
+                if "Flash Attention was auto, set to disabled" in ln:
+                    out["seen_fattn_disabled"] = True
+                    is_match = True
+                if "Flash Attention tensor is assigned to device CPU" in ln:
+                    out["seen_sched_reserve_cpu_fattn"] = True
+                    is_match = True
+                if "__fattn__" in ln:
+                    out["fattn_line_count"] += 1
+                    for m in re.finditer(r"__fattn__-\\d+", ln):
+                        nodes.add(m.group(0))
+                    low = ln.lower()
+                    if "cpu" in low:
+                        out["fattn_cpu_line_count"] += 1
+                    if "cuda" in low:
+                        out["fattn_cuda_line_count"] += 1
+                    is_match = True
+                if is_match and len(match_lines) < 50:
+                    match_lines.append(ln[:4000])
+    except Exception:
+        pass
+    out["fattn_node_unique"] = len(nodes)
+    out["match_lines"] = match_lines
+    out["fattn_nodes_sample"] = sorted(nodes)[:50]
+    return out
+
+
 def main():
     out_dir = os.environ.get("OUT_DIR", "/tmp/llamacpp_server_sweep")
     llama_server = os.environ.get("LLAMA_SERVER", "")
@@ -156,6 +204,8 @@ def main():
     results_path = os.path.join(out_dir, "server_sweep.jsonl")
     summary_path = os.path.join(out_dir, "server_sweep.md")
     proc = None
+    log_fp = None
+    fattn_probe_path = os.path.join(out_dir, "fattn_reservation_probe.json")
     if start_server != 0:
         if not llama_server or not model:
             raise SystemExit("LLAMA_SERVER and MODEL_GGUF are required when START_SERVER=1")
@@ -233,16 +283,38 @@ def main():
                     rf.write(json.dumps(row, sort_keys=True) + "\n")
                     rf.flush()
                     print(json.dumps(row, sort_keys=True), flush=True)
+        if log_fp is not None:
+            try:
+                log_fp.flush()
+            except Exception:
+                pass
+        fattn = scan_fattn_reservation(server_log)
+        try:
+            with open(fattn_probe_path, "w", encoding="utf-8") as pf:
+                json.dump(fattn, pf, indent=2, sort_keys=True)
+        except Exception:
+            pass
+        meta["fattn_seen_disabled"] = str(bool(fattn.get("seen_fattn_disabled")))
+        meta["fattn_seen_sched_reserve_cpu"] = str(bool(fattn.get("seen_sched_reserve_cpu_fattn")))
+        meta["fattn_line_count"] = str(int(fattn.get("fattn_line_count") or 0))
+        meta["fattn_node_unique"] = str(int(fattn.get("fattn_node_unique") or 0))
+        meta["fattn_probe_json"] = fattn_probe_path
         write_summary(summary_path, rows, meta)
         print("summary=" + summary_path)
         print("results=" + results_path)
         print("server_log=" + server_log)
+        print("fattn_probe=" + fattn_probe_path)
         return 0
     finally:
         if proc is not None and keep_server == 0:
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
             except ProcessLookupError:
+                pass
+        if log_fp is not None:
+            try:
+                log_fp.close()
+            except Exception:
                 pass
 
 
