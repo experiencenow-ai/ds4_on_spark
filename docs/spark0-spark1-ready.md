@@ -55,6 +55,8 @@ Notes:
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe).
 - `nvcc` path and version (toolkit version).
+- `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
+- `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
 - Storage summary (`df -h` + `lsblk` disk model/size).
 - Wired link status + speed when available (`ip link` + optional `ethtool`).

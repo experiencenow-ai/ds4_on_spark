@@ -29,6 +29,7 @@ Notes:
   - `CUDA_RUNTIME_PROBE=0` skip the tiny `nvcc` compile+run probe
   - `PYTORCH_PROBE=1` attempt a `python3` torch probe (usually absent)
 - `scripts/spark_probe.sh` includes cuDNN hints (header macros when present + `ldconfig` library hits) to confirm whether cuDNN is installed.
+- `scripts/spark_probe.sh` also captures `nvidia-smi topo -m` (capped) plus kernel module/version hints (`lsmod`, `modinfo nvidia`) and CUDA header macros (`cuda.h`) to cross-check driver/toolkit facts.
 
 ### Mac-side Discovery (mDNS + reachability)
 
