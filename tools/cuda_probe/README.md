@@ -27,6 +27,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.
 - `tools/cuda_probe/bin/cuda_sm121_bf16_conv`: compile/run BF16 conversion plumbing via `cuda_bf16.h`.
+- `tools/cuda_probe/bin/cuda_sm121_fp4_conv`: compile/run FP4 (E2M1) conversion plumbing via `cuda_fp4.h`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`: compile/run a `__pipeline_memcpy_async` (cp.async-style) copy from global->shared.
 - `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async`: compile/run `cuda::memcpy_async(..., barrier)` using CCCL’s `<cuda/barrier>` API.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx`: compile/run an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
@@ -57,6 +58,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_devattrs
 ./tools/cuda_probe/bin/cuda_sm121_fp8_conv
 ./tools/cuda_probe/bin/cuda_sm121_bf16_conv
+./tools/cuda_probe/bin/cuda_sm121_fp4_conv
 ./tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx
@@ -96,6 +98,7 @@ Expected outputs:
   CUTLASS / custom GEMM kernel bring-up.
 - `cuda_sm121_fp8_conv` is a compile/run check for CUDA’s FP8 conversion helpers.
 - `cuda_sm121_bf16_conv` is a compile/run check for CUDA’s BF16 conversion helpers.
+- `cuda_sm121_fp4_conv` is a compile/run check for CUDA’s FP4 conversion helpers (`cuda_fp4.h`, E2M1).
 - `cuda_sm121_pipeline_memcpy_async` is a compile/run check for CUDA pipeline primitives (`cuda_pipeline_primitives.h`) used by cp.async-style kernels.
 - `cuda_sm121_barrier_memcpy_async` is a compile/run check for CCCL’s higher-level `cuda::barrier` + `cuda::memcpy_async` API (commonly used by templated kernels).
 - `cuda_sm121_cp_async_bulk_tx` is a compile/run check for CCCL’s internal `cuda::device::memcpy_async_tx` helper, which lowers to an explicit `cp.async.bulk` global->shared copy path on SM90+.

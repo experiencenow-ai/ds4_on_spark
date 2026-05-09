@@ -16,6 +16,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2).
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_bf16_conv` validates that CUDA BF16 helpers (`cuda_bf16.h`) compile and run for `sm_121` (BF16 data plumbing gate for many CUTLASS-style kernels).
+- `tools/cuda_probe/bin/cuda_sm121_fp4_conv` validates that CUDA 13 FP4 conversion helpers (`cuda_fp4.h`, E2M1) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` validates an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
@@ -88,6 +89,7 @@ Next probe step:
 - Run `tools/cuda_probe/bin/cuda_sm120_compat_probe` to determine whether `sm_120`-targeted build artifacts are likely to run on GB10 (useful when upstream build scripts have not added `sm_121` yet).
 - Confirm that `cuda_fp8.h` conversion helpers compile and run on GB10 (DeepGEMM uses FP8 paths); see `tools/cuda_probe/bin/cuda_sm121_fp8_conv`.
 - Confirm that `cuda_bf16.h` conversion/data helpers compile and run on GB10 (DeepGEMM-like kernels often use BF16 intermediates); see `tools/cuda_probe/bin/cuda_sm121_bf16_conv`.
+- Confirm that `cuda_fp4.h` conversion helpers compile and run on GB10 if FP4 paths are needed; see `tools/cuda_probe/bin/cuda_sm121_fp4_conv`.
 - Confirm that pipeline primitives (cp.async-style mainloop plumbing) compile and run on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
 - If DeepGEMM depends on large dynamic shared memory, use `cuda_sm121_smem_optin` output as the initial feasibility gate before deeper porting work.
 - If DeepGEMM is blocked on missing submodules, use `cuda_sm121_devattrs` to record the baseline device limits and features while deciding whether to pull CUTLASS into the tree.
