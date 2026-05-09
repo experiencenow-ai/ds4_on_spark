@@ -25,6 +25,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`: compile/run a `__pipeline_memcpy_async` (cp.async-style) copy from global->shared.
 - `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async`: compile/run `cuda::memcpy_async(..., barrier)` using CCCL’s `<cuda/barrier>` API.
 - `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`: compile/run a tiny WMMA (`mma.h`) matmul smoke test on `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_cluster_launch`: compile/run a thread-block cluster launch (`cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension`) and validate `cooperative_groups::this_cluster().block_rank()`.
 
 ## Run
 
@@ -42,6 +43,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_wmma_smoke
+./tools/cuda_probe/bin/cuda_sm121_cluster_launch
 ```
 
 ## Notes
@@ -62,5 +64,6 @@ Expected outputs:
 - `cuda_sm121_pipeline_memcpy_async` is a compile/run check for CUDA pipeline primitives (`cuda_pipeline_primitives.h`) used by cp.async-style kernels.
 - `cuda_sm121_barrier_memcpy_async` is a compile/run check for CCCL’s higher-level `cuda::barrier` + `cuda::memcpy_async` API (commonly used by templated kernels).
 - `cuda_sm121_wmma_smoke` is a compile/run check for WMMA (`mma.h`) tensor core matmul plumbing, as a tiny proxy for CUTLASS-style kernels.
+- `cuda_sm121_cluster_launch` is a compile/run check for thread-block cluster launches and cluster group intrinsics; cluster launches are used by newer CUTLASS kernels and other advanced scheduling patterns.
 - These probes intentionally keep dependencies tiny and print errors verbatim so
   failures can be pasted into an issue/PR.

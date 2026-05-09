@@ -100,6 +100,18 @@ The probe `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` is a tiny compile/run che
 
 Observed on Spark0 (2026-05-09): `wmma_smoke ... max_abs_err=0`.
 
+## Thread Block Clusters (CUTLASS-style scheduling)
+
+Some newer templated kernels (including modern CUTLASS codepaths) can use thread-block clusters for scheduling and data movement.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_cluster_launch` is a tiny compile/run check that:
+
+- queries `cudaDevAttrClusterLaunch` support
+- uses `cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension` to launch a 2-block cluster
+- validates `cooperative_groups::this_cluster().block_rank()` via a device writeback
+
+Observed on Spark0 (2026-05-09): `cluster_launch_supported=1`, `max_cluster_size_portable=8`, `max_active_clusters_for_2x1x1=48`.
+
 ## cuBLASLt FP8 Matmul Smoke
 
 DeepGEMM and many CUTLASS kernels use FP8 inputs; a quick “works-first” gate is whether cuBLASLt can execute an FP8 GEMM on GB10.
