@@ -40,6 +40,8 @@ Notes:
   an identity file and a dedicated known-hosts path (see the commented example in
   `deploy/config/ds4-spark*.env.example`). If `SSH_OPTS` is not set, `ops_tp2_readiness.sh`
   defaults to storing peer host keys under `/var/lib/ds4/ssh/known_hosts`.
+- When enabled, `ops_tp2_readiness.sh` uses that SSH hop to run a **peer → master**
+  reachability backcheck (ping/TCP and an optional metrics HTTP probe).
 - If you do not want SSH checks, leave `DS4_PEER_SSH` empty; the script will skip it.
 
 ## Wired Reachability

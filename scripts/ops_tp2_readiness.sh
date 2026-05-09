@@ -26,6 +26,8 @@ Notes:
   - It does not modify networking, systemd, or GPU settings.
   - `--strict` exits non-zero when required TP=2 inputs are missing/invalid.
   - `--env` parses env files as simple KEY=VALUE assignments (no shell execution).
+  - When `--peer-ssh` (or `DS4_PEER_SSH`) is set, the script also runs a peer→master
+    backcheck via SSH using `DS4_MASTER_ADDR`/`DS4_MASTER_PORT` (and optional metrics).
   - Prefix a path with '-' to make it optional (skipped when missing), e.g.:
       ops_tp2_readiness.sh --self spark0 --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
 EOF
@@ -407,6 +409,68 @@ check_peer_metrics_endpoint()
     return 0
 }
 
+peer_backcheck_via_ssh()
+{
+    target="$1"
+    master_addr="${2:-}"
+    master_port="${3:-}"
+    metrics_port="${4:-}"
+
+    if [ "$master_addr" = "" ]; then
+        echo "peer backcheck: skip (DS4_MASTER_ADDR unset)"
+        return 0
+    fi
+
+    if ssh $SSH_OPTS "$target" sh -c '
+set -eu
+master_addr="${1:-}"
+master_port="${2:-}"
+metrics_port="${3:-}"
+echo "peer host: $(hostname 2>/dev/null || true)"
+echo "peer -> master: $master_addr"
+if ping -c 2 "$master_addr" 2>/dev/null; then
+    echo "master ping: ok"
+else
+    echo "master ping: failed"
+fi
+if [ "$master_port" != "" ]; then
+    if command -v nc >/dev/null 2>&1; then
+        if nc -z -w 2 "$master_addr" "$master_port" 2>/dev/null; then
+            echo "master tcp ($master_port): ok"
+        else
+            echo "master tcp ($master_port): failed"
+        fi
+    else
+        echo "master tcp: nc missing; skip ($master_port)"
+    fi
+fi
+if [ "$metrics_port" != "" ]; then
+    if command -v curl >/dev/null 2>&1; then
+        host="$master_addr"
+        case "$host" in
+            \[*\])
+                ;;
+            *:*)
+                host="[$host]"
+                ;;
+        esac
+        if curl -fsS --max-time 2 "http://${host}:${metrics_port}/metrics" >/dev/null 2>&1; then
+            echo "master metrics: http ok (${host}:${metrics_port})"
+        else
+            echo "master metrics: http failed (${host}:${metrics_port})"
+        fi
+    else
+        echo "master metrics: curl missing; skip ($metrics_port)"
+    fi
+fi
+' sh "$master_addr" "$master_port" "$metrics_port" 2>/dev/null; then
+        echo "peer ssh: ok"
+    else
+        echo "peer ssh: failed (set SSH_OPTS for key/known_hosts if needed)"
+    fi
+    return 0
+}
+
 echo "== ds4 tp=2 preflight =="
 echo "self: $self"
 date -Is 2>/dev/null || date || true
@@ -512,11 +576,7 @@ fi
 
 if [ "$peer_ssh" != "" ]; then
     echo "== peer ssh ($peer_ssh) =="
-    if ssh $SSH_OPTS "$peer_ssh" hostname 2>/dev/null; then
-        echo "ssh ok"
-    else
-        echo "ssh failed (set SSH_OPTS for key/known_hosts if needed)"
-    fi
+    peer_backcheck_via_ssh "$peer_ssh" "${DS4_MASTER_ADDR:-}" "${DS4_MASTER_PORT:-}" "${DS4_METRICS_PORT:-}"
     echo
 fi
 
