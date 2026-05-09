@@ -198,16 +198,26 @@ else
 	echo "nvidia-smi not found"
 fi
 echo
-echo "== nvidia-smi pcie link (max/current) =="
-if command -v nvidia-smi >/dev/null 2>&1; then
+pcie_link_query()
+{
 	pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$pcie_q" = "" ]; then
 		pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.link.gen.max,pci.link.gen.current,pci.link.width.max,pci.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
 	fi
-	if [ "$pcie_q" != "" ]; then
-		if printf "%s" "$pcie_q" | grep -qi "not a valid field"; then
-			echo "pcie link query not supported"
-			printf "%s\n" "$pcie_q" | head -n 2
+	printf "%s" "$pcie_q"
+	return 0
+}
+
+emit_pcie_link()
+{
+	label="$1"
+	echo "== nvidia-smi pcie link (max/current${label}) =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		pcie_q="$(pcie_link_query)"
+		if [ "$pcie_q" != "" ]; then
+			if printf "%s" "$pcie_q" | grep -qi "not a valid field"; then
+				echo "pcie link query not supported"
+				printf "%s\n" "$pcie_q" | head -n 2
 			else
 				echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
 				echo "$pcie_q"
@@ -215,38 +225,49 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 		else
 			echo "pcie link query not supported"
 		fi
-else
-	echo "nvidia-smi not found"
-fi
-echo
-echo "== pci link (sysfs, current/max) =="
-if [ -d /sys/bus/pci/devices ]; then
-	bus_ids=""
-	if [ "$q" != "" ]; then
-		bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
-	fi
-	if [ "$bus_ids" != "" ]; then
-		for bus in $bus_ids; do
-			dom="$(printf "%s" "$bus" | cut -d: -f1 | sed -E "s/.*([0-9A-Fa-f]{4})$/\\1/" | tr ABCDEF abcdef)"
-			rest="$(printf "%s" "$bus" | cut -d: -f2-)"
-			short_bus="${dom}:${rest}"
-			sys="/sys/bus/pci/devices/$short_bus"
-			echo "-- $bus -> $short_bus --"
-			if [ -d "$sys" ]; then
-				[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
-				[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
-				[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
-				[ -r "$sys/max_link_width" ] && echo "max_link_width: $(cat "$sys/max_link_width" 2>/dev/null || true)"
-			else
-				echo "sysfs device not found: $sys"
-			fi
-		done
 	else
-		echo "no pci.bus_id inventory"
+		echo "nvidia-smi not found"
 	fi
-else
-	echo "/sys/bus/pci/devices not found"
-fi
+	return 0
+}
+
+emit_sysfs_pcie_link()
+{
+	label="$1"
+	echo "== pci link (sysfs, current/max${label}) =="
+	if [ -d /sys/bus/pci/devices ]; then
+		bus_ids=""
+		if [ "$q" != "" ]; then
+			bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
+		fi
+		if [ "$bus_ids" != "" ]; then
+			for bus in $bus_ids; do
+				dom="$(printf "%s" "$bus" | cut -d: -f1 | sed -E "s/.*([0-9A-Fa-f]{4})$/\\1/" | tr ABCDEF abcdef)"
+				rest="$(printf "%s" "$bus" | cut -d: -f2-)"
+				short_bus="${dom}:${rest}"
+				sys="/sys/bus/pci/devices/$short_bus"
+				echo "-- $bus -> $short_bus --"
+				if [ -d "$sys" ]; then
+					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
+					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
+					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
+					[ -r "$sys/max_link_width" ] && echo "max_link_width: $(cat "$sys/max_link_width" 2>/dev/null || true)"
+				else
+					echo "sysfs device not found: $sys"
+				fi
+			done
+		else
+			echo "no pci.bus_id inventory"
+		fi
+	else
+		echo "/sys/bus/pci/devices not found"
+	fi
+	return 0
+}
+
+emit_pcie_link ""
+echo
+emit_sysfs_pcie_link ""
 echo
 echo "== nvidia-smi power/clocks (summary) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -436,6 +457,10 @@ CU
 				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
 			fi
 		fi
+		echo
+		emit_pcie_link ", post-load"
+		echo
+		emit_sysfs_pcie_link ", post-load"
 	else
 		echo "nvcc compile failed:"
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true

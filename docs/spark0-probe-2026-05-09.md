@@ -9,13 +9,14 @@ Host:
 Commands run from the Mac:
 
 ```bash
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09_14z.txt
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T144215Z_probe11.txt
 ```
 
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
 - PCIe link state is captured from both `nvidia-smi` and sysfs (`/sys/bus/pci/devices/*/current_link_*`) because `lspci -vv` capability fields can be restricted without root on this host.
+- The probe prints a second `post-load` PCIe link snapshot after the CUDA runtime probe, to check whether link speed/width changes under GPU activity.
 
 ## Probe Excerpts (Redacted)
 
@@ -56,6 +57,17 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== pci link (sysfs, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
 ```
 
 ```text
