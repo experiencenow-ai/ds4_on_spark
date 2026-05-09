@@ -27,6 +27,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async`: compile/run `cuda::memcpy_async(..., barrier)` using CCCL’s `<cuda/barrier>` API.
 - `tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref`: compile/run CCCL `cuda::atomic_ref` (device-scope + block-scope) atomics on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit`: compile PTX via NVRTC (`--gpu-architecture=compute_121`), load via CUDA Driver API, and launch a tiny kernel.
+- `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit`: compile PTX via NVRTC, link to CUBIN via nvJitLink (`-arch=sm_121`), then load via CUDA Driver API and launch a tiny kernel.
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe`: compile/run `-std=c++20` toolchain smoke test for `sm_121` (DeepGEMM-style build gate).
 - `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`: compile/run a tiny WMMA (`mma.h`) matmul smoke test on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cluster_launch`: compile/run a thread-block cluster launch (`cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension`) and validate `cooperative_groups::this_cluster().block_rank()`.
@@ -49,6 +50,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref
 ./tools/cuda_probe/bin/cuda_sm121_nvrtc_jit
+./tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit
 ./tools/cuda_probe/bin/cuda_sm121_cxx20_probe
 ./tools/cuda_probe/bin/cuda_sm121_wmma_smoke
 ./tools/cuda_probe/bin/cuda_sm121_cluster_launch
@@ -77,6 +79,7 @@ Expected outputs:
 - `cuda_sm121_barrier_memcpy_async` is a compile/run check for CCCL’s higher-level `cuda::barrier` + `cuda::memcpy_async` API (commonly used by templated kernels).
 - `cuda_sm121_cccl_atomic_ref` is a compile/run check for CCCL atomics (`cuda::atomic_ref`), which many template kernels use for counters, epilogues, and synchronization-side channels.
 - `cuda_sm121_nvrtc_jit` is a compile/run check for NVRTC + the driver PTX loader; it validates `--gpu-architecture=compute_121` and a minimal “compile PTX → load module → launch kernel” path used by JIT compilation flows.
+- `cuda_sm121_nvjitlink_jit` extends the NVRTC JIT probe by linking PTX to a device CUBIN via nvJitLink (`-arch=sm_121`) before loading via the Driver API; this is a useful gate for toolchains that rely on nvJitLink in their JIT flow.
 - `cuda_sm121_cxx20_probe` is a compile/run check that CUDA `nvcc` + the host toolchain can build C++20 code for `sm_121`.
 - `cuda_sm121_wmma_smoke` is a compile/run check for WMMA (`mma.h`) tensor core matmul plumbing, as a tiny proxy for CUTLASS-style kernels.
 - `cuda_sm121_cluster_launch` is a compile/run check for thread-block cluster launches and cluster group intrinsics; cluster launches are used by newer CUTLASS kernels and other advanced scheduling patterns.

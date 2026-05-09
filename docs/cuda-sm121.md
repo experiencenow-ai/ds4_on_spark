@@ -47,6 +47,20 @@ If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATIO
 
 Observed on Spark0 (2026-05-09): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
 
+## nvJitLink JIT Link For `sm_121` (PTX → CUBIN)
+
+Some JIT pipelines compile CUDA source to PTX and then use nvJitLink to link PTX into an `sm_121` CUBIN before loading via the CUDA Driver API.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit`:
+
+- Compiles a tiny kernel to PTX via NVRTC (`--gpu-architecture=compute_121`)
+- Uses nvJitLink (`-arch=sm_121`) to link PTX into a device CUBIN
+- Loads the CUBIN with `cuModuleLoadDataEx` and launches the kernel, validating a minimal “NVRTC → PTX → nvJitLink → CUBIN → Driver load → launch” path
+
+If this probe fails with `NVJITLINK_ERROR_MISSING_ARCH` or linker errors, treat it as “nvJitLink cannot target `sm_121` on this host/toolkit” even if `nvcc -arch=sm_121` works.
+
+Observed on Spark0 (2026-05-09): probe prints `nvJitLinkVersion=13.0` and `nvjitlink_jit ok`.
+
 ## `sm_120` → `sm_121` Binary Compatibility Probe
 
 Some upstream projects gate on `sm_120` (or have not yet added `sm_121`), so it is useful to know whether a binary compiled for `sm_120` runs correctly on GB10 (`sm_121`).
