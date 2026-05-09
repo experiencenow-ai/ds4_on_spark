@@ -219,7 +219,7 @@ DS4 must match the de-rotation step, or logits will diverge even if attention in
 
 These constants are **source-derived** from `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.inference_model_constants` to avoid accidental drift:
 
-- KV activation QAT group size(s): `kv_act_quant_group_sizes` (expected: `[64]`)
+- KV activation QAT group size(s): `kv_act_quant_group_sizes` (expected: `[64]`; enforced by `scripts/model_contract_verify_deepseek_v4_flash.py`)
 - Attention softmax scaling expression: `attn_softmax_scale_expr` (expected: `self.head_dim ** -0.5`)
 - CSA Indexer per-token weights scaling expression: `indexer_weights_expr` (expected: `self.weights_proj(x) * (self.softmax_scale * self.n_heads ** -0.5)`)
 

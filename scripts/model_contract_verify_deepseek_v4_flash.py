@@ -60,6 +60,14 @@ def main() -> int:
 		r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_contract_build_deepseek_v4_flash_contract.py"), "--check"], cwd=str(ROOT))
 		if r.returncode != 0:
 			failures.append(Failure(12, f"contract summary fixture is stale: {contract_summary} (re-run scripts/model_contract_build_deepseek_v4_flash_contract.py)"))
+		else:
+			try:
+				summary = load_json(contract_summary)
+				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
+				if 64 not in list(group_sizes):
+					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
+			except Exception as e:
+				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 
 	# Cross-check the two config sources for the fields they share.
 	for k in ("vocab_size", "hidden_size", "num_hidden_layers", "num_attention_heads", "head_dim", "q_lora_rank", "o_groups", "o_lora_rank", "compress_ratios"):

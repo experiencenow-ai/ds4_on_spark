@@ -161,19 +161,109 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 				return None
 		return None
 
+	def split_top_level_args(call_args: str) -> list[str]:
+		args: list[str] = []
+		buf: list[str] = []
+		paren = 0
+		brack = 0
+		brace = 0
+		in_quote: Optional[str] = None
+		escaped = False
+		for ch in call_args:
+			if in_quote is not None:
+				buf.append(ch)
+				if escaped:
+					escaped = False
+					continue
+				if ch == "\\":
+					escaped = True
+					continue
+				if ch == in_quote:
+					in_quote = None
+				continue
+
+			if ch in ("'", '"'):
+				in_quote = ch
+				buf.append(ch)
+				continue
+
+			if ch == "(":
+				paren += 1
+			elif ch == ")":
+				paren = max(0, paren - 1)
+			elif ch == "[":
+				brack += 1
+			elif ch == "]":
+				brack = max(0, brack - 1)
+			elif ch == "{":
+				brace += 1
+			elif ch == "}":
+				brace = max(0, brace - 1)
+
+			if ch == "," and paren == 0 and brack == 0 and brace == 0:
+				args.append("".join(buf).strip())
+				buf = []
+				continue
+			buf.append(ch)
+		if buf:
+			args.append("".join(buf).strip())
+		return args
+
+	def iter_call_args(src: str, func: str) -> list[list[str]]:
+		out: list[list[str]] = []
+		needle = func + "("
+		i = 0
+		while True:
+			start = src.find(needle, i)
+			if start < 0:
+				break
+			j = start + len(needle)
+			depth = 1
+			in_quote: Optional[str] = None
+			escaped = False
+			buf: list[str] = []
+			while j < len(src):
+				ch = src[j]
+				if in_quote is not None:
+					buf.append(ch)
+					if escaped:
+						escaped = False
+					elif ch == "\\":
+						escaped = True
+					elif ch == in_quote:
+						in_quote = None
+					j += 1
+					continue
+				if ch in ("'", '"'):
+					in_quote = ch
+					buf.append(ch)
+					j += 1
+					continue
+				if ch == "(":
+					depth += 1
+				elif ch == ")":
+					depth -= 1
+					if depth == 0:
+						break
+				buf.append(ch)
+				j += 1
+			if depth == 0:
+				out.append(split_top_level_args("".join(buf)))
+				i = j + 1
+			else:
+				i = start + len(needle)
+		return out
+
 	def find_unique_act_quant_group_sizes() -> list[int]:
 		sizes: set[int] = set()
-		for raw in text.splitlines():
-			line = raw.strip()
-			if not line.startswith("act_quant("):
+		for args in iter_call_args(text, "act_quant"):
+			if len(args) < 2:
 				continue
-			parts = [p.strip() for p in line.split(",")]
-			if len(parts) < 3:
-				continue
-			if "[...:-rd]" not in parts[0].replace(" ", "") and ":-rd" not in parts[0]:
+			arg0 = args[0].replace(" ", "")
+			if ":-rd" not in arg0:
 				continue
 			try:
-				sizes.add(int(parts[1]))
+				sizes.add(int(args[1]))
 			except ValueError:
 				continue
 		return sorted(sizes)
