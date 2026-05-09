@@ -222,6 +222,7 @@ Replay mode reads one JSON object per line with required fields:
   - `(mtp_draft_len - rejected_mtp) + 1` when only `rejected_mtp` is provided
   - if both are provided, `accepted_mtp + rejected_mtp` must equal `mtp_draft_len`
 - `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (useful for shape-dependent service modeling in replay traces)
+- `decode_ms` (optional number): observed per-token decode latency from a runtime trace; the simulator records `trace.decode_ms` and `trace.decode_error_ms` to compare the model to the trace
 
 Example:
 
@@ -261,6 +262,7 @@ The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
 - `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
+- `trace.decode_ms.{interactive,batch}` and `trace.decode_error_ms.{interactive,batch}`: when trace replay includes `decode_ms`, summarize observed decode latency and error vs simulated token latency (admitted tokens only)
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max (admitted tokens only)
 - `output_token_latency_ms.{interactive,batch}`: token latency distribution weighted by realized output tokens (MTP-aware; equals `token_latency_ms` when MTP is disabled)
 - `sla`: per-class token-SLA violation counts/fractions (when `--sla-*-ms` is set)

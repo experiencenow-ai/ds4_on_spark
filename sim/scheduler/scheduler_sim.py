@@ -30,6 +30,7 @@ class TokenRoute:
     accepted_mtp: Optional[int] = None
     rejected_mtp: Optional[int] = None
     cost_scale: Optional[float] = None
+    decode_ms: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,7 @@ class TokenState:
     remaining: int
     done_ms: Optional[float] = None
     output_len: int = 1
+    trace_decode_ms: Optional[float] = None
 
 
 @dataclass
@@ -170,6 +172,10 @@ class SimMetrics:
     num_tokens: int = 0
     makespan_ms: float = 0.0
     k_mode: str = "controller"
+    trace_decode_ms_interactive: List[float] = dataclasses.field(default_factory=list)
+    trace_decode_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    trace_decode_error_ms_interactive: List[float] = dataclasses.field(default_factory=list)
+    trace_decode_error_ms_batch: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
     output_token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
@@ -314,7 +320,17 @@ class SimMetrics:
                     "token_throughput_tps": (float(self.num_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                     "task_throughput_tps": (float(self.admitted_tasks) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                 },
-                "trace": {"k_mode": self.k_mode},
+                "trace": {
+                    "k_mode": self.k_mode,
+                    "decode_ms": {
+                        "interactive": summarize(self.trace_decode_ms_interactive),
+                        "batch": summarize(self.trace_decode_ms_batch),
+                    },
+                    "decode_error_ms": {
+                        "interactive": summarize(self.trace_decode_error_ms_interactive),
+                        "batch": summarize(self.trace_decode_error_ms_batch),
+                    },
+                },
                 "mtp": {
                     "enabled": self.mtp_draft_len > 0,
                     "output_tokens": self.mtp_output_tokens,
@@ -771,6 +787,15 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     raise ValueError(f"{path}:{lineno}: cost_scale must be > 0")
                 cost_scale = float(cs_raw)
 
+            decode_ms: Optional[float] = None
+            if "decode_ms" in obj and obj["decode_ms"] is not None:
+                dm_raw = obj["decode_ms"]
+                if not isinstance(dm_raw, (int, float)):
+                    raise ValueError(f"{path}:{lineno}: decode_ms must be a number")
+                if float(dm_raw) < 0.0:
+                    raise ValueError(f"{path}:{lineno}: decode_ms must be >= 0")
+                decode_ms = float(dm_raw)
+
             routes.append(
                 TokenRoute(
                     t_ms=t_ms,
@@ -782,6 +807,7 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     accepted_mtp=accepted_mtp,
                     rejected_mtp=rejected_mtp,
                     cost_scale=cost_scale,
+                    decode_ms=decode_ms,
                 )
             )
 
@@ -811,6 +837,8 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
                 obj["rejected_mtp"] = int(r.rejected_mtp)
             if r.cost_scale is not None:
                 obj["cost_scale"] = float(r.cost_scale)
+            if r.decode_ms is not None:
+                obj["decode_ms"] = float(r.decode_ms)
             f.write(json.dumps(obj, sort_keys=True))
             f.write("\n")
 
@@ -841,6 +869,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
     cand_lens: List[float] = []
     k_vals: List[float] = []
     accept_lens: List[float] = []
+    decode_ms: List[float] = []
     min_expert: Optional[int] = None
     max_expert: Optional[int] = None
 
@@ -850,6 +879,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
     present_accepted_mtp = 0
     present_rejected_mtp = 0
     present_cost_scale = 0
+    present_decode_ms = 0
 
     for r in trace:
         if r.cls == LatencyClass.INTERACTIVE:
@@ -881,6 +911,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
                 accept_lens.append(float((mtp_draft_len - int(r.rejected_mtp)) + 1))
         if r.cost_scale is not None:
             present_cost_scale += 1
+        if r.decode_ms is not None:
+            present_decode_ms += 1
+            decode_ms.append(float(r.decode_ms))
 
     out: Dict[str, object] = {
         "tokens": {"count": len(trace), "interactive": num_i, "batch": num_b},
@@ -893,6 +926,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
             "accepted_mtp": present_accepted_mtp,
             "rejected_mtp": present_rejected_mtp,
             "cost_scale": present_cost_scale,
+            "decode_ms": present_decode_ms,
         },
     }
     if min_expert is not None and max_expert is not None:
@@ -901,6 +935,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
         out["k"] = summarize(k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
+    if len(decode_ms) != 0:
+        out["decode_ms"] = summarize(decode_ms)
     return(out)
 
 
@@ -1340,7 +1376,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 tasks=(Task(token_id=tid, cls=route.cls, enqueue_ms=route.t_ms),),
             ),
         )
-        tokens[tid] = TokenState(cls=route.cls, submit_ms=route.t_ms, chosen_k=0, remaining=0)
+        tokens[tid] = TokenState(cls=route.cls, submit_ms=route.t_ms, chosen_k=0, remaining=0, trace_decode_ms=route.decode_ms)
 
     now_ms = 0.0
     snapshot_state()
@@ -1525,10 +1561,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     lat_ms = (now_ms - ts.submit_ms)
                     if ts.cls == LatencyClass.INTERACTIVE:
                         metrics.token_lat_ms_interactive.append(lat_ms)
+                        if ts.trace_decode_ms is not None:
+                            metrics.trace_decode_ms_interactive.append(float(ts.trace_decode_ms))
+                            metrics.trace_decode_error_ms_interactive.append(float(lat_ms - float(ts.trace_decode_ms)))
                         if cfg.sla_interactive_ms > 0.0 and lat_ms > cfg.sla_interactive_ms:
                             metrics.token_sla_violations_interactive += 1
                     else:
                         metrics.token_lat_ms_batch.append(lat_ms)
+                        if ts.trace_decode_ms is not None:
+                            metrics.trace_decode_ms_batch.append(float(ts.trace_decode_ms))
+                            metrics.trace_decode_error_ms_batch.append(float(lat_ms - float(ts.trace_decode_ms)))
                         if cfg.sla_batch_ms > 0.0 and lat_ms > cfg.sla_batch_ms:
                             metrics.token_sla_violations_batch += 1
                     if ts.output_len > 0:
