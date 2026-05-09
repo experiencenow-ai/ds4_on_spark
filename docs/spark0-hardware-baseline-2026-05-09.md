@@ -611,3 +611,48 @@ filename:       /lib/modules/6.17.0-1014-nvidia/kernel/nvidia-580-open/nvidia.ko
 version:        580.142
 vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
 ```
+
+## Update: Probe Refresh (2026-05-09 05:58Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_probe7_2.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The `nvcc` runtime probe now prints the compile arch used (`nvcc arch:`), defaulting to the driver-reported compute capability when available.
+
+```text
+== local meta ==
+Sat May  9 05:58:03 UTC 2026
+git: 5f2798c
+probe target: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 51, P0, [N/A]
+
+== nvidia-smi topo (capped) ==
+	GPU0	NIC0	NIC1	NIC2	NIC3	CPU Affinity	NUMA Affinity	GPU NUMA ID
+GPU0	 X 	NODE	NODE	NODE	NODE	0-19	0		N/A
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+
+== modinfo nvidia (summary) ==
+filename:       /lib/modules/6.17.0-1014-nvidia/kernel/nvidia-580-open/nvidia.ko
+version:        580.142
+srcversion:     C4BC8E95CA62E8363647ABA
+vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
+```
