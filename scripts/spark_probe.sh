@@ -108,6 +108,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
 			git_dir="$git_worktree/.git-codex"
 		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
+			git_dir="$git_worktree/.gitshim/repo/.git"
+		fi
 		if [ "$git_dir" != "" ]; then
 			echo "git: $(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
 		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -572,6 +575,7 @@ int main()
 	int device_count = 0,dev = 0;
 	cudaDeviceProp prop;
 	int runtime_v = 0,driver_v = 0;
+	int drv_major = 0,drv_minor = 0,rt_major = 0,rt_minor = 0;
 	if ( cudaGetDeviceCount(&device_count) != cudaSuccess )
 	{
 		std::printf("cudaGetDeviceCount failed\n");
@@ -582,8 +586,12 @@ int main()
 		return(0);
 	cudaRuntimeGetVersion(&runtime_v);
 	cudaDriverGetVersion(&driver_v);
-	std::printf("cuda driver api version: %d\n",driver_v);
-	std::printf("cuda runtime api version: %d\n",runtime_v);
+	drv_major = (driver_v / 1000);
+	drv_minor = ((driver_v % 1000) / 10);
+	rt_major = (runtime_v / 1000);
+	rt_minor = ((runtime_v % 1000) / 10);
+	std::printf("cuda driver api version: %d (%d.%d)\n",driver_v,drv_major,drv_minor);
+	std::printf("cuda runtime api version: %d (%d.%d)\n",runtime_v,rt_major,rt_minor);
 	for (dev=0; dev<device_count; dev++)
 	{
 		if ( cudaGetDeviceProperties(&prop,dev) != cudaSuccess )
