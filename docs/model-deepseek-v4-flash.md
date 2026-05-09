@@ -22,6 +22,22 @@ Notes on config sources:
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
 
+### Field-name mapping (Transformers / external runtimes)
+
+Some upstream integrations and third-party runtimes refer to these field names:
+
+- `layer_types[i] ∈ {"sliding_attention","compressed_sparse_attention","heavily_compressed_attention"}`
+- `compress_rates.{csa,hca}` (defaults `4` and `128`)
+- `mlp_layer_types[i] ∈ {"hash_moe","moe"}`
+- `partial_rotary_factor = qk_rope_head_dim / head_dim`
+
+The pinned upstream `config.json` used by this repo does **not** include those arrays. Instead it ships a single `compress_ratios[]` list and a scalar `num_hash_layers`.
+
+For DS4 consumption, `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records a derived `compat.transformers` view:
+
+- `layer_types[]` derived from `compress_ratios[]` (`0→sliding_attention`, `4→compressed_sparse_attention`, `128→heavily_compressed_attention`)
+- `mlp_layer_types[]` derived from `num_hash_layers` (`i<num_hash_layers→hash_moe`, else `moe`)
+
 ## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280

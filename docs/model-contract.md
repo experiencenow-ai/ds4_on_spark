@@ -16,7 +16,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 
 - Contract doc: `docs/model-deepseek-v4-flash.md`
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
-- Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets, tokenizer constants, quantization metadata, runtime indexer/HC params, and tensor-key invariants)
+- Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets, tokenizer constants, quantization metadata, runtime indexer/HC params, tensor-key invariants, and a derived `compat.transformers` field-name mapping for external runtimes)
 - Fetch/refresh script: `scripts/model_contract_fetch_deepseek_v4_flash.sh`
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`
 - Contract verifier: `scripts/model_contract_verify_deepseek_v4_flash.py`
