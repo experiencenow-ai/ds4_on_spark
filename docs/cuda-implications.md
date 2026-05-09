@@ -15,6 +15,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2).
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` validates that WMMA (`mma.h`) tensor core matmul plumbing compiles and runs for `sm_121`.
 
 ## cuBLASLt
 
@@ -41,6 +42,7 @@ Next probe step:
 - Run `tools/cuda_probe/bin/cuda_sm120_compat_probe` on Spark0 to establish whether `sm_120` SASS is a viable short-term compatibility target for GB10.
 - Confirm the required shared-memory footprint fits within `cudaDevAttrMaxSharedMemoryPerBlockOptin` for any CUTLASS kernels we plan to bring up.
 - Confirm that pipeline primitives (cp.async-style global->shared copies) work on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
+- Confirm that tensor core matmul plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`.
 - Note: this repo’s pinned DeepGEMM upstream uses a CUTLASS submodule; we intentionally do not auto-init submodules in the probe loop (see `docs/upstream-deepgemm.md`), so a CUTLASS compile/run probe requires an explicit submodule init (extra downloads).
 
 ## DeepGEMM

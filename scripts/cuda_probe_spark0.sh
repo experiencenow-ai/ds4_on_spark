@@ -67,4 +67,6 @@ echo \"== run: cuda_sm121_pipeline_memcpy_async ==\"
 echo
 echo \"== run: cuda_sm121_barrier_memcpy_async ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_barrier_memcpy_async
+echo \"== run: cuda_sm121_wmma_smoke ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_wmma_smoke
 "
