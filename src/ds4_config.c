@@ -144,9 +144,9 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 			return(-2);
 		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
 			return(-3);
-		if ( iv < 0 )
+		if ( iv < DS4_LOG_LEVEL_MIN )
 			return(-4);
-		if ( iv > 3 )
+		if ( iv > DS4_LOG_LEVEL_MAX )
 			return(-5);
 		cfg->log_level = iv;
 	}
@@ -180,9 +180,9 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 	{
 		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
 			return(-6);
-		if ( iv < 0 )
+		if ( iv < DS4_LOG_LEVEL_MIN )
 			return(-7);
-		if ( iv > 3 )
+		if ( iv > DS4_LOG_LEVEL_MAX )
 			return(-8);
 		cfg->log_level = iv;
 		return(0);
@@ -319,5 +319,24 @@ int32_t ds4_config_parse_file(ds4_config_t *cfg,const char *path,uint8_t *buf,in
 	err = ds4_config_parse_mem(cfg,buf,n);
 	if ( err < 0 )
 		return(-9);
+	return(0);
+}
+
+int32_t ds4_config_load(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len)
+{
+	if ( cfg == 0 )
+		return(-1);
+	if ( ds4_config_defaults(cfg) < 0 )
+		return(-2);
+	if ( path != 0 )
+	{
+		if ( path[0] != 0 )
+		{
+			if ( ds4_config_parse_file(cfg,path,buf,cap,out_len) < 0 )
+				return(-3);
+		}
+	}
+	if ( ds4_config_parse_env(cfg) < 0 )
+		return(-4);
 	return(0);
 }

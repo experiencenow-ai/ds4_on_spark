@@ -30,6 +30,14 @@ You can also override config fields from the environment with `ds4_config_parse_
 - `DS4_LOG_LEVEL`
 - `DS4_ENABLE_CUDA`
 
+## Load order helper
+
+For callers that want a single entrypoint, `ds4_config_load` applies configuration in this order:
+
+1. Defaults (`ds4_config_defaults`)
+2. Optional file (`ds4_config_parse_file`) when `path` is non-empty
+3. Environment overrides (`ds4_config_parse_env`)
+
 ## Static buffers
 
 `ds4_config_parse_file` reads the config file into a caller-provided buffer:

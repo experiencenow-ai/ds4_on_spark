@@ -8,6 +8,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 option(DS4_ENABLE_TESTS "Build unit tests" ON)
 option(DS4_WERROR "Treat warnings as errors" OFF)
+option(DS4_ENABLE_ASAN "Enable AddressSanitizer (CPU builds only)" OFF)
+option(DS4_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer (CPU builds only)" OFF)
 
 if(APPLE)
 	set(_DS4_CUDA_DEFAULT OFF)
@@ -19,6 +21,7 @@ option(DS4_ENABLE_CUDA "Enable CUDA build (requires CUDA toolkit)" ${_DS4_CUDA_D
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(ds4_warnings)
+include(ds4_sanitizers)
 include(CheckLanguage)
 
 add_library(ds4
@@ -34,6 +37,7 @@ target_include_directories(ds4
 )
 
 ds4_target_warnings(ds4 ${DS4_WERROR})
+ds4_target_sanitizers(ds4 ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 
 if(DS4_ENABLE_CUDA)
 	check_language(CUDA)
@@ -59,5 +63,6 @@ if(DS4_ENABLE_TESTS)
 	)
 	target_link_libraries(ds4_tests PRIVATE ds4)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})
+	ds4_target_sanitizers(ds4_tests ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 	add_test(NAME ds4_tests COMMAND ds4_tests)
 endif()
