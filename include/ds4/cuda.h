@@ -4,6 +4,8 @@
 
 #define DS4_CUDA_ERR_DISABLED (-1)
 #define DS4_CUDA_ERR_NO_DEVICE (-2)
+#define DS4_CUDA_ERR_INVALID_ARG (-3)
+#define DS4_CUDA_ERR_SIZE_OVERFLOW (-4)
 
 typedef struct
 {
@@ -21,6 +23,11 @@ ds4_cuda_status_t ds4_cuda_last_error(void);
 ds4_cuda_status_t ds4_cuda_peek_last_error(void);
 ds4_cuda_status_t ds4_cuda_device_synchronize(void);
 ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const char *file,int32_t line);
+ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes);
+ds4_cuda_status_t ds4_cuda_free(void *ptr);
+ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes);
+ds4_cuda_status_t ds4_cuda_memcpy_h2d(void *dst,const void *src,int64_t bytes);
+ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes);
 DS4_EXTERN_C_END
 
 #define DS4_CUDA_CALL(expr) ds4_cuda_check_i32((int32_t)(expr),#expr,__FILE__,(int32_t)__LINE__)
