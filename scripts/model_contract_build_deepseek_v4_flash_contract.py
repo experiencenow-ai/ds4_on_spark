@@ -107,6 +107,11 @@ def layer_type_from_ratio(ratio: int) -> str:
 		return "csa"
 	return "hca"
 
+def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> int:
+	if compress_ratio == 0:
+		return int(window_size)
+	return int(window_size + (int(max_seq_len) // int(compress_ratio)))
+
 
 def parse_inference_quant_constants(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
@@ -471,6 +476,7 @@ def build_contract() -> dict:
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
 	compress_ratios = list(cfg["compress_ratios"])
 	n_layers = int(cfg["num_hidden_layers"])
+	n_mtp_layers = int(cfg.get("num_nextn_predict_layers", 0))
 	mtp_ratios = compress_ratios[n_layers:]
 	layer_types = [layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
 	type_counts = {t: layer_types.count(t) for t in ("sliding", "csa", "hca")}
@@ -478,6 +484,26 @@ def build_contract() -> dict:
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
 	tensor_keys = build_tensor_key_summary(weight_keys, n_layers, int(cfg["n_routed_experts"]))
+
+	window_size = int(cfg["sliding_window"])
+	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
+	ref_max_seq_len = ref_defaults.get("max_seq_len", None)
+	ref_max_batch_size = ref_defaults.get("max_batch_size", None)
+	if not isinstance(ref_max_seq_len, int):
+		ref_max_seq_len = None
+	if not isinstance(ref_max_batch_size, int):
+		ref_max_batch_size = None
+
+	kv_cache_sizes_by_layer: Optional[list[int]] = None
+	kv_cache_sizes_by_ratio: Optional[dict[str, int]] = None
+	kv_cache_slots_total: Optional[int] = None
+	kv_cache_slots_mtp_total: Optional[int] = None
+	if ref_max_seq_len is not None:
+		kv_cache_sizes_by_layer = [kv_cache_size(window_size, ref_max_seq_len, int(r)) for r in compress_ratios[:n_layers]]
+		kv_cache_sizes_by_ratio = {str(r): kv_cache_size(window_size, ref_max_seq_len, int(r)) for r in sorted(set(int(x) for x in compress_ratios))}
+		kv_cache_slots_total = int(sum(kv_cache_sizes_by_layer))
+		if n_mtp_layers > 0:
+			kv_cache_slots_mtp_total = int(sum(kv_cache_size(window_size, ref_max_seq_len, int(r)) for r in mtp_ratios))
 
 	block_size = inf_model.get("inference_model_constants", {}).get("block_size", None)
 	fp4_block_size = inf_model.get("inference_model_constants", {}).get("fp4_block_size", None)
@@ -557,9 +583,17 @@ def build_contract() -> dict:
 			"mtp_compress_ratios": [int(r) for r in mtp_ratios],
 		},
 		"cache": {
-			"window_size": int(cfg["sliding_window"]),
+			"window_size": window_size,
 			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
 			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+			"kv_cache_sizes_at_reference_defaults": {
+				"max_seq_len": ref_max_seq_len,
+				"max_batch_size": ref_max_batch_size,
+				"kv_cache_size_by_compress_ratio": kv_cache_sizes_by_ratio,
+				"kv_cache_size_by_layer": kv_cache_sizes_by_layer,
+				"kv_cache_slots_total_main": kv_cache_slots_total,
+				"kv_cache_slots_total_mtp": kv_cache_slots_mtp_total,
+			},
 			"topk_mask_value": -1,
 			"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
 			"prefill": {

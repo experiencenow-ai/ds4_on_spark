@@ -175,6 +175,14 @@ Per-layer KV cache allocation:
   - `kv_cache[:,:window_size]` is a **ring buffer** for the sliding window (index `t % window_size` in decode).
   - `kv_cache[:,window_size:]` is a **linear** compressed segment (index `t // compress_ratio` in decode for `compress_ratio != 0`).
 
+For the upstream reference defaults (`max_seq_len=4096`, `window_size=128`), the resulting per-layer `kv_cache_size` values are:
+
+- sliding (`compress_ratio==0`): `128`
+- CSA (`compress_ratio==4`): `128 + 4096//4 = 1152`
+- HCA (`compress_ratio==128`): `128 + 4096//128 = 160`
+
+These values (plus the full `kv_cache_size_by_layer[]` schedule) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.kv_cache_sizes_at_reference_defaults`.
+
 Runtime update rules:
 
 - **Prefill** (`start_pos == 0`):
@@ -440,6 +448,7 @@ For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
 - Some community GGUF conversions ship `mtp.0.*` as a **separate sidecar** file rather than embedding it in the trunk GGUF. Treat MTP presence as a property of the artifact **set**, not just one file.
+- At least one pinned candidate (`docs/upstream-quantized-v4-flash.md`: `antirez/deepseek-v4-gguf`) explicitly publishes an MTP sidecar GGUF; expect the trunk GGUF to be missing `mtp.0.*` unless both files are supplied to the runtime.
 - Treat MTP as **disabled/untrusted** unless the artifact is inspected and proven to contain `mtp.0.*` weights (and, ideally, MTP passes an oracle check; see below).
 - Record whether the runtime can expose draft logits or draft token IDs.
 - A successful MTP speedup is not enough by itself; the acceptance path must be
