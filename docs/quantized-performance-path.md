@@ -59,6 +59,15 @@ The llama.cpp Spark baseline script also supports a **best-effort token trace** 
 - If the runtime emits per-token JSON log lines (for example, `function=process_token` events), the script writes them to `token_trace.jsonl` inside the Spark artifacts directory for the run.
 - This is disabled by default unless the runtime is configured to emit those events; consult `llama_cli.help.txt` in the artifacts directory and only enable logging flags that the runtime actually supports.
 
+When token JSON is present, the llama.cpp Spark baseline script also computes **read-only** derived metrics and prints them into the `== baseline summary (approx) ==` block:
+
+- per-token latency percentiles (ms, from local monotonic timestamps between token events)
+- routed expert ID frequencies (best-effort: only if the runtime includes expert IDs in token JSON)
+- queue depth / batch size / expert batch size summaries (best-effort: only if present in token JSON)
+- MTP draft/accepted/rejected counters (best-effort: only if present in token JSON)
+
+These derived fields are intended to be *opportunistic*: they are `NA` unless the runtime actually emits compatible keys.
+
 ## Spark0 Command Shape (No Downloads/Builds)
 
 From the Mac:

@@ -48,6 +48,15 @@ Memory:
 
 - Max RSS:
 - GPU mem (before/after):
+- GPU poll mem used (min/max/delta):
+
+Token trace / routing (best-effort; when the runtime emits JSON token events):
+
+- Token events:
+- Per-token latency (ms p50/p90/p99):
+- Routed experts (top5):
+- Expert/batch/queue stats:
+- MTP counters (draft/accepted/rejected):
 
 ## Raw Logs
 
@@ -58,4 +67,3 @@ Attach or paste minimal excerpts (redact secrets / private LAN details).
 - Exit code:
 - Stderr excerpt:
 - Notes / suspected cause:
-

@@ -222,10 +222,10 @@ rc_run=0
 trap gpu_sampler_stop EXIT
 gpu_sampler_start
 
-python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$LLAMA_CLI_SHA256" "$LLAMA_CLI_VERSION" || rc_run=$?
-import hashlib, json, os, resource, re, subprocess, sys, time, shlex
+python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$LLAMA_CLI_SHA256" "$LLAMA_CLI_VERSION" "$gpu_sampler_file" || rc_run=$?
+import hashlib, json, math, os, resource, re, subprocess, sys, time, shlex
 
-llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, llama_cli_sha256, llama_cli_version = sys.argv[1:]
+llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, llama_cli_sha256, llama_cli_version, gpu_poll_csv = sys.argv[1:]
 
 cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl, "--timings"]
 if extra_args.strip():
@@ -402,7 +402,73 @@ with open(log_raw, "w", encoding="utf-8") as f:
         "count": 0,
         "first_ts": None,
         "last_ts": None,
+        "mono_s": [],
+        "expert_counts": {},
+        "expert_events": 0,
+        "queue_depth": [],
+        "batch_size": [],
+        "expert_batch_size": [],
+        "mtp_draft": None,
+        "mtp_accepted": None,
+        "mtp_rejected": None,
     }
+
+    def _append_cap(xs, v, cap=200000):
+        if len(xs) >= cap:
+            return
+        xs.append(v)
+
+    def _count_expert(eid):
+        try:
+            eid_i = int(eid)
+        except Exception:
+            return
+        if eid_i < 0:
+            return
+        d = token_trace["expert_counts"]
+        d[eid_i] = int(d.get(eid_i, 0)) + 1
+        token_trace["expert_events"] += 1
+
+    def _record_evt_metrics(evt):
+        # Best-effort: only record metrics if the runtime emits them in token JSON.
+        for k in ("queue_depth", "expert_queue_depth"):
+            v = evt.get(k)
+            if isinstance(v, (int, float)):
+                _append_cap(token_trace["queue_depth"], float(v))
+
+        for k in ("batch_size", "batch_n", "n_batch"):
+            v = evt.get(k)
+            if isinstance(v, (int, float)):
+                _append_cap(token_trace["batch_size"], float(v))
+
+        for k in ("expert_batch_size", "expert_batch", "expert_batch_n"):
+            v = evt.get(k)
+            if isinstance(v, (int, float)):
+                _append_cap(token_trace["expert_batch_size"], float(v))
+
+        # Expert routing: record IDs if present.
+        for k in ("expert_id", "expert", "router_expert_id"):
+            v = evt.get(k)
+            if isinstance(v, int):
+                _count_expert(v)
+        for k in ("expert_ids", "experts", "router_expert_ids"):
+            v = evt.get(k)
+            if isinstance(v, list):
+                for e in v[:64]:
+                    _count_expert(e)
+
+        # MTP counters: record the last seen values if present.
+        for k, outk in (
+            ("mtp_draft", "mtp_draft"),
+            ("mtp_accepted", "mtp_accepted"),
+            ("mtp_rejected", "mtp_rejected"),
+            ("draft_tokens", "mtp_draft"),
+            ("accepted_tokens", "mtp_accepted"),
+            ("rejected_tokens", "mtp_rejected"),
+        ):
+            v = evt.get(k)
+            if isinstance(v, (int, float)):
+                token_trace[outk] = float(v)
 
     def _emit_text(s: str):
         f.write(s)
@@ -420,11 +486,13 @@ with open(log_raw, "w", encoding="utf-8") as f:
                     token_trace["fp"].write(json.dumps(evt, ensure_ascii=False) + "\n")
                     token_trace["fp"].flush()
                     token_trace["count"] += 1
+                    _append_cap(token_trace["mono_s"], float(time.monotonic() - start))
                     ts = evt.get("timestamp")
                     if isinstance(ts, (int, float)):
                         if token_trace["first_ts"] is None:
                             token_trace["first_ts"] = float(ts)
                         token_trace["last_ts"] = float(ts)
+                    _record_evt_metrics(evt)
             except Exception:
                 pass
         if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line):
@@ -472,6 +540,19 @@ max_rss_bytes = max_rss_native
 if sys.platform.startswith("linux"):
     max_rss_bytes = max_rss_native * 1024
 
+def _pct(xs, p):
+    xs = sorted(xs)
+    if not xs:
+        return None
+    if len(xs) == 1:
+        return float(xs[0])
+    k = (len(xs) - 1) * float(p)
+    f = int(math.floor(k))
+    c = int(math.ceil(k))
+    if f == c:
+        return float(xs[f])
+    return float(xs[f] * (c - k) + xs[c] * (k - f))
+
 def _last_float_before(haystack: str, needle: str):
     if needle not in haystack:
         return None
@@ -492,6 +573,37 @@ for tl in timings_lines:
     elif tl.startswith("eval time") or " eval time" in tl:
         gen_tps = _last_float_before(tl, "tokens per second")
         gen_ms_per_tok = _last_float_before(tl, "ms per token")
+
+gpu_used_mib = []
+if gpu_poll_csv and os.path.exists(gpu_poll_csv):
+    try:
+        with open(gpu_poll_csv, "r", encoding="utf-8", errors="replace") as pf:
+            for ln in pf:
+                if "memory.used" in ln and "timestamp" in ln:
+                    continue
+                cols = [c.strip() for c in ln.split(",")]
+                if len(cols) < 3:
+                    continue
+                m = re.search(r"(\\d+)", cols[2])
+                if not m:
+                    continue
+                gpu_used_mib.append(float(int(m.group(1))))
+                if len(gpu_used_mib) >= 200000:
+                    break
+    except Exception:
+        gpu_used_mib = []
+
+token_latency_ms = []
+try:
+    monos = [float(x) for x in token_trace.get("mono_s") or []]
+    if len(monos) > 1:
+        for i in range(1, len(monos)):
+            dt = monos[i] - monos[i - 1]
+            if dt < 0:
+                continue
+            token_latency_ms.append(dt * 1000.0)
+except Exception:
+    token_latency_ms = []
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
@@ -535,6 +647,63 @@ else:
     else:
         summary_lines.append("token_trace_duration_s=NA")
         summary_lines.append("token_trace_tps=NA")
+
+summary_lines.append("token_latency_samples=%d" % int(len(token_latency_ms)))
+if token_latency_ms:
+    summary_lines.append("token_latency_ms_min=%.6f" % min(token_latency_ms))
+    summary_lines.append("token_latency_ms_p50=%.6f" % (_pct(token_latency_ms, 0.50) or 0.0))
+    summary_lines.append("token_latency_ms_p90=%.6f" % (_pct(token_latency_ms, 0.90) or 0.0))
+    summary_lines.append("token_latency_ms_p99=%.6f" % (_pct(token_latency_ms, 0.99) or 0.0))
+    summary_lines.append("token_latency_ms_max=%.6f" % max(token_latency_ms))
+    summary_lines.append("token_latency_ms_mean=%.6f" % (sum(token_latency_ms) / max(1, len(token_latency_ms))))
+else:
+    summary_lines.append("token_latency_ms_min=NA")
+    summary_lines.append("token_latency_ms_p50=NA")
+    summary_lines.append("token_latency_ms_p90=NA")
+    summary_lines.append("token_latency_ms_p99=NA")
+    summary_lines.append("token_latency_ms_max=NA")
+    summary_lines.append("token_latency_ms_mean=NA")
+
+if gpu_used_mib:
+    summary_lines.append("gpu_poll_mem_used_min_mib=%.3f" % min(gpu_used_mib))
+    summary_lines.append("gpu_poll_mem_used_max_mib=%.3f" % max(gpu_used_mib))
+    summary_lines.append("gpu_poll_mem_used_delta_mib=%.3f" % (max(gpu_used_mib) - min(gpu_used_mib)))
+else:
+    summary_lines.append("gpu_poll_mem_used_min_mib=NA")
+    summary_lines.append("gpu_poll_mem_used_max_mib=NA")
+    summary_lines.append("gpu_poll_mem_used_delta_mib=NA")
+
+summary_lines.append("expert_events=%d" % int(token_trace.get("expert_events") or 0))
+if token_trace.get("expert_counts"):
+    top = sorted(token_trace["expert_counts"].items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+    summary_lines.append("expert_unique_count=%d" % len(token_trace["expert_counts"]))
+    summary_lines.append("expert_top5=%s" % ",".join("%d:%d" % (k, v) for (k, v) in top))
+else:
+    summary_lines.append("expert_unique_count=NA")
+    summary_lines.append("expert_top5=NA")
+
+def _agg_stats(xs, prefix):
+    if not xs:
+        summary_lines.append(prefix + "_samples=0")
+        summary_lines.append(prefix + "_min=NA")
+        summary_lines.append(prefix + "_max=NA")
+        summary_lines.append(prefix + "_mean=NA")
+        return
+    summary_lines.append(prefix + "_samples=%d" % len(xs))
+    summary_lines.append(prefix + "_min=%.6f" % min(xs))
+    summary_lines.append(prefix + "_max=%.6f" % max(xs))
+    summary_lines.append(prefix + "_mean=%.6f" % (sum(xs) / max(1, len(xs))))
+
+_agg_stats(token_trace.get("queue_depth") or [], "queue_depth")
+_agg_stats(token_trace.get("batch_size") or [], "batch_size")
+_agg_stats(token_trace.get("expert_batch_size") or [], "expert_batch_size")
+
+for k in ("mtp_draft", "mtp_accepted", "mtp_rejected"):
+    v = token_trace.get(k)
+    if v is None:
+        summary_lines.append(k + "=NA")
+    else:
+        summary_lines.append(k + "=%.6f" % float(v))
 summary_lines.append("wall_s=%.6f" % (end - start))
 summary_lines.append("max_rss_native=%d" % max_rss_native)
 summary_lines.append("max_rss_bytes=%d" % max_rss_bytes)
