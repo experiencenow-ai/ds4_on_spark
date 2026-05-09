@@ -72,6 +72,12 @@ To probe for common `LICENSE*` files at pinned commits (without cloning), run:
 ./scripts/upstream_license_probe.sh
 ```
 
+To discover new community Hugging Face GGUF candidates (metadata only; no downloads), run:
+
+```bash
+./scripts/upstream_hf_search.sh "DeepSeek-V4-Flash GGUF" --sort downloads --limit 50
+```
+
 ## Per-Upstream Notes
 
 - [`docs/upstream-ds4.md`](upstream-ds4.md)
