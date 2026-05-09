@@ -119,6 +119,8 @@
       "compressed_index_offset": "seqlen",
       "window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)"
     },
+    "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+    "topk_mask_value": -1,
     "window_size": 128
   },
   "checkpoint_index": {
@@ -192,6 +194,10 @@
         "weight_shape": "[out_features, in_features]"
       },
       "reference_source": "inference/model.py:Linear"
+    },
+    "reference_defaults": {
+      "max_batch_size": 4,
+      "max_seq_len": 4096
     }
   },
   "runtime": {
@@ -204,6 +210,10 @@
       "index_head_dim": 128,
       "index_n_heads": 64,
       "index_topk": 512
+    },
+    "reference_defaults": {
+      "max_batch_size": 4,
+      "max_seq_len": 4096
     },
     "swiglu_limit": 10.0
   },
@@ -400,6 +410,16 @@
     "beta_slow": 1,
     "compress_rope_theta": 160000.0,
     "original_seq_len": 65536,
+    "per_layer_rule": {
+      "if_compress_ratio_nonzero": {
+        "original_seq_len": "yarn_rope.original_seq_len",
+        "rope_theta": "yarn_rope.compress_rope_theta"
+      },
+      "if_compress_ratio_zero": {
+        "original_seq_len": 0,
+        "rope_theta": "yarn_rope.rope_theta"
+      }
+    },
     "rope_factor": 16.0,
     "rope_theta": 10000.0
   }
