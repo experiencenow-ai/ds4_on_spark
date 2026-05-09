@@ -39,6 +39,7 @@ Targets:
   llama_cpp_cuda_spark
   spark_v4_bringup_mockingjay
   spark_v4_bringup_bigs
+  spark_v4_gb10_runtime_devid791
   deepseek_v4_flash_sm120_patch
   all
 EOF
@@ -252,6 +253,10 @@ fetch_one()
 			upstream="bigs/deepseek-v4-flash-dgx-spark"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_bringup_bigs" "https://github.com/bigs/deepseek-v4-flash-dgx-spark.git" "${ref}" "${expected}"
 			;;
+		spark_v4_gb10_runtime_devid791)
+			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "spark_v4_gb10_runtime_devid791" "https://github.com/devid791/dsv4-flash-gb10-runtime.git" "${ref}" "${expected}"
+			;;
 		deepseek_v4_flash_sm120_patch)
 			upstream="0xSero/deepseek-v4-flash-sm120"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "deepseek_v4_flash_sm120_patch" "https://github.com/0xSero/deepseek-v4-flash-sm120.git" "${ref}" "${expected}"
@@ -295,6 +300,7 @@ main()
 		fetch_one llama_cpp_cuda_spark
 		fetch_one spark_v4_bringup_mockingjay
 		fetch_one spark_v4_bringup_bigs
+		fetch_one spark_v4_gb10_runtime_devid791
 		fetch_one deepseek_v4_flash_sm120_patch
 		echo "Fetched: ${UPSTREAM_DIR}"
 		return 0

@@ -151,6 +151,7 @@ print_head_report()
 	print_ref "bati.cpp" "https://github.com/batiai/bati.cpp.git"
 	print_ref "Spark bring-up (pruned checkpoint)" "https://github.com/Mockingjay1316/deepseek-v4-flash-spark.git"
 	print_ref "Spark bring-up (native checkpoint runtime)" "https://github.com/bigs/deepseek-v4-flash-dgx-spark.git"
+	print_ref "Spark bring-up (GB10 C++ runtime, MXFP4)" "https://github.com/devid791/dsv4-flash-gb10-runtime.git"
 	print_ref "Blackwell/SGLang arch patch (reference)" "https://github.com/0xSero/deepseek-v4-flash-sm120.git"
 }
 
