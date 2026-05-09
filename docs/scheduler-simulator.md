@@ -345,7 +345,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --
 The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
-- `work`: total service-slot time and work-units accounting (useful for comparing compute per output token, especially with MTP enabled)
+- `work`: service-slot time, work-units, and batch-size accounting (useful for comparing compute per output token, especially with MTP enabled)
+  - `work.batch_size.{interactive,batch}` summarizes the simulator’s started batch sizes per expert worker (queue served, not token class; promoted batch tasks count as interactive-queue batches)
 - `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
 - `trace.decode_ms.{interactive,batch}` and `trace.decode_error_ms.{interactive,batch}`: when trace replay includes `decode_ms`, summarize observed decode latency and error vs simulated token latency (admitted tokens only)
 - `trace.kv_tokens.{interactive,batch}` and `trace.expert_batch_size.{interactive,batch}`: when trace replay includes `kv_tokens` / `expert_batch_size`, summarize observed values for admitted tokens
@@ -394,6 +395,8 @@ The first useful runtime patch can be instrumentation-only. Expert queueing
 should be enabled only after replay shows a throughput win without unacceptable
 interactive p95, starvation, or partial-admit regressions.
 
+Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
+
 ## MTP Simulation
 
 MTP is modeled as a draft/accept layer on top of decode:
@@ -409,7 +412,7 @@ by default until deterministic acceptance tests pass.
 ## Next Steps
 
 - Start collecting real quantized-runtime router traces and feed them into `--trace-jsonl` (see `docs/quantized-performance-path.md`).
-- Add MTP draft/accept accounting once a runtime exposes draft tokens/logits.
+- Once real traces include `expert_batch_size`, calibrate service/batching knobs and decide whether expert queueing improves batch sizes without interactive p95 regressions.
 - Replace fixed `--service-ms` with a shape-dependent service model once DS4
   expert GEMM shapes are pinned down.
 - Use this harness to define production invariants (interactive p95 bounds,

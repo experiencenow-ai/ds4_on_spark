@@ -237,6 +237,8 @@ class SimMetrics:
     makespan_ms: float = 0.0
     k_mode: str = "controller"
     pending_units: str = "tasks"
+    service_batch_size_interactive: List[float] = dataclasses.field(default_factory=list)
+    service_batch_size_batch: List[float] = dataclasses.field(default_factory=list)
     trace_decode_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     trace_decode_ms_batch: List[float] = dataclasses.field(default_factory=list)
     trace_decode_error_ms_interactive: List[float] = dataclasses.field(default_factory=list)
@@ -418,6 +420,10 @@ class SimMetrics:
                 },
                 "work": {
                     "batches_started": self.service_batches_started,
+                    "batch_size": {
+                        "interactive": summarize(self.service_batch_size_interactive),
+                        "batch": summarize(self.service_batch_size_batch),
+                    },
                     "work_units_total": self.work_units_total,
                     "work_units_interactive": self.work_units_interactive,
                     "work_units_batch": self.work_units_batch,
@@ -1926,6 +1932,11 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
                 eq.pending_work_lo -= float(t.cost_scale)
         if len(tasks) == 0:
             break
+
+        if serving_hi:
+            metrics.service_batch_size_interactive.append(float(len(tasks)))
+        else:
+            metrics.service_batch_size_batch.append(float(len(tasks)))
 
         if serving_hi:
             eq.hi_wakeup_ms = -1.0
