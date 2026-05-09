@@ -19,6 +19,8 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 - `ds4-strict@.service`: long-running DS4 instance that *wants* `ds4-preflight-strict@%i.service` before start
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly)
 - `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`)
+- Optional: `ds4-preflight@.timer`: periodic non-destructive preflight
+- Optional: `ds4-preflight-strict@.timer`: periodic strict preflight
 - Optional Spark standalone helpers: `spark-master@.service`, `spark-worker@.service` (see `docs/deployment-spark-standalone-systemd.md`)
 
 ## Instance Naming
