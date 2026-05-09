@@ -18,6 +18,7 @@ class InspectResult:
 	metadata: dict[str, Any]
 	tensor_count: int
 	tensor_type_counts: dict[str, int]
+	weight_keys_all: list[str]
 	mtp_present: bool
 	mtp_tensor_count: int
 	mtp_tensor_type_counts: dict[str, int]
@@ -168,7 +169,18 @@ def should_capture_gguf_metadata(key: str, value_type: int) -> bool:
 		return True
 	if key == "tokenizer.ggml.model":
 		return True
-	if key.endswith(".context_length") or key.endswith(".embedding_length") or key.endswith(".block_count"):
+	if key.endswith(
+		(
+			".context_length",
+			".embedding_length",
+			".block_count",
+			".vocab_size",
+			".head_count",
+			".head_count_kv",
+			".rope.dimension_count",
+			".rope.freq_base",
+		)
+	):
 		return True
 	return False
 
@@ -191,6 +203,7 @@ def inspect_weight_keys(weight_keys: list[str], path: str, artifact_type: str) -
 		metadata={},
 		tensor_count=len(weight_keys),
 		tensor_type_counts={},
+		weight_keys_all=weight_keys,
 		mtp_present=bool(mtp_keys),
 		mtp_tensor_count=len(mtp_keys),
 		mtp_tensor_type_counts={},
@@ -206,6 +219,202 @@ def load_default_contract_summary_path() -> Optional[Path]:
 	if candidate.exists():
 		return candidate
 	return None
+
+
+def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
+	if not weight_keys:
+		return {"checked": False, "reason": "no tensor keys found"}
+
+	tk = contract_summary.get("tensor_keys", {})
+	topo = contract_summary.get("topology", {})
+	attn = contract_summary.get("attention_schedule", {})
+	moe = contract_summary.get("moe", {})
+
+	required_top_level = tk.get("required_top_level", None)
+	required_layer_suffixes = tk.get("required_layer_suffixes", None)
+	required_nonzero = tk.get("required_layer_suffixes_compress_ratio_nonzero", None)
+	required_ratio4 = tk.get("required_layer_suffixes_compress_ratio_4", None)
+
+	hash_gate_suffix = tk.get("hash_gate_tensor_key_suffix", "ffn.gate.tid2eid")
+	score_gate_suffix = tk.get("score_gate_tensor_key_suffix", "ffn.gate.bias")
+
+	compress_ratios = attn.get("compress_ratios", None)
+	n_layers = topo.get("num_hidden_layers", None)
+	n_hash_layers = moe.get("n_hash_layers", None)
+	n_routed_experts = moe.get("n_routed_experts", None)
+
+	if not isinstance(required_top_level, list) or not isinstance(required_layer_suffixes, list):
+		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_* lists"}
+	if not isinstance(required_nonzero, list) or not isinstance(required_ratio4, list):
+		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_layer_suffixes_compress_ratio_* lists"}
+	if not isinstance(compress_ratios, list):
+		return {"checked": False, "reason": "contract_summary missing attention_schedule.compress_ratios"}
+	try:
+		n_layers_i = int(n_layers)
+		n_hash_layers_i = int(n_hash_layers)
+		n_routed_experts_i = int(n_routed_experts)
+	except Exception:
+		return {"checked": False, "reason": "contract_summary missing topology/moe layer counts"}
+	if n_layers_i <= 0 or n_routed_experts_i <= 0:
+		return {"checked": False, "reason": "contract_summary has invalid layer/expert counts"}
+	if len(compress_ratios) < n_layers_i:
+		return {"checked": False, "reason": "contract_summary compress_ratios shorter than num_hidden_layers"}
+
+	missing_count = 0
+	missing_sample: list[str] = []
+	forbidden_present: set[str] = set()
+
+	def note_missing(key: str) -> None:
+		nonlocal missing_count
+		missing_count += 1
+		if len(missing_sample) < 20:
+			missing_sample.append(key)
+
+	for k in required_top_level:
+		if not isinstance(k, str) or not k:
+			continue
+		if k not in weight_keys:
+			note_missing(k)
+
+	for i in range(n_layers_i):
+		prefix = f"layers.{i}."
+		try:
+			ratio_i = int(compress_ratios[i])
+		except Exception:
+			ratio_i = 0
+
+		for suffix in required_layer_suffixes:
+			if not isinstance(suffix, str) or not suffix:
+				continue
+			need = prefix + suffix
+			if need not in weight_keys:
+				note_missing(need)
+
+		if ratio_i != 0:
+			for suffix in required_nonzero:
+				if not isinstance(suffix, str) or not suffix:
+					continue
+				need = prefix + suffix
+				if need not in weight_keys:
+					note_missing(need)
+
+		if ratio_i == 4:
+			for suffix in required_ratio4:
+				if not isinstance(suffix, str) or not suffix:
+					continue
+				need = prefix + suffix
+				if need not in weight_keys:
+					note_missing(need)
+
+		if i < n_hash_layers_i:
+			need_hash = prefix + str(hash_gate_suffix)
+			if need_hash not in weight_keys:
+				note_missing(need_hash)
+			bad_score = prefix + str(score_gate_suffix)
+			if bad_score in weight_keys:
+				forbidden_present.add(bad_score)
+		else:
+			need_score = prefix + str(score_gate_suffix)
+			if need_score not in weight_keys:
+				note_missing(need_score)
+			bad_hash = prefix + str(hash_gate_suffix)
+			if bad_hash in weight_keys:
+				forbidden_present.add(bad_hash)
+
+		for eid in range(n_routed_experts_i):
+			for w in (1, 2, 3):
+				for s in ("weight", "scale"):
+					need = f"{prefix}ffn.experts.{eid}.w{w}.{s}"
+					if need not in weight_keys:
+						note_missing(need)
+
+	forbidden_sorted = sorted(forbidden_present)[:20]
+	return {
+		"checked": True,
+		"complete": (missing_count == 0 and len(forbidden_sorted) == 0),
+		"n_layers_checked": n_layers_i,
+		"missing_required_count": missing_count,
+		"missing_required_sample": missing_sample,
+		"forbidden_present": forbidden_sorted,
+	}
+
+
+def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[str, Any]) -> dict[str, Any]:
+	if not metadata:
+		return {"checked": False, "reason": "no metadata captured from artifact header"}
+
+	topo = contract_summary.get("topology", {})
+	mtp = contract_summary.get("mtp", {})
+
+	def expected_int(name: str) -> Optional[int]:
+		try:
+			return int(topo[name])
+		except Exception:
+			return None
+
+	expected_hidden = expected_int("hidden_size")
+	expected_layers = expected_int("num_hidden_layers")
+	expected_heads = expected_int("num_attention_heads")
+	expected_kv_heads = expected_int("num_key_value_heads")
+	expected_vocab = expected_int("vocab_size")
+	try:
+		expected_mtp_layers = int(mtp.get("n_mtp_layers", 0))
+	except Exception:
+		expected_mtp_layers = 0
+
+	def pick_int(keys: list[str]) -> Optional[int]:
+		for k in keys:
+			v = metadata.get(k, None)
+			try:
+				return int(v)
+			except Exception:
+				continue
+		return None
+
+	embedding_keys = [k for k in metadata.keys() if k.endswith(".embedding_length")]
+	block_keys = [k for k in metadata.keys() if k.endswith(".block_count")]
+	vocab_keys = [k for k in metadata.keys() if k.endswith(".vocab_size")]
+	head_keys = [k for k in metadata.keys() if k.endswith(".head_count")]
+	kv_head_keys = [k for k in metadata.keys() if k.endswith(".head_count_kv")]
+
+	embedding_len = pick_int(sorted(embedding_keys))
+	block_count = pick_int(sorted(block_keys))
+	vocab_size = pick_int(sorted(vocab_keys))
+	head_count = pick_int(sorted(head_keys))
+	kv_head_count = pick_int(sorted(kv_head_keys))
+
+	mismatches: list[str] = []
+
+	def check_eq(label: str, got: Optional[int], expected: Optional[int]) -> None:
+		if got is None or expected is None:
+			return
+		if int(got) != int(expected):
+			mismatches.append(f"{label}: got={got} expected={expected}")
+
+	check_eq("embedding_length", embedding_len, expected_hidden)
+	check_eq("vocab_size", vocab_size, expected_vocab)
+	check_eq("head_count", head_count, expected_heads)
+	check_eq("head_count_kv", kv_head_count, expected_kv_heads)
+
+	block_count_ok = None
+	if block_count is not None and expected_layers is not None:
+		ok_values = {int(expected_layers)}
+		if expected_mtp_layers > 0:
+			ok_values.add(int(expected_layers) + int(expected_mtp_layers))
+		block_count_ok = (int(block_count) in ok_values)
+		if not block_count_ok:
+			mismatches.append(f"block_count: got={block_count} expected_one_of={sorted(ok_values)}")
+
+	return {
+		"checked": True,
+		"embedding_length": embedding_len,
+		"block_count": block_count,
+		"block_count_ok": block_count_ok,
+		"vocab_size": vocab_size,
+		"head_count": head_count,
+		"head_count_kv": kv_head_count,
+		"mismatches": mismatches[:20],
+	}
 
 
 def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
@@ -375,6 +584,7 @@ def inspect_gguf(path: Path) -> InspectResult:
 		metadata=metadata,
 		tensor_count=res.tensor_count,
 		tensor_type_counts=dict(sorted(type_counts.items())),
+		weight_keys_all=res.weight_keys_all,
 		mtp_present=res.mtp_present,
 		mtp_tensor_count=res.mtp_tensor_count,
 		mtp_tensor_type_counts=dict(sorted(mtp_type_counts.items())),
@@ -453,11 +663,13 @@ def main() -> int:
 		mtp_layer_ids: set[int] = set()
 		first_mtp_keys: list[str] = []
 		mtp_keys_union: set[str] = set()
+		weight_keys_union: set[str] = set()
 		for res in results:
 			type_counts.update(res.tensor_type_counts)
 			mtp_type_counts.update(res.mtp_tensor_type_counts)
 			mtp_layer_ids.update(res.mtp_layer_ids)
 			mtp_keys_union.update(res.mtp_keys_all)
+			weight_keys_union.update(res.weight_keys_all)
 			for k in res.first_mtp_keys:
 				if k in first_mtp_keys:
 					continue
@@ -465,8 +677,10 @@ def main() -> int:
 				if len(first_mtp_keys) >= 20:
 					break
 		mtp_contract = None
+		trunk_contract = None
 		if contract_summary is not None:
 			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
+			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -479,6 +693,7 @@ def main() -> int:
 			"mtp_layer_ids": sorted(mtp_layer_ids),
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
+			"trunk_contract": trunk_contract,
 		}
 
 	if args.json:
@@ -486,13 +701,29 @@ def main() -> int:
 			out = as_dict(results[0])
 			if contract_summary is not None:
 				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
+				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
+				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
 		else:
 			print(
 				json.dumps(
 					{
 						"combined": combine(results),
-						"artifacts": [as_dict(r) for r in results],
+						"artifacts": [
+							{
+								**as_dict(r),
+								**(
+									{}
+									if contract_summary is None
+									else {
+										"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
+										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
+										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
+									}
+								),
+							}
+							for r in results
+						],
 					},
 					indent=2,
 					sort_keys=True,
@@ -519,6 +750,14 @@ def main() -> int:
 					print(f"mtp_contract_missing_required: {k}")
 				for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 					print(f"mtp_contract_forbidden_present: {k}")
+			trunk_contract = combined.get("trunk_contract", None)
+			if isinstance(trunk_contract, dict) and trunk_contract.get("checked") is True:
+				print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
+				print(f"trunk_contract_missing_required_count: {int(trunk_contract.get('missing_required_count', 0))}")
+				for k in list(trunk_contract.get("missing_required_sample", []))[:10]:
+					print(f"trunk_contract_missing_required: {k}")
+				for k in list(trunk_contract.get("forbidden_present", []))[:10]:
+					print(f"trunk_contract_forbidden_present: {k}")
 			for res in results:
 				print(f"artifact_path: {res.path}")
 				print(f"artifact_type: {res.artifact_type}")
@@ -526,6 +765,13 @@ def main() -> int:
 					print(f"gguf_version: {res.gguf_version}")
 				for k in sorted(res.metadata.keys()):
 					print(f"metadata: {k}={res.metadata[k]}")
+				if contract_summary is not None:
+					topology_contract = compute_topology_contract(res.metadata, contract_summary)
+					if isinstance(topology_contract, dict) and topology_contract.get("checked") is True:
+						mismatches = topology_contract.get("mismatches", [])
+						print(f"topology_contract_mismatch_count: {len(mismatches) if isinstance(mismatches, list) else 0}")
+						for m in list(mismatches)[:10]:
+							print(f"topology_contract_mismatch: {m}")
 		else:
 			res = results[0]
 			print(f"path: {res.path}")
@@ -555,6 +801,20 @@ def main() -> int:
 						print(f"mtp_contract_missing_required: {k}")
 					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 						print(f"mtp_contract_forbidden_present: {k}")
+				trunk_contract = compute_trunk_contract(set(res.weight_keys_all), contract_summary)
+				if trunk_contract.get("checked") is True:
+					print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
+					print(f"trunk_contract_missing_required_count: {int(trunk_contract.get('missing_required_count', 0))}")
+					for k in list(trunk_contract.get("missing_required_sample", []))[:10]:
+						print(f"trunk_contract_missing_required: {k}")
+					for k in list(trunk_contract.get("forbidden_present", []))[:10]:
+						print(f"trunk_contract_forbidden_present: {k}")
+				topology_contract = compute_topology_contract(res.metadata, contract_summary)
+				if isinstance(topology_contract, dict) and topology_contract.get("checked") is True:
+					mismatches = topology_contract.get("mismatches", [])
+					print(f"topology_contract_mismatch_count: {len(mismatches) if isinstance(mismatches, list) else 0}")
+					for m in list(mismatches)[:10]:
+						print(f"topology_contract_mismatch: {m}")
 
 	if args.require_mtp and not any(r.mtp_present for r in results):
 		return 1
