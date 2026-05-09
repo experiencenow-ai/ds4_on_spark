@@ -20,6 +20,7 @@ What it does:
   - `cuda_sm121_arch_report` (prints device CC + compiled `__CUDA_ARCH__`)
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
+  - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
 
 Environment overrides:
 
@@ -33,7 +34,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, and `cuda_sm121_smem_optin` for `sm_121`.
+It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, and `cuda_sm121_devattrs` for `sm_121`.
 
 ## Current Spark0 Results (2026-05-08)
 
