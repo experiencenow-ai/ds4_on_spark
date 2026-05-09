@@ -33,6 +33,7 @@ High-level facts observed (from the probe output below):
 - Default route: via Wi-Fi during probe
 - Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
 - PCIe link negotiation: appears stuck at Gen1 x1 (nvidia-smi + sysfs); `lspci -vv` does not expose `LnkCap/LnkSta` fields without extra privileges on this host
+- Sysfs PCIe path chain (root port -> endpoint): upstream `max_link_speed` reports `32.0 GT/s PCIe` while the GPU endpoint reports `max_link_speed` `2.5 GT/s PCIe` (Gen1); `current_link_width` remains `1`
 - NVIDIA driver (proc): Open Kernel Module `580.142` build timestamp `2026-03-03`
 - cuDNN: not detected (no headers/libs found via probe)
 

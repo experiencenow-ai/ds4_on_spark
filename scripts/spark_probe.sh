@@ -301,6 +301,23 @@ emit_sysfs_pcie_link()
 				sys="/sys/bus/pci/devices/$short_bus"
 				echo "-- $bus -> $short_bus --"
 				if [ -d "$sys" ]; then
+					if command -v readlink >/dev/null 2>&1; then
+						devpath="$(readlink -f "$sys" 2>/dev/null || true)"
+						if [ "$devpath" != "" ]; then
+							echo "sysfs: $devpath"
+							chain="$(printf "%s" "$devpath" | tr "/" "\n" | grep -E "^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}[.][0-7]$" | paste -sd " " - 2>/dev/null || true)"
+							if [ "$chain" != "" ]; then
+								echo "path: $chain"
+								for dev in $chain; do
+									p="/sys/bus/pci/devices/$dev"
+									[ -r "$p/current_link_speed" ] && echo "path $dev current_link_speed: $(cat "$p/current_link_speed" 2>/dev/null || true)"
+									[ -r "$p/current_link_width" ] && echo "path $dev current_link_width: $(cat "$p/current_link_width" 2>/dev/null || true)"
+									[ -r "$p/max_link_speed" ] && echo "path $dev max_link_speed: $(cat "$p/max_link_speed" 2>/dev/null || true)"
+									[ -r "$p/max_link_width" ] && echo "path $dev max_link_width: $(cat "$p/max_link_width" 2>/dev/null || true)"
+								done
+							fi
+						fi
+					fi
 					[ -r "$sys/vendor" ] && echo "vendor: $(cat "$sys/vendor" 2>/dev/null || true)"
 					[ -r "$sys/device" ] && echo "device: $(cat "$sys/device" 2>/dev/null || true)"
 					[ -r "$sys/subsystem_vendor" ] && echo "subsystem_vendor: $(cat "$sys/subsystem_vendor" 2>/dev/null || true)"
@@ -370,6 +387,13 @@ if command -v nvcc >/dev/null 2>&1; then
 	nvcc_bin="$(command -v nvcc)"
 elif [ -x /usr/local/cuda/bin/nvcc ]; then
 	nvcc_bin="/usr/local/cuda/bin/nvcc"
+fi
+if [ "$nvcc_bin" != "" ]; then
+	if command -v nvcc >/dev/null 2>&1; then
+		echo "nvcc path: $nvcc_bin (on PATH)"
+	else
+		echo "nvcc path: $nvcc_bin (not on PATH)"
+	fi
 fi
 nvcc_release=""
 if [ "$nvcc_bin" != "" ]; then

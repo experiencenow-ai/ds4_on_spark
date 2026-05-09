@@ -210,3 +210,32 @@ device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
+
+## Update: Probe Refresh (2026-05-09 18:11Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T1815Z_loop_v2c.txt
+```
+
+```text
+== pci link (sysfs, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+sysfs: /sys/devices/pci000f:00/000f:00:00.0/000f:01:00.0
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 current_link_speed: Unknown
+path 000f:00:00.0 current_link_width: 0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+```
