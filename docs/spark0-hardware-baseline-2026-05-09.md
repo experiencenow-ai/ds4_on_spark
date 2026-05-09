@@ -586,6 +586,36 @@ device0 cc: 12.1
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 10:56Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_eb97.Ti5juo/repo/.git DS4_GIT_WORK_TREE='/Users/mac/.codex/worktrees/eb97/New project 4' ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09T11-00Z_probe13_power.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The probe now includes a power/clocks/utilization summary (via `nvidia-smi --query-gpu=...`), which is useful for spotting throttling or idle/boost state changes.
+
+```text
+== local meta ==
+Sat May  9 10:56:37 UTC 2026
+git: cd2867f
+probe targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 52, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi pcie link (max/current) ==
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== nvidia-smi power/clocks (summary) ==
+0, 0000000F:01:00.0, [N/A], 13.03, 2398, 2398, [N/A], 0, 0
+```
+
 ## Update: Probe Refresh (2026-05-09 08:56Z)
 
 Commands run:

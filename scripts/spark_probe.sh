@@ -188,6 +188,23 @@ else
 	echo "nvidia-smi not found"
 fi
 echo
+echo "== nvidia-smi power/clocks (summary) =="
+if command -v nvidia-smi >/dev/null 2>&1; then
+	pwr_q="$(nvidia-smi --query-gpu=index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory --format=csv,noheader,nounits 2>/dev/null || true)"
+	if [ "$pwr_q" != "" ]; then
+		if printf "%s" "$pwr_q" | grep -qi "not a valid field"; then
+			echo "power/clocks query not supported"
+			printf "%s\n" "$pwr_q" | head -n 2
+		else
+			echo "$pwr_q"
+		fi
+	else
+		echo "power/clocks query not supported"
+	fi
+else
+	echo "nvidia-smi not found"
+fi
+echo
 echo "== nvidia-smi gpu list =="
 if command -v nvidia-smi >/dev/null 2>&1; then
 	nvidia-smi -L 2>/dev/null || true
