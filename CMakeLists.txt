@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ds4_on_spark LANGUAGES C)
+project(ds4_on_spark VERSION 0.1.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -37,10 +37,12 @@ add_library(ds4
 	src/ds4_log.c
 	src/ds4.c
 )
+add_library(ds4::ds4 ALIAS ds4)
 
 target_include_directories(ds4
 	PUBLIC
-		"${CMAKE_CURRENT_SOURCE_DIR}/include"
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+		$<INSTALL_INTERFACE:include>
 )
 
 ds4_target_warnings(ds4 ${DS4_WERROR})
@@ -74,6 +76,13 @@ if(DS4_ENABLE_TESTS)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})
 	ds4_target_sanitizers(ds4_tests ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 	add_test(NAME ds4_tests COMMAND ds4_tests)
+	add_test(NAME ds4_install_consumer
+		COMMAND "${CMAKE_COMMAND}"
+			-DDS4_BUILD_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}
+			-DDS4_SOURCE_DIR:PATH=${CMAKE_CURRENT_SOURCE_DIR}
+			-DDS4_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/_install_test
+			-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_install_consumer_test.cmake"
+	)
 endif()
 
 if(DS4_ENABLE_CLI)
@@ -84,3 +93,43 @@ if(DS4_ENABLE_CLI)
 	ds4_target_warnings(ds4_cli ${DS4_WERROR})
 	ds4_target_sanitizers(ds4_cli ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+set(DS4_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/ds4")
+
+install(TARGETS ds4
+	EXPORT ds4Targets
+	ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+	LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+	RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+)
+install(DIRECTORY include/ds4 DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+if(TARGET ds4_cli)
+	install(TARGETS ds4_cli RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
+
+install(EXPORT ds4Targets
+	NAMESPACE ds4::
+	DESTINATION "${DS4_INSTALL_CMAKEDIR}"
+)
+
+configure_package_config_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4Config.cmake.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/ds4Config.cmake"
+	INSTALL_DESTINATION "${DS4_INSTALL_CMAKEDIR}"
+)
+
+write_basic_package_version_file(
+	"${CMAKE_CURRENT_BINARY_DIR}/ds4ConfigVersion.cmake"
+	VERSION "${PROJECT_VERSION}"
+	COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+	"${CMAKE_CURRENT_BINARY_DIR}/ds4Config.cmake"
+	"${CMAKE_CURRENT_BINARY_DIR}/ds4ConfigVersion.cmake"
+	DESTINATION "${DS4_INSTALL_CMAKEDIR}"
+)

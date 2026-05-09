@@ -10,6 +10,7 @@ See also:
 - `docs/build-memory.md`
 - `docs/build-config.md`
 - `docs/build-cli.md`
+- `docs/build-install.md`
 
 ## Mac (no CUDA)
 
