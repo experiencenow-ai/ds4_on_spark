@@ -57,6 +57,7 @@ Environment overrides:
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
 It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
+Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using the `__cluster_dims__` attribute (`tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu`) and prints whether it compiled or the first lines of the error output.
 
 ## Current Spark0 Results (2026-05-09)
 
@@ -71,6 +72,7 @@ Observed:
 
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `-arch=sm_121` compiles and links (including `-lcublasLt`)
+- `nvcc -arch=sm_121` accepts the `__cluster_dims__` kernel annotation (compile-only check prints `cluster_dims_attr_compile: OK`)
 - `-arch=sm_120` binaries run on GB10 (`sm_121`) successfully (probe prints `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - Runtime launches a tiny `sm_121` kernel successfully
 - Separate compilation (`-dc`) + device link (`-dlink`) succeeds for `sm_121` (`cuda_sm121_rdc_probe` runs and validates output)
@@ -118,6 +120,7 @@ bf16_conv x=1.250000 raw_x=0x3fa0 x_back=1.250000 y=-2.500000 raw_y=0xc020 y_bac
 fp4_conv x=1.250000 e2m1_storage=0x02 e2m1_nibble=0x2 halfraw_e2m1=0x3c00
 pipeline_memcpy_async out=11111111 22222222 33333333 44444444
 barrier_memcpy_async ok first=decaf000 last=decaf01f
+cluster_dims_attr_compile: OK
 cuda_graph_smoke out=22222222
 nvrtcVersion=13.0
 nvrtc supportedArchs: 75 80 86 87 88 89 90 100 103 110 120 121
