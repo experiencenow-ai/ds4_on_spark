@@ -34,6 +34,7 @@ add_library(ds4
 	src/ds4_pool.c
 	src/ds4_ring.c
 	src/ds4_config.c
+	src/ds4_gguf.c
 	src/ds4_log.c
 	src/ds4.c
 )
@@ -88,6 +89,7 @@ if(DS4_ENABLE_TESTS)
 		tests/test_log.c
 		tests/test_ctx.c
 		tests/test_cuda.c
+		tests/test_gguf.c
 	)
 	target_link_libraries(ds4_tests PRIVATE ds4)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})
