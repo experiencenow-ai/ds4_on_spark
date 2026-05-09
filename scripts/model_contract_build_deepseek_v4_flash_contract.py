@@ -653,6 +653,7 @@ def build_compat_mappings() -> dict:
 		{"concept": "n_hash_layers", "transformers_key": "num_hash_layers", "inference_key": "n_hash_layers", "canonical_path": "moe.n_hash_layers"},
 		{"concept": "route_scale", "transformers_key": "routed_scaling_factor", "inference_key": "route_scale", "canonical_path": "moe.route_scale"},
 		{"concept": "scoring_func", "transformers_key": "scoring_func", "inference_key": "score_func", "canonical_path": "moe.scoring_func"},
+		{"concept": "num_nextn_predict_layers", "transformers_key": "num_nextn_predict_layers", "inference_key": None, "canonical_path": "mtp.n_mtp_layers"},
 		{"concept": "rope_theta", "transformers_key": "rope_theta", "inference_key": "rope_theta", "canonical_path": "yarn_rope.rope_theta"},
 		{"concept": "compress_rope_theta", "transformers_key": "compress_rope_theta", "inference_key": "compress_rope_theta", "canonical_path": "yarn_rope.compress_rope_theta"},
 		{"concept": "original_seq_len", "transformers_key": "original_max_position_embeddings", "inference_key": "original_seq_len", "canonical_path": "yarn_rope.original_seq_len"},
@@ -660,8 +661,13 @@ def build_compat_mappings() -> dict:
 		{"concept": "beta_fast", "transformers_key": "rope_scaling.beta_fast", "inference_key": "beta_fast", "canonical_path": "yarn_rope.beta_fast"},
 		{"concept": "beta_slow", "transformers_key": "rope_scaling.beta_slow", "inference_key": "beta_slow", "canonical_path": "yarn_rope.beta_slow"},
 		{"concept": "dtype", "transformers_key": None, "inference_key": "dtype", "canonical_path": "quantization.inference_config.dtype"},
-		{"concept": "expert_dtype", "transformers_key": None, "inference_key": "expert_dtype", "canonical_path": "quantization.inference_config.expert_dtype"},
+		{"concept": "expert_dtype", "transformers_key": "expert_dtype", "inference_key": "expert_dtype", "canonical_path": "quantization.inference_config.expert_dtype"},
 		{"concept": "scale_fmt", "transformers_key": None, "inference_key": "scale_fmt", "canonical_path": "quantization.inference_config.scale_fmt"},
+		{"concept": "quant_method", "transformers_key": "quantization_config.quant_method", "inference_key": None, "canonical_path": "quantization.config_quantization_config.quant_method"},
+		{"concept": "quant_fmt", "transformers_key": "quantization_config.fmt", "inference_key": None, "canonical_path": "quantization.config_quantization_config.fmt"},
+		{"concept": "activation_scheme", "transformers_key": "quantization_config.activation_scheme", "inference_key": None, "canonical_path": "quantization.config_quantization_config.activation_scheme"},
+		{"concept": "scale_fmt_cfg", "transformers_key": "quantization_config.scale_fmt", "inference_key": None, "canonical_path": "quantization.config_quantization_config.scale_fmt"},
+		{"concept": "weight_block_size", "transformers_key": "quantization_config.weight_block_size", "inference_key": None, "canonical_path": "quantization.config_quantization_config.weight_block_size"},
 	]
 
 	by_transformers_key: dict[str, str] = {}
