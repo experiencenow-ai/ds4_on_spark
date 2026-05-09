@@ -28,6 +28,12 @@ static const char *cublas_compute_type_str(cublasComputeType_t t)
 {
 	switch (t)
 	{
+#ifdef CUBLAS_COMPUTE_32F_FAST_8F
+		case CUBLAS_COMPUTE_32F_FAST_8F: return("CUBLAS_COMPUTE_32F_FAST_8F");
+#endif
+#ifdef CUBLAS_COMPUTE_32F_FAST_8BF
+		case CUBLAS_COMPUTE_32F_FAST_8BF: return("CUBLAS_COMPUTE_32F_FAST_8BF");
+#endif
 		case CUBLAS_COMPUTE_16F: return("CUBLAS_COMPUTE_16F");
 		case CUBLAS_COMPUTE_32F: return("CUBLAS_COMPUTE_32F");
 		case CUBLAS_COMPUTE_32F_FAST_16F: return("CUBLAS_COMPUTE_32F_FAST_16F");
@@ -41,6 +47,16 @@ static int32_t cublaslt_probe_check(cublasStatus_t s,int32_t code,const char *ca
 {
 	if ( s == CUBLAS_STATUS_SUCCESS )
 		return(0);
+	fprintf(stderr,"cuBLASLt error %s: %s\n",callsite,cublaslt_status_str(s));
+	return(code);
+}
+
+static int32_t cublaslt_probe_check_quiet_not_supported(cublasStatus_t s,int32_t code,const char *callsite)
+{
+	if ( s == CUBLAS_STATUS_SUCCESS )
+		return(0);
+	if ( s == CUBLAS_STATUS_NOT_SUPPORTED )
+		return(code);
 	fprintf(stderr,"cuBLASLt error %s: %s\n",callsite,cublaslt_status_str(s));
 	return(code);
 }
@@ -88,8 +104,8 @@ static int32_t run_cublaslt_fp8_e5m2_gemm_compute(uint8_t *d_a,uint8_t *d_b,floa
 	cublasLtMatmulDesc_t op = 0;
 	cublasLtMatrixLayout_t a_desc = 0,b_desc = 0,c_desc = 0;
 	cublasLtMatmulPreference_t pref = 0;
-	cublasLtMatmulHeuristicResult_t heur;
-	int32_t got = 0,rc = 0;
+	cublasLtMatmulHeuristicResult_t heur[16];
+	int32_t got = 0,i = 0,rc = 0;
 	cublasOperation_t trans = CUBLAS_OP_N;
 	cublasStatus_t st;
 	if ( d_a == 0 || d_b == 0 || d_c == 0 || d_ws == 0 )
@@ -132,8 +148,8 @@ static int32_t run_cublaslt_fp8_e5m2_gemm_compute(uint8_t *d_a,uint8_t *d_b,floa
 		rc = cublaslt_probe_check(st,-28,"cublasLtMatmulPreferenceSetAttribute(MAX_WORKSPACE_BYTES)");
 		if ( rc != 0 )
 			break;
-		st = cublasLtMatmulAlgoGetHeuristic(lt,op,a_desc,b_desc,c_desc,c_desc,pref,1,&heur,&got);
-		rc = cublaslt_probe_check(st,-29,"cublasLtMatmulAlgoGetHeuristic");
+		st = cublasLtMatmulAlgoGetHeuristic(lt,op,a_desc,b_desc,c_desc,c_desc,pref,(int32_t)(sizeof(heur) / sizeof(heur[0])),heur,&got);
+		rc = cublaslt_probe_check_quiet_not_supported(st,-29,"cublasLtMatmulAlgoGetHeuristic");
 		if ( rc != 0 )
 			break;
 		if ( got <= 0 )
@@ -141,10 +157,18 @@ static int32_t run_cublaslt_fp8_e5m2_gemm_compute(uint8_t *d_a,uint8_t *d_b,floa
 			rc = -30;
 			break;
 		}
-		st = cublasLtMatmul(lt,op,&alpha,d_a,a_desc,d_b,b_desc,&beta,d_c,c_desc,d_c,c_desc,&heur.algo,d_ws,ws_bytes,0);
-		rc = cublaslt_probe_check(st,-31,"cublasLtMatmul");
+		rc = -31;
+		for (i=0; i<got; i++)
+		{
+			st = cublasLtMatmul(lt,op,&alpha,d_a,a_desc,d_b,b_desc,&beta,d_c,c_desc,d_c,c_desc,&heur[i].algo,d_ws,ws_bytes,0);
+			if ( st == CUBLAS_STATUS_SUCCESS )
+			{
+				rc = 0;
+				break;
+			}
+		}
 		if ( rc != 0 )
-			break;
+			cublaslt_probe_check(st,-31,"cublasLtMatmul");
 	} while (0);
 	if ( pref != 0 )
 		cublasLtMatmulPreferenceDestroy(pref);
@@ -165,6 +189,12 @@ static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,v
 {
 	cublasComputeType_t compute_types[] =
 	{
+#ifdef CUBLAS_COMPUTE_32F_FAST_8F
+		CUBLAS_COMPUTE_32F_FAST_8F,
+#endif
+#ifdef CUBLAS_COMPUTE_32F_FAST_8BF
+		CUBLAS_COMPUTE_32F_FAST_8BF,
+#endif
 		CUBLAS_COMPUTE_32F,
 		CUBLAS_COMPUTE_32F_FAST_16F,
 		CUBLAS_COMPUTE_32F_FAST_16BF,
@@ -174,7 +204,7 @@ static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,v
 	int32_t i,rc = 0,last_rc = 0;
 	for (i=0; i<(int32_t)(sizeof(compute_types) / sizeof(compute_types[0])); i++)
 	{
-		printf("cuBLASLt fp8 e5m2 probe try compute_type=%s\n",cublas_compute_type_str(compute_types[i]));
+		printf("cuBLASLt fp8 e5m2 probe try m=%d n=%d k=%d compute_type=%s ws_bytes=%zu\n",m,n,k,cublas_compute_type_str(compute_types[i]),ws_bytes);
 		rc = run_cublaslt_fp8_e5m2_gemm_compute(d_a,d_b,d_c,d_ws,ws_bytes,m,n,k,compute_types[i]);
 		if ( rc == 0 )
 			return(0);
@@ -185,55 +215,88 @@ static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,v
 
 int main(int argc,char **argv)
 {
-	static const int32_t m = 16,n = 16,k = 16;
+	static const int32_t max_dim = 128;
+	static const int32_t cases[][3] =
+	{
+		{16,16,16},
+		{64,64,64},
+		{128,128,128},
+	};
 	uint8_t *d_a = 0,*d_b = 0;
-	float h_c[m * n];
+	float h_c[max_dim * max_dim];
 	float *d_c = 0;
 	void *d_ws = 0;
-	size_t ws_bytes = (size_t)(1u<<20);
+	size_t ws_bytes_list[] =
+	{
+		(size_t)(1u<<20),
+		(size_t)(16u<<20),
+	};
 	float max_err = 0.0f;
-	int32_t rc = 0,threads = 256,blocks = 1,elems = 0;
+	int32_t rc = 0,rc_case = 0,threads = 256,blocks = 1,elems = 0,w = 0,c = 0,m = 0,n = 0,k = 0;
+	size_t ws_bytes = 0;
 	(void)argc;
 	(void)argv;
 	cuda_probe_print_versions();
 	printf("cublasLtGetVersion=%zu cublasLtGetCudartVersion=%zu\n",cublasLtGetVersion(),cublasLtGetCudartVersion());
 	do
 	{
-		rc = cuda_probe_check(cudaMalloc((void **)&d_a,(size_t)m * (size_t)k),-1,"cudaMalloc(A fp8)");
+		rc = cuda_probe_check(cudaMalloc((void **)&d_a,(size_t)max_dim * (size_t)max_dim),-1,"cudaMalloc(A fp8)");
 		if ( rc != 0 )
 			break;
-		rc = cuda_probe_check(cudaMalloc((void **)&d_b,(size_t)k * (size_t)n),-2,"cudaMalloc(B fp8)");
+		rc = cuda_probe_check(cudaMalloc((void **)&d_b,(size_t)max_dim * (size_t)max_dim),-2,"cudaMalloc(B fp8)");
 		if ( rc != 0 )
 			break;
-		rc = cuda_probe_check(cudaMalloc((void **)&d_c,(size_t)m * (size_t)n * (size_t)sizeof(float)),-3,"cudaMalloc(C f32)");
+		rc = cuda_probe_check(cudaMalloc((void **)&d_c,(size_t)max_dim * (size_t)max_dim * (size_t)sizeof(float)),-3,"cudaMalloc(C f32)");
 		if ( rc != 0 )
 			break;
-		rc = cuda_probe_check(cudaMalloc(&d_ws,ws_bytes),-4,"cudaMalloc(workspace)");
-		if ( rc != 0 )
-			break;
-		elems = (m * k);
-		if ( (k * n) > elems )
-			elems = (k * n);
-		blocks = ((elems + threads - 1) / threads);
-		fp8_fill_identity_ones_e5m2<<<blocks,threads>>>(d_a,d_b,m,n,k);
-		rc = cuda_probe_check(cudaGetLastError(),-5,"fp8_fill_identity_ones_e5m2 launch");
-		if ( rc != 0 )
-			break;
-		rc = cuda_probe_check(cudaMemset(d_c,0,(size_t)m * (size_t)n * (size_t)sizeof(float)),-6,"cudaMemset(C)");
-		if ( rc != 0 )
-			break;
-		rc = run_cublaslt_fp8_e5m2_gemm(d_a,d_b,d_c,d_ws,ws_bytes,m,n,k);
-		if ( rc != 0 )
-			break;
-		rc = cuda_probe_check(cudaDeviceSynchronize(),-7,"cudaDeviceSynchronize");
-		if ( rc != 0 )
-			break;
-		rc = cuda_probe_check(cudaMemcpy(h_c,d_c,(size_t)m * (size_t)n * (size_t)sizeof(float),cudaMemcpyDeviceToHost),-8,"cudaMemcpy(D2H C)");
-		if ( rc != 0 )
-			break;
-		rc = max_abs_err_vs_one_f32(h_c,(m * n),&max_err);
-		if ( rc != 0 )
-			break;
+		for (w=0; w<(int32_t)(sizeof(ws_bytes_list) / sizeof(ws_bytes_list[0])); w++)
+		{
+			ws_bytes = ws_bytes_list[w];
+			if ( d_ws != 0 )
+				cudaFree(d_ws);
+			d_ws = 0;
+			rc = cuda_probe_check(cudaMalloc(&d_ws,ws_bytes),-4,"cudaMalloc(workspace)");
+			if ( rc != 0 )
+				break;
+			for (c=0; c<(int32_t)(sizeof(cases) / sizeof(cases[0])); c++)
+			{
+				m = cases[c][0];
+				n = cases[c][1];
+				k = cases[c][2];
+				elems = (m * k);
+				if ( (k * n) > elems )
+					elems = (k * n);
+				blocks = ((elems + threads - 1) / threads);
+				fp8_fill_identity_ones_e5m2<<<blocks,threads>>>(d_a,d_b,m,n,k);
+				rc = cuda_probe_check(cudaGetLastError(),-5,"fp8_fill_identity_ones_e5m2 launch");
+				if ( rc != 0 )
+					break;
+				rc = cuda_probe_check(cudaMemset(d_c,0,(size_t)m * (size_t)n * (size_t)sizeof(float)),-6,"cudaMemset(C)");
+				if ( rc != 0 )
+					break;
+				rc_case = run_cublaslt_fp8_e5m2_gemm(d_a,d_b,d_c,d_ws,ws_bytes,m,n,k);
+				if ( rc_case != 0 )
+				{
+					printf("cuBLASLt fp8 e5m2 smoke: no supported algo for this config (continuing)\n");
+					continue;
+				}
+				rc = cuda_probe_check(cudaDeviceSynchronize(),-7,"cudaDeviceSynchronize");
+				if ( rc != 0 )
+					break;
+				rc = cuda_probe_check(cudaMemcpy(h_c,d_c,(size_t)m * (size_t)n * (size_t)sizeof(float),cudaMemcpyDeviceToHost),-8,"cudaMemcpy(D2H C)");
+				if ( rc != 0 )
+					break;
+				rc = max_abs_err_vs_one_f32(h_c,(m * n),&max_err);
+				if ( rc != 0 )
+					break;
+				printf("cuBLASLt fp8 e5m2 smoke max_abs_err_vs_one=%g\n",max_err);
+				if ( max_err > 1.0e-2f )
+					return(-40);
+				return(0);
+			}
+			if ( rc != 0 )
+				break;
+		}
 	} while (0);
 	if ( d_ws != 0 )
 		cudaFree(d_ws);
@@ -245,8 +308,6 @@ int main(int argc,char **argv)
 		cudaFree(d_a);
 	if ( rc != 0 )
 		return(rc);
-	printf("cuBLASLt fp8 e5m2 smoke max_abs_err_vs_one=%g\n",max_err);
-	if ( max_err > 1.0e-2f )
-		return(-40);
-	return(0);
+	printf("cuBLASLt fp8 e5m2 smoke: no supported configuration found\n");
+	return(-41);
 }

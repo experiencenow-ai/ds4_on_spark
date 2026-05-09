@@ -241,4 +241,4 @@ The probes `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` and `tools/cuda_probe/
 - uses default scale pointers (NULL ⇒ scale=1) to keep the API surface minimal
 
 Observed on Spark0 (2026-05-09): `cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0`.
-Observed on Spark0 (2026-05-09): `cuda_cublaslt_fp8_e5m2_smoke` currently returns `CUBLAS_STATUS_NOT_SUPPORTED` (cuBLASLt heuristic selection fails).
+Observed on Spark0 (2026-05-09): `cuda_cublaslt_fp8_e5m2_smoke` fails to find any supported algo even after trying `m=n=k` in `{16,64,128}`, multiple `cublasComputeType_t` values, and workspace sizes `{1MiB,16MiB}`.
