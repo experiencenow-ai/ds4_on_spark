@@ -3,9 +3,10 @@
 Goal: get DeepSeek V4 Flash producing tokens on **one** Spark before the native
 DS4 runtime and dual-Spark TP path are ready.
 
-This is an intermediate execution milestone, not the final architecture. A slow
-or low-quality first token stream is useful if it proves the model artifact,
-runtime, CUDA path, tokenizer/chat format, and memory envelope are real.
+This is the first gate for the broader quantized high-performance path described
+in `docs/quantized-performance-path.md`. A slow or low-quality first token
+stream is useful if it proves the model artifact, runtime, CUDA path,
+tokenizer/chat format, and memory envelope are real.
 
 ## Definition of Done
 
@@ -102,6 +103,8 @@ If it loads and generates, rerun with:
 - `N_TOKENS=128`, then `N_TOKENS=256`
 - one representative chat prompt rendered through the DeepSeek V4 encoding path
 - a second run after process restart to separate cold-load time from generation
+- runtime instrumentation enabled if available: routing trace, expert batch
+  sizes, per-token latency, memory snapshots, and MTP accept/reject counters
 
 ## Failure Triage
 

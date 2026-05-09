@@ -57,6 +57,18 @@ Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 triage. These env strings are recorded in the generated report, so do not put
 tokens or other secrets in them.
 
+After the first successful quantized run, prefer instrumentation over immediate
+optimization. The next useful report should say whether the runtime can expose:
+
+- per-token decode latency
+- routed expert IDs and top-k scores
+- expert batch sizes / queue depth
+- MTP draft, accepted, and rejected token counters
+
+Those fields feed the quantized high-performance path in
+`docs/quantized-performance-path.md` and the replay work in
+`docs/scheduler-simulator.md`.
+
 ## One-command entrypoint (Mac local: antirez/ds4)
 
 Run from the Mac:

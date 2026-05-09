@@ -9,6 +9,11 @@ policies on synthetic routing traces so we can:
 - separate **latency classes** (interactive vs batch)
 - produce **concise metrics** that can guide the eventual CUDA design
 
+The quantized runtime path changes the priority: as soon as Spark0 can generate
+tokens with a V4-capable quantized runtime, this simulator should ingest real
+route traces from that runtime and decide whether expert queueing and MTP are
+worth patching into the working path.
+
 ## Model
 
 Work units:
@@ -221,9 +226,43 @@ The simulator prints a JSON object with:
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
 - `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`
 
+## Quantized Runtime Trace Contract
+
+When the baseline loop can instrument a working quantized runtime, prefer JSONL
+records that are easy to replay here:
+
+```json
+{"t_ms":0.0,"token_index":12,"cls":"interactive","candidates":[7,3,19,2,1,0],"scores":[0.9,0.7,0.4,0.2,0.1,0.05]}
+```
+
+Optional fields should be added when available:
+
+- `accepted_mtp`: number of MTP draft tokens accepted after this decode step
+- `rejected_mtp`: number of MTP draft tokens rejected after this decode step
+- `expert_batch_size`: observed batch size for the dispatched expert work
+- `decode_ms`: measured decode latency for this token
+- `kv_tokens`: KV/cache token count at this step
+
+The first useful runtime patch can be instrumentation-only. Expert queueing
+should be enabled only after replay shows a throughput win without unacceptable
+interactive p95, starvation, or partial-admit regressions.
+
+## MTP Simulation
+
+MTP is modeled as a draft/accept layer on top of decode:
+
+- draft cost adds work before acceptance is known
+- accepted drafts reduce future decode steps
+- rejected drafts still consume draft compute
+
+Initial scheduler metrics should include accepted-token rate, rejected-token
+rate, draft overhead, and net generated tokens/sec. MTP remains runtime-disabled
+by default until deterministic acceptance tests pass.
+
 ## Next Steps
 
 - Start collecting real quantized-runtime router traces and feed them into `--trace-jsonl` (see `docs/quantized-performance-path.md`).
+- Add MTP draft/accept accounting once a runtime exposes draft tokens/logits.
 - Replace fixed `--service-ms` with a shape-dependent service model once DS4
   expert GEMM shapes are pinned down.
 - Use this harness to define production invariants (interactive p95 bounds,
