@@ -24,6 +24,19 @@ static const char *cublaslt_status_str(cublasStatus_t s)
 	}
 }
 
+static const char *cublas_compute_type_str(cublasComputeType_t t)
+{
+	switch (t)
+	{
+		case CUBLAS_COMPUTE_16F: return("CUBLAS_COMPUTE_16F");
+		case CUBLAS_COMPUTE_32F: return("CUBLAS_COMPUTE_32F");
+		case CUBLAS_COMPUTE_32F_FAST_16F: return("CUBLAS_COMPUTE_32F_FAST_16F");
+		case CUBLAS_COMPUTE_32F_FAST_16BF: return("CUBLAS_COMPUTE_32F_FAST_16BF");
+		case CUBLAS_COMPUTE_32F_FAST_TF32: return("CUBLAS_COMPUTE_32F_FAST_TF32");
+		default: return("CUBLAS_COMPUTE_UNKNOWN");
+	}
+}
+
 static int32_t cublaslt_probe_check(cublasStatus_t s,int32_t code,const char *callsite)
 {
 	if ( s == CUBLAS_STATUS_SUCCESS )
@@ -68,7 +81,7 @@ static int32_t max_abs_err_vs_one_f32(float *a,int32_t len,float *out)
 	return(0);
 }
 
-static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,void *d_ws,size_t ws_bytes,int32_t m,int32_t n,int32_t k)
+static int32_t run_cublaslt_fp8_e5m2_gemm_compute(uint8_t *d_a,uint8_t *d_b,float *d_c,void *d_ws,size_t ws_bytes,int32_t m,int32_t n,int32_t k,cublasComputeType_t compute_type)
 {
 	const float alpha = 1.0f,beta = 0.0f;
 	cublasLtHandle_t lt = 0;
@@ -87,7 +100,7 @@ static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,v
 		rc = cublaslt_probe_check(st,-20,"cublasLtCreate");
 		if ( rc != 0 )
 			break;
-		st = cublasLtMatmulDescCreate(&op,CUBLAS_COMPUTE_32F,CUDA_R_32F);
+		st = cublasLtMatmulDescCreate(&op,compute_type,CUDA_R_32F);
 		rc = cublaslt_probe_check(st,-21,"cublasLtMatmulDescCreate");
 		if ( rc != 0 )
 			break;
@@ -148,6 +161,28 @@ static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,v
 	return(rc);
 }
 
+static int32_t run_cublaslt_fp8_e5m2_gemm(uint8_t *d_a,uint8_t *d_b,float *d_c,void *d_ws,size_t ws_bytes,int32_t m,int32_t n,int32_t k)
+{
+	cublasComputeType_t compute_types[] =
+	{
+		CUBLAS_COMPUTE_32F,
+		CUBLAS_COMPUTE_32F_FAST_16F,
+		CUBLAS_COMPUTE_32F_FAST_16BF,
+		CUBLAS_COMPUTE_32F_FAST_TF32,
+		CUBLAS_COMPUTE_16F,
+	};
+	int32_t i,rc = 0,last_rc = 0;
+	for (i=0; i<(int32_t)(sizeof(compute_types) / sizeof(compute_types[0])); i++)
+	{
+		printf("cuBLASLt fp8 e5m2 probe try compute_type=%s\n",cublas_compute_type_str(compute_types[i]));
+		rc = run_cublaslt_fp8_e5m2_gemm_compute(d_a,d_b,d_c,d_ws,ws_bytes,m,n,k,compute_types[i]);
+		if ( rc == 0 )
+			return(0);
+		last_rc = rc;
+	}
+	return(last_rc);
+}
+
 int main(int argc,char **argv)
 {
 	static const int32_t m = 16,n = 16,k = 16;
@@ -161,6 +196,7 @@ int main(int argc,char **argv)
 	(void)argc;
 	(void)argv;
 	cuda_probe_print_versions();
+	printf("cublasLtGetVersion=%zu cublasLtGetCudartVersion=%zu\n",cublasLtGetVersion(),cublasLtGetCudartVersion());
 	do
 	{
 		rc = cuda_probe_check(cudaMalloc((void **)&d_a,(size_t)m * (size_t)k),-1,"cudaMalloc(A fp8)");
@@ -214,4 +250,3 @@ int main(int argc,char **argv)
 		return(-40);
 	return(0);
 }
-
