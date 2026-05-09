@@ -215,12 +215,15 @@ elif command -v shasum >/dev/null 2>&1; then
 fi
 LLAMA_CLI_VERSION="$("$LLAMA_CLI" --version 2>/dev/null | head -n 1 | tr -s ' ' | sed 's/[[:space:]]*$//' || true)"
 
+LLAMA_CLI_HELP_FILE="$OUT_DIR/llama_cli.help.txt"
+("$LLAMA_CLI" --help >"$LLAMA_CLI_HELP_FILE" 2>&1) || true
+
 rc_run=0
 trap gpu_sampler_stop EXIT
 gpu_sampler_start
 
 python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$LLAMA_CLI_SHA256" "$LLAMA_CLI_VERSION" || rc_run=$?
-import hashlib, os, resource, re, subprocess, sys, time, shlex
+import hashlib, json, os, resource, re, subprocess, sys, time, shlex
 
 llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, llama_cli_sha256, llama_cli_version = sys.argv[1:]
 
@@ -385,18 +388,81 @@ with open(log_raw, "w", encoding="utf-8") as f:
         for k in ("is_gguf", "version", "architecture", "alignment", "has_mtp", "mtp_tensor_count"):
             gf.write(f"{k}={gguf_info.get(k)}\n")
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
     first_output_s = None
-    for line in proc.stdout:
-        if first_output_s is None and line != "":
-            first_output_s = time.monotonic() - start
+
+    import codecs
+
+    line_buf = ""
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+
+    token_trace = {
+        "path": os.path.join(os.path.dirname(log_raw), "token_trace.jsonl"),
+        "fp": None,
+        "count": 0,
+        "first_ts": None,
+        "last_ts": None,
+    }
+
+    def _emit_text(s: str):
+        f.write(s)
+        f.flush()
+        sys.stdout.write(s)
+        sys.stdout.flush()
+
+    def _handle_line(line: str):
+        if line.lstrip().startswith("{") and "process_token" in line and "token" in line:
+            try:
+                evt = json.loads(line)
+                if isinstance(evt, dict) and evt.get("function") == "process_token":
+                    if token_trace["fp"] is None:
+                        token_trace["fp"] = open(token_trace["path"], "w", encoding="utf-8")
+                    token_trace["fp"].write(json.dumps(evt, ensure_ascii=False) + "\n")
+                    token_trace["fp"].flush()
+                    token_trace["count"] += 1
+                    ts = evt.get("timestamp")
+                    if isinstance(ts, (int, float)):
+                        if token_trace["first_ts"] is None:
+                            token_trace["first_ts"] = float(ts)
+                        token_trace["last_ts"] = float(ts)
+            except Exception:
+                pass
         if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line):
             timings_lines.append(line.strip())
-        f.write(line)
-        f.flush()
-        sys.stdout.write(line)
-        sys.stdout.flush()
+        _emit_text(line)
+
+    assert proc.stdout is not None
+    while True:
+        b = proc.stdout.read(1)
+        if b == b"":
+            break
+        if first_output_s is None:
+            first_output_s = time.monotonic() - start
+        try:
+            s = decoder.decode(b)
+        except Exception:
+            s = ""
+        line_buf += s
+        while "\n" in line_buf:
+            line, line_buf = line_buf.split("\n", 1)
+            _handle_line(line + "\n")
+
+    try:
+        tail = decoder.decode(b"", final=True)
+        if tail:
+            line_buf += tail
+    except Exception:
+        pass
+
+    if line_buf != "":
+        _handle_line(line_buf)
+
     rc = proc.wait()
+    if token_trace["fp"] is not None:
+        try:
+            token_trace["fp"].close()
+        except Exception:
+            pass
 
 end = time.monotonic()
 
@@ -455,6 +521,20 @@ if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
 else:
     summary_lines.append("ttft_first_output_s=%.6f" % first_output_s)
+summary_lines.append("token_trace_events=%d" % int(token_trace["count"]))
+if token_trace["first_ts"] is None or token_trace["last_ts"] is None:
+    summary_lines.append("token_trace_ts_first=NA")
+    summary_lines.append("token_trace_ts_last=NA")
+else:
+    summary_lines.append("token_trace_ts_first=%.6f" % float(token_trace["first_ts"]))
+    summary_lines.append("token_trace_ts_last=%.6f" % float(token_trace["last_ts"]))
+    if token_trace["count"] > 1 and float(token_trace["last_ts"]) > float(token_trace["first_ts"]):
+        dur = float(token_trace["last_ts"]) - float(token_trace["first_ts"])
+        summary_lines.append("token_trace_duration_s=%.6f" % dur)
+        summary_lines.append("token_trace_tps=%.6f" % (float(token_trace["count"]) / max(1e-9, dur)))
+    else:
+        summary_lines.append("token_trace_duration_s=NA")
+        summary_lines.append("token_trace_tps=NA")
 summary_lines.append("wall_s=%.6f" % (end - start))
 summary_lines.append("max_rss_native=%d" % max_rss_native)
 summary_lines.append("max_rss_bytes=%d" % max_rss_bytes)

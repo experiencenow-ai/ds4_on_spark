@@ -54,6 +54,11 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
 - expert batch sizes / queue depth
 - MTP draft/accepted/rejected counters
 
+The llama.cpp Spark baseline script also supports a **best-effort token trace** capture:
+
+- If the runtime emits per-token JSON log lines (for example, `function=process_token` events), the script writes them to `token_trace.jsonl` inside the Spark artifacts directory for the run.
+- This is disabled by default unless the runtime is configured to emit those events; consult `llama_cli.help.txt` in the artifacts directory and only enable logging flags that the runtime actually supports.
+
 ## Spark0 Command Shape (No Downloads/Builds)
 
 From the Mac:
@@ -93,4 +98,3 @@ Only after the external-runtime quantized single-Spark run is repeatable and ins
 - compare baseline envelopes: TTFT, decode t/s, GPU memory growth, crash modes
 
 Keep baseline reports using `docs/baseline-template.md` structure where committed.
-

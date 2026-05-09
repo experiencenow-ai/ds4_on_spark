@@ -63,6 +63,7 @@ If it loads and generates, rerun with:
 ## Instrumentation Hooks (Read-only)
 
 - GPU polling during runs: set `GPU_SAMPLE=1` (default) and adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) to emit `nvidia_smi_poll.csv` alongside the normal `nvidia-smi` snapshots.
+- llama.cpp token trace (best-effort): if the runtime emits per-token JSON log events (for example `process_token`), the Spark llama.cpp script writes them to `token_trace.jsonl` in the fetched artifacts directory. Do not guess flags; use the captured `llama_cli.help.txt` and only enable runtime-supported log options via `EXTRA_ARGS`.
 - See `docs/quantized-performance-path.md` for the ordered instrumentation path after the first successful token stream.
 
 ## Failure Triage

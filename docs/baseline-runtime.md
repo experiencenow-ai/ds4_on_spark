@@ -14,6 +14,7 @@ This baseline track is designed to capture **exact command lines**, **model arti
 - tokens/sec (prefill + generation where possible)
 - memory usage (CPU RSS + GPU memory snapshot)
 - optional GPU polling during runs (`nvidia_smi_poll.csv` when `GPU_SAMPLE=1`)
+- best-effort per-token trace capture when the runtime emits JSON `process_token` events (`token_trace.jsonl`)
 - failure modes (exact stderr / return codes)
 
 ## Safety Gates (non-negotiable)
