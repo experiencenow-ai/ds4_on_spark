@@ -27,6 +27,12 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 
 The GGUF “sizes” above are taken from the Git LFS pointer metadata in a metadata-only clone (i.e. `GIT_LFS_SKIP_SMUDGE=1` / LFS filters disabled). This lets us record exact byte counts without fetching multi‑GB blobs.
 
+Alternative (no clone): query the Hugging Face HTTP API for per-file sizes:
+
+```bash
+./scripts/upstream_hf_api_report.sh antirez/deepseek-v4-gguf --top 50 | rg '\\.gguf$'
+```
+
 To reproduce:
 
 ```bash

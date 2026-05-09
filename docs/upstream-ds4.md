@@ -4,7 +4,7 @@
 
 - Repo: `https://github.com/antirez/ds4`
 - Ref: `refs/heads/main`
-- Commit: `d967f63e738865935430658a202174d1990ffa51`
+- Commit: `baa084482020263a17a3b33a238f6f0809b425fd`
 - License: MIT (see upstream `LICENSE`)
 
 ## What it is

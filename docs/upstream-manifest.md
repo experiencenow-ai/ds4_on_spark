@@ -9,7 +9,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 
 | Name | Upstream | Ref | Commit | License | Notes |
 | --- | --- | --- | --- | --- | --- |
-| ds4 | `antirez/ds4` | `refs/heads/main` | `d967f63e738865935430658a202174d1990ffa51` | MIT | DeepSeek-V4-Flash-specific native engine (Metal-first); semantics + KV-cache design reference; do not run upstream model-download scripts. |
+| ds4 | `antirez/ds4` | `refs/heads/main` | `baa084482020263a17a3b33a238f6f0809b425fd` | MIT | DeepSeek-V4-Flash-specific native engine (Metal-first); semantics + KV-cache design reference; do not run upstream model-download scripts. |
 | DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/tags/v2.1.1.post3` | `c9f8b34dcdacc20aa746b786f983492c51072870` | MIT | CUDA GEMM kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); pinned to a release tag (vs `main`). |
 | FlashMLA | `deepseek-ai/FlashMLA` | `refs/heads/main` | `9241ae3ef9bac614dd25e45e507e089f888280e0` | MIT | Efficient Multi-head Latent Attention kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); treat as kernel-design reference for V4-Flash-style MLA. |
 | DeepSeek-V3 (code) | `deepseek-ai/DeepSeek-V3` | `refs/tags/v1.0.0` | `f6e34dd26772dd4a216be94a8899276c5dca9e43` | MIT (code) | Repo has distinct code vs model/weights licensing. |
