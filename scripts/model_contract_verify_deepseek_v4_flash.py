@@ -136,6 +136,33 @@ def main() -> int:
 				moe_sem = summary.get("moe", {}).get("semantics", {})
 				if moe_sem.get("bias_affects_selection_only_comment") is None:
 					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
+				moe = summary.get("moe", {})
+				moe_hash = moe.get("hash_routing", {}) if isinstance(moe, dict) else {}
+				try:
+					n_hash = int(moe.get("n_hash_layers", 0)) if isinstance(moe, dict) else 0
+				except Exception:
+					n_hash = 0
+					if n_hash > 0:
+						if not isinstance(moe_hash, dict):
+							failures.append(Failure(40, f"contract summary missing moe.hash_routing dict (hash routing is enabled with n_hash_layers={n_hash}): {contract_summary}"))
+						else:
+							expected_ids = list(range(n_hash))
+							if moe_hash.get("hash_layer_ids") != expected_ids:
+								failures.append(Failure(41, f"contract summary moe.hash_routing.hash_layer_ids mismatch (expected {expected_ids}): {contract_summary}"))
+							if moe_hash.get("tid2eid_dtype") != "int32":
+								failures.append(Failure(42, f"contract summary moe.hash_routing.tid2eid_dtype must be 'int32': {contract_summary}"))
+							try:
+								expected_shape = [int(summary.get("topology", {}).get("vocab_size")), int(moe.get("n_activated_experts"))]
+							except Exception:
+								expected_shape = None
+							if expected_shape is not None and moe_hash.get("tid2eid_shape") != expected_shape:
+								failures.append(Failure(43, f"contract summary moe.hash_routing.tid2eid_shape mismatch (expected {expected_shape}): {contract_summary}"))
+							need_exprs = ["hash_enabled_expr", "hash_indices_expr"]
+							for k in need_exprs:
+								v = moe_hash.get(k)
+								if not (isinstance(v, str) and v):
+									failures.append(Failure(44, f"contract summary moe.hash_routing missing {k} expression string: {contract_summary}"))
+									break
 
 				chk = summary.get("checkpoint_index", {})
 				expected_key_sha = sha256_lines(sorted(weight_keys))
