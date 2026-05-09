@@ -4,7 +4,7 @@ set -euo pipefail
 usage()
 {
 	cat <<'EOF'
-Usage: ./scripts/upstream_hf_api_report.sh <hf_repo> [--files|--top N|--sum-gguf|--sum-safetensors]
+Usage: ./scripts/upstream_hf_api_report.sh <hf_repo> [--files|--files-oids|--top N|--top-oids N|--sum-gguf|--sum-safetensors]
 
 Reports Hugging Face model-repo metadata (commit sha + file sizes) via the HF
 HTTP API. This avoids cloning and avoids downloading any LFS blobs.
@@ -17,7 +17,9 @@ Arguments:
 Modes:
   (default)        Print a short summary + top 10 largest files.
   --files          Print "bytes<TAB>path<TAB>lfs|nolfs" for every file.
+  --files-oids     Print "bytes<TAB>sha256<TAB>path<TAB>lfs|nolfs" for every file.
   --top N          Print only the top N largest files (default summary is 10).
+  --top-oids N     Print top N as "bytes<TAB>sha256<TAB>path<TAB>lfs|nolfs".
   --sum-gguf       Print total bytes and GiB for *.gguf files.
   --sum-safetensors Print total bytes and GiB for *.safetensors files.
 
@@ -43,11 +45,22 @@ if [ "${#}" -gt 0 ]; then
 		--files)
 			mode="files"
 			;;
+		--files-oids)
+			mode="files_oids"
+			;;
 		--top)
 			mode="top"
 			top_n="${2:-}"
 			if [ -z "${top_n}" ] || ! [[ "${top_n}" =~ ^[0-9]+$ ]]; then
 				echo "Invalid --top N" >&2
+				exit 2
+			fi
+			;;
+		--top-oids)
+			mode="top_oids"
+			top_n="${2:-}"
+			if [ -z "${top_n}" ] || ! [[ "${top_n}" =~ ^[0-9]+$ ]]; then
+				echo "Invalid --top-oids N" >&2
 				exit 2
 			fi
 			;;
@@ -114,6 +127,20 @@ print_top()
 	'
 }
 
+print_top_oids()
+{
+	local n="$1"
+	echo "${json}" | jq -r --argjson n "${n}" '
+		[ .siblings[]
+		  | { p: .rfilename, s: (.size // 0), l: (.lfs? != null), o: (.lfs.sha256 // "") }
+		]
+		| sort_by(.s) | reverse
+		| .[0:$n]
+		| .[]
+		| "\(.s)\t\(.o)\t\(.p)\t" + (if .l then "lfs" else "nolfs" end)
+	'
+}
+
 case "${mode}" in
 	files)
 		echo "${json}" | jq -r '
@@ -121,8 +148,17 @@ case "${mode}" in
 			| "\(.size // 0)\t\(.rfilename)\t" + (if (.lfs? != null) then "lfs" else "nolfs" end)
 		'
 		;;
+	files_oids)
+		echo "${json}" | jq -r '
+			.siblings[]
+			| "\(.size // 0)\t\(.lfs.sha256 // \"\")\t\(.rfilename)\t" + (if (.lfs? != null) then "lfs" else "nolfs" end)
+		'
+		;;
 	top)
 		print_top "${top_n}"
+		;;
+	top_oids)
+		print_top_oids "${top_n}"
 		;;
 	sum_gguf)
 		sum="$(sum_ext_bytes ".gguf")"
@@ -149,4 +185,3 @@ case "${mode}" in
 		fi
 		;;
 esac
-
