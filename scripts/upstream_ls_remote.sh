@@ -143,6 +143,7 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash GGUF (teamblobfish, HF)" "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF"
 	print_ref "vLLM" "https://github.com/vllm-project/vllm.git"
 	print_ref "Transformers" "https://github.com/huggingface/transformers.git"
+	print_ref "SGLang" "https://github.com/sgl-project/sglang.git"
 	print_ref "llama.cpp" "https://github.com/ggml-org/llama.cpp.git"
 	print_ref "llama.cpp (antirez V4 fork)" "https://github.com/antirez/llama.cpp-deepseek-v4-flash.git"
 	print_ref "llama.cpp (nisparks V4 WIP)" "https://github.com/nisparks/llama.cpp.git" "refs/heads/wip/deepseek-v4-support"
