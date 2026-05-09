@@ -18,6 +18,8 @@ This builds and runs only:
 
 It also prints `nvcc --version` plus `--list-gpu-arch` / `--list-gpu-code` when supported (toolchain sanity gate for CUDA 13).
 
+If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
+
 ## Spark0: Tiny Compile-Only `sm_121`
 
 When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
