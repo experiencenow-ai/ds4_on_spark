@@ -316,6 +316,8 @@ Reference implementation: `inference/model.py` (`MTPBlock`, `Transformer.mtp`).
   4. Run the normal `Block` forward (attention + MoE + HC mixing).
   5. Compute logits with a **separate** HC head: `hc_head_{fn,base,scale}` under `mtp.0.*`.
 
+These key MTP expressions are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `mtp.semantics` and gated by `scripts/model_contract_verify_deepseek_v4_flash.py`.
+
 DS4 must treat `mtp.*` as a distinct draft-model path with its own HC head weights, not just an alias to the main head.
 
 ## Tokenizer + encoding contract
@@ -513,7 +515,7 @@ For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` ca
 python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`.
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, and `mtp_trust`.
 
 When multiple `--path` values are provided, the tool emits both:
 

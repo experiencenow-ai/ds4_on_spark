@@ -237,6 +237,9 @@ class SimMetrics:
     makespan_ms: float = 0.0
     k_mode: str = "controller"
     pending_units: str = "tasks"
+    tasks_started_per_expert: List[int] = dataclasses.field(default_factory=list)
+    starved_tasks_started_per_expert: List[int] = dataclasses.field(default_factory=list)
+    max_task_queue_wait_ms_per_expert: List[float] = dataclasses.field(default_factory=list)
     service_batch_size_interactive: List[float] = dataclasses.field(default_factory=list)
     service_batch_size_batch: List[float] = dataclasses.field(default_factory=list)
     trace_decode_ms_interactive: List[float] = dataclasses.field(default_factory=list)
@@ -576,6 +579,13 @@ class SimMetrics:
                     "max_pending_max": max(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
+                    "starvation_task_frac": summarize_experts(
+                        [
+                            (float(self.starved_tasks_started_per_expert[i]) / float(self.tasks_started_per_expert[i])) if self.tasks_started_per_expert[i] != 0 else 0.0
+                            for i in range(len(self.tasks_started_per_expert))
+                        ]
+                    ),
+                    "max_task_queue_wait_ms": summarize_experts(self.max_task_queue_wait_ms_per_expert),
                     "work": {
                         "max_pending_p50": statistics.median(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
                         "max_pending_max": max(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
@@ -1962,8 +1972,12 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
 
         for task in tasks:
             wait_ms = (now_ms - task.enqueue_ms)
+            metrics.tasks_started_per_expert[expert_id] += 1
+            if wait_ms > metrics.max_task_queue_wait_ms_per_expert[expert_id]:
+                metrics.max_task_queue_wait_ms_per_expert[expert_id] = wait_ms
             if wait_ms >= cfg.starvation_ms:
                 metrics.starved_tasks += 1
+                metrics.starved_tasks_started_per_expert[expert_id] += 1
                 if task.cls == LatencyClass.INTERACTIVE:
                     metrics.starved_tasks_interactive += 1
                 else:
@@ -2256,6 +2270,9 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         num_tokens=len(trace),
         k_mode=k_mode,
         pending_units=pending_units,
+        tasks_started_per_expert=[0 for _ in range(cfg.num_experts)],
+        starved_tasks_started_per_expert=[0 for _ in range(cfg.num_experts)],
+        max_task_queue_wait_ms_per_expert=[0.0 for _ in range(cfg.num_experts)],
         max_pending_per_expert=[0 for _ in range(cfg.num_experts)],
         mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)],
         max_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],

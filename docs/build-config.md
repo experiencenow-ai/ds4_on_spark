@@ -17,11 +17,14 @@ Rules:
 - Blank lines are ignored.
 - Leading/trailing spaces and tabs around keys/values are trimmed.
 - Inline comments are supported when `#` begins a token (start-of-line or preceded by whitespace).
+- Unknown keys are ignored by default.
+- For strict parsing (unknown keys are errors), use `ds4_config_parse_mem_ex` / `ds4_config_parse_file_ex` with `DS4_CONFIG_PARSE_STRICT_UNKNOWN`.
 
 Supported keys:
 
 - `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`) or a case-insensitive name (`error`, `warn`/`warning`, `info`, `debug`)
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
+- `cuda_device`: integer `-1` (auto / leave default device) or `>= 0` (force device index)
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 
@@ -34,6 +37,7 @@ For CLI-style overrides where keys and values are NUL-terminated strings, `ds4_c
 `enable_cuda` is a runtime toggle, but CUDA support is also a build-time choice:
 
 - If DS4 is built without CUDA (`DS4_ENABLE_CUDA=OFF`), enabling CUDA via config will cause `ds4_ctx_apply_config` to fail.
+- If DS4 is built with CUDA but no CUDA device is available at runtime, `ds4_ctx_apply_config` will fail (it calls `ds4_cuda_init` when `enable_cuda=1`).
 - If DS4 is built with CUDA, `DS4_HAS_CUDA` is defined and `ds4_cuda_is_enabled_build()` returns `1`.
 
 ## Environment variables
@@ -42,6 +46,7 @@ You can also override config fields from the environment with `ds4_config_parse_
 
 - `DS4_LOG_LEVEL`
 - `DS4_ENABLE_CUDA`
+- `DS4_CUDA_DEVICE`
 
 `ds4_config_load_auto` also consults:
 

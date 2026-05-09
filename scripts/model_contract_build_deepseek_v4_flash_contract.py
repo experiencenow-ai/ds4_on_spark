@@ -302,6 +302,28 @@ def parse_inference_moe_hash_routing(model_py: Path) -> dict:
 		"bias_none_expr": bias_none,
 	}
 
+def parse_inference_mtp_semantics(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+	input_shape_comment = find_first_line_containing(text, "# x: [b,s,hc,d]")
+	embed_head_assert = find_first_line_containing(text, "assert self.embed is not None and self.head is not None")
+	embed = find_first_line_containing(text, "e = self.embed(input_ids)")
+	enorm = find_first_line_containing(text, "e = self.enorm(e)")
+	hnorm = find_first_line_containing(text, "x = self.hnorm(x)")
+	combine = find_first_line_containing(text, "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)")
+	super_forward = find_first_line_containing(text, "x = super().forward(x, start_pos, input_ids)")
+	head = find_first_line_containing(text, "logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)")
+
+	return {
+		"input_shape_comment": input_shape_comment,
+		"assert_embed_head_expr": embed_head_assert,
+		"embed_expr": embed,
+		"enorm_expr": enorm,
+		"hnorm_expr": hnorm,
+		"combine_e_and_h_expr": combine,
+		"super_forward_expr": super_forward,
+		"head_logits_expr": head,
+	}
+
 def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> int:
 	if compress_ratio == 0:
 		return int(window_size)
@@ -713,6 +735,7 @@ def build_contract() -> dict:
 	sem = parse_inference_mla_and_cache_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	moe_sem = parse_inference_moe_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	moe_hash_sem = parse_inference_moe_hash_routing(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
+	mtp_sem = parse_inference_mtp_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
@@ -888,6 +911,7 @@ def build_contract() -> dict:
 					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
 					"namespace_prefix": "mtp.{j}.",
+					"semantics": mtp_sem,
 					"trust_gates": {
 						"artifact_requires_mtp_contract_complete": True,
 						"artifact_requires_namespace_prefix": "mtp.{j}.",

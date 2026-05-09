@@ -593,6 +593,16 @@
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
     "namespace_prefix": "mtp.{j}.",
+    "semantics": {
+      "assert_embed_head_expr": "assert self.embed is not None and self.head is not None",
+      "combine_e_and_h_expr": "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)",
+      "embed_expr": "e = self.embed(input_ids)",
+      "enorm_expr": "e = self.enorm(e)",
+      "head_logits_expr": "logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)",
+      "hnorm_expr": "x = self.hnorm(x)",
+      "input_shape_comment": "# x: [b,s,hc,d], hc_fn: [mix_hc,hc*d], hc_scale: [3], hc_base: [mix_hc], y: [b,s,hc,d]",
+      "super_forward_expr": "x = super().forward(x, start_pos, input_ids)"
+    },
     "trust_gates": {
       "acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
       "acceptance_requires_prefill_and_decode": true,
