@@ -19,9 +19,18 @@ Targets:
   deepseek_v3
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_batiai    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_nsparks   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_cyberneurova  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
   transformers
   llama_cpp
+  llama_cpp_deepseek_v4_flash
+  llama_cpp_deepseek_v4_support_wip
+  llama_cpp_cuda_spark
   all
 EOF
 }
@@ -95,6 +104,24 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			clone_or_update_nolfs "deepseek_v4_flash_base_hf" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base" "refs/heads/main"
 			;;
+		deepseek_v4_gguf_antirez)
+			clone_or_update_nolfs "deepseek_v4_gguf_antirez" "https://huggingface.co/antirez/deepseek-v4-gguf" "refs/heads/main"
+			;;
+		deepseek_v4_gguf_preyazz)
+			clone_or_update_nolfs "deepseek_v4_gguf_preyazz" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
+			;;
+		deepseek_v4_gguf_batiai)
+			clone_or_update_nolfs "deepseek_v4_gguf_batiai" "https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
+			;;
+		deepseek_v4_gguf_nsparks)
+			clone_or_update_nolfs "deepseek_v4_gguf_nsparks" "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF" "refs/heads/main"
+			;;
+		deepseek_v4_gguf_cyberneurova)
+			clone_or_update_nolfs "deepseek_v4_gguf_cyberneurova" "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF" "refs/heads/main"
+			;;
+		bati_cpp)
+			clone_or_update "bati_cpp" "https://github.com/batiai/bati.cpp.git" "refs/tags/v0.1.2"
+			;;
 		vllm)
 			clone_or_update "vllm" "https://github.com/vllm-project/vllm.git" "refs/tags/v0.20.2"
 			;;
@@ -103,6 +130,15 @@ fetch_one()
 			;;
 		llama_cpp)
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/tags/b8833"
+			;;
+		llama_cpp_deepseek_v4_flash)
+			clone_or_update "llama_cpp_deepseek_v4_flash" "https://github.com/antirez/llama.cpp-deepseek-v4-flash.git" "refs/heads/main"
+			;;
+		llama_cpp_deepseek_v4_support_wip)
+			clone_or_update "llama_cpp_deepseek_v4_support_wip" "https://github.com/nisparks/llama.cpp.git" "refs/heads/wip/deepseek-v4-support"
+			;;
+		llama_cpp_cuda_spark)
+			clone_or_update "llama_cpp_cuda_spark" "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git" "refs/heads/master"
 			;;
 		*)
 			echo "Unknown target: ${target}" >&2
@@ -125,9 +161,18 @@ main()
 		fetch_one deepseek_v3
 		fetch_one deepseek_v4_flash_hf
 		fetch_one deepseek_v4_flash_base_hf
+		fetch_one deepseek_v4_gguf_antirez
+		fetch_one deepseek_v4_gguf_preyazz
+		fetch_one deepseek_v4_gguf_batiai
+		fetch_one deepseek_v4_gguf_nsparks
+		fetch_one deepseek_v4_gguf_cyberneurova
+		fetch_one bati_cpp
 		fetch_one vllm
 		fetch_one transformers
 		fetch_one llama_cpp
+		fetch_one llama_cpp_deepseek_v4_flash
+		fetch_one llama_cpp_deepseek_v4_support_wip
+		fetch_one llama_cpp_cuda_spark
 		echo "Fetched: ${UPSTREAM_DIR}"
 		return 0
 	fi

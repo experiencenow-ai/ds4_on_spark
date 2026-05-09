@@ -21,6 +21,7 @@ Related checkpoint (same “official configs” approach):
 - `config.json`, `generation_config.json`
 - `tokenizer.json`, `tokenizer_config.json`
 - `encoding/` (tokenizer-related assets)
+- `inference/` (reference scripts; small, but do not vendor)
 - `DeepSeek_V4.pdf` (technical report)
 
 ## Weight download risk (Git LFS)
@@ -29,11 +30,18 @@ Related checkpoint (same “official configs” approach):
 - When fetched via `scripts/fetch_upstreams.sh` with LFS disabled, these appear as small pointer stubs (first line `version https://git-lfs.github.com/spec/v1`), not actual weights.
 - Do not run `git lfs pull` (or any alternative fetch that resolves LFS blobs) inside `upstreams/deepseek_v4_*`.
 
+## Hugging Face revisions vs git commits
+
+Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) that don’t match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
+
+To see the exact git commit for the pinned ref, use:
+
+```bash
+git ls-remote https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash refs/heads/main
+```
 ## Quantized single-Spark candidates
 
-Quantized community artifacts are useful for the intermediate "one Spark
-produces tokens" milestone, but they are not canonical sources of model
-semantics. Track them as runtime fixtures, not upstream truth.
+Quantized community artifacts are useful for the intermediate "one Spark produces tokens" milestone, but they are not canonical sources of model semantics. Track them as runtime fixtures, not upstream truth.
 
 Before using any quantized artifact, record:
 
@@ -43,9 +51,7 @@ Before using any quantized artifact, record:
 - required runtime fork/branch/commit
 - license and conversion notes
 
-Do not add community quantized model repos to `scripts/fetch_upstreams.sh` unless
-the fetch remains metadata-only. Large GGUF or safetensor downloads must remain
-human-approved, manual fixture setup.
+Do not add community quantized model repos to `scripts/fetch_upstreams.sh` unless the fetch remains metadata-only. Large GGUF or safetensor downloads must remain human-approved, manual fixture setup.
 
 ## vLLM references
 

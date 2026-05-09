@@ -11,6 +11,10 @@
 
 DeepGEMM provides optimized GEMM kernels and related CUDA plumbing that may be relevant for Spark GPU nodes when comparing kernel-level performance/behavior.
 
+## Pinning notes
+
+- Prefer release tags over `main` for reproducibility when they exist.
+
 ## Build notes (upstream, summarized)
 
 - Requirements (from upstream README, summarized):
