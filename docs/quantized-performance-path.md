@@ -52,7 +52,7 @@ To make the first replay meaningful, log at least:
 
 Optional but useful:
 
-- router scores/probabilities (`scores`)
+- router scores/probabilities (`scores`) (enables `--admit-policy score_desc` in the simulator)
 - observed per-expert queue depth at enqueue time (for later model/validation)
 
 ## MTP Status

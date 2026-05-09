@@ -530,6 +530,82 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(m.effective_k_batch), m.admitted_tokens_batch)
         self.assertGreater(m.partial_admit_tokens, 0)
 
+    def test_admit_policy_score_desc_can_override_router_order(self) -> None:
+        trace = []
+        for i in range(20):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=0.0,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                    scores=(0.0,),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0, 1),
+                scores=(0.1, 0.9),
+            )
+        )
+
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        base = dict(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+        )
+        cfg_ordered = scheduler_sim.SimConfig(**base, admit_policy="ordered")
+        cfg_scored = scheduler_sim.SimConfig(**base, admit_policy="score_desc")
+
+        m0 = scheduler_sim.run_simulation(cfg_ordered, trace)
+        m1 = scheduler_sim.run_simulation(cfg_scored, trace)
+        self.assertGreater(len(m0.token_lat_ms_interactive), 0)
+        self.assertGreater(len(m1.token_lat_ms_interactive), 0)
+        self.assertGreater(m0.token_lat_ms_interactive[0], m1.token_lat_ms_interactive[0])
+
+    def test_admit_policy_score_desc_requires_scores(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0, 1),
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            admit_policy="score_desc",
+        )
+        with self.assertRaises(ValueError):
+            scheduler_sim.run_simulation(cfg, trace)
+
     def test_batching_service_model_reduces_makespan(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

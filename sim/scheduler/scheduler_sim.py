@@ -131,10 +131,11 @@ class ExpertQueue:
     hi: Deque[Task] = dataclasses.field(default_factory=deque)
     lo: Deque[Task] = dataclasses.field(default_factory=deque)
     in_flight: int = 0
+    in_flight_tasks: int = 0
     hi_burst: int = 0
 
     def pending(self) -> int:
-        return(len(self.hi) + len(self.lo))
+        return(len(self.hi) + len(self.lo) + self.in_flight_tasks)
 
 
 class EventKind(enum.IntEnum):
@@ -699,7 +700,13 @@ def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: T
         ranked = [(experts[e].pending(), i, e) for i, e in enumerate(route.candidates)]
         ranked.sort()
         return([e for _p, _i, e in ranked])
-    raise ValueError("admit_policy must be 'ordered' or 'least_pending'")
+    if admit_policy == "score_desc":
+        if route.scores is None:
+            raise ValueError("admit_policy score_desc requires per-candidate scores")
+        ranked = [(-float(route.scores[i]), i, e) for i, e in enumerate(route.candidates)]
+        ranked.sort()
+        return([e for _s, _i, e in ranked])
+    raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
 
 
 def _service_time_ms(cfg: SimConfig, batch_size: int) -> float:
@@ -771,6 +778,7 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
             task.start_ms = now_ms
 
         eq.in_flight += 1
+        eq.in_flight_tasks += len(tasks)
         seq_ref[0] += 1
         heapq.heappush(evq, Event(t_ms=(now_ms + _service_time_tasks_ms(cfg, tasks)), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
 
@@ -875,8 +883,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("k_signal must be 'global' or 'candidates'")
 
     admit_policy = cfg.admit_policy.strip().lower()
-    if admit_policy not in ("ordered", "least_pending"):
-        raise ValueError("admit_policy must be 'ordered' or 'least_pending'")
+    if admit_policy not in ("ordered", "least_pending", "score_desc"):
+        raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
 
     if cfg.adaptive_k.k_min_interactive <= 0 or cfg.adaptive_k.k_max_interactive <= 0:
         raise ValueError("k_min_interactive and k_max_interactive must be > 0")
@@ -913,6 +921,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("trace route candidates must be non-empty")
         if route.scores is not None and len(route.scores) != len(route.candidates):
             raise ValueError("trace route scores must have same length as candidates")
+        if admit_policy == "score_desc" and route.scores is None:
+            raise ValueError("admit_policy score_desc requires scores on every trace route")
         if route.mtp_accept_len is not None and cfg.mtp_draft_len <= 0:
             raise ValueError("trace route mtp_accept_len requires mtp_draft_len > 0")
         for expert_id in route.candidates:
@@ -1134,6 +1144,9 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             if eq.in_flight <= 0:
                 raise RuntimeError("in_flight underflow")
             eq.in_flight -= 1
+            if eq.in_flight_tasks < len(ev.tasks):
+                raise RuntimeError("in_flight_tasks underflow")
+            eq.in_flight_tasks -= len(ev.tasks)
 
             for task in ev.tasks:
                 tid = task.token_id
@@ -1218,7 +1231,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--k-update-ms", type=float, default=0.0, help="Adaptive-K control: minimum time between K updates (0 = per-token).")
     p.add_argument("--k-slew", type=int, default=0, help="Adaptive-K control: max |delta K| per controller update (0 = unlimited).")
     p.add_argument("--k-signal", type=str, default="global", help="Adaptive-K congestion signal: global (max pending across all experts) or candidates (max pending among this token's candidates).")
-    p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order) or least_pending (pick least pending experts among candidates).")
+    p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
 
     p.add_argument("--json", action="store_true", help="Print JSON metrics only.")
     return(p.parse_args(argv))

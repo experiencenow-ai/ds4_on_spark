@@ -28,6 +28,9 @@ Work units:
 Starvation is counted when a task waits in an expert queue for at least
 `--starvation-ms` before it starts service.
 
+Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
+queued tasks plus tasks currently in service (in-flight).
+
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.
@@ -35,6 +38,7 @@ Two policies are supported:
 
 - `--admit-policy ordered` (default): admit in router-provided order
 - `--admit-policy least_pending`: admit the least-pending experts among the candidates (ties broken by router order)
+- `--admit-policy score_desc`: order candidates by descending `scores` from trace replay (ties broken by router order). Requires `scores` for every trace entry.
 
 ### Per-Expert Service Discipline
 
@@ -148,7 +152,7 @@ Replay mode reads one JSON object per line with required fields:
 - `t_ms` (number): arrival time in milliseconds
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
-- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
+- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc`.
 - `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
 
 Example:
