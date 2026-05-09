@@ -132,9 +132,13 @@ def _fmt_float(v):
 
 summary = []
 summary.append("exit_code=%d" % rc)
+summary.append("model_path=%s" % model)
+summary.append("tensor_parallel_size=%d" % tp)
+summary.append("max_tokens=%d" % max_tokens)
 summary.append("ttft_first_output_s=NA")
 summary.append("load_s=" + _fmt_float(load_s))
 summary.append("generate_wall_s=" + _fmt_float(generate_wall_s))
+summary.append("wall_s=%.6f" % (time.monotonic() - start))
 summary.append("generated_tokens=%d" % int(generated_tokens))
 if generate_wall_s is not None and generate_wall_s > 0 and generated_tokens > 0:
     summary.append("generation_tps=%.6f" % (generated_tokens / max(1e-9, generate_wall_s)))
@@ -153,8 +157,6 @@ print("\n== baseline summary (approx) ==")
 print("\n".join(summary))
 raise SystemExit(rc)
 PY
-
-cat "$LOG_RAW" || true
 
 echo
 echo "== gpu snapshot (post) =="

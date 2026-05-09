@@ -109,6 +109,11 @@ if extra_args.strip():
     cmd.extend(shlex.split(extra_args))
 
 start = time.monotonic()
+model_size_bytes = None
+try:
+    model_size_bytes = int(os.stat(model).st_size)
+except Exception:
+    model_size_bytes = None
 
 timings_lines = []
 with open(log_raw, "w", encoding="utf-8") as f:
@@ -160,6 +165,12 @@ for tl in timings_lines:
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
+summary_lines.append("llama_cli=%s" % llama_cli)
+summary_lines.append("model_path=%s" % model)
+if model_size_bytes is None:
+    summary_lines.append("model_size_bytes=NA")
+else:
+    summary_lines.append("model_size_bytes=%d" % model_size_bytes)
 if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
 else:

@@ -44,6 +44,7 @@ This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
 - best-effort Spark host metadata (`lscpu`, `free`, `df`, etc.)
+- the exact remote `ssh` invocations used (copy/pasteable)
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
 

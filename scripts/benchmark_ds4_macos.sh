@@ -111,6 +111,11 @@ start = time.monotonic()
 first_output_s = None
 prefill_tps = None
 generation_tps = None
+model_size_bytes = None
+try:
+    model_size_bytes = int(os.stat(model).st_size)
+except Exception:
+    model_size_bytes = None
 
 prefill_re = re.compile(r"ds4:\\s+prefill:\\s+([0-9]+(?:\\.[0-9]+)?)\\s+t/s,\\s+generation:\\s+([0-9]+(?:\\.[0-9]+)?)\\s+t/s")
 
@@ -143,6 +148,12 @@ if sys.platform.startswith("linux"):
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
+summary_lines.append("ds4_bin=%s" % ds4_bin)
+summary_lines.append("model_path=%s" % model)
+if model_size_bytes is None:
+    summary_lines.append("model_size_bytes=NA")
+else:
+    summary_lines.append("model_size_bytes=%d" % model_size_bytes)
 if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
 else:

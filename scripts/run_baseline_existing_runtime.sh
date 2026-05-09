@@ -42,6 +42,9 @@ extract_baseline_summary()
     ' "$in" 2>/dev/null || true
 }
 
+REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN LLAMA_DIR='${LLAMA_DIR}' MODEL_GGUF='${MODEL_GGUF}' /tmp/benchmark_llamacpp_spark.sh"
+REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN VLLM_MODEL='${VLLM_MODEL}' /tmp/benchmark_vllm_spark.sh"
+
 {
     echo "# Existing Runtime Baseline (Spark)"
     echo
@@ -65,6 +68,22 @@ extract_baseline_summary()
     echo "- VLLM_MODEL (hf dir): ${VLLM_MODEL:-<unset>}"
     echo "- DS4_DIR (macos): ${DS4_DIR:-<default local>}"
     echo "- DS4_MODEL_GGUF (macos): ${DS4_MODEL_GGUF:-<unset>}"
+    echo
+    echo "## Remote Commands"
+    echo
+    echo "These are the exact remote invocations used for the Spark sections."
+    echo
+    echo "llama.cpp:"
+    echo
+    echo '```sh'
+    echo "ssh $SSH_OPTS $target \"$REMOTE_LLAMA_CMD\" < scripts/benchmark_llamacpp_spark.sh"
+    echo '```'
+    echo
+    echo "vLLM:"
+    echo
+    echo '```sh'
+    echo "ssh $SSH_OPTS $target \"$REMOTE_VLLM_CMD\" < scripts/benchmark_vllm_spark.sh"
+    echo '```'
     echo
     echo "## Safety Gates"
     echo
@@ -118,7 +137,7 @@ fi
 
 echo "== running llama.cpp benchmark script on spark (may be gated) =="
 rc_llama=0
-ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN LLAMA_DIR='${LLAMA_DIR}' MODEL_GGUF='${MODEL_GGUF}' /tmp/benchmark_llamacpp_spark.sh" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
+ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_CMD" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
     >"$OUT_DIR/remote_llamacpp_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_stderr.txt" || rc_llama=$?
 
 {
@@ -153,7 +172,7 @@ ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp
 
 echo "== running vLLM probe script on spark =="
 rc_vllm=0
-ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN VLLM_MODEL='${VLLM_MODEL}' /tmp/benchmark_vllm_spark.sh" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
+ssh $SSH_OPTS "$target" "$REMOTE_VLLM_CMD" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
     >"$OUT_DIR/remote_vllm_stdout.txt" 2>"$OUT_DIR/remote_vllm_stderr.txt" || rc_vllm=$?
 
 {
