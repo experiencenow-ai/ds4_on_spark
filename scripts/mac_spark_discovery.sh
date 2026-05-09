@@ -14,7 +14,8 @@ Runs lightweight macOS-side discovery for Spark hosts:
 - TCP/22 reachability probes
 
 Environment:
-  DS4_GIT_DIR Optional git dir override for printing `git: <hash>`
+  DS4_GIT_DIR       Optional git dir override for printing `git: <hash>`
+  DS4_GIT_WORK_TREE Optional work tree override (defaults to $PWD)
   REDACT=1    Redact IPv4/IPv6/MAC addresses from output
 
 Examples:
@@ -45,8 +46,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 echo "== meta =="
 date -u
 if command -v git >/dev/null 2>&1; then
+	worktree="${DS4_GIT_WORK_TREE:-$PWD}"
 	if [ "${DS4_GIT_DIR:-}" != "" ]; then
-		echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$PWD" rev-parse --short HEAD 2>/dev/null || true)"
+		echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$worktree" rev-parse --short HEAD 2>/dev/null || true)"
 	elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 		echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 	fi

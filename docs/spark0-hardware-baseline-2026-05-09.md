@@ -543,6 +543,47 @@ device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 08:56Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_wt_gitdir SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0-probe-20260509T085606Z.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- `DS4_GIT_DIR` points at a writable git dir used by this Mac checkout; any equivalent writable `gitdir` works.
+
+```text
+== local meta ==
+Sat May  9 08:56:06 UTC 2026
+git: 6f9427e
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== cuda toolkit ==
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
+```
+
 ## Update: Probe Refresh (2026-05-09 04:52Z)
 
 Commands run:
@@ -643,6 +684,62 @@ cuda runtime api version: 13000
 device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 sms: 48
+```
+
+## Update: Probe Refresh (2026-05-09 09:27Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_20260509T092719Z_probe12.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The probe now captures `ethtool -i` (NIC driver/firmware) and filesystem type/options; it also checks for `deviceQuery` when present.
+
+```text
+== local meta ==
+Sat May  9 09:27:19 UTC 2026
+git: 2c65e9b
+probe targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== cuda demo_suite (deviceQuery, optional) ==
+deviceQuery not found
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 sms: 48
+
+== network links (no IPs) ==
+-- ethtool enP7s7 --
+Settings for enP7s7:
+	Speed: 10000Mb/s
+	Duplex: Full
+	Auto-negotiation: on
+	Link detected: yes
+driver: r8127
+version: 11.014.00-NAPI
+bus-info: 0007:01:00.0
+
+== filesystems (type + opts) ==
+/      ext4   rw,relatime,errors=remount-ro
+
+== disks (summary) ==
+nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
 
 ## Update: Probe Refresh (2026-05-09 08:27Z)
