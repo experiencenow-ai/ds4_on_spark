@@ -869,6 +869,16 @@ def build_contract() -> dict:
 					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
 					"namespace_prefix": "mtp.{j}.",
+					"trust_gates": {
+						"artifact_requires_mtp_contract_complete": True,
+						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"oracle_requires_include_mtp": True,
+						"oracle_requires_mtp_trace": True,
+						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+						"acceptance_requires_prefill_and_decode": True,
+						"acceptance_topk_ids_exact": True,
+						"acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+					},
 				},
 				"runtime": {
 					"reference_defaults": inf_model.get("reference_defaults", {}),

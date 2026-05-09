@@ -629,6 +629,39 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 		"forbidden_present": forbidden_sorted[:20],
 	}
 
+def compute_mtp_trust(mtp_present: bool, mtp_contract: Optional[dict[str, Any]], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
+	if not mtp_present:
+		return {"checked": True, "trusted": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+
+	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
+		return {"checked": False, "trusted": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+
+	trust_gates = None
+	if isinstance(contract_summary, dict):
+		trust_gates = contract_summary.get("mtp", {}).get("trust_gates", None)
+	if not isinstance(trust_gates, dict):
+		trust_gates = {}
+
+	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
+	if requires_complete and mtp_contract.get("complete") is not True:
+		return {
+			"checked": True,
+			"trusted": False,
+			"status": "incomplete",
+			"reasons": ["mtp_contract.complete != true"],
+		}
+
+	reasons = ["structural mtp.* keys complete"]
+	if trust_gates.get("oracle_requires_include_mtp") is True or trust_gates.get("oracle_requires_mtp_trace") is True:
+		reasons.append("requires logits oracle with include_mtp before trusting MTP")
+
+	return {
+		"checked": True,
+		"trusted": False,
+		"status": "structural_complete_untrusted",
+		"reasons": reasons,
+	}
+
 
 def inspect_safetensors_index(path: Path) -> InspectResult:
 	data = load_json(path)
@@ -887,6 +920,7 @@ def main() -> int:
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
 			if topology_candidate is not None:
 				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
+		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -899,6 +933,7 @@ def main() -> int:
 			"mtp_layer_ids": sorted(mtp_layer_ids),
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
+			"mtp_trust": mtp_trust,
 			"trunk_contract": trunk_contract,
 			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"topology_contract": topology_contract,
@@ -909,6 +944,7 @@ def main() -> int:
 			out = as_dict(results[0])
 			if contract_summary is not None:
 				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
+				out["mtp_trust"] = compute_mtp_trust(bool(out.get("mtp_present", False)), out.get("mtp_contract"), contract_summary)
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
@@ -925,6 +961,7 @@ def main() -> int:
 									if contract_summary is None
 									else {
 										"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
+										"mtp_trust": compute_mtp_trust(bool(r.mtp_present), compute_mtp_contract(set(r.mtp_keys_all), contract_summary), contract_summary),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 									}

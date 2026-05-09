@@ -592,7 +592,17 @@
   "mtp": {
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
-    "namespace_prefix": "mtp.{j}."
+    "namespace_prefix": "mtp.{j}.",
+    "trust_gates": {
+      "acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+      "acceptance_requires_prefill_and_decode": true,
+      "acceptance_topk_ids_exact": true,
+      "artifact_requires_mtp_contract_complete": true,
+      "artifact_requires_namespace_prefix": "mtp.{j}.",
+      "oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+      "oracle_requires_include_mtp": true,
+      "oracle_requires_mtp_trace": true
+    }
   },
   "quantization": {
     "config_quantization_config": {
