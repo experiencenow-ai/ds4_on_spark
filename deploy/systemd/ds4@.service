@@ -14,6 +14,9 @@ Environment=DS4_INSTANCE=%i
 EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env
 
+# Provide the script on-host at /opt/ds4/scripts/ops_ds4_env_check.sh.
+ExecStartPre=/opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-%i.env
+
 # ExecStart is intentionally a template: the binary/flags will evolve as the engine
 # skeleton lands. Keep env keys stable and update only the command line here.
 ExecStart=/opt/ds4/bin/ds4_server --config ${DS4_CONFIG_PATH}
