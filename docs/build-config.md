@@ -17,6 +17,8 @@ Rules:
 - Blank lines are ignored.
 - Leading/trailing spaces and tabs around keys/values are trimmed.
 - Inline comments are supported when `#` begins a token (start-of-line or preceded by whitespace).
+- Unknown keys are ignored by default.
+- For strict parsing (unknown keys are errors), use `ds4_config_parse_mem_ex` / `ds4_config_parse_file_ex` with `DS4_CONFIG_PARSE_STRICT_UNKNOWN`.
 
 Supported keys:
 
