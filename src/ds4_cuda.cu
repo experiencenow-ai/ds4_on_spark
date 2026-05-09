@@ -219,6 +219,35 @@ ds4_cuda_status_t ds4_cuda_free(void *ptr)
 	return(ds4_cuda_ok());
 }
 
+ds4_cuda_status_t ds4_cuda_malloc_host(void **out,int64_t bytes)
+{
+	cudaError_t err;
+	size_t n;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out = 0;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (size_t)bytes;
+	err = cudaMallocHost(out,n);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_free_host(void *ptr)
+{
+	cudaError_t err;
+	err = cudaFreeHost(ptr);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
 ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes)
 {
 	cudaError_t err;
