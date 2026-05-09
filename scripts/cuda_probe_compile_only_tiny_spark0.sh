@@ -27,26 +27,33 @@ LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
 "
 
 ssh $SSH_OPTS "$target" "set -eu
+NVCC=\"\"
 echo \"== nvcc ==\"
 if [ -x /usr/local/cuda/bin/nvcc ]; then
-	/usr/local/cuda/bin/nvcc --version
-	echo
-	echo \"== nvcc: --list-gpu-arch (if supported) ==\"
-	/usr/local/cuda/bin/nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
-	echo
-	echo \"== nvcc: --list-gpu-code (if supported) ==\"
-	/usr/local/cuda/bin/nvcc --list-gpu-code 2>/dev/null || echo \"(nvcc --list-gpu-code not supported)\"
+	NVCC=\"/usr/local/cuda/bin/nvcc\"
 elif command -v nvcc >/dev/null 2>&1; then
-	nvcc --version
-	echo
-	echo \"== nvcc: --list-gpu-arch (if supported) ==\"
-	nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
-	echo
-	echo \"== nvcc: --list-gpu-code (if supported) ==\"
-	nvcc --list-gpu-code 2>/dev/null || echo \"(nvcc --list-gpu-code not supported)\"
+	NVCC=\"nvcc\"
 else
 	echo \"nvcc not found\" >&2
 	exit 3
+fi
+\$NVCC --version
+echo
+echo \"== nvcc: --list-gpu-arch (if supported) ==\"
+\$NVCC --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
+echo
+echo \"== nvcc: --list-gpu-code (if supported) ==\"
+list_gpu_code=\$(\$NVCC --list-gpu-code 2>/dev/null || true)
+if [ \"\${list_gpu_code}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-code not supported)\"
+else
+	printf \"%s\n\" \"\${list_gpu_code}\"
+	if echo \"\${list_gpu_code}\" | grep -q \"sm_121\"; then
+		:
+	else
+		echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
+		exit 4
+	fi
 fi
 
 echo
