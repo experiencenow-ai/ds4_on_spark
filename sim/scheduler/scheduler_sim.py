@@ -108,6 +108,8 @@ class SimConfig:
     mtp_draft_cost_scale: float = 0.25
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
+    batch_wait_interactive_ms: float = 0.0
+    batch_wait_batch_ms: float = 0.0
     service_base_ms: float = 0.0
     service_per_task_ms: float = -1.0
 
@@ -137,6 +139,8 @@ class ExpertQueue:
     in_flight: int = 0
     in_flight_tasks: int = 0
     hi_burst: int = 0
+    hi_wakeup_ms: float = -1.0
+    lo_wakeup_ms: float = -1.0
 
     def pending(self) -> int:
         return(len(self.hi) + len(self.lo) + self.in_flight_tasks)
@@ -145,6 +149,7 @@ class ExpertQueue:
 class EventKind(enum.IntEnum):
     TOKEN_ARRIVAL = 0
     TASK_DONE = 1
+    EXPERT_WAKE = 2
 
 
 @dataclass(order=True)
@@ -857,12 +862,34 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
         if batch_max <= 0:
             raise RuntimeError("batch_max must be > 0")
 
+        batch_wait_ms = cfg.batch_wait_interactive_ms if serving_hi else cfg.batch_wait_batch_ms
+        if batch_wait_ms < 0.0:
+            raise RuntimeError("batch_wait_ms must be >= 0")
+
+        if batch_max > 1 and batch_wait_ms > 0.0 and len(q) < batch_max:
+            due_ms = (q[0].enqueue_ms + batch_wait_ms)
+            if due_ms > now_ms:
+                prev_due = eq.hi_wakeup_ms if serving_hi else eq.lo_wakeup_ms
+                if prev_due < 0.0 or due_ms < (prev_due - 1e-12):
+                    if serving_hi:
+                        eq.hi_wakeup_ms = due_ms
+                    else:
+                        eq.lo_wakeup_ms = due_ms
+                    seq_ref[0] += 1
+                    heapq.heappush(evq, Event(t_ms=due_ms, kind=EventKind.EXPERT_WAKE, seq=seq_ref[0], expert_id=expert_id))
+                break
+
         n = min(batch_max, len(q))
         tasks: List[Task] = []
         for _i in range(n):
             tasks.append(q.popleft())
         if len(tasks) == 0:
             break
+
+        if serving_hi:
+            eq.hi_wakeup_ms = -1.0
+        else:
+            eq.lo_wakeup_ms = -1.0
 
         if serving_hi:
             eq.hi_burst += len(tasks)
@@ -975,6 +1002,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("batch_max_interactive must be > 0")
     if cfg.batch_max_batch <= 0:
         raise ValueError("batch_max_batch must be > 0")
+    if cfg.batch_wait_interactive_ms < 0.0:
+        raise ValueError("batch_wait_interactive_ms must be >= 0")
+    if cfg.batch_wait_batch_ms < 0.0:
+        raise ValueError("batch_wait_batch_ms must be >= 0")
     if _service_time_ms(cfg, 1) <= 0.0:
         raise ValueError("service model must produce >0ms for batch_size=1")
     if cfg.starvation_ms <= 0.0:
@@ -1313,6 +1344,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                             metrics.token_sla_violations_batch += 1
 
             _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
+        elif ev.kind == EventKind.EXPERT_WAKE:
+            if ev.expert_id < 0 or ev.expert_id >= cfg.num_experts:
+                raise RuntimeError("EXPERT_WAKE invalid expert_id")
+            eq = experts[ev.expert_id]
+            if eq.hi_wakeup_ms >= 0.0 and now_ms >= (eq.hi_wakeup_ms - 1e-12):
+                eq.hi_wakeup_ms = -1.0
+            if eq.lo_wakeup_ms >= 0.0 and now_ms >= (eq.lo_wakeup_ms - 1e-12):
+                eq.lo_wakeup_ms = -1.0
+            _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
         else:
             raise RuntimeError("unknown event kind")
 
@@ -1355,6 +1395,8 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--service-per-task-ms", type=float, default=-1.0, help="Batch service model: incremental cost per task in a started expert batch (-1 = use --service-ms).")
     p.add_argument("--batch-max-interactive", type=int, default=1, help="Max tasks started per expert batch for interactive queue (1 = no batching).")
     p.add_argument("--batch-max-batch", type=int, default=1, help="Max tasks started per expert batch for batch queue (1 = no batching).")
+    p.add_argument("--batch-wait-interactive-ms", type=float, default=0.0, help="Batching window: max time to wait to fill interactive expert batches (0 = start immediately).")
+    p.add_argument("--batch-wait-batch-ms", type=float, default=0.0, help="Batching window: max time to wait to fill batch expert batches (0 = start immediately).")
     p.add_argument("--starvation-ms", type=float, default=50.0)
     p.add_argument("--hi-burst", type=int, default=0, help="Per-expert fairness: after starting N interactive tasks consecutively, force one batch start if any are queued (0 = strict priority).")
     p.add_argument("--promote-ms", type=float, default=0.0, help="Per-expert aging: promote batch tasks to interactive queue once they wait this long (0 = disabled).")
@@ -1463,6 +1505,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         service_per_task_ms=args.service_per_task_ms,
         batch_max_interactive=args.batch_max_interactive,
         batch_max_batch=args.batch_max_batch,
+        batch_wait_interactive_ms=args.batch_wait_interactive_ms,
+        batch_wait_batch_ms=args.batch_wait_batch_ms,
         starvation_ms=args.starvation_ms,
         hi_burst=args.hi_burst,
         promote_ms=args.promote_ms,

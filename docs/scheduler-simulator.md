@@ -29,6 +29,8 @@ Work units:
     - default (no batching): fixed service time per task (`--service-ms`)
     - optional batching: start up to `--batch-max-{interactive,batch}` tasks at once on an expert worker, with service time
       `--service-base-ms + --service-per-task-ms * batch_size` (when `--service-per-task-ms=-1`, it uses `--service-ms`)
+    - optional batching window: when an expert worker is idle and the chosen queue has fewer than `--batch-max-*` tasks,
+      delay starting the batch until the oldest queued task has waited `--batch-wait-*-ms` (or until the batch fills)
 
 Starvation is counted when a task waits in an expert queue for at least
 `--starvation-ms` before it starts service.
@@ -137,6 +139,12 @@ Batching-style service model example:
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --batch-max-batch 8 --service-base-ms 0.05 --service-per-task-ms 0.02 --json
+```
+
+Batching window example (trade queueing latency for larger batches):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --batch-max-batch 8 --batch-wait-batch-ms 0.5 --service-base-ms 0.05 --service-per-task-ms 0.02 --json
 ```
 
 Example: damp K oscillations and expose SLA violations:
