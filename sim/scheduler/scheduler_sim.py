@@ -20,6 +20,12 @@ class LatencyClass(str, enum.Enum):
     BATCH = "batch"
 
 
+class MtpPhase(enum.IntEnum):
+    NONE = 0
+    DRAFT = 1
+    VERIFY = 2
+
+
 @dataclass(frozen=True)
 class TokenRoute:
     t_ms: float
@@ -128,6 +134,7 @@ class Task:
     cls: LatencyClass
     enqueue_ms: float
     cost_scale: float = 1.0
+    mtp_phase: MtpPhase = MtpPhase.NONE
     start_ms: Optional[float] = None
 
 
@@ -230,6 +237,17 @@ class SimMetrics:
     saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist_overflow: float = 0.0
+    work_units_total: float = 0.0
+    work_units_interactive: float = 0.0
+    work_units_batch: float = 0.0
+    work_units_mtp_draft: float = 0.0
+    work_units_mtp_verify: float = 0.0
+    service_batches_started: int = 0
+    service_base_ms_total: float = 0.0
+    service_task_ms_total: float = 0.0
+    service_slot_ms_total: float = 0.0
+    service_slot_ms_interactive: float = 0.0
+    service_slot_ms_batch: float = 0.0
     mtp_output_tokens: int = 0
     mtp_verify_steps: int = 0
     mtp_draft_len: int = 0
@@ -322,6 +340,7 @@ class SimMetrics:
                 return(0)
             return(len(hist_time_ms) - 1)
 
+        output_tokens = float(self.mtp_output_tokens) if self.mtp_draft_len > 0 else float(self.admitted_tokens)
         return(
             {
                 "sim": {
@@ -329,6 +348,22 @@ class SimMetrics:
                     "makespan_ms": self.makespan_ms,
                     "token_throughput_tps": (float(self.num_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                     "task_throughput_tps": (float(self.admitted_tasks) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
+                },
+                "work": {
+                    "batches_started": self.service_batches_started,
+                    "work_units_total": self.work_units_total,
+                    "work_units_interactive": self.work_units_interactive,
+                    "work_units_batch": self.work_units_batch,
+                    "work_units_per_output_token": (float(self.work_units_total) / output_tokens) if output_tokens > 0.0 else 0.0,
+                    "service_base_ms_total": self.service_base_ms_total,
+                    "service_task_ms_total": self.service_task_ms_total,
+                    "service_slot_ms_total": self.service_slot_ms_total,
+                    "service_slot_ms_interactive": self.service_slot_ms_interactive,
+                    "service_slot_ms_batch": self.service_slot_ms_batch,
+                    "service_slot_ms_per_output_token": (float(self.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0,
+                    "mtp_work_units_draft": self.work_units_mtp_draft,
+                    "mtp_work_units_verify": self.work_units_mtp_verify,
+                    "mtp_work_units_draft_frac": (float(self.work_units_mtp_draft) / float(self.work_units_total)) if self.work_units_total > 0.0 else 0.0,
                 },
                 "trace": {
                     "k_mode": self.k_mode,
@@ -1426,10 +1461,38 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
                 metrics.task_queue_wait_ms_batch.append(wait_ms)
             task.start_ms = now_ms
 
+        per_task_ms = cfg.service_per_task_ms if cfg.service_per_task_ms >= 0.0 else cfg.service_ms
+        work_units_total = 0.0
+        work_units_draft = 0.0
+        work_units_verify = 0.0
+        for t in tasks:
+            u = float(t.cost_scale)
+            work_units_total += u
+            if t.cls == LatencyClass.INTERACTIVE:
+                metrics.work_units_interactive += u
+            else:
+                metrics.work_units_batch += u
+            if t.mtp_phase == MtpPhase.DRAFT:
+                work_units_draft += u
+            elif t.mtp_phase == MtpPhase.VERIFY:
+                work_units_verify += u
+        metrics.work_units_total += work_units_total
+        metrics.work_units_mtp_draft += work_units_draft
+        metrics.work_units_mtp_verify += work_units_verify
+        metrics.service_batches_started += 1
+        metrics.service_base_ms_total += cfg.service_base_ms
+        metrics.service_task_ms_total += (per_task_ms * work_units_total)
+        dt_ms = (cfg.service_base_ms + (per_task_ms * work_units_total))
+        metrics.service_slot_ms_total += dt_ms
+        if serving_hi:
+            metrics.service_slot_ms_interactive += dt_ms
+        else:
+            metrics.service_slot_ms_batch += dt_ms
+
         eq.in_flight += 1
         eq.in_flight_tasks += len(tasks)
         seq_ref[0] += 1
-        heapq.heappush(evq, Event(t_ms=(now_ms + _service_time_tasks_ms(cfg, tasks)), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
+        heapq.heappush(evq, Event(t_ms=(now_ms + dt_ms), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
 
 
 def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics) -> int:
@@ -1787,10 +1850,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             for micro_i in range(micro_tokens):
                 base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
                 cost_scale = base_cost_scale
+                mtp_phase = MtpPhase.NONE
                 if mtp_enabled and micro_i < cfg.mtp_draft_len:
                     cost_scale *= cfg.mtp_draft_cost_scale
+                    mtp_phase = MtpPhase.DRAFT
                 elif mtp_enabled and micro_i == cfg.mtp_draft_len and cfg.mtp_verify_per_draft_cost_scale > 0.0:
                     cost_scale *= (1.0 + (cfg.mtp_verify_per_draft_cost_scale * float(cfg.mtp_draft_len)))
+                    mtp_phase = MtpPhase.VERIFY
+                elif mtp_enabled and micro_i == cfg.mtp_draft_len:
+                    mtp_phase = MtpPhase.VERIFY
 
                 admitted = 0
                 for expert_id in _candidate_order(admit_policy, experts, route):
@@ -1804,7 +1872,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         else:
                             metrics.dropped_tasks_backpressure_batch += 1
                         continue
-                    task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=cost_scale)
+                    task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=cost_scale, mtp_phase=mtp_phase)
                     if route.cls == LatencyClass.INTERACTIVE:
                         eq.hi.append(task)
                     else:
@@ -1955,6 +2023,7 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     dropped = float(metrics.dropped_tokens_backpressure)
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
+    service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -1962,6 +2031,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "task_throughput_tps": float(task_tps),
             "output_tokens": float(output_tokens),
             "output_token_throughput_tps": float(output_tps),
+            "service_slot_ms_total": float(metrics.service_slot_ms_total),
+            "service_slot_ms_per_output_token": float(service_per_output_token),
             "drop_frac_tokens": float(drop_frac),
             "token_p50_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.50)),
             "token_p95_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.95)),
