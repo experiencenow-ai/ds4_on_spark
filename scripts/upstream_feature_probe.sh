@@ -45,6 +45,7 @@ if [ "${want_fetch}" -eq 1 ]; then
 fi
 
 fail=0
+skipped=0
 
 ok()
 {
@@ -81,15 +82,27 @@ need_dir()
 	return 1
 }
 
+skip()
+{
+	echo "SKIP $*" >&2
+	skipped=1
+}
+
 echo "== transformers (DeepSeek-V4 support) =="
-need_dir "${UPSTREAM_DIR}/transformers" "transformers checkout present" || true
-need_dir "${UPSTREAM_DIR}/transformers/src/transformers/models/deepseek_v4" "transformers deepseek_v4 model code" || true
-need_file "${UPSTREAM_DIR}/transformers/docs/source/en/model_doc/deepseek_v4.md" "transformers deepseek_v4 docs" || true
+if [ -d "${UPSTREAM_DIR}/transformers" ]; then
+	need_dir "${UPSTREAM_DIR}/transformers/src/transformers/models/deepseek_v4" "transformers deepseek_v4 model code" || true
+	need_file "${UPSTREAM_DIR}/transformers/docs/source/en/model_doc/deepseek_v4.md" "transformers deepseek_v4 docs" || true
+else
+	skip "transformers checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
+fi
 
 echo "== vLLM (DeepSeek-V4 support) =="
-need_dir "${UPSTREAM_DIR}/vllm" "vllm checkout present" || true
-need_file "${UPSTREAM_DIR}/vllm/vllm/model_executor/models/deepseek_v4.py" "vllm deepseek_v4 model entrypoint" || true
-need_file "${UPSTREAM_DIR}/vllm/csrc/fused_deepseek_v4_qnorm_rope_kv_insert_kernel.cu" "vllm deepseek_v4 fused KV insert kernel" || true
+if [ -d "${UPSTREAM_DIR}/vllm" ]; then
+	need_file "${UPSTREAM_DIR}/vllm/vllm/model_executor/models/deepseek_v4.py" "vllm deepseek_v4 model entrypoint" || true
+	need_file "${UPSTREAM_DIR}/vllm/csrc/fused_deepseek_v4_qnorm_rope_kv_insert_kernel.cu" "vllm deepseek_v4 fused KV insert kernel" || true
+else
+	skip "vllm checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
+fi
 
 if [ -f "${UPSTREAM_DIR}/vllm/vllm/model_executor/models/deepseek_v4.py" ]; then
 	if rg -n "_DEEPSEEK_V4_EXPERT_DTYPES" "${UPSTREAM_DIR}/vllm/vllm/model_executor/models/deepseek_v4.py" >/dev/null 2>&1; then
@@ -99,6 +112,11 @@ if [ -f "${UPSTREAM_DIR}/vllm/vllm/model_executor/models/deepseek_v4.py" ]; then
 	fi
 fi
 
+if [ "${fail}" -eq 0 ] && [ "${skipped}" -ne 0 ]; then
+	echo "OK   feature probe skipped (missing upstream checkouts; run with --fetch to enforce)"
+	exit 0
+fi
+
 if [ "${fail}" -ne 0 ]; then
 	echo "FAIL (one or more expected features missing)" >&2
 	exit 1
@@ -106,4 +124,3 @@ fi
 
 echo "OK   all feature probes passed"
 exit 0
-
