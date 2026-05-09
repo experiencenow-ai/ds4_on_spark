@@ -179,6 +179,14 @@ The probe `tools/cuda_probe/bin/cuda_sm121_fp4_conv` is a tiny compile/run check
 - converts a `float` to FP4 storage (`e2m1`)
 - converts back to `__half_raw` and prints the raw bits
 
+## cuBLASLt FP4 (E2M1) Smoke
+
+The probe `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke` is a best-effort “link + run” check for FP4 (E2M1) matmul via cuBLASLt on `sm_121`.
+
+Treat `CUBLAS_STATUS_NOT_SUPPORTED` as an informative result while the CUDA stack matures (DeepGEMM-style FP4 kernels may still need custom codepaths even when conversion helpers are present).
+
+Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88`): `cuda_cublaslt_fp4_smoke` returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection.
+
 ## Pipeline memcpy-async (cp.async-style mainloops)
 
 Many CUTLASS and custom GEMM kernels rely on CUDA pipeline primitives (cp.async-style) to move data from global memory into shared memory efficiently.

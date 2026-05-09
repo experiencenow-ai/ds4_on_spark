@@ -39,12 +39,15 @@ Implication:
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
 - FP8 matmul is verified via cuBLASLt on `sm_121` for E4M3 (see `cuda_cublaslt_fp8_smoke`), which de-risks early FP8 bring-up for DeepGEMM-style paths.
 - The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}`, multiple `cublasComputeType_t` variants, and workspace sizes `{1MiB,16MiB}` (observed `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
+- FP4 conversion helpers exist in CUDA 13 (`cuda_fp4.h`), but FP4 matmul support is cuBLASLt-stack dependent; use `cuda_cublaslt_fp4_smoke` as the first “does FP4 GEMM exist?” signal before investing in FP4 kernels.
+- Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88`): `cuda_cublaslt_fp4_smoke` returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection, so FP4 GEMM is not currently available via cuBLASLt on GB10.
 
 Probe:
 
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E4M3) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E5M2) matmul smoke test on Spark0.
+- `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP4 (E2M1) matmul smoke test on Spark0 (best-effort capability probe).
 
 ## CUTLASS
 
