@@ -223,6 +223,11 @@ Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
 
 DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
 
+These MLA/cache update semantics are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`:
+
+- `mla.*` records the presence of the extra per-token Q normalization and the output de-rotation marker.
+- `cache.update_semantics.*` records the decode-time KV ring-buffer update expression (`start_pos % win`) and the compressed-cache update expression (`start_pos // ratio`).
+
 ### Attention scaling + activation QAT constants
 
 These constants are **source-derived** from `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.inference_model_constants` to avoid accidental drift:
@@ -267,6 +272,8 @@ Score-routed layers:
   - tensor key: `layers.{i}.ffn.gate.bias` (float32) exists and is applied only for expert selection.
 - Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
+
+These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics` so downstream tooling can validate external runtime logs/configs without guessing.
 
 ## Hyper-Connections (mHC)
 
@@ -351,6 +358,12 @@ Quantized linear layers include per-block scale tensors:
 
 DS4 must treat the `model.safetensors.index.json` key set as authoritative for loader compatibility.
 
+To make the key set easy to reference in downstream tooling (and to detect accidental fixture drift), `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records a stable fingerprint of the sorted weight-map keys:
+
+- `checkpoint_index.weight_map_num_tensors`
+- `checkpoint_index.weight_map_keys_sha256`
+- `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
+
 ### Quantization scale tensor semantics (FP8/FP4)
 
 Reference implementation: `inference/model.py` (`Linear`, `linear(...)`).
@@ -415,6 +428,7 @@ MTP block (`mtp.0.*`):
   - `mtp.0.e_proj.{weight,scale}`, `mtp.0.h_proj.{weight,scale}`
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
+- Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
 
 This repo includes a verifier for these invariants: `scripts/model_contract_verify_deepseek_v4_flash.py`.
 

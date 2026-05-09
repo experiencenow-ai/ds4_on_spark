@@ -177,12 +177,68 @@
     },
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_mask_value": -1,
+    "update_semantics": {
+      "decode_compressed_update_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
+      "decode_sliding_ring_update_expr": "self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
+      "prefill_sliding_wrap_expr": "cutoff = seqlen % win"
+    },
     "window_size": 128
   },
   "checkpoint_index": {
     "metadata": {
       "total_size": 159609485896
-    }
+    },
+    "weight_map_file_counts": {
+      "model-00001-of-00046.safetensors": 1,
+      "model-00002-of-00046.safetensors": 1565,
+      "model-00003-of-00046.safetensors": 1565,
+      "model-00004-of-00046.safetensors": 1576,
+      "model-00005-of-00046.safetensors": 1569,
+      "model-00006-of-00046.safetensors": 1576,
+      "model-00007-of-00046.safetensors": 1569,
+      "model-00008-of-00046.safetensors": 1576,
+      "model-00009-of-00046.safetensors": 1569,
+      "model-00010-of-00046.safetensors": 1576,
+      "model-00011-of-00046.safetensors": 1569,
+      "model-00012-of-00046.safetensors": 1576,
+      "model-00013-of-00046.safetensors": 1569,
+      "model-00014-of-00046.safetensors": 1576,
+      "model-00015-of-00046.safetensors": 1569,
+      "model-00016-of-00046.safetensors": 1576,
+      "model-00017-of-00046.safetensors": 1569,
+      "model-00018-of-00046.safetensors": 1576,
+      "model-00019-of-00046.safetensors": 1569,
+      "model-00020-of-00046.safetensors": 1576,
+      "model-00021-of-00046.safetensors": 1569,
+      "model-00022-of-00046.safetensors": 1576,
+      "model-00023-of-00046.safetensors": 1569,
+      "model-00024-of-00046.safetensors": 1576,
+      "model-00025-of-00046.safetensors": 1569,
+      "model-00026-of-00046.safetensors": 1576,
+      "model-00027-of-00046.safetensors": 1569,
+      "model-00028-of-00046.safetensors": 1576,
+      "model-00029-of-00046.safetensors": 1569,
+      "model-00030-of-00046.safetensors": 1576,
+      "model-00031-of-00046.safetensors": 1569,
+      "model-00032-of-00046.safetensors": 1576,
+      "model-00033-of-00046.safetensors": 1569,
+      "model-00034-of-00046.safetensors": 1576,
+      "model-00035-of-00046.safetensors": 1569,
+      "model-00036-of-00046.safetensors": 1576,
+      "model-00037-of-00046.safetensors": 1569,
+      "model-00038-of-00046.safetensors": 1576,
+      "model-00039-of-00046.safetensors": 1569,
+      "model-00040-of-00046.safetensors": 1576,
+      "model-00041-of-00046.safetensors": 1569,
+      "model-00042-of-00046.safetensors": 1576,
+      "model-00043-of-00046.safetensors": 1569,
+      "model-00044-of-00046.safetensors": 1576,
+      "model-00045-of-00046.safetensors": 5,
+      "model-00046-of-00046.safetensors": 1575
+    },
+    "weight_map_keys_sha256": "f010f0041b4630a335fcf2368134154c4e7c1e17a04e750baa62a1ffe0a4f87a",
+    "weight_map_num_tensors": 69187,
+    "weight_map_unique_files": 46
   },
   "compat": {
     "by_inference_key": {
@@ -423,6 +479,15 @@
     "tool_calls_block_name": "tool_calls"
   },
   "format_version": 1,
+  "mla": {
+    "kv_rope_apply_expr": "apply_rotary_emb(kv[..., -rd:], freqs_cis)",
+    "output_derotate_expr": "apply_rotary_emb(o[..., -rd:], freqs_cis, True)",
+    "output_derotate_present": true,
+    "q_extra_rms_norm_expr": "q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + self.eps)",
+    "q_extra_rms_norm_present": true,
+    "q_rope_apply_expr": "apply_rotary_emb(q[..., -rd:], freqs_cis)",
+    "rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]"
+  },
   "model": "deepseek_v4_flash",
   "moe": {
     "hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
@@ -433,7 +498,19 @@
     "n_shared_experts": 1,
     "route_scale": 1.5,
     "score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
-    "scoring_func": "sqrtsoftplus"
+    "scoring_func": "sqrtsoftplus",
+    "semantics": {
+      "bias_affects_selection_only_comment": "# Bias shifts scores for expert selection (topk) but does not affect routing weights.",
+      "expert_compute_fp32_expr": "gate = self.w1(x).float()",
+      "gate_scores_fp32_expr": "scores = linear(x.float(), self.weight.float())",
+      "score_func_exprs": {
+        "sigmoid": "scores = scores.sigmoid()",
+        "softmax": "scores = scores.softmax(dim=-1)",
+        "sqrtsoftplus": "scores = F.softplus(scores).sqrt()"
+      },
+      "weights_normalize_expr": "weights /= weights.sum(dim=-1, keepdim=True)",
+      "weights_scale_expr": "weights *= self.route_scale"
+    }
   },
   "mtp": {
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
@@ -562,9 +639,13 @@
       "present": true,
       "tensor_key_count": 1575
     },
+    "mtp_embed_present": false,
+    "mtp_head_present": false,
     "mtp_layer_ids": [
       0
     ],
+    "mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
+    "mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
     "namespaces": [
       "embed",
       "hc_head_base",
@@ -619,6 +700,18 @@
       "attn.compressor.norm.weight",
       "attn.compressor.wgate.weight",
       "attn.compressor.wkv.weight"
+    ],
+    "required_mtp_additional_suffixes": [
+      "e_proj.weight",
+      "e_proj.scale",
+      "h_proj.weight",
+      "h_proj.scale",
+      "enorm.weight",
+      "hnorm.weight",
+      "norm.weight",
+      "hc_head_fn",
+      "hc_head_base",
+      "hc_head_scale"
     ],
     "required_top_level": [
       "embed.weight",
