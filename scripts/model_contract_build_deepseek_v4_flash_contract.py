@@ -3,6 +3,7 @@
 import argparse
 import json
 from collections import Counter
+from hashlib import sha256
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,13 @@ def dump_json(path: Path, obj) -> None:
 		json.dump(obj, f, indent=2, sort_keys=True)
 		f.write("\n")
 	tmp.replace(path)
+
+def sha256_file(path: Path) -> str:
+	h = sha256()
+	with path.open("rb") as f:
+		for chunk in iter(lambda: f.read(1024 * 1024), b""):
+			h.update(chunk)
+	return h.hexdigest()
 
 
 def layer_type_from_ratio(ratio: int) -> str:
@@ -94,6 +102,7 @@ def find_mtp_layer_ids(weight_keys: list[str]) -> list[int]:
 
 def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_experts: int) -> dict:
 	top = Counter(k.split(".", 1)[0] for k in weight_keys)
+	mtp0_key_count = sum(1 for k in weight_keys if k.startswith("mtp.0."))
 
 	def layer_ids_matching(suffix: str) -> list[int]:
 		ids = set()
@@ -117,6 +126,10 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"tensor_key_count": len(weight_keys),
 		"namespaces": sorted(top.keys()),
 		"top_level_prefix_counts": dict(top),
+		"mtp0": {
+			"present": mtp0_key_count > 0,
+			"tensor_key_count": mtp0_key_count,
+		},
 		"mtp_layer_ids": find_mtp_layer_ids(weight_keys),
 		"layer_gate": {
 			"tid2eid_layer_ids": layer_ids_matching("ffn.gate.tid2eid"),
@@ -200,6 +213,22 @@ def build_contract() -> dict:
 	weight_keys = sorted(weight_map.keys())
 	tensor_keys = build_tensor_key_summary(weight_keys, n_layers, int(cfg["n_routed_experts"]))
 
+	fixture_sha = {}
+	for rel in (
+		"config.json",
+		"generation_config.json",
+		"inference/config.json",
+		"inference/kernel.py",
+		"inference/model.py",
+		"model.safetensors.index.json",
+		"tokenizer.json",
+		"tokenizer_config.json",
+		"encoding/encoding_dsv4.py",
+	):
+		p = FIX / rel
+		if p.exists():
+			fixture_sha[rel] = sha256_file(p)
+
 	contract = {
 		"format_version": 1,
 		"model": "deepseek_v4_flash",
@@ -207,6 +236,7 @@ def build_contract() -> dict:
 			"hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
 			"hf_revision": "main",
 			"x_repo_commit": upstream_commit,
+			"fixtures_sha256": fixture_sha,
 			"fixtures": {
 				"config_json": "config.json",
 				"inference_config_json": "inference/config.json",

@@ -14,11 +14,12 @@ SM121_SMEM_OPTIN := $(BIN_DIR)/cuda_sm121_smem_optin
 SM121_DEVATTRS := $(BIN_DIR)/cuda_sm121_devattrs
 SM121_FP8_CONV := $(BIN_DIR)/cuda_sm121_fp8_conv
 SM121_PIPELINE_MEMCPY_ASYNC := $(BIN_DIR)/cuda_sm121_pipeline_memcpy_async
+SM120_COMPAT_PROBE := $(BIN_DIR)/cuda_sm120_compat_probe
 SM121_BARRIER_MEMCPY_ASYNC := $(BIN_DIR)/cuda_sm121_barrier_memcpy_async
 
 .PHONY: all clean
 
-all: $(DEVICE_PROPS) $(SM121_PROBE) $(CUBLASLT_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM121_BARRIER_MEMCPY_ASYNC)
+all: $(DEVICE_PROPS) $(SM121_PROBE) $(CUBLASLT_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -49,6 +50,9 @@ $(SM121_PIPELINE_MEMCPY_ASYNC): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_pipeline_memcpy
 
 $(SM121_BARRIER_MEMCPY_ASYNC): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_barrier_memcpy_async.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_barrier_memcpy_async.cu $(LDFLAGS)
+
+$(SM120_COMPAT_PROBE): $(BIN_DIR) $(SRC_DIR)/cuda_sm120_compat_probe.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_120 -o $@ $(SRC_DIR)/cuda_sm120_compat_probe.cu $(LDFLAGS)
 
 clean:
 	rm -rf $(BIN_DIR)
