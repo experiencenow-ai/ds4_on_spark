@@ -27,6 +27,20 @@ REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp
 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local | tee /private/tmp/spark1-probe.txt
 ```
 
+Optional toggles:
+
+- Include full `nvidia-smi` output (verbose; includes process list + timestamps):
+
+```bash
+REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe-verbose.txt
+```
+
+- Skip the `nvcc` runtime probe compile/run (when you only need the driver-side query):
+
+```bash
+REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+```
+
 Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
@@ -39,3 +53,4 @@ Notes:
 - `nvcc` path and version (toolkit version).
 - Storage summary (`df -h` + `lsblk` disk model/size).
 - Wired link status + speed when available (`ip link` + optional `ethtool`).
+
