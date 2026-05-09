@@ -239,3 +239,49 @@ path 000f:01:00.0 max_link_width: 16
 nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
 Cuda compilation tools, release 13.0, V13.0.88
 ```
+
+## Update: Probe Refresh (2026-05-09 18:39Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T1841Z_loop_v3.txt
+```
+
+```text
+== local meta ==
+Sat May  9 18:39:08 UTC 2026
+git: a3b6ed6
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+```
+
+```text
+== memory ==
+               total        used        free      shared  buff/cache   available
+Mem:           119Gi        90Gi       5.1Gi       465Mi        25Gi        29Gi
+Swap:           15Gi       743Mi        15Gi
+```
+
+```text
+== network links (no IPs) ==
+-- ethtool enP7s7 --
+driver: r8127
+version: 11.014.00-NAPI
+bus-info: 0007:01:00.0
+-- ethtool wlP9s9 --
+driver: mt7925e
+version: 6.17.0-1014-nvidia
+firmware-version: ____000000-20251210093025
+bus-info: 0009:01:00.0
+```
+
+```text
+== rdma (roce/infiniband, optional) ==
+-- roceP2p1s0f0 --
+hca_type: MT4129
+port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
+-- rocep1s0f0 --
+hca_type: MT4129
+port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
+```

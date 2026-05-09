@@ -30,6 +30,8 @@ High-level facts observed (from the probe output below):
 - `ptxas` path: `/usr/local/cuda/bin/ptxas`
 - CUDA driver/runtime API version (nvcc probe): `13000` (CUDA 13.0)
 - Wired NIC: `enP7s7`, MTU 9000, link speed 10Gb/s (ethtool)
+- Wi-Fi NIC driver: `mt7925e` (mt7925e firmware present per `ethtool -i`)
+- RDMA/ROCE: Mellanox `MT4129` devices present (`/sys/class/infiniband`), but ports were `DOWN`/`Disabled` during probes
 - Default route: via Wi-Fi during probe
 - Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
 - PCIe link negotiation: appears stuck at Gen1 x1 (nvidia-smi + sysfs); `lspci -vv` does not expose `LnkCap/LnkSta` fields without extra privileges on this host
@@ -543,6 +545,38 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+```
+
+## Update: Probe Refresh (2026-05-09 18:39Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_18-39Z.txt
+```
+
+```text
+== memory ==
+               total        used        free      shared  buff/cache   available
+Mem:           119Gi        90Gi       5.1Gi       465Mi        25Gi        29Gi
+Swap:           15Gi       743Mi        15Gi
+
+== network links (no IPs) ==
+-- ethtool enP7s7 --
+driver: r8127
+version: 11.014.00-NAPI
+bus-info: 0007:01:00.0
+-- ethtool wlP9s9 --
+driver: mt7925e
+version: 6.17.0-1014-nvidia
+firmware-version: ____000000-20251210093025
+bus-info: 0009:01:00.0
+
+== rdma (roce/infiniband, optional) ==
+-- rocep1s0f0 --
+fw_ver: 28.45.4028
+hca_type: MT4129
+port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
 ```
 
 ## Update: Probe Refresh (2026-05-09 15:42Z)
