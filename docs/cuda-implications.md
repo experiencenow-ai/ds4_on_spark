@@ -20,6 +20,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` validates an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
 - `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_1d` validates a minimal TMA `cp.async.bulk.tensor.1d` load using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (CUTLASS TMA load plumbing gate).
+- `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_2d` validates a minimal TMA `cp.async.bulk.tensor.2d` load using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (2D traversal gate used by many tile schedulers).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
 - `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` validates that `nvcc` accepts common template-kernel compile flags (`--extended-lambda` + `--expt-relaxed-constexpr`) with `-std=c++20` for `sm_121` (CUTLASS/DeepGEMM-style compile gate).
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe` validates that `nvcc` + `nvlink` can perform separate compilation (`-dc`) + device link (`-dlink`) for `sm_121` (multi-translation-unit CUDA build gate; observed success on Spark0: 2026-05-09).
@@ -31,7 +32,6 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit` validates an NVRTC+nvJitLink “compile to PTX for `compute_121` → link to `sm_121` CUBIN → load via Driver API → launch kernel” path; this is a useful gate for JIT flows that rely on nvJitLink (observed success on Spark0: 2026-05-09).
 - `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` validates that WMMA (`mma.h`) tensor core matmul plumbing compiles and runs for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cluster_launch` validates that thread-block cluster launches (`cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension`) and `cooperative_groups::this_cluster()` compile and run for `sm_121` (observed on Spark0: `cluster_launch_supported=1`, `max_cluster_size_portable=8`).
-
 ## cuBLASLt
 
 Implication:
@@ -57,7 +57,7 @@ Implication:
 - CUTLASS is the most likely path for “bring-up on `sm_121`” when we need custom GEMMs beyond cuBLASLt.
 - Any CUTLASS integration work must explicitly include `sm_121` in its arch list; do not assume `sm_100` build settings apply.
 - If `sm_121` is not available in a given upstream build system yet, validate whether building for `sm_120` runs correctly on GB10 first (see `cuda_sm120_compat_probe` below).
-- CUTLASS 3-style TMA loads appear viable on GB10; the `cuda_sm121_tma_bulk_tensor_1d` probe is a minimal “tensor map encode + `cp.async.bulk.tensor`” gate that should fail fast if TMA plumbing is missing or broken.
+- CUTLASS 3-style TMA loads appear viable on GB10; the `cuda_sm121_tma_bulk_tensor_1d` / `cuda_sm121_tma_bulk_tensor_2d` probes are minimal “tensor map encode + `cp.async.bulk.tensor`” gates that should fail fast if TMA plumbing is missing or broken.
 
 Next probe step:
 
