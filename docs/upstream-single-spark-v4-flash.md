@@ -25,6 +25,10 @@ The sizes below are taken from Git LFS pointer metadata (no GGUF downloads), as 
 | D | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | Treat as blocked until a human verifies licensing; also sharded. |
 | E | `antirez/ds4` (`baa084482020263a17a3b33a238f6f0809b425fd`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
 
+Fixture provenance note:
+
+- If a human approves a GGUF download, record and verify the artifact `sha256` against the HF API `lfs.sha256` values listed in [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md). This lets us validate fixtures without trusting filenames.
+
 ## Candidates (native checkpoint path)
 
 These are Spark/GB10 bring-up references that operate on the “official” checkpoint layout rather than GGUF, but they all require large human-approved downloads.
