@@ -686,6 +686,53 @@ device0 cc: 12.1
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 09:58Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git DS4_GIT_WORK_TREE='/Users/mac/.codex/worktrees/3934/New project 4' SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_probe11.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The probe now includes a capped CUDA/NVIDIA package inventory and a lightweight RDMA/ROCE section.
+
+```text
+== local meta ==
+Sat May  9 09:58:07 UTC 2026
+git: afb55a8
+probe targets: spark0@aitopatom-9ab9.local
+
+== packages (cuda/nvidia, dpkg, capped) ==
+cuda-cccl-13-0	13.0.85-1
+cuda-command-line-tools-13-0	13.0.3-1
+cuda-compiler-13-0	13.0.3-1
+cuda-crt-13-0	13.0.88-1
+cuda-cudart-13-0	13.0.96-1
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+selected compute_cap: 12.1
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+device0 cc: 12.1
+device0 sms: 48
+
+== rdma (roce/infiniband, optional) ==
+roceP2p1s0f0
+roceP2p1s0f1
+rocep1s0f0
+rocep1s0f1
+-- rocep1s0f0 --
+fw_ver: 28.45.4028
+hca_type: MT4129
+port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
+link rocep1s0f0/1 state DOWN physical_state DISABLED netdev enp1s0f0np0
+```
+
 ## Update: Probe Refresh (2026-05-09 09:27Z)
 
 Commands run:
