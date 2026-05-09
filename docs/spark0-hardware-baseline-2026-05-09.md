@@ -486,3 +486,59 @@ nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 NVRM version: NVIDIA UNIX Open Kernel Module for aarch64  580.142  Release Build  (dvs-builder@U22-I3-H10-02-1)  Tue Mar  3 19:08:06 UTC 2026
 GCC version:  gcc version 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 
 ```
+
+## Update: Probe Refresh (2026-05-09 04:23Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_10.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The `nvidia-smi` section includes GPU `index` + `pci.bus_id` to make multi-GPU hosts easier to compare across reboots.
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== nvidia-smi gpu list ==
+GPU 0: NVIDIA GB10 (UUID: <redacted-gpu-uuid>)
+
+== cuda toolkit ==
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Wed_Aug_20_01:57:39_PM_PDT_2025
+Cuda compilation tools, release 13.0, V13.0.88
+Build cuda_13.0.r13.0/compiler.36424714_0
+-rwxr-xr-x 1 root root 24513032 Aug 21  2025 /usr/local/cuda/bin/nvcc
+ptxas: /usr/local/cuda/bin/ptxas
+ptxas: NVIDIA (R) Ptx optimizing assembler
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Wed_Aug_20_01:53:56_PM_PDT_2025
+lrwxrwxrwx 1 root root 22 Dec 17 21:40 /usr/local/cuda -> /etc/alternatives/cuda
+/usr/local/cuda-13.0
+
+== cuda libraries (ldconfig, first hits) ==
+	libcudart.so.13 (libc6,AArch64) => /usr/local/cuda/targets/sbsa-linux/lib/libcudart.so.13
+	libcudart.so (libc6,AArch64) => /usr/local/cuda/targets/sbsa-linux/lib/libcudart.so
+	libcuda.so.1 (libc6,AArch64) => /lib/aarch64-linux-gnu/libcuda.so.1
+
+== cudnn (headers + libs) ==
+cudnn headers not found
+
+
+== cuda runtime probe (nvcc, no deps) ==
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
+```

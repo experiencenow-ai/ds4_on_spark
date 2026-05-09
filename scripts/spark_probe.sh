@@ -91,14 +91,14 @@ echo
 echo "== pci nvidia =="
 lspci | grep -i nvidia || true
 echo
-echo "== nvidia-smi query (driver + compute capability) =="
+echo "== nvidia-smi inventory (index + pci bus) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
 	q=""
-	q="$(nvidia-smi --query-gpu=gpu_name,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then
 		echo "$q"
 	else
-		q="$(nvidia-smi --query-gpu=gpu_name,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 		[ "$q" != "" ] && echo "$q"
 		echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
 	fi
@@ -208,6 +208,7 @@ int main()
 		std::printf("device%d name: %s\n",dev,prop.name);
 		std::printf("device%d cc: %d.%d\n",dev,prop.major,prop.minor);
 		std::printf("device%d global mem (bytes): %llu\n",dev,(unsigned long long)prop.totalGlobalMem);
+		std::printf("device%d sms: %d\n",dev,prop.multiProcessorCount);
 	}
 	return(0);
 }
@@ -273,6 +274,7 @@ if [ "${REDACT:-0}" = "1" ]; then
 		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
 		-e 's/UUID: [^)]*/UUID: <redacted-gpu-uuid>/g' \
+		-e 's/GPU-[0-9A-Fa-f-]{36}/<redacted-gpu-uuid>/g' \
 		"$tmp"
 else
 	cat "$tmp"
