@@ -15,6 +15,7 @@ Environment:
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
   PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
   CUDA_RUNTIME_PROBE=0 Skip the tiny `nvcc` runtime probe compile/run
+  NVCC_ARCH            Optional `nvcc -arch` override (e.g., sm_121); default derives from nvidia-smi compute_cap when available
 
 Examples:
   ./scripts/spark_probe.sh
@@ -117,6 +118,19 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 else
 	echo "nvidia-smi not found"
 fi
+compute_cap=""
+if [ "$q" != "" ]; then
+	compute_cap="$(printf "%s\n" "$q" | awk -F"," "{ c=\$5; gsub(/^[ \\t]+|[ \\t]+$/, \"\", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,\".\"); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != \"\" ) print bestc; }")"
+fi
+nvcc_arch=""
+if [ "${NVCC_ARCH:-}" != "" ]; then
+	nvcc_arch="$NVCC_ARCH"
+elif [ "$compute_cap" != "" ]; then
+	nvcc_arch="sm_$(printf "%s" "$compute_cap" | sed -E "s/[^0-9.]//g; s/[.]//g")"
+fi
+if [ "$compute_cap" != "" ]; then
+	echo "selected compute_cap: $compute_cap"
+fi
 echo
 echo "== nvidia-smi cuda version =="
 nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true
@@ -203,6 +217,7 @@ ldconfig -p 2>/dev/null | grep -E "libcudnn" | head -n 20 || true
 echo
 echo "== cuda runtime probe (nvcc, no deps) =="
 if [ "$cuda_runtime_probe" = "1" ] && [ "$nvcc_bin" != "" ]; then
+	echo "nvcc arch: ${nvcc_arch:-default}"
 	cu_src="/tmp/ds4_cuda_probe.$$.cu"
 	cu_bin="/tmp/ds4_cuda_probe.$$"
 	nvcc_log="/tmp/ds4_cuda_probe_nvcc.$$.log"
@@ -241,7 +256,11 @@ int main()
 	return(0);
 }
 CU
-	if "$nvcc_bin" -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
+	nvcc_extra=""
+	if [ "$nvcc_arch" != "" ]; then
+		nvcc_extra="-arch=$nvcc_arch"
+	fi
+	if "$nvcc_bin" $nvcc_extra -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
 		"$cu_bin" || true
 	else
 		echo "nvcc compile failed:"
