@@ -21,6 +21,7 @@ Notes:
 
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
 - Use `REDACT=1` for any output you plan to commit.
+- Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
 - `scripts/spark_probe.sh` optional toggles:
   - `NVIDIA_SMI_FULL=1` include full `nvidia-smi` output (verbose, process list)
   - `CUDA_RUNTIME_PROBE=0` skip the tiny `nvcc` compile+run probe

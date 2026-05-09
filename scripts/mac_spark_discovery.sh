@@ -42,6 +42,11 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 {
 echo "== meta =="
 date -u
+if command -v git >/dev/null 2>&1; then
+	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
+	fi
+fi
 echo
 echo "== interfaces =="
 for iface in en0 en1; do
