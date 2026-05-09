@@ -43,13 +43,14 @@ if [ "${SPARK_KNOWN_HOSTS:-}" = "" ]; then
 		SPARK_KNOWN_HOSTS="/private/tmp/ds4_spark_known_hosts"
 	fi
 fi
-NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
-PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
-CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
+	NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
+	PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
+	CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
+	NVCC_ARCH_OVERRIDE="${NVCC_ARCH:-}"
 
-if [ "${SSH_OPTS:-}" = "" ]; then
-	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SPARK_KNOWN_HOSTS -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
-fi
+	if [ "${SSH_OPTS:-}" = "" ]; then
+		SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SPARK_KNOWN_HOSTS -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
+	fi
 
 tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
@@ -72,6 +73,10 @@ export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
+nvcc_arch_override='"$NVCC_ARCH_OVERRIDE"'
+if [ "$nvcc_arch_override" != "" ]; then
+	NVCC_ARCH="$nvcc_arch_override"
+fi
 echo "== probe meta =="
 date -u
 echo "target user: $(id -un 2>/dev/null || true)"
@@ -135,6 +140,26 @@ echo
 echo "== nvidia-smi cuda version =="
 nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true
 echo
+echo "== nvidia-smi pcie link (max/current) =="
+if command -v nvidia-smi >/dev/null 2>&1; then
+	pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
+	if [ "$pcie_q" = "" ]; then
+		pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.link.gen.max,pci.link.gen.current,pci.link.width.max,pci.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
+	fi
+	if [ "$pcie_q" != "" ]; then
+		if printf "%s" "$pcie_q" | grep -qi "not a valid field"; then
+			echo "pcie link query not supported"
+			printf "%s\n" "$pcie_q" | head -n 2
+		else
+			echo "$pcie_q"
+		fi
+	else
+		echo "pcie link query not supported"
+	fi
+else
+	echo "nvidia-smi not found"
+fi
+echo
 echo "== nvidia-smi gpu list =="
 if command -v nvidia-smi >/dev/null 2>&1; then
 	nvidia-smi -L 2>/dev/null || true
@@ -161,8 +186,11 @@ if command -v nvcc >/dev/null 2>&1; then
 elif [ -x /usr/local/cuda/bin/nvcc ]; then
 	nvcc_bin="/usr/local/cuda/bin/nvcc"
 fi
+nvcc_release=""
 if [ "$nvcc_bin" != "" ]; then
-	"$nvcc_bin" --version || true
+	nvcc_ver="$("$nvcc_bin" --version 2>/dev/null || true)"
+	[ "$nvcc_ver" != "" ] && printf "%s\n" "$nvcc_ver"
+	nvcc_release="$(printf "%s\n" "$nvcc_ver" | sed -nE "s/.*release[[:space:]]+([0-9]+)\\.([0-9]+).*/\\1.\\2/p" | head -n 1)"
 	ls -l "$nvcc_bin" || true
 else
 	echo "nvcc not found"
@@ -183,11 +211,21 @@ command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null |
 echo
 echo "== cuda headers (cuda.h) =="
 cuda_h="/usr/local/cuda/include/cuda.h"
+cuda_h_version=""
 if [ -r "$cuda_h" ]; then
 	echo "$cuda_h"
+	cuda_h_version="$(grep -E "^#define CUDA_VERSION " "$cuda_h" 2>/dev/null | awk "{ print \$3 }" | head -n 1 || true)"
 	grep -E "^#define (CUDA_VERSION|CUDART_VERSION) " "$cuda_h" 2>/dev/null || true
 else
 	echo "cuda.h not found"
+fi
+if [ "$nvcc_release" != "" ] && [ "$cuda_h_version" != "" ]; then
+	nvcc_major="$(printf "%s" "$nvcc_release" | awk -F. "{ print \$1 }")"
+	nvcc_minor="$(printf "%s" "$nvcc_release" | awk -F. "{ print \$2 }")"
+	nvcc_expect="$(( (nvcc_major * 1000) + (nvcc_minor * 10) ))"
+	if [ "$cuda_h_version" != "$nvcc_expect" ]; then
+		echo "warning: nvcc release $nvcc_release expects CUDA_VERSION $nvcc_expect but cuda.h has $cuda_h_version"
+	fi
 fi
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
