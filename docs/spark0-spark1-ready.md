@@ -25,9 +25,9 @@ The discovery output prints `targets:` so the exact target list is visible in co
 Always use `REDACT=1` when saving output for commit.
 
 ```bash
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@spark1.local | tee /private/tmp/spark1-probe.txt
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local | tee /private/tmp/spark01-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark1.local | tee /private/tmp/spark1-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/spark01-probe.txt
 ```
 
 Optional toggles:
@@ -35,39 +35,42 @@ Optional toggles:
 - Include full `nvidia-smi` output (verbose; includes process list + timestamps):
 
 ```bash
-REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe-verbose.txt
+SPARK_SSH_USER=spark0 REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe-verbose.txt
 ```
 
 - Skip the `nvcc` runtime probe compile/run (when you only need the driver-side query):
 
 ```bash
-REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+SPARK_SSH_USER=spark0 REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh aitopatom-9ab9.local
 ```
 
 - Force the `nvcc` runtime probe compile arch (defaults to deriving from the max `nvidia-smi` compute capability when available):
 
 ```bash
-REDACT=1 NVCC_ARCH=sm_121 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+SPARK_SSH_USER=spark0 REDACT=1 NVCC_ARCH=sm_121 ./scripts/spark_probe.sh aitopatom-9ab9.local
 ```
 
 Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
 - When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
-- When multiple targets are provided, the probe prints `probe targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
+- When multiple targets are provided, the probe prints `probe args:` plus `resolved targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
+- When `SPARK_SSH_USER` is set, host-only args (like `spark1.local`) are rewritten into `user@host` targets and printed in `resolved targets:` so the actual SSH targets are visible in committed excerpts.
 - The probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - The probe prints `selected compute_cap:` and `selected nvcc arch:` before the CUDA runtime probe section so the derived `-arch` choice is visible in committed excerpts.
 - The probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 - After the CUDA runtime probe runs, the probe prints a `post-load` PCIe link snapshot (both `nvidia-smi` query + sysfs cross-check) so we can see whether link speed/width changes under GPU activity.
 - If the `nvcc -arch=...` runtime probe compile fails (unsupported arch), the probe retries once without `-arch` so the runtime can still report `device0 cc: ...`.
+- The CUDA runtime probe prints both the raw `cuda*GetVersion()` integers and a `major.minor` parse to avoid ambiguity (e.g. `13000 (13.0)`).
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
-- If the checkout `.git` metadata is unusable (macOS provenance/permission), set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
+- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.git-codex/` (used by some automation runners) and `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
 
 ## What To Record In `docs/spark0-*.md`
 
 - `nvidia-smi` driver + CUDA version.
+- `nvidia-smi` version banner (`nvidia-smi --version` / `nvidia-smi -V`) for NVML/driver/CUDA summary.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
 - PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/{current,max}_link_{speed,width}` + PCI IDs via `{vendor,device,subsystem_*}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
