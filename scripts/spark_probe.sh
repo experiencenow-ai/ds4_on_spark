@@ -141,10 +141,12 @@ have_smi="0"
 q=""
 if command -v nvidia-smi >/dev/null 2>&1; then
 	have_smi="1"
+	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
 	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then
 		echo "$q"
 	else
+		echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
 		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 		[ "$q" != "" ] && echo "$q"
 		echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
@@ -184,6 +186,8 @@ if [ "$compute_cap_q" != "" ]; then
 fi
 if [ "$nvcc_arch" != "" ]; then
 	echo "selected nvcc arch: $nvcc_arch"
+else
+	echo "selected nvcc arch: default"
 fi
 echo
 echo "== nvidia-smi cuda version =="
@@ -205,6 +209,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 			echo "pcie link query not supported"
 			printf "%s\n" "$pcie_q" | head -n 2
 		else
+			echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
 			echo "$pcie_q"
 		fi
 	else
@@ -222,6 +227,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 			echo "power/clocks query not supported"
 			printf "%s\n" "$pwr_q" | head -n 2
 		else
+			echo "columns: index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory"
 			echo "$pwr_q"
 		fi
 	else

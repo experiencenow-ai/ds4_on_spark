@@ -34,6 +34,7 @@ Notes:
 - `scripts/spark_probe.sh` includes cuDNN hints (header macros when present + `ldconfig` library hits) to confirm whether cuDNN is installed.
 - `scripts/spark_probe.sh` also captures `nvidia-smi topo -m` (capped), PCIe link state (gen/width max/current), a power/clocks/utilization summary (via `nvidia-smi --query-gpu=...`), kernel module/version hints (`lsmod`, `modinfo nvidia`), CUDA header macros (`cuda.h`), a capped `dpkg-query` CUDA/NVIDIA package list, and a lightweight RDMA/ROCE summary (`/sys/class/infiniband` + `rdma link show`) to cross-check driver/toolkit/network facts. It emits a `warning:` when the parsed `nvcc release` disagrees with `cuda.h` `CUDA_VERSION`, and may emit a `note:` when `nvidia-smi`'s CUDA major differs from the `nvcc` toolkit major (driver vs toolkit). If the `nvcc -arch=...` runtime probe compile fails (unsupported arch), it retries once without `-arch` as a fallback.
 - The Spark probe prints both `selected compute_cap:` and `selected nvcc arch:` so `NVCC_ARCH` selection is explicit in committed excerpts.
+- The Spark probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 
 ### Mac-side Discovery (mDNS + reachability)
 
