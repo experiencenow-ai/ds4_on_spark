@@ -19,6 +19,10 @@ FlashMLA is an official DeepSeek kernel repo for â€œMulti-head Latent Attentionâ
 - Treat as an out-of-tree reference; do not vendor the repo.
 - Expect CUDA toolchain requirements and tight coupling to GPU architecture; validate on Spark only with explicit human approval.
 
+Spark relevance / architecture warning:
+
+- Upstream documents SM90/SM100 support. DGX Spark / GB10 is SM121-class, so FlashMLA should be treated as a kernel-design reference unless/until an SM12x-capable port is validated.
+
 ## Fetch
 
 ```bash
