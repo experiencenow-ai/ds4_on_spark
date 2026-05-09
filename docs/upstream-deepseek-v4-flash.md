@@ -8,6 +8,7 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Ref: `refs/heads/main`
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
+  - Note (as of 2026-05-09): we treat this HF repo as the canonical public “official configs” source; we do not rely on a separate DeepSeek-V4-Flash GitHub code repo.
 
 Related checkpoint (same “official configs” approach):
 
@@ -31,6 +32,22 @@ These are tracked as optional GPU-kernel reference points for Spark:
 - `inference/` (reference scripts; small, but do not vendor)
 - `DeepSeek_V4.pdf` (technical report)
 
+## Weight footprint (HF API, no downloads)
+
+The official HF repos are large and must remain human-approved fixtures.
+
+As of the pinned commits in [`docs/upstream-manifest.md`](upstream-manifest.md):
+
+- Flash (`6976c7ff1b30a1b2cb7805021b8ba4684041f136`): `*.safetensors` sum is **148.66 GiB**
+- Flash-Base (`8855555deef230a27a21a8d6f294b7b7497759b6`): `*.safetensors` sum is **274.44 GiB**
+
+Reproduce (no clone, no LFS):
+
+```bash
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash --sum-safetensors
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash-Base --sum-safetensors
+```
+
 ## Weight download risk (Git LFS)
 
 - The HF repos include many `model-*.safetensors` files tracked by Git LFS.
@@ -44,6 +61,12 @@ The Hub increasingly serves large files via Xet-backed storage, while keeping Gi
 ## Hugging Face revisions vs git commits
 
 Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) that don’t match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
+
+To see the HF API-reported revision SHA (and file sizes) without cloning/downloading:
+
+```bash
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash
+```
 
 To see the exact git commit for the pinned ref, use:
 

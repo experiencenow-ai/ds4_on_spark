@@ -33,6 +33,18 @@ Fixture provenance note:
 
 These are Spark/GB10 bring-up references that operate on the “official” checkpoint layout rather than GGUF, but they all require large human-approved downloads.
 
+Footprint note (no download): as of the pinned commits in [`docs/upstream-manifest.md`](upstream-manifest.md), the HF API reports:
+
+- Flash `deepseek-ai/DeepSeek-V4-Flash` (`6976c7ff1b30a1b2cb7805021b8ba4684041f136`): 148.66 GiB total `*.safetensors`
+- Flash-Base `deepseek-ai/DeepSeek-V4-Flash-Base` (`8855555deef230a27a21a8d6f294b7b7497759b6`): 274.44 GiB total `*.safetensors`
+
+Reproduce:
+
+```bash
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash --sum-safetensors
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash-Base --sum-safetensors
+```
+
 | Candidate | Runtime (pinned) | Checkpoint source | License | Single-Spark plausibility | Notes |
 | --- | --- | --- | --- | --- | --- |
 | F | `devid791/dsv4-flash-gb10-runtime` (`244cb11d3ee3adfd96bd0f95d6a91649af7af45d`) | HF `deepseek-ai/DeepSeek-V4-Flash` (BF16 + routed expert quantize to MXFP4 at load) | Apache-2.0 | Unknown (requires on-hardware validation) | Most directly GB10/Spark-focused “native layout” proof-of-life; requires a large HF snapshot download. |

@@ -46,9 +46,9 @@ print_ref()
 
 	printf "== %s\n" "${name}"
 	if [ "${ref}" = "HEAD" ]; then
-		git ls-remote --symref "${url}" HEAD | sed -n '1,2p'
+		GIT_TERMINAL_PROMPT=0 git ls-remote --symref "${url}" HEAD | sed -n '1,2p'
 	else
-		git ls-remote "${url}" "${ref}" | sed -n '1p'
+		GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | sed -n '1p'
 	fi
 	echo
 }
@@ -101,7 +101,7 @@ print_pinned()
 	local expected="$5"
 	local got
 
-	got="$(git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
 	if [ -z "${got}" ]; then
 		printf "== %s\n" "${name}"
 		printf "upstream:  %s\n" "${upstream}"
@@ -113,7 +113,7 @@ print_pinned()
 
 	if [[ "${ref}" == refs/tags/* ]]; then
 		local deref
-		deref="$(git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
+		deref="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
 		if [ -n "${deref}" ]; then
 			got="${deref}"
 		fi

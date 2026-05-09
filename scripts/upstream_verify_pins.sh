@@ -27,7 +27,7 @@ check_ref()
 	local expected="$4"
 	local got
 
-	got="$(git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
 	if [ -z "${got}" ]; then
 		echo "FAIL ${name}: ref not found: ${ref}" >&2
 		return 1
@@ -37,7 +37,7 @@ check_ref()
 		# Annotated tags return the tag object hash unless dereferenced; always
 		# prefer the dereferenced commit when available.
 		local deref
-		deref="$(git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
+		deref="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
 		if [ -n "${deref}" ]; then
 			got="${deref}"
 		fi
