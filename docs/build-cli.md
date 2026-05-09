@@ -29,6 +29,12 @@ Dump effective config (defaults + optional file + env):
 ./build_cli/ds4_cli --config path/to/ds4.conf --dump-config
 ```
 
+Read config from stdin:
+
+```bash
+cat path/to/ds4.conf | ./build_cli/ds4_cli --config - --dump-config
+```
+
 Reject unknown keys in the config file:
 
 ```bash
@@ -53,3 +59,5 @@ When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests t
 
 - `ds4_cli --version`
 - `ds4_cli --dump-config`
+- `ds4_cli --config <tmpfile> --dump-config`
+- `ds4_cli --config - --dump-config` (stdin)

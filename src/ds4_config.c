@@ -376,7 +376,7 @@ int32_t ds4_config_parse_mem(ds4_config_t *cfg,const uint8_t *buf,int32_t len)
 int32_t ds4_config_parse_file_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len,int32_t flags,int32_t *out_unknown)
 {
 	FILE *fp;
-	int32_t n,err,c,unknown;
+	int32_t n,err,c,unknown,close_fp;
 	if ( cfg == 0 )
 		return(-1);
 	if ( path == 0 )
@@ -390,18 +390,27 @@ int32_t ds4_config_parse_file_ex(ds4_config_t *cfg,const char *path,uint8_t *buf
 	unknown = 0;
 	if ( out_unknown != 0 )
 		*out_unknown = 0;
-	fp = fopen(path,"rb");
+	close_fp = 0;
+	if ( path[0] == '-' && path[1] == 0 )
+		fp = stdin;
+	else
+	{
+		fp = fopen(path,"rb");
+		close_fp = 1;
+	}
 	if ( fp == 0 )
 		return(-6);
 	n = (int32_t)fread(buf,1,(size_t)cap,fp);
 	if ( n > cap )
 	{
-		fclose(fp);
+		if ( close_fp != 0 )
+			fclose(fp);
 		return(-7);
 	}
 	if ( ferror(fp) != 0 )
 	{
-		fclose(fp);
+		if ( close_fp != 0 )
+			fclose(fp);
 		return(-8);
 	}
 	if ( n == cap )
@@ -409,16 +418,19 @@ int32_t ds4_config_parse_file_ex(ds4_config_t *cfg,const char *path,uint8_t *buf
 		c = fgetc(fp);
 		if ( c != EOF )
 		{
-			fclose(fp);
+			if ( close_fp != 0 )
+				fclose(fp);
 			return(-9);
 		}
 		if ( ferror(fp) != 0 )
 		{
-			fclose(fp);
+			if ( close_fp != 0 )
+				fclose(fp);
 			return(-10);
 		}
 	}
-	fclose(fp);
+	if ( close_fp != 0 )
+		fclose(fp);
 	if ( out_len != 0 )
 		*out_len = n;
 	if ( n == 0 )
