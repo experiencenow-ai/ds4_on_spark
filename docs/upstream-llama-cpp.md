@@ -55,6 +55,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - Commit: `9222e55c13c965ccb7e9104fda58796edd84a732`
 - License: MIT
 - Notes: Community fork reportedly running DeepSeek-V4-Flash IQ2XXS GGUF on a single DGX Spark/GB10; validate performance and memory headroom on the actual Spark target.
+  - Provenance (report, 2026-05-05): `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`
 
 ## Upstream build/docs pointers
 
