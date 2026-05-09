@@ -294,10 +294,25 @@ def main() -> int:
 			if not isinstance(cases, list) or not cases:
 				failures.append(Failure(52, f"logits oracle must contain non-empty cases[]: {oracle_path}"))
 			else:
+				include_mtp = bool(oracle.get("include_mtp", False))
+				if include_mtp and n_mtp_layers < 1:
+					failures.append(Failure(64, f"logits oracle requests include_mtp but fixtures contain no mtp.* weights: {oracle_path}"))
 				for c in cases[:4]:
 					if "id" not in c or "prompt_tokens" not in c or "trace" not in c:
 						failures.append(Failure(53, f"logits oracle case missing required keys: {oracle_path}"))
 						break
+					if include_mtp:
+						mt = c.get("mtp_trace")
+						if not isinstance(mt, list):
+							failures.append(Failure(65, f"logits oracle include_mtp requires cases[].mtp_trace[] list: {oracle_path}"))
+							break
+						tr = c.get("trace")
+						if isinstance(tr, list) and len(mt) != len(tr):
+							failures.append(Failure(66, f"logits oracle cases[].mtp_trace must match cases[].trace length (got {len(mt)} vs {len(tr)}): {oracle_path}"))
+							break
+						if mt and ("argmax_id" not in mt[0] or "topk_ids" not in mt[0] or "topk_logits" not in mt[0]):
+							failures.append(Failure(67, f"logits oracle cases[].mtp_trace entries missing required keys: {oracle_path}"))
+							break
 
 	if failures:
 		for f in failures:

@@ -456,3 +456,5 @@ For external/quantized artifacts:
 - Upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4` (see `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `runtime.reference_defaults`), but Spark baselines may override them; record the exact values used since KV cache sizing depends on them.
 
 Before relying on MTP for speculative decoding, extend the logit oracle to cover the `mtp` path (weights required) and gate DS4’s `mtp` implementation against it.
+
+The oracle generator supports this by adding `--include-mtp`, which records `cases[].mtp_trace[]` (draft logits from `MTPBlock.forward(...)`) alongside the main trunk `cases[].trace[]`.

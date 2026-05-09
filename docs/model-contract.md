@@ -39,6 +39,7 @@ DeepSeek V4 Flash specifics:
   - Emits `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json` containing:
     - `prompt_tokens[]` (already tokenized; no tokenizer dependency for verification)
     - per-step `topk_ids[]` + `topk_logits[]` (default `topk=64`)
+  - Add `--include-mtp` to also record MTP (`mtp.0.*`) draft traces (`cases[].mtp_trace[]`).
 
 MTP (multi-token prediction) oracle requirements:
 
