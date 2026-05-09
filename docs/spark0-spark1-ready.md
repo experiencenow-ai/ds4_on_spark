@@ -57,6 +57,7 @@ Notes:
 - The probe prints `selected compute_cap:` and `selected nvcc arch:` before the CUDA runtime probe section so the derived `-arch` choice is visible in committed excerpts.
 - The probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
+- After the CUDA runtime probe runs, the probe prints a `post-load` PCIe link snapshot (both `nvidia-smi` query + sysfs cross-check) so we can see whether link speed/width changes under GPU activity.
 - If the `nvcc -arch=...` runtime probe compile fails (unsupported arch), the probe retries once without `-arch` so the runtime can still report `device0 cc: ...`.
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
@@ -66,8 +67,8 @@ Notes:
 
 - `nvidia-smi` driver + CUDA version.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
-- `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported).
-- PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/current_link_{speed,width}`), since `lspci -vv` capability fields can be restricted without root on some hosts.
+- `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
+- PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/current_link_{speed,width}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available).
 - `nvcc` path and version (toolkit version).
 - `nvcc --list-gpu-arch` output (capped) to confirm supported SM targets (useful when `NVCC_ARCH=...` overrides fail).
