@@ -1,0 +1,229 @@
+{
+  "attention_schedule": {
+    "compress_ratios": [
+      0,
+      0,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      0
+    ],
+    "main_layer_types": [
+      "sliding",
+      "sliding",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa",
+      "hca",
+      "csa"
+    ],
+    "mtp_compress_ratios": [
+      0
+    ],
+    "type_counts": {
+      "csa": 21,
+      "hca": 20,
+      "sliding": 2
+    }
+  },
+  "cache": {
+    "decode": {
+      "compress_indices": {
+        "csa": "Indexer(...,offset=window_size)",
+        "hca": "get_compress_topk_idxs(...,offset=window_size)"
+      },
+      "compressed_index_offset": "window_size",
+      "window_indices": "get_window_topk_idxs(window_size,...,start_pos>0)"
+    },
+    "kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+    "kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
+    "prefill": {
+      "compress_indices": {
+        "csa": "Indexer(...)",
+        "hca": "get_compress_topk_idxs(...,offset=seqlen)"
+      },
+      "compressed_index_offset": "seqlen",
+      "window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)"
+    },
+    "window_size": 128
+  },
+  "checkpoint_index": {
+    "metadata": {
+      "total_size": 159609485896
+    }
+  },
+  "format_version": 1,
+  "model": "deepseek_v4_flash",
+  "moe": {
+    "hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
+    "moe_inter_dim": 2048,
+    "n_activated_experts": 6,
+    "n_hash_layers": 3,
+    "n_routed_experts": 256,
+    "n_shared_experts": 1,
+    "route_scale": 1.5,
+    "score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+    "scoring_func": "sqrtsoftplus"
+  },
+  "mtp": {
+    "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+    "n_mtp_layers": 1,
+    "namespace_prefix": "mtp.{j}."
+  },
+  "quantization": {
+    "config_quantization_config": {
+      "activation_scheme": "dynamic",
+      "fmt": "e4m3",
+      "quant_method": "fp8",
+      "scale_fmt": "ue8m0",
+      "weight_block_size": [
+        128,
+        128
+      ]
+    },
+    "inference_config": {
+      "dtype": "fp8",
+      "expert_dtype": "fp4",
+      "scale_fmt": "ue8m0"
+    },
+    "inference_model_constants": {
+      "block_size": 128,
+      "fp4_block_size": 32
+    }
+  },
+  "tensor_keys": {
+    "required_top_level": [
+      "embed.weight",
+      "norm.weight",
+      "head.weight",
+      "hc_head_fn",
+      "hc_head_base",
+      "hc_head_scale"
+    ],
+    "tensor_key_count": 69187,
+    "weight_index_source": "model.safetensors.index.json:weight_map"
+  },
+  "tokenizer": {
+    "add_bos_token": false,
+    "add_eos_token": false,
+    "bos_token": "<\uff5cbegin\u2581of\u2581sentence\uff5c>",
+    "bos_token_id": 0,
+    "encoding_oracle_dir": "encoding/tests",
+    "eos_token": "<\uff5cend\u2581of\u2581sentence\uff5c>",
+    "eos_token_id": 1,
+    "model_max_length": 1048576,
+    "pad_token_is_eos": true,
+    "tokenizer_class": "PreTrainedTokenizerFast"
+  },
+  "topology": {
+    "head_dim": 512,
+    "hidden_size": 4096,
+    "nope_head_dim": 448,
+    "num_attention_heads": 64,
+    "num_hidden_layers": 43,
+    "num_key_value_heads": 1,
+    "o_groups": 8,
+    "o_lora_rank": 1024,
+    "q_lora_rank": 1024,
+    "rope_head_dim": 64,
+    "sliding_window": 128,
+    "vocab_size": 129280
+  },
+  "upstream": {
+    "fixtures": {
+      "config_json": "config.json",
+      "encoding_oracle": "encoding/tests/*",
+      "inference_config_json": "inference/config.json",
+      "inference_kernel_py": "inference/kernel.py",
+      "inference_model_py": "inference/model.py",
+      "tokenizer_config_json": "tokenizer_config.json",
+      "tokenizer_json": "tokenizer.json",
+      "weight_index_json": "model.safetensors.index.json"
+    },
+    "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
+    "hf_revision": "main",
+    "x_repo_commit": "6976c7ff1b30a1b2cb7805021b8ba4684041f136"
+  },
+  "yarn_rope": {
+    "beta_fast": 32,
+    "beta_slow": 1,
+    "compress_rope_theta": 160000.0,
+    "original_seq_len": 65536,
+    "rope_factor": 16.0,
+    "rope_theta": 10000.0
+  }
+}
