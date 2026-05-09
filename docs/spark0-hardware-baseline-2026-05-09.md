@@ -543,6 +543,49 @@ device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 10:27Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git DS4_GIT_WORK_TREE='/Users/mac/.codex/worktrees/27d3/New project 4' ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_probe12.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+
+```text
+== local meta ==
+Sat May  9 10:27:54 UTC 2026
+git: bd10301
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 53, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi cuda version ==
+CUDA Version: 13.0
+
+== cuda toolkit ==
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 sms: 48
+```
+
 ## Update: Probe Refresh (2026-05-09 08:56Z)
 
 Commands run:

@@ -165,7 +165,8 @@ if [ "$compute_cap" != "" ]; then
 fi
 echo
 echo "== nvidia-smi cuda version =="
-nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true
+smi_cuda_ver="$(nvidia-smi -q 2>/dev/null | sed -nE "s/^[[:space:]]*CUDA Version[[:space:]]*:[[:space:]]*([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
+[ "$smi_cuda_ver" != "" ] && echo "CUDA Version: $smi_cuda_ver" || (nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true)
 echo
 echo "== nvidia-smi pcie link (max/current) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -254,6 +255,13 @@ if [ "$nvcc_release" != "" ] && [ "$cuda_h_version" != "" ]; then
 		echo "warning: nvcc release $nvcc_release expects CUDA_VERSION $nvcc_expect but cuda.h has $cuda_h_version"
 	fi
 fi
+if [ "$smi_cuda_ver" != "" ] && [ "$nvcc_release" != "" ]; then
+	smi_major="$(printf "%s" "$smi_cuda_ver" | awk -F. "{ print \$1 }")"
+	nvcc_major="$(printf "%s" "$nvcc_release" | awk -F. "{ print \$1 }")"
+	if [ "$smi_major" != "$nvcc_major" ]; then
+		echo "note: nvidia-smi CUDA $smi_cuda_ver differs from nvcc release $nvcc_release (driver vs toolkit)"
+	fi
+fi
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
 ldconfig -p 2>/dev/null | grep -E "libcuda\\.so\\.1|libcudart\\.so" | head -n 20 || true
@@ -333,10 +341,26 @@ CU
 		nvcc_extra="-arch=$nvcc_arch"
 	fi
 	if "$nvcc_bin" $nvcc_extra -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
-		"$cu_bin" || true
+		out="$("$cu_bin" 2>/dev/null || true)"
+		[ "$out" != "" ] && printf "%s\n" "$out"
+		if [ "$compute_cap" != "" ] && [ "$out" != "" ]; then
+			cc0="$(printf "%s\n" "$out" | sed -nE "s/^device0 cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | head -n 1)"
+			if [ "$cc0" != "" ] && [ "$cc0" != "$compute_cap" ]; then
+				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
+			fi
+		fi
 	else
 		echo "nvcc compile failed:"
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
+		if [ "$nvcc_extra" != "" ]; then
+			echo "retry: nvcc without -arch (fallback)"
+			if "$nvcc_bin" -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
+				"$cu_bin" 2>/dev/null || true
+			else
+				echo "nvcc fallback compile failed:"
+				sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
+			fi
+		fi
 	fi
 	rm -f "$cu_src" "$cu_bin" "$nvcc_log" >/dev/null 2>&1 || true
 elif [ "$cuda_runtime_probe" = "1" ]; then
