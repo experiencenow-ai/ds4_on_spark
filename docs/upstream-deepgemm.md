@@ -3,13 +3,17 @@
 ## Source
 
 - Repo: `https://github.com/deepseek-ai/DeepGEMM`
-- Ref: `refs/heads/main`
-- Commit: `891d57b4db1071624b5c8fa0d1e51cb317fa709f`
+- Ref: `refs/tags/v2.1.1.post3`
+- Commit: `c9f8b34dcdacc20aa746b786f983492c51072870`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it
 
 DeepGEMM provides optimized GEMM kernels and related CUDA plumbing that may be relevant for Spark GPU nodes when comparing kernel-level performance/behavior.
+
+## Pinning notes
+
+- Prefer release tags over `main` for reproducibility when they exist.
 
 ## Build notes (upstream, summarized)
 

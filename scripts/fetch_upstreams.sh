@@ -88,7 +88,7 @@ fetch_one()
 			clone_or_update "ds4" "https://github.com/antirez/ds4.git" "refs/heads/main"
 			;;
 		deepgemm)
-			clone_or_update "deepgemm" "https://github.com/deepseek-ai/DeepGEMM.git" "refs/heads/main"
+			clone_or_update "deepgemm" "https://github.com/deepseek-ai/DeepGEMM.git" "refs/tags/v2.1.1.post3"
 			;;
 		deepseek_v3)
 			clone_or_update "deepseek_v3" "https://github.com/deepseek-ai/DeepSeek-V3.git" "refs/tags/v1.0.0"

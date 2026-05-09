@@ -2,6 +2,15 @@
 
 This repo does **not** vendor model weights. The entries below are **references only** for (a) provenance + licensing and (b) a quick “could this plausibly fit on one Spark?” filter. Any GGUF download remains a human-approved fixture.
 
+## Single-Spark memory baseline (Spark0)
+
+Based on [`docs/spark0-hardware-baseline-2026-05-09.md`](spark0-hardware-baseline-2026-05-09.md), Spark0 has:
+
+- Host RAM: ~119 GiB
+- GPU VRAM (GB10): ~119.7 GiB
+
+Treat this as the practical upper bound for “single Spark” artifacts; anything above ~100 GB leaves limited headroom for KV/cache + runtime overhead.
+
 ## Candidates (pinned)
 
 ### antirez/deepseek-v4-gguf (DS4-tuned IQ2XXS)
@@ -14,7 +23,7 @@ This repo does **not** vendor model weights. The entries below are **references 
 - Provenance notes:
   - Model card states these quants are “specific for the DS4 inference engine” and links to `https://github.com/antirez/ds4`.
 - Single-Spark plausibility:
-  - **Plausible** as a first single-node/Spark target given the ~87 GB footprint and existing reports of “IQ2XXS on single GB10/Spark” in CUDA llama.cpp forks; still needs on-hardware validation and careful KV/cache sizing.
+  - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the ~87 GB footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
 
 ### nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF (native FP4/FP8)
 
@@ -26,7 +35,7 @@ This repo does **not** vendor model weights. The entries below are **references 
 - Runtime requirement:
   - Requires DeepSeek-V4 loader plus native `F8_E4M3_B128` + `MXFP4` support; model card points to `nisparks/llama.cpp` branch `wip/deepseek-v4-support`.
 - Single-Spark plausibility:
-  - **Unclear / likely tight** for a single Spark-class node unless host RAM is comfortably above ~146 GB + KV/cache overhead; validate with real Spark memory limits before attempting.
+  - **Not plausible on Spark0-class hardware** (146 GB > ~119 GiB host RAM and > ~119.7 GiB VRAM).
 
 ### cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF (research artifact)
 
@@ -36,7 +45,7 @@ This repo does **not** vendor model weights. The entries below are **references 
   - Q2_K: 98.8 GB (RAM floor stated: 128 GB)
   - Q8_0: ~282 GB (RAM floor stated: 320 GB)
 - Single-Spark plausibility:
-  - **Q2_K plausible** on a high-RAM single node; **Q8_0 not plausible** for typical single-Spark constraints.
+  - **Q2_K plausible but tight** on Spark0-class hardware (98.8 GB leaves limited KV/cache headroom); **Q8_0 not plausible** (too large).
 
 ## Related runtime forks (pinned)
 
