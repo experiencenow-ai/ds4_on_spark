@@ -63,6 +63,20 @@ Notes on config sources:
   - `beta_fast`: 32
 - `beta_slow`: 1
 
+## Attention schedule (sliding vs CSA vs HCA)
+
+Upstream encodes the per-layer cache mode as `compress_ratios[]`:
+
+- `compress_ratios` length is `44`:
+  - entries `0..42` are the 43 main trunk layers (`layers.{i}.*`)
+  - entry `43` is the MTP layer (`mtp.0.*`)
+- Main layer type counts (derived from `fixtures/model_contract/deepseek_v4_flash/config.json` and recorded in `contract_summary.json`):
+  - sliding-only: 2 layers (`layer_id ∈ {0,1}`)
+  - CSA (`compress_ratio == 4`): 21 layers
+  - HCA (`compress_ratio == 128`): 20 layers
+- Starting at `layer_id == 2`, the upstream schedule alternates `CSA, HCA, CSA, HCA, ...` and ends on CSA at `layer_id == 42`.
+- MTP blocks are always sliding-only: `compress_ratios[n_layers + mtp_id] == 0`.
+
 ## Logical parameter shapes (from `inference/model.py` + configs)
 
 These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below).
@@ -390,6 +404,17 @@ Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
 must eventually be validated against official-source oracle fixtures.
 
+### MTP + quantized artifacts
+
+Official-source safetensors **do** include the MTP namespace:
+
+- `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json` contains `mtp.0.*` (1,575 tensor keys as of the pinned upstream commit).
+
+For external/quantized artifacts:
+
+- Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
+- Treat MTP as **disabled/untrusted** unless the artifact is inspected and proven to contain `mtp.0.*` weights (and, ideally, MTP passes an oracle check; see below).
+
 ## Next steps (oracle + remaining unknowns)
 
 - The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
@@ -399,3 +424,5 @@ must eventually be validated against official-source oracle fixtures.
   - Output (commit only after review): `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`
 - The verifier enforces that any committed `logits_oracle.json` matches the pinned `upstream_commit.txt` and records core runtime metadata (TP size, seed, tokenizer hashes).
 - Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.
+
+Before relying on MTP for speculative decoding, extend the logit oracle to cover the `mtp` path (weights required) and gate DS4’s `mtp` implementation against it.

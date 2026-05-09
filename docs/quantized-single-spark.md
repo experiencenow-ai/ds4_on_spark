@@ -14,8 +14,8 @@ runtime, CUDA path, tokenizer/chat format, and memory envelope are real.
 - The run records exact runtime source, runtime commit, model source, quant,
   file size, sha256, command line, context length, token count, TTFT, tokens/sec
   where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
-- The report records whether the artifact preserves the upstream `mtp.0.*`
-  tensor namespace (see “MTP / tensor-key compatibility” below).
+- The report records whether the artifact preserves the upstream MTP namespace
+  (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
 - If the run fails, the report preserves the exact failure mode: unsupported
   architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat
   mismatch, or runtime crash.
@@ -38,6 +38,17 @@ llama.cpp should be treated as unproven for V4 Flash until verified.
 For any community artifact, record provenance rather than trusting the model
 card summary: HF repo, revision, file list, file sizes, sha256, declared base
 model, declared license, required runtime fork, and any conversion command.
+
+## MTP (multi-token prediction) expectations
+
+DeepSeek V4 Flash’s official checkpoint includes an MTP module namespace (`mtp.0.*`).
+Many derived artifacts (especially GGUF conversions) may drop it.
+
+For each tested artifact, record:
+
+- Whether `mtp.0.*` weights exist in the artifact.
+- If MTP is missing: run with MTP disabled and treat the artifact as **next-token only**.
+- If MTP is present: still treat it as **untrusted** until it is validated against an upstream logit oracle that exercises the MTP path (weights required).
 
 Reference pages to inspect before choosing a fixture:
 

@@ -8,7 +8,7 @@ edit host-specific values, then enable services with `systemctl`.
 ## Suggested Host Layout
 
 - `/opt/ds4/` : DS4 code + binaries (owned by root, read-only at runtime)
-- `/etc/ds4/` : instance configs + environment files (owned by root)
+- `/etc/ds4/` : instance configs + environment files (owned by root; readable by `ds4`, e.g. `root:ds4 0750` + `root:ds4 0640`)
 - `/var/lib/ds4/` : state (model cache, checkpoints, etc.)
 - `/var/log/ds4/` : optional file logs (journald is preferred)
 
@@ -20,6 +20,7 @@ edit host-specific values, then enable services with `systemctl`.
   - an optional shared env file at `/etc/ds4/ds4.env`
   - an env file at `/etc/ds4/ds4-%i.env` (loaded after `ds4.env`)
   - an optional config at `/etc/ds4/ds4-%i.yaml`
+  - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
 - Optional Spark standalone examples:
   - `spark-master@.service`
   - `spark-worker@.service`

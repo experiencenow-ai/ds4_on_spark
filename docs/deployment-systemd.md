@@ -23,6 +23,8 @@ Use instance names matching the host role:
 Each instance loads `/etc/ds4/ds4-%i.env` via `EnvironmentFile=`.
 Optionally, you can also provide shared defaults in `/etc/ds4/ds4.env` (loaded before `ds4-%i.env`).
 
+The templates set `DS4_INSTANCE=%i` by default, so `ds4-%i.env` may omit `DS4_INSTANCE` if you prefer (the sample env files include it for clarity).
+
 ## Prereqs (Human Runbook)
 
 Before starting services, ensure the `ds4` user and base directories exist.
@@ -39,6 +41,8 @@ sudo systemd-tmpfiles --create || true
 ```
 
 The staging helper also copies safe ops scripts to `/tmp/ds4-scripts/`; install them under `/opt/ds4/scripts/` so systemd units can reference them.
+
+Ensure `/etc/ds4/` and any `/etc/ds4/ds4-*.env` files are readable by the `ds4` service user (recommended: directory `root:ds4 0750`, files `root:ds4 0640`).
 
 ## Enable/Start (Human Runbook)
 

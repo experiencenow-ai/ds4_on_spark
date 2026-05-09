@@ -18,11 +18,14 @@ What it does:
   - `cuda_device_props` (runtime + device properties)
   - `cuda_sm121_probe` (sanity kernel compiled for `sm_121`)
   - `cuda_sm121_arch_report` (prints device CC + compiled `__CUDA_ARCH__`)
+  - `cuda_sm120_compat_probe` (runs an `sm_120`-compiled kernel on the device; tests `sm_120`→`sm_121` compatibility)
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
   - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
   - `cuda_sm121_pipeline_memcpy_async` (`__pipeline_memcpy_async` global->shared copy probe)
+  - `cuda_sm121_barrier_memcpy_async` (`cuda::barrier` + `cuda::memcpy_async` copy probe)
+  - `cuda_sm121_wmma_smoke` (`mma.h` WMMA matmul smoke test; CUTLASS-style proxy)
 
 Environment overrides:
 
@@ -36,7 +39,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, and `cuda_sm121_pipeline_memcpy_async` for `sm_121`.
+It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, and `cuda_sm121_wmma_smoke` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 
 ## Current Spark0 Results (2026-05-09)
 
@@ -51,11 +54,14 @@ Observed:
 
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `-arch=sm_121` compiles and links (including `-lcublasLt`)
+- `-arch=sm_120` binaries run on GB10 (`sm_121`) successfully (probe prints `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - Runtime launches a tiny `sm_121` kernel successfully
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
 - Pipeline memcpy-async probe succeeds (cp.async-style global->shared copy)
+- Barrier memcpy-async probe succeeds (`cuda::barrier` + `cuda::memcpy_async`)
+- WMMA matmul smoke test succeeds (`wmma_smoke ... max_abs_err=0`)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 
 Selected output excerpt:
@@ -66,11 +72,15 @@ cudaGetDeviceCount=1
 device[0]=NVIDIA GB10 cc=12.1 clock_khz=2418000 mem=128518373376
 kernel wrote 0xc0d3cafe
 kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1210
+expect: compiled __CUDA_ARCH__=1200 for -arch=sm_120
+kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1200
 cuBLASLt sgemm smoke max_abs_err=0
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
 fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
 pipeline_memcpy_async out=11111111 22222222 33333333 44444444
+barrier_memcpy_async ok first=decaf000 last=decaf01f
+wmma_smoke C00=16.000000 C255=16.000000 max_abs_err=0.000000
 ```
 
 ## Where The Probe Lives
