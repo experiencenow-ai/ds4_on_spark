@@ -735,6 +735,38 @@ class SchedulerSimTest(unittest.TestCase):
         m1 = scheduler_sim.run_simulation(batch_cfg, trace)
         self.assertLess(m1.makespan_ms, m0.makespan_ms)
 
+    def test_batch_wait_delays_singleton_batch_start(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            batch_max_batch=4,
+            batch_wait_batch_ms=2.5,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.admitted_tasks_batch, 1)
+        self.assertEqual(len(m.task_queue_wait_ms_batch), 1)
+        self.assertGreaterEqual(m.task_queue_wait_ms_batch[0] + 1e-9, 2.5)
+
     def test_markov_trace_deterministic_and_sticky(self) -> None:
         cfg = scheduler_sim.MarkovTraceConfig(
             num_tokens=10,
