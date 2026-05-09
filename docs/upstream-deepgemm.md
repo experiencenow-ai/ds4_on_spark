@@ -11,10 +11,17 @@
 
 DeepGEMM provides optimized GEMM kernels and related CUDA plumbing that may be relevant for Spark GPU nodes when comparing kernel-level performance/behavior.
 
-## Build notes (high level)
+## Build notes (upstream, summarized)
 
-- Expect a CUDA toolchain requirement and architecture-specific tuning.
-- Treat as a reference dependency: do not vendor; fetch pinned commit and build out-of-tree.
+- Requirements (from upstream README, summarized):
+  - NVIDIA SM90 or SM100 GPUs
+  - CUDA Toolkit 12.3+ (SM90), and 12.9+ recommended for best performance
+  - PyTorch 2.1+
+  - C++20-capable compiler + Python 3.8+
+- DeepGEMM uses a lightweight JIT module and compiles kernels at runtime (installation does not require compiling kernels up front).
+- Upstream uses git submodules (e.g. CUTLASS + `{fmt}`); `./scripts/fetch_upstreams.sh deepgemm` does not initialize submodules.
+  - If you actually need to build/test it locally, run `git submodule update --init --recursive` inside `upstreams/deepgemm/` (expect extra code downloads).
+- Upstream includes `develop.sh` / `install.sh`; use those as the canonical entry points if you choose to build the pinned upstream out-of-tree.
 
 ## Fetch
 

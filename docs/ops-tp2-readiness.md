@@ -42,6 +42,12 @@ ping -c 3 <peer-host-or-ip>
 ssh -o BatchMode=yes <peer-user>@<peer-host> hostname
 ```
 
+Optional TCP reachability check (if `nc` is installed):
+
+```bash
+nc -z -w 2 <peer-host-or-ip> 29500
+```
+
 Optional bandwidth check (only if both ends have `iperf3` installed):
 
 ```bash
@@ -76,4 +82,26 @@ repo-provided checks via the systemd oneshot:
 
 ```bash
 sudo systemctl start ds4-preflight@spark0.service
+```
+
+`ds4-preflight@.service` reads optional peer settings from `/etc/ds4/ds4-%i.env`:
+
+- `DS4_PEER_HOST` for ping/TCP checks
+- `DS4_PEER_SSH` for an optional SSH hop (leave empty to skip)
+
+Avoid setting `DS4_PEER_SSH` to `ds4@...` because the `ds4` service account is
+typically configured with `/usr/sbin/nologin`.
+
+For ad-hoc runs without systemd, the script supports sourcing the env file:
+
+```bash
+sudo /opt/ds4/scripts/ops_tp2_readiness.sh --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
+```
+
+## Optional: Spark Standalone Sanity
+
+If Spark is managed locally via systemd, you can also sanity check the Spark env (non-destructive):
+
+```bash
+/opt/ds4/scripts/ops_spark_standalone_check.sh --role worker --env /etc/ds4/spark-spark1.env --master-host spark0.local
 ```

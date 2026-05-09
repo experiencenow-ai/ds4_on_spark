@@ -7,7 +7,8 @@ This is an intermediate execution milestone, not the final architecture. A slow 
 ## Definition of Done
 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family quantized artifact.
-- The run records exact runtime source + revision (or binary hash), model source, quant, file size, sha256, command line, context length, token count, TTFT, tokens/sec where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+- The run records exact runtime source + revision (or binary hash/version), model source, quant, file size, sha256, command line, context length, token count, TTFT, tokens/sec where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+- The report records whether the artifact preserves the upstream MTP namespace (`mtp.0.*`) and whether MTP was enabled/disabled for the run.
 - If the run fails, the report preserves the exact failure mode: unsupported architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat mismatch, or runtime crash.
 - No automation downloads large model files unless a human explicitly approves the exact command and target path.
 
@@ -23,6 +24,16 @@ As of 2026-05-09, the practical first target is a community GGUF using a DeepSee
 | Official HF safetensors | Source of truth for native DS4 loader work. | Metadata only unless a human approves checkpoint download. |
 
 For any community artifact, record provenance rather than trusting the model card summary: HF repo, revision, file list, file sizes, sha256, declared base model, declared license, required runtime fork, and any conversion command.
+
+## MTP (multi-token prediction) expectations
+
+DeepSeek V4 Flash’s official checkpoint includes an MTP module namespace (`mtp.0.*`). Many derived artifacts (especially GGUF conversions) may drop it.
+
+For each tested artifact, record:
+
+- Whether `mtp.0.*` weights exist in the artifact.
+- If MTP is missing: run with MTP disabled and treat the artifact as **next-token only**.
+- If MTP is present: still treat it as **untrusted** until it is validated against an upstream logit oracle that exercises the MTP path (weights required).
 
 ## First Run Shape (Spark0)
 
@@ -67,3 +78,4 @@ If it loads and generates, rerun with:
 - Upstream intake owns quantized artifact and runtime-fork provenance.
 - Model contract owns tokenizer/encoding and quant-format compatibility notes.
 - Build skeleton/native DS4 work should not block this milestone; it uses the results as a measured baseline.
+

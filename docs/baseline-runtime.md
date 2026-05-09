@@ -21,6 +21,8 @@ This baseline track is designed to capture **exact command lines**, **model arti
 - Scripts **do not download model weights**.
 - Scripts **do not build** upstream runtimes unless explicitly enabled.
 - Scripts **do not run** inference unless explicitly enabled.
+- The quantized single-Spark path is still gated: model files must already exist
+  on Spark, and runtime builds/downloads need explicit approval.
 
 Enable gates with environment variables:
 
@@ -52,6 +54,20 @@ This writes a markdown report to a local output directory and includes:
 - quantized single-Spark milestone guidance: see `docs/quantized-single-spark.md` (no downloads are automated)
 - performance path narrative: see `docs/quantized-performance-path.md`
 
+To run a quantized V4 Flash smoke test through a V4-capable llama.cpp-compatible
+binary that already exists on Spark:
+
+```sh
+REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
+`REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime. See
+`docs/quantized-single-spark.md` for the milestone definition and failure
+triage. These env strings are recorded in the generated report, so do not put
+tokens or other secrets in them.
+
 ## One-command entrypoint (Mac local: antirez/ds4)
 
 Run from the Mac:
@@ -76,8 +92,9 @@ All baseline scripts share the same safety gates (these are passed through by `s
 When using `scripts/run_baseline_existing_runtime.sh`, the model path inputs (`MODEL_GGUF`, `VLLM_MODEL`, and `LLAMA_DIR`) are also passed through to the remote benchmark scripts.
 
 Per-script useful env vars:
-
-- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
+- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
+- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`
+- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`
 - `scripts/benchmark_llamacpp_spark.sh`: `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`

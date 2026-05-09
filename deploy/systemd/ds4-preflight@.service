@@ -8,13 +8,18 @@ Type=oneshot
 User=ds4
 Group=ds4
 WorkingDirectory=/opt/ds4
+Environment=DS4_INSTANCE=%i
+EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env
 
 # Provide the script on-host at /opt/ds4/scripts/ops_tp2_readiness.sh.
-ExecStart=/opt/ds4/scripts/ops_tp2_readiness.sh --self ${DS4_INSTANCE} --peer ${DS4_PEER_HOST} --peer-ssh ${DS4_PEER_SSH}
+ExecStart=/opt/ds4/scripts/ops_tp2_readiness.sh --self %i
 
 StandardOutput=journal
 StandardError=journal
+
+RemainAfterExit=yes
+TimeoutStartSec=120
 
 NoNewPrivileges=true
 PrivateTmp=true
@@ -26,3 +31,6 @@ ProtectKernelTunables=true
 LockPersonality=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

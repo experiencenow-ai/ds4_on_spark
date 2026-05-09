@@ -29,6 +29,9 @@ DS4_DIR="${DS4_DIR:-}"
 DS4_MODEL_GGUF="${DS4_MODEL_GGUF:-}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
+REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
+REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -158,6 +161,23 @@ VLLM_PROMPT_META="$(prompt_meta_line "$VLLM_PROMPT")"
     echo "- ALLOW_FETCH=1"
     echo "- ALLOW_BUILD=1"
     echo "- ALLOW_RUN=1"
+    echo "- REMOTE_BENCH_ENV='...'"
+    echo "- REMOTE_LLAMA_ENV='...'"
+    echo "- REMOTE_VLLM_ENV='...'"
+    echo
+    echo "Remote llama env:"
+    echo
+    echo "Do not put secrets in REMOTE_* env values; this report records them."
+    echo
+    echo '```'
+    echo "$REMOTE_LLAMA_ENV"
+    echo '```'
+    echo
+    echo "Remote vLLM env:"
+    echo
+    echo '```'
+    echo "$REMOTE_VLLM_ENV"
+    echo '```'
     echo
     echo "## Spark Probe"
     echo

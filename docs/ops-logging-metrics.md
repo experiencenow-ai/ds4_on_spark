@@ -27,6 +27,17 @@ journalctl -u ds4@spark0.service -o json | head
 If file logs are needed, use `/var/log/ds4/` and ensure log rotation is in
 place before a soak test.
 
+### Journald Persistence (Optional)
+
+For early bring-up it can be useful to persist journal logs across reboots.
+
+This repo includes an example drop-in:
+
+- `deploy/config/journald.ds4.conf.example`
+
+Apply only with human approval and after reviewing `man journald.conf` on the
+target OS.
+
 ## Metrics
 
 Preferred: Prometheus scrape endpoint on each Spark.
@@ -47,3 +58,14 @@ Recommended baseline metrics:
 - `ds4_cuda_oom_total`
 
 Prometheus scrape snippet example: `deploy/config/prometheus-scrape.ds4.yml.example`.
+
+## Spark (Optional)
+
+If Spark is managed via systemd (see `docs/deployment-spark-standalone-systemd.md`), prefer journald for unit logs:
+
+```bash
+journalctl -u spark-master@spark0.service -n 200 --no-pager
+journalctl -u spark-worker@spark1.service -n 200 --no-pager
+```
+
+For troubleshooting distributed runs, also consider enabling Spark event logs and recording the event log directory in your run notes.

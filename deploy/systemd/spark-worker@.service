@@ -1,0 +1,42 @@
+[Unit]
+Description=Spark standalone worker (%i)
+Wants=network-online.target
+After=network-online.target
+Wants=spark-master@%i.service
+After=spark-master@%i.service
+
+[Service]
+Type=simple
+User=ds4
+Group=ds4
+WorkingDirectory=/
+EnvironmentFile=/etc/ds4/spark-%i.env
+
+# Example unit for a Spark standalone worker. Review + adjust for your Spark install.
+ExecStart=${SPARK_HOME}/bin/spark-class org.apache.spark.deploy.worker.Worker --webui-port ${SPARK_WORKER_WEBUI_PORT} ${SPARK_MASTER_URL}
+
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+UMask=0027
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+

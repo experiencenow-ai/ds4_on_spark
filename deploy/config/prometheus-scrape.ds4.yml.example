@@ -7,7 +7,7 @@
   scrape_interval: 5s
   static_configs:
     - targets:
-        - aitopatom-9ab9.local:9090
+        - spark0.local:9090
       labels:
         ds4_instance: spark0
     - targets:

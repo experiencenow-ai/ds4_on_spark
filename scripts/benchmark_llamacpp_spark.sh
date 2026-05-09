@@ -91,7 +91,6 @@ gpu_sampler_stop()
     wait "$gpu_sampler_pid" 2>/dev/null || true
     gpu_sampler_pid=""
 }
-
 if [ "$LLAMA_CLI" = "" ] && [ ! -d "$LLAMA_DIR" ]; then
     echo "missing LLAMA_DIR=$LLAMA_DIR"
     if [ "$ALLOW_FETCH" = "1" ]; then
@@ -117,10 +116,14 @@ if [ "$ALLOW_BUILD" = "1" ]; then
         echo "LLAMA_CLI is set; skipping build under LLAMA_DIR"
         echo
     else
-    echo "== build (cuda) =="
-    (cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release)
-    (cd "$LLAMA_DIR" && cmake --build build --config Release)
-    echo
+        if [ ! -d "$LLAMA_DIR" ]; then
+            echo "LLAMA_DIR is required for ALLOW_BUILD=1: $LLAMA_DIR"
+            exit 6
+        fi
+        echo "== build (cuda) =="
+        (cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release)
+        (cd "$LLAMA_DIR" && cmake --build build --config Release)
+        echo
     fi
 else
     echo "== build skipped =="
@@ -174,6 +177,7 @@ LOG_RAW="$OUT_DIR/llama_cli.log"
 LOG_SUMMARY="$OUT_DIR/llama_cli.summary.txt"
 
 echo "== run =="
+echo "runtime_label=$RUNTIME_LABEL"
 echo "prompt_chars=$(printf %s \"$PROMPT\" | wc -c | tr -d ' ')"
 if command -v sha256sum >/dev/null 2>&1; then
     echo "prompt_sha256=$(printf %s \"$PROMPT\" | sha256sum | awk '{print $1}')"

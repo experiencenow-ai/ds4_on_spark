@@ -26,6 +26,18 @@ On each Spark:
 
 1. Create a dedicated service user and directories.
 
+Option A: use systemd sysusers/tmpfiles (recommended for repeatability, after staging deploy assets to `/tmp`):
+
+```bash
+sudo install -d -m 0755 /etc/sysusers.d /etc/tmpfiles.d
+sudo install -m 0644 /tmp/ds4-sysusers/ds4.conf /etc/sysusers.d/ds4.conf
+sudo install -m 0644 /tmp/ds4-tmpfiles/ds4.conf /etc/tmpfiles.d/ds4.conf
+sudo systemd-sysusers || true
+sudo systemd-tmpfiles --create || true
+```
+
+Option B: manual user + dirs:
+
 ```bash
 sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin ds4 || true
 sudo install -d -o root -g root -m 0755 /opt/ds4
@@ -38,14 +50,18 @@ sudo install -d -o ds4  -g ds4  -m 0750 /var/log/ds4
 
 ```bash
 # From your Mac:
-rsync -av deploy/systemd/ spark0@aitopatom-9ab9.local:/tmp/ds4-systemd/
-rsync -av deploy/config/  spark0@aitopatom-9ab9.local:/tmp/ds4-config/
+rsync -av deploy/systemd/ <user>@spark0.local:/tmp/ds4-systemd/
+rsync -av deploy/config/  <user>@spark0.local:/tmp/ds4-config/
+rsync -av deploy/sysusers.d/ <user>@spark0.local:/tmp/ds4-sysusers/
+rsync -av deploy/tmpfiles.d/ <user>@spark0.local:/tmp/ds4-tmpfiles/
 ```
 
 Then on the Spark:
 
 ```bash
-sudo install -m 0644 /tmp/ds4-systemd/*.service /etc/systemd/system/
+sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
+# optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
+# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
 sudo systemctl daemon-reload
 ```
@@ -55,6 +71,7 @@ sudo systemctl daemon-reload
 The systemd unit in `deploy/systemd/ds4@.service` expects:
 
 - `/opt/ds4/bin/ds4_server`
+- optional shared env at `/etc/ds4/ds4.env`
 - `/etc/ds4/ds4-spark0.env`
 
 ## Safety Notes
@@ -62,3 +79,4 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Do not put secrets in the repo. Keep `/etc/ds4/*.env` local to each Spark.
 - Prefer journald over file logs until retention/rotation is designed.
 - Tighten systemd sandboxing only after CUDA + distributed smoke tests pass.
+- Optional Spark standalone systemd templates exist, but are not required for DS4: `docs/deployment-spark-standalone-systemd.md`.
