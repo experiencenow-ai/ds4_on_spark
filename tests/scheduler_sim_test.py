@@ -462,6 +462,34 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(m.dropped_tokens_backpressure, 0)
         self.assertEqual(len(m.token_lat_ms_batch), m.admitted_tokens_batch)
 
+    def test_expert_queue_reserve_interactive_keeps_headroom_under_batch_load(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+        ]
+        base = dict(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=2,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m_no_reserve = scheduler_sim.run_simulation(scheduler_sim.SimConfig(**base, expert_queue_reserve_interactive=0), trace)
+        m_reserve = scheduler_sim.run_simulation(scheduler_sim.SimConfig(**base, expert_queue_reserve_interactive=1), trace)
+        self.assertGreater(m_no_reserve.dropped_tokens_backpressure_interactive, 0)
+        self.assertEqual(m_reserve.dropped_tokens_backpressure_interactive, 0)
+
     def test_k_signal_candidates_ignores_unrelated_congestion(self) -> None:
         trace = []
         for i in range(50):
