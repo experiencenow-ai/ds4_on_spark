@@ -55,4 +55,7 @@ echo \"== run: cuda_sm121_smem_optin ==\"
 echo
 echo \"== run: cuda_sm121_devattrs ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_devattrs
+echo
+echo \"== run: cuda_sm121_fp8_conv ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_fp8_conv
 "

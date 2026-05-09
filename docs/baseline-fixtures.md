@@ -35,11 +35,23 @@ Local placement guidance:
 Required local artifact:
 
 - A local GGUF that `llama-cli` can load (start with a small smoke GGUF, then move to larger fixtures).
+- For the quantized single-Spark V4 Flash milestone, use the smallest credible
+  V4 Flash GGUF first and require a runtime that explicitly supports the
+  DeepSeek V4 architecture and its GGUF quant types.
 
 Record:
 
+- runtime repo + commit, especially when using a fork or early-access runtime
+- declared base model and quant type
 - sha256 + size of GGUF
 - any runtime flags that affect memory/perf: context, batch, `-ngl`, `--flash-attn`, etc.
+
+Single-Spark ordering:
+
+1. tiny non-DS4 GGUF to prove the runtime binary can execute on Spark
+2. lowest-size V4 Flash quantized GGUF for first token generation
+3. higher-quality quant only after memory headroom is measured
+4. native FP4/FP8 GGUF for loader compatibility, not as the first success target
 
 ### C) vLLM (Spark / Python baseline, reference)
 

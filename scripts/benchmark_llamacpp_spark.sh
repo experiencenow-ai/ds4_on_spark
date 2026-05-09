@@ -4,6 +4,10 @@ set -eu
 target_note="llama.cpp baseline (Spark/CUDA)"
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/src/llama.cpp}"
+LLAMA_CLI="${LLAMA_CLI:-}"
+RUNTIME_LABEL="${RUNTIME_LABEL:-llama.cpp-compatible}"
+MODEL_SOURCE="${MODEL_SOURCE:-unknown}"
+MODEL_QUANT="${MODEL_QUANT:-unknown}"
 MODEL_GGUF="${MODEL_GGUF:-}"
 PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 CTX="${CTX:-8192}"
@@ -22,6 +26,9 @@ echo "== $target_note =="
 date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
 echo "cwd=$PWD"
 echo "out_dir=$OUT_DIR"
+echo "runtime_label=$RUNTIME_LABEL"
+echo "model_source=$MODEL_SOURCE"
+echo "model_quant=$MODEL_QUANT"
 echo
 
 echo "== gpu snapshot (pre) =="
@@ -30,7 +37,7 @@ nvidia-smi >"$GPU_PRE" 2>&1 || true
 cat "$GPU_PRE" || true
 echo
 
-if [ ! -d "$LLAMA_DIR" ]; then
+if [ "$LLAMA_CLI" = "" ] && [ ! -d "$LLAMA_DIR" ]; then
     echo "missing LLAMA_DIR=$LLAMA_DIR"
     if [ "$ALLOW_FETCH" = "1" ]; then
         mkdir -p "$(dirname "$LLAMA_DIR")"
@@ -45,9 +52,16 @@ echo "== llama.cpp revision =="
 if [ -d "$LLAMA_DIR/.git" ]; then
     (cd "$LLAMA_DIR" && git rev-parse HEAD) || true
 fi
+if [ "$LLAMA_CLI" != "" ]; then
+    echo "llama_cli_override=$LLAMA_CLI"
+fi
 echo
 
 if [ "$ALLOW_BUILD" = "1" ]; then
+    if [ ! -d "$LLAMA_DIR" ]; then
+        echo "LLAMA_DIR is required for ALLOW_BUILD=1: $LLAMA_DIR"
+        exit 6
+    fi
     echo "== build (cuda) =="
     (cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release)
     (cd "$LLAMA_DIR" && cmake --build build --config Release)
@@ -58,11 +72,12 @@ else
     echo
 fi
 
-LLAMA_CLI=""
-if [ -x "$LLAMA_DIR/build/bin/llama-cli" ]; then
-    LLAMA_CLI="$LLAMA_DIR/build/bin/llama-cli"
-elif [ -x "$LLAMA_DIR/build/bin/main" ]; then
-    LLAMA_CLI="$LLAMA_DIR/build/bin/main"
+if [ "$LLAMA_CLI" = "" ]; then
+    if [ -x "$LLAMA_DIR/build/bin/llama-cli" ]; then
+        LLAMA_CLI="$LLAMA_DIR/build/bin/llama-cli"
+    elif [ -x "$LLAMA_DIR/build/bin/main" ]; then
+        LLAMA_CLI="$LLAMA_DIR/build/bin/main"
+    fi
 fi
 
 if [ "$ALLOW_RUN" != "1" ]; then
@@ -88,7 +103,10 @@ if [ ! -r "$MODEL_GGUF" ]; then
 fi
 
 echo "== model artifact =="
+echo "model_source=$MODEL_SOURCE"
+echo "model_quant=$MODEL_QUANT"
 ls -lh "$MODEL_GGUF" || true
+wc -c "$MODEL_GGUF" || true
 command -v sha256sum >/dev/null 2>&1 && sha256sum "$MODEL_GGUF" || true
 echo
 
@@ -96,13 +114,14 @@ LOG_RAW="$OUT_DIR/llama_cli.log"
 LOG_SUMMARY="$OUT_DIR/llama_cli.summary.txt"
 
 echo "== run =="
+echo "runtime_label=$RUNTIME_LABEL"
 echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS --timings $EXTRA_ARGS"
 echo
 
-python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY"
+python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT"
 import os, resource, re, subprocess, sys, time, shlex
 
-llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary = sys.argv[1:]
+llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant = sys.argv[1:]
 
 cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl, "--timings"]
 if extra_args.strip():
@@ -114,6 +133,9 @@ timings_lines = []
 with open(log_raw, "w", encoding="utf-8") as f:
     f.write("cmd=" + " ".join(shlex.quote(x) for x in cmd) + "\n")
     f.write("utc_start=" + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
+    f.write("runtime_label=" + runtime_label + "\n")
+    f.write("model_source=" + model_source + "\n")
+    f.write("model_quant=" + model_quant + "\n")
     f.flush()
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -156,6 +178,13 @@ for tl in timings_lines:
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
+summary_lines.append("runtime_label=%s" % runtime_label)
+summary_lines.append("model_source=%s" % model_source)
+summary_lines.append("model_quant=%s" % model_quant)
+try:
+    summary_lines.append("model_size_bytes=%d" % int(os.path.getsize(model)))
+except OSError:
+    summary_lines.append("model_size_bytes=NA")
 if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
 else:

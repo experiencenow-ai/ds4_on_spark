@@ -2,6 +2,8 @@
 
 import json
 import re
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,6 +51,15 @@ def main() -> int:
 	upstream_commit = upstream_commit_path.read_text(encoding="utf-8").strip() if upstream_commit_path.exists() else ""
 	if not re.fullmatch(r"[0-9a-f]{40}", upstream_commit):
 		failures.append(Failure(1, f"fixtures must include a pinned upstream commit hash in {upstream_commit_path}"))
+
+	# Contract summary must be generated from fixtures and stay in sync.
+	contract_summary = FIX / "contract_summary.json"
+	if not contract_summary.exists():
+		failures.append(Failure(11, f"missing contract summary fixture: {contract_summary} (run scripts/model_contract_build_deepseek_v4_flash_contract.py)"))
+	else:
+		r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_contract_build_deepseek_v4_flash_contract.py"), "--check"], cwd=str(ROOT))
+		if r.returncode != 0:
+			failures.append(Failure(12, f"contract summary fixture is stale: {contract_summary} (re-run scripts/model_contract_build_deepseek_v4_flash_contract.py)"))
 
 	# Cross-check the two config sources for the fields they share.
 	for k in ("vocab_size", "hidden_size", "num_hidden_layers", "num_attention_heads", "head_dim", "q_lora_rank", "o_groups", "o_lora_rank", "compress_ratios"):
@@ -226,6 +237,68 @@ def main() -> int:
 		):
 			req_mtp(suffix)
 
+	# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
+	enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
+	if not enc_test.exists():
+		failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
+	else:
+		r = subprocess.run([sys.executable, str(enc_test)], cwd=str(enc_test.parent))
+		if r.returncode != 0:
+			failures.append(Failure(41, "DeepSeek V4 encoding oracle failed (see test output above)"))
+
+	# Optional: structural validation for a Spark-generated logits oracle (weights are not shipped here).
+	oracle_path = FIX / "oracle" / "logits_oracle.json"
+	if oracle_path.exists():
+		try:
+			oracle = load_json(oracle_path)
+		except Exception as e:
+			failures.append(Failure(50, f"failed to parse logits oracle JSON {oracle_path}: {e}"))
+			oracle = None
+		if oracle is not None:
+			if int(oracle.get("format_version", 0)) != 1:
+				failures.append(Failure(51, f"logits oracle has unexpected format_version (expected 1): {oracle_path}"))
+			if str(oracle.get("upstream_commit", "")) != upstream_commit:
+				failures.append(Failure(54, f"logits oracle upstream_commit must match pinned fixtures upstream_commit.txt ({upstream_commit}): {oracle_path}"))
+			ws = oracle.get("world_size")
+			if not isinstance(ws, int) or ws < 1:
+				failures.append(Failure(55, f"logits oracle world_size must be an integer >= 1: {oracle_path}"))
+			seed = oracle.get("seed")
+			if not isinstance(seed, int):
+				failures.append(Failure(56, f"logits oracle seed must be an integer: {oracle_path}"))
+			ref = oracle.get("reference")
+			if not isinstance(ref, dict):
+				failures.append(Failure(57, f"logits oracle missing reference object: {oracle_path}"))
+			else:
+				ma = ref.get("model_args")
+				if not isinstance(ma, dict):
+					failures.append(Failure(58, f"logits oracle reference.model_args must be an object: {oracle_path}"))
+				else:
+					if not isinstance(ma.get("n_layers"), int) or int(ma.get("n_layers")) != n_layers:
+						failures.append(Failure(59, f"logits oracle reference.model_args.n_layers must match fixtures n_layers={n_layers}: {oracle_path}"))
+					if not isinstance(ma.get("window_size"), int) or int(ma.get("window_size")) != int(inf["window_size"]):
+						failures.append(Failure(60, f"logits oracle reference.model_args.window_size must match fixtures window_size={inf['window_size']}: {oracle_path}"))
+					crl = ma.get("compress_ratios_len")
+					if not isinstance(crl, int) or crl != len(compress_ratios):
+						failures.append(Failure(61, f"logits oracle reference.model_args.compress_ratios_len must match fixtures compress_ratios length={len(compress_ratios)}: {oracle_path}"))
+
+			sha_map = oracle.get("tokenizer_sha256", {})
+			if sha_map is not None and not isinstance(sha_map, dict):
+				failures.append(Failure(62, f"logits oracle tokenizer_sha256 must be an object when present: {oracle_path}"))
+			if isinstance(sha_map, dict):
+				for k, v in list(sha_map.items())[:4]:
+					if not isinstance(k, str) or not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v):
+						failures.append(Failure(63, f"logits oracle tokenizer_sha256 entries must be sha256 hex strings: {oracle_path}"))
+						break
+
+			cases = oracle.get("cases")
+			if not isinstance(cases, list) or not cases:
+				failures.append(Failure(52, f"logits oracle must contain non-empty cases[]: {oracle_path}"))
+			else:
+				for c in cases[:4]:
+					if "id" not in c or "prompt_tokens" not in c or "trace" not in c:
+						failures.append(Failure(53, f"logits oracle case missing required keys: {oracle_path}"))
+						break
+
 	if failures:
 		for f in failures:
 			print(f"ERROR[{f.code}]: {f.msg}")
@@ -237,4 +310,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	raise SystemExit(main())
-

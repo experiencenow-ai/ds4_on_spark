@@ -11,6 +11,7 @@ Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
+- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption)
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
@@ -35,12 +36,21 @@ Notes on config sources:
 - `o_groups`: 8
 - `o_lora_rank`: 1024
 - `sliding_window` / `window_size`: 128
+- CSA Indexer (from `config.json` + `inference/config.json`):
+  - `index_n_heads`: 64
+  - `index_head_dim`: 128
+  - `index_topk`: 512
+- Hyper-Connections (mHC):
+  - `hc_mult`: 4
+  - `hc_sinkhorn_iters`: 20
+  - `hc_eps`: 1e-6
 - `num_hash_layers` / `n_hash_layers`: 3 (first 3 MoE layers are hash-routed)
 - MoE:
   - `n_routed_experts`: 256
   - `n_shared_experts`: 1
   - `num_experts_per_tok` / `n_activated_experts`: 6
   - `moe_intermediate_size` / `moe_inter_dim`: 2048
+  - `swiglu_limit`: 10.0 (clamps expert activations in the reference code)
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
@@ -51,7 +61,62 @@ Notes on config sources:
   - `original_seq_len` / `original_max_position_embeddings`: 65536
   - `rope_factor`: 16
   - `beta_fast`: 32
-  - `beta_slow`: 1
+- `beta_slow`: 1
+
+## Logical parameter shapes (from `inference/model.py` + configs)
+
+These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below).
+
+Top-level:
+
+- `embed.weight`: `[vocab_size, hidden_size]`
+- `norm.weight`: `[hidden_size]`
+- `head.weight`: `[vocab_size, hidden_size]`
+- `hc_head_{fn,base,scale}`: `[mix_hc,hc_mult*hidden_size]`, `[mix_hc]`, `[3]` where `mix_hc=(2+hc_mult)*hc_mult`
+
+Per-layer attention (`layers.{i}.attn.*`):
+
+- `wq_a.weight`: `[q_lora_rank, hidden_size]` (low-rank Q factor A)
+- `q_norm.weight`: `[q_lora_rank]` (RMSNorm in fp32)
+- `wq_b.weight`: `[num_attention_heads*head_dim, q_lora_rank]` (low-rank Q factor B)
+- `wkv.weight`: `[head_dim, hidden_size]` (shared KV latent)
+- `kv_norm.weight`: `[head_dim]`
+- `wo_a.weight`: `[o_groups*o_lora_rank, (num_attention_heads*head_dim)/o_groups]` (grouped low-rank O factor A)
+- `wo_b.weight`: `[hidden_size, o_groups*o_lora_rank]` (low-rank O factor B)
+
+Per-layer MoE (`layers.{i}.ffn.*`):
+
+- `gate.weight`: `[n_routed_experts, hidden_size]`
+- Hash gate (layers `0..n_hash_layers-1`): `gate.tid2eid`: `[vocab_size, n_activated_experts]` (int32)
+- Score gate (layers `n_hash_layers..n_layers-1`): `gate.bias`: `[n_routed_experts]` (float32; selection-only)
+- Expert FFN (logical shapes for each `experts.{eid}.w{1,2,3}`):
+  - `w1`: `[moe_inter_dim, hidden_size]`
+  - `w2`: `[hidden_size, moe_inter_dim]`
+  - `w3`: `[moe_inter_dim, hidden_size]`
+
+## Quantization + scale tensors (FP8 trunk, FP4 experts)
+
+Upstream sources: `config.json` (`quantization_config`, `expert_dtype`) and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
+
+Checkpoint formats:
+
+- Trunk weights use FP8 (`e4m3`) with separate scale tensors:
+  - `quantization_config.quant_method`: `fp8`
+  - `quantization_config.fmt`: `e4m3`
+  - `quantization_config.scale_fmt`: `ue8m0` (power-of-2 scale rounding / MXFP style)
+  - `quantization_config.weight_block_size`: `[128,128]`
+- Expert weights use FP4 (from `config.json` `expert_dtype: fp4`):
+  - In the reference `Linear`, FP4 weights are stored packed as `float4_e2m1fn_x2` with shape `[out_features, in_features//2]` (logically `[out_features, in_features]`).
+  - FP4 scale tensors are `float8_e8m0fnu` with shape `[out_features, in_features//32]` (1 scale per 32 FP4 K-elements).
+
+Activation quantization in the reference runtime:
+
+- GEMM input activations are block-quantized to FP8 in blocks of `block_size=128`.
+- KV path uses QAT-style activation quantization on the **non-RoPE** dims only:
+  - `act_quant(kv[..., :-rope_head_dim], block_size=64, inplace=True)` (RoPE slice stays BF16 for positional precision).
+- The compressed KV path (`Compressor.rotate == true`) applies a Hadamard rotation then uses FP4 act quantization with `fp4_block_size=32`.
+
+DS4 must treat `*.scale` tensors and the block-size rules above as part of the execution contract; skipping them can preserve shapes but still diverge numerically.
 
 ## Attention schedule (sliding vs CSA vs HCA)
 
@@ -63,10 +128,12 @@ Interpretation (from `inference/model.py`):
   - KV cache stores only the local window.
   - YaRN is disabled for these layers (uses base `rope_theta` and `original_seq_len=0`).
 - `compress_ratio == 4`: **CSA** (Compressed Sparse Attention)
-  - Uses a learned **Indexer** to pick `index_topk` compressed blocks per query.
+  - Uses a learned **Indexer** to pick up to `index_topk` compressed positions per query.
+  - Compression uses overlapping windows (`Compressor.overlap == true` for `compress_ratio==4`).
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 4`.
 - `compress_ratio != 0 and != 4` (V4 Flash uses `128`): **HCA** (hybrid compressed attention)
   - No Indexer path; compressed top-k indices come from the deterministic `get_compress_topk_idxs(...)`.
+  - Compression uses non-overlapping windows (`Compressor.overlap == false`).
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 128`.
   - YaRN is enabled in these layers (uses `compress_rope_theta` and `original_seq_len=65536`).
 
@@ -110,6 +177,11 @@ Sparse attention index selection:
   - CSA (`ratio==4`): `Indexer(...)` chooses indices.
   - HCA (`ratio==128`): `get_compress_topk_idxs(...)` chooses indices.
 
+Important indexing details (from `Attention.forward`):
+
+- Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
+- Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
+
 ### MLA positional semantics (partial RoPE + inverse on output)
 
 Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
@@ -117,15 +189,25 @@ Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
 - Query path:
   - `qr = q_norm(wq_a(x))`
   - `q = wq_b(qr)` reshaped to `[B,S,n_heads,head_dim]`
+  - `q *= rsqrt(mean(q^2) + eps)` (extra per-token normalization in the reference code)
   - `apply_rotary_emb(q[..., -rope_head_dim:], freqs_cis)`
 - KV path (shared KV, no per-head split):
   - `kv = kv_norm(wkv(x))` shaped `[B,S,head_dim]`
   - `apply_rotary_emb(kv[..., -rope_head_dim:], freqs_cis)`
+  - `act_quant(kv[..., :-rope_head_dim], group=64, ...)` (non-RoPE dims only; RoPE dims stay BF16)
 - Attention output:
   - `o = sparse_attn(q, kv_cache_or_concat, attn_sink, topk_idxs, softmax_scale)`
   - `apply_rotary_emb(o[..., -rope_head_dim:], freqs_cis, inverse=True)` (**de-rotation** via complex conjugate)
 
 DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
+
+### Attention sink semantics (`attn_sink`)
+
+Reference implementation: `inference/kernel.py` (`sparse_attn`).
+
+- Each attention head has a learned scalar `attn_sink[h]`.
+- The sink contributes to the **softmax denominator** as an extra `exp(attn_sink[h])` term (i.e. it is a null/sink logit with no value vector contribution).
+- DS4 must treat `layers.{i}.attn.attn_sink` as semantically significant, not a no-op parameter.
 
 ## MoE routing semantics (hash + score routing)
 
@@ -172,6 +254,20 @@ Reference implementation: `inference/model.py` (`MTPBlock`, `Transformer.mtp`).
   - This makes the MTP block read `compress_ratios[43]`, which is the extra trailing `0` (sliding-only) entry.
 - `Transformer.forward(...)` returns normal next-token logits and does **not** invoke `mtp` by default.
   - MTP is a separate callable for speculative/next-n prediction and must be explicitly integrated by DS4.
+
+`MTPBlock.forward(...)` contract (from `inference/model.py`):
+
+- Inputs:
+  - `x`: hidden state shaped `[B,S,hc_mult,dim]` (same HC stream layout as the main trunk)
+  - `input_ids`: `[B,S]` token ids for the same positions
+- Computation:
+  1. `e = embed(input_ids)` then `e = enorm(e)`
+  2. `x = hnorm(x)`
+  3. `x = e_proj(e).unsqueeze(2) + h_proj(x)`
+  4. Run the normal `Block` forward (attention + MoE + HC mixing).
+  5. Compute logits with a **separate** HC head: `hc_head_{fn,base,scale}` under `mtp.0.*`.
+
+DS4 must treat `mtp.*` as a distinct draft-model path with its own HC head weights, not just an alias to the main head.
 
 ## Tokenizer + encoding contract
 
@@ -267,7 +363,32 @@ MTP block (`mtp.0.*`):
 
 This repo includes a verifier for these invariants: `scripts/model_contract_verify_deepseek_v4_flash.py`.
 
+## Quantized single-Spark compatibility
+
+The first Spark0 token-generation milestone may use a community GGUF or runtime
+fork before DS4 has a native loader. Treat that as an execution baseline only:
+the source-derived contract above remains authoritative.
+
+For each quantized artifact tested, record:
+
+- artifact format (`GGUF`, HF safetensors, or other)
+- declared quant (`Q2_K`, `Q3_K_M`, native `F8_E4M3 + MXFP4`, etc.)
+- declared base model and conversion path
+- runtime repo, branch, and commit required to load it
+- whether the runtime claims to preserve native FP8/FP4 scales or has
+  re-quantized through another representation
+- tokenizer/chat-template behavior used for the prompt
+
+Any successful external-runtime output must still be followed by a contract
+check: prompt rendering must match the encoding oracle, and native DS4 logits
+must eventually be validated against official-source oracle fixtures.
+
 ## Next steps (oracle + remaining unknowns)
 
-- Add a Spark-side logit oracle generator that runs the upstream reference implementation against a small prompt set **when weights are locally available** (do not auto-download shards).
+- The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
+- A Spark-side logit oracle generator is provided:
+  - Prompt cases: `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`
+  - Generator (weights required): `scripts/model_contract_generate_deepseek_v4_flash_oracle.py`
+  - Output (commit only after review): `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`
+- The verifier enforces that any committed `logits_oracle.json` matches the pinned `upstream_commit.txt` and records core runtime metadata (TP size, seed, tokenizer hashes).
 - Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.

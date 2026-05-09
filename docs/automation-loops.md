@@ -57,15 +57,19 @@ Exit: initial `docs/model-contract.md` and fixture plan.
 
 ## Loop 5: Existing Baseline
 
-Goal: get any DS4 Flash runtime producing tokens on Spark.
+Goal: get any DS4 Flash runtime producing tokens on Spark, with a quantized
+single-Spark run as the first execution milestone.
 
 Tasks:
 
 - Run known llama.cpp/antirez path if available.
+- Try a V4-capable external runtime with the smallest credible quantized V4
+  Flash artifact on Spark0 before attempting native DS4 or dual-Spark work.
 - Capture command line, context, quant, t/s, TTFT, memory use.
 - Record failures exactly.
 
-Exit: one baseline report, even if performance is poor.
+Exit: one baseline report, even if performance is poor, plus one quantized
+single-Spark success or exact failure report.
 
 ## Loop 6: DeepGEMM Spike
 
