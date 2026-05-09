@@ -175,6 +175,8 @@ class SimMetrics:
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
+    pending_signal_interactive: List[float] = dataclasses.field(default_factory=list)
+    pending_signal_batch: List[float] = dataclasses.field(default_factory=list)
     k_updates_interactive: int = 0
     k_updates_batch: int = 0
     k_changes_interactive: int = 0
@@ -363,6 +365,10 @@ class SimMetrics:
                         "controller_updates": self.k_updates_batch,
                         "controller_changes": self.k_changes_batch,
                     },
+                },
+                "pending_signal": {
+                    "interactive": summarize(self.pending_signal_interactive),
+                    "batch": summarize(self.pending_signal_batch),
                 },
                 "effective_k": {
                     "interactive": summarize_ints(self.effective_k_interactive),
@@ -1137,13 +1143,19 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             tid = ev.tasks[0].token_id
             route = trace[tid]
             mtp_enabled = (cfg.mtp_draft_len > 0)
+            if k_signal == "global":
+                pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
+            else:
+                pending_signal = float(max(experts[e].pending() for e in route.candidates))
+
+            if route.cls == LatencyClass.INTERACTIVE:
+                metrics.pending_signal_interactive.append(pending_signal)
+            else:
+                metrics.pending_signal_batch.append(pending_signal)
+
             if k_mode == "trace":
                 k = int(route.k or 0)
             else:
-                if k_signal == "global":
-                    pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                else:
-                    pending_signal = float(max(experts[e].pending() for e in route.candidates))
 
                 cs = k_ctrl[route.cls]
                 if cs.last_update_ms < 0.0:

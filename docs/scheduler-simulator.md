@@ -210,6 +210,7 @@ The simulator prints a JSON object with:
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
   - also includes controller update/change counts when `--k-update-ms` / `--k-slew` are used
+- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates}`); useful for choosing `--q-low/--q-high`
 - `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
 - `tasks.promoted`: number of batch tasks promoted by `--promote-ms`

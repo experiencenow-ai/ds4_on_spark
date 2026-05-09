@@ -220,6 +220,7 @@ class SchedulerSimTest(unittest.TestCase):
         mc = scheduler_sim.run_simulation(cfg_candidates, trace)
         idx = next(i for i, r in enumerate(trace) if r.candidates == (1,))
         self.assertLessEqual(mg.chosen_k_batch[idx], mc.chosen_k_batch[idx])
+        self.assertGreater(mg.pending_signal_batch[idx], mc.pending_signal_batch[idx])
 
     def test_starvation_counts_queue_wait(self) -> None:
         trace = [
