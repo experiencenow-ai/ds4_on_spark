@@ -32,6 +32,7 @@ High-level facts observed (from the probe output below):
 - Wired NIC: `enP7s7`, MTU 9000, link speed 10Gb/s (ethtool)
 - Default route: via Wi-Fi during probe
 - Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
+- PCIe link negotiation: appears stuck at Gen1 x1 (nvidia-smi + sysfs); `lspci -vv` does not expose `LnkCap/LnkSta` fields without extra privileges on this host
 - NVIDIA driver (proc): Open Kernel Module `580.142` build timestamp `2026-03-03`
 - cuDNN: not detected (no headers/libs found via probe)
 

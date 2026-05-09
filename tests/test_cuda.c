@@ -5,8 +5,10 @@
 int32_t test_cuda(void)
 {
 	ds4_cuda_status_t st0,st1,st2,st3,st4,st5;
+	ds4_cuda_device_info_t di;
 	const char *s;
 	void *dev;
+	int32_t dev_count;
 	st0 = ds4_cuda_ok();
 	if ( ds4_cuda_is_ok(st0) == 0 )
 		return(-1);
@@ -45,11 +47,32 @@ int32_t test_cuda(void)
 	{
 		if ( st5.code != DS4_CUDA_ERR_NO_DEVICE )
 			return(-12);
+		dev_count = -1;
+		st0 = ds4_cuda_device_count(&dev_count);
+		if ( st0.code != DS4_CUDA_ERR_NO_DEVICE )
+			return(-22);
+		if ( dev_count != 0 )
+			return(-23);
 	}
 	else
 	{
 		uint8_t h0[16],h1[16];
 		int32_t i;
+		dev_count = -1;
+		st0 = ds4_cuda_device_count(&dev_count);
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-24);
+		if ( dev_count <= 0 )
+			return(-25);
+		st0 = ds4_cuda_device_info(&di,0);
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-26);
+		if ( di.dev != 0 )
+			return(-27);
+		if ( di.name[0] == 0 )
+			return(-28);
+		if ( di.total_global_mem <= 0 )
+			return(-29);
 		dev = 0;
 		for (i=0; i<(int32_t)sizeof(h0); i++)
 		{
@@ -92,6 +115,15 @@ int32_t test_cuda(void)
 	st5 = ds4_cuda_init();
 	if ( st5.code != DS4_CUDA_ERR_DISABLED )
 		return(-13);
+	dev_count = -1;
+	st0 = ds4_cuda_device_count(&dev_count);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-30);
+	if ( dev_count != 0 )
+		return(-31);
+	st0 = ds4_cuda_device_info(&di,0);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-32);
 	dev = (void *)0x1;
 	st0 = ds4_cuda_malloc(&dev,16);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )

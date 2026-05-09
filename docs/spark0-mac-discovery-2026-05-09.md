@@ -134,6 +134,27 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+## Update: Discovery Refresh (2026-05-09 16:40Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T164004Z_probe16.txt
+```
+
+```text
+== meta ==
+Sat May  9 16:40:04 UTC 2026
+git: c8f2283
+targets: aitopatom-9ab9.local spark1.local
+```
+
+```text
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
 ## Update: Discovery Refresh (2026-05-09 16:10Z)
 
 Commands run:
