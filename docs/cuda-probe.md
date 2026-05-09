@@ -37,6 +37,7 @@ What it does:
   - `cuda_sm121_cccl_atomic_ref` (CCCL `cuda::atomic_ref` device-scope + block-scope atomics)
   - `cuda_sm121_cuda_graph_smoke` (CUDA graph capture → instantiate → launch smoke test)
   - `cuda_sm121_nvrtc_jit` (NVRTC compile-to-PTX + Driver API module load/launch for `compute_121`)
+  - `cuda_sm121_nvrtc_cxx20_jit` (NVRTC `--std=c++20` compile-to-PTX + Driver API module load/launch for `compute_121`)
   - `cuda_sm121_nvcc_flags_probe` (nvcc `-std=c++20` + `--extended-lambda` + `--expt-relaxed-constexpr` compile/run gate for `sm_121`)
   - `cuda_sm121_nvjitlink_jit` (NVRTC compile-to-PTX + nvJitLink PTX→CUBIN + Driver API module load/launch for `sm_121`)
   - `cuda_sm121_cxx20_probe` (`-std=c++20` toolchain probe; DeepGEMM-style build gate)
@@ -55,7 +56,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, `cuda_sm121_nvrtc_cxx20_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
 Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using the `__cluster_dims__` attribute (`tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu`) and prints whether it compiled or the first lines of the error output.
 
@@ -90,6 +91,7 @@ Observed:
 - CCCL atomic-ref probe succeeds (`cuda::atomic_ref`)
 - CUDA graph smoke probe succeeds (stream capture + instantiate + launch)
 - NVRTC JIT probe succeeds (`nvrtc supportedArchs` includes `121`; driver loads PTX and launches kernel)
+- NVRTC JIT probe succeeds in C++20 mode (`--std=c++20` for `compute_121`; probe prints `nvrtc_cxx20_jit ok out=0x1234567a`)
 - NVCC flags probe succeeds (`-std=c++20 --extended-lambda --expt-relaxed-constexpr`)
 - nvJitLink JIT probe succeeds (nvJitLink links `compute_121` PTX to an `sm_121` CUBIN and driver loads/launches the kernel)
 - C++20 toolchain probe succeeds (`-std=c++20`)
@@ -126,6 +128,7 @@ cuda_graph_smoke out=22222222
 nvrtcVersion=13.0
 nvrtc supportedArchs: 75 80 86 87 88 89 90 100 103 110 120 121
 nvrtc_jit ok out=0x12345679
+nvrtc_cxx20_jit ok out=0x1234567a
 nvcc_flags_probe ok out=0x12345679
 nvJitLinkVersion=13.0
 nvjitlink_jit ok out=0x12345679
