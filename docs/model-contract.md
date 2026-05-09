@@ -43,3 +43,8 @@ Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
 - Ensure the oracle covers both prefill (`start_pos == 0`) and decode (`start_pos > 0`) so KV-cache semantics are exercised.
+
+MTP (multi-token prediction) note:
+
+- DeepSeek V4 Flash includes an `mtp.0.*` module namespace that is **not** exercised by the normal next-token logits oracle.
+- Before DS4 enables or trusts MTP/draft decoding, require an explicit MTP oracle that validates `MTPBlock.forward(...)` semantics and the `mtp.0.hc_head_*` head weights, and record whether the tested artifact preserves `mtp.0.*`.

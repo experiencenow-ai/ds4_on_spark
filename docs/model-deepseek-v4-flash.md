@@ -379,6 +379,13 @@ For each quantized artifact tested, record:
   re-quantized through another representation
 - tokenizer/chat-template behavior used for the prompt
 
+MTP namespace preservation:
+
+- Upstream includes an `mtp.0.*` tensor namespace for the MTP (draft) path.
+- Many GGUF conversions/runtimes drop or ignore `mtp.*` keys.
+- Record whether the artifact preserves `mtp.0.*` using:
+  - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf`
+
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
 must eventually be validated against official-source oracle fixtures.
