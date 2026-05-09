@@ -2,6 +2,9 @@ import unittest
 import tempfile
 import os
 import dataclasses
+import contextlib
+import io
+import json
 
 from sim.scheduler import scheduler_sim
 
@@ -375,6 +378,29 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertEqual(len(trace), 2)
             self.assertEqual(trace[0].t_ms, 0.0)
             self.assertAlmostEqual(trace[1].t_ms, 0.25, places=9)
+        finally:
+            os.unlink(path)
+
+    def test_trace_speedup_scales_timestamps(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=10.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(1,)),
+        ]
+        scaled = scheduler_sim.scale_trace_speedup(trace, 2.0)
+        self.assertEqual([r.t_ms for r in scaled], [0.0, 5.0])
+
+    def test_trace_speedup_applies_in_trace_summary(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0]}\n')
+                f.write('{"t_ms":10.0,"cls":"batch","candidates":[1]}\n')
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(["--trace-jsonl", path, "--trace-speedup", "2", "--trace-summary", "--json"])
+            self.assertEqual(rc, 0)
+            out = json.loads(buf.getvalue().strip())
+            self.assertEqual(out["t_ms"]["max"], 5.0)
         finally:
             os.unlink(path)
 

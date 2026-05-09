@@ -260,6 +260,12 @@ EOF
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route_dt.jsonl --trace-time-mode dt_ms --num-experts 8 --json
 ```
 
+Trace speedup (stress backpressure/starvation by compressing arrival times; `--trace-speedup 2` doubles offered load):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-speedup 2 --num-experts 8 --json
+```
+
 Trace sanity-check (contract summary only):
 
 ```bash

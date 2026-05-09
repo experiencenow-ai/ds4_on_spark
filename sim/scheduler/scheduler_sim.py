@@ -2026,11 +2026,21 @@ def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute]
     return(out)
 
 
+def scale_trace_speedup(trace: Sequence[TokenRoute], speedup: float) -> List[TokenRoute]:
+    if speedup <= 0.0:
+        raise ValueError("trace_speedup must be > 0")
+    if speedup == 1.0:
+        return(list(trace))
+    scale = (1.0 / float(speedup))
+    return([dataclasses.replace(r, t_ms=(float(r.t_ms) * scale)) for r in trace])
+
+
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size).")
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
+    p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file (t_ms, cls, candidates) before simulation.")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file (t_ms, cls, candidates) before simulation.")
@@ -2093,6 +2103,11 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
 
+    try:
+        trace_speedup = float(args.trace_speedup)
+    except (TypeError, ValueError):
+        raise SystemExit("--trace-speedup must be a number")
+
     if args.trace_jsonl != "" and args.trace_csv != "":
         raise SystemExit("Choose exactly one: --trace-jsonl or --trace-csv")
 
@@ -2108,6 +2123,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower())
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
+        if trace_speedup != 1.0:
+            try:
+                trace = scale_trace_speedup(trace, trace_speedup)
+            except ValueError as e:
+                raise SystemExit(str(e))
         if args.trace_summary:
             out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
             if args.json:
@@ -2167,6 +2187,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             trace = generate_markov_trace(trace_cfg)
         else:
             raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf, hotset, or markov.")
+
+        if trace_speedup != 1.0:
+            try:
+                trace = scale_trace_speedup(trace, trace_speedup)
+            except ValueError as e:
+                raise SystemExit(str(e))
 
         if args.dump_trace_jsonl.strip() != "":
             write_trace_jsonl(args.dump_trace_jsonl, trace)
