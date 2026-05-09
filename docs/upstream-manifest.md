@@ -81,4 +81,5 @@ To probe for common `LICENSE*` files at pinned commits (without cloning), run:
 - [`docs/upstream-vllm-transformers.md`](upstream-vllm-transformers.md)
 - [`docs/upstream-llama-cpp.md`](upstream-llama-cpp.md)
 - [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md)
+- [`docs/upstream-single-spark-v4-flash.md`](upstream-single-spark-v4-flash.md)
 - [`docs/upstream-spark-v4-bringup.md`](upstream-spark-v4-bringup.md)
