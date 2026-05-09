@@ -196,6 +196,8 @@ sudo systemctl enable ds4-strict@spark0.service
 sudo systemctl start  ds4-strict@spark0.service
 ```
 
+`ds4-strict@.service` requires `ds4-preflight-strict@%i.service`; if strict preflight fails, `ds4-strict@...` will also fail to start.
+
 Logs:
 
 ```bash
