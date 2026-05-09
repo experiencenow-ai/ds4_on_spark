@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from collections import Counter
 import json
 import struct
 import sys
@@ -14,8 +15,10 @@ class InspectResult:
 	path: str
 	artifact_type: str
 	tensor_count: int
+	tensor_type_counts: dict[str, int]
 	mtp_present: bool
 	mtp_tensor_count: int
+	mtp_tensor_type_counts: dict[str, int]
 	mtp_layer_ids: list[int]
 	first_mtp_keys: list[str]
 
@@ -96,8 +99,10 @@ def inspect_weight_keys(weight_keys: list[str], path: str, artifact_type: str) -
 		path=path,
 		artifact_type=artifact_type,
 		tensor_count=len(weight_keys),
+		tensor_type_counts={},
 		mtp_present=bool(mtp_keys),
 		mtp_tensor_count=len(mtp_keys),
+		mtp_tensor_type_counts={},
 		mtp_layer_ids=sorted(mtp_layer_ids),
 		first_mtp_keys=mtp_keys[:10],
 	)
@@ -112,6 +117,48 @@ def inspect_safetensors_index(path: Path) -> InspectResult:
 
 
 def inspect_gguf(path: Path) -> InspectResult:
+	# Types follow gguf spec (ggml_type):
+	# https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
+	#
+	# This mapping is intentionally partial/stable: unknown types are emitted as "TYPE_<code>".
+	ggml_type_names: dict[int, str] = {
+		0: "F32",
+		1: "F16",
+		2: "Q4_0",
+		3: "Q4_1",
+		6: "Q5_0",
+		7: "Q5_1",
+		8: "Q8_0",
+		9: "Q8_1",
+		10: "Q2_K",
+		11: "Q3_K",
+		12: "Q4_K",
+		13: "Q5_K",
+		14: "Q6_K",
+		15: "Q8_K",
+		16: "IQ2_XXS",
+		17: "IQ2_XS",
+		18: "IQ3_XXS",
+		19: "IQ1_S",
+		20: "IQ4_NL",
+		21: "IQ3_S",
+		22: "IQ2_S",
+		23: "IQ4_XS",
+		24: "I8",
+		25: "I16",
+		26: "I32",
+		27: "I64",
+		28: "F64",
+		29: "IQ1_M",
+		30: "BF16",
+		34: "TQ1_0",
+		35: "TQ2_0",
+		39: "MXFP4",
+	}
+
+	def ggml_type_name(code: int) -> str:
+		return ggml_type_names.get(code, f"TYPE_{code}")
+
 	with path.open("rb") as f:
 		magic = read_bytes(f, 4)
 		if magic != b"GGUF":
@@ -126,16 +173,31 @@ def inspect_gguf(path: Path) -> InspectResult:
 			skip_gguf_value(f, int(vtype))
 
 		weight_keys: list[str] = []
+		weight_types: list[int] = []
 		for _ in range(int(n_tensors)):
 			name = read_gguf_string(f)
 			nd = read_u32_le(f)
 			for _ in range(int(nd)):
 				_ = read_u64_le(f)
-			_ = read_u32_le(f)  # tensor_type
+			tensor_type = read_u32_le(f)  # ggml_type
 			_ = read_u64_le(f)  # offset
 			weight_keys.append(name)
+			weight_types.append(int(tensor_type))
 
-	return inspect_weight_keys(weight_keys, str(path), "gguf")
+	type_counts = Counter(ggml_type_name(t) for t in weight_types)
+	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
+	res = inspect_weight_keys(weight_keys, str(path), "gguf")
+	return InspectResult(
+		path=res.path,
+		artifact_type=res.artifact_type,
+		tensor_count=res.tensor_count,
+		tensor_type_counts=dict(sorted(type_counts.items())),
+		mtp_present=res.mtp_present,
+		mtp_tensor_count=res.mtp_tensor_count,
+		mtp_tensor_type_counts=dict(sorted(mtp_type_counts.items())),
+		mtp_layer_ids=res.mtp_layer_ids,
+		first_mtp_keys=res.first_mtp_keys,
+	)
 
 
 def detect_and_inspect(path: Path) -> InspectResult:
@@ -171,8 +233,10 @@ def main() -> int:
 					"path": res.path,
 					"artifact_type": res.artifact_type,
 					"tensor_count": res.tensor_count,
+					"tensor_type_counts": res.tensor_type_counts,
 					"mtp_present": res.mtp_present,
 					"mtp_tensor_count": res.mtp_tensor_count,
+					"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
 					"mtp_layer_ids": res.mtp_layer_ids,
 					"first_mtp_keys": res.first_mtp_keys,
 				},
@@ -184,8 +248,14 @@ def main() -> int:
 		print(f"path: {res.path}")
 		print(f"artifact_type: {res.artifact_type}")
 		print(f"tensor_count: {res.tensor_count}")
+		if res.tensor_type_counts:
+			for k in sorted(res.tensor_type_counts.keys()):
+				print(f"tensor_type_count: {k}={res.tensor_type_counts[k]}")
 		print(f"mtp_present: {str(res.mtp_present).lower()}")
 		print(f"mtp_tensor_count: {res.mtp_tensor_count}")
+		if res.mtp_tensor_type_counts:
+			for k in sorted(res.mtp_tensor_type_counts.keys()):
+				print(f"mtp_tensor_type_count: {k}={res.mtp_tensor_type_counts[k]}")
 		print(f"mtp_layer_ids: {res.mtp_layer_ids}")
 		for k in res.first_mtp_keys:
 			print(f"mtp_key: {k}")

@@ -78,6 +78,7 @@ Interpreting the result:
 - If `mtp_present == true`, the artifact is only **MTP-capable** if the runtime
   actually loads and uses those tensors. Still require correctness oracles
   before trusting MTP outputs.
+- For GGUF, record `tensor_type_counts` (and `mtp_tensor_type_counts` when present) to capture the exact quant formats the runtime must support (e.g. `Q2_K`, `Q3_K`, `BF16`, `MXFP4`).
 
 Acceptance checks before DS4 can trust MTP:
 

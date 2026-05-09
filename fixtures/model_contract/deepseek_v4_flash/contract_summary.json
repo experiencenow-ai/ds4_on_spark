@@ -128,6 +128,234 @@
       "total_size": 159609485896
     }
   },
+  "compat": {
+    "by_inference_key": {
+      "beta_fast": "yarn_rope.beta_fast",
+      "beta_slow": "yarn_rope.beta_slow",
+      "compress_ratios": "attention_schedule.compress_ratios",
+      "compress_rope_theta": "yarn_rope.compress_rope_theta",
+      "dim": "topology.hidden_size",
+      "dtype": "quantization.inference_config.dtype",
+      "expert_dtype": "quantization.inference_config.expert_dtype",
+      "head_dim": "topology.head_dim",
+      "moe_inter_dim": "moe.moe_inter_dim",
+      "n_activated_experts": "moe.n_activated_experts",
+      "n_hash_layers": "moe.n_hash_layers",
+      "n_heads": "topology.num_attention_heads",
+      "n_layers": "topology.num_hidden_layers",
+      "n_routed_experts": "moe.n_routed_experts",
+      "n_shared_experts": "moe.n_shared_experts",
+      "o_groups": "topology.o_groups",
+      "o_lora_rank": "topology.o_lora_rank",
+      "original_seq_len": "yarn_rope.original_seq_len",
+      "q_lora_rank": "topology.q_lora_rank",
+      "rope_factor": "yarn_rope.rope_factor",
+      "rope_head_dim": "topology.rope_head_dim",
+      "rope_theta": "yarn_rope.rope_theta",
+      "route_scale": "moe.route_scale",
+      "scale_fmt": "quantization.inference_config.scale_fmt",
+      "score_func": "moe.scoring_func",
+      "vocab_size": "topology.vocab_size",
+      "window_size": "topology.sliding_window"
+    },
+    "by_transformers_key": {
+      "compress_ratios": "attention_schedule.compress_ratios",
+      "compress_rope_theta": "yarn_rope.compress_rope_theta",
+      "head_dim": "topology.head_dim",
+      "hidden_size": "topology.hidden_size",
+      "moe_intermediate_size": "moe.moe_inter_dim",
+      "n_routed_experts": "moe.n_routed_experts",
+      "n_shared_experts": "moe.n_shared_experts",
+      "num_attention_heads": "topology.num_attention_heads",
+      "num_experts_per_tok": "moe.n_activated_experts",
+      "num_hash_layers": "moe.n_hash_layers",
+      "num_hidden_layers": "topology.num_hidden_layers",
+      "num_key_value_heads": "topology.num_key_value_heads",
+      "o_groups": "topology.o_groups",
+      "o_lora_rank": "topology.o_lora_rank",
+      "original_max_position_embeddings": "yarn_rope.original_seq_len",
+      "q_lora_rank": "topology.q_lora_rank",
+      "qk_rope_head_dim": "topology.rope_head_dim",
+      "rope_scaling.beta_fast": "yarn_rope.beta_fast",
+      "rope_scaling.beta_slow": "yarn_rope.beta_slow",
+      "rope_scaling.factor": "yarn_rope.rope_factor",
+      "rope_theta": "yarn_rope.rope_theta",
+      "routed_scaling_factor": "moe.route_scale",
+      "scoring_func": "moe.scoring_func",
+      "sliding_window": "topology.sliding_window",
+      "vocab_size": "topology.vocab_size"
+    },
+    "fields": [
+      {
+        "canonical_path": "topology.vocab_size",
+        "concept": "vocab_size",
+        "inference_key": "vocab_size",
+        "transformers_key": "vocab_size"
+      },
+      {
+        "canonical_path": "topology.hidden_size",
+        "concept": "hidden_size",
+        "inference_key": "dim",
+        "transformers_key": "hidden_size"
+      },
+      {
+        "canonical_path": "topology.num_hidden_layers",
+        "concept": "num_hidden_layers",
+        "inference_key": "n_layers",
+        "transformers_key": "num_hidden_layers"
+      },
+      {
+        "canonical_path": "topology.num_attention_heads",
+        "concept": "num_attention_heads",
+        "inference_key": "n_heads",
+        "transformers_key": "num_attention_heads"
+      },
+      {
+        "canonical_path": "topology.num_key_value_heads",
+        "concept": "num_key_value_heads",
+        "inference_key": null,
+        "transformers_key": "num_key_value_heads"
+      },
+      {
+        "canonical_path": "topology.head_dim",
+        "concept": "head_dim",
+        "inference_key": "head_dim",
+        "transformers_key": "head_dim"
+      },
+      {
+        "canonical_path": "topology.rope_head_dim",
+        "concept": "rope_head_dim",
+        "inference_key": "rope_head_dim",
+        "transformers_key": "qk_rope_head_dim"
+      },
+      {
+        "canonical_path": "topology.q_lora_rank",
+        "concept": "q_lora_rank",
+        "inference_key": "q_lora_rank",
+        "transformers_key": "q_lora_rank"
+      },
+      {
+        "canonical_path": "topology.o_groups",
+        "concept": "o_groups",
+        "inference_key": "o_groups",
+        "transformers_key": "o_groups"
+      },
+      {
+        "canonical_path": "topology.o_lora_rank",
+        "concept": "o_lora_rank",
+        "inference_key": "o_lora_rank",
+        "transformers_key": "o_lora_rank"
+      },
+      {
+        "canonical_path": "topology.sliding_window",
+        "concept": "sliding_window",
+        "inference_key": "window_size",
+        "transformers_key": "sliding_window"
+      },
+      {
+        "canonical_path": "attention_schedule.compress_ratios",
+        "concept": "compress_ratios",
+        "inference_key": "compress_ratios",
+        "transformers_key": "compress_ratios"
+      },
+      {
+        "canonical_path": "moe.moe_inter_dim",
+        "concept": "moe_inter_dim",
+        "inference_key": "moe_inter_dim",
+        "transformers_key": "moe_intermediate_size"
+      },
+      {
+        "canonical_path": "moe.n_routed_experts",
+        "concept": "n_routed_experts",
+        "inference_key": "n_routed_experts",
+        "transformers_key": "n_routed_experts"
+      },
+      {
+        "canonical_path": "moe.n_shared_experts",
+        "concept": "n_shared_experts",
+        "inference_key": "n_shared_experts",
+        "transformers_key": "n_shared_experts"
+      },
+      {
+        "canonical_path": "moe.n_activated_experts",
+        "concept": "n_activated_experts",
+        "inference_key": "n_activated_experts",
+        "transformers_key": "num_experts_per_tok"
+      },
+      {
+        "canonical_path": "moe.n_hash_layers",
+        "concept": "n_hash_layers",
+        "inference_key": "n_hash_layers",
+        "transformers_key": "num_hash_layers"
+      },
+      {
+        "canonical_path": "moe.route_scale",
+        "concept": "route_scale",
+        "inference_key": "route_scale",
+        "transformers_key": "routed_scaling_factor"
+      },
+      {
+        "canonical_path": "moe.scoring_func",
+        "concept": "scoring_func",
+        "inference_key": "score_func",
+        "transformers_key": "scoring_func"
+      },
+      {
+        "canonical_path": "yarn_rope.rope_theta",
+        "concept": "rope_theta",
+        "inference_key": "rope_theta",
+        "transformers_key": "rope_theta"
+      },
+      {
+        "canonical_path": "yarn_rope.compress_rope_theta",
+        "concept": "compress_rope_theta",
+        "inference_key": "compress_rope_theta",
+        "transformers_key": "compress_rope_theta"
+      },
+      {
+        "canonical_path": "yarn_rope.original_seq_len",
+        "concept": "original_seq_len",
+        "inference_key": "original_seq_len",
+        "transformers_key": "original_max_position_embeddings"
+      },
+      {
+        "canonical_path": "yarn_rope.rope_factor",
+        "concept": "rope_factor",
+        "inference_key": "rope_factor",
+        "transformers_key": "rope_scaling.factor"
+      },
+      {
+        "canonical_path": "yarn_rope.beta_fast",
+        "concept": "beta_fast",
+        "inference_key": "beta_fast",
+        "transformers_key": "rope_scaling.beta_fast"
+      },
+      {
+        "canonical_path": "yarn_rope.beta_slow",
+        "concept": "beta_slow",
+        "inference_key": "beta_slow",
+        "transformers_key": "rope_scaling.beta_slow"
+      },
+      {
+        "canonical_path": "quantization.inference_config.dtype",
+        "concept": "dtype",
+        "inference_key": "dtype",
+        "transformers_key": null
+      },
+      {
+        "canonical_path": "quantization.inference_config.expert_dtype",
+        "concept": "expert_dtype",
+        "inference_key": "expert_dtype",
+        "transformers_key": null
+      },
+      {
+        "canonical_path": "quantization.inference_config.scale_fmt",
+        "concept": "scale_fmt",
+        "inference_key": "scale_fmt",
+        "transformers_key": null
+      }
+    ]
+  },
   "encoding_constants": {
     "assistant_msg_template": "{reasoning}{content}{tool_calls}<\uff5cend\u2581of\u2581sentence\uff5c>",
     "assistant_msg_wo_eos_template": "{reasoning}{content}{tool_calls}",
