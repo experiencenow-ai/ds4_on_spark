@@ -629,6 +629,31 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 		"forbidden_present": forbidden_sorted[:20],
 	}
 
+
+def compute_mtp_namespace_status(mtp_layer_ids: list[int], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
+	present_ids: list[int] = sorted({int(i) for i in mtp_layer_ids})
+	present_prefixes = [f"mtp.{i}." for i in present_ids]
+
+	expected_ids: list[int] = []
+	if isinstance(contract_summary, dict):
+		try:
+			n_mtp_layers = int(contract_summary.get("mtp", {}).get("n_mtp_layers", 0))
+		except Exception:
+			n_mtp_layers = 0
+		if n_mtp_layers > 0:
+			expected_ids = list(range(int(n_mtp_layers)))
+
+	missing_expected_ids = [i for i in expected_ids if i not in present_ids]
+	return {
+		"checked": True,
+		"present_layer_ids": present_ids,
+		"present_prefixes": present_prefixes,
+		"has_mtp0": (0 in present_ids),
+		"expected_layer_ids": expected_ids,
+		"missing_expected_layer_ids": missing_expected_ids,
+		"expected_complete": (len(expected_ids) > 0 and len(missing_expected_ids) == 0),
+	}
+
 def compute_mtp_trust(mtp_present: bool, mtp_contract: Optional[dict[str, Any]], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
 	if not mtp_present:
 		return {"checked": True, "trusted": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
@@ -886,6 +911,7 @@ def main() -> int:
 			"mtp_tensor_count": res.mtp_tensor_count,
 			"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
 			"mtp_layer_ids": res.mtp_layer_ids,
+			"mtp_namespace": compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary),
 			"first_mtp_keys": res.first_mtp_keys,
 		}
 
@@ -931,6 +957,7 @@ def main() -> int:
 			"mtp_tensor_count": sum(r.mtp_tensor_count for r in results),
 			"mtp_tensor_type_counts": dict(sorted(mtp_type_counts.items())),
 			"mtp_layer_ids": sorted(mtp_layer_ids),
+			"mtp_namespace": compute_mtp_namespace_status(sorted(mtp_layer_ids), contract_summary),
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
 			"mtp_trust": mtp_trust,

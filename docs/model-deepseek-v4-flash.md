@@ -515,7 +515,7 @@ For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` ca
 python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`.
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, and `mtp_trust`.
 
 When multiple `--path` values are provided, the tool emits both:
 

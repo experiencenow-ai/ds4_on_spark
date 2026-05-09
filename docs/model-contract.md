@@ -27,6 +27,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`
 - Contract verifier: `scripts/model_contract_verify_deepseek_v4_flash.py`
   - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).
+  - Also gates `contract_summary.json` `mtp.semantics` (source-derived `MTPBlock.forward(...)` expressions) so MTP path drift is detected even when tensor keys remain stable.
 
 ## Correctness Oracles (requirements)
 
@@ -53,6 +54,7 @@ MTP (multi-token prediction) oracle requirements:
   - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py` and record:
     - `tensor_type_counts` + `mtp_tensor_type_counts` (GGUF quant types present)
     - `tensor_key_namespace_guess` (whether the artifact appears to preserve upstream `layers.{i}.*` / `mtp.0.*` key namespaces; many GGUF conversions are `llama.cpp`)
+    - `mtp_namespace.has_mtp0` + `mtp_namespace.expected_complete` (whether the artifact set appears to preserve the expected `mtp.{id}.*` namespace prefixes)
     - `metadata.general.*` (provenance)
     - `topology_contract` mismatches (GGUF header metadata vs expected topology, including RoPE `dimension_count` / `freq_base` when present)
     - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
