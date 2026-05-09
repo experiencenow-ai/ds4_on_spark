@@ -523,6 +523,56 @@ class SchedulerSimTest(unittest.TestCase):
         m1 = scheduler_sim.run_simulation(batch_cfg, trace)
         self.assertLess(m1.makespan_ms, m0.makespan_ms)
 
+    def test_markov_trace_deterministic_and_sticky(self) -> None:
+        cfg = scheduler_sim.MarkovTraceConfig(
+            num_tokens=10,
+            num_experts=8,
+            num_candidates=4,
+            interactive_prob=0.25,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            stay_prob=1.0,
+            seed=123,
+        )
+        t0 = scheduler_sim.generate_markov_trace(cfg)
+        t1 = scheduler_sim.generate_markov_trace(cfg)
+        self.assertEqual(t0, t1)
+        primaries = [r.candidates[0] for r in t0]
+        self.assertEqual(len(set(primaries)), 1)
+
+    def test_sla_violation_counts(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for _ in range(2)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sla_batch_ms=15.0,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.admitted_tokens_batch, 2)
+        self.assertEqual(m.token_sla_violations_batch, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

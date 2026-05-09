@@ -61,6 +61,16 @@ Then:
 - if `max_pending >= --q-high` then `K = K_min`
 - otherwise linearly interpolate between `K_max` and `K_min`
 
+### Control Loop Knobs
+
+The base controller uses the instantaneous pending signal at each token arrival.
+Three optional knobs let you turn this into a more realistic (and more stable)
+control loop:
+
+- `--k-ema-alpha A`: apply EMA smoothing to the pending signal (`A=1` disables smoothing).
+- `--k-update-ms T`: only update `K` at most once per `T` ms per latency class (`T=0` updates per token).
+- `--k-slew N`: limit `|delta K|` per controller update (`N=0` disables slew limiting).
+
 This is intentionally simple; it is meant to generate stable, testable behavior
 and highlight oscillation or starvation regimes early.
 
@@ -77,6 +87,12 @@ Batching-style service model example:
 python3 sim/scheduler/scheduler_sim.py --batch-max-batch 8 --service-base-ms 0.05 --service-per-task-ms 0.02 --json
 ```
 
+Example: damp K oscillations and expose SLA violations:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.95 --k-ema-alpha 0.2 --k-update-ms 1.0 --k-slew 1 --sla-interactive-ms 25 --json
+```
+
 ### Synthetic Trace Modes
 
 Default synthetic mode is Zipf-skewed expert popularity:
@@ -90,6 +106,13 @@ which is useful for stress-testing backpressure, queue depth, and adaptive-K osc
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --hotset-size 8 --hotset-bias 0.9 --hotset-rotate-every-tokens 2000 --json
+```
+
+Markov mode creates temporal locality by reusing the previous token's primary expert with probability `--markov-stay-prob`
+(candidates are still filled out to `--num-candidates` with Zipf-weighted sampling):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
 ### Trace Replay (JSONL)
@@ -117,9 +140,11 @@ The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max (admitted tokens only)
+- `sla`: per-class token-SLA violation counts/fractions (when `--sla-*-ms` is set)
 - `tokens`: token-level admitted vs dropped-by-backpressure counts
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
+  - also includes controller update/change counts when `--k-update-ms` / `--k-slew` are used
 - `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
 - `tasks.promoted`: number of batch tasks promoted by `--promote-ms`

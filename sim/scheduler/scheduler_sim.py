@@ -56,6 +56,20 @@ class HotsetTraceConfig:
 
 
 @dataclass(frozen=True)
+class MarkovTraceConfig:
+    num_tokens: int
+    num_experts: int
+    num_candidates: int
+    interactive_prob: float
+    arrival_rate_tps: float
+    burst_prob: float
+    burst_scale: float
+    zipf_alpha: float
+    stay_prob: float
+    seed: int
+
+
+@dataclass(frozen=True)
 class AdaptiveKConfig:
     k_min_interactive: int
     k_max_interactive: int
@@ -63,6 +77,9 @@ class AdaptiveKConfig:
     k_max_batch: int
     q_low: int
     q_high: int
+    ema_alpha: float = 1.0
+    update_ms: float = 0.0
+    k_slew: int = 0
 
 
 @dataclass(frozen=True)
@@ -77,6 +94,8 @@ class SimConfig:
     adaptive_k: AdaptiveKConfig
     k_signal: str = "global"
     admit_policy: str = "ordered"
+    sla_interactive_ms: float = 0.0
+    sla_batch_ms: float = 0.0
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     service_base_ms: float = 0.0
@@ -131,6 +150,8 @@ class SimMetrics:
     makespan_ms: float = 0.0
     token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    token_sla_violations_interactive: int = 0
+    token_sla_violations_batch: int = 0
     admitted_tokens: int = 0
     admitted_tokens_interactive: int = 0
     admitted_tokens_batch: int = 0
@@ -141,6 +162,10 @@ class SimMetrics:
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
+    k_updates_interactive: int = 0
+    k_updates_batch: int = 0
+    k_changes_interactive: int = 0
+    k_changes_batch: int = 0
     effective_k_interactive: List[int] = dataclasses.field(default_factory=list)
     effective_k_batch: List[int] = dataclasses.field(default_factory=list)
     partial_admit_tokens: int = 0
@@ -229,6 +254,12 @@ class SimMetrics:
                     "interactive": summarize(self.token_lat_ms_interactive),
                     "batch": summarize(self.token_lat_ms_batch),
                 },
+                "sla": {
+                    "token_violations_interactive": self.token_sla_violations_interactive,
+                    "token_violations_batch": self.token_sla_violations_batch,
+                    "token_violation_frac_interactive": (float(self.token_sla_violations_interactive) / float(self.admitted_tokens_interactive)) if self.admitted_tokens_interactive != 0 else 0.0,
+                    "token_violation_frac_batch": (float(self.token_sla_violations_batch) / float(self.admitted_tokens_batch)) if self.admitted_tokens_batch != 0 else 0.0,
+                },
                 "tokens": {
                     "admitted": self.admitted_tokens,
                     "admitted_interactive": self.admitted_tokens_interactive,
@@ -250,12 +281,16 @@ class SimMetrics:
                         "mean": statistics.fmean(self.chosen_k_interactive) if len(self.chosen_k_interactive) != 0 else 0.0,
                         "min": min(self.chosen_k_interactive) if len(self.chosen_k_interactive) != 0 else 0,
                         "max": max(self.chosen_k_interactive) if len(self.chosen_k_interactive) != 0 else 0,
+                        "controller_updates": self.k_updates_interactive,
+                        "controller_changes": self.k_changes_interactive,
                     },
                     "batch": {
                         "count": len(self.chosen_k_batch),
                         "mean": statistics.fmean(self.chosen_k_batch) if len(self.chosen_k_batch) != 0 else 0.0,
                         "min": min(self.chosen_k_batch) if len(self.chosen_k_batch) != 0 else 0,
                         "max": max(self.chosen_k_batch) if len(self.chosen_k_batch) != 0 else 0,
+                        "controller_updates": self.k_updates_batch,
+                        "controller_changes": self.k_changes_batch,
                     },
                 },
                 "effective_k": {
@@ -449,6 +484,69 @@ def generate_hotset_trace(cfg: HotsetTraceConfig) -> List[TokenRoute]:
     return(routes)
 
 
+def _sample_unique_ordered_excluding(rng: random.Random, population_size: int, weights: Sequence[float], k: int, excluded: Sequence[int]) -> Tuple[int, ...]:
+    if k <= 0:
+        return(())
+    excluded_set = set(excluded)
+    chosen: List[int] = []
+    chosen_set = set(excluded_set)
+    tries = 0
+    while len(chosen) < k and tries < (k * 100):
+        idx = rng.choices(range(population_size), weights=weights, k=1)[0]
+        if idx not in chosen_set:
+            chosen.append(idx)
+            chosen_set.add(idx)
+        tries += 1
+    if len(chosen) != k:
+        for idx in range(population_size):
+            if idx not in chosen_set:
+                chosen.append(idx)
+                chosen_set.add(idx)
+                if len(chosen) == k:
+                    break
+    return(tuple(chosen[:k]))
+
+
+def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
+    if cfg.num_experts <= 0:
+        raise ValueError("num_experts must be > 0")
+    if cfg.num_candidates <= 0:
+        raise ValueError("num_candidates must be > 0")
+    if cfg.num_candidates > cfg.num_experts:
+        raise ValueError("num_candidates must be <= num_experts")
+    if cfg.num_tokens <= 0:
+        raise ValueError("num_tokens must be > 0")
+    if cfg.arrival_rate_tps <= 0.0:
+        raise ValueError("arrival_rate_tps must be > 0")
+    if cfg.interactive_prob < 0.0 or cfg.interactive_prob > 1.0:
+        raise ValueError("interactive_prob must be within [0,1]")
+    if cfg.burst_prob < 0.0 or cfg.burst_prob > 1.0:
+        raise ValueError("burst_prob must be within [0,1]")
+    if cfg.burst_scale <= 0.0:
+        raise ValueError("burst_scale must be > 0")
+    if cfg.zipf_alpha <= 0.0:
+        raise ValueError("zipf_alpha must be > 0")
+    if cfg.stay_prob < 0.0 or cfg.stay_prob > 1.0:
+        raise ValueError("stay_prob must be within [0,1]")
+
+    rng = random.Random(cfg.seed)
+    weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
+    arrivals = _generate_arrival_times_ms(rng, cfg.num_tokens, cfg.arrival_rate_tps, cfg.burst_prob, cfg.burst_scale)
+    routes: List[TokenRoute] = []
+
+    primary = rng.randrange(0, cfg.num_experts)
+    for t_ms in arrivals:
+        if rng.random() > cfg.stay_prob:
+            primary = rng.choices(range(cfg.num_experts), weights=weights, k=1)[0]
+        cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
+        others = _sample_unique_ordered_excluding(rng, cfg.num_experts, weights, cfg.num_candidates - 1, excluded=(primary,))
+        candidates = (primary,) + others
+        routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+
+    routes.sort(key=lambda r: r.t_ms)
+    return(routes)
+
+
 def load_trace_jsonl(path: str) -> List[TokenRoute]:
     routes: List[TokenRoute] = []
     with open(path, "r", encoding="utf-8") as f:
@@ -521,21 +619,28 @@ def _clamp_i32(v: int, lo: int, hi: int) -> int:
     return(v)
 
 
-def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, max_pending: int) -> int:
+@dataclass
+class KControllerState:
+    last_update_ms: float = -1.0
+    ema_pending: float = 0.0
+    k: int = 0
+
+
+def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
     if cls == LatencyClass.INTERACTIVE:
         k_min, k_max = adapt.k_min_interactive, adapt.k_max_interactive
     else:
         k_min, k_max = adapt.k_min_batch, adapt.k_max_batch
 
-    if max_pending <= adapt.q_low:
+    if pending <= float(adapt.q_low):
         return(k_max)
-    if max_pending >= adapt.q_high:
+    if pending >= float(adapt.q_high):
         return(k_min)
 
     span_q = (adapt.q_high - adapt.q_low)
     if span_q <= 0:
         return(_clamp_i32(k_min, k_min, k_max))
-    frac = float(max_pending - adapt.q_low) / float(span_q)
+    frac = (pending - float(adapt.q_low)) / float(span_q)
     k = int(round(float(k_max) - (frac * float(k_max - k_min))))
     return(_clamp_i32(k, k_min, k_max))
 
@@ -649,6 +754,25 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if admit_policy not in ("ordered", "least_pending"):
         raise ValueError("admit_policy must be 'ordered' or 'least_pending'")
 
+    if cfg.adaptive_k.k_min_interactive <= 0 or cfg.adaptive_k.k_max_interactive <= 0:
+        raise ValueError("k_min_interactive and k_max_interactive must be > 0")
+    if cfg.adaptive_k.k_min_batch <= 0 or cfg.adaptive_k.k_max_batch <= 0:
+        raise ValueError("k_min_batch and k_max_batch must be > 0")
+    if cfg.adaptive_k.k_min_interactive > cfg.adaptive_k.k_max_interactive:
+        raise ValueError("k_min_interactive must be <= k_max_interactive")
+    if cfg.adaptive_k.k_min_batch > cfg.adaptive_k.k_max_batch:
+        raise ValueError("k_min_batch must be <= k_max_batch")
+    if cfg.adaptive_k.ema_alpha <= 0.0 or cfg.adaptive_k.ema_alpha > 1.0:
+        raise ValueError("ema_alpha must be within (0,1]")
+    if cfg.adaptive_k.update_ms < 0.0:
+        raise ValueError("update_ms must be >= 0")
+    if cfg.adaptive_k.k_slew < 0:
+        raise ValueError("k_slew must be >= 0")
+    if cfg.sla_interactive_ms < 0.0:
+        raise ValueError("sla_interactive_ms must be >= 0")
+    if cfg.sla_batch_ms < 0.0:
+        raise ValueError("sla_batch_ms must be >= 0")
+
     for route in trace:
         if len(route.candidates) == 0:
             raise ValueError("trace route candidates must be non-empty")
@@ -667,6 +791,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
         saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
     )
+
+    k_ctrl: Dict[LatencyClass, KControllerState] = {LatencyClass.INTERACTIVE: KControllerState(), LatencyClass.BATCH: KControllerState()}
 
     # Time-weighted pending depth: integral pending(t) dt / makespan.
     pending_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
@@ -728,10 +854,49 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             tid = ev.tasks[0].token_id
             route = trace[tid]
             if k_signal == "global":
-                max_pending = max(experts[e].pending() for e in range(cfg.num_experts))
+                pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
             else:
-                max_pending = max(experts[e].pending() for e in route.candidates)
-            k = choose_k(cfg.adaptive_k, route.cls, max_pending)
+                pending_signal = float(max(experts[e].pending() for e in route.candidates))
+
+            cs = k_ctrl[route.cls]
+            if cs.last_update_ms < 0.0:
+                cs.ema_pending = pending_signal
+            else:
+                alpha = cfg.adaptive_k.ema_alpha
+                cs.ema_pending = ((alpha * pending_signal) + ((1.0 - alpha) * cs.ema_pending))
+
+            update = False
+            if cs.k == 0:
+                update = True
+            elif cfg.adaptive_k.update_ms <= 0.0:
+                update = True
+            elif (now_ms - cs.last_update_ms) >= cfg.adaptive_k.update_ms:
+                update = True
+
+            if update:
+                prev_k = cs.k
+                k_target = choose_k(cfg.adaptive_k, route.cls, cs.ema_pending)
+                if prev_k != 0 and cfg.adaptive_k.k_slew > 0:
+                    diff = (k_target - prev_k)
+                    if diff > cfg.adaptive_k.k_slew:
+                        cs.k = (prev_k + cfg.adaptive_k.k_slew)
+                    elif diff < -cfg.adaptive_k.k_slew:
+                        cs.k = (prev_k - cfg.adaptive_k.k_slew)
+                    else:
+                        cs.k = k_target
+                else:
+                    cs.k = k_target
+                cs.last_update_ms = now_ms
+                if route.cls == LatencyClass.INTERACTIVE:
+                    metrics.k_updates_interactive += 1
+                    if prev_k != 0 and cs.k != prev_k:
+                        metrics.k_changes_interactive += 1
+                else:
+                    metrics.k_updates_batch += 1
+                    if prev_k != 0 and cs.k != prev_k:
+                        metrics.k_changes_batch += 1
+
+            k = cs.k
 
             tokens[tid].chosen_k = k
             tokens[tid].remaining = 0
@@ -813,8 +978,12 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     lat_ms = (now_ms - ts.submit_ms)
                     if ts.cls == LatencyClass.INTERACTIVE:
                         metrics.token_lat_ms_interactive.append(lat_ms)
+                        if cfg.sla_interactive_ms > 0.0 and lat_ms > cfg.sla_interactive_ms:
+                            metrics.token_sla_violations_interactive += 1
                     else:
                         metrics.token_lat_ms_batch.append(lat_ms)
+                        if cfg.sla_batch_ms > 0.0 and lat_ms > cfg.sla_batch_ms:
+                            metrics.token_sla_violations_batch += 1
 
             _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
         else:
@@ -836,7 +1005,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates).")
-    p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default) or hotset.")
+    p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
@@ -848,6 +1017,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--hotset-size", type=int, default=8, help="Hotset trace: number of 'hot' experts.")
     p.add_argument("--hotset-bias", type=float, default=0.9, help="Hotset trace: probability a candidate is drawn from the hotset.")
     p.add_argument("--hotset-rotate-every-tokens", type=int, default=2000, help="Hotset trace: rotate hotset every N tokens (0 = never).")
+    p.add_argument("--markov-stay-prob", type=float, default=0.9, help="Markov trace: probability to reuse previous token's primary expert.")
     p.add_argument("--seed", type=int, default=1)
 
     p.add_argument("--expert-parallelism", type=int, default=2)
@@ -860,6 +1030,8 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--starvation-ms", type=float, default=50.0)
     p.add_argument("--hi-burst", type=int, default=0, help="Per-expert fairness: after starting N interactive tasks consecutively, force one batch start if any are queued (0 = strict priority).")
     p.add_argument("--promote-ms", type=float, default=0.0, help="Per-expert aging: promote batch tasks to interactive queue once they wait this long (0 = disabled).")
+    p.add_argument("--sla-interactive-ms", type=float, default=0.0, help="Token SLA: count interactive tokens with latency > this (0 = disabled).")
+    p.add_argument("--sla-batch-ms", type=float, default=0.0, help="Token SLA: count batch tokens with latency > this (0 = disabled).")
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -867,6 +1039,9 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--k-max-batch", type=int, default=2)
     p.add_argument("--q-low", type=int, default=16)
     p.add_argument("--q-high", type=int, default=128)
+    p.add_argument("--k-ema-alpha", type=float, default=1.0, help="Adaptive-K control: EMA smoothing alpha over pending signal ((0,1], 1 = no smoothing).")
+    p.add_argument("--k-update-ms", type=float, default=0.0, help="Adaptive-K control: minimum time between K updates (0 = per-token).")
+    p.add_argument("--k-slew", type=int, default=0, help="Adaptive-K control: max |delta K| per controller update (0 = unlimited).")
     p.add_argument("--k-signal", type=str, default="global", help="Adaptive-K congestion signal: global (max pending across all experts) or candidates (max pending among this token's candidates).")
     p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order) or least_pending (pick least pending experts among candidates).")
 
@@ -909,8 +1084,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 seed=args.seed,
             )
             trace = generate_hotset_trace(trace_cfg)
+        elif mode == "markov":
+            trace_cfg = MarkovTraceConfig(
+                num_tokens=args.num_tokens,
+                num_experts=args.num_experts,
+                num_candidates=args.num_candidates,
+                interactive_prob=args.interactive_prob,
+                arrival_rate_tps=args.arrival_rate_tps,
+                burst_prob=args.burst_prob,
+                burst_scale=args.burst_scale,
+                zipf_alpha=args.zipf_alpha,
+                stay_prob=args.markov_stay_prob,
+                seed=args.seed,
+            )
+            trace = generate_markov_trace(trace_cfg)
         else:
-            raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf or hotset.")
+            raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf, hotset, or markov.")
 
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,
@@ -919,6 +1108,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_max_batch=args.k_max_batch,
         q_low=args.q_low,
         q_high=args.q_high,
+        ema_alpha=args.k_ema_alpha,
+        update_ms=args.k_update_ms,
+        k_slew=args.k_slew,
     )
     sim_cfg = SimConfig(
         num_experts=args.num_experts,
@@ -935,6 +1127,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         adaptive_k=adapt,
         k_signal=args.k_signal,
         admit_policy=args.admit_policy,
+        sla_interactive_ms=args.sla_interactive_ms,
+        sla_batch_ms=args.sla_batch_ms,
     )
 
     metrics = run_simulation(sim_cfg, trace)
