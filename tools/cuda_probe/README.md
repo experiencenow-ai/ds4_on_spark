@@ -17,6 +17,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe`: compile/run separate-compilation (`-rdc=true`) device-link smoke test for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe`: compile/run sanity kernel built with explicit `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX).
+- `tools/cuda_probe/bin/cuda_sm121_dlto_probe`: compile/run device LTO (`-dlto`) smoke test for `sm_121` (toolchain gate for some CUDA build systems).
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
@@ -45,6 +46,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_probe
 ./tools/cuda_probe/bin/cuda_sm121_rdc_probe
 ./tools/cuda_probe/bin/cuda_sm121_fatbin_probe
+./tools/cuda_probe/bin/cuda_sm121_dlto_probe
 ./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_sm120_compat_probe
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
@@ -75,6 +77,7 @@ Expected outputs:
   output contains both `sm_120` + `sm_121` SASS, plus PTX for `compute_121`
   (useful when you need “one binary” portability and/or want a short-term
   fallback while upstream build systems catch up to `sm_121`).
+- `cuda_sm121_dlto_probe` is a compile/run check that `nvcc` supports device LTO (`-dlto`) for `sm_121`; treat failures as a blocker for CUDA build systems that enable device LTO by default.
 - `cuda_sm121_compile_probe.o` is a compile-only smoke check; it does not link
   against `cudart` and is useful when you only need to confirm that `nvcc`
   recognizes `sm_121`.
