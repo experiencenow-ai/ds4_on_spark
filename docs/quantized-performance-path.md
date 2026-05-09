@@ -84,7 +84,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mo
 
 Trace JSONL fields:
 
-- `t_ms`: token arrival time in milliseconds
+- `t_ms`: token arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and emit per-line `dt_ms` deltas.
+- `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls`: `"interactive"` or `"batch"`
 - `candidates`: ordered expert candidates for that token
 - `k`: optional chosen `K`; required with `--k-mode trace`

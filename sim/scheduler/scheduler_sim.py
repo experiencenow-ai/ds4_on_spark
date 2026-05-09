@@ -646,8 +646,11 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
     return(routes)
 
 
-def load_trace_jsonl(path: str) -> List[TokenRoute]:
+def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
+    if time_mode not in ("t_ms", "dt_ms"):
+        raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
     routes: List[TokenRoute] = []
+    t_ms_accum = 0.0
     with open(path, "r", encoding="utf-8") as f:
         for lineno, line in enumerate(f, 1):
             line = line.strip()
@@ -657,16 +660,31 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
             if not isinstance(obj, dict):
                 raise ValueError(f"{path}:{lineno}: expected JSON object")
 
-            if "t_ms" not in obj:
-                raise ValueError(f"{path}:{lineno}: missing t_ms")
+            if time_mode == "t_ms":
+                if "dt_ms" in obj and obj["dt_ms"] is not None:
+                    raise ValueError(f"{path}:{lineno}: dt_ms is only valid with time_mode=dt_ms")
+                if "t_ms" not in obj:
+                    raise ValueError(f"{path}:{lineno}: missing t_ms")
+            else:
+                if "t_ms" in obj and obj["t_ms"] is not None:
+                    raise ValueError(f"{path}:{lineno}: t_ms is not valid with time_mode=dt_ms")
+                if "dt_ms" not in obj:
+                    raise ValueError(f"{path}:{lineno}: missing dt_ms")
             if "cls" not in obj:
                 raise ValueError(f"{path}:{lineno}: missing cls")
             if "candidates" not in obj:
                 raise ValueError(f"{path}:{lineno}: missing candidates")
 
-            t_ms = float(obj["t_ms"])
-            if t_ms < 0.0:
-                raise ValueError(f"{path}:{lineno}: t_ms must be >= 0")
+            if time_mode == "t_ms":
+                t_ms = float(obj["t_ms"])
+                if t_ms < 0.0:
+                    raise ValueError(f"{path}:{lineno}: t_ms must be >= 0")
+            else:
+                dt_ms = float(obj["dt_ms"])
+                if dt_ms < 0.0:
+                    raise ValueError(f"{path}:{lineno}: dt_ms must be >= 0")
+                t_ms_accum += dt_ms
+                t_ms = t_ms_accum
 
             cls_raw = obj["cls"]
             if not isinstance(cls_raw, str):
@@ -1640,6 +1658,7 @@ def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute]
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale).")
+    p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (only with --trace-jsonl): t_ms (default) requires per-line t_ms, dt_ms uses per-line dt_ms deltas and cumulative sum.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file (t_ms, cls, candidates) before simulation.")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
@@ -1706,7 +1725,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             raise SystemExit("--dump-trace-jsonl is only supported for synthetic trace generation (omit --trace-jsonl)")
         if args.arrival_units.strip().lower() != "steps":
             raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl)")
-        trace = load_trace_jsonl(args.trace_jsonl)
+        trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower())
         if args.trace_summary:
             out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
             if args.json:

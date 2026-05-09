@@ -322,6 +322,29 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_jsonl_dt_ms_time_mode_loads(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"dt_ms":0.0,"cls":"interactive","candidates":[0,1]}\n')
+                f.write('{"dt_ms":0.25,"cls":"batch","candidates":[1,0]}\n')
+            trace = scheduler_sim.load_trace_jsonl(path, time_mode="dt_ms")
+            self.assertEqual(len(trace), 2)
+            self.assertEqual(trace[0].t_ms, 0.0)
+            self.assertAlmostEqual(trace[1].t_ms, 0.25, places=9)
+        finally:
+            os.unlink(path)
+
+    def test_trace_jsonl_dt_ms_rejected_without_mode(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"dt_ms":0.0,"cls":"interactive","candidates":[0,1]}\n')
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(path)
+        finally:
+            os.unlink(path)
+
     def test_trace_jsonl_duplicate_candidates_rejected(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:
