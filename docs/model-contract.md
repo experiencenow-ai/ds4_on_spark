@@ -19,6 +19,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, and config-field compatibility mappings for interpreting external runtimes)
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
+  - Upstream section records sha256 of the encoding oracle vectors (`encoding/tests/*`) and the oracle prompt set (`oracle/prompts.json`) to keep tokenizer/templating drift machine-detectable.
 - Contract summary also records small but correctness-critical reference expressions (e.g. attention scaling and activation-QAT group sizes) from `inference/model.py` so DS4 can validate external runtime assumptions without guessing.
 - Fetch/refresh script: `scripts/model_contract_fetch_deepseek_v4_flash.sh`
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`
