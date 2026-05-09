@@ -292,6 +292,43 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 ```
 
+## Update: Probe Refresh (2026-05-09 22:15Z)
+
+Commands run from the Mac:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2215Z_loop_v11.txt
+```
+
+```text
+== local meta ==
+Sat May  9 22:15:16 UTC 2026
+git: 94d4737
+probe args: aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+NVML version        : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current) ==
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== pci link (sysfs, current/max) ==
+sysfs: /sys/devices/pci000f:00/000f:00:00.0/000f:01:00.0
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+```
+
 ## Update: Probe Refresh (2026-05-09 21:42Z)
 
 Commands run from the Mac:

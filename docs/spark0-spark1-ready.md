@@ -25,9 +25,9 @@ The discovery output prints `targets:` so the exact target list is visible in co
 Always use `REDACT=1` when saving output for commit.
 
 ```bash
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@spark1.local | tee /private/tmp/spark1-probe.txt
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local | tee /private/tmp/spark01-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark1.local | tee /private/tmp/spark1-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/spark01-probe.txt
 ```
 
 Optional toggles:
@@ -35,26 +35,27 @@ Optional toggles:
 - Include full `nvidia-smi` output (verbose; includes process list + timestamps):
 
 ```bash
-REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe-verbose.txt
+SPARK_SSH_USER=spark0 REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe-verbose.txt
 ```
 
 - Skip the `nvcc` runtime probe compile/run (when you only need the driver-side query):
 
 ```bash
-REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+SPARK_SSH_USER=spark0 REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh aitopatom-9ab9.local
 ```
 
 - Force the `nvcc` runtime probe compile arch (defaults to deriving from the max `nvidia-smi` compute capability when available):
 
 ```bash
-REDACT=1 NVCC_ARCH=sm_121 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+SPARK_SSH_USER=spark0 REDACT=1 NVCC_ARCH=sm_121 ./scripts/spark_probe.sh aitopatom-9ab9.local
 ```
 
 Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
 - When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
-- When multiple targets are provided, the probe prints `probe targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
+- When multiple targets are provided, the probe prints `probe args:` plus `resolved targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
+- When `SPARK_SSH_USER` is set, host-only args (like `spark1.local`) are rewritten into `user@host` targets and printed in `resolved targets:` so the actual SSH targets are visible in committed excerpts.
 - The probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - The probe prints `selected compute_cap:` and `selected nvcc arch:` before the CUDA runtime probe section so the derived `-arch` choice is visible in committed excerpts.
 - The probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.

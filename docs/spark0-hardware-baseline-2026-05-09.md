@@ -1079,7 +1079,7 @@ REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git SPARK_KNOWN_HOSTS_PER_HOST=1 ./sc
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
-- The `probe targets:` + `known_hosts:` lines are emitted for reproducible multi-target runs.
+- The `probe args:`/`resolved targets:` + `known_hosts:` lines are emitted for reproducible multi-target runs (older excerpts may show `probe targets:`).
 
 ```text
 == local meta ==

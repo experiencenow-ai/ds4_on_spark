@@ -7,6 +7,7 @@ usage()
 usage: spark_probe.sh [user@host ...]
 
 Environment:
+  SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
@@ -24,6 +25,7 @@ Examples:
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
+  SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local
 USAGE
 }
 
@@ -35,6 +37,7 @@ case "${1:-}" in
 esac
 
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
+SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
@@ -44,8 +47,36 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
 fi
 
+normalize_target()
+{
+	t="$1"
+	case "$t" in
+		*@*)
+			printf "%s" "$t"
+			;;
+		*)
+			printf "%s" "${SPARK_SSH_USER}@${t}"
+			;;
+	esac
+}
+
+targets=""
 if [ "$#" -eq 0 ]; then
-	set -- "spark0@aitopatom-9ab9.local"
+	targets="$(normalize_target "aitopatom-9ab9.local")"
+else
+	for t in "$@"; do
+		nt="$(normalize_target "$t")"
+		if [ "$targets" = "" ]; then
+			targets="$nt"
+		else
+			targets="$targets $nt"
+		fi
+	done
+fi
+
+probe_args="$*"
+if [ "$probe_args" = "" ]; then
+	probe_args="(default)"
 fi
 
 known_hosts_for_target()
@@ -83,13 +114,14 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 		fi
 	fi
-	echo "probe targets: $*"
+	echo "probe args: $probe_args"
+	echo "resolved targets: $targets"
 	echo "ssh opts: $SSH_OPTS"
-	for t in "$@"; do
+	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
 	echo
-	for target in "$@"; do
+	for target in $targets; do
 		kh="$(known_hosts_for_target "$target")"
 		echo "== target: $target =="
 		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu

@@ -21,7 +21,7 @@ Notes:
 
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
 - When probing multiple Spark hosts (Spark0/Spark1), set `SPARK_KNOWN_HOSTS_PER_HOST=1` (or set `SPARK_KNOWN_HOSTS` explicitly) to keep host keys isolated per target.
-- When multiple targets are passed to `scripts/spark_probe.sh`, the probe prints `probe targets:` and one `known_hosts:` line per target so runs can be reproduced exactly.
+- When multiple targets are passed to `scripts/spark_probe.sh`, the probe prints `probe args:` plus `resolved targets:` and one `known_hosts:` line per target so runs can be reproduced exactly.
 - The Spark probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - Use `REDACT=1` for any output you plan to commit.
 - `REDACT=1` redaction is delimiter-aware (it will redact actual IP addresses without clobbering non-secret version strings like `0ubuntu0.24.04.1`), and includes both expanded and compressed (`::`) IPv6 forms.
@@ -60,7 +60,7 @@ This prints:
 ### Spark Hardware + Toolchain Probe
 
 ```bash
-REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
 ```
 
 The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting host keys. Use `REDACT=1` when saving output for commit; the redacted snapshot is suitable to paste into `docs/spark0-*.md`.
@@ -74,7 +74,7 @@ When Spark1 exists (or a second Spark is provisioned), the same scripts should w
 
 ```bash
 REDACT=1 ./scripts/mac_spark_discovery.sh spark1.local
-REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
+SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh spark1.local
 ```
 
 If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
