@@ -66,6 +66,18 @@ def main() -> int:
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):
 					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
+				mla = summary.get("mla", {})
+				if mla.get("output_derotate_present") is not True:
+					failures.append(Failure(15, f"contract summary missing MLA output de-rotation marker (mla.output_derotate_present=true): {contract_summary}"))
+				if mla.get("q_extra_rms_norm_present") is not True:
+					failures.append(Failure(16, f"contract summary missing MLA Q extra RMS normalization marker (mla.q_extra_rms_norm_present=true): {contract_summary}"))
+				cache_update = summary.get("cache", {}).get("update_semantics", {})
+				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
+				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
+					failures.append(Failure(17, f"contract summary missing decode sliding-ring update expression containing 'start_pos % win': {contract_summary}"))
+				moe_sem = summary.get("moe", {}).get("semantics", {})
+				if moe_sem.get("bias_affects_selection_only_comment") is None:
+					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 

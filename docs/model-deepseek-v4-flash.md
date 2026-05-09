@@ -223,6 +223,11 @@ Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
 
 DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
 
+These MLA/cache update semantics are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`:
+
+- `mla.*` records the presence of the extra per-token Q normalization and the output de-rotation marker.
+- `cache.update_semantics.*` records the decode-time KV ring-buffer update expression (`start_pos % win`) and the compressed-cache update expression (`start_pos // ratio`).
+
 ### Attention scaling + activation QAT constants
 
 These constants are **source-derived** from `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.inference_model_constants` to avoid accidental drift:
@@ -267,6 +272,8 @@ Score-routed layers:
   - tensor key: `layers.{i}.ffn.gate.bias` (float32) exists and is applied only for expert selection.
 - Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
+
+These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics` so downstream tooling can validate external runtime logs/configs without guessing.
 
 ## Hyper-Connections (mHC)
 

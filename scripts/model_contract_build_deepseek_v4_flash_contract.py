@@ -107,6 +107,64 @@ def layer_type_from_ratio(ratio: int) -> str:
 		return "csa"
 	return "hca"
 
+def find_first_line_containing(text: str, needle: str) -> Optional[str]:
+	for raw in text.splitlines():
+		if needle in raw:
+			return raw.strip()
+	return None
+
+def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+
+	q_extra_norm = find_first_line_containing(text, "q *= torch.rsqrt(")
+	o_derotate = find_first_line_containing(text, "apply_rotary_emb(o[..., -rd:], freqs_cis, True)")
+	rope_q = find_first_line_containing(text, "apply_rotary_emb(q[..., -rd:], freqs_cis)")
+	rope_kv = find_first_line_containing(text, "apply_rotary_emb(kv[..., -rd:], freqs_cis)")
+	kv_decode_ring = find_first_line_containing(text, "start_pos % win")
+	kv_decode_compress = find_first_line_containing(text, "start_pos // ratio")
+	kv_prefill_wrap = find_first_line_containing(text, "cutoff = seqlen % win")
+
+	return {
+		"mla": {
+			"rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]",
+			"q_extra_rms_norm_present": q_extra_norm is not None,
+			"q_extra_rms_norm_expr": q_extra_norm,
+			"output_derotate_present": o_derotate is not None,
+			"output_derotate_expr": o_derotate,
+			"q_rope_apply_expr": rope_q,
+			"kv_rope_apply_expr": rope_kv,
+		},
+		"cache_update_semantics": {
+			"decode_sliding_ring_update_expr": kv_decode_ring,
+			"decode_compressed_update_expr": kv_decode_compress,
+			"prefill_sliding_wrap_expr": kv_prefill_wrap,
+		},
+	}
+
+def parse_inference_moe_semantics(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+	score_fp32 = find_first_line_containing(text, "scores = linear(x.float(), self.weight.float())")
+	bias_comment = find_first_line_containing(text, "Bias shifts scores for expert selection")
+	weights_norm = find_first_line_containing(text, "weights /= weights.sum")
+	weights_scale = find_first_line_containing(text, "weights *= self.route_scale")
+	score_softmax = find_first_line_containing(text, "scores = scores.softmax")
+	score_sigmoid = find_first_line_containing(text, "scores = scores.sigmoid")
+	score_sqrtsoftplus = find_first_line_containing(text, "scores = F.softplus(scores).sqrt()")
+	expert_fp32 = find_first_line_containing(text, "gate = self.w1(x).float()")
+
+	return {
+		"gate_scores_fp32_expr": score_fp32,
+		"bias_affects_selection_only_comment": bias_comment,
+		"weights_normalize_expr": weights_norm,
+		"weights_scale_expr": weights_scale,
+		"score_func_exprs": {
+			"softmax": score_softmax,
+			"sigmoid": score_sigmoid,
+			"sqrtsoftplus": score_sqrtsoftplus,
+		},
+		"expert_compute_fp32_expr": expert_fp32,
+	}
+
 def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> int:
 	if compress_ratio == 0:
 		return int(window_size)
@@ -471,6 +529,8 @@ def build_contract() -> dict:
 	tok_cfg = load_json(FIX / "tokenizer_config.json")
 	idx = load_json(FIX / "model.safetensors.index.json")
 	inf_model = parse_inference_quant_constants(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
+	sem = parse_inference_mla_and_cache_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
+	moe_sem = parse_inference_moe_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
@@ -544,6 +604,7 @@ def build_contract() -> dict:
 			},
 		},
 		"compat": build_compat_mappings(),
+		"mla": sem.get("mla", {}) if isinstance(sem, dict) else {},
 		"topology": {
 			"vocab_size": int(cfg["vocab_size"]),
 			"hidden_size": int(cfg["hidden_size"]),
@@ -586,6 +647,7 @@ def build_contract() -> dict:
 			"window_size": window_size,
 			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
 			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+			"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
 			"kv_cache_sizes_at_reference_defaults": {
 				"max_seq_len": ref_max_seq_len,
 				"max_batch_size": ref_max_batch_size,
@@ -617,6 +679,7 @@ def build_contract() -> dict:
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
 				"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+				"semantics": moe_sem,
 			},
 				"mtp": {
 					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),

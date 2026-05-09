@@ -177,6 +177,11 @@
     },
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_mask_value": -1,
+    "update_semantics": {
+      "decode_compressed_update_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
+      "decode_sliding_ring_update_expr": "self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
+      "prefill_sliding_wrap_expr": "cutoff = seqlen % win"
+    },
     "window_size": 128
   },
   "checkpoint_index": {
@@ -423,6 +428,15 @@
     "tool_calls_block_name": "tool_calls"
   },
   "format_version": 1,
+  "mla": {
+    "kv_rope_apply_expr": "apply_rotary_emb(kv[..., -rd:], freqs_cis)",
+    "output_derotate_expr": "apply_rotary_emb(o[..., -rd:], freqs_cis, True)",
+    "output_derotate_present": true,
+    "q_extra_rms_norm_expr": "q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + self.eps)",
+    "q_extra_rms_norm_present": true,
+    "q_rope_apply_expr": "apply_rotary_emb(q[..., -rd:], freqs_cis)",
+    "rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]"
+  },
   "model": "deepseek_v4_flash",
   "moe": {
     "hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
@@ -433,7 +447,19 @@
     "n_shared_experts": 1,
     "route_scale": 1.5,
     "score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
-    "scoring_func": "sqrtsoftplus"
+    "scoring_func": "sqrtsoftplus",
+    "semantics": {
+      "bias_affects_selection_only_comment": "# Bias shifts scores for expert selection (topk) but does not affect routing weights.",
+      "expert_compute_fp32_expr": "gate = self.w1(x).float()",
+      "gate_scores_fp32_expr": "scores = linear(x.float(), self.weight.float())",
+      "score_func_exprs": {
+        "sigmoid": "scores = scores.sigmoid()",
+        "softmax": "scores = scores.softmax(dim=-1)",
+        "sqrtsoftplus": "scores = F.softplus(scores).sqrt()"
+      },
+      "weights_normalize_expr": "weights /= weights.sum(dim=-1, keepdim=True)",
+      "weights_scale_expr": "weights *= self.route_scale"
+    }
   },
   "mtp": {
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
