@@ -369,6 +369,8 @@ The simulator prints a JSON object with:
 - `tokens.partial_admit_any_layer*`: like `tokens.partial_admit*`, but triggers when *any* routing layer under-admits during the verify step
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
   - also includes `expert_queue.work` (per-expert max/mean pending work units, time-weighted) so `--pending-units work` has observable queue depth
+  - also includes `expert_queue.starvation_task_frac` (median/p95/max across experts) for the fraction of started tasks that waited at least `--starvation-ms` before service
+  - also includes `expert_queue.max_task_queue_wait_ms` (median/p95/max across experts) for per-expert worst-case queue wait before service
   - also includes time-weighted depth percentiles across expert-time:
     - `pending_depth_time_weighted.p{50,95,99}`: total outstanding tasks (queued + in-flight)
     - `hi_queue_depth_time_weighted.p{50,95,99}`: interactive queue depth (queued only)

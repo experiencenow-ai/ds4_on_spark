@@ -279,6 +279,42 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertTrue(all(0.0 <= x <= 1.0 for x in m.mean_utilization_per_expert))
         self.assertTrue(all(0.0 <= x <= 1.0 for x in m.saturated_time_frac_per_expert))
 
+    def test_expert_queue_reports_per_expert_starvation_fraction_and_max_wait(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for _i in range(3)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=10.0,
+            starvation_ms=9.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.tasks_started_per_expert, [3])
+        self.assertEqual(m.starved_tasks_started_per_expert, [2])
+        self.assertAlmostEqual(m.max_task_queue_wait_ms_per_expert[0], 20.0, places=6)
+
+        out = m.to_jsonable()
+        q = out.get("expert_queue", {})
+        self.assertAlmostEqual(q.get("starvation_task_frac", {}).get("p50", 0.0), (2.0 / 3.0), places=6)
+        self.assertAlmostEqual(q.get("max_task_queue_wait_ms", {}).get("max", 0.0), 20.0, places=6)
+
     def test_backpressure_drops_tasks(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
