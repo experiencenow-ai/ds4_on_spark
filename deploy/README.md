@@ -72,4 +72,16 @@ Before staging, you can sanity-check that deploy assets and ops scripts are inte
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
+After staging (Spark side), validate the staged `/tmp/ds4-*` directories before installing:
+
+```bash
+/tmp/ds4-scripts/ops_validate_staged_assets.sh
+```
+
+After installing templates/configs/scripts under `/etc` + `/opt` (Spark side), validate the installed layout and run preflight:
+
+```bash
+/tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0
+```
+
 For stable non-interactive SSH (identity + dedicated known-hosts path), set `SSH_OPTS` before running the staging helper.

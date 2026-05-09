@@ -13,6 +13,15 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
+## Validation Helpers
+
+When staging assets to a Spark via `scripts/ops_stage_deploy_assets.sh`, the repo also stages two safe validators under `/tmp/ds4-scripts/`:
+
+- `ops_validate_staged_assets.sh`: checks the `/tmp/ds4-*` staged directories (no sudo)
+- `ops_validate_installed_assets.sh`: checks installed assets under `/etc` + `/opt` then runs preflight (no sudo; use `--strict` for fail-fast gating)
+
+See `docs/ops-deploy-asset-validation.md` for the full workflow.
+
 ## Units
 
 - `ds4@.service`: long-running DS4 instance

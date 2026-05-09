@@ -54,6 +54,14 @@ This copies systemd templates + config examples to `/tmp/` on each Spark and pri
 
 It also stages safe ops scripts (preflight + env sanity checks) under `/tmp/ds4-scripts/`.
 
+### Optional: Validate Staged Assets (Spark Side)
+
+On each Spark, you can validate the staged `/tmp/ds4-*` directories before installing anything:
+
+```bash
+/tmp/ds4-scripts/ops_validate_staged_assets.sh
+```
+
 ### Optional: SSH Options For Staging
 
 If you want stable non-interactive SSH (identity + dedicated known-hosts path), set `SSH_OPTS`:
@@ -130,6 +138,20 @@ Notes:
 
 - The YAML config examples are intentionally minimal until the DS4 config schema is defined in-tree.
 - `ds4@.service` is wired to *want* the preflight unit for the same instance; you can run preflight independently at any time.
+
+## Optional: Validate Installed Assets (Spark Side)
+
+After installing templates under `/etc/systemd/system/`, configs under `/etc/ds4/`, and scripts under `/opt/ds4/scripts/`, you can validate the installed layout and run preflight:
+
+```bash
+/tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0
+```
+
+Use `--strict` if you want fail-fast gating on missing/invalid TP=2 inputs:
+
+```bash
+/tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0 --strict
+```
 
 ## Optional: Env Sanity Check (Spark Side)
 
