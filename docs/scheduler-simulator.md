@@ -210,7 +210,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.
 
 Replay mode reads one JSON object per line with required fields:
 
-- `t_ms` (number): arrival time in milliseconds
+- `t_ms` (number): arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and provide `dt_ms` instead.
+- `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
 - `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace`)
@@ -230,6 +231,16 @@ cat > /tmp/route.jsonl <<'EOF'
 {"t_ms":0.2,"cls":"batch","candidates":[7,2,3,5]}
 EOF
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-experts 8 --json
+```
+
+Delta-time example (cumulative `dt_ms`):
+
+```bash
+cat > /tmp/route_dt.jsonl <<'EOF'
+{"dt_ms":0.0,"cls":"interactive","candidates":[3,7,1,0]}
+{"dt_ms":0.2,"cls":"batch","candidates":[7,2,3,5]}
+EOF
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route_dt.jsonl --trace-time-mode dt_ms --num-experts 8 --json
 ```
 
 Trace sanity-check (contract summary only):
