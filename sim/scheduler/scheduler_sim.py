@@ -2019,8 +2019,6 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("trace route cost_scale must be > 0")
         if route.k is not None and route.k <= 0:
             raise ValueError("trace route k must be > 0")
-        if k_mode == "trace" and route.k is None:
-            raise ValueError("k_mode trace requires per-route k in the trace")
         if route.layers is not None and route.scores is not None:
             raise ValueError("trace route scores must be per-layer when layers are present")
         if route.layers is None and route.scores is not None and len(route.scores) != len(route.candidates):
@@ -2034,6 +2032,9 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 raise ValueError("trace route accepted_mtp + rejected_mtp must equal mtp_draft_len")
 
         layers = _route_layers(route)
+        if k_mode == "trace" and route.k is None:
+            if any(lr.k is None for lr in layers):
+                raise ValueError("k_mode trace requires per-route k or per-layer k for every layer in the trace")
         union: List[int] = []
         seen_union: set[int] = set()
         for lr in layers:
@@ -2173,7 +2174,13 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 metrics.pending_signal_batch.append(pending_signal)
 
             if k_mode == "trace":
-                k = int(route.k or 0)
+                if route.k is not None:
+                    k = int(route.k)
+                else:
+                    layers = _route_layers(route)
+                    if layers[0].k is None:
+                        raise RuntimeError("k_mode trace requires route.k or layers[].k")
+                    k = int(layers[0].k)
             else:
 
                 cs = k_ctrl[route.cls]
@@ -2258,9 +2265,12 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 for li, lr in enumerate(layers):
                     layer_cost_scale = float(lr.cost_scale) if lr.cost_scale is not None else 1.0
                     stage_cost_scale = (cost_scale * layer_cost_scale)
+                    layer_k = k
+                    if k_mode == "trace" and lr.k is not None:
+                        layer_k = int(lr.k)
                     admitted = 0
                     for expert_id in _candidate_order_for_layer(admit_policy, experts, lr.candidates, lr.scores):
-                        if admitted >= k:
+                        if admitted >= layer_k:
                             break
                         eq = experts[expert_id]
                         if eq.pending() >= cfg.expert_queue_max:
@@ -2284,7 +2294,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         admitted += 1
                         _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
                     if is_verify:
-                        desired_layer = min(k, len(lr.candidates))
+                        desired_layer = min(layer_k, len(lr.candidates))
                         admitted_verify_total += admitted
                         if admitted < desired_layer:
                             partial_any_layer = True
