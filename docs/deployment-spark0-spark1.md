@@ -81,13 +81,13 @@ Notes:
 Before enabling long-running services, you can validate the env file contents:
 
 ```bash
-sudo /opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-spark0.env
+sudo /opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-spark0.env
 ```
 
 If you haven't installed scripts under `/opt/ds4/scripts/` yet, run directly from the repo checkout:
 
 ```bash
-sudo ./scripts/ops_ds4_env_check.sh /etc/ds4/ds4-spark0.env
+sudo ./scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-spark0.env
 ```
 
 ## Enable/Start Services

@@ -50,7 +50,7 @@ sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_spark_standalone_check.sh /opt/ds4/scripts/ops_spark_standalone_check.sh
-sudo /opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-${instance}.env
+sudo /opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-${instance}.env
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@${instance}.service
 

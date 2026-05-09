@@ -95,7 +95,7 @@ typically configured with `/usr/sbin/nologin`.
 For ad-hoc runs without systemd, the script supports parsing the env file:
 
 ```bash
-sudo /opt/ds4/scripts/ops_tp2_readiness.sh --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
+sudo /opt/ds4/scripts/ops_tp2_readiness.sh --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
 ```
 
 ## Optional: Spark Standalone Sanity
