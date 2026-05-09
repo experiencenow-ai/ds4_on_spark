@@ -484,6 +484,38 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m_token.chosen_k_total_batch[idx], 2)
         self.assertEqual(m_layer.chosen_k_total_batch[idx], 5)
 
+    def test_pending_units_work_lets_k_ignore_low_cost_inflight(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), cost_scale=0.01),
+            scheduler_sim.TokenRoute(t_ms=0.1, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), cost_scale=0.01),
+        ]
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=0,
+            q_high=1,
+        )
+        base = dict(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            service_base_ms=0.0,
+            service_per_task_ms=100.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            k_signal="global",
+        )
+        m_tasks = scheduler_sim.run_simulation(scheduler_sim.SimConfig(**base, pending_units="tasks"), trace)
+        m_work = scheduler_sim.run_simulation(scheduler_sim.SimConfig(**base, pending_units="work"), trace)
+        self.assertEqual(m_tasks.chosen_k_batch[1], 1)
+        self.assertEqual(m_work.chosen_k_batch[1], 2)
+        self.assertGreater(m_tasks.pending_signal_batch[1], m_work.pending_signal_batch[1])
+
     def test_compare_variants_reports_delta(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

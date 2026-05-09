@@ -5,6 +5,7 @@
 #include "ds4/pool.h"
 #include "ds4/ring.h"
 #include "ds4/config.h"
+#include "ds4/gguf.h"
 #include "ds4/log.h"
 #include "ds4/cuda.h"
 

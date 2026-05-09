@@ -16,6 +16,8 @@ This builds and runs only:
 - `cuda_sm121_compile_probe.o` (compile-only gate)
 - `cuda_sm121_probe`
 
+It also prints `nvcc --version` plus `--list-gpu-arch` / `--list-gpu-code` when supported (toolchain sanity gate for CUDA 13).
+
 ## Spark0: Tiny Compile-Only `sm_121`
 
 When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:

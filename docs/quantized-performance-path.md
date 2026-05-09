@@ -106,6 +106,8 @@ Trace JSONL fields:
 - `expert_batch_size`: optional observed expert batch size (the simulator summarizes this under `trace.expert_batch_size` when present)
 - (optional) metadata: JSONL meta records like `{"type":"meta","meta":{...}}` are accepted and ignored by replay; you can also supply a sidecar metadata JSON via `--trace-meta-json`
 
+If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts.
+
 ## Expert Queueing
 
 Expert queueing is worth attempting against the quantized runtime if decode
