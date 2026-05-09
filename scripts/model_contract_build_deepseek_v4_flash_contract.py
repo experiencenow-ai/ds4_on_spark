@@ -111,6 +111,30 @@ def layer_type_from_ratio(ratio: int) -> str:
 def parse_inference_quant_constants(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
+	def modelargs_defaults() -> dict:
+		in_model_args = False
+		out: dict[str, Optional[int]] = {"max_batch_size": None, "max_seq_len": None}
+		for raw in text.splitlines():
+			line = raw.strip()
+			if line.startswith("class ModelArgs"):
+				in_model_args = True
+				continue
+			if in_model_args and line.startswith("class ") and not line.startswith("class ModelArgs"):
+				break
+			if not in_model_args:
+				continue
+			if not line.startswith(("max_batch_size:", "max_seq_len:")):
+				continue
+			if " = " not in line:
+				continue
+			field = line.split(":", 1)[0].strip()
+			rhs = line.split("=", 1)[1].strip()
+			try:
+				out[field] = int(rhs)
+			except ValueError:
+				out[field] = None
+		return out
+
 	def find_dataclass_float(field: str) -> Optional[float]:
 		for line in text.splitlines():
 			line = line.strip()
@@ -140,13 +164,15 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 	block_size = find_int("block_size")
 	fp4_block_size = find_int("fp4_block_size")
 	hc_eps = find_dataclass_float("hc_eps")
+	defaults = modelargs_defaults()
 
 	return {
 		"inference_model_constants": {
 			"block_size": block_size,
 			"fp4_block_size": fp4_block_size,
 			"hc_eps": hc_eps,
-		}
+		},
+		"reference_defaults": defaults,
 	}
 
 
@@ -259,6 +285,57 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
 
+def build_compat_mappings() -> dict:
+	# Source-derived aliases between:
+	# - Transformers-style config.json fields (fixtures/.../config.json)
+	# - Upstream reference runtime inference/config.json fields
+	# - Canonical contract_summary.json paths used by DS4
+	#
+	# This is intended for interpreting external runtime logs/configs without guessing semantics.
+	fields = [
+		{"concept": "vocab_size", "transformers_key": "vocab_size", "inference_key": "vocab_size", "canonical_path": "topology.vocab_size"},
+		{"concept": "hidden_size", "transformers_key": "hidden_size", "inference_key": "dim", "canonical_path": "topology.hidden_size"},
+		{"concept": "num_hidden_layers", "transformers_key": "num_hidden_layers", "inference_key": "n_layers", "canonical_path": "topology.num_hidden_layers"},
+		{"concept": "num_attention_heads", "transformers_key": "num_attention_heads", "inference_key": "n_heads", "canonical_path": "topology.num_attention_heads"},
+		{"concept": "num_key_value_heads", "transformers_key": "num_key_value_heads", "inference_key": None, "canonical_path": "topology.num_key_value_heads"},
+		{"concept": "head_dim", "transformers_key": "head_dim", "inference_key": "head_dim", "canonical_path": "topology.head_dim"},
+		{"concept": "rope_head_dim", "transformers_key": "qk_rope_head_dim", "inference_key": "rope_head_dim", "canonical_path": "topology.rope_head_dim"},
+		{"concept": "q_lora_rank", "transformers_key": "q_lora_rank", "inference_key": "q_lora_rank", "canonical_path": "topology.q_lora_rank"},
+		{"concept": "o_groups", "transformers_key": "o_groups", "inference_key": "o_groups", "canonical_path": "topology.o_groups"},
+		{"concept": "o_lora_rank", "transformers_key": "o_lora_rank", "inference_key": "o_lora_rank", "canonical_path": "topology.o_lora_rank"},
+		{"concept": "sliding_window", "transformers_key": "sliding_window", "inference_key": "window_size", "canonical_path": "topology.sliding_window"},
+		{"concept": "compress_ratios", "transformers_key": "compress_ratios", "inference_key": "compress_ratios", "canonical_path": "attention_schedule.compress_ratios"},
+		{"concept": "moe_inter_dim", "transformers_key": "moe_intermediate_size", "inference_key": "moe_inter_dim", "canonical_path": "moe.moe_inter_dim"},
+		{"concept": "n_routed_experts", "transformers_key": "n_routed_experts", "inference_key": "n_routed_experts", "canonical_path": "moe.n_routed_experts"},
+		{"concept": "n_shared_experts", "transformers_key": "n_shared_experts", "inference_key": "n_shared_experts", "canonical_path": "moe.n_shared_experts"},
+		{"concept": "n_activated_experts", "transformers_key": "num_experts_per_tok", "inference_key": "n_activated_experts", "canonical_path": "moe.n_activated_experts"},
+		{"concept": "n_hash_layers", "transformers_key": "num_hash_layers", "inference_key": "n_hash_layers", "canonical_path": "moe.n_hash_layers"},
+		{"concept": "route_scale", "transformers_key": "routed_scaling_factor", "inference_key": "route_scale", "canonical_path": "moe.route_scale"},
+		{"concept": "scoring_func", "transformers_key": "scoring_func", "inference_key": "score_func", "canonical_path": "moe.scoring_func"},
+		{"concept": "rope_theta", "transformers_key": "rope_theta", "inference_key": "rope_theta", "canonical_path": "yarn_rope.rope_theta"},
+		{"concept": "compress_rope_theta", "transformers_key": "compress_rope_theta", "inference_key": "compress_rope_theta", "canonical_path": "yarn_rope.compress_rope_theta"},
+		{"concept": "original_seq_len", "transformers_key": "original_max_position_embeddings", "inference_key": "original_seq_len", "canonical_path": "yarn_rope.original_seq_len"},
+		{"concept": "rope_factor", "transformers_key": "rope_scaling.factor", "inference_key": "rope_factor", "canonical_path": "yarn_rope.rope_factor"},
+		{"concept": "beta_fast", "transformers_key": "rope_scaling.beta_fast", "inference_key": "beta_fast", "canonical_path": "yarn_rope.beta_fast"},
+		{"concept": "beta_slow", "transformers_key": "rope_scaling.beta_slow", "inference_key": "beta_slow", "canonical_path": "yarn_rope.beta_slow"},
+		{"concept": "dtype", "transformers_key": None, "inference_key": "dtype", "canonical_path": "quantization.inference_config.dtype"},
+		{"concept": "expert_dtype", "transformers_key": None, "inference_key": "expert_dtype", "canonical_path": "quantization.inference_config.expert_dtype"},
+		{"concept": "scale_fmt", "transformers_key": None, "inference_key": "scale_fmt", "canonical_path": "quantization.inference_config.scale_fmt"},
+	]
+
+	by_transformers_key: dict[str, str] = {}
+	by_inference_key: dict[str, str] = {}
+	for f in fields:
+		tk = f.get("transformers_key", None)
+		ik = f.get("inference_key", None)
+		cp = str(f.get("canonical_path"))
+		if isinstance(tk, str) and tk:
+			by_transformers_key[tk] = cp
+		if isinstance(ik, str) and ik:
+			by_inference_key[ik] = cp
+
+	return {"fields": fields, "by_transformers_key": by_transformers_key, "by_inference_key": by_inference_key}
+
 
 def build_contract() -> dict:
 	cfg = load_json(FIX / "config.json")
@@ -317,6 +394,7 @@ def build_contract() -> dict:
 				"encoding_oracle": "encoding/tests/*",
 			},
 		},
+		"compat": build_compat_mappings(),
 		"topology": {
 			"vocab_size": int(cfg["vocab_size"]),
 			"hidden_size": int(cfg["hidden_size"]),
@@ -338,6 +416,16 @@ def build_contract() -> dict:
 			"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
 			"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
 			"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
+			"per_layer_rule": {
+				"if_compress_ratio_nonzero": {
+					"rope_theta": "yarn_rope.compress_rope_theta",
+					"original_seq_len": "yarn_rope.original_seq_len",
+				},
+				"if_compress_ratio_zero": {
+					"rope_theta": "yarn_rope.rope_theta",
+					"original_seq_len": 0,
+				},
+			},
 		},
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
@@ -349,6 +437,8 @@ def build_contract() -> dict:
 			"window_size": int(cfg["sliding_window"]),
 			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
 			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+			"topk_mask_value": -1,
+			"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
 			"prefill": {
 				"compressed_index_offset": "seqlen",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
@@ -377,6 +467,7 @@ def build_contract() -> dict:
 					"namespace_prefix": "mtp.{j}.",
 				},
 				"runtime": {
+					"reference_defaults": inf_model.get("reference_defaults", {}),
 					"indexer": {
 						"index_n_heads": int(inf["index_n_heads"]),
 						"index_head_dim": int(inf["index_head_dim"]),
