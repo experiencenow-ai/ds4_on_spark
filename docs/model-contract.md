@@ -39,6 +39,13 @@ DeepSeek V4 Flash specifics:
     - `prompt_tokens[]` (already tokenized; no tokenizer dependency for verification)
     - per-step `topk_ids[]` + `topk_logits[]` (default `topk=64`)
 
+MTP (multi-token prediction) oracle requirements:
+
+- If DS4 enables speculative decoding via `mtp.0.*`, treat MTP as a **separate execution path** with its own acceptance gate.
+- Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
+  - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not).
+  - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
+
 Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
