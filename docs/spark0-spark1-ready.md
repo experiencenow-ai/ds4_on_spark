@@ -51,6 +51,7 @@ Notes:
 ## What To Record In `docs/spark0-*.md`
 
 - `nvidia-smi` driver + CUDA version.
+- `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe).
 - `nvcc` path and version (toolkit version).
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
