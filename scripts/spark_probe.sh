@@ -126,6 +126,13 @@ command -v ninja >/dev/null 2>&1 && ninja --version || true
 command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
 command -v python3 >/dev/null 2>&1 && python3 --version || true
 echo
+echo "== packages (cuda/nvidia, dpkg, capped) =="
+if command -v dpkg-query >/dev/null 2>&1; then
+	dpkg-query -W -f='"'"'${Package}\t${Version}\n'"'"' "cuda*" "nvidia*" "libcudnn*" 2>/dev/null | head -n 200 || true
+else
+	echo "dpkg-query not found"
+fi
+echo
 echo "== pci nvidia =="
 lspci | grep -i nvidia || true
 echo
@@ -367,6 +374,33 @@ if command -v ethtool >/dev/null 2>&1; then
 		ethtool "$iface" 2>/dev/null | grep -E "^(Settings for|\\s*Speed:|\\s*Duplex:|\\s*Auto-negotiation:|\\s*Link detected:)" || true
 		ethtool -i "$iface" 2>/dev/null | grep -E "^(driver:|version:|firmware-version:|bus-info:)" || true
 	done
+fi
+echo
+echo "== rdma (roce/infiniband, optional) =="
+if [ -d /sys/class/infiniband ]; then
+	ls -1 /sys/class/infiniband 2>/dev/null || true
+	for dev in /sys/class/infiniband/*; do
+		[ -d "$dev" ] || continue
+		echo "-- $(basename "$dev") --"
+		[ -r "$dev/fw_ver" ] && echo "fw_ver: $(cat "$dev/fw_ver" 2>/dev/null | head -n 1 || true)"
+		[ -r "$dev/hca_type" ] && echo "hca_type: $(cat "$dev/hca_type" 2>/dev/null | head -n 1 || true)"
+		for port in "$dev"/ports/*; do
+			[ -d "$port" ] || continue
+			pn="$(basename "$port")"
+			state="$(cat "$port/state" 2>/dev/null | head -n 1 || true)"
+			phys="$(cat "$port/phys_state" 2>/dev/null | head -n 1 || true)"
+			rate="$(cat "$port/rate" 2>/dev/null | head -n 1 || true)"
+			layer="$(cat "$port/link_layer" 2>/dev/null | head -n 1 || true)"
+			[ "$state$phys$rate$layer" != "" ] && echo "port$pn: state=${state:-?} phys=${phys:-?} rate=${rate:-?} layer=${layer:-?}"
+		done
+	done
+else
+	echo "no /sys/class/infiniband"
+fi
+if command -v rdma >/dev/null 2>&1; then
+	rdma link show 2>/dev/null | head -n 80 || true
+else
+	echo "rdma tool not found"
 fi
 echo
 echo "== filesystems (type + opts) =="
