@@ -32,6 +32,21 @@ ds4_cuda_status_t ds4_cuda_init(void)
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }
 
+ds4_cuda_status_t ds4_cuda_get_device(int32_t *out_dev)
+{
+	if ( out_dev == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out_dev = 0;
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_set_device(int32_t dev)
+{
+	if ( dev < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
 const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 {
 	if ( st.code == 0 )
