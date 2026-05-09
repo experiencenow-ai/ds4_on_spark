@@ -166,6 +166,39 @@ nvcc arch: sm_121
 device0 cc: 12.1
 ```
 
+## Update: Probe Refresh (2026-05-09 20:44Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2044Z_loop_v7b.txt
+```
+
+```text
+== local meta ==
+Sat May  9 20:44:00 UTC 2026
+git: d3e8aae
+probe targets: spark0@aitopatom-9ab9.local
+ssh opts: -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi -q pci link (capped) ==
+        Device Id                                      : 0x2E1210DE
+        Bus Id                                         : 0000000F:01:00.0
+        GPU Link Info
+            PCIe Generation
+                Max                                    : 1
+                Current                                : 1
+                Device Max                             : 5
+                Host Max                               : 5
+            Link Width
+                Max                                    : 16x
+                Current                                : 1x
+        Replays Since Reset                            : 0
+```
+
 ## Update: Probe Refresh (2026-05-09 17:35Z)
 
 Commands run from the Mac:
