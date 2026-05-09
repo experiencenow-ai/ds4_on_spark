@@ -1,29 +1,22 @@
 [Unit]
-Description=DS4 strict preflight checks (%i)
+Description=DS4 support bundle collector (%i)
 Wants=network-online.target
 After=network-online.target
-OnFailure=ds4-support-bundle@%i.service
 
 [Service]
 Type=oneshot
-User=ds4
-Group=ds4
+User=root
+Group=root
 WorkingDirectory=/opt/ds4
 Environment=DS4_INSTANCE=%i
 EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env
 
-# Provide the script on-host at /opt/ds4/scripts/ops_ds4_env_check.sh.
-ExecStartPre=/opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-%i.env
-
-# Provide the script on-host at /opt/ds4/scripts/ops_tp2_readiness.sh.
-ExecStart=/opt/ds4/scripts/ops_tp2_readiness.sh --strict --self %i
+# Provide the script on-host at /opt/ds4/scripts/ops_collect_support_bundle.sh.
+ExecStart=/opt/ds4/scripts/ops_collect_support_bundle.sh --instance %i --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-%i.env
 
 StandardOutput=journal
 StandardError=journal
-
-RemainAfterExit=yes
-TimeoutStartSec=120
 
 NoNewPrivileges=true
 PrivateTmp=true

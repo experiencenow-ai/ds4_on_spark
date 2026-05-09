@@ -50,6 +50,7 @@ need_file "deploy/systemd/ds4@.service"
 need_file "deploy/systemd/ds4-strict@.service"
 need_file "deploy/systemd/ds4-preflight@.service"
 need_file "deploy/systemd/ds4-preflight-strict@.service"
+need_file "deploy/systemd/ds4-support-bundle@.service"
 need_file "deploy/systemd/ds4-preflight@.timer"
 need_file "deploy/systemd/ds4-preflight-strict@.timer"
 
