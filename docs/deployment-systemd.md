@@ -42,6 +42,8 @@ sudo systemd-tmpfiles --create || true
 
 The staging helper also copies safe ops scripts to `/tmp/ds4-scripts/`; install them under `/opt/ds4/scripts/` so systemd units can reference them.
 
+Ensure `/etc/ds4/` and any `/etc/ds4/ds4-*.env` files are readable by the `ds4` service user (recommended: directory `root:ds4 0750`, files `root:ds4 0640`).
+
 ## Enable/Start (Human Runbook)
 
 ```bash

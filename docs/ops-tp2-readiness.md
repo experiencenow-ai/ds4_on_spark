@@ -84,7 +84,7 @@ repo-provided checks via the systemd oneshot:
 sudo systemctl start ds4-preflight@spark0.service
 ```
 
-`ds4-preflight@.service` reads optional peer settings from `/etc/ds4/ds4-%i.env`:
+`ds4-preflight@.service` validates and reads optional peer settings from `/etc/ds4/ds4-%i.env`:
 
 - `DS4_PEER_HOST` for ping/TCP checks
 - `DS4_PEER_SSH` for an optional SSH hop (leave empty to skip)

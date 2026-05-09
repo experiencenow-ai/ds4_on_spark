@@ -21,7 +21,7 @@ Pick one approach and run it on **both** Sparks.
 ```bash
 sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin ds4 || true
 sudo install -d -o root -g root -m 0755 /opt/ds4
-sudo install -d -o root -g root -m 0755 /etc/ds4
+sudo install -d -o root -g ds4  -m 0750 /etc/ds4
 ```
 
 The `ds4@.service` template uses systemd-managed `StateDirectory=` / `LogsDirectory=` (created automatically) for `/var/lib/ds4` and `/var/log/ds4`.
@@ -52,9 +52,9 @@ On Spark0:
 ```bash
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
-# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
-sudo install -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
-sudo install -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
+# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark0.service
 ```
@@ -64,9 +64,9 @@ On Spark1:
 ```bash
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
-# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
-sudo install -m 0640 /tmp/ds4-config/ds4-spark1.env.example /etc/ds4/ds4-spark1.env
-sudo install -m 0640 /tmp/ds4-config/ds4-spark1.yaml.example /etc/ds4/ds4-spark1.yaml
+# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.env.example /etc/ds4/ds4-spark1.env
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.yaml.example /etc/ds4/ds4-spark1.yaml
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark1.service
 ```
