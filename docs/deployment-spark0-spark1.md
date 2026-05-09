@@ -12,6 +12,11 @@ Goal: make it easy to stand up a repeatable Spark0/Spark1 layout with systemd te
 Keep instance names stable: `%i` in systemd maps to `/etc/ds4/ds4-%i.env`.
 The systemd templates set `DS4_INSTANCE=%i` by default; the sample env files include `DS4_INSTANCE=...` for clarity.
 
+Decide how hosts resolve:
+
+- mDNS (`spark0.local`, `spark1.local`) for early bring-up
+- pinned `/etc/hosts` entries for stability on an isolated wired subnet (see `deploy/config/hosts.ds4.spark01.example`)
+
 ## On Each Spark: Minimal Filesystem Bring-up
 
 Pick one approach and run it on **both** Sparks.

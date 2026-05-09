@@ -13,6 +13,7 @@ SM121_PROBE := $(BIN_DIR)/cuda_sm121_probe
 SM121_COMPILE_PROBE_OBJ := $(BIN_DIR)/cuda_sm121_compile_probe.o
 CUBLASLT_SMOKE := $(BIN_DIR)/cuda_cublaslt_smoke
 CUBLASLT_FP8_SMOKE := $(BIN_DIR)/cuda_cublaslt_fp8_smoke
+CUBLASLT_FP8_E5M2_SMOKE := $(BIN_DIR)/cuda_cublaslt_fp8_e5m2_smoke
 SM121_ARCH_REPORT := $(BIN_DIR)/cuda_sm121_arch_report
 SM121_SMEM_OPTIN := $(BIN_DIR)/cuda_sm121_smem_optin
 SM121_DEVATTRS := $(BIN_DIR)/cuda_sm121_devattrs
@@ -28,7 +29,7 @@ SM121_NVRTC_JIT := $(BIN_DIR)/cuda_sm121_nvrtc_jit
 
 .PHONY: all clean
 
-all: $(DEVICE_PROPS) $(DEVICE_PROPS_TINY) $(SM121_COMPILE_PROBE_OBJ) $(SM121_PROBE) $(CUBLASLT_SMOKE) $(CUBLASLT_FP8_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC) $(SM121_WMMA_SMOKE) $(SM121_CLUSTER_LAUNCH) $(SM121_CCCL_ATOMIC_REF) $(SM121_CXX20_PROBE) $(SM121_NVRTC_JIT)
+all: $(DEVICE_PROPS) $(DEVICE_PROPS_TINY) $(SM121_COMPILE_PROBE_OBJ) $(SM121_PROBE) $(CUBLASLT_SMOKE) $(CUBLASLT_FP8_SMOKE) $(CUBLASLT_FP8_E5M2_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC) $(SM121_WMMA_SMOKE) $(SM121_CLUSTER_LAUNCH) $(SM121_CCCL_ATOMIC_REF) $(SM121_CXX20_PROBE) $(SM121_NVRTC_JIT)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -50,6 +51,9 @@ $(CUBLASLT_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_smoke.cu $(SRC_DIR)/cuda_
 
 $(CUBLASLT_FP8_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp8_smoke.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_cublaslt_fp8_smoke.cu -lcublasLt -lcublas $(LDFLAGS)
+
+$(CUBLASLT_FP8_E5M2_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp8_e5m2_smoke.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_cublaslt_fp8_e5m2_smoke.cu -lcublasLt -lcublas $(LDFLAGS)
 
 $(SM121_ARCH_REPORT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_arch_report.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_arch_report.cu $(LDFLAGS)

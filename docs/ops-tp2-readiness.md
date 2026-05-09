@@ -101,14 +101,17 @@ typically configured with `/usr/sbin/nologin`.
 For ad-hoc runs without systemd, the script supports parsing the env file:
 
 ```bash
-sudo /opt/ds4/scripts/ops_tp2_readiness.sh --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
+sudo -u ds4 /opt/ds4/scripts/ops_tp2_readiness.sh --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
 ```
 
 To gate a TP=2 run on required inputs, add `--strict` (fails non-zero if required
-env/config is missing or invalid):
+env/config is missing or invalid). In strict mode, the script also enforces:
+
+- `DS4_MASTER_ADDR` is not loopback when `DS4_WORLD_SIZE > 1`
+- `DS4_PEER_HOST` is set when `DS4_WORLD_SIZE > 1`
 
 ```bash
-sudo /opt/ds4/scripts/ops_tp2_readiness.sh --strict --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0
+sudo -u ds4 /opt/ds4/scripts/ops_tp2_readiness.sh --strict --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0
 ```
 
 If `DS4_METRICS_PORT` is set and `curl` is available, `ops_tp2_readiness.sh` also

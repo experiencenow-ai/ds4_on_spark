@@ -65,6 +65,14 @@ When bringing up Spark1, decide how names will resolve:
 Avoid mixing Wi-Fi and wired paths for TP=2 benchmarks; record which path is
 active.
 
+### Optional: Pin Hostnames With `/etc/hosts`
+
+If you choose `/etc/hosts` pinning, this repo includes a starting point:
+
+- `deploy/config/hosts.ds4.spark01.example`
+
+Stage it via `scripts/ops_stage_deploy_assets.sh` (it lands under `/tmp/ds4-config/`) and append the lines to `/etc/hosts` on each Spark (human-run, review first).
+
 ## Safe Checks (Spark Side)
 
 ```bash

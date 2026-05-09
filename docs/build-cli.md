@@ -28,3 +28,9 @@ Dump effective config (defaults + optional file + env):
 ```bash
 ./build_cli/ds4_cli --config path/to/ds4.conf --dump-config
 ```
+
+You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
+
+```bash
+DS4_CONFIG_PATH=path/to/ds4.conf ./build_cli/ds4_cli --dump-config
+```

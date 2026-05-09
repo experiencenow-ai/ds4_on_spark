@@ -130,10 +130,11 @@ Observed on Spark0 (2026-05-09): `cluster_launch_supported=1`, `max_cluster_size
 
 DeepGEMM and many CUTLASS kernels use FP8 inputs; a quick “works-first” gate is whether cuBLASLt can execute an FP8 GEMM on GB10.
 
-The probe `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` is a tiny compile/run check that:
+The probes `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` and `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke` are tiny compile/run checks that:
 
-- uses FP8 E4M3 inputs for A/B (`CUDA_R_8F_E4M3`)
+- use FP8 E4M3 or E5M2 inputs for A/B (`CUDA_R_8F_E4M3` / `CUDA_R_8F_E5M2`)
 - accumulates into FP32 (`CUBLAS_COMPUTE_32F`) and writes FP32 output
 - uses default scale pointers (NULL ⇒ scale=1) to keep the API surface minimal
 
 Observed on Spark0 (2026-05-09): `cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0`.
+Observed on Spark0 (2026-05-09): `cuda_cublaslt_fp8_e5m2_smoke` currently returns `CUBLAS_STATUS_NOT_SUPPORTED` (cuBLASLt heuristic selection fails).
