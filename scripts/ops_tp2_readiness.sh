@@ -7,7 +7,7 @@ usage()
 ops_tp2_readiness.sh -- safe DS4 TP=2 readiness checks
 
 Usage:
-  ops_tp2_readiness.sh --self <name> [--peer <host>] [--peer-ssh <user@host>] [--env <path>]
+  ops_tp2_readiness.sh --self <name> [--peer <host>] [--peer-ssh <user@host>] [--env <path>]...
 
 Environment:
   SSH_OPTS            Optional ssh options override.
@@ -24,14 +24,16 @@ Environment:
 Notes:
   - This script is non-destructive and should not require sudo.
   - It does not modify networking, systemd, or GPU settings.
-  - `--env` parses the env file as simple KEY=VALUE assignments (no shell execution).
+  - `--env` parses env files as simple KEY=VALUE assignments (no shell execution).
+  - Prefix a path with '-' to make it optional (skipped when missing), e.g.:
+      ops_tp2_readiness.sh --self spark0 --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
 EOF
 }
 
 self=""
 peer=""
 peer_ssh=""
-env_path=""
+env_paths=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -48,7 +50,7 @@ while [ $# -gt 0 ]; do
             shift 2
             ;;
         --env)
-            env_path="${2:-}"
+            env_paths="$env_paths ${2:-}"
             shift 2
             ;;
         -h|--help)
@@ -69,15 +71,9 @@ if [ "$self" = "" ]; then
     exit 2
 fi
 
-if [ "$env_path" != "" ]; then
-    if [ ! -f "$env_path" ]; then
-        echo "missing env file: $env_path" >&2
-        exit 2
-    fi
-    if [ ! -r "$env_path" ]; then
-        echo "unreadable env file (check owner/group/mode): $env_path" >&2
-        exit 2
-    fi
+load_env_file()
+{
+    env_path="$1"
     while IFS= read -r line || [ "$line" != "" ]; do
         case "$line" in
             ''|\#*)
@@ -130,6 +126,31 @@ if [ "$env_path" != "" ]; then
         esac
         export "$key=$val"
     done < "$env_path"
+}
+
+if [ "$env_paths" != "" ]; then
+    for raw in $env_paths; do
+        optional=0
+        env_path="$raw"
+        case "$raw" in
+            -/*)
+                optional=1
+                env_path="${raw#-}"
+                ;;
+        esac
+        if [ ! -f "$env_path" ]; then
+            if [ "$optional" -ne 0 ]; then
+                continue
+            fi
+            echo "missing env file: $env_path" >&2
+            exit 2
+        fi
+        if [ ! -r "$env_path" ]; then
+            echo "unreadable env file (check owner/group/mode): $env_path" >&2
+            exit 2
+        fi
+        load_env_file "$env_path"
+    done
 fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then

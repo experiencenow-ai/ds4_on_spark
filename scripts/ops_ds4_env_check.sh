@@ -7,28 +7,20 @@ usage()
 ops_ds4_env_check.sh -- safe DS4 env sanity checks
 
 Usage:
-  ops_ds4_env_check.sh <path-to-ds4-*.env>
+  ops_ds4_env_check.sh [-/path/to/shared.env] <path-to-ds4-*.env> [more.env ...]
 
 Notes:
   - Non-destructive; does not require sudo.
   - Parses env files as simple KEY=VALUE assignments (no shell execution).
   - If DS4_INSTANCE is missing, it may be inferred from a filename like:
       /etc/ds4/ds4-spark0.env  -> DS4_INSTANCE=spark0
+  - Prefix a path with '-' to make it optional (skipped when missing), e.g.:
+      ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-spark0.env
 EOF
 }
 
-env_path="${1:-}"
-if [ "$env_path" = "" ]; then
+if [ "$#" -lt 1 ]; then
     usage >&2
-    exit 2
-fi
-
-if [ ! -f "$env_path" ]; then
-    echo "missing env file: $env_path" >&2
-    exit 2
-fi
-if [ ! -r "$env_path" ]; then
-    echo "unreadable env file (check owner/group/mode): $env_path" >&2
     exit 2
 fi
 
@@ -89,7 +81,47 @@ load_env_file()
     done < "$path"
 }
 
-load_env_file "$env_path"
+loaded=""
+infer_path=""
+
+while [ $# -gt 0 ]; do
+    raw="$1"
+    shift
+
+    optional=0
+    path="$raw"
+    case "$raw" in
+        -/*)
+            optional=1
+            path="${raw#-}"
+            ;;
+    esac
+
+    if [ ! -f "$path" ]; then
+        if [ "$optional" -ne 0 ]; then
+            continue
+        fi
+        echo "missing env file: $path" >&2
+        exit 2
+    fi
+    if [ ! -r "$path" ]; then
+        echo "unreadable env file (check owner/group/mode): $path" >&2
+        exit 2
+    fi
+
+    load_env_file "$path"
+    loaded="$loaded $path"
+    case "${path##*/}" in
+        ds4-*.env)
+            infer_path="$path"
+            ;;
+    esac
+done
+
+if [ "$loaded" = "" ]; then
+    echo "no env files loaded (all optional paths missing?)" >&2
+    exit 2
+fi
 
 err=0
 
@@ -132,10 +164,10 @@ need_uint()
 }
 
 echo "== ds4 env check =="
-echo "env: $env_path"
+echo "envs:$loaded"
 
 if [ "${DS4_INSTANCE:-}" = "" ]; then
-    inferred="$(infer_instance_from_path "$env_path" 2>/dev/null || true)"
+    inferred="$(infer_instance_from_path "$infer_path" 2>/dev/null || true)"
     if [ "$inferred" != "" ]; then
         DS4_INSTANCE="$inferred"
         export DS4_INSTANCE
