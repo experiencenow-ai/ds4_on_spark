@@ -165,3 +165,38 @@ columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.widt
 nvcc arch: sm_121
 device0 cc: 12.1
 ```
+
+## Update: Probe Refresh (2026-05-09 17:07Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_probe_loop_1778346408 DS4_GIT_WORK_TREE="/Users/mac/.codex/worktrees/0734/New project 4" ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T170752Z.txt
+```
+
+```text
+== local meta ==
+Sat May  9 17:07:53 UTC 2026
+git: ad143d0
+```
+
+```text
+== lspci gpu link state (capped) ==
+-- 000f:01:00.0 --
+no LnkCap/LnkSta fields found; header:
+000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1) (prog-if 00 [VGA controller])
+```
+
+```text
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 cc: 12.1
+```
