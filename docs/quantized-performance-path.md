@@ -48,7 +48,7 @@ scheduling behavior:
 - GPU memory and KV cache growth
 - MTP draft tokens, accepted tokens, and rejected tokens when available
 
-Preferred output is JSONL so `sim/scheduler/` can replay real route traces.
+Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
 
 ## Phase 0: Simulator-Only
 

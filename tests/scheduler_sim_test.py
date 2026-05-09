@@ -424,6 +424,83 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_csv_replay_loads_and_sorts(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".csv")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write("t_ms,cls,candidates,scores\n")
+                f.write('0.2,batch,"[1,0]","[0.1,0.9]"\n')
+                f.write('0.0,interactive,"[0,1]","[0.9,0.1]"\n')
+            trace = scheduler_sim.load_trace_csv(path)
+            self.assertEqual(len(trace), 2)
+            self.assertEqual(trace[0].t_ms, 0.0)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+            self.assertEqual(trace[1].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[0].scores, (0.9, 0.1))
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=2,
+                expert_parallelism=1,
+                expert_queue_max=10,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.num_tokens, 2)
+            self.assertGreater(m.makespan_ms, 0.0)
+        finally:
+            os.unlink(path)
+
+    def test_trace_csv_dt_ms_time_mode_loads(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".csv")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write("dt_ms,cls,candidates\n")
+                f.write('0.0,interactive,"0 1"\n')
+                f.write('0.25,batch,"1 0"\n')
+            trace = scheduler_sim.load_trace_csv(path, time_mode="dt_ms")
+            self.assertEqual(len(trace), 2)
+            self.assertEqual(trace[0].t_ms, 0.0)
+            self.assertAlmostEqual(trace[1].t_ms, 0.25, places=9)
+        finally:
+            os.unlink(path)
+
+    def test_write_trace_csv_roundtrip(self) -> None:
+        trace = scheduler_sim.generate_synthetic_trace(
+            scheduler_sim.TraceConfig(
+                num_tokens=64,
+                num_experts=8,
+                num_candidates=4,
+                interactive_prob=0.5,
+                arrival_rate_tps=1000.0,
+                burst_prob=0.0,
+                burst_scale=1.0,
+                zipf_alpha=1.1,
+                seed=123,
+            )
+        )
+        fd, path = tempfile.mkstemp(prefix="sched_trace_out_", suffix=".csv")
+        try:
+            os.close(fd)
+            scheduler_sim.write_trace_csv(path, trace)
+            loaded = scheduler_sim.load_trace_csv(path)
+            self.assertEqual(len(loaded), len(trace))
+            self.assertEqual([r.t_ms for r in loaded], [r.t_ms for r in trace])
+            self.assertEqual([r.cls for r in loaded], [r.cls for r in trace])
+            self.assertEqual([r.candidates for r in loaded], [r.candidates for r in trace])
+        finally:
+            os.unlink(path)
+
     def test_trace_jsonl_k_and_k_mode_trace_override_controller(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:

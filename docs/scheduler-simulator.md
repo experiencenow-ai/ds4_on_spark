@@ -206,9 +206,11 @@ Markov mode creates temporal locality by reusing the previous token's primary ex
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
-### Trace Replay (JSONL)
+### Trace Replay (JSONL or CSV)
 
-Replay mode reads one JSON object per line with required fields:
+Replay mode can read either JSONL (`--trace-jsonl`) or CSV (`--trace-csv`).
+
+JSONL reads one JSON object per line with required fields:
 
 - `t_ms` (number): arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and provide `dt_ms` instead.
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
@@ -237,6 +239,17 @@ EOF
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-experts 8 --json
 ```
 
+CSV replay uses a header row with the same field names (list fields like `candidates` / `scores` can be JSON lists; `candidates` also accepts a simple delimiter format like `"0 1 2"`):
+
+```bash
+cat > /tmp/route.csv <<'EOF'
+t_ms,cls,candidates
+0.0,interactive,"[3,7,1,0]"
+0.2,batch,"[7,2,3,5]"
+EOF
+python3 sim/scheduler/scheduler_sim.py --trace-csv /tmp/route.csv --num-experts 8 --json
+```
+
 Delta-time example (cumulative `dt_ms`):
 
 ```bash
@@ -257,6 +270,12 @@ Synthetic trace dump (generate, write JSONL, and exit after printing the trace s
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --num-experts 16 --dump-trace-jsonl /tmp/synth_route.jsonl --trace-summary --json
+```
+
+Synthetic trace dump (CSV):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --num-experts 16 --dump-trace-csv /tmp/synth_route.csv --trace-summary --json
 ```
 
 ## Metrics

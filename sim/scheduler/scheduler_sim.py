@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import enum
 import heapq
@@ -860,6 +861,241 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
+
+
+def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
+    if time_mode not in ("t_ms", "dt_ms"):
+        raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
+
+    def parse_optional_int(cell: str, key: str, lineno: int) -> Optional[int]:
+        s = cell.strip()
+        if s == "":
+            return(None)
+        try:
+            v = int(s)
+        except ValueError:
+            raise ValueError(f"{path}:{lineno}: {key} must be an integer")
+        return(v)
+
+    def parse_optional_float(cell: str, key: str, lineno: int) -> Optional[float]:
+        s = cell.strip()
+        if s == "":
+            return(None)
+        try:
+            v = float(s)
+        except ValueError:
+            raise ValueError(f"{path}:{lineno}: {key} must be a number")
+        return(v)
+
+    def parse_int_list(cell: str, key: str, lineno: int) -> List[int]:
+        s = cell.strip()
+        if s == "":
+            raise ValueError(f"{path}:{lineno}: {key} must be non-empty")
+        if s.startswith("["):
+            obj = json.loads(s)
+            if not isinstance(obj, list):
+                raise ValueError(f"{path}:{lineno}: {key} must be a JSON list")
+            out: List[int] = []
+            for c in obj:
+                if not isinstance(c, int):
+                    raise ValueError(f"{path}:{lineno}: {key} must be integers")
+                out.append(int(c))
+            return(out)
+        # Allow a simple delimiter format: "1 2 3" or "1,2,3" or "1;2;3".
+        cleaned = s.replace(",", " ").replace(";", " ")
+        parts = [p for p in cleaned.split() if p != ""]
+        out = []
+        for p in parts:
+            try:
+                out.append(int(p))
+            except ValueError:
+                raise ValueError(f"{path}:{lineno}: {key} list element '{p}' must be an integer")
+        return(out)
+
+    def parse_optional_float_list(cell: str, key: str, lineno: int) -> Optional[Tuple[float, ...]]:
+        s = cell.strip()
+        if s == "":
+            return(None)
+        if s.startswith("["):
+            obj = json.loads(s)
+            if not isinstance(obj, list):
+                raise ValueError(f"{path}:{lineno}: {key} must be a JSON list")
+            out: List[float] = []
+            for v in obj:
+                if not isinstance(v, (int, float)):
+                    raise ValueError(f"{path}:{lineno}: {key} must be numbers")
+                out.append(float(v))
+            return(tuple(out))
+        cleaned = s.replace(",", " ").replace(";", " ")
+        parts = [p for p in cleaned.split() if p != ""]
+        out = []
+        for p in parts:
+            try:
+                out.append(float(p))
+            except ValueError:
+                raise ValueError(f"{path}:{lineno}: {key} list element '{p}' must be a number")
+        return(tuple(out))
+
+    routes: List[TokenRoute] = []
+    t_ms_accum = 0.0
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise ValueError(f"{path}: missing CSV header")
+
+        for lineno0, row in enumerate(reader, 2):
+            if row is None:
+                continue
+            # Treat completely empty rows as ignorable.
+            if all((v or "").strip() == "" for v in row.values()):
+                continue
+
+            if time_mode == "t_ms":
+                if "dt_ms" in row and (row["dt_ms"] or "").strip() != "":
+                    raise ValueError(f"{path}:{lineno0}: dt_ms is only valid with time_mode=dt_ms")
+                if "t_ms" not in row:
+                    raise ValueError(f"{path}:{lineno0}: missing t_ms")
+            else:
+                if "t_ms" in row and (row["t_ms"] or "").strip() != "":
+                    raise ValueError(f"{path}:{lineno0}: t_ms is not valid with time_mode=dt_ms")
+                if "dt_ms" not in row:
+                    raise ValueError(f"{path}:{lineno0}: missing dt_ms")
+            if "cls" not in row:
+                raise ValueError(f"{path}:{lineno0}: missing cls")
+            if "candidates" not in row:
+                raise ValueError(f"{path}:{lineno0}: missing candidates")
+
+            token_index = parse_optional_int(row.get("token_index", "") or "", "token_index", lineno0)
+            if token_index is not None and token_index < 0:
+                raise ValueError(f"{path}:{lineno0}: token_index must be >= 0")
+
+            if time_mode == "t_ms":
+                t_raw = (row.get("t_ms", "") or "").strip()
+                if t_raw == "":
+                    raise ValueError(f"{path}:{lineno0}: missing t_ms")
+                t_ms = float(t_raw)
+                if t_ms < 0.0:
+                    raise ValueError(f"{path}:{lineno0}: t_ms must be >= 0")
+            else:
+                dt_raw = (row.get("dt_ms", "") or "").strip()
+                if dt_raw == "":
+                    raise ValueError(f"{path}:{lineno0}: missing dt_ms")
+                dt_ms = float(dt_raw)
+                if dt_ms < 0.0:
+                    raise ValueError(f"{path}:{lineno0}: dt_ms must be >= 0")
+                t_ms_accum += dt_ms
+                t_ms = t_ms_accum
+
+            cls_raw = (row.get("cls", "") or "").strip()
+            cls_norm = cls_raw.lower()
+            if cls_norm == "interactive":
+                cls = LatencyClass.INTERACTIVE
+            elif cls_norm == "batch":
+                cls = LatencyClass.BATCH
+            else:
+                raise ValueError(f"{path}:{lineno0}: cls must be 'interactive' or 'batch'")
+
+            candidates = parse_int_list(row.get("candidates", "") or "", "candidates", lineno0)
+            if len(candidates) == 0:
+                raise ValueError(f"{path}:{lineno0}: candidates must be non-empty")
+            for c in candidates:
+                if c < 0:
+                    raise ValueError(f"{path}:{lineno0}: candidates must be >= 0")
+            if len(set(candidates)) != len(candidates):
+                raise ValueError(f"{path}:{lineno0}: candidates must be unique")
+
+            k = parse_optional_int(row.get("k", "") or "", "k", lineno0)
+            if k is not None and k <= 0:
+                raise ValueError(f"{path}:{lineno0}: k must be > 0")
+
+            scores = parse_optional_float_list(row.get("scores", "") or "", "scores", lineno0)
+            if scores is not None:
+                if len(scores) != len(candidates):
+                    raise ValueError(f"{path}:{lineno0}: scores length must match candidates length")
+
+            mtp_accept_len = parse_optional_int(row.get("mtp_accept_len", "") or "", "mtp_accept_len", lineno0)
+            if mtp_accept_len is not None and mtp_accept_len < 1:
+                raise ValueError(f"{path}:{lineno0}: mtp_accept_len must be >= 1")
+            accepted_mtp = parse_optional_int(row.get("accepted_mtp", "") or "", "accepted_mtp", lineno0)
+            if accepted_mtp is not None and accepted_mtp < 0:
+                raise ValueError(f"{path}:{lineno0}: accepted_mtp must be >= 0")
+            rejected_mtp = parse_optional_int(row.get("rejected_mtp", "") or "", "rejected_mtp", lineno0)
+            if rejected_mtp is not None and rejected_mtp < 0:
+                raise ValueError(f"{path}:{lineno0}: rejected_mtp must be >= 0")
+
+            cost_scale = parse_optional_float(row.get("cost_scale", "") or "", "cost_scale", lineno0)
+            if cost_scale is not None and cost_scale <= 0.0:
+                raise ValueError(f"{path}:{lineno0}: cost_scale must be > 0")
+            decode_ms = parse_optional_float(row.get("decode_ms", "") or "", "decode_ms", lineno0)
+            if decode_ms is not None and decode_ms < 0.0:
+                raise ValueError(f"{path}:{lineno0}: decode_ms must be >= 0")
+            kv_tokens = parse_optional_int(row.get("kv_tokens", "") or "", "kv_tokens", lineno0)
+            if kv_tokens is not None and kv_tokens < 0:
+                raise ValueError(f"{path}:{lineno0}: kv_tokens must be >= 0")
+            expert_batch_size = parse_optional_int(row.get("expert_batch_size", "") or "", "expert_batch_size", lineno0)
+            if expert_batch_size is not None and expert_batch_size < 0:
+                raise ValueError(f"{path}:{lineno0}: expert_batch_size must be >= 0")
+
+            routes.append(
+                TokenRoute(
+                    t_ms=t_ms,
+                    cls=cls,
+                    candidates=tuple(candidates),
+                    token_index=token_index,
+                    k=k,
+                    scores=scores,
+                    mtp_accept_len=mtp_accept_len,
+                    accepted_mtp=accepted_mtp,
+                    rejected_mtp=rejected_mtp,
+                    cost_scale=cost_scale,
+                    decode_ms=decode_ms,
+                    kv_tokens=kv_tokens,
+                    expert_batch_size=expert_batch_size,
+                )
+            )
+
+    routes.sort(key=lambda r: r.t_ms)
+    return(routes)
+
+
+def write_trace_csv(path: str, trace: Sequence[TokenRoute]) -> None:
+    if path.strip() == "":
+        raise ValueError("path must be non-empty")
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        fieldnames = [
+            "t_ms",
+            "cls",
+            "candidates",
+            "token_index",
+            "k",
+            "scores",
+            "mtp_accept_len",
+            "accepted_mtp",
+            "rejected_mtp",
+            "cost_scale",
+            "decode_ms",
+            "kv_tokens",
+            "expert_batch_size",
+        ]
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in trace:
+            row: Dict[str, str] = {
+                "t_ms": str(float(r.t_ms)),
+                "cls": str(r.cls.value),
+                "candidates": json.dumps(list(r.candidates)),
+                "token_index": "" if r.token_index is None else str(int(r.token_index)),
+                "k": "" if r.k is None else str(int(r.k)),
+                "scores": "" if r.scores is None else json.dumps(list(r.scores)),
+                "mtp_accept_len": "" if r.mtp_accept_len is None else str(int(r.mtp_accept_len)),
+                "accepted_mtp": "" if r.accepted_mtp is None else str(int(r.accepted_mtp)),
+                "rejected_mtp": "" if r.rejected_mtp is None else str(int(r.rejected_mtp)),
+                "cost_scale": "" if r.cost_scale is None else str(float(r.cost_scale)),
+                "decode_ms": "" if r.decode_ms is None else str(float(r.decode_ms)),
+                "kv_tokens": "" if r.kv_tokens is None else str(int(r.kv_tokens)),
+                "expert_batch_size": "" if r.expert_batch_size is None else str(int(r.expert_batch_size)),
+            }
+            w.writerow(row)
 
 
 def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
@@ -1792,10 +2028,12 @@ def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute]
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
-    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale).")
-    p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (only with --trace-jsonl): t_ms (default) requires per-line t_ms, dt_ms uses per-line dt_ms deltas and cumulative sum.")
+    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size).")
+    p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
+    p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file (t_ms, cls, candidates) before simulation.")
+    p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file (t_ms, cls, candidates) before simulation.")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
@@ -1855,12 +2093,21 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
 
-    if args.trace_jsonl != "":
-        if args.dump_trace_jsonl.strip() != "":
-            raise SystemExit("--dump-trace-jsonl is only supported for synthetic trace generation (omit --trace-jsonl)")
+    if args.trace_jsonl != "" and args.trace_csv != "":
+        raise SystemExit("Choose exactly one: --trace-jsonl or --trace-csv")
+
+    if args.dump_trace_jsonl.strip() != "" and args.dump_trace_csv.strip() != "":
+        raise SystemExit("Choose at most one: --dump-trace-jsonl or --dump-trace-csv")
+
+    if args.trace_jsonl != "" or args.trace_csv != "":
+        if args.dump_trace_jsonl.strip() != "" or args.dump_trace_csv.strip() != "":
+            raise SystemExit("--dump-trace-* is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.arrival_units.strip().lower() != "steps":
-            raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl)")
-        trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower())
+            raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
+        if args.trace_jsonl != "":
+            trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower())
+        else:
+            trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
         if args.trace_summary:
             out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
             if args.json:
@@ -1923,6 +2170,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         if args.dump_trace_jsonl.strip() != "":
             write_trace_jsonl(args.dump_trace_jsonl, trace)
+        if args.dump_trace_csv.strip() != "":
+            write_trace_csv(args.dump_trace_csv, trace)
         if args.trace_summary:
             out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
             if args.json:
