@@ -318,6 +318,25 @@ int32_t ds4_config_load(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t 
 	return(0);
 }
 
+int32_t ds4_config_load_auto(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len)
+{
+	const char *env_path;
+	if ( cfg == 0 )
+		return(-1);
+	if ( path != 0 )
+	{
+		if ( path[0] != 0 )
+			return(ds4_config_load(cfg,path,buf,cap,out_len));
+	}
+	env_path = getenv("DS4_CONFIG_PATH");
+	if ( env_path != 0 )
+	{
+		if ( env_path[0] != 0 )
+			return(ds4_config_load(cfg,env_path,buf,cap,out_len));
+	}
+	return(ds4_config_load(cfg,0,buf,cap,out_len));
+}
+
 int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
 {
 	int32_t n;

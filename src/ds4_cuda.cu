@@ -27,6 +27,11 @@ int32_t ds4_cuda_is_ok(ds4_cuda_status_t st)
 	return(0);
 }
 
+int32_t ds4_cuda_is_enabled_build(void)
+{
+	return(1);
+}
+
 const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 {
 	cudaError_t err;

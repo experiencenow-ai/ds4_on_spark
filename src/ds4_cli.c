@@ -93,7 +93,7 @@ int main(int argc,char **argv)
 		ds4_cli_usage(stderr,argv != 0 ? argv[0] : 0);
 		return(2);
 	}
-	if ( ds4_config_load(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0) < 0 )
+	if ( ds4_config_load_auto(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0) < 0 )
 	{
 		fprintf(stderr,"ds4_cli: failed to load config\n");
 		return(1);
