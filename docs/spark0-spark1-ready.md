@@ -70,3 +70,5 @@ Notes:
 - `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
 - Storage summary (`df -h` + filesystem type/opts + `lsblk` disk model/size).
 - Wired link status + speed when available (`ip link` + optional `ethtool` + `ethtool -i` driver/firmware).
+- Capped CUDA/NVIDIA package inventory (`dpkg-query`), when available.
+- RDMA/ROCE presence + port state summary (`/sys/class/infiniband` + optional `rdma link show`).
