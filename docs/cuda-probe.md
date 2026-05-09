@@ -28,6 +28,7 @@ What it does:
   - `cuda_sm121_pipeline_memcpy_async` (`__pipeline_memcpy_async` global->shared copy probe)
   - `cuda_sm121_barrier_memcpy_async` (`cuda::barrier` + `cuda::memcpy_async` copy probe)
   - `cuda_sm121_wmma_smoke` (`mma.h` WMMA matmul smoke test; CUTLASS-style proxy)
+  - `cuda_sm121_cluster_launch` (thread-block cluster launch + `cooperative_groups::this_cluster().block_rank()` smoke test)
 
 Environment overrides:
 
@@ -65,6 +66,7 @@ Observed:
 - Pipeline memcpy-async probe succeeds (cp.async-style global->shared copy)
 - Barrier memcpy-async probe succeeds (`cuda::barrier` + `cuda::memcpy_async`)
 - WMMA matmul smoke test succeeds (`wmma_smoke ... max_abs_err=0`)
+- Cluster launch probe succeeds (`cluster_block_rank out[0]=0 out[1]=1`)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 
 Selected output excerpt:
@@ -85,6 +87,10 @@ fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
 pipeline_memcpy_async out=11111111 22222222 33333333 44444444
 barrier_memcpy_async ok first=decaf000 last=decaf01f
 wmma_smoke C00=16.000000 C255=16.000000 max_abs_err=0.000000
+cluster_launch_supported=1
+max_cluster_size_portable=8
+max_active_clusters_for_2x1x1=48
+cluster_block_rank out[0]=0 out[1]=1
 ```
 
 ## Where The Probe Lives
