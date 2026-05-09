@@ -18,6 +18,7 @@ What it does:
   - `cuda_device_props_tiny` (one-line runtime + device summary)
   - `cuda_device_props` (runtime + device properties)
   - `cuda_sm121_probe` (sanity kernel compiled for `sm_121`)
+  - `cuda_sm121_fatbin_probe` (sanity kernel built via `-gencode` with `sm_120` + `sm_121` SASS plus `compute_121` PTX)
   - `cuda_sm121_arch_report` (prints device CC + compiled `__CUDA_ARCH__`)
   - `cuda_sm120_compat_probe` (runs an `sm_120`-compiled kernel on the device; tests `sm_120`→`sm_121` compatibility)
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
@@ -48,7 +49,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 
 ## Current Spark0 Results (2026-05-09)
 

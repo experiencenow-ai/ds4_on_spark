@@ -59,6 +59,16 @@ echo
 echo \"== run: cuda_sm121_probe ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_probe
 echo
+echo \"== run: cuda_sm121_fatbin_probe ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_fatbin_probe
+echo
+echo \"== cuobjdump: cuda_sm121_fatbin_probe PTX slice (if available) ==\"
+if [ -x /usr/local/cuda/bin/cuobjdump ]; then
+	/usr/local/cuda/bin/cuobjdump --dump-ptx \"$REMOTE_DIR\"/bin/cuda_sm121_fatbin_probe 2>/dev/null | head -n 40 || true
+else
+	echo \"(cuobjdump not found)\"
+fi
+echo
 echo \"== run: cuda_sm121_arch_report ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 echo
