@@ -134,18 +134,18 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
-## Update: Discovery Refresh (2026-05-09 23:10Z)
+## Update: Discovery Refresh (2026-05-09 23:13Z)
 
 Commands run:
 
 ```bash
-REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2310Z_loop_v12.txt
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2313Z_loop_v13.txt
 ```
 
 ```text
 == meta ==
-Sat May  9 23:10:45 UTC 2026
-git: a0b64d4
+Sat May  9 23:13:05 UTC 2026
+git: b6057a9
 targets: aitopatom-9ab9.local spark1.local
 ```
 
@@ -153,10 +153,10 @@ targets: aitopatom-9ab9.local spark1.local
 == ssh service browse, 5 seconds ==
 Browsing for _ssh._tcp.local
 DATE: ---Sat 09 May 2026---
-23:10:45.414  ...STARTING...
+23:13:05.785  ...STARTING...
 Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
-23:10:45.415  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
-23:10:45.546  Add        2  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+23:13:05.786  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+23:13:05.786  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
 ```
 
 ```text

@@ -292,18 +292,18 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 ```
 
-## Update: Probe Refresh (2026-05-09 23:11Z)
+## Update: Probe Refresh (2026-05-09 23:13Z)
 
 Commands run from the Mac:
 
 ```bash
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2311Z_loop_v12.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2313Z_loop_v13.txt
 ```
 
 ```text
 == local meta ==
-Sat May  9 23:11:07 UTC 2026
-git: a0b64d4
+Sat May  9 23:13:25 UTC 2026
+git: b6057a9
 probe args: aitopatom-9ab9.local
 resolved targets: spark0@aitopatom-9ab9.local
 known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
@@ -318,7 +318,7 @@ CUDA Version        : 13.0
 
 == nvidia-smi inventory (index + pci bus) ==
 columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
-0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 49, P0, [N/A]
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
 selected compute_cap: 12.1
 selected nvcc arch: sm_121
 ```
