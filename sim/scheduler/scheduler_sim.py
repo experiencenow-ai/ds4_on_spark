@@ -27,6 +27,14 @@ class MtpPhase(enum.IntEnum):
 
 
 @dataclass(frozen=True)
+class LayerRoute:
+    candidates: Tuple[int, ...]
+    k: Optional[int] = None
+    scores: Optional[Tuple[float, ...]] = None
+    cost_scale: Optional[float] = None
+
+
+@dataclass(frozen=True)
 class TokenRoute:
     t_ms: float
     cls: LatencyClass
@@ -41,6 +49,7 @@ class TokenRoute:
     decode_ms: Optional[float] = None
     kv_tokens: Optional[int] = None
     expert_batch_size: Optional[int] = None
+    layers: Optional[Tuple[LayerRoute, ...]] = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +158,8 @@ class TokenState:
     trace_decode_ms: Optional[float] = None
     trace_kv_tokens: Optional[int] = None
     trace_expert_batch_size: Optional[int] = None
+    stage_idx: int = 0
+    stage_total: int = 1
 
 
 @dataclass
@@ -741,8 +752,8 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     raise ValueError(f"{path}:{lineno}: missing dt_ms")
             if "cls" not in obj:
                 raise ValueError(f"{path}:{lineno}: missing cls")
-            if "candidates" not in obj:
-                raise ValueError(f"{path}:{lineno}: missing candidates")
+            if "candidates" not in obj and "layers" not in obj:
+                raise ValueError(f"{path}:{lineno}: missing candidates (or layers)")
 
             token_index: Optional[int] = None
             if "token_index" in obj and obj["token_index"] is not None:
@@ -775,20 +786,114 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
             else:
                 raise ValueError(f"{path}:{lineno}: cls must be 'interactive' or 'batch'")
 
-            cand_raw = obj["candidates"]
-            if not isinstance(cand_raw, list):
-                raise ValueError(f"{path}:{lineno}: candidates must be a JSON list")
+            layers: Optional[Tuple[LayerRoute, ...]] = None
             candidates: List[int] = []
-            for c in cand_raw:
-                if not isinstance(c, int):
-                    raise ValueError(f"{path}:{lineno}: candidates must be integers")
-                if c < 0:
-                    raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
-                candidates.append(c)
-            if len(candidates) == 0:
-                raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
-            if len(set(candidates)) != len(candidates):
-                raise ValueError(f"{path}:{lineno}: candidates must be unique")
+            if "layers" in obj and obj["layers"] is not None:
+                layers_raw = obj["layers"]
+                if not isinstance(layers_raw, list):
+                    raise ValueError(f"{path}:{lineno}: layers must be a JSON list")
+                layer_routes: List[LayerRoute] = []
+                union: List[int] = []
+                seen_union: set[int] = set()
+                for li, lobj in enumerate(layers_raw):
+                    if not isinstance(lobj, dict):
+                        raise ValueError(f"{path}:{lineno}: layers[{li}] must be a JSON object")
+                    if "candidates" not in lobj:
+                        raise ValueError(f"{path}:{lineno}: layers[{li}] missing candidates")
+                    lcand_raw = lobj["candidates"]
+                    if not isinstance(lcand_raw, list):
+                        raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be a JSON list")
+                    lcands: List[int] = []
+                    for c in lcand_raw:
+                        if not isinstance(c, int):
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be integers")
+                        if c < 0:
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be >= 0")
+                        lcands.append(int(c))
+                    if len(lcands) == 0:
+                        raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be non-empty")
+                    if len(set(lcands)) != len(lcands):
+                        raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be unique")
+
+                    layer_k: Optional[int] = None
+                    if "k" in lobj and lobj["k"] is not None:
+                        lk_raw = lobj["k"]
+                        if not isinstance(lk_raw, int):
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].k must be an integer")
+                        if lk_raw <= 0:
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].k must be > 0")
+                        layer_k = int(lk_raw)
+
+                    layer_scores: Optional[Tuple[float, ...]] = None
+                    if "scores" in lobj and lobj["scores"] is not None:
+                        ls_raw = lobj["scores"]
+                        if not isinstance(ls_raw, list):
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].scores must be a JSON list")
+                        if len(ls_raw) != len(lcands):
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].scores must have same length as candidates")
+                        out_scores: List[float] = []
+                        for s in ls_raw:
+                            if not isinstance(s, (int, float)):
+                                raise ValueError(f"{path}:{lineno}: layers[{li}].scores must be numbers")
+                            out_scores.append(float(s))
+                        layer_scores = tuple(out_scores)
+
+                    layer_cost_scale: Optional[float] = None
+                    if "cost_scale" in lobj and lobj["cost_scale"] is not None:
+                        lcs_raw = lobj["cost_scale"]
+                        if not isinstance(lcs_raw, (int, float)):
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].cost_scale must be a number")
+                        if float(lcs_raw) <= 0.0:
+                            raise ValueError(f"{path}:{lineno}: layers[{li}].cost_scale must be > 0")
+                        layer_cost_scale = float(lcs_raw)
+
+                    layer_routes.append(LayerRoute(candidates=tuple(lcands), k=layer_k, scores=layer_scores, cost_scale=layer_cost_scale))
+                    for c in lcands:
+                        if c not in seen_union:
+                            union.append(c)
+                            seen_union.add(c)
+
+                if len(layer_routes) == 0:
+                    raise ValueError(f"{path}:{lineno}: layers must be non-empty")
+
+                if "scores" in obj and obj["scores"] is not None:
+                    raise ValueError(f"{path}:{lineno}: scores is not valid when layers are present (use layers[].scores)")
+
+                if "candidates" in obj and obj["candidates"] is not None:
+                    cand_raw = obj["candidates"]
+                    if not isinstance(cand_raw, list):
+                        raise ValueError(f"{path}:{lineno}: candidates must be a JSON list")
+                    top_candidates: List[int] = []
+                    for c in cand_raw:
+                        if not isinstance(c, int):
+                            raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                        if c < 0:
+                            raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
+                        top_candidates.append(int(c))
+                    if len(top_candidates) == 0:
+                        raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+                    if len(set(top_candidates)) != len(top_candidates):
+                        raise ValueError(f"{path}:{lineno}: candidates must be unique")
+                    if top_candidates != union:
+                        raise ValueError(f"{path}:{lineno}: candidates must equal the union of layers[].candidates when layers are present")
+                    candidates = top_candidates
+                else:
+                    candidates = union
+                layers = tuple(layer_routes)
+            else:
+                cand_raw = obj["candidates"]
+                if not isinstance(cand_raw, list):
+                    raise ValueError(f"{path}:{lineno}: candidates must be a JSON list")
+                for c in cand_raw:
+                    if not isinstance(c, int):
+                        raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                    if c < 0:
+                        raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
+                    candidates.append(int(c))
+                if len(candidates) == 0:
+                    raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+                if len(set(candidates)) != len(candidates):
+                    raise ValueError(f"{path}:{lineno}: candidates must be unique")
 
             k: Optional[int] = None
             if "k" in obj and obj["k"] is not None:
@@ -800,7 +905,7 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                 k = int(k_raw)
 
             scores: Optional[Tuple[float, ...]] = None
-            if "scores" in obj and obj["scores"] is not None:
+            if layers is None and "scores" in obj and obj["scores"] is not None:
                 scores_raw = obj["scores"]
                 if not isinstance(scores_raw, list):
                     raise ValueError(f"{path}:{lineno}: scores must be a JSON list")
@@ -891,6 +996,7 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     decode_ms=decode_ms,
                     kv_tokens=kv_tokens,
                     expert_batch_size=expert_batch_size,
+                    layers=layers,
                 )
             )
 
@@ -997,8 +1103,8 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     raise ValueError(f"{path}:{lineno0}: missing dt_ms")
             if "cls" not in row:
                 raise ValueError(f"{path}:{lineno0}: missing cls")
-            if "candidates" not in row:
-                raise ValueError(f"{path}:{lineno0}: missing candidates")
+            if "candidates" not in row and "layers" not in row:
+                raise ValueError(f"{path}:{lineno0}: missing candidates (or layers)")
 
             token_index = parse_optional_int(row.get("token_index", "") or "", "token_index", lineno0)
             if token_index is not None and token_index < 0:
@@ -1030,20 +1136,114 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
             else:
                 raise ValueError(f"{path}:{lineno0}: cls must be 'interactive' or 'batch'")
 
-            candidates = parse_int_list(row.get("candidates", "") or "", "candidates", lineno0)
-            if len(candidates) == 0:
-                raise ValueError(f"{path}:{lineno0}: candidates must be non-empty")
-            for c in candidates:
-                if c < 0:
-                    raise ValueError(f"{path}:{lineno0}: candidates must be >= 0")
-            if len(set(candidates)) != len(candidates):
-                raise ValueError(f"{path}:{lineno0}: candidates must be unique")
+            layers: Optional[Tuple[LayerRoute, ...]] = None
+            candidates: List[int] = []
+            layers_cell = (row.get("layers", "") or "").strip()
+            if layers_cell != "":
+                try:
+                    layers_obj = json.loads(layers_cell)
+                except json.JSONDecodeError:
+                    raise ValueError(f"{path}:{lineno0}: layers must be valid JSON")
+                if not isinstance(layers_obj, list):
+                    raise ValueError(f"{path}:{lineno0}: layers must be a JSON list")
+                layer_routes: List[LayerRoute] = []
+                union: List[int] = []
+                seen_union: set[int] = set()
+                for li, lobj in enumerate(layers_obj):
+                    if not isinstance(lobj, dict):
+                        raise ValueError(f"{path}:{lineno0}: layers[{li}] must be a JSON object")
+                    if "candidates" not in lobj:
+                        raise ValueError(f"{path}:{lineno0}: layers[{li}] missing candidates")
+                    lcand_raw = lobj["candidates"]
+                    if not isinstance(lcand_raw, list):
+                        raise ValueError(f"{path}:{lineno0}: layers[{li}].candidates must be a JSON list")
+                    lcands: List[int] = []
+                    for c in lcand_raw:
+                        if not isinstance(c, int):
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].candidates must be integers")
+                        if c < 0:
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].candidates must be >= 0")
+                        lcands.append(int(c))
+                    if len(lcands) == 0:
+                        raise ValueError(f"{path}:{lineno0}: layers[{li}].candidates must be non-empty")
+                    if len(set(lcands)) != len(lcands):
+                        raise ValueError(f"{path}:{lineno0}: layers[{li}].candidates must be unique")
+
+                    layer_k: Optional[int] = None
+                    if "k" in lobj and lobj["k"] is not None:
+                        lk_raw = lobj["k"]
+                        if not isinstance(lk_raw, int):
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].k must be an integer")
+                        if lk_raw <= 0:
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].k must be > 0")
+                        layer_k = int(lk_raw)
+
+                    layer_scores: Optional[Tuple[float, ...]] = None
+                    if "scores" in lobj and lobj["scores"] is not None:
+                        ls_raw = lobj["scores"]
+                        if not isinstance(ls_raw, list):
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].scores must be a JSON list")
+                        if len(ls_raw) != len(lcands):
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].scores must have same length as candidates")
+                        out_scores: List[float] = []
+                        for s in ls_raw:
+                            if not isinstance(s, (int, float)):
+                                raise ValueError(f"{path}:{lineno0}: layers[{li}].scores must be numbers")
+                            out_scores.append(float(s))
+                        layer_scores = tuple(out_scores)
+
+                    layer_cost_scale: Optional[float] = None
+                    if "cost_scale" in lobj and lobj["cost_scale"] is not None:
+                        lcs_raw = lobj["cost_scale"]
+                        if not isinstance(lcs_raw, (int, float)):
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].cost_scale must be a number")
+                        if float(lcs_raw) <= 0.0:
+                            raise ValueError(f"{path}:{lineno0}: layers[{li}].cost_scale must be > 0")
+                        layer_cost_scale = float(lcs_raw)
+
+                    layer_routes.append(LayerRoute(candidates=tuple(lcands), k=layer_k, scores=layer_scores, cost_scale=layer_cost_scale))
+                    for c in lcands:
+                        if c not in seen_union:
+                            union.append(c)
+                            seen_union.add(c)
+
+                if len(layer_routes) == 0:
+                    raise ValueError(f"{path}:{lineno0}: layers must be non-empty")
+                if (row.get("scores", "") or "").strip() != "":
+                    raise ValueError(f"{path}:{lineno0}: scores is not valid when layers are present (use layers[].scores)")
+
+                cand_cell = (row.get("candidates", "") or "").strip()
+                if cand_cell != "":
+                    candidates = parse_int_list(cand_cell, "candidates", lineno0)
+                    if len(candidates) == 0:
+                        raise ValueError(f"{path}:{lineno0}: candidates must be non-empty")
+                    for c in candidates:
+                        if c < 0:
+                            raise ValueError(f"{path}:{lineno0}: candidates must be >= 0")
+                    if len(set(candidates)) != len(candidates):
+                        raise ValueError(f"{path}:{lineno0}: candidates must be unique")
+                    if candidates != union:
+                        raise ValueError(f"{path}:{lineno0}: candidates must equal the union of layers[].candidates when layers are present")
+                else:
+                    candidates = union
+                layers = tuple(layer_routes)
+            else:
+                if "candidates" not in row:
+                    raise ValueError(f"{path}:{lineno0}: missing candidates")
+                candidates = parse_int_list(row.get("candidates", "") or "", "candidates", lineno0)
+                if len(candidates) == 0:
+                    raise ValueError(f"{path}:{lineno0}: candidates must be non-empty")
+                for c in candidates:
+                    if c < 0:
+                        raise ValueError(f"{path}:{lineno0}: candidates must be >= 0")
+                if len(set(candidates)) != len(candidates):
+                    raise ValueError(f"{path}:{lineno0}: candidates must be unique")
 
             k = parse_optional_int(row.get("k", "") or "", "k", lineno0)
             if k is not None and k <= 0:
                 raise ValueError(f"{path}:{lineno0}: k must be > 0")
 
-            scores = parse_optional_float_list(row.get("scores", "") or "", "scores", lineno0)
+            scores = parse_optional_float_list(row.get("scores", "") or "", "scores", lineno0) if layers is None else None
             if scores is not None:
                 if len(scores) != len(candidates):
                     raise ValueError(f"{path}:{lineno0}: scores length must match candidates length")
@@ -1086,6 +1286,7 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     decode_ms=decode_ms,
                     kv_tokens=kv_tokens,
                     expert_batch_size=expert_batch_size,
+                    layers=layers,
                 )
             )
 
@@ -1101,6 +1302,7 @@ def write_trace_csv(path: str, trace: Sequence[TokenRoute]) -> None:
             "t_ms",
             "cls",
             "candidates",
+            "layers",
             "token_index",
             "k",
             "scores",
@@ -1115,10 +1317,24 @@ def write_trace_csv(path: str, trace: Sequence[TokenRoute]) -> None:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for r in trace:
+            layers_cell = ""
+            if r.layers is not None and len(r.layers) != 0:
+                layers_json: List[Dict[str, object]] = []
+                for lr in r.layers:
+                    lobj: Dict[str, object] = {"candidates": list(lr.candidates)}
+                    if lr.k is not None:
+                        lobj["k"] = int(lr.k)
+                    if lr.scores is not None:
+                        lobj["scores"] = list(lr.scores)
+                    if lr.cost_scale is not None:
+                        lobj["cost_scale"] = float(lr.cost_scale)
+                    layers_json.append(lobj)
+                layers_cell = json.dumps(layers_json, sort_keys=True)
             row: Dict[str, str] = {
                 "t_ms": str(float(r.t_ms)),
                 "cls": str(r.cls.value),
                 "candidates": json.dumps(list(r.candidates)),
+                "layers": layers_cell,
                 "token_index": "" if r.token_index is None else str(int(r.token_index)),
                 "k": "" if r.k is None else str(int(r.k)),
                 "scores": "" if r.scores is None else json.dumps(list(r.scores)),
@@ -1143,6 +1359,18 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
                 "cls": str(r.cls.value),
                 "candidates": list(r.candidates),
             }
+            if r.layers is not None and len(r.layers) != 0:
+                layers_json: List[Dict[str, object]] = []
+                for lr in r.layers:
+                    lobj: Dict[str, object] = {"candidates": list(lr.candidates)}
+                    if lr.k is not None:
+                        lobj["k"] = int(lr.k)
+                    if lr.scores is not None:
+                        lobj["scores"] = list(lr.scores)
+                    if lr.cost_scale is not None:
+                        lobj["cost_scale"] = float(lr.cost_scale)
+                    layers_json.append(lobj)
+                obj["layers"] = layers_json
             if r.token_index is not None:
                 obj["token_index"] = int(r.token_index)
             if r.k is not None:
@@ -1192,6 +1420,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
     t_ms: List[float] = []
     token_index_vals: List[float] = []
     cand_lens: List[float] = []
+    layer_counts: List[float] = []
+    layer_cand_lens: List[float] = []
     k_vals: List[float] = []
     accept_lens: List[float] = []
     decode_ms: List[float] = []
@@ -1203,6 +1433,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
     present_token_index = 0
     present_k = 0
     present_scores = 0
+    present_layers = 0
+    present_layer_scores = 0
+    present_layer_cost_scale = 0
     present_accept_len = 0
     present_accepted_mtp = 0
     present_rejected_mtp = 0
@@ -1221,6 +1454,16 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
             present_token_index += 1
             token_index_vals.append(float(r.token_index))
         cand_lens.append(float(len(r.candidates)))
+        if r.layers is not None:
+            present_layers += 1
+        layers = _route_layers(r)
+        layer_counts.append(float(len(layers)))
+        for lr in layers:
+            layer_cand_lens.append(float(len(lr.candidates)))
+            if lr.scores is not None:
+                present_layer_scores += 1
+            if lr.cost_scale is not None:
+                present_layer_cost_scale += 1
         if len(r.candidates) != 0:
             lo = min(r.candidates)
             hi = max(r.candidates)
@@ -1258,10 +1501,15 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
         "tokens": {"count": len(trace), "interactive": num_i, "batch": num_b},
         "t_ms": summarize(t_ms),
         "candidates_len": summarize(cand_lens),
+        "layers_count": summarize(layer_counts),
+        "layer_candidates_len": summarize(layer_cand_lens),
         "optional_fields_present": {
             "token_index": present_token_index,
             "k": present_k,
             "scores": present_scores,
+            "layers": present_layers,
+            "layer_scores": present_layer_scores,
+            "layer_cost_scale": present_layer_cost_scale,
             "mtp_accept_len": present_accept_len,
             "accepted_mtp": present_accepted_mtp,
             "rejected_mtp": present_rejected_mtp,
@@ -1355,20 +1603,30 @@ def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
     return(_clamp_i32(k, k_min, k_max))
 
 
-def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
+def _route_layers(route: TokenRoute) -> Tuple[LayerRoute, ...]:
+    if route.layers is None or len(route.layers) == 0:
+        return((LayerRoute(candidates=route.candidates, k=route.k, scores=route.scores, cost_scale=None),))
+    return(route.layers)
+
+
+def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
     if admit_policy == "ordered":
-        return(route.candidates)
+        return(candidates)
     if admit_policy == "least_pending":
-        ranked = [(experts[e].pending(), i, e) for i, e in enumerate(route.candidates)]
+        ranked = [(experts[e].pending(), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _p, _i, e in ranked])
     if admit_policy == "score_desc":
-        if route.scores is None:
+        if scores is None:
             raise ValueError("admit_policy score_desc requires per-candidate scores")
-        ranked = [(-float(route.scores[i]), i, e) for i, e in enumerate(route.candidates)]
+        ranked = [(-float(scores[i]), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _s, _i, e in ranked])
     raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
+
+
+def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
+    return(_candidate_order_for_layer(admit_policy, experts, route.candidates, route.scores))
 
 
 def _service_time_ms(cfg: SimConfig, batch_size: int) -> float:
@@ -1652,29 +1910,51 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("mtp_verify_per_draft_cost_scale must be >= 0")
 
     for route in trace:
-        if len(route.candidates) == 0:
-            raise ValueError("trace route candidates must be non-empty")
         if route.cost_scale is not None and float(route.cost_scale) <= 0.0:
             raise ValueError("trace route cost_scale must be > 0")
-        if route.k is not None:
-            if route.k <= 0:
-                raise ValueError("trace route k must be > 0")
-            if route.k > len(route.candidates):
-                raise ValueError("trace route k must be <= len(candidates)")
+        if route.k is not None and route.k <= 0:
+            raise ValueError("trace route k must be > 0")
         if k_mode == "trace" and route.k is None:
             raise ValueError("k_mode trace requires per-route k in the trace")
-        if route.scores is not None and len(route.scores) != len(route.candidates):
+        if route.layers is not None and route.scores is not None:
+            raise ValueError("trace route scores must be per-layer when layers are present")
+        if route.layers is None and route.scores is not None and len(route.scores) != len(route.candidates):
             raise ValueError("trace route scores must have same length as candidates")
-        if admit_policy == "score_desc" and route.scores is None:
+        if route.layers is None and admit_policy == "score_desc" and route.scores is None:
             raise ValueError("admit_policy score_desc requires scores on every trace route")
         if (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None) and cfg.mtp_draft_len <= 0:
             raise ValueError("trace route mtp fields require mtp_draft_len > 0")
         if route.accepted_mtp is not None and route.rejected_mtp is not None:
             if (route.accepted_mtp + route.rejected_mtp) != cfg.mtp_draft_len:
                 raise ValueError("trace route accepted_mtp + rejected_mtp must equal mtp_draft_len")
-        for expert_id in route.candidates:
-            if expert_id < 0 or expert_id >= cfg.num_experts:
-                raise ValueError("trace route has expert_id out of range")
+
+        layers = _route_layers(route)
+        union: List[int] = []
+        seen_union: set[int] = set()
+        for lr in layers:
+            if len(lr.candidates) == 0:
+                raise ValueError("trace route candidates must be non-empty")
+            if lr.k is not None and lr.k <= 0:
+                raise ValueError("trace route k must be > 0")
+            if lr.k is not None and lr.k > len(lr.candidates):
+                raise ValueError("trace route k must be <= len(candidates)")
+            if lr.scores is not None and len(lr.scores) != len(lr.candidates):
+                raise ValueError("trace route scores must have same length as candidates")
+            if admit_policy == "score_desc" and lr.scores is None:
+                raise ValueError("admit_policy score_desc requires scores on every trace layer")
+            if lr.cost_scale is not None and float(lr.cost_scale) <= 0.0:
+                raise ValueError("trace route layer cost_scale must be > 0")
+            for expert_id in lr.candidates:
+                if expert_id < 0 or expert_id >= cfg.num_experts:
+                    raise ValueError("trace route has expert_id out of range")
+                if expert_id not in seen_union:
+                    union.append(expert_id)
+                    seen_union.add(expert_id)
+
+        if len(union) == 0:
+            raise ValueError("trace route candidates must be non-empty")
+        if route.k is not None and route.k > len(union):
+            raise ValueError("trace route k must be <= len(candidates)")
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
@@ -1847,8 +2127,9 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             else:
                 tokens[tid].output_len = 1
 
+            layers = _route_layers(route)
+            base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
             for micro_i in range(micro_tokens):
-                base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
                 cost_scale = base_cost_scale
                 mtp_phase = MtpPhase.NONE
                 if mtp_enabled and micro_i < cfg.mtp_draft_len:
@@ -1860,33 +2141,36 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 elif mtp_enabled and micro_i == cfg.mtp_draft_len:
                     mtp_phase = MtpPhase.VERIFY
 
-                admitted = 0
-                for expert_id in _candidate_order(admit_policy, experts, route):
-                    if admitted >= k:
-                        break
-                    eq = experts[expert_id]
-                    if eq.pending() >= cfg.expert_queue_max:
-                        metrics.dropped_tasks_backpressure += 1
+                for li, lr in enumerate(layers):
+                    layer_cost_scale = float(lr.cost_scale) if lr.cost_scale is not None else 1.0
+                    stage_cost_scale = (cost_scale * layer_cost_scale)
+                    admitted = 0
+                    for expert_id in _candidate_order_for_layer(admit_policy, experts, lr.candidates, lr.scores):
+                        if admitted >= k:
+                            break
+                        eq = experts[expert_id]
+                        if eq.pending() >= cfg.expert_queue_max:
+                            metrics.dropped_tasks_backpressure += 1
+                            if route.cls == LatencyClass.INTERACTIVE:
+                                metrics.dropped_tasks_backpressure_interactive += 1
+                            else:
+                                metrics.dropped_tasks_backpressure_batch += 1
+                            continue
+                        task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage_cost_scale, mtp_phase=mtp_phase)
                         if route.cls == LatencyClass.INTERACTIVE:
-                            metrics.dropped_tasks_backpressure_interactive += 1
+                            eq.hi.append(task)
                         else:
-                            metrics.dropped_tasks_backpressure_batch += 1
-                        continue
-                    task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=cost_scale, mtp_phase=mtp_phase)
-                    if route.cls == LatencyClass.INTERACTIVE:
-                        eq.hi.append(task)
-                    else:
-                        eq.lo.append(task)
-                    tokens[tid].remaining += 1
-                    metrics.admitted_tasks += 1
-                    if route.cls == LatencyClass.INTERACTIVE:
-                        metrics.admitted_tasks_interactive += 1
-                    else:
-                        metrics.admitted_tasks_batch += 1
-                    admitted += 1
-                    if (not mtp_enabled) or micro_i == cfg.mtp_draft_len:
-                        admitted_verify += 1
-                    _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
+                            eq.lo.append(task)
+                        tokens[tid].remaining += 1
+                        metrics.admitted_tasks += 1
+                        if route.cls == LatencyClass.INTERACTIVE:
+                            metrics.admitted_tasks_interactive += 1
+                        else:
+                            metrics.admitted_tasks_batch += 1
+                        admitted += 1
+                        if ((not mtp_enabled) or micro_i == cfg.mtp_draft_len) and li == 0:
+                            admitted_verify += 1
+                        _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
 
             if tokens[tid].remaining == 0:
                 metrics.dropped_tokens_backpressure += 1
@@ -1906,7 +2190,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 else:
                     metrics.admitted_tokens_batch += 1
                     metrics.effective_k_batch.append(admitted_verify)
-                desired = min(k, len(route.candidates))
+                desired = min(k, len(layers[0].candidates))
                 if admitted_verify < desired:
                     metrics.partial_admit_tokens += 1
                     if route.cls == LatencyClass.INTERACTIVE:
