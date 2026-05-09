@@ -22,6 +22,22 @@ Notes on config sources:
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
 
+### Field-name mapping (Transformers / external runtimes)
+
+Some upstream integrations and third-party runtimes refer to these field names:
+
+- `layer_types[i] ∈ {"sliding_attention","compressed_sparse_attention","heavily_compressed_attention"}`
+- `compress_rates.{csa,hca}` (defaults `4` and `128`)
+- `mlp_layer_types[i] ∈ {"hash_moe","moe"}`
+- `partial_rotary_factor = qk_rope_head_dim / head_dim`
+
+The pinned upstream `config.json` used by this repo does **not** include those arrays. Instead it ships a single `compress_ratios[]` list and a scalar `num_hash_layers`.
+
+For DS4 consumption, `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records a derived `compat.transformers` view:
+
+- `layer_types[]` derived from `compress_ratios[]` (`0→sliding_attention`, `4→compressed_sparse_attention`, `128→heavily_compressed_attention`)
+- `mlp_layer_types[]` derived from `num_hash_layers` (`i<num_hash_layers→hash_moe`, else `moe`)
+
 ## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280
@@ -149,7 +165,7 @@ Interpretation (from `inference/model.py`):
   - No Indexer path; compressed top-k indices come from the deterministic `get_compress_topk_idxs(...)`.
   - Compression uses non-overlapping windows (`Compressor.overlap == false`).
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 128`.
-  - YaRN is enabled in these layers (uses `compress_rope_theta` and `original_seq_len=65536`).
+  - YaRN is enabled for any `compress_ratio != 0` layer (CSA + HCA): uses `compress_rope_theta` and `original_seq_len=65536`.
 
 Layer-by-layer `compress_ratio` schedule for the 43 main blocks:
 
@@ -190,6 +206,12 @@ Sparse attention index selection:
 - If `compress_ratio != 0`, concatenates compressed indices:
   - CSA (`ratio==4`): `Indexer(...)` chooses indices.
   - HCA (`ratio==128`): `get_compress_topk_idxs(...)` chooses indices.
+
+Index masking:
+
+- `get_window_topk_idxs(...)` emits `-1` sentinel indices to pad out positions that should be masked (not enough history in prefill, or `start_pos < window_size - 1` in decode).
+- In the prefill path (`start_pos == 0`), `get_compress_topk_idxs(...)` also emits `-1` to mask compressed positions that do not exist yet.
+- In `inference/kernel.py` `sparse_attn`, indices where `idx == -1` are masked out by setting their attention score to `-inf` and loading `kv=0` for those positions.
 
 Important indexing details (from `Attention.forward`):
 
@@ -392,6 +414,13 @@ For each quantized artifact tested, record:
 - whether the runtime claims to preserve native FP8/FP4 scales or has
   re-quantized through another representation
 - tokenizer/chat-template behavior used for the prompt
+
+MTP namespace preservation:
+
+- Upstream includes an `mtp.0.*` tensor namespace for the MTP (draft) path.
+- Many GGUF conversions/runtimes drop or ignore `mtp.*` keys.
+- Record whether the artifact preserves `mtp.0.*` using:
+  - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf`
 
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits

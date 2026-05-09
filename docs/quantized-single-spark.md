@@ -15,7 +15,7 @@ runtime, CUDA path, tokenizer/chat format, and memory envelope are real.
   file size, sha256, command line, context length, token count, TTFT, tokens/sec
   where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
 - The report records whether the artifact preserves the upstream MTP namespace
-  (`mtp.0.*`) and whether MTP was enabled/disabled for the run.
+  (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
 - If the run fails, the report preserves the exact failure mode: unsupported
   architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat
   mismatch, or runtime crash.
@@ -56,6 +56,34 @@ Reference pages to inspect before choosing a fixture:
 - `https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF`
 - `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF`
 - `https://huggingface.co/models?other=base_model%3Aquantized%3Adeepseek-ai%2FDeepSeek-V4-Flash`
+
+## MTP / tensor-key compatibility
+
+DeepSeek V4 Flash includes a distinct MTP (multi-token prediction) module under
+the `mtp.0.*` tensor namespace. Many conversion pipelines and some runtimes
+silently drop unfamiliar tensor namespaces or ignore them at load time.
+
+For each tested quantized artifact, record whether `mtp.0.*` is present:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf
+```
+
+Interpreting the result:
+
+- If `mtp_present == false`, treat the artifact as **MTP-disabled** even if it
+  generates text normally. Any runtime “speculative” or “draft” feature must be
+  treated as untrusted unless it can be traced back to `mtp.0.*` weights.
+- If `mtp_present == true`, the artifact is only **MTP-capable** if the runtime
+  actually loads and uses those tensors. Still require correctness oracles
+  before trusting MTP outputs.
+
+Acceptance checks before DS4 can trust MTP:
+
+1. Encoding oracle passes (tokenizer/chat rendering).
+2. Next-token logits oracle passes (normal trunk forward + KV/cache semantics).
+3. Add and validate an explicit MTP correctness oracle (weights required) that
+   exercises `MTPBlock.forward(...)` semantics and the `mtp.0.hc_head_*` head.
 
 ## First Run Shape
 

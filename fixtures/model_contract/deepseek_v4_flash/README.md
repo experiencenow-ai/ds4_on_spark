@@ -10,7 +10,7 @@ Included upstream sources (metadata only):
 
 - `config.json`, `generation_config.json`
 - `model.safetensors.index.json` (tensor key set; no weight shards)
-- `contract_summary.json` (repo-generated, source-derived constants: topology, cache schedule, runtime params, and tensor-key invariants)
+- `contract_summary.json` (repo-generated, source-derived constants: topology, cache schedule, runtime params, tensor-key invariants, plus a derived `compat.transformers` view for external-runtime field-name mapping)
 - `tokenizer.json`, `tokenizer_config.json`
 - `encoding/*` (chat/tool/thinking encoder + gold vectors)
 - `inference/*` (reference runtime semantics: MLA, CSA/HCA cache compression, MoE, MTP, FP8/FP4 quantization)

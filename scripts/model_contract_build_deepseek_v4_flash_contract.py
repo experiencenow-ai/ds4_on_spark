@@ -208,6 +208,19 @@ def build_contract() -> dict:
 	mtp_ratios = compress_ratios[n_layers:]
 	layer_types = [layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
 	type_counts = {t: layer_types.count(t) for t in ("sliding", "csa", "hca")}
+	n_hash_layers = int(cfg["num_hash_layers"])
+
+	transformers_layer_types = []
+	for t in layer_types:
+		if t == "sliding":
+			transformers_layer_types.append("sliding_attention")
+		elif t == "csa":
+			transformers_layer_types.append("compressed_sparse_attention")
+		else:
+			transformers_layer_types.append("heavily_compressed_attention")
+
+	mlp_layer_types = ["hash_moe" if i < n_hash_layers else "moe" for i in range(n_layers)]
+	partial_rotary_factor = float(cfg["qk_rope_head_dim"]) / float(cfg["head_dim"])
 
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
@@ -229,9 +242,9 @@ def build_contract() -> dict:
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
 
-	contract = {
-		"format_version": 1,
-		"model": "deepseek_v4_flash",
+		contract = {
+			"format_version": 1,
+			"model": "deepseek_v4_flash",
 		"upstream": {
 			"hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
 			"hf_revision": "main",
@@ -262,90 +275,111 @@ def build_contract() -> dict:
 			"o_lora_rank": int(cfg["o_lora_rank"]),
 			"sliding_window": int(cfg["sliding_window"]),
 		},
-		"yarn_rope": {
-			"rope_theta": float(cfg.get("rope_theta", 10000)),
-			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
-			"original_seq_len": int(cfg.get("original_max_position_embeddings", inf.get("original_seq_len", 0))),
-			"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
-			"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
-			"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
-		},
+			"yarn_rope": {
+				"rope_theta": float(cfg.get("rope_theta", 10000)),
+				"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
+				"original_seq_len": int(cfg.get("original_max_position_embeddings", inf.get("original_seq_len", 0))),
+				"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
+				"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
+				"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
+				"per_layer_rule": {
+					"if_compress_ratio_nonzero": {
+						"original_seq_len": "yarn_rope.original_seq_len",
+						"rope_theta": "yarn_rope.compress_rope_theta",
+					},
+					"if_compress_ratio_zero": {
+						"original_seq_len": 0,
+						"rope_theta": "yarn_rope.rope_theta",
+					},
+				},
+			},
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
 			"main_layer_types": layer_types,
+			"transformers_layer_types": transformers_layer_types,
 			"type_counts": type_counts,
 			"mtp_compress_ratios": [int(r) for r in mtp_ratios],
 		},
-		"cache": {
-			"window_size": int(cfg["sliding_window"]),
-			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
-			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
-			"prefill": {
-				"compressed_index_offset": "seqlen",
-				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
-				"compress_indices": {"csa": "Indexer(...)", "hca": "get_compress_topk_idxs(...,offset=seqlen)"},
-			},
+		"compat": {
+			"transformers": {
+				"layer_types": transformers_layer_types,
+				"compress_rates": {"csa": 4, "hca": 128},
+				"mlp_layer_types": mlp_layer_types,
+				"partial_rotary_factor": partial_rotary_factor,
+			}
+		},
+			"cache": {
+				"window_size": int(cfg["sliding_window"]),
+				"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
+				"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+				"topk_mask_value": -1,
+				"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+				"prefill": {
+					"compressed_index_offset": "seqlen",
+					"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
+					"compress_indices": {"csa": "Indexer(...)", "hca": "get_compress_topk_idxs(...,offset=seqlen)"},
+				},
 			"decode": {
 				"compressed_index_offset": "window_size",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos>0)",
 				"compress_indices": {"csa": "Indexer(...,offset=window_size)", "hca": "get_compress_topk_idxs(...,offset=window_size)"},
 			},
 		},
-			"moe": {
+		"moe": {
 			"n_routed_experts": int(cfg["n_routed_experts"]),
 			"n_shared_experts": int(cfg["n_shared_experts"]),
 			"n_activated_experts": int(cfg["num_experts_per_tok"]),
 			"moe_inter_dim": int(cfg["moe_intermediate_size"]),
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
-			"n_hash_layers": int(cfg["num_hash_layers"]),
+			"n_hash_layers": n_hash_layers,
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
-				"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+		},
+		"mtp": {
+			"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
+			"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+			"namespace_prefix": "mtp.{j}.",
+		},
+		"runtime": {
+			"indexer": {
+				"index_n_heads": int(inf["index_n_heads"]),
+				"index_head_dim": int(inf["index_head_dim"]),
+				"index_topk": int(inf["index_topk"]),
 			},
-				"mtp": {
-					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
-					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-					"namespace_prefix": "mtp.{j}.",
-				},
-				"runtime": {
-					"indexer": {
-						"index_n_heads": int(inf["index_n_heads"]),
-						"index_head_dim": int(inf["index_head_dim"]),
-						"index_topk": int(inf["index_topk"]),
-					},
-					"hyper_connections": {
-						"hc_mult": int(inf["hc_mult"]),
-						"hc_sinkhorn_iters": int(inf["hc_sinkhorn_iters"]),
-						"hc_eps": float(inf_model.get("inference_model_constants", {}).get("hc_eps", 1e-6)),
-					},
-					"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
-				},
-				"tokenizer": {
-					"tokenizer_class": tok_cfg.get("tokenizer_class"),
-					"model_max_length": int(tok_cfg.get("model_max_length")),
-					"add_bos_token": bool(tok_cfg.get("add_bos_token")),
-				"add_eos_token": bool(tok_cfg.get("add_eos_token")),
-				"bos_token": tok_cfg.get("bos_token", {}).get("content"),
-				"eos_token": tok_cfg.get("eos_token", {}).get("content"),
-				"bos_token_id": int(cfg["bos_token_id"]),
-				"eos_token_id": int(cfg["eos_token_id"]),
-				"pad_token_is_eos": True,
-				"encoding_oracle_dir": "encoding/tests",
+			"hyper_connections": {
+				"hc_mult": int(inf["hc_mult"]),
+				"hc_sinkhorn_iters": int(inf["hc_sinkhorn_iters"]),
+				"hc_eps": float(inf_model.get("inference_model_constants", {}).get("hc_eps", 1e-6)),
 			},
-			"quantization": {
-				"config_quantization_config": cfg.get("quantization_config"),
-				"inference_config": {
-					"dtype": inf.get("dtype"),
-					"scale_fmt": inf.get("scale_fmt"),
-					"expert_dtype": inf.get("expert_dtype"),
-				},
-					**inf_model,
-				},
-				"tensor_keys": tensor_keys,
-				"checkpoint_index": {
-					"metadata": idx.get("metadata", {}),
-				},
-		}
+			"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
+		},
+		"tokenizer": {
+			"tokenizer_class": tok_cfg.get("tokenizer_class"),
+			"model_max_length": int(tok_cfg.get("model_max_length")),
+			"add_bos_token": bool(tok_cfg.get("add_bos_token")),
+			"add_eos_token": bool(tok_cfg.get("add_eos_token")),
+			"bos_token": tok_cfg.get("bos_token", {}).get("content"),
+			"eos_token": tok_cfg.get("eos_token", {}).get("content"),
+			"bos_token_id": int(cfg["bos_token_id"]),
+			"eos_token_id": int(cfg["eos_token_id"]),
+			"pad_token_is_eos": True,
+			"encoding_oracle_dir": "encoding/tests",
+		},
+		"quantization": {
+			"config_quantization_config": cfg.get("quantization_config"),
+			"inference_config": {
+				"dtype": inf.get("dtype"),
+				"scale_fmt": inf.get("scale_fmt"),
+				"expert_dtype": inf.get("expert_dtype"),
+			},
+			**inf_model,
+		},
+		"tensor_keys": tensor_keys,
+		"checkpoint_index": {
+			"metadata": idx.get("metadata", {}),
+		},
+	}
 	return contract
 
 

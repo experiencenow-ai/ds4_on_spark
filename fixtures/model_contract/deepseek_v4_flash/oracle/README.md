@@ -37,3 +37,15 @@ Each `cases[]` entry must include:
 - `thinking_mode`: `chat` or `thinking` (upstream encoding mode)
 - `prompt_tokens[]`: encoded prompt token ids
 - `trace[]`: per-step decode trace with `argmax_id`, `topk_ids[]`, `topk_logits[]`
+
+## MTP oracle (required before trusting draft decoding)
+
+DeepSeek V4 Flash ships an MTP (multi-token prediction) module under `mtp.0.*`.
+External runtimes and conversion pipelines may drop or ignore this namespace.
+
+Before DS4 enables or trusts MTP/draft decoding:
+
+- Confirm the tested artifact preserves `mtp.0.*` tensor keys (see `scripts/model_contract_inspect_quantized_artifact.py`).
+- Add an explicit MTP oracle fixture (weights required) that exercises
+  `MTPBlock.forward(...)` and validates `mtp.0.hc_head_*` behavior, not just the
+  main trunk `Transformer.forward(...)`.
