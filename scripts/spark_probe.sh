@@ -21,7 +21,8 @@ Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
-  SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
+  REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
+  SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
 USAGE
 }
 
@@ -32,23 +33,36 @@ case "${1:-}" in
 		;;
 esac
 
-if [ "$#" -gt 0 ]; then
-	targets="$@"
-else
-	targets="spark0@aitopatom-9ab9.local"
+SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
+NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
+PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
+CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
+NVCC_ARCH_OVERRIDE="${NVCC_ARCH:-}"
+
+if [ "${SSH_OPTS:-}" = "" ]; then
+	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
 fi
 
-SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
-if [ "$#" -gt 1 ] && [ "${SPARK_KNOWN_HOSTS:-}" = "" ] && [ "${SPARK_KNOWN_HOSTS_PER_HOST:-}" = "0" ]; then
-	SPARK_KNOWN_HOSTS_PER_HOST="1"
+if [ "$#" -eq 0 ]; then
+	set -- "spark0@aitopatom-9ab9.local"
 fi
-if [ "${SPARK_KNOWN_HOSTS:-}" = "" ]; then
-	SPARK_KNOWN_HOSTS="/private/tmp/ds4_spark_known_hosts"
-fi
-	NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
-	PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
-	CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
-	NVCC_ARCH_OVERRIDE="${NVCC_ARCH:-}"
+
+known_hosts_for_target()
+{
+	t="$1"
+	if [ "${SPARK_KNOWN_HOSTS:-}" != "" ]; then
+		echo "$SPARK_KNOWN_HOSTS"
+		return 0
+	fi
+	if [ "$SPARK_KNOWN_HOSTS_PER_HOST" = "1" ]; then
+		h="${t#*@}"
+		safe_h="$(printf "%s" "$h" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
+		echo "/private/tmp/ds4_spark_known_hosts.$safe_h"
+	else
+		echo "/private/tmp/ds4_spark_known_hosts"
+	fi
+	return 0
+}
 
 tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
@@ -63,30 +77,15 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 		fi
 	fi
-	echo "probe targets: $targets"
-	echo "known_hosts per host: $SPARK_KNOWN_HOSTS_PER_HOST"
-	echo "known_hosts base: $SPARK_KNOWN_HOSTS"
+	echo "probe targets: $*"
+	for t in "$@"; do
+		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
+	done
 	echo
-	for target in $targets; do
-		if [ "${SSH_OPTS:-}" = "" ]; then
-			if [ "$SPARK_KNOWN_HOSTS_PER_HOST" = "1" ]; then
-				host="${target#*@}"
-				safe_host="$(printf "%s" "$host" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
-				known_hosts="$SPARK_KNOWN_HOSTS.$safe_host"
-			else
-				known_hosts="$SPARK_KNOWN_HOSTS"
-			fi
-			ssh_opts="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
-		else
-			ssh_opts="$SSH_OPTS"
-		fi
-		echo "== probe target =="
-		echo "probe target: $target"
-		if [ "${SSH_OPTS:-}" = "" ]; then
-			echo "known_hosts: $known_hosts"
-		fi
-		echo
-		ssh $ssh_opts "$target" 'set -eu
+	for target in "$@"; do
+		kh="$(known_hosts_for_target "$target")"
+		echo "== target: $target =="
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
@@ -382,7 +381,7 @@ fi
 echo
 echo "== /dev nvidia nodes =="
 ls -l /dev/nvidia* 2>/dev/null | head -n 80 || true
-'
+	'
 		echo
 	done
 } >"$tmp"
