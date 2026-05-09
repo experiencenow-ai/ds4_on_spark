@@ -25,6 +25,10 @@ if [ ! -f "$env_path" ]; then
     echo "missing env file: $env_path" >&2
     exit 2
 fi
+if [ ! -r "$env_path" ]; then
+    echo "unreadable env file (check owner/group/mode): $env_path" >&2
+    exit 2
+fi
 
 set -a
 # shellcheck disable=SC1090
@@ -97,4 +101,3 @@ if [ "$err" -ne 0 ]; then
 fi
 
 echo "== OK =="
-

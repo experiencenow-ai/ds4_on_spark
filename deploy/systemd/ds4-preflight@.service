@@ -11,6 +11,9 @@ WorkingDirectory=/opt/ds4
 EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env
 
+# Provide the script on-host at /opt/ds4/scripts/ops_ds4_env_check.sh.
+ExecStartPre=/opt/ds4/scripts/ops_ds4_env_check.sh /etc/ds4/ds4-%i.env
+
 # Provide the script on-host at /opt/ds4/scripts/ops_tp2_readiness.sh.
 ExecStart=/opt/ds4/scripts/ops_tp2_readiness.sh --self ${DS4_INSTANCE}
 
