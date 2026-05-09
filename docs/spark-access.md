@@ -24,7 +24,7 @@ Notes:
 - When multiple targets are passed to `scripts/spark_probe.sh`, the probe prints `probe targets:` and one `known_hosts:` line per target so runs can be reproduced exactly.
 - Use `REDACT=1` for any output you plan to commit.
 - Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
-- If the checkout's `.git` metadata is not usable (provenance/permission issues), set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running.
+- If the checkout's `.git` metadata is not usable (provenance/permission issues), set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
 - `scripts/spark_probe.sh` optional toggles:
   - `NVIDIA_SMI_FULL=1` include full `nvidia-smi` output (verbose, process list)
   - `CUDA_RUNTIME_PROBE=0` skip the tiny `nvcc` compile+run probe

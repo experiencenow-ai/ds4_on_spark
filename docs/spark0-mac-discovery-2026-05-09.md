@@ -12,6 +12,7 @@ Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
 - Default targets include `aitopatom-9ab9.local` and `spark1.local`.
+- When using `DS4_GIT_DIR` to force a stable `git: <hash>` in the script output, you can also set `DS4_GIT_WORK_TREE=/path/to/worktree` if the git dir is not tied to the current working directory (defaults to `$PWD`).
 
 ## Update: Discovery Refresh (2026-05-09 03:48Z)
 

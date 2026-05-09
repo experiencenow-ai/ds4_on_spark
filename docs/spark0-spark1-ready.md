@@ -56,7 +56,7 @@ Notes:
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
-- If the checkout `.git` metadata is unusable (macOS provenance/permission), set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`.
+- If the checkout `.git` metadata is unusable (macOS provenance/permission), set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
 
 ## What To Record In `docs/spark0-*.md`
 
