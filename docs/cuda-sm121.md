@@ -85,3 +85,15 @@ The probe `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async` is a tiny compi
 - initializes a block-scope `cuda::barrier`
 - issues a per-thread `cuda::memcpy_async(..., barrier)` global->shared copy
 - waits via `barrier.arrive_and_wait()` and validates the copied values
+
+## WMMA Tensor Core Smoke (CUTLASS-style proxy)
+
+CUTLASS and other template GEMM libraries rely on tensor core matmul plumbing.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` is a tiny compile/run check that:
+
+- includes `mma.h`
+- runs a single warp WMMA matmul on `sm_121`
+- prints a couple of output elements plus `max_abs_err` against an expected result
+
+Observed on Spark0 (2026-05-09): `wmma_smoke ... max_abs_err=0`.
