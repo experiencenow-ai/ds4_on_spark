@@ -779,7 +779,64 @@
     "eos_token_id": 1,
     "model_max_length": 1048576,
     "pad_token_is_eos": true,
-    "tokenizer_class": "PreTrainedTokenizerFast"
+    "tokenizer_class": "PreTrainedTokenizerFast",
+    "tokenizer_json_summary": {
+      "added_special_tokens_count": 1230,
+      "added_token_id_max": 129279,
+      "added_token_id_min": 0,
+      "added_tokens_count": 1283,
+      "base_vocab_size": 128000,
+      "decoder": {
+        "add_prefix_space": true,
+        "trim_offsets": true,
+        "type": "ByteLevel",
+        "use_regex": true
+      },
+      "effective_vocab_size": 129280,
+      "effective_vocab_size_matches_config": true,
+      "merges_count": 127741,
+      "model_type": "BPE",
+      "normalizer": {
+        "sequence": [],
+        "type": "Sequence"
+      },
+      "post_processor": {
+        "add_prefix_space": true,
+        "trim_offsets": false,
+        "type": "ByteLevel",
+        "use_regex": true
+      },
+      "pre_tokenizer": {
+        "sequence": [
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "\\p{N}{1,3}",
+            "type": "Split"
+          },
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff]+",
+            "type": "Split"
+          },
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "[!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~][A-Za-z]+|[^\r\n\\p{L}\\p{P}\\p{S}]?[\\p{L}\\p{M}]+| ?[\\p{P}\\p{S}]+[\r\n]*|\\s*[\r\n]+|\\s+(?!\\S)|\\s+",
+            "type": "Split"
+          },
+          {
+            "add_prefix_space": false,
+            "trim_offsets": true,
+            "type": "ByteLevel",
+            "use_regex": false
+          }
+        ],
+        "type": "Sequence"
+      },
+      "tokenizers_json_version": "1.0"
+    }
   },
   "topology": {
     "head_dim": 512,
