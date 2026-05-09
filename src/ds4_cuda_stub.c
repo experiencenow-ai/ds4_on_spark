@@ -27,12 +27,21 @@ int32_t ds4_cuda_is_enabled_build(void)
 	return(0);
 }
 
+ds4_cuda_status_t ds4_cuda_init(void)
+{
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
 const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 {
 	if ( st.code == 0 )
 		return("OK");
 	if ( st.code == DS4_CUDA_ERR_DISABLED )
 		return("CUDA disabled");
+	if ( st.code == DS4_CUDA_ERR_NO_DEVICE )
+		return("No CUDA device");
+	if ( st.code < 0 )
+		return("DS4 CUDA internal error");
 	return("CUDA error (disabled build)");
 }
 

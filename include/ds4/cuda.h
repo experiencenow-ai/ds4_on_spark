@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #define DS4_CUDA_ERR_DISABLED (-1)
+#define DS4_CUDA_ERR_NO_DEVICE (-2)
 
 typedef struct
 {
@@ -17,6 +18,7 @@ ds4_cuda_status_t ds4_cuda_ok(void);
 ds4_cuda_status_t ds4_cuda_fail(int32_t code);
 int32_t ds4_cuda_is_ok(ds4_cuda_status_t st);
 int32_t ds4_cuda_is_enabled_build(void);
+ds4_cuda_status_t ds4_cuda_init(void);
 const char *ds4_cuda_errstr(ds4_cuda_status_t st);
 ds4_cuda_status_t ds4_cuda_last_error(void);
 ds4_cuda_status_t ds4_cuda_peek_last_error(void);

@@ -32,11 +32,38 @@ int32_t ds4_cuda_is_enabled_build(void)
 	return(1);
 }
 
+ds4_cuda_status_t ds4_cuda_init(void)
+{
+	int dev_count;
+	cudaError_t err;
+	dev_count = 0;
+	err = cudaGetDeviceCount(&dev_count);
+	if ( err == cudaSuccess )
+	{
+		if ( dev_count <= 0 )
+			return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+		err = cudaSetDevice(0);
+		if ( err != cudaSuccess )
+			return(ds4_cuda_fail((int32_t)err));
+		err = cudaFree(0);
+		if ( err != cudaSuccess )
+			return(ds4_cuda_fail((int32_t)err));
+		return(ds4_cuda_ok());
+	}
+	if ( err == cudaErrorNoDevice )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+	return(ds4_cuda_fail((int32_t)err));
+}
+
 const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 {
 	cudaError_t err;
 	if ( st.code == 0 )
 		return("OK");
+	if ( st.code == DS4_CUDA_ERR_DISABLED )
+		return("CUDA disabled");
+	if ( st.code == DS4_CUDA_ERR_NO_DEVICE )
+		return("No CUDA device");
 	if ( st.code < 0 )
 		return("DS4 CUDA internal error");
 	err = (cudaError_t)st.code;
