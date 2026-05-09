@@ -53,6 +53,16 @@ N_GPU_LAYERS=99 \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+Wrapper variant (same shape, fewer knobs):
+
+```sh
+MODEL_GGUF=/abs/path/to/model.gguf \
+LLAMA_CLI=/abs/path/to/v4-capable/llama-cli \
+MODEL_SOURCE='<hf-repo-or-local-note>' \
+MODEL_QUANT=Q2_K \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
 If it loads and generates, rerun with:
 
 - `CTX=4096`, then `CTX=8192`
@@ -62,6 +72,10 @@ If it loads and generates, rerun with:
 
 ## Instrumentation Hooks (Read-only)
 
+- Optional Spark inventory (read-only): set `SPARK_INVENTORY=1` when running the
+  baseline entrypoint to record a best-effort scan for candidate `*.gguf` files
+  and common runtime binaries. Keep scan depth small; do not run wide filesystem
+  searches.
 - GPU polling during runs: set `GPU_SAMPLE=1` (default) and adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) to emit `nvidia_smi_poll.csv` alongside the normal `nvidia-smi` snapshots.
 - llama.cpp token trace (best-effort): if the runtime emits per-token JSON log events (for example `process_token`), the Spark llama.cpp script writes them to `token_trace.jsonl` in the fetched artifacts directory. Do not guess flags; use the captured `llama_cli.help.txt` and only enable runtime-supported log options via `EXTRA_ARGS`.
 - See `docs/quantized-performance-path.md` for the ordered instrumentation path after the first successful token stream.

@@ -5,6 +5,10 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
 FETCH_REMOTE_ARTIFACTS="${FETCH_REMOTE_ARTIFACTS:-1}"
 RUN_DS4_MACOS="${RUN_DS4_MACOS:-0}"
+SPARK_INVENTORY="${SPARK_INVENTORY:-0}"
+INVENTORY_DIRS="${INVENTORY_DIRS:-}"
+INVENTORY_MAX_DEPTH="${INVENTORY_MAX_DEPTH:-}"
+INVENTORY_MAX_FILES="${INVENTORY_MAX_FILES:-}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
@@ -160,6 +164,11 @@ apply_overrides()
             bench:GPU_SAMPLE|llama:GPU_SAMPLE|vllm:GPU_SAMPLE) GPU_SAMPLE="$v" ;;
             bench:GPU_SAMPLE_INTERVAL_S|llama:GPU_SAMPLE_INTERVAL_S|vllm:GPU_SAMPLE_INTERVAL_S) GPU_SAMPLE_INTERVAL_S="$v" ;;
 
+            bench:SPARK_INVENTORY) SPARK_INVENTORY="$v" ;;
+            bench:INVENTORY_DIRS) INVENTORY_DIRS="$v" ;;
+            bench:INVENTORY_MAX_DEPTH) INVENTORY_MAX_DEPTH="$v" ;;
+            bench:INVENTORY_MAX_FILES) INVENTORY_MAX_FILES="$v" ;;
+
             llama:LLAMA_DIR) LLAMA_DIR="$v" ;;
             llama:MODEL_GGUF) MODEL_GGUF="$v" ;;
             llama:LLAMA_CLI) LLAMA_CLI="$v" ;;
@@ -202,15 +211,20 @@ RUNTIME_LABEL_B64="$(b64_enc "$RUNTIME_LABEL")"
 MODEL_SOURCE_B64="$(b64_enc "$MODEL_SOURCE")"
 MODEL_QUANT_B64="$(b64_enc "$MODEL_QUANT")"
 VLLM_MODEL_B64="$(b64_enc "$VLLM_MODEL")"
+INVENTORY_DIRS_B64="$(b64_enc "$INVENTORY_DIRS")"
 
 REMOTE_LLAMA_OUT_DIR="/tmp/baseline_llamacpp_${ts}"
 REMOTE_VLLM_OUT_DIR="/tmp/baseline_vllm_${ts}"
+REMOTE_INV_OUT_DIR="/tmp/baseline_spark_inventory_${ts}"
 
 REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S LLAMA_DIR='' LLAMA_DIR_B64='${LLAMA_DIR_B64}' MODEL_GGUF='' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_CLI='' LLAMA_CLI_B64='${LLAMA_CLI_B64}' RUNTIME_LABEL='' RUNTIME_LABEL_B64='${RUNTIME_LABEL_B64}' MODEL_SOURCE='' MODEL_SOURCE_B64='${MODEL_SOURCE_B64}' MODEL_QUANT='' MODEL_QUANT_B64='${MODEL_QUANT_B64}' PROMPT_B64='${LLAMA_PROMPT_B64}' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
 REMOTE_LLAMA_CMD_PRINT="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S LLAMA_DIR_B64='${LLAMA_DIR_B64}' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_CLI_B64='${LLAMA_CLI_B64}' RUNTIME_LABEL_B64='${RUNTIME_LABEL_B64}' MODEL_SOURCE_B64='${MODEL_SOURCE_B64}' MODEL_QUANT_B64='${MODEL_QUANT_B64}' PROMPT_B64='<omitted>' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
 
 REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL='' VLLM_MODEL_B64='${VLLM_MODEL_B64}' PROMPT_B64='${VLLM_PROMPT_B64}' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
 REMOTE_VLLM_CMD_PRINT="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL_B64='${VLLM_MODEL_B64}' PROMPT_B64='<omitted>' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
+
+REMOTE_INV_CMD="cat > /tmp/benchmark_spark_inventory.sh && chmod +x /tmp/benchmark_spark_inventory.sh && INVENTORY_DIRS='' INVENTORY_DIRS_B64='${INVENTORY_DIRS_B64}' MAX_DEPTH='${INVENTORY_MAX_DEPTH}' MAX_FILES='${INVENTORY_MAX_FILES}' OUT_DIR='${REMOTE_INV_OUT_DIR}' /tmp/benchmark_spark_inventory.sh"
+REMOTE_INV_CMD_PRINT="cat > /tmp/benchmark_spark_inventory.sh && chmod +x /tmp/benchmark_spark_inventory.sh && INVENTORY_DIRS_B64='${INVENTORY_DIRS_B64}' MAX_DEPTH='${INVENTORY_MAX_DEPTH}' MAX_FILES='${INVENTORY_MAX_FILES}' OUT_DIR='${REMOTE_INV_OUT_DIR}' /tmp/benchmark_spark_inventory.sh"
 
 LLAMA_PROMPT_META="$(prompt_meta_line "$LLAMA_PROMPT")"
 VLLM_PROMPT_META="$(prompt_meta_line "$VLLM_PROMPT")"
@@ -284,6 +298,10 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo "- MEASURE_TTFT (vLLM): ${MEASURE_TTFT:-<default>}"
     echo "- DS4_DIR (macos): ${DS4_DIR:-<default local>}"
     echo "- DS4_MODEL_GGUF (macos): ${DS4_MODEL_GGUF:-<unset>}"
+    echo "- SPARK_INVENTORY: ${SPARK_INVENTORY:-<default>}"
+    echo "- INVENTORY_DIRS: ${INVENTORY_DIRS:-<remote default>}"
+    echo "- INVENTORY_MAX_DEPTH: ${INVENTORY_MAX_DEPTH:-<remote default>}"
+    echo "- INVENTORY_MAX_FILES: ${INVENTORY_MAX_FILES:-<remote default>}"
     echo "- FETCH_REMOTE_ARTIFACTS: ${FETCH_REMOTE_ARTIFACTS:-<default>}"
     echo
     echo "## Remote Commands"
@@ -300,6 +318,12 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo
     echo '```sh'
     echo "ssh $SSH_OPTS $target \"$REMOTE_VLLM_CMD_PRINT\" < scripts/benchmark_vllm_spark.sh"
+    echo '```'
+    echo
+    echo "inventory (optional; SPARK_INVENTORY=1):"
+    echo
+    echo '```sh'
+    echo "ssh $SSH_OPTS $target \"$REMOTE_INV_CMD_PRINT\" < scripts/benchmark_spark_inventory.sh"
     echo '```'
     echo
     echo "## Safety Gates"
@@ -368,6 +392,42 @@ fi
     echo '```'
     echo
 } >"$REPORT_MD"
+
+if [ "$SPARK_INVENTORY" = "1" ]; then
+    echo "== running Spark inventory script (read-only) =="
+    rc_inv=0
+    ssh $SSH_OPTS "$target" "$REMOTE_INV_CMD" <"$repo_root/scripts/benchmark_spark_inventory.sh" \
+        >"$OUT_DIR/remote_inventory_stdout.txt" 2>"$OUT_DIR/remote_inventory_stderr.txt" || rc_inv=$?
+
+    INV_ARTIFACT_DIR="$OUT_DIR/spark_inventory_artifacts"
+    fetch_remote_artifacts "$target" "$REMOTE_INV_OUT_DIR" "$INV_ARTIFACT_DIR" "inventory" || true
+
+    {
+        echo "## Spark Inventory (Spark)"
+        echo
+        echo "- ssh_exit_code: $rc_inv"
+        echo "- spark_out_dir: $REMOTE_INV_OUT_DIR"
+        echo "- spark_artifacts_local: $INV_ARTIFACT_DIR"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_inventory_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_inventory_stderr.txt"
+        echo
+        echo "Stdout:"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_inventory_stdout.txt" || true
+        echo '```'
+        echo
+        echo "Stderr:"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_inventory_stderr.txt" || true
+        echo '```'
+        echo
+    } >>"$REPORT_MD"
+fi
 
 echo "== running llama.cpp benchmark script on spark (may be gated) =="
 rc_llama=0

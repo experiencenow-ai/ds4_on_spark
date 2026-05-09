@@ -39,6 +39,13 @@ Run from the Mac:
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+Optional: include a **read-only** Spark inventory pass (best-effort scan for
+candidate `*.gguf` files + common runtime binaries) in the same report:
+
+```sh
+SPARK_INVENTORY=1 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
 Optionally include the local `antirez/ds4` Mac/Metal probe in the same report:
 
 ```sh
@@ -64,6 +71,17 @@ REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-re
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+If you prefer a wrapper that enforces the canonical low-cost Milestone 0 run
+shape (still no downloads/builds), use:
+
+```sh
+MODEL_GGUF=/abs/path/to/model.gguf \
+LLAMA_CLI=/abs/path/to/v4-capable/llama-cli \
+MODEL_SOURCE='<hf-repo-or-local-note>' \
+MODEL_QUANT=Q2_K \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
 Use `REMOTE_BENCH_ENV` for env vars shared by both Spark benchmark scripts, or
 `REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime.
 
@@ -74,6 +92,7 @@ env vars before the SSH call. Unknown keys are ignored.
 Recognized keys (non-exhaustive):
 
 - Shared: `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
+- Inventory: `SPARK_INVENTORY`, `INVENTORY_DIRS`, `INVENTORY_MAX_DEPTH`, `INVENTORY_MAX_FILES`
 - llama.cpp: `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`
 - vLLM: `VLLM_MODEL`, `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`
 

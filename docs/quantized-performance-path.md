@@ -76,10 +76,21 @@ N_GPU_LAYERS=99 \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+Wrapper variant:
+
+```sh
+MODEL_GGUF=/abs/path/to/model.gguf \
+LLAMA_CLI=/abs/path/to/v4-capable/llama-cli \
+MODEL_SOURCE='<hf-repo-or-local-note>' \
+MODEL_QUANT=Q2_K \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
 Notes:
 
 - Prompts are passed to Spark as base64 (`PROMPT_B64`) to avoid shell quoting pitfalls; the report records prompt **hash + length**, not the prompt text.
 - The Spark scripts do not install packages or fetch weights; they only run when `ALLOW_RUN=1`.
+- Optional inventory: set `SPARK_INVENTORY=1` on the entrypoint to record a best-effort scan for candidate `*.gguf` files + runtime binaries (read-only).
 
 ## Next: External Runtime Baselines (llama.cpp / vLLM)
 
