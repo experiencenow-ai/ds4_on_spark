@@ -23,6 +23,7 @@ class InspectResult:
 	mtp_tensor_type_counts: dict[str, int]
 	mtp_layer_ids: list[int]
 	first_mtp_keys: list[str]
+	mtp_keys_all: list[str]
 
 
 def load_json(path: Path) -> Any:
@@ -195,7 +196,93 @@ def inspect_weight_keys(weight_keys: list[str], path: str, artifact_type: str) -
 		mtp_tensor_type_counts={},
 		mtp_layer_ids=sorted(mtp_layer_ids),
 		first_mtp_keys=mtp_keys[:10],
+		mtp_keys_all=mtp_keys,
 	)
+
+
+def load_default_contract_summary_path() -> Optional[Path]:
+	root = Path(__file__).resolve().parents[1]
+	candidate = root / "fixtures" / "model_contract" / "deepseek_v4_flash" / "contract_summary.json"
+	if candidate.exists():
+		return candidate
+	return None
+
+
+def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
+	if not mtp_keys:
+		return {"checked": False, "reason": "no mtp.* tensors present"}
+
+	tk = contract_summary.get("tensor_keys", {})
+	moe = contract_summary.get("moe", {})
+
+	required_layer_suffixes = tk.get("required_layer_suffixes", None)
+	required_mtp_additional_suffixes = tk.get("required_mtp_additional_suffixes", None)
+	score_gate_suffix = tk.get("mtp_score_gate_tensor_key_suffix", tk.get("score_gate_tensor_key_suffix", "ffn.gate.bias"))
+	n_routed_experts = moe.get("n_routed_experts", None)
+
+	if not isinstance(required_layer_suffixes, list) or not isinstance(required_mtp_additional_suffixes, list):
+		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_* lists"}
+	try:
+		n_routed_experts_i = int(n_routed_experts)
+	except Exception:
+		n_routed_experts_i = 0
+	if n_routed_experts_i <= 0:
+		return {"checked": False, "reason": "contract_summary missing moe.n_routed_experts"}
+
+	mtp_layer_ids_present: set[int] = set()
+	for k in mtp_keys:
+		parts = k.split(".", 2)
+		if len(parts) < 2:
+			continue
+		try:
+			mtp_layer_ids_present.add(int(parts[1]))
+		except ValueError:
+			continue
+
+	missing_required: set[str] = set()
+	forbidden_present: set[str] = set()
+
+	for mtp_id in sorted(mtp_layer_ids_present):
+		prefix = f"mtp.{mtp_id}."
+
+		for bad in ("attn.compressor.", "attn.indexer."):
+			if any(k.startswith(prefix + bad) for k in mtp_keys):
+				forbidden_present.add(prefix + bad)
+		for bad in ("ffn.gate.tid2eid", "embed.weight", "head.weight"):
+			if (prefix + bad) in mtp_keys:
+				forbidden_present.add(prefix + bad)
+
+		for suffix in required_layer_suffixes:
+			need = prefix + suffix
+			if need not in mtp_keys:
+				missing_required.add(need)
+
+		need_gate = prefix + str(score_gate_suffix)
+		if need_gate not in mtp_keys:
+			missing_required.add(need_gate)
+
+		for eid in range(n_routed_experts_i):
+			for w in (1, 2, 3):
+				for s in ("weight", "scale"):
+					need = f"{prefix}ffn.experts.{eid}.w{w}.{s}"
+					if need not in mtp_keys:
+						missing_required.add(need)
+
+		for suffix in required_mtp_additional_suffixes:
+			need = prefix + suffix
+			if need not in mtp_keys:
+				missing_required.add(need)
+
+	missing_sorted = sorted(missing_required)
+	forbidden_sorted = sorted(forbidden_present)
+	return {
+		"checked": True,
+		"complete": (len(missing_sorted) == 0 and len(forbidden_sorted) == 0),
+		"mtp_layer_ids_present": sorted(mtp_layer_ids_present),
+		"missing_required_count": len(missing_sorted),
+		"missing_required_sample": missing_sorted[:20],
+		"forbidden_present": forbidden_sorted[:20],
+	}
 
 
 def inspect_safetensors_index(path: Path) -> InspectResult:
@@ -293,6 +380,7 @@ def inspect_gguf(path: Path) -> InspectResult:
 		mtp_tensor_type_counts=dict(sorted(mtp_type_counts.items())),
 		mtp_layer_ids=res.mtp_layer_ids,
 		first_mtp_keys=res.first_mtp_keys,
+		mtp_keys_all=res.mtp_keys_all,
 	)
 
 
@@ -320,6 +408,12 @@ def main() -> int:
 	)
 	parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
 	parser.add_argument("--require-mtp", action="store_true", help="Exit non-zero if no mtp.* tensors are present.")
+	parser.add_argument(
+		"--contract-summary",
+		type=str,
+		default=None,
+		help="Optional path to a DeepSeek V4 Flash contract_summary.json. When provided (or when the repo default exists), emits an mtp_contract completeness check for mtp.* tensor keys.",
+	)
 	args = parser.parse_args()
 
 	results: list[InspectResult] = []
@@ -329,6 +423,14 @@ def main() -> int:
 		except Exception as e:
 			print(f"ERROR: {e}")
 			return 2
+
+	contract_summary: Optional[dict[str, Any]] = None
+	contract_path = Path(args.contract_summary) if args.contract_summary else load_default_contract_summary_path()
+	if contract_path is not None:
+		try:
+			contract_summary = load_json(contract_path)
+		except Exception:
+			contract_summary = None
 
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		return {
@@ -350,16 +452,21 @@ def main() -> int:
 		mtp_type_counts: Counter[str] = Counter()
 		mtp_layer_ids: set[int] = set()
 		first_mtp_keys: list[str] = []
+		mtp_keys_union: set[str] = set()
 		for res in results:
 			type_counts.update(res.tensor_type_counts)
 			mtp_type_counts.update(res.mtp_tensor_type_counts)
 			mtp_layer_ids.update(res.mtp_layer_ids)
+			mtp_keys_union.update(res.mtp_keys_all)
 			for k in res.first_mtp_keys:
 				if k in first_mtp_keys:
 					continue
 				first_mtp_keys.append(k)
 				if len(first_mtp_keys) >= 20:
 					break
+		mtp_contract = None
+		if contract_summary is not None:
+			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -371,11 +478,15 @@ def main() -> int:
 			"mtp_tensor_type_counts": dict(sorted(mtp_type_counts.items())),
 			"mtp_layer_ids": sorted(mtp_layer_ids),
 			"first_mtp_keys": first_mtp_keys,
+			"mtp_contract": mtp_contract,
 		}
 
 	if args.json:
 		if len(results) == 1:
-			print(json.dumps(as_dict(results[0]), indent=2, sort_keys=True))
+			out = as_dict(results[0])
+			if contract_summary is not None:
+				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
+			print(json.dumps(out, indent=2, sort_keys=True))
 		else:
 			print(
 				json.dumps(
@@ -400,6 +511,14 @@ def main() -> int:
 			print(f"mtp_layer_ids: {combined['mtp_layer_ids']}")
 			for k in combined["first_mtp_keys"]:
 				print(f"mtp_key: {k}")
+			mtp_contract = combined.get("mtp_contract", None)
+			if isinstance(mtp_contract, dict) and mtp_contract.get("checked") is True:
+				print(f"mtp_contract_complete: {str(bool(mtp_contract.get('complete', False))).lower()}")
+				print(f"mtp_contract_missing_required_count: {int(mtp_contract.get('missing_required_count', 0))}")
+				for k in list(mtp_contract.get("missing_required_sample", []))[:10]:
+					print(f"mtp_contract_missing_required: {k}")
+				for k in list(mtp_contract.get("forbidden_present", []))[:10]:
+					print(f"mtp_contract_forbidden_present: {k}")
 			for res in results:
 				print(f"artifact_path: {res.path}")
 				print(f"artifact_type: {res.artifact_type}")
@@ -427,6 +546,15 @@ def main() -> int:
 			print(f"mtp_layer_ids: {res.mtp_layer_ids}")
 			for k in res.first_mtp_keys:
 				print(f"mtp_key: {k}")
+			if contract_summary is not None:
+				mtp_contract = compute_mtp_contract(set(res.mtp_keys_all), contract_summary)
+				if mtp_contract.get("checked") is True:
+					print(f"mtp_contract_complete: {str(bool(mtp_contract.get('complete', False))).lower()}")
+					print(f"mtp_contract_missing_required_count: {int(mtp_contract.get('missing_required_count', 0))}")
+					for k in list(mtp_contract.get("missing_required_sample", []))[:10]:
+						print(f"mtp_contract_missing_required: {k}")
+					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
+						print(f"mtp_contract_forbidden_present: {k}")
 
 	if args.require_mtp and not any(r.mtp_present for r in results):
 		return 1
