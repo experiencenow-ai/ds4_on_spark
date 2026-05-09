@@ -98,6 +98,13 @@ For ad-hoc runs without systemd, the script supports parsing the env file:
 sudo /opt/ds4/scripts/ops_tp2_readiness.sh --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
 ```
 
+To gate a TP=2 run on required inputs, add `--strict` (fails non-zero if required
+env/config is missing or invalid):
+
+```bash
+sudo /opt/ds4/scripts/ops_tp2_readiness.sh --strict --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0
+```
+
 ## Optional: Spark Standalone Sanity
 
 If Spark is managed locally via systemd, you can also sanity check the Spark env (non-destructive):

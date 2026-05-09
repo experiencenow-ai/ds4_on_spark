@@ -7,7 +7,7 @@ usage()
 ops_tp2_readiness.sh -- safe DS4 TP=2 readiness checks
 
 Usage:
-  ops_tp2_readiness.sh --self <name> [--peer <host>] [--peer-ssh <user@host>] [--env <path>]...
+  ops_tp2_readiness.sh --self <name> [--strict] [--peer <host>] [--peer-ssh <user@host>] [--env <path>]...
 
 Environment:
   SSH_OPTS            Optional ssh options override.
@@ -19,11 +19,12 @@ Environment:
   DS4_MASTER_PORT     Optional; printed when present.
   DS4_METRICS_ADDR    Optional; printed when present.
   DS4_METRICS_PORT    Optional; printed when present.
-  DS4_CONFIG_PATH     Optional; checked for existence when present.
+  DS4_CONFIG_PATH     Optional; checked for existence when present (required with --strict).
 
 Notes:
   - This script is non-destructive and should not require sudo.
   - It does not modify networking, systemd, or GPU settings.
+  - `--strict` exits non-zero when required TP=2 inputs are missing/invalid.
   - `--env` parses env files as simple KEY=VALUE assignments (no shell execution).
   - Prefix a path with '-' to make it optional (skipped when missing), e.g.:
       ops_tp2_readiness.sh --self spark0 --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
@@ -34,12 +35,17 @@ self=""
 peer=""
 peer_ssh=""
 env_paths=""
+strict=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --self)
             self="${2:-}"
             shift 2
+            ;;
+        --strict)
+            strict=1
+            shift
             ;;
         --peer)
             peer="${2:-}"
@@ -168,6 +174,100 @@ if [ "$peer_ssh" = "" ]; then
     peer_ssh="${DS4_PEER_SSH:-}"
 fi
 
+is_uint()
+{
+    case "${1:-}" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+validate_port()
+{
+    key="$1"
+    val="$2"
+    if [ "$val" = "" ]; then
+        return 0
+    fi
+    if ! is_uint "$val"; then
+        echo "$key must be an integer: $val" >&2
+        return 1
+    fi
+    if [ "$val" -lt 1 ] || [ "$val" -gt 65535 ]; then
+        echo "$key out of range (1-65535): $val" >&2
+        return 1
+    fi
+    return 0
+}
+
+strict_validate()
+{
+    fail=0
+
+    if [ "${DS4_CONFIG_PATH:-}" = "" ]; then
+        echo "strict: DS4_CONFIG_PATH is required" >&2
+        fail=1
+    else
+        if [ ! -f "$DS4_CONFIG_PATH" ]; then
+            echo "strict: config missing: $DS4_CONFIG_PATH" >&2
+            fail=1
+        elif [ ! -r "$DS4_CONFIG_PATH" ]; then
+            echo "strict: config unreadable: $DS4_CONFIG_PATH" >&2
+            fail=1
+        fi
+    fi
+
+    if [ "${DS4_MASTER_ADDR:-}" = "" ]; then
+        echo "strict: DS4_MASTER_ADDR is required" >&2
+        fail=1
+    fi
+
+    if [ "${DS4_MASTER_PORT:-}" = "" ]; then
+        echo "strict: DS4_MASTER_PORT is required" >&2
+        fail=1
+    else
+        validate_port "DS4_MASTER_PORT" "$DS4_MASTER_PORT" || fail=1
+    fi
+
+    if [ "${DS4_METRICS_PORT:-}" != "" ]; then
+        validate_port "DS4_METRICS_PORT" "$DS4_METRICS_PORT" || fail=1
+    fi
+
+    if [ "${DS4_WORLD_SIZE:-}" = "" ]; then
+        echo "strict: DS4_WORLD_SIZE is required" >&2
+        fail=1
+    elif ! is_uint "$DS4_WORLD_SIZE"; then
+        echo "strict: DS4_WORLD_SIZE must be an integer: $DS4_WORLD_SIZE" >&2
+        fail=1
+    fi
+
+    if [ "${DS4_RANK:-}" = "" ]; then
+        echo "strict: DS4_RANK is required" >&2
+        fail=1
+    elif ! is_uint "$DS4_RANK"; then
+        echo "strict: DS4_RANK must be an integer: $DS4_RANK" >&2
+        fail=1
+    fi
+
+    if is_uint "${DS4_WORLD_SIZE:-}" && is_uint "${DS4_RANK:-}"; then
+        if [ "$DS4_WORLD_SIZE" -le 0 ]; then
+            echo "strict: DS4_WORLD_SIZE must be > 0: $DS4_WORLD_SIZE" >&2
+            fail=1
+        fi
+        if [ "$DS4_RANK" -ge "$DS4_WORLD_SIZE" ]; then
+            echo "strict: DS4_RANK must be < DS4_WORLD_SIZE ($DS4_RANK >= $DS4_WORLD_SIZE)" >&2
+            fail=1
+        fi
+    fi
+
+    if [ "$fail" -ne 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
 print_if_set()
 {
     key="$1"
@@ -243,6 +343,17 @@ echo
 echo "== time =="
 timedatectl status 2>/dev/null || true
 echo
+
+if [ "$strict" -ne 0 ]; then
+    echo "== strict env validation =="
+    if strict_validate; then
+        echo "strict ok"
+    else
+        echo "strict failed" >&2
+        exit 1
+    fi
+    echo
+fi
 
 echo "== ds4 env (optional) =="
 print_if_set DS4_INSTANCE

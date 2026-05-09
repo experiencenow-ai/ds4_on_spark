@@ -25,7 +25,7 @@ journalctl -u ds4@spark0.service -o json | head
 ```
 
 If file logs are needed, use `/var/log/ds4/` and ensure log rotation is in
-place before a soak test.
+place before a soak test. Example: `deploy/config/logrotate.ds4.conf.example`.
 
 ### Journald Persistence (Optional)
 
