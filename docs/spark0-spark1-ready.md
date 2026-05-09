@@ -17,6 +17,7 @@ REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 ```
 
 Omit args to use the same default targets.
+Targets may be passed as `user@host`; discovery strips the `user@` prefix for reachability + `*.local` resolution.
 
 ## Spark Probe (Redacted)
 
@@ -41,7 +42,7 @@ REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local 
 REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
 ```
 
-- Force the `nvcc` runtime probe compile arch (defaults to deriving from the max `nvidia-smi` compute capability when available):
+- Force the `nvcc` runtime probe compile arch (forwarded into the remote SSH session; defaults to deriving from the max `nvidia-smi` compute capability when available):
 
 ```bash
 REDACT=1 NVCC_ARCH=sm_121 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
@@ -59,9 +60,11 @@ Notes:
 
 - `nvidia-smi` driver + CUDA version.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
+- `nvidia-smi` PCIe link state line(s) (gen/width max/current).
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe).
 - `nvcc` path and version (toolkit version).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
+- CUDA toolkit cross-check (`nvcc release` vs `cuda.h CUDA_VERSION`) when present.
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
 - `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
 - Storage summary (`df -h` + `lsblk` disk model/size).

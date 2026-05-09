@@ -46,6 +46,17 @@ fi
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
+NVCC_ARCH="${NVCC_ARCH:-}"
+if [ "$NVCC_ARCH" != "" ]; then
+	case "$NVCC_ARCH" in
+		sm_[0-9][0-9]*)
+			;;
+		*)
+			echo "warning: ignoring invalid NVCC_ARCH (expected sm_<digits>): $NVCC_ARCH" >&2
+			NVCC_ARCH=""
+			;;
+	esac
+fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SPARK_KNOWN_HOSTS -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -62,9 +73,12 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 			echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$PWD" rev-parse --short HEAD 2>/dev/null || true)"
 		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
-		fi
+	fi
 	fi
 	echo "probe target: $target"
+	if [ "$NVCC_ARCH" != "" ]; then
+		echo "NVCC_ARCH: $NVCC_ARCH"
+	fi
 	echo
 	ssh $SSH_OPTS "$target" 'set -eu
 export LANG=C LC_ALL=C
@@ -72,6 +86,7 @@ export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
+nvcc_arch_override='"$NVCC_ARCH"'
 echo "== probe meta =="
 date -u
 echo "target user: $(id -un 2>/dev/null || true)"
@@ -123,13 +138,20 @@ if [ "$q" != "" ]; then
 	compute_cap="$(printf "%s\n" "$q" | awk -F"," "{ c=\$5; gsub(/^[ \\t]+|[ \\t]+$/, \"\", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,\".\"); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != \"\" ) print bestc; }")"
 fi
 nvcc_arch=""
-if [ "${NVCC_ARCH:-}" != "" ]; then
-	nvcc_arch="$NVCC_ARCH"
+if [ "$nvcc_arch_override" != "" ]; then
+	nvcc_arch="$nvcc_arch_override"
 elif [ "$compute_cap" != "" ]; then
 	nvcc_arch="sm_$(printf "%s" "$compute_cap" | sed -E "s/[^0-9.]//g; s/[.]//g")"
 fi
 if [ "$compute_cap" != "" ]; then
 	echo "selected compute_cap: $compute_cap"
+fi
+echo
+echo "== nvidia-smi pcie link state =="
+if command -v nvidia-smi >/dev/null 2>&1; then
+	nvidia-smi --query-gpu=index,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current --format=csv,noheader,nounits 2>/dev/null || echo "pcie link query not supported"
+else
+	echo "nvidia-smi not found"
 fi
 echo
 echo "== nvidia-smi cuda version =="
@@ -183,11 +205,50 @@ command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null |
 echo
 echo "== cuda headers (cuda.h) =="
 cuda_h="/usr/local/cuda/include/cuda.h"
+cuda_macro=""
 if [ -r "$cuda_h" ]; then
 	echo "$cuda_h"
 	grep -E "^#define (CUDA_VERSION|CUDART_VERSION) " "$cuda_h" 2>/dev/null || true
+	cuda_macro="$(grep -E "^#define CUDA_VERSION " "$cuda_h" 2>/dev/null | awk "{ print \$3 }" | head -n 1 || true)"
+	case "$cuda_macro" in
+		""|*[!0-9]*)
+			cuda_macro=""
+			;;
+		*)
+			;;
+	esac
 else
 	echo "cuda.h not found"
+fi
+echo
+echo "== cuda toolkit cross-check =="
+nvcc_release=""
+if [ "$nvcc_bin" != "" ]; then
+	nvcc_release="$("$nvcc_bin" --version 2>/dev/null | sed -n "s/.*release \\([0-9][0-9]*\\)\\.\\([0-9][0-9]*\\).*/\\1 \\2/p" | head -n 1 || true)"
+fi
+if [ "$nvcc_release" != "" ] && [ "$cuda_macro" != "" ]; then
+	set -- $nvcc_release
+	nvcc_rel_maj="$1"
+	nvcc_rel_min="$2"
+	cuda_maj="$((cuda_macro / 1000))"
+	cuda_min="$(((cuda_macro % 1000) / 10))"
+	echo "nvcc release: $nvcc_rel_maj.$nvcc_rel_min"
+	echo "cuda.h CUDA_VERSION: $cuda_maj.$cuda_min ($cuda_macro)"
+	if [ "$nvcc_rel_maj" != "$cuda_maj" ] || [ "$nvcc_rel_min" != "$cuda_min" ]; then
+		echo "warning: nvcc release and cuda.h CUDA_VERSION differ; check /usr/local/cuda symlink"
+	fi
+elif [ "$nvcc_release" != "" ]; then
+	set -- $nvcc_release
+	echo "nvcc release: $1.$2"
+	echo "cuda.h CUDA_VERSION: unavailable"
+elif [ "$cuda_macro" != "" ]; then
+	cuda_maj="$((cuda_macro / 1000))"
+	cuda_min="$(((cuda_macro % 1000) / 10))"
+	echo "nvcc release: unavailable"
+	echo "cuda.h CUDA_VERSION: $cuda_maj.$cuda_min ($cuda_macro)"
+else
+	echo "nvcc release: unavailable"
+	echo "cuda.h CUDA_VERSION: unavailable"
 fi
 echo
 echo "== cuda libraries (ldconfig, first hits) =="

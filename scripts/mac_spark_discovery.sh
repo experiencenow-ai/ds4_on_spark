@@ -77,10 +77,18 @@ kill "$pid" >/dev/null 2>&1 || true
 wait "$pid" >/dev/null 2>&1 || true
 echo
 echo "== mdns resolution, 3 seconds each =="
-for host in $targets; do
+for target in $targets; do
+	host="$target"
+	case "$host" in
+		*@*)
+			host="${host#*@}"
+			;;
+		*)
+			;;
+	esac
 	case "$host" in
 		*.local)
-			echo "-- $host --"
+			echo "-- $target --"
 			dns-sd -G v4v6 "$host" &
 			pid="$!"
 			sleep 3
@@ -93,8 +101,16 @@ for host in $targets; do
 done
 echo
 echo "== known target checks =="
-for host in $targets; do
-	printf "%s: " "$host"
+for target in $targets; do
+	host="$target"
+	case "$host" in
+		*@*)
+			host="${host#*@}"
+			;;
+		*)
+			;;
+	esac
+	printf "%s: " "$target"
 	nc -vz -G 2 "$host" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
 done
 } >"$tmp"
