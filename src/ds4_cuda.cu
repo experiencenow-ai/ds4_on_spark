@@ -34,6 +34,36 @@ int32_t ds4_cuda_is_enabled_build(void)
 	return(1);
 }
 
+ds4_cuda_status_t ds4_cuda_get_device(int32_t *out_dev)
+{
+	int dev;
+	cudaError_t err;
+	if ( out_dev == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out_dev = -1;
+	dev = -1;
+	err = cudaGetDevice(&dev);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	*out_dev = (int32_t)dev;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_set_device(int32_t dev)
+{
+	cudaError_t err;
+	if ( dev < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	err = cudaSetDevice((int)dev);
+	if ( err != cudaSuccess )
+	{
+		if ( err == cudaErrorInvalidDevice || err == cudaErrorNoDevice )
+			return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+		return(ds4_cuda_fail((int32_t)err));
+	}
+	return(ds4_cuda_ok());
+}
+
 ds4_cuda_status_t ds4_cuda_init(void)
 {
 	int dev_count;

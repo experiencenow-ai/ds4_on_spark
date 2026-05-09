@@ -43,6 +43,8 @@ ds4_cuda_status_t ds4_cuda_fail(int32_t code);
 int32_t ds4_cuda_is_ok(ds4_cuda_status_t st);
 int32_t ds4_cuda_is_enabled_build(void);
 ds4_cuda_status_t ds4_cuda_init(void);
+ds4_cuda_status_t ds4_cuda_get_device(int32_t *out_dev);
+ds4_cuda_status_t ds4_cuda_set_device(int32_t dev);
 const char *ds4_cuda_errstr(ds4_cuda_status_t st);
 ds4_cuda_status_t ds4_cuda_last_error(void);
 ds4_cuda_status_t ds4_cuda_peek_last_error(void);
