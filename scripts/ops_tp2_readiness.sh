@@ -11,7 +11,7 @@ Usage:
 
 Environment:
   SSH_OPTS            Optional ssh options override.
-  DS4_PEER_HOST       Optional default peer hostname/IP (used if --peer omitted).
+  DS4_PEER_HOST       Optional default peer hostname/IP (used if --peer omitted; required with --strict when DS4_WORLD_SIZE > 1).
   DS4_PEER_SSH        Optional default peer SSH target (used if --peer-ssh omitted).
   DS4_WORLD_SIZE      Optional; printed when present.
   DS4_RANK            Optional; printed when present.
@@ -259,6 +259,18 @@ strict_validate()
         if [ "$DS4_RANK" -ge "$DS4_WORLD_SIZE" ]; then
             echo "strict: DS4_RANK must be < DS4_WORLD_SIZE ($DS4_RANK >= $DS4_WORLD_SIZE)" >&2
             fail=1
+        fi
+        if [ "$DS4_WORLD_SIZE" -gt 1 ]; then
+            case "${DS4_MASTER_ADDR:-}" in
+                127.0.0.1|localhost)
+                    echo "strict: DS4_MASTER_ADDR looks loopback for DS4_WORLD_SIZE=$DS4_WORLD_SIZE: ${DS4_MASTER_ADDR}" >&2
+                    fail=1
+                    ;;
+            esac
+            if [ "${DS4_PEER_HOST:-}" = "" ]; then
+                echo "strict: DS4_PEER_HOST is required for DS4_WORLD_SIZE=$DS4_WORLD_SIZE" >&2
+                fail=1
+            fi
         fi
     fi
 

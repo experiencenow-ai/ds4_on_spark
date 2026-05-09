@@ -1,0 +1,17 @@
+# Example /etc/hosts lines for stable Spark0/Spark1 name resolution.
+#
+# Copy to (append on each Spark, human-run):
+#   /etc/hosts
+#
+# Use this only if you are NOT relying on mDNS (`*.local`) and you have a stable
+# wired subnet. Adjust IPs to match your actual cabling + static leases.
+#
+# Suggested convention:
+#   spark0 = 10.0.0.2
+#   spark1 = 10.0.0.3
+#
+# The DS4 env examples default to `spark0.local` / `spark1.local` for early
+# bring-up; if you pin /etc/hosts, update DS4_MASTER_ADDR and DS4_PEER_HOST to
+# match the pinned hostnames.
+10.0.0.2 spark0
+10.0.0.3 spark1

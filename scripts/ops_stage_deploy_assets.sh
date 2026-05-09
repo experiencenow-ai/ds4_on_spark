@@ -97,4 +97,9 @@ sudo logrotate -d /etc/logrotate.d/ds4 || true
 == optional (Prometheus scrape snippet, human-run) ==
 # Merge this into your Prometheus config and reload Prometheus.
 cat /tmp/ds4-config/prometheus-scrape.ds4.yml.example
+
+== optional (pin Spark0/Spark1 hostnames, human-run) ==
+# Use only if you are NOT relying on mDNS (`*.local`) and you have a stable wired subnet.
+# Review, then append to /etc/hosts on each Spark:
+cat /tmp/ds4-config/hosts.ds4.spark01.example
 EOF
