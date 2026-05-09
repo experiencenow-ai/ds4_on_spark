@@ -7,6 +7,10 @@ REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_compile_only}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 probe_dir="$repo_root/tools/cuda_probe"
+tar_no_mac_metadata=""
+if tar --version 2>/dev/null | grep -qi "bsdtar"; then
+	tar_no_mac_metadata="--no-mac-metadata"
+fi
 
 if [ ! -d "$probe_dir" ]; then
 	echo "missing $probe_dir" >&2
@@ -18,8 +22,8 @@ rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
 "
 
-env COPYFILE_DISABLE=1 tar -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
-tar -C \"$REMOTE_DIR\" -xf -
+LC_ALL=C env COPYFILE_DISABLE=1 tar --no-xattrs $tar_no_mac_metadata -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
+LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
 "
 
 ssh $SSH_OPTS "$target" "set -eu
