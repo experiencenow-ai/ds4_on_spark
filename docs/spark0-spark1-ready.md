@@ -63,6 +63,7 @@ Notes:
 
 - `nvidia-smi` driver + CUDA version.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
+- `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported).
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available).
 - `nvcc` path and version (toolkit version).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
