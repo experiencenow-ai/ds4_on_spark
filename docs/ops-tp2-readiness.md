@@ -137,6 +137,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ds4-preflight@spark0.timer
 ```
 
+Strict variant (fails non-zero on missing/invalid TP=2 inputs; human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-strict@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-strict@spark0.timer
+```
+
 ## Optional: Spark Standalone Sanity
 
 If Spark is managed locally via systemd, you can also sanity check the Spark env (non-destructive):

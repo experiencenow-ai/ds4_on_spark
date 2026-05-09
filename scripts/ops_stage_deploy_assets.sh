@@ -58,6 +58,7 @@ rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_staged_assets.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_validate_installed_assets.sh" "$target:/tmp/ds4-scripts/"
 
 cat <<EOF
 
@@ -100,10 +101,23 @@ sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight@.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now ds4-preflight@${instance}.timer
 
+== optional (periodic strict preflight timer, human-run) ==
+# Runs strict (fails non-zero on missing/invalid TP=2 inputs) preflight on boot and periodically after.
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-strict@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-strict@${instance}.timer
+
 == optional (Spark standalone systemd, human-run) ==
 sudo install -m 0644 /tmp/ds4-systemd/spark-*.service /etc/systemd/system/
 sudo install -g ds4 -m 0640 /tmp/ds4-config/spark-${instance}.env.example /etc/ds4/spark-${instance}.env
 sudo /opt/ds4/scripts/ops_spark_standalone_check.sh --role worker --env /etc/ds4/spark-${instance}.env --master-host spark0.local
+
+== optional (validate installed assets, human-run) ==
+# Confirms installed systemd templates + /etc/ds4 configs are consistent, then runs preflight.
+# You can run from /tmp or install it under /opt/ds4/scripts/ for convenience.
+/tmp/ds4-scripts/ops_validate_installed_assets.sh --instance ${instance}
+#sudo install -m 0755 /tmp/ds4-scripts/ops_validate_installed_assets.sh /opt/ds4/scripts/ops_validate_installed_assets.sh
+#/opt/ds4/scripts/ops_validate_installed_assets.sh --instance ${instance}
 
 == optional (journald persistence, human-run) ==
 sudo install -d -m 0755 /etc/systemd/journald.conf.d
