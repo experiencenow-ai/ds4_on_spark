@@ -16,7 +16,7 @@ DS4_WERROR ?= OFF
 DS4_ENABLE_ASAN ?= OFF
 DS4_ENABLE_UBSAN ?= OFF
 
-.PHONY: all configure build test check check-cuda install clean
+.PHONY: all configure build test check check-cuda ci ci-cuda install clean
 
 all: build
 
@@ -34,6 +34,10 @@ check:
 
 check-cuda:
 	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=ON DS4_WERROR=ON
+
+ci: check
+
+ci-cuda: check-cuda
 
 install: build
 	@if [ -n "$(PREFIX)" ]; then cmake --install "$(BUILD_DIR)" --prefix "$(PREFIX)" $(INSTALL_OPTS); else cmake --install "$(BUILD_DIR)" $(INSTALL_OPTS); fi

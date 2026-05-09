@@ -4,6 +4,7 @@ This repo uses CMake and ships a thin `Makefile` wrapper.
 
 See also:
 
+- `docs/build-ci.md`
 - `docs/build-macos.md`
 - `docs/build-linux.md`
 - `docs/build-spark.md`
