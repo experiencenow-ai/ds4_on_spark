@@ -431,6 +431,80 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_jsonl_accepted_mtp_derives_accept_len(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0],"accepted_mtp":0}\n')
+                f.write('{"t_ms":0.01,"cls":"batch","candidates":[0],"accepted_mtp":1}\n')
+                f.write('{"t_ms":0.02,"cls":"batch","candidates":[0],"accepted_mtp":2}\n')
+            trace = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual([r.accepted_mtp for r in trace], [0, 1, 2])
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=1,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=0.1,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+                mtp_draft_len=2,
+                mtp_accept_prob=0.0,
+                mtp_accept_decay=1.0,
+                mtp_draft_cost_scale=0.25,
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.mtp_accept_len_per_step, [1, 2, 3])
+            self.assertEqual(m.mtp_output_tokens, 6)
+        finally:
+            os.unlink(path)
+
+    def test_trace_jsonl_rejected_mtp_derives_accept_len(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0],"rejected_mtp":2}\n')
+                f.write('{"t_ms":0.01,"cls":"batch","candidates":[0],"rejected_mtp":1}\n')
+                f.write('{"t_ms":0.02,"cls":"batch","candidates":[0],"rejected_mtp":0}\n')
+            trace = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual([r.rejected_mtp for r in trace], [2, 1, 0])
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=1,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=0.1,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+                mtp_draft_len=2,
+                mtp_accept_prob=0.0,
+                mtp_accept_decay=1.0,
+                mtp_draft_cost_scale=0.25,
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.mtp_accept_len_per_step, [1, 2, 3])
+            self.assertEqual(m.mtp_output_tokens, 6)
+        finally:
+            os.unlink(path)
+
     def test_trace_replay_expert_id_range_checked(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(2,)),

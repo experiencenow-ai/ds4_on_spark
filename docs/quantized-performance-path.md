@@ -89,6 +89,7 @@ Trace JSONL fields:
 - `k`: optional chosen `K`; required with `--k-mode trace`
 - `scores`: optional per-candidate router scores
 - `mtp_accept_len`: optional accept length for MTP replay
+- `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
 - `cost_scale`: optional per-token cost multiplier
 
 ## Expert Queueing
