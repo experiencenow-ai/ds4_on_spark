@@ -21,11 +21,19 @@ Notes:
 ## Probe Excerpts (Redacted)
 
 ```text
+== pci nvidia (numeric ids) ==
+0000:00:00.0 PCI bridge [0604]: NVIDIA Corporation Device [10de:22ce] (rev 01)
+000f:01:00.0 VGA compatible controller [0300]: NVIDIA Corporation Device [10de:2e12] (rev a1)
+
 == nvidia-smi inventory (index + pci bus) ==
 columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
 0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
 selected compute_cap: 12.1
 selected nvcc arch: sm_121
+
+== nvidia-smi pci ids (optional) ==
+columns: index,pci.bus_id,pci.device_id,pci.sub_device_id
+0, 0000000F:01:00.0, 0x2E1210DE, 0x10DE
 
 == nvidia-smi cuda version ==
 CUDA Version: 13.0
@@ -68,6 +76,14 @@ current_link_speed: 2.5 GT/s PCIe
 current_link_width: 1
 max_link_speed: 2.5 GT/s PCIe
 max_link_width: 16
+```
+
+## Update: Probe Refresh (2026-05-09 15:42Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T154208Z_probe12.txt
 ```
 
 ```text
