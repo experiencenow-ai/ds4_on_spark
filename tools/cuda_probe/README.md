@@ -18,6 +18,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
+- `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.
@@ -34,6 +35,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_sm120_compat_probe
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
+./tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke
 ./tools/cuda_probe/bin/cuda_sm121_smem_optin
 ./tools/cuda_probe/bin/cuda_sm121_devattrs
 ./tools/cuda_probe/bin/cuda_sm121_fp8_conv

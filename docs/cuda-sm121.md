@@ -99,3 +99,15 @@ The probe `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` is a tiny compile/run che
 - prints a couple of output elements plus `max_abs_err` against an expected result
 
 Observed on Spark0 (2026-05-09): `wmma_smoke ... max_abs_err=0`.
+
+## cuBLASLt FP8 Matmul Smoke
+
+DeepGEMM and many CUTLASS kernels use FP8 inputs; a quick “works-first” gate is whether cuBLASLt can execute an FP8 GEMM on GB10.
+
+The probe `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` is a tiny compile/run check that:
+
+- uses FP8 E4M3 inputs for A/B (`CUDA_R_8F_E4M3`)
+- accumulates into FP32 (`CUBLAS_COMPUTE_32F`) and writes FP32 output
+- uses default scale pointers (NULL ⇒ scale=1) to keep the API surface minimal
+
+Observed on Spark0 (2026-05-09): `cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0`.
