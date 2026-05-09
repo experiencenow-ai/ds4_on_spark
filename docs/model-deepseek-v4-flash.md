@@ -329,6 +329,14 @@ Tokenizer (from `tokenizer_config.json`):
 - EOS token string: `<｜end▁of▁sentence｜>` (`eos_token_id: 1` in `config.json`)
 - PAD token is EOS.
 
+Tokenizer backend (from `tokenizer.json`):
+
+- Model: `BPE` (base vocab size 128000 + merges; effective vocab size matches `vocab_size=129280` once added tokens are applied).
+- Pre-tokenizer: a `Sequence` of 3 `Split` regex passes followed by `ByteLevel` (this controls the **exact** text → byte-level pieces fed into BPE).
+- Post-processor + decoder: `ByteLevel`.
+
+These backend pipeline facts (including the exact `Split` regex patterns and `ByteLevel` flags) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tokenizer.tokenizer_json_summary` so external runtimes can reproduce tokenization without guessing.
+
 Message rendering:
 
 - Upstream provides `encoding/encoding_dsv4.py` with templates for:

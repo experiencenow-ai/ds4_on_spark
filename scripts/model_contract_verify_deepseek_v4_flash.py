@@ -97,6 +97,23 @@ def main() -> int:
 						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
 					if enc.get("eos_token") != tok.get("eos_token"):
 						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+					tok_js = tok.get("tokenizer_json_summary")
+					if not isinstance(tok_js, dict):
+						failures.append(Failure(40, f"contract summary missing tokenizer.tokenizer_json_summary (expected dict): {contract_summary}"))
+					else:
+						if tok_js.get("model_type") != "BPE":
+							failures.append(Failure(41, f"contract summary tokenizer.tokenizer_json_summary.model_type must be BPE: {contract_summary}"))
+						if tok_js.get("effective_vocab_size_matches_config") is not True:
+							failures.append(Failure(42, f"contract summary tokenizer.tokenizer_json_summary.effective_vocab_size_matches_config must be true: {contract_summary}"))
+						pre = tok_js.get("pre_tokenizer")
+						post = tok_js.get("post_processor")
+						dec = tok_js.get("decoder")
+						if not (isinstance(pre, dict) and pre.get("type") == "Sequence"):
+							failures.append(Failure(43, f"contract summary tokenizer.tokenizer_json_summary.pre_tokenizer must be a Sequence: {contract_summary}"))
+						if not (isinstance(post, dict) and post.get("type") == "ByteLevel"):
+							failures.append(Failure(44, f"contract summary tokenizer.tokenizer_json_summary.post_processor must be ByteLevel: {contract_summary}"))
+						if not (isinstance(dec, dict) and dec.get("type") == "ByteLevel"):
+							failures.append(Failure(45, f"contract summary tokenizer.tokenizer_json_summary.decoder must be ByteLevel: {contract_summary}"))
 					required_enc_fields = [
 						"system_msg_template",
 						"user_msg_template",

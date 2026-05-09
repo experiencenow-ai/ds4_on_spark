@@ -135,6 +135,93 @@ def parse_encoding_constants(encoding_py: Path) -> dict:
 		}
 	}
 
+def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int) -> dict:
+	if not tokenizer_json.exists():
+		return {"tokenizer_json_summary": None}
+
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return {"tokenizer_json_summary": None}
+
+	model = tok.get("model", {}) if isinstance(tok, dict) else {}
+	model_type = model.get("type") if isinstance(model, dict) else None
+	vocab = model.get("vocab") if isinstance(model, dict) else None
+	merges = model.get("merges") if isinstance(model, dict) else None
+
+	base_vocab_size: Optional[int] = None
+	if isinstance(vocab, dict):
+		base_vocab_size = int(len(vocab))
+
+	merges_count: Optional[int] = None
+	if isinstance(merges, list):
+		merges_count = int(len(merges))
+
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	added_tokens_count: Optional[int] = None
+	added_special_tokens_count: Optional[int] = None
+	added_id_min: Optional[int] = None
+	added_id_max: Optional[int] = None
+	if isinstance(added_tokens, list):
+		added_tokens_count = int(len(added_tokens))
+		added_special_tokens_count = int(sum(1 for t in added_tokens if isinstance(t, dict) and t.get("special") is True))
+		ids: list[int] = [int(t["id"]) for t in added_tokens if isinstance(t, dict) and isinstance(t.get("id"), int)]
+		if ids:
+			added_id_min = int(min(ids))
+			added_id_max = int(max(ids))
+
+	effective_vocab_size: Optional[int] = None
+	if isinstance(base_vocab_size, int):
+		effective_vocab_size = int(base_vocab_size)
+		if isinstance(added_id_max, int):
+			effective_vocab_size = int(max(effective_vocab_size, added_id_max + 1))
+
+	def summarize_tok_component(node: object) -> Optional[dict]:
+		if not isinstance(node, dict):
+			return None
+		t = node.get("type")
+		if not isinstance(t, str):
+			return None
+		out: dict[str, object] = {"type": t}
+		if t == "Sequence":
+			items = node.get("normalizers")
+			if items is None:
+				items = node.get("pretokenizers")
+			if isinstance(items, list):
+				out["sequence"] = [summarize_tok_component(c) for c in items]
+		elif t == "Split":
+			pat = node.get("pattern", {})
+			pat_re = None
+			if isinstance(pat, dict):
+				pat_re = pat.get("Regex")
+			out["pattern_regex"] = pat_re
+			out["behavior"] = node.get("behavior")
+			out["invert"] = node.get("invert")
+		elif t == "ByteLevel":
+			for k in ("add_prefix_space", "trim_offsets", "use_regex"):
+				if k in node:
+					out[k] = node.get(k)
+		return out
+
+	return {
+		"tokenizer_json_summary": {
+			"tokenizers_json_version": tok.get("version"),
+			"model_type": model_type,
+			"base_vocab_size": base_vocab_size,
+			"merges_count": merges_count,
+			"added_tokens_count": added_tokens_count,
+			"added_special_tokens_count": added_special_tokens_count,
+			"added_token_id_min": added_id_min,
+			"added_token_id_max": added_id_max,
+			"effective_vocab_size": effective_vocab_size,
+			"effective_vocab_size_matches_config": (effective_vocab_size == int(expected_vocab_size)) if isinstance(effective_vocab_size, int) else None,
+			"normalizer": summarize_tok_component(tok.get("normalizer")),
+			"pre_tokenizer": summarize_tok_component(tok.get("pre_tokenizer")),
+			"post_processor": summarize_tok_component(tok.get("post_processor")),
+			"decoder": summarize_tok_component(tok.get("decoder")),
+		}
+	}
+
 
 def layer_type_from_ratio(ratio: int) -> str:
 	if ratio == 0:
@@ -596,6 +683,7 @@ def build_contract() -> dict:
 	inf = load_json(FIX / "inference" / "config.json")
 	tok_cfg = load_json(FIX / "tokenizer_config.json")
 	idx = load_json(FIX / "model.safetensors.index.json")
+	tok_json_sum = parse_tokenizer_json_summary(FIX / "tokenizer.json", int(cfg["vocab_size"]))
 	inf_model = parse_inference_quant_constants(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	sem = parse_inference_mla_and_cache_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	moe_sem = parse_inference_moe_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
@@ -801,6 +889,7 @@ def build_contract() -> dict:
 					"eos_token_id": int(cfg["eos_token_id"]),
 					"pad_token_is_eos": True,
 					"encoding_oracle_dir": "encoding/tests",
+					**tok_json_sum,
 				},
 			"quantization": {
 				"config_quantization_config": cfg.get("quantization_config"),
