@@ -64,6 +64,47 @@ static int32_t ds4_parse_bool(const char *s,int32_t slen,int32_t *out)
 	return(-5);
 }
 
+static int32_t ds4_parse_log_level(const char *s,int32_t slen,int32_t *out)
+{
+	int32_t iv;
+	if ( s == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( slen <= 0 )
+		return(-3);
+	if ( ds4_parse_i32(s,slen,&iv) == 0 )
+	{
+		if ( iv < DS4_LOG_LEVEL_MIN )
+			return(-4);
+		if ( iv > DS4_LOG_LEVEL_MAX )
+			return(-5);
+		*out = iv;
+		return(0);
+	}
+	if ( ds4_span_eq_ci(s,slen,"error") != 0 )
+	{
+		*out = 0;
+		return(0);
+	}
+	if ( ds4_span_eq_ci(s,slen,"warn") != 0 || ds4_span_eq_ci(s,slen,"warning") != 0 )
+	{
+		*out = 1;
+		return(0);
+	}
+	if ( ds4_span_eq_ci(s,slen,"info") != 0 )
+	{
+		*out = 2;
+		return(0);
+	}
+	if ( ds4_span_eq_ci(s,slen,"debug") != 0 )
+	{
+		*out = 3;
+		return(0);
+	}
+	return(-6);
+}
+
 int32_t ds4_config_defaults(ds4_config_t *cfg)
 {
 	if ( cfg == 0 )
@@ -85,12 +126,8 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 		vlen = ds4_cstr_len_i32(v);
 		if ( vlen <= 0 )
 			return(-2);
-		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+		if ( ds4_parse_log_level(v,vlen,&iv) < 0 )
 			return(-3);
-		if ( iv < DS4_LOG_LEVEL_MIN )
-			return(-4);
-		if ( iv > DS4_LOG_LEVEL_MAX )
-			return(-5);
 		cfg->log_level = iv;
 	}
 	v = getenv("DS4_ENABLE_CUDA");
@@ -121,12 +158,8 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 		return(-5);
 	if ( ds4_span_eq(k,klen,"log_level") != 0 )
 	{
-		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+		if ( ds4_parse_log_level(v,vlen,&iv) < 0 )
 			return(-6);
-		if ( iv < DS4_LOG_LEVEL_MIN )
-			return(-7);
-		if ( iv > DS4_LOG_LEVEL_MAX )
-			return(-8);
 		cfg->log_level = iv;
 		return(0);
 	}
