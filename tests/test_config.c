@@ -34,6 +34,9 @@ int32_t test_config(void)
 	static const uint8_t buf1[] = "enable_cuda=ON\n";
 	static const uint8_t buf2[] = "log_level=0 # comment\n# full line comment\n enable_cuda = yes\t# trailing\n";
 	static const uint8_t buf3[] = "log_level=debug\nenable_cuda=0\n";
+	static const uint8_t buf_over0[] = "log_level=2147483648\nenable_cuda=0\n";
+	static const uint8_t buf_over1[] = "log_level=-2147483649\nenable_cuda=0\n";
+	static const uint8_t buf_i32min[] = "log_level=-2147483648\nenable_cuda=0\n";
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
 	static const uint8_t capbuf[] = "log_level=1\n";
 	char path[64];
@@ -70,6 +73,18 @@ int32_t test_config(void)
 	if ( cfg.enable_cuda != 0 )
 		return(-14);
 	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-101);
+	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )
+		return(-102);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-103);
+	if ( ds4_config_parse_mem(&cfg,buf_over1,(int32_t)(sizeof(buf_over1) - 1)) >= 0 )
+		return(-104);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-105);
+	if ( ds4_config_parse_mem(&cfg,buf_i32min,(int32_t)(sizeof(buf_i32min) - 1)) >= 0 )
+		return(-106);
+	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-15);
 	if ( setenv("DS4_LOG_LEVEL","warning",1) != 0 )
 		return(-16);
@@ -82,6 +97,13 @@ int32_t test_config(void)
 	if ( cfg.enable_cuda != 1 )
 		return(-20);
 	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-107);
+	if ( setenv("DS4_ENABLE_CUDA","2147483648",1) != 0 )
+		return(-108);
+	if ( ds4_config_parse_env(&cfg) >= 0 )
+		return(-109);
 	unsetenv("DS4_ENABLE_CUDA");
 	for (n=0; n<(int32_t)sizeof(path); n++)
 		path[n] = 0;
