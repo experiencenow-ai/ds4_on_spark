@@ -516,6 +516,35 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m_work.chosen_k_batch[1], 2)
         self.assertGreater(m_tasks.pending_signal_batch[1], m_work.pending_signal_batch[1])
 
+    def test_pending_work_metrics_time_weighted(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=2.0),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=1.0),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            service_base_ms=0.0,
+            service_per_task_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(len(m.mean_pending_work_per_expert), 1)
+        self.assertAlmostEqual(m.max_pending_work_per_expert[0], 3.0, places=6)
+        self.assertAlmostEqual(m.mean_pending_work_per_expert[0], (7.0 / 3.0), places=6)
+
     def test_compare_variants_reports_delta(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

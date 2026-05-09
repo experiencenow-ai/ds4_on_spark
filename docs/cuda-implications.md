@@ -20,6 +20,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_fp4_conv` validates that CUDA 13 FP4 conversion helpers (`cuda_fp4.h`, E2M1) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` validates an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
+- `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke` validates that inline PTX `ldmatrix.sync` loads from shared memory compile and run on `sm_121` (CUTLASS-style inline-PTX gate).
 - `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_1d` validates a minimal TMA `cp.async.bulk.tensor.1d` load using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (CUTLASS TMA load plumbing gate).
 - `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_2d` validates a minimal TMA `cp.async.bulk.tensor.2d` load using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (2D traversal gate used by many tile schedulers).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
@@ -67,6 +68,7 @@ Next probe step:
 - Confirm the required shared-memory footprint fits within `cudaDevAttrMaxSharedMemoryPerBlockOptin` for any CUTLASS kernels we plan to bring up.
 - Confirm that pipeline primitives (cp.async-style global->shared copies) work on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
 - Confirm that bulk async copy plumbing compiles and runs on GB10; see `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` path used by CCCL/CUTLASS-style code).
+- Confirm that inline PTX mainloop plumbing is viable on GB10; see `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync` gate).
 - Confirm that tensor core matmul plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`.
 - Confirm that BF16 conversion/data plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_bf16_conv`.
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
