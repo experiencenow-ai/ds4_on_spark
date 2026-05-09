@@ -10,6 +10,7 @@ Goal: make it easy to stand up a repeatable Spark0/Spark1 layout with systemd te
 - Spark1: TP=2 rank 1 (`ds4@spark1`)
 
 Keep instance names stable: `%i` in systemd maps to `/etc/ds4/ds4-%i.env`.
+The systemd templates set `DS4_INSTANCE=%i` by default; the sample env files include `DS4_INSTANCE=...` for clarity.
 
 ## On Each Spark: Minimal Filesystem Bring-up
 

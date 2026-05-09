@@ -231,6 +231,10 @@
         2
       ]
     },
+    "mtp0": {
+      "present": true,
+      "tensor_key_count": 1575
+    },
     "mtp_layer_ids": [
       0
     ],
@@ -347,6 +351,17 @@
       "tokenizer_config_json": "tokenizer_config.json",
       "tokenizer_json": "tokenizer.json",
       "weight_index_json": "model.safetensors.index.json"
+    },
+    "fixtures_sha256": {
+      "config.json": "b628e63398a645abc711d92207f8737dd8140f7a4ef1e0a5b3616019e0ddd818",
+      "encoding/encoding_dsv4.py": "bdbd57c132a1b3725042323d02b98b9d1df28e5f388f134399555d041f5055e0",
+      "generation_config.json": "5fccff80f55a4d455bbe516bdd552edf3e9623df95e99fbf2a3c3389fdf91af0",
+      "inference/config.json": "6cc6f816ca73a8d38750194e330398e4f6955b4b45f674f7d29c96da14ccb733",
+      "inference/kernel.py": "c4dc859a2208f9182ae00f6267cf8655deba51dcd92dfd14d0e65401658593e4",
+      "inference/model.py": "ce962f1face79d4f633d36436576214057a7e11443c9789935e1deb5c6cd1d71",
+      "model.safetensors.index.json": "7e975ba3bef8947a94e7da0abd60888375b232b4dfad883d59653e65c6ba522a",
+      "tokenizer.json": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
+      "tokenizer_config.json": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547"
     },
     "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
     "hf_revision": "main",
