@@ -104,7 +104,9 @@ the tradeoffs *before* touching CUDA runtime code.
 
 When `--mtp-draft-len > 0`, each trace element is treated as one **verify step** which performs:
 
-- Draft compute: enqueue `--mtp-draft-len` draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
+- Draft compute: enqueue draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
+  - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
+  - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:

@@ -360,6 +360,48 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(base_out["summary"]["output_tokens"], var_out["summary"]["output_tokens"])
         self.assertLess(var_out["delta_vs_baseline"]["output_tokens"], 0.0)
 
+    def test_mtp_draft_attempt_policy_stop_at_reject_reduces_draft_work(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i),
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                mtp_accept_len=1,
+            )
+            for i in range(50)
+        ]
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        cfg_full = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.1,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            mtp_draft_len=4,
+            mtp_accept_prob=0.5,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            mtp_draft_attempt_policy="full",
+        )
+        cfg_stop = dataclasses.replace(cfg_full, mtp_draft_attempt_policy="stop_at_reject")
+        m_full = scheduler_sim.run_simulation(cfg_full, trace)
+        m_stop = scheduler_sim.run_simulation(cfg_stop, trace)
+        self.assertEqual(m_full.mtp_draft_tokens_total, len(trace) * 4)
+        self.assertEqual(m_stop.mtp_draft_tokens_total, len(trace) * 1)
+        self.assertGreater(m_full.work_units_mtp_draft, m_stop.work_units_mtp_draft)
+        self.assertAlmostEqual(m_full.work_units_mtp_draft, float(len(trace) * 4) * 0.25, places=6)
+        self.assertAlmostEqual(m_stop.work_units_mtp_draft, float(len(trace) * 1) * 0.25, places=6)
+
     def test_starvation_counts_queue_wait(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
