@@ -61,3 +61,13 @@ The probe `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` is a tiny comp
 - includes `cuda_pipeline_primitives.h`
 - issues a single `__pipeline_memcpy_async` from global->shared
 - commits, waits, and copies the shared value back to global for verification
+
+## CCCL Barrier + `cuda::memcpy_async` (CUTLASS-style staging)
+
+CUDA 13 bundles CCCL (libcudacxx/thrust/cub) headers under `${CUDA_HOME}/include/cccl/`, and the high-level async-copy API lives under `<cuda/barrier>` / `cuda::memcpy_async`.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async` is a tiny compile/run check that:
+
+- initializes a block-scope `cuda::barrier`
+- issues a per-thread `cuda::memcpy_async(..., barrier)` global->shared copy
+- waits via `barrier.arrive_and_wait()` and validates the copied values
