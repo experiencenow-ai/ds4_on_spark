@@ -97,6 +97,18 @@ if(DS4_ENABLE_TESTS)
 		add_test(NAME ds4_cli_version COMMAND $<TARGET_FILE:ds4_cli> --version)
 		add_test(NAME ds4_cli_dump_config COMMAND $<TARGET_FILE:ds4_cli> --dump-config)
 		add_test(NAME ds4_cli_dump_config_overrides COMMAND $<TARGET_FILE:ds4_cli> --log-level debug --no-cuda --dump-config)
+		add_test(NAME ds4_cli_smoke_version
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=version_semver
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
+		add_test(NAME ds4_cli_smoke_dump_config_overrides
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=dump_config_overrides
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
 	endif()
 	add_test(NAME ds4_install_consumer
 		COMMAND "${CMAKE_COMMAND}"
