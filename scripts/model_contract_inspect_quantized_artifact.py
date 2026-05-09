@@ -287,6 +287,38 @@ def parse_gguf_stream(f: BinaryIO, label: str) -> tuple[int, dict[str, Any], lis
 	return (vers, metadata, weight_keys, weight_types)
 
 
+def guess_tensor_key_namespace(weight_keys: list[str]) -> tuple[str, list[str]]:
+	if not weight_keys:
+		return ("empty", ["no tensor keys"])
+
+	evidence: list[str] = []
+
+	def saw_prefix(prefix: str) -> bool:
+		return any(k.startswith(prefix) for k in weight_keys)
+
+	def saw_any(keys: set[str]) -> bool:
+		return any(k in keys for k in weight_keys)
+
+	if saw_prefix("layers.") or saw_any({"embed.weight", "head.weight", "norm.weight"}):
+		evidence.append("found deepseek upstream-style keys (layers.* and/or embed/head/norm)")
+		return ("deepseek-upstream", evidence)
+
+	if saw_prefix("mtp."):
+		evidence.append("found mtp.* tensor namespace")
+		return ("deepseek-upstream-mtp-only", evidence)
+
+	if saw_prefix("blk.") or saw_any({"token_embd.weight", "output.weight"}):
+		evidence.append("found llama.cpp-style keys (blk.* and/or token_embd/output)")
+		return ("llama.cpp", evidence)
+
+	if saw_prefix("block.") or saw_prefix("model.layers."):
+		evidence.append("found transformer-style keys (block.* or model.layers.*), not deepseek upstream namespace")
+		return ("hf-transformers", evidence)
+
+	evidence.append("no known key namespace patterns matched")
+	return ("unknown", evidence)
+
+
 def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
 	if not weight_keys:
 		return {"checked": False, "reason": "no tensor keys found"}
@@ -325,6 +357,15 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 		return {"checked": False, "reason": "contract_summary has invalid layer/expert counts"}
 	if len(compress_ratios) < n_layers_i:
 		return {"checked": False, "reason": "contract_summary compress_ratios shorter than num_hidden_layers"}
+
+	# Most GGUF conversion toolchains rename layer tensor keys; only run this
+	# check when the artifact appears to preserve the upstream `layers.{i}.*`
+	# namespace.
+	if not any(k.startswith("layers.") for k in weight_keys):
+		return {
+			"checked": False,
+			"reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable",
+		}
 
 	missing_count = 0
 	missing_sample: list[str] = []
@@ -767,6 +808,7 @@ def main() -> int:
 			contract_summary = None
 
 	def as_dict(res: InspectResult) -> dict[str, Any]:
+		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
 		return {
 			"path": res.path,
 			"artifact_type": res.artifact_type,
@@ -775,6 +817,9 @@ def main() -> int:
 			"metadata": res.metadata,
 			"tensor_count": res.tensor_count,
 			"tensor_type_counts": res.tensor_type_counts,
+			"first_tensor_keys": res.weight_keys_all[:20],
+			"tensor_key_namespace_guess": namespace_guess,
+			"tensor_key_namespace_evidence": namespace_evidence,
 			"mtp_present": res.mtp_present,
 			"mtp_tensor_count": res.mtp_tensor_count,
 			"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
