@@ -1124,6 +1124,46 @@ class SchedulerSimTest(unittest.TestCase):
         m = scheduler_sim.run_simulation(cfg, trace)
         self.assertEqual(m.output_token_lat_ms_batch, m.token_lat_ms_batch)
 
+    def test_trace_decode_ms_collected_and_error_reported(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0,),
+                decode_ms=2.0,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=10.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                decode_ms=4.0,
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.admitted_tokens_interactive, 1)
+        self.assertEqual(m.admitted_tokens_batch, 1)
+        self.assertEqual(m.trace_decode_ms_interactive, [2.0])
+        self.assertEqual(m.trace_decode_ms_batch, [4.0])
+        self.assertEqual(len(m.trace_decode_error_ms_interactive), 1)
+        self.assertEqual(len(m.trace_decode_error_ms_batch), 1)
+
     def test_expected_mtp_accept_len_simple_cases(self) -> None:
         self.assertAlmostEqual(scheduler_sim.expected_mtp_accept_len(0, 1.0, 1.0), 1.0)
         self.assertAlmostEqual(scheduler_sim.expected_mtp_accept_len(2, 0.0, 1.0), 1.0)
