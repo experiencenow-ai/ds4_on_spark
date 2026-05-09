@@ -151,6 +151,17 @@ class Task:
     start_ms: Optional[float] = None
 
 
+@dataclass(frozen=True)
+class StagePlan:
+    candidates: Tuple[int, ...]
+    scores: Optional[Tuple[float, ...]]
+    k: int
+    cost_scale: float
+    mtp_phase: MtpPhase
+    is_verify: bool
+    layer_index: int
+
+
 @dataclass
 class TokenState:
     cls: LatencyClass
@@ -164,6 +175,16 @@ class TokenState:
     trace_expert_batch_size: Optional[int] = None
     stage_idx: int = 0
     stage_total: int = 1
+    stages: Optional[Tuple[StagePlan, ...]] = None
+    admitted_any: bool = False
+    metrics_slot: int = -1
+    admitted_verify_layer0: int = 0
+    desired_verify_layer0: int = 0
+    admitted_verify_total: int = 0
+    partial_any_layer: bool = False
+    mtp_accept_len: int = 1
+    mtp_draft_attempt_len: int = 0
+    mtp_accounted: bool = False
 
 
 @dataclass
@@ -2152,6 +2173,178 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     now_ms = 0.0
     snapshot_state()
 
+    if cfg.mtp_draft_len > 0:
+        metrics.mtp_accept_len_per_step = [0 for _ in range(len(trace))]
+        metrics.mtp_draft_attempt_len_per_step = [0 for _ in range(len(trace))]
+
+    def _token_first_admit(tid: int) -> None:
+        ts = tokens[tid]
+        if ts.admitted_any:
+            return
+        ts.admitted_any = True
+        metrics.admitted_tokens += 1
+        if ts.cls == LatencyClass.INTERACTIVE:
+            metrics.admitted_tokens_interactive += 1
+            ts.metrics_slot = len(metrics.effective_k_interactive)
+            metrics.effective_k_interactive.append(0)
+            metrics.effective_k_total_interactive.append(0)
+        else:
+            metrics.admitted_tokens_batch += 1
+            ts.metrics_slot = len(metrics.effective_k_batch)
+            metrics.effective_k_batch.append(0)
+            metrics.effective_k_total_batch.append(0)
+
+    def _account_token_effective_k(tid: int) -> None:
+        ts = tokens[tid]
+        if not ts.admitted_any:
+            return
+        if ts.metrics_slot < 0:
+            raise RuntimeError("token metrics_slot unset")
+        if ts.cls == LatencyClass.INTERACTIVE:
+            metrics.effective_k_interactive[ts.metrics_slot] = ts.admitted_verify_layer0
+            metrics.effective_k_total_interactive[ts.metrics_slot] = ts.admitted_verify_total
+        else:
+            metrics.effective_k_batch[ts.metrics_slot] = ts.admitted_verify_layer0
+            metrics.effective_k_total_batch[ts.metrics_slot] = ts.admitted_verify_total
+
+        if ts.desired_verify_layer0 > 0 and ts.admitted_verify_layer0 < ts.desired_verify_layer0:
+            metrics.partial_admit_tokens += 1
+            if ts.cls == LatencyClass.INTERACTIVE:
+                metrics.partial_admit_tokens_interactive += 1
+            else:
+                metrics.partial_admit_tokens_batch += 1
+        if ts.partial_any_layer:
+            metrics.partial_admit_any_layer_tokens += 1
+            if ts.cls == LatencyClass.INTERACTIVE:
+                metrics.partial_admit_any_layer_tokens_interactive += 1
+            else:
+                metrics.partial_admit_any_layer_tokens_batch += 1
+
+    def _maybe_account_token_mtp(tid: int) -> None:
+        if cfg.mtp_draft_len <= 0:
+            return
+        ts = tokens[tid]
+        if ts.mtp_accounted:
+            return
+        if not ts.admitted_any:
+            ts.mtp_accounted = True
+            return
+        if ts.admitted_verify_layer0 <= 0:
+            metrics.mtp_accept_len_per_step[tid] = 0
+            metrics.mtp_draft_attempt_len_per_step[tid] = 0
+            ts.output_len = 0
+            ts.mtp_accounted = True
+            return
+        metrics.mtp_accept_len_per_step[tid] = ts.mtp_accept_len
+        metrics.mtp_draft_attempt_len_per_step[tid] = ts.mtp_draft_attempt_len
+        metrics.mtp_output_tokens += ts.mtp_accept_len
+        route = trace[tid]
+        if route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None:
+            _record_mtp_accept_len(cfg, metrics, ts.mtp_accept_len, mtp_draft_attempt_policy)
+        ts.mtp_accounted = True
+
+    def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
+        route = trace[tid]
+        admitted = 0
+        for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores):
+            if admitted >= stage.k:
+                break
+            eq = experts[expert_id]
+            if eq.pending() >= cfg.expert_queue_max:
+                metrics.dropped_tasks_backpressure += 1
+                if route.cls == LatencyClass.INTERACTIVE:
+                    metrics.dropped_tasks_backpressure_interactive += 1
+                else:
+                    metrics.dropped_tasks_backpressure_batch += 1
+                continue
+            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase)
+            if route.cls == LatencyClass.INTERACTIVE:
+                eq.hi.append(task)
+            else:
+                eq.lo.append(task)
+            tokens[tid].remaining += 1
+            metrics.admitted_tasks += 1
+            if route.cls == LatencyClass.INTERACTIVE:
+                metrics.admitted_tasks_interactive += 1
+            else:
+                metrics.admitted_tasks_batch += 1
+            admitted += 1
+            _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
+        return(admitted)
+
+    def _finish_token(now_ms: float, tid: int) -> None:
+        ts = tokens[tid]
+        if ts.done_ms is not None:
+            return
+        if not ts.admitted_any:
+            metrics.dropped_tokens_backpressure += 1
+            if ts.cls == LatencyClass.INTERACTIVE:
+                metrics.dropped_tokens_backpressure_interactive += 1
+            else:
+                metrics.dropped_tokens_backpressure_batch += 1
+            ts.output_len = 0
+            _maybe_account_token_mtp(tid)
+            ts.done_ms = now_ms
+            return
+
+        _account_token_effective_k(tid)
+        _maybe_account_token_mtp(tid)
+        ts.done_ms = now_ms
+        lat_ms = (now_ms - ts.submit_ms)
+        if ts.cls == LatencyClass.INTERACTIVE:
+            metrics.token_lat_ms_interactive.append(lat_ms)
+            if ts.trace_decode_ms is not None:
+                metrics.trace_decode_ms_interactive.append(float(ts.trace_decode_ms))
+                metrics.trace_decode_error_ms_interactive.append(float(lat_ms - float(ts.trace_decode_ms)))
+            if ts.trace_kv_tokens is not None:
+                metrics.trace_kv_tokens_interactive.append(float(ts.trace_kv_tokens))
+            if ts.trace_expert_batch_size is not None:
+                metrics.trace_expert_batch_size_interactive.append(float(ts.trace_expert_batch_size))
+            if cfg.sla_interactive_ms > 0.0 and lat_ms > cfg.sla_interactive_ms:
+                metrics.token_sla_violations_interactive += 1
+        else:
+            metrics.token_lat_ms_batch.append(lat_ms)
+            if ts.trace_decode_ms is not None:
+                metrics.trace_decode_ms_batch.append(float(ts.trace_decode_ms))
+                metrics.trace_decode_error_ms_batch.append(float(lat_ms - float(ts.trace_decode_ms)))
+            if ts.trace_kv_tokens is not None:
+                metrics.trace_kv_tokens_batch.append(float(ts.trace_kv_tokens))
+            if ts.trace_expert_batch_size is not None:
+                metrics.trace_expert_batch_size_batch.append(float(ts.trace_expert_batch_size))
+            if cfg.sla_batch_ms > 0.0 and lat_ms > cfg.sla_batch_ms:
+                metrics.token_sla_violations_batch += 1
+        if ts.output_len > 0:
+            if ts.cls == LatencyClass.INTERACTIVE:
+                metrics.output_token_lat_ms_interactive.extend([lat_ms for _ in range(ts.output_len)])
+            else:
+                metrics.output_token_lat_ms_batch.extend([lat_ms for _ in range(ts.output_len)])
+
+    def _advance_token(now_ms: float, tid: int) -> None:
+        ts = tokens[tid]
+        if ts.stages is None:
+            return
+
+        while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
+            stage = ts.stages[ts.stage_idx]
+            admitted = _enqueue_stage(now_ms, tid, stage)
+            if admitted != 0:
+                _token_first_admit(tid)
+            if stage.is_verify:
+                desired_layer = min(stage.k, len(stage.candidates))
+                ts.admitted_verify_total += admitted
+                if admitted < desired_layer:
+                    ts.partial_any_layer = True
+                if stage.layer_index == 0:
+                    ts.admitted_verify_layer0 = admitted
+                    ts.desired_verify_layer0 = desired_layer
+                    _maybe_account_token_mtp(tid)
+            ts.stage_idx += 1
+            if admitted != 0:
+                return
+
+        if ts.remaining == 0 and ts.done_ms is None and ts.stage_idx >= ts.stage_total:
+            _finish_token(now_ms, tid)
+
     while len(evq) != 0:
         ev = heapq.heappop(evq)
         now_ms = ev.t_ms
@@ -2230,25 +2423,34 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             else:
                 metrics.chosen_k_batch.append(k)
 
-            admitted = 0
-            admitted_verify_layer0 = 0
-            admitted_verify_total = 0
-            desired_verify_layer0 = 0
-            partial_any_layer = False
             accept_len = 1
             draft_attempt_len = 0
             if mtp_enabled:
                 accept_len = _choose_mtp_accept_len(cfg, rng, metrics, route, mtp_draft_attempt_policy)
-                tokens[tid].output_len = accept_len
                 draft_attempt_len = cfg.mtp_draft_len
                 if mtp_draft_attempt_policy == "stop_at_reject":
                     draft_attempt_len = _mtp_attempted_draft_len(cfg.mtp_draft_len, accept_len)
-            else:
-                tokens[tid].output_len = 1
-            micro_tokens = (draft_attempt_len + 1) if mtp_enabled else 1
 
+            ts = tokens[tid]
+            ts.remaining = 0
+            ts.stage_idx = 0
+            ts.stage_total = 0
+            ts.stages = None
+            ts.admitted_any = False
+            ts.metrics_slot = -1
+            ts.admitted_verify_layer0 = 0
+            ts.desired_verify_layer0 = 0
+            ts.admitted_verify_total = 0
+            ts.partial_any_layer = False
+            ts.mtp_accept_len = accept_len
+            ts.mtp_draft_attempt_len = draft_attempt_len
+            ts.mtp_accounted = False
+            ts.output_len = accept_len if mtp_enabled else 1
+
+            micro_tokens = (draft_attempt_len + 1) if mtp_enabled else 1
             layers = _route_layers(route)
             base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
+            stage_plans: List[StagePlan] = []
             for micro_i in range(micro_tokens):
                 is_verify = ((not mtp_enabled) or micro_i == draft_attempt_len)
                 cost_scale = base_cost_scale
@@ -2268,86 +2470,21 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     layer_k = k
                     if k_mode == "trace" and lr.k is not None:
                         layer_k = int(lr.k)
-                    admitted = 0
-                    for expert_id in _candidate_order_for_layer(admit_policy, experts, lr.candidates, lr.scores):
-                        if admitted >= layer_k:
-                            break
-                        eq = experts[expert_id]
-                        if eq.pending() >= cfg.expert_queue_max:
-                            metrics.dropped_tasks_backpressure += 1
-                            if route.cls == LatencyClass.INTERACTIVE:
-                                metrics.dropped_tasks_backpressure_interactive += 1
-                            else:
-                                metrics.dropped_tasks_backpressure_batch += 1
-                            continue
-                        task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage_cost_scale, mtp_phase=mtp_phase)
-                        if route.cls == LatencyClass.INTERACTIVE:
-                            eq.hi.append(task)
-                        else:
-                            eq.lo.append(task)
-                        tokens[tid].remaining += 1
-                        metrics.admitted_tasks += 1
-                        if route.cls == LatencyClass.INTERACTIVE:
-                            metrics.admitted_tasks_interactive += 1
-                        else:
-                            metrics.admitted_tasks_batch += 1
-                        admitted += 1
-                        _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
-                    if is_verify:
-                        desired_layer = min(layer_k, len(lr.candidates))
-                        admitted_verify_total += admitted
-                        if admitted < desired_layer:
-                            partial_any_layer = True
-                        if li == 0:
-                            admitted_verify_layer0 = admitted
-                            desired_verify_layer0 = desired_layer
+                    stage_plans.append(
+                        StagePlan(
+                            candidates=lr.candidates,
+                            scores=lr.scores,
+                            k=layer_k,
+                            cost_scale=stage_cost_scale,
+                            mtp_phase=mtp_phase,
+                            is_verify=is_verify,
+                            layer_index=li,
+                        )
+                    )
 
-            if tokens[tid].remaining == 0:
-                metrics.dropped_tokens_backpressure += 1
-                if route.cls == LatencyClass.INTERACTIVE:
-                    metrics.dropped_tokens_backpressure_interactive += 1
-                else:
-                    metrics.dropped_tokens_backpressure_batch += 1
-                tokens[tid].done_ms = now_ms
-                tokens[tid].output_len = 0
-                if mtp_enabled:
-                    metrics.mtp_accept_len_per_step.append(0)
-                    metrics.mtp_draft_attempt_len_per_step.append(0)
-            else:
-                metrics.admitted_tokens += 1
-                if route.cls == LatencyClass.INTERACTIVE:
-                    metrics.admitted_tokens_interactive += 1
-                    metrics.effective_k_interactive.append(admitted_verify_layer0)
-                    metrics.effective_k_total_interactive.append(admitted_verify_total)
-                else:
-                    metrics.admitted_tokens_batch += 1
-                    metrics.effective_k_batch.append(admitted_verify_layer0)
-                    metrics.effective_k_total_batch.append(admitted_verify_total)
-                if desired_verify_layer0 == 0:
-                    desired_verify_layer0 = min(k, len(layers[0].candidates))
-                if admitted_verify_layer0 < desired_verify_layer0:
-                    metrics.partial_admit_tokens += 1
-                    if route.cls == LatencyClass.INTERACTIVE:
-                        metrics.partial_admit_tokens_interactive += 1
-                    else:
-                        metrics.partial_admit_tokens_batch += 1
-                if partial_any_layer:
-                    metrics.partial_admit_any_layer_tokens += 1
-                    if route.cls == LatencyClass.INTERACTIVE:
-                        metrics.partial_admit_any_layer_tokens_interactive += 1
-                    else:
-                        metrics.partial_admit_any_layer_tokens_batch += 1
-                if mtp_enabled:
-                    if admitted_verify_layer0 > 0 and (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None):
-                        _record_mtp_accept_len(cfg, metrics, accept_len, mtp_draft_attempt_policy)
-                    if admitted_verify_layer0 == 0:
-                        metrics.mtp_accept_len_per_step.append(0)
-                        metrics.mtp_draft_attempt_len_per_step.append(0)
-                        tokens[tid].output_len = 0
-                    else:
-                        metrics.mtp_accept_len_per_step.append(accept_len)
-                        metrics.mtp_draft_attempt_len_per_step.append(draft_attempt_len)
-                        metrics.mtp_output_tokens += accept_len
+            ts.stages = tuple(stage_plans)
+            ts.stage_total = len(stage_plans)
+            _advance_token(now_ms, tid)
 
         elif ev.kind == EventKind.TASK_DONE:
             if ev.tasks is None or len(ev.tasks) == 0:
@@ -2372,35 +2509,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     raise RuntimeError("token remaining underflow")
                 ts.remaining -= 1
                 if ts.remaining == 0 and ts.done_ms is None:
-                    ts.done_ms = now_ms
-                    lat_ms = (now_ms - ts.submit_ms)
-                    if ts.cls == LatencyClass.INTERACTIVE:
-                        metrics.token_lat_ms_interactive.append(lat_ms)
-                        if ts.trace_decode_ms is not None:
-                            metrics.trace_decode_ms_interactive.append(float(ts.trace_decode_ms))
-                            metrics.trace_decode_error_ms_interactive.append(float(lat_ms - float(ts.trace_decode_ms)))
-                        if ts.trace_kv_tokens is not None:
-                            metrics.trace_kv_tokens_interactive.append(float(ts.trace_kv_tokens))
-                        if ts.trace_expert_batch_size is not None:
-                            metrics.trace_expert_batch_size_interactive.append(float(ts.trace_expert_batch_size))
-                        if cfg.sla_interactive_ms > 0.0 and lat_ms > cfg.sla_interactive_ms:
-                            metrics.token_sla_violations_interactive += 1
-                    else:
-                        metrics.token_lat_ms_batch.append(lat_ms)
-                        if ts.trace_decode_ms is not None:
-                            metrics.trace_decode_ms_batch.append(float(ts.trace_decode_ms))
-                            metrics.trace_decode_error_ms_batch.append(float(lat_ms - float(ts.trace_decode_ms)))
-                        if ts.trace_kv_tokens is not None:
-                            metrics.trace_kv_tokens_batch.append(float(ts.trace_kv_tokens))
-                        if ts.trace_expert_batch_size is not None:
-                            metrics.trace_expert_batch_size_batch.append(float(ts.trace_expert_batch_size))
-                        if cfg.sla_batch_ms > 0.0 and lat_ms > cfg.sla_batch_ms:
-                            metrics.token_sla_violations_batch += 1
-                    if ts.output_len > 0:
-                        if ts.cls == LatencyClass.INTERACTIVE:
-                            metrics.output_token_lat_ms_interactive.extend([lat_ms for _ in range(ts.output_len)])
-                        else:
-                            metrics.output_token_lat_ms_batch.extend([lat_ms for _ in range(ts.output_len)])
+                    _advance_token(now_ms, tid)
 
             _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
         elif ev.kind == EventKind.EXPERT_WAKE:
