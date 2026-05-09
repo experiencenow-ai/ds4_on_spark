@@ -79,7 +79,7 @@ Observed:
 - Device LTO (`-dlto`) compile/run succeeds for `sm_121` (`cuda_sm121_dlto_probe` runs and validates output)
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - cuBLASLt FP8 matmul smoke test succeeds (`max_abs_err_vs_one=0`)
-- cuBLASLt FP8 (E5M2) matmul smoke probe returns `CUBLAS_STATUS_NOT_SUPPORTED` on Spark0 (CUDA 13.0 `V13.0.88`)
+- cuBLASLt FP8 (E5M2) matmul smoke probe fails to find any supported algo on Spark0 (CUDA 13.0 `V13.0.88`) even after trying `m=n=k` in `{16,64,128}`, multiple `cublasComputeType_t` values, and workspace sizes `{1MiB,16MiB}` (the Spark runner continues past this failure)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
 - BF16 conversion probe succeeds (`cuda_bf16.h` conversions compile and run for `sm_121`)
@@ -111,7 +111,8 @@ expect: compiled __CUDA_ARCH__=1200 for -arch=sm_120
 kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1200
 cuBLASLt sgemm smoke max_abs_err=0
 cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0
-cuBLASLt error cublasLtMatmulAlgoGetHeuristic: CUBLAS_STATUS_NOT_SUPPORTED
+cuBLASLt fp8 e5m2 probe try m=128 n=128 k=128 compute_type=CUBLAS_COMPUTE_16F ws_bytes=16777216
+cuBLASLt fp8 e5m2 smoke: no supported configuration found
 (cuda_cublaslt_fp8_e5m2_smoke failed; continuing)
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
