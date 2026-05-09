@@ -217,6 +217,17 @@ def main() -> int:
 							failures.append(Failure(69, f"contract summary mtp.trust_gates[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
 							break
 
+				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
+				if not isinstance(mtp_sem, dict):
+					failures.append(Failure(70, f"contract summary mtp.semantics must be an object: {contract_summary}"))
+				else:
+					combine = mtp_sem.get("combine_e_and_h_expr")
+					if not (isinstance(combine, str) and "self.e_proj(e).unsqueeze(2)" in combine and "+ self.h_proj(x)" in combine):
+						failures.append(Failure(71, f"contract summary mtp.semantics.combine_e_and_h_expr missing or unexpected: {contract_summary}"))
+					head = mtp_sem.get("head_logits_expr")
+					if not (isinstance(head, str) and head.startswith("logits = self.head(")):
+						failures.append(Failure(72, f"contract summary mtp.semantics.head_logits_expr missing or unexpected: {contract_summary}"))
+
 				compat = summary.get("compat", {})
 				bt = compat.get("by_transformers_key", {}) if isinstance(compat, dict) else {}
 				if not isinstance(bt, dict):
