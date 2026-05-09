@@ -33,5 +33,8 @@ int32_t test_cuda(void)
 	st0 = ds4_cuda_check_i32(0,"ok","file",123);
 	if ( ds4_cuda_is_ok(st0) == 0 )
 		return(-8);
+	st0 = DS4_CUDA_CALL(0);
+	if ( ds4_cuda_is_ok(st0) == 0 )
+		return(-9);
 	return(0);
 }

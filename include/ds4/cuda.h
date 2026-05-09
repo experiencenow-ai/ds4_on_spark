@@ -26,6 +26,4 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 }
 #endif
 
-#if defined(DS4_HAS_CUDA)
 #define DS4_CUDA_CALL(expr) ds4_cuda_check_i32((int32_t)(expr),#expr,__FILE__,(int32_t)__LINE__)
-#endif
