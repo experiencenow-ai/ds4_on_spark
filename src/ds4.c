@@ -3,9 +3,9 @@
 ds4_version_t ds4_version(void)
 {
 	ds4_version_t v;
-	v.v0 = 0;
-	v.v1 = 0;
-	v.v2 = 0;
+	v.v0 = (uint32_t)DS4_VERSION_V0;
+	v.v1 = (uint32_t)DS4_VERSION_V1;
+	v.v2 = (uint32_t)DS4_VERSION_V2;
 	return(v);
 }
 

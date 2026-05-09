@@ -13,14 +13,16 @@ int main(void)
 		err = -2;
 	if ( test_ring() < 0 )
 		err = -3;
-	if ( test_config() < 0 )
+	if ( test_version() < 0 )
 		err = -4;
-	if ( test_log() < 0 )
+	if ( test_config() < 0 )
 		err = -5;
-	if ( test_ctx() < 0 )
+	if ( test_log() < 0 )
 		err = -6;
-	if ( test_cuda() < 0 )
+	if ( test_ctx() < 0 )
 		err = -7;
+	if ( test_cuda() < 0 )
+		err = -8;
 	if ( err < 0 )
 	{
 		fprintf(stderr,"ds4_tests failed (%d)\n",err);

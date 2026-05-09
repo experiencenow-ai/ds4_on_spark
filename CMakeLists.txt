@@ -45,6 +45,13 @@ target_include_directories(ds4
 		$<INSTALL_INTERFACE:include>
 )
 
+target_compile_definitions(ds4
+	PUBLIC
+		DS4_VERSION_V0=${PROJECT_VERSION_MAJOR}
+		DS4_VERSION_V1=${PROJECT_VERSION_MINOR}
+		DS4_VERSION_V2=${PROJECT_VERSION_PATCH}
+)
+
 ds4_target_warnings(ds4 ${DS4_WERROR})
 ds4_target_sanitizers(ds4 ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 
@@ -73,6 +80,7 @@ if(DS4_ENABLE_TESTS)
 	enable_testing()
 	add_executable(ds4_tests
 		tests/test_main.c
+		tests/test_version.c
 		tests/test_arena.c
 		tests/test_pool.c
 		tests/test_ring.c
