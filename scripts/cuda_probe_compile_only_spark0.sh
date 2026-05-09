@@ -44,9 +44,9 @@ else
 	echo \"nvcc not found\" >&2
 	exit 3
 fi
-echo
-echo \"== compile-only sm_121 probes ==\"
-cd \"$REMOTE_DIR\"
-make clean
-make bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_fp8_conv bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm120_compat_probe bin/cuda_sm121_barrier_memcpy_async bin/cuda_sm121_wmma_smoke
+	echo
+	echo \"== compile-only sm_121 probes ==\"
+	cd \"$REMOTE_DIR\"
+	make clean
+	make bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_cublaslt_fp8_smoke bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_fp8_conv bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm120_compat_probe bin/cuda_sm121_barrier_memcpy_async bin/cuda_sm121_wmma_smoke
 "

@@ -65,12 +65,15 @@ echo
 echo \"== run: cuda_sm120_compat_probe ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm120_compat_probe
 echo
-echo \"== run: cuda_cublaslt_smoke ==\"
-\"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
-echo
-echo \"== run: cuda_sm121_smem_optin ==\"
-\"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin
-echo
+	echo \"== run: cuda_cublaslt_smoke ==\"
+	\"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
+	echo
+	echo \"== run: cuda_cublaslt_fp8_smoke ==\"
+	\"$REMOTE_DIR\"/bin/cuda_cublaslt_fp8_smoke
+	echo
+	echo \"== run: cuda_sm121_smem_optin ==\"
+	\"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin
+	echo
 echo \"== run: cuda_sm121_devattrs ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_devattrs
 echo

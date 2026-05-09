@@ -24,10 +24,12 @@ Implication:
 
 - cuBLASLt should be treated as the “works-first” baseline for GEMM paths on GB10.
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
+- FP8 matmul is now verified via cuBLASLt on `sm_121` (see `cuda_cublaslt_fp8_smoke`), which de-risks early FP8 bring-up for DeepGEMM-style paths.
 
 Probe:
 
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
+- `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E4M3) matmul smoke test on Spark0.
 
 ## CUTLASS
 
