@@ -484,6 +484,14 @@ When multiple `--path` values are provided, the tool emits both:
 - per-artifact `topology_contract` (computed from that artifact's captured GGUF header metadata, when present)
 - a `combined.topology_contract` computed from the GGUF path with the most tensors (`combined.topology_contract_source_path` records which)
 
+Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published as a compact 32‑tensor `mtp.0.*` table with `general.architecture=deepseek4_mtp_support` (not a full official `mtp.0.*` checkpoint). Validate these sidecars explicitly before trying to load them in external runtimes:
+
+```sh
+python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json
+# Or, for metadata-only validation without a full download:
+python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
+```
+
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
 - Also record and review:
