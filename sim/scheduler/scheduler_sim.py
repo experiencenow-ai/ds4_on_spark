@@ -1690,7 +1690,50 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["kv_tokens"] = summarize(kv_tokens)
     if len(expert_batch_size) != 0:
         out["expert_batch_size"] = summarize(expert_batch_size)
+    inferred: Dict[str, object] = {}
+    inferred_num_experts = infer_num_experts_from_trace(trace, meta)
+    if inferred_num_experts is not None:
+        inferred["num_experts"] = int(inferred_num_experts)
+    inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+    if inferred_mtp_draft_len is not None:
+        inferred["mtp_draft_len"] = int(inferred_mtp_draft_len)
+    if len(inferred) != 0:
+        out["inferred"] = inferred
     return(out)
+
+
+def infer_num_experts_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    if meta is not None:
+        v = meta.get("num_experts")
+        if isinstance(v, int) and v > 0:
+            return(int(v))
+
+    max_expert: Optional[int] = None
+    for r in trace:
+        for lr in _route_layers(r):
+            for e in lr.candidates:
+                max_expert = int(e) if max_expert is None else max(max_expert, int(e))
+    if max_expert is None:
+        return(None)
+    return(int(max_expert) + 1)
+
+
+def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    if meta is not None:
+        v = meta.get("mtp_draft_len")
+        if isinstance(v, int) and v >= 0:
+            return(int(v))
+
+    gamma: Optional[int] = None
+    for r in trace:
+        if r.accepted_mtp is None or r.rejected_mtp is None:
+            continue
+        g = (int(r.accepted_mtp) + int(r.rejected_mtp))
+        if gamma is None:
+            gamma = g
+        elif gamma != g:
+            return(None)
+    return(gamma)
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -1770,6 +1813,27 @@ def _route_layers(route: TokenRoute) -> Tuple[LayerRoute, ...]:
     if route.layers is None or len(route.layers) == 0:
         return((LayerRoute(candidates=route.candidates, k=route.k, scores=route.scores, cost_scale=None),))
     return(route.layers)
+
+
+def _validate_trace_expert_ids(trace: Sequence[TokenRoute], num_experts: int) -> None:
+    if num_experts <= 0:
+        return
+    for i, r in enumerate(trace):
+        token_index = r.token_index
+        token_tag = f"trace[{i}]"
+        if token_index is not None:
+            token_tag += f" token_index={int(token_index)}"
+        token_tag += f" t_ms={float(r.t_ms)}"
+
+        if r.layers is not None:
+            for li, lr in enumerate(_route_layers(r)):
+                for e in lr.candidates:
+                    if e < 0 or e >= num_experts:
+                        raise ValueError(f"{token_tag}: layers[{li}].candidates expert_id={int(e)} out of range for num_experts={int(num_experts)}")
+        else:
+            for e in r.candidates:
+                if e < 0 or e >= num_experts:
+                    raise ValueError(f"{token_tag}: candidates expert_id={int(e)} out of range for num_experts={int(num_experts)}")
 
 
 def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
@@ -2109,6 +2173,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("mtp_verify_per_draft_cost_scale must be >= 0")
     else:
         mtp_draft_attempt_policy = "full"
+
+    _validate_trace_expert_ids(trace, cfg.num_experts)
 
     for route in trace:
         if route.cost_scale is not None and float(route.cost_scale) <= 0.0:
@@ -2824,7 +2890,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
-    p.add_argument("--num-experts", type=int, default=64)
+    p.add_argument("--num-experts", type=int, default=64, help="Number of experts. Replay: use 0 to infer from the trace/meta.")
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
     p.add_argument("--num-layers", type=int, default=1, help="Synthetic trace: number of MoE layers per token (1 = candidates only; >1 emits per-layer routing under `layers`).")
@@ -2855,7 +2921,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--sla-interactive-ms", type=float, default=0.0, help="Token SLA: count interactive tokens with latency > this (0 = disabled).")
     p.add_argument("--sla-batch-ms", type=float, default=0.0, help="Token SLA: count batch tokens with latency > this (0 = disabled).")
     p.add_argument("--sim-seed", type=int, default=1, help="Simulation seed (used for MTP accept/reject sampling).")
-    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled).")
+    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (requires accepted_mtp+rejected_mtp or meta.mtp_draft_len).")
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
@@ -2931,6 +2997,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 trace = scale_trace_speedup(trace, trace_speedup)
             except ValueError as e:
                 raise SystemExit(str(e))
+
+        if args.num_experts == 0:
+            inferred = infer_num_experts_from_trace(trace, trace_meta)
+            if inferred is None or inferred <= 0:
+                raise SystemExit("--num-experts=0 requires a trace (or meta.num_experts) with valid expert IDs")
+            args.num_experts = int(inferred)
+        if args.mtp_draft_len == -1:
+            inferred = infer_mtp_draft_len_from_trace(trace, trace_meta)
+            if inferred is None:
+                raise SystemExit("--mtp-draft-len=-1 requires meta.mtp_draft_len or consistent accepted_mtp+rejected_mtp in the trace")
+            args.mtp_draft_len = int(inferred)
+
         if args.trace_summary:
             out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len, meta=trace_meta)
             if args.json:
@@ -2940,6 +3018,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(out, indent=2, sort_keys=True))
             return(0)
     else:
+        if args.num_experts <= 0:
+            raise SystemExit("--num-experts must be > 0 for synthetic trace generation (use 0 only with --trace-jsonl/--trace-csv)")
+        if args.mtp_draft_len == -1:
+            raise SystemExit("--mtp-draft-len=-1 is only supported for trace replay (use an explicit value for synthetic traces)")
         try:
             arrival_rate_tps = arrival_rate_steps_tps(args.arrival_rate_tps, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay)
         except ValueError as e:
