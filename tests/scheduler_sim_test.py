@@ -287,6 +287,42 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_jsonl_duplicate_candidates_rejected(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0,0]}\n')
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(path)
+        finally:
+            os.unlink(path)
+
+    def test_write_trace_jsonl_roundtrip(self) -> None:
+        trace = scheduler_sim.generate_synthetic_trace(
+            scheduler_sim.TraceConfig(
+                num_tokens=64,
+                num_experts=8,
+                num_candidates=4,
+                interactive_prob=0.5,
+                arrival_rate_tps=1000.0,
+                burst_prob=0.0,
+                burst_scale=1.0,
+                zipf_alpha=1.1,
+                seed=123,
+            )
+        )
+        fd, path = tempfile.mkstemp(prefix="sched_trace_out_", suffix=".jsonl")
+        try:
+            os.close(fd)
+            scheduler_sim.write_trace_jsonl(path, trace)
+            loaded = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual(len(loaded), len(trace))
+            self.assertEqual([r.t_ms for r in loaded], [r.t_ms for r in trace])
+            self.assertEqual([r.cls for r in loaded], [r.cls for r in trace])
+            self.assertEqual([r.candidates for r in loaded], [r.candidates for r in trace])
+        finally:
+            os.unlink(path)
+
     def test_trace_jsonl_k_and_k_mode_trace_override_controller(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:

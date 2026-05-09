@@ -686,9 +686,13 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
             for c in cand_raw:
                 if not isinstance(c, int):
                     raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                if c < 0:
+                    raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
                 candidates.append(c)
             if len(candidates) == 0:
                 raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+            if len(set(candidates)) != len(candidates):
+                raise ValueError(f"{path}:{lineno}: candidates must be unique")
 
             k: Optional[int] = None
             if "k" in obj and obj["k"] is not None:
@@ -765,6 +769,121 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
+
+
+def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
+    if path.strip() == "":
+        raise ValueError("path must be non-empty")
+    with open(path, "w", encoding="utf-8") as f:
+        for r in trace:
+            obj: Dict[str, object] = {
+                "t_ms": float(r.t_ms),
+                "cls": str(r.cls.value),
+                "candidates": list(r.candidates),
+            }
+            if r.k is not None:
+                obj["k"] = int(r.k)
+            if r.scores is not None:
+                obj["scores"] = list(r.scores)
+            if r.mtp_accept_len is not None:
+                obj["mtp_accept_len"] = int(r.mtp_accept_len)
+            if r.accepted_mtp is not None:
+                obj["accepted_mtp"] = int(r.accepted_mtp)
+            if r.rejected_mtp is not None:
+                obj["rejected_mtp"] = int(r.rejected_mtp)
+            if r.cost_scale is not None:
+                obj["cost_scale"] = float(r.cost_scale)
+            f.write(json.dumps(obj, sort_keys=True))
+            f.write("\n")
+
+
+def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) -> Dict[str, object]:
+    def summarize(xs: Sequence[float]) -> Dict[str, object]:
+        if len(xs) == 0:
+            return({"count": 0})
+        xs_sorted = sorted(xs)
+        idx50 = int(math.floor(0.50 * float(len(xs_sorted) - 1)))
+        idx95 = int(math.floor(0.95 * float(len(xs_sorted) - 1)))
+        idx99 = int(math.floor(0.99 * float(len(xs_sorted) - 1)))
+        return(
+            {
+                "count": len(xs_sorted),
+                "mean": statistics.fmean(xs_sorted),
+                "min": float(xs_sorted[0]),
+                "p50": float(xs_sorted[idx50]),
+                "p95": float(xs_sorted[idx95]),
+                "p99": float(xs_sorted[idx99]),
+                "max": float(xs_sorted[-1]),
+            }
+        )
+
+    num_i = 0
+    num_b = 0
+    t_ms: List[float] = []
+    cand_lens: List[float] = []
+    k_vals: List[float] = []
+    accept_lens: List[float] = []
+    min_expert: Optional[int] = None
+    max_expert: Optional[int] = None
+
+    present_k = 0
+    present_scores = 0
+    present_accept_len = 0
+    present_accepted_mtp = 0
+    present_rejected_mtp = 0
+    present_cost_scale = 0
+
+    for r in trace:
+        if r.cls == LatencyClass.INTERACTIVE:
+            num_i += 1
+        else:
+            num_b += 1
+        t_ms.append(float(r.t_ms))
+        cand_lens.append(float(len(r.candidates)))
+        if len(r.candidates) != 0:
+            lo = min(r.candidates)
+            hi = max(r.candidates)
+            min_expert = lo if min_expert is None else min(min_expert, lo)
+            max_expert = hi if max_expert is None else max(max_expert, hi)
+
+        if r.k is not None:
+            present_k += 1
+            k_vals.append(float(r.k))
+        if r.scores is not None:
+            present_scores += 1
+        if r.mtp_accept_len is not None:
+            present_accept_len += 1
+            accept_lens.append(float(r.mtp_accept_len))
+        elif r.accepted_mtp is not None:
+            present_accepted_mtp += 1
+            accept_lens.append(float(int(r.accepted_mtp) + 1))
+        elif r.rejected_mtp is not None:
+            present_rejected_mtp += 1
+            if mtp_draft_len > 0:
+                accept_lens.append(float((mtp_draft_len - int(r.rejected_mtp)) + 1))
+        if r.cost_scale is not None:
+            present_cost_scale += 1
+
+    out: Dict[str, object] = {
+        "tokens": {"count": len(trace), "interactive": num_i, "batch": num_b},
+        "t_ms": summarize(t_ms),
+        "candidates_len": summarize(cand_lens),
+        "optional_fields_present": {
+            "k": present_k,
+            "scores": present_scores,
+            "mtp_accept_len": present_accept_len,
+            "accepted_mtp": present_accepted_mtp,
+            "rejected_mtp": present_rejected_mtp,
+            "cost_scale": present_cost_scale,
+        },
+    }
+    if min_expert is not None and max_expert is not None:
+        out["expert_id_range"] = {"min": int(min_expert), "max": int(max_expert)}
+    if len(k_vals) != 0:
+        out["k"] = summarize(k_vals)
+    if len(accept_lens) != 0:
+        out["mtp_accept_len_derived"] = summarize(accept_lens)
+    return(out)
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -1429,6 +1548,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale).")
+    p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
+    p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file (t_ms, cls, candidates) before simulation.")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
@@ -1488,9 +1609,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
 
     if args.trace_jsonl != "":
+        if args.dump_trace_jsonl.strip() != "":
+            raise SystemExit("--dump-trace-jsonl is only supported for synthetic trace generation (omit --trace-jsonl)")
         if args.arrival_units.strip().lower() != "steps":
             raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl)")
         trace = load_trace_jsonl(args.trace_jsonl)
+        if args.trace_summary:
+            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
+            if args.json:
+                print(json.dumps(out, sort_keys=True))
+                return(0)
+            print("== trace summary ==")
+            print(json.dumps(out, indent=2, sort_keys=True))
+            return(0)
     else:
         try:
             arrival_rate_tps = arrival_rate_steps_tps(args.arrival_rate_tps, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay)
@@ -1542,6 +1673,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             trace = generate_markov_trace(trace_cfg)
         else:
             raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf, hotset, or markov.")
+
+        if args.dump_trace_jsonl.strip() != "":
+            write_trace_jsonl(args.dump_trace_jsonl, trace)
+        if args.trace_summary:
+            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
+            if args.json:
+                print(json.dumps(out, sort_keys=True))
+                return(0)
+            print("== trace summary ==")
+            print(json.dumps(out, indent=2, sort_keys=True))
+            return(0)
 
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,

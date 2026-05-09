@@ -215,6 +215,18 @@ EOF
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-experts 8 --json
 ```
 
+Trace sanity-check (contract summary only):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
+```
+
+Synthetic trace dump (generate, write JSONL, and exit after printing the trace summary):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --num-experts 16 --dump-trace-jsonl /tmp/synth_route.jsonl --trace-summary --json
+```
+
 ## Metrics
 
 The simulator prints a JSON object with:
