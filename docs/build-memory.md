@@ -1,0 +1,35 @@
+# Memory Patterns
+
+The build skeleton aims for predictable, static allocation. Most call sites should avoid `malloc`/`free` and instead use caller-provided buffers.
+
+## Arena (`ds4_arena_t`)
+
+`ds4_arena_t` is a bump allocator over a caller-provided memory region:
+
+- `ds4_arena_alloc`: allocates aligned slices (no free).
+- `ds4_arena_mark` / `ds4_arena_release`: coarse rollback to a prior mark.
+- `ds4_arena_reset`: discard all allocations.
+
+Typical usage: allocate per-request scratch memory, or build fixed-size graphs without per-node `malloc`.
+
+## Fixed Pool (`ds4_pool_t`)
+
+`ds4_pool_t` is a fixed-block allocator backed by a caller-provided memory region:
+
+- `ds4_pool_init`: partitions memory into equal-sized blocks.
+- `ds4_pool_alloc`: returns one block.
+- `ds4_pool_free`: returns a block to the pool.
+
+This pattern is useful when you know the max number of same-sized objects ahead of time (e.g. queue nodes, small structs).
+
+Notes:
+
+- The pool does not currently detect double-free; keep ownership disciplined at call sites.
+- The pool stores its free list inside the blocks themselves; a freed block’s first 4 bytes are used for internal bookkeeping.
+
+## Ring Buffer (`ds4_ring_t`)
+
+`ds4_ring_t` is a fixed-size ring queue backed by caller-provided memory:
+
+- `ds4_ring_push` / `ds4_ring_pop`: push/pop fixed-size elements by copying.
+- Useful for bounded event queues, message passing between components, or simple telemetry buffers.

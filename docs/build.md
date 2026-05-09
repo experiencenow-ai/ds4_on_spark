@@ -2,12 +2,27 @@
 
 This repo uses CMake and ships a thin `Makefile` wrapper.
 
+See also:
+
+- `docs/build-macos.md`
+- `docs/build-linux.md`
+- `docs/build-memory.md`
+- `docs/build-config.md`
+- `docs/build-cli.md`
+
 ## Mac (no CUDA)
 
 ```bash
 make clean
 make build
 make test
+```
+
+For a portable, CPU-only strict build (warnings-as-errors), use:
+
+```bash
+make clean
+make check
 ```
 
 ## Linux (optional CUDA)

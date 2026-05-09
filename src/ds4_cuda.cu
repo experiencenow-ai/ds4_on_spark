@@ -29,6 +29,8 @@ const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 	cudaError_t err;
 	if ( st.code == 0 )
 		return("OK");
+	if ( st.code < 0 )
+		return("DS4 CUDA internal error");
 	err = (cudaError_t)st.code;
 	return(cudaGetErrorString(err));
 }
