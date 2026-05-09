@@ -32,6 +32,7 @@ print_ref()
 
 print_ref "ds4" "https://github.com/antirez/ds4.git"
 print_ref "DeepGEMM" "https://github.com/deepseek-ai/DeepGEMM.git"
+print_ref "FlashMLA" "https://github.com/deepseek-ai/FlashMLA.git"
 print_ref "DeepSeek-V3" "https://github.com/deepseek-ai/DeepSeek-V3.git"
 print_ref "DeepSeek-V4-Flash (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
 print_ref "DeepSeek-V4-Flash-Base (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base"

@@ -11,6 +11,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | --- | --- | --- | --- | --- | --- |
 | ds4 | `antirez/ds4` | `refs/heads/main` | `d615ab08c8bce9b8242963ecece5aed6b5a79367` | MIT | DeepSeek-V4-Flash-specific native engine (Metal-first); semantics + KV-cache design reference; do not run upstream model-download scripts. |
 | DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/tags/v2.1.1.post3` | `c9f8b34dcdacc20aa746b786f983492c51072870` | MIT | CUDA GEMM kernels; treat as optional accelerator reference; pinned to a release tag (vs `main`). |
+| FlashMLA | `deepseek-ai/FlashMLA` | `refs/heads/main` | `9241ae3ef9bac614dd25e45e507e089f888280e0` | MIT | Efficient Multi-head Latent Attention kernels; potential Spark GPU kernel reference for V4-Flash-style MLA. |
 | DeepSeek-V3 (code) | `deepseek-ai/DeepSeek-V3` | `refs/tags/v1.0.0` | `f6e34dd26772dd4a216be94a8899276c5dca9e43` | MIT (code) | Repo has distinct code vs model/weights licensing. |
 | DeepSeek-V4-Flash (HF) | `huggingface.co/deepseek-ai/DeepSeek-V4-Flash` | `refs/heads/main` | `6976c7ff1b30a1b2cb7805021b8ba4684041f136` | MIT | HF repo is “official code/configs” source; fetch with `GIT_LFS_SKIP_SMUDGE=1` to avoid weights; commit here is from git transport (`git ls-remote`), not the HF web UI revision string. |
 | DeepSeek-V4-Flash-Base (HF) | `huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base` | `refs/heads/main` | `8855555deef230a27a21a8d6f294b7b7497759b6` | MIT | Optional checkpoint; fetch metadata-only (no weights) via `GIT_LFS_SKIP_SMUDGE=1`; commit here is from git transport (`git ls-remote`), not the HF web UI revision string. |
@@ -55,6 +56,7 @@ To verify that the **pinned** refs/commits in this manifest still resolve upstre
 
 - [`docs/upstream-ds4.md`](upstream-ds4.md)
 - [`docs/upstream-deepgemm.md`](upstream-deepgemm.md)
+- [`docs/upstream-flashmla.md`](upstream-flashmla.md)
 - [`docs/upstream-deepseek-v3.md`](upstream-deepseek-v3.md)
 - [`docs/upstream-deepseek-v4-flash.md`](upstream-deepseek-v4-flash.md)
 - [`docs/upstream-vllm-transformers.md`](upstream-vllm-transformers.md)
