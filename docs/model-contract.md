@@ -52,7 +52,7 @@ MTP (multi-token prediction) oracle requirements:
     - `tensor_type_counts` + `mtp_tensor_type_counts` (GGUF quant types present)
     - `tensor_key_namespace_guess` (whether the artifact appears to preserve upstream `layers.{i}.*` / `mtp.0.*` key namespaces; many GGUF conversions are `llama.cpp`)
     - `metadata.general.*` (provenance)
-    - `topology_contract` mismatches (GGUF header metadata vs expected topology)
+    - `topology_contract` mismatches (GGUF header metadata vs expected topology, including RoPE `dimension_count` / `freq_base` when present)
     - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
     - `mtp_contract.complete == true` when `mtp_present == true` (MTP tensor-key completeness)
   - For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` also supports metadata-only inspection via range reads (no full download). Record the `url_prefix_bytes` used:
