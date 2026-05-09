@@ -16,6 +16,13 @@ Related checkpoint (same “official configs” approach):
   - Commit: `8855555deef230a27a21a8d6f294b7b7497759b6`
   - License: MIT (see HF `LICENSE`)
 
+## Related official kernel repos (reference)
+
+These are tracked as optional GPU-kernel reference points for Spark:
+
+- DeepGEMM: see [`docs/upstream-deepgemm.md`](upstream-deepgemm.md)
+- FlashMLA: see [`docs/upstream-flashmla.md`](upstream-flashmla.md)
+
 ## What we read from HF (no weights)
 
 - `config.json`, `generation_config.json`

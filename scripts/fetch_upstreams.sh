@@ -16,6 +16,7 @@ Clones pinned upstream refs into ./upstreams (ignored by git).
 Targets:
   ds4
   deepgemm
+  flashmla
   deepseek_v3
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -94,6 +95,9 @@ fetch_one()
 		deepgemm)
 			clone_or_update "deepgemm" "https://github.com/deepseek-ai/DeepGEMM.git" "refs/tags/v2.1.1.post3"
 			;;
+		flashmla)
+			clone_or_update "flashmla" "https://github.com/deepseek-ai/FlashMLA.git" "refs/heads/main"
+			;;
 		deepseek_v3)
 			clone_or_update "deepseek_v3" "https://github.com/deepseek-ai/DeepSeek-V3.git" "refs/tags/v1.0.0"
 			;;
@@ -162,6 +166,7 @@ main()
 	if [ "$1" = "all" ]; then
 		fetch_one ds4
 		fetch_one deepgemm
+		fetch_one flashmla
 		fetch_one deepseek_v3
 		fetch_one deepseek_v4_flash_hf
 		fetch_one deepseek_v4_flash_base_hf
