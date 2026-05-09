@@ -7,7 +7,9 @@ BIN_DIR := bin
 SRC_DIR := src
 
 DEVICE_PROPS := $(BIN_DIR)/cuda_device_props
+DEVICE_PROPS_TINY := $(BIN_DIR)/cuda_device_props_tiny
 SM121_PROBE := $(BIN_DIR)/cuda_sm121_probe
+SM121_COMPILE_PROBE_OBJ := $(BIN_DIR)/cuda_sm121_compile_probe.o
 CUBLASLT_SMOKE := $(BIN_DIR)/cuda_cublaslt_smoke
 SM121_ARCH_REPORT := $(BIN_DIR)/cuda_sm121_arch_report
 SM121_SMEM_OPTIN := $(BIN_DIR)/cuda_sm121_smem_optin
@@ -20,13 +22,19 @@ SM121_WMMA_SMOKE := $(BIN_DIR)/cuda_sm121_wmma_smoke
 
 .PHONY: all clean
 
-all: $(DEVICE_PROPS) $(SM121_PROBE) $(CUBLASLT_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC) $(SM121_WMMA_SMOKE)
+all: $(DEVICE_PROPS) $(DEVICE_PROPS_TINY) $(SM121_COMPILE_PROBE_OBJ) $(SM121_PROBE) $(CUBLASLT_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC) $(SM121_WMMA_SMOKE)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 $(DEVICE_PROPS): $(BIN_DIR) $(SRC_DIR)/cuda_device_props.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=native -o $@ $(SRC_DIR)/cuda_device_props.cu $(LDFLAGS)
+
+$(DEVICE_PROPS_TINY): $(BIN_DIR) $(SRC_DIR)/cuda_device_props_tiny.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=native -o $@ $(SRC_DIR)/cuda_device_props_tiny.cu $(LDFLAGS)
+
+$(SM121_COMPILE_PROBE_OBJ): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_compile_probe.cu
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -c -o $@ $(SRC_DIR)/cuda_sm121_compile_probe.cu
 
 $(SM121_PROBE): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_probe.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_probe.cu $(LDFLAGS)

@@ -12,6 +12,8 @@ make
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
+- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly).
+- `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
@@ -27,6 +29,7 @@ Expected outputs:
 
 ```bash
 ./tools/cuda_probe/bin/cuda_device_props
+./tools/cuda_probe/bin/cuda_device_props_tiny
 ./tools/cuda_probe/bin/cuda_sm121_probe
 ./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_sm120_compat_probe
@@ -43,6 +46,9 @@ Expected outputs:
 
 - `cuda_sm121_probe` compiles for `-arch=sm_121` and should fail fast if `nvcc`
   or the installed toolkit does not recognize `sm_121`.
+- `cuda_sm121_compile_probe.o` is a compile-only smoke check; it does not link
+  against `cudart` and is useful when you only need to confirm that `nvcc`
+  recognizes `sm_121`.
 - `cuda_cublaslt_smoke` is a minimal “link + run” check for `-lcublasLt` on
   `sm_121`.
 - `cuda_sm120_compat_probe` is a minimal “run an `sm_120`-compiled kernel on the device” check; if it succeeds on Spark0, it suggests `sm_120` SASS is a viable short-term compatibility target for GB10 (`sm_121`) (observed success on 2026-05-09).
