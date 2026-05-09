@@ -49,4 +49,20 @@ fi
 	cd \"$REMOTE_DIR\"
 	make clean
 	make bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe bin/cuda_sm121_rdc_probe bin/cuda_sm121_fatbin_probe bin/cuda_sm121_dlto_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_cublaslt_fp8_smoke bin/cuda_cublaslt_fp8_e5m2_smoke bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_fp8_conv bin/cuda_sm121_bf16_conv bin/cuda_sm121_fp4_conv bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm120_compat_probe bin/cuda_sm121_barrier_memcpy_async bin/cuda_sm121_cp_async_bulk_tx bin/cuda_sm121_cccl_atomic_ref bin/cuda_sm121_cuda_graph_smoke bin/cuda_sm121_cxx20_probe bin/cuda_sm121_nvcc_flags_probe bin/cuda_sm121_wmma_smoke bin/cuda_sm121_cluster_launch bin/cuda_sm121_nvrtc_jit bin/cuda_sm121_nvjitlink_jit
+	echo
+	echo \"== nvcc: cluster_dims attribute compile (expected may fail on sm_121) ==\"
+	set +e
+	if [ -x /usr/local/cuda/bin/nvcc ]; then
+		/usr/local/cuda/bin/nvcc -O2 -std=c++17 -arch=sm_121 -c -o bin/cuda_sm121_cluster_dims_attr_compile.o src/cuda_sm121_cluster_dims_attr_compile.cu 2>bin/cuda_sm121_cluster_dims_attr_compile.err
+	else
+		nvcc -O2 -std=c++17 -arch=sm_121 -c -o bin/cuda_sm121_cluster_dims_attr_compile.o src/cuda_sm121_cluster_dims_attr_compile.cu 2>bin/cuda_sm121_cluster_dims_attr_compile.err
+	fi
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		echo \"cluster_dims_attr_compile: OK\"
+	else
+		echo \"cluster_dims_attr_compile: FAILED rc=\$rc\"
+		head -n 40 bin/cuda_sm121_cluster_dims_attr_compile.err || true
+	fi
 "

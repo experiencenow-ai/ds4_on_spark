@@ -110,5 +110,6 @@ Expected outputs:
 - `cuda_sm121_cxx20_probe` is a compile/run check that CUDA `nvcc` + the host toolchain can build C++20 code for `sm_121`.
 - `cuda_sm121_wmma_smoke` is a compile/run check for WMMA (`mma.h`) tensor core matmul plumbing, as a tiny proxy for CUTLASS-style kernels.
 - `cuda_sm121_cluster_launch` is a compile/run check for thread-block cluster launches and cluster group intrinsics; cluster launches are used by newer CUTLASS kernels and other advanced scheduling patterns.
+- `__cluster_dims__` compile note: `./scripts/cuda_probe_compile_only_spark0.sh` also attempts a standalone compile of `tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu` (kernel annotated with `__cluster_dims__(2,1,1)`) and prints whether it compiled or the first lines of the error; this is useful because some toolkits reject the annotation for `sm_121` even when runtime cluster launch via `cudaLaunchKernelExC` works.
 - These probes intentionally keep dependencies tiny and print errors verbatim so
   failures can be pasted into an issue/PR.
