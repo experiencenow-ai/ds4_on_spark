@@ -175,11 +175,20 @@ else
 	echo "lspci not found"
 fi
 echo
-echo "== nvidia-smi inventory (index + pci bus) =="
 have_smi="0"
-q=""
 if command -v nvidia-smi >/dev/null 2>&1; then
 	have_smi="1"
+fi
+echo "== nvidia-smi version =="
+if [ "$have_smi" = "1" ]; then
+	(nvidia-smi --version 2>/dev/null || nvidia-smi -V 2>/dev/null || true) | sed -E '/^ERROR:/d' | head -n 20 || true
+else
+	echo "nvidia-smi not found"
+fi
+echo
+echo "== nvidia-smi inventory (index + pci bus) =="
+q=""
+if [ "$have_smi" = "1" ]; then
 	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
 	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then

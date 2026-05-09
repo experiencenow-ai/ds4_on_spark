@@ -68,6 +68,7 @@ Notes:
 ## What To Record In `docs/spark0-*.md`
 
 - `nvidia-smi` driver + CUDA version.
+- `nvidia-smi` version banner (`nvidia-smi --version` / `nvidia-smi -V`) for NVML/driver/CUDA summary.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
 - PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/{current,max}_link_{speed,width}` + PCI IDs via `{vendor,device,subsystem_*}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
