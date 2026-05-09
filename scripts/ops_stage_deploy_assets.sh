@@ -57,6 +57,7 @@ rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
 rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_validate_staged_assets.sh" "$target:/tmp/ds4-scripts/"
 
 cat <<EOF
 
@@ -66,6 +67,10 @@ sudo install -m 0644 /tmp/ds4-sysusers/ds4.conf /etc/sysusers.d/ds4.conf
 sudo install -m 0644 /tmp/ds4-tmpfiles/ds4.conf /etc/tmpfiles.d/ds4.conf
 sudo systemd-sysusers || true
 sudo systemd-tmpfiles --create || true
+
+== optional (validate staged assets before install, human-run) ==
+/tmp/ds4-scripts/ops_validate_staged_assets.sh
+
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
 # if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
