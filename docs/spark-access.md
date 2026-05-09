@@ -20,6 +20,7 @@ From the Mac repo root, use the scripts in `scripts/` to keep probes consistent 
 Notes:
 
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
+- When probing multiple Spark hosts (Spark0/Spark1), set `SPARK_KNOWN_HOSTS_PER_HOST=1` (or set `SPARK_KNOWN_HOSTS` explicitly) to keep host keys isolated per target.
 - Use `REDACT=1` for any output you plan to commit.
 - Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
 - If the checkout's `.git` metadata is not usable (provenance/permission issues), set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running.

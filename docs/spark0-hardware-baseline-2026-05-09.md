@@ -542,3 +542,36 @@ device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
+
+## Update: Probe Refresh (2026-05-09 04:52Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_12.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== cuda runtime probe (nvcc, no deps) ==
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
+
+== disks (summary) ==
+NAME      SIZE MODEL                      ROTA TYPE
+nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
+```

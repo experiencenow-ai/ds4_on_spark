@@ -9,6 +9,7 @@ usage: spark_probe.sh [user@host]
 Environment:
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
+  SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
@@ -19,6 +20,7 @@ Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
+  SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
 USAGE
 }
 
@@ -30,7 +32,16 @@ case "${1:-}" in
 esac
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SPARK_KNOWN_HOSTS="${SPARK_KNOWN_HOSTS:-/private/tmp/ds4_spark_known_hosts}"
+SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
+if [ "${SPARK_KNOWN_HOSTS:-}" = "" ]; then
+	if [ "$SPARK_KNOWN_HOSTS_PER_HOST" = "1" ]; then
+		host="${target#*@}"
+		safe_host="$(printf "%s" "$host" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
+		SPARK_KNOWN_HOSTS="/private/tmp/ds4_spark_known_hosts.$safe_host"
+	else
+		SPARK_KNOWN_HOSTS="/private/tmp/ds4_spark_known_hosts"
+	fi
+fi
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
