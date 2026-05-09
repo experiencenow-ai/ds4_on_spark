@@ -16,7 +16,6 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 
 - Contract doc: `docs/model-deepseek-v4-flash.md`
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
-- Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets, tokenizer constants, quantization metadata, runtime indexer/HC params, and tensor-key invariants)
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), runtime indexer/HC params, and tensor-key invariants)
 - Fetch/refresh script: `scripts/model_contract_fetch_deepseek_v4_flash.sh`
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`
@@ -44,7 +43,7 @@ MTP (multi-token prediction) oracle requirements:
 
 - If DS4 enables speculative decoding via `mtp.0.*`, treat MTP as a **separate execution path** with its own acceptance gate.
 - Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
-  - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not).
+  - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py`.
   - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
 
 Recommended DS4 comparison rule (when enabling DS4 gating):
