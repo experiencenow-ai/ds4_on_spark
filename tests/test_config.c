@@ -32,6 +32,7 @@ int32_t test_config(void)
 	ds4_config_t cfg;
 	static const uint8_t buf0[] = "log_level=3\nenable_cuda=false\n";
 	static const uint8_t buf1[] = "enable_cuda=ON\n";
+	static const uint8_t buf2[] = "log_level=0 # comment\n# full line comment\n enable_cuda = yes\t# trailing\n";
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
 	static const uint8_t capbuf[] = "log_level=1\n";
 	char path[64];
@@ -53,34 +54,42 @@ int32_t test_config(void)
 		return(-6);
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-7);
-	if ( setenv("DS4_LOG_LEVEL","1",1) != 0 )
+	if ( ds4_config_parse_mem(&cfg,buf2,(int32_t)(sizeof(buf2) - 1)) < 0 )
 		return(-8);
-	if ( setenv("DS4_ENABLE_CUDA","yes",1) != 0 )
+	if ( cfg.log_level != 0 )
 		return(-9);
-	if ( ds4_config_parse_env(&cfg) < 0 )
-		return(-10);
-	if ( cfg.log_level != 1 )
-		return(-11);
 	if ( cfg.enable_cuda != 1 )
+		return(-10);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-11);
+	if ( setenv("DS4_LOG_LEVEL","1",1) != 0 )
 		return(-12);
+	if ( setenv("DS4_ENABLE_CUDA","yes",1) != 0 )
+		return(-13);
+	if ( ds4_config_parse_env(&cfg) < 0 )
+		return(-14);
+	if ( cfg.log_level != 1 )
+		return(-15);
+	if ( cfg.enable_cuda != 1 )
+		return(-16);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	for (n=0; n<(int32_t)sizeof(path); n++)
 		path[n] = 0;
 	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_XXXXXX");
 	if ( plen <= 0 )
-		return(-13);
+		return(-17);
 	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
 		path[n] = "/tmp/ds4_cfg_XXXXXX"[n];
 	path[n] = 0;
 	fd = mkstemp(path);
 	if ( fd < 0 )
-		return(-14);
+		return(-18);
 	if ( ds4_write_all(fd,fbuf,(int32_t)(sizeof(fbuf) - 1)) < 0 )
 	{
 		close(fd);
 		unlink(path);
-		return(-15);
+		return(-19);
 	}
 	close(fd);
 	unsetenv("DS4_LOG_LEVEL");
@@ -88,32 +97,32 @@ int32_t test_config(void)
 	if ( setenv("DS4_LOG_LEVEL","2",1) != 0 )
 	{
 		unlink(path);
-		return(-16);
+		return(-20);
 	}
 	if ( ds4_config_load(&cfg,path,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
 	{
 		unlink(path);
-		return(-17);
+		return(-21);
 	}
 	if ( cfg.log_level != 2 )
 	{
 		unlink(path);
-		return(-18);
+		return(-22);
 	}
 	if ( cfg.enable_cuda != 1 )
 	{
 		unlink(path);
-		return(-19);
+		return(-23);
 	}
 	if ( ds4_config_format(&cfg,out,(int32_t)sizeof(out)) < 0 )
 	{
 		unlink(path);
-		return(-20);
+		return(-24);
 	}
 	if ( out[0] == 0 )
 	{
 		unlink(path);
-		return(-21);
+		return(-25);
 	}
 	unlink(path);
 	unsetenv("DS4_LOG_LEVEL");
@@ -122,63 +131,63 @@ int32_t test_config(void)
 		path[n] = 0;
 	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_empty_XXXXXX");
 	if ( plen <= 0 )
-		return(-22);
+		return(-26);
 	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
 		path[n] = "/tmp/ds4_cfg_empty_XXXXXX"[n];
 	path[n] = 0;
 	fd = mkstemp(path);
 	if ( fd < 0 )
-		return(-23);
+		return(-27);
 	close(fd);
 	if ( ds4_config_load(&cfg,path,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
 	{
 		unlink(path);
-		return(-24);
+		return(-28);
 	}
 	if ( cfg.log_level != 2 )
 	{
 		unlink(path);
-		return(-25);
+		return(-29);
 	}
 	unlink(path);
 	for (n=0; n<(int32_t)sizeof(path); n++)
 		path[n] = 0;
 	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_cap_XXXXXX");
 	if ( plen <= 0 )
-		return(-26);
+		return(-30);
 	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
 		path[n] = "/tmp/ds4_cfg_cap_XXXXXX"[n];
 	path[n] = 0;
 	fd = mkstemp(path);
 	if ( fd < 0 )
-		return(-27);
+		return(-31);
 	if ( ds4_write_all(fd,capbuf,(int32_t)(sizeof(capbuf) - 1)) < 0 )
 	{
 		close(fd);
 		unlink(path);
-		return(-28);
+		return(-32);
 	}
 	close(fd);
 	if ( ds4_config_defaults(&cfg) < 0 )
 	{
 		unlink(path);
-		return(-29);
+		return(-33);
 	}
 	out_len = 0;
 	if ( ds4_config_parse_file(&cfg,path,io_cap_buf,(int32_t)sizeof(io_cap_buf),&out_len) < 0 )
 	{
 		unlink(path);
-		return(-30);
+		return(-34);
 	}
 	if ( out_len != (int32_t)sizeof(io_cap_buf) )
 	{
 		unlink(path);
-		return(-31);
+		return(-35);
 	}
 	if ( cfg.log_level != 1 )
 	{
 		unlink(path);
-		return(-32);
+		return(-36);
 	}
 	unlink(path);
 	return(0);

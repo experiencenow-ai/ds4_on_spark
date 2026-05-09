@@ -16,7 +16,7 @@ Rules:
 
 - Blank lines are ignored.
 - Leading/trailing spaces and tabs around keys/values are trimmed.
-- Inline comments are not supported yet (only full-line `# ...`).
+- Inline comments are supported when `#` begins a token (start-of-line or preceded by whitespace).
 
 Supported keys:
 
