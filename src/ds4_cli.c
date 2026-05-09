@@ -10,8 +10,8 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 		return;
 	if ( argv0 == 0 )
 		argv0 = "ds4_cli";
-	fprintf(fp,"usage: %s [--config PATH] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--dump-config] [--version]\n",argv0);
-	fprintf(fp,"  --config PATH     Load key=value config file\n");
+	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--dump-config] [--version]\n",argv0);
+	fprintf(fp,"  --config PATH     Load key=value config file (PATH or '-')\n");
 	fprintf(fp,"  --strict-config   Reject unknown keys in config file\n");
 	fprintf(fp,"  --log-level LVL   Override log_level (0..3 or error/warn/info/debug)\n");
 	fprintf(fp,"  --enable-cuda B   Override enable_cuda (0/1 or true/false etc)\n");

@@ -68,3 +68,5 @@ For callers that want a single entrypoint, `ds4_config_load` applies configurati
 
 - If the file is larger than the buffer capacity, it fails.
 - This keeps the config path free of internal `malloc`.
+
+If `path` is `"-"`, `ds4_config_parse_file` reads from `stdin` instead of opening a file.

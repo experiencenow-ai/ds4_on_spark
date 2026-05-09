@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 #include "test_suite.h"
@@ -44,7 +45,7 @@ int32_t test_config(void)
 	static const uint8_t capbuf[] = "log_level=1\n";
 	char path[64];
 	char out[64];
-	int32_t fd,plen,n,out_len;
+	int32_t fd,fdin,fd_save,plen,n,out_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
 	int32_t unknown;
@@ -171,6 +172,69 @@ int32_t test_config(void)
 		return(-23);
 	}
 	close(fd);
+	fdin = (int32_t)open(path,O_RDONLY);
+	if ( fdin < 0 )
+	{
+		unlink(path);
+		return(-130);
+	}
+	fd_save = (int32_t)dup(0);
+	if ( fd_save < 0 )
+	{
+		close(fdin);
+		unlink(path);
+		return(-131);
+	}
+	if ( dup2(fdin,0) < 0 )
+	{
+		close(fdin);
+		close(fd_save);
+		unlink(path);
+		return(-132);
+	}
+	close(fdin);
+	if ( ds4_config_defaults(&cfg) < 0 )
+	{
+		dup2(fd_save,0);
+		close(fd_save);
+		unlink(path);
+		return(-133);
+	}
+	out_len = -1;
+	if ( ds4_config_parse_file(&cfg,"-",io_buf,(int32_t)sizeof(io_buf),&out_len) < 0 )
+	{
+		dup2(fd_save,0);
+		close(fd_save);
+		unlink(path);
+		return(-134);
+	}
+	if ( dup2(fd_save,0) < 0 )
+	{
+		close(fd_save);
+		unlink(path);
+		return(-135);
+	}
+	close(fd_save);
+	if ( out_len <= 0 )
+	{
+		unlink(path);
+		return(-136);
+	}
+	if ( cfg.log_level != 0 )
+	{
+		unlink(path);
+		return(-137);
+	}
+	if ( cfg.enable_cuda != 1 )
+	{
+		unlink(path);
+		return(-138);
+	}
+	if ( cfg.cuda_device != DS4_CUDA_DEVICE_AUTO )
+	{
+		unlink(path);
+		return(-139);
+	}
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	if ( setenv("DS4_LOG_LEVEL","2",1) != 0 )
