@@ -77,6 +77,12 @@ For each tested quantized artifact, record whether `mtp.0.*` is present:
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf
 ```
 
+For Hugging Face-hosted GGUFs, you can capture the same header/tensor-table metadata without downloading the full file (range reads only). Record the `url_prefix_bytes` from the JSON output:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
+```
+
 Interpreting the result:
 
 - If `mtp_present == false`, treat the artifact as **MTP-disabled** even if it
