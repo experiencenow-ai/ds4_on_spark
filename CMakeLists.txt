@@ -60,6 +60,15 @@ else()
 	target_sources(ds4 PRIVATE src/ds4_cuda_stub.c)
 endif()
 
+if(DS4_ENABLE_CLI)
+	add_executable(ds4_cli
+		src/ds4_cli.c
+	)
+	target_link_libraries(ds4_cli PRIVATE ds4)
+	ds4_target_warnings(ds4_cli ${DS4_WERROR})
+	ds4_target_sanitizers(ds4_cli ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
+endif()
+
 if(DS4_ENABLE_TESTS)
 	enable_testing()
 	add_executable(ds4_tests
@@ -76,6 +85,10 @@ if(DS4_ENABLE_TESTS)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})
 	ds4_target_sanitizers(ds4_tests ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 	add_test(NAME ds4_tests COMMAND ds4_tests)
+	if(TARGET ds4_cli)
+		add_test(NAME ds4_cli_version COMMAND $<TARGET_FILE:ds4_cli> --version)
+		add_test(NAME ds4_cli_dump_config COMMAND $<TARGET_FILE:ds4_cli> --dump-config)
+	endif()
 	add_test(NAME ds4_install_consumer
 		COMMAND "${CMAKE_COMMAND}"
 			-DDS4_BUILD_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}
@@ -83,15 +96,6 @@ if(DS4_ENABLE_TESTS)
 			-DDS4_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/_install_test
 			-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_install_consumer_test.cmake"
 	)
-endif()
-
-if(DS4_ENABLE_CLI)
-	add_executable(ds4_cli
-		src/ds4_cli.c
-	)
-	target_link_libraries(ds4_cli PRIVATE ds4)
-	ds4_target_warnings(ds4_cli ${DS4_WERROR})
-	ds4_target_sanitizers(ds4_cli ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 endif()
 
 include(GNUInstallDirs)
