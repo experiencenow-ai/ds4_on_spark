@@ -12,6 +12,8 @@ Usage:
 Notes:
   - Non-destructive; does not require sudo.
   - Sources the env file (so do not point at untrusted content).
+  - If DS4_INSTANCE is missing, it may be inferred from a filename like:
+      /etc/ds4/ds4-spark0.env  -> DS4_INSTANCE=spark0
 EOF
 }
 
@@ -32,6 +34,22 @@ set -a
 set +a
 
 err=0
+
+infer_instance_from_path()
+{
+    base="${1##*/}"
+    case "$base" in
+        ds4-*.env)
+            inst="${base#ds4-}"
+            inst="${inst%.env}"
+            if [ "$inst" != "" ]; then
+                echo "$inst"
+                return 0
+            fi
+            ;;
+    esac
+    return 1
+}
 
 need_nonempty()
 {
@@ -57,6 +75,15 @@ need_uint()
 
 echo "== ds4 env check =="
 echo "env: $env_path"
+
+if [ "${DS4_INSTANCE:-}" = "" ]; then
+    inferred="$(infer_instance_from_path "$env_path" 2>/dev/null || true)"
+    if [ "$inferred" != "" ]; then
+        DS4_INSTANCE="$inferred"
+        export DS4_INSTANCE
+        echo "inferred: DS4_INSTANCE=$DS4_INSTANCE"
+    fi
+fi
 
 need_nonempty DS4_INSTANCE
 need_nonempty DS4_HOME
@@ -97,4 +124,3 @@ if [ "$err" -ne 0 ]; then
 fi
 
 echo "== OK =="
-

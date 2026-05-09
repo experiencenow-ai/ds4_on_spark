@@ -10,6 +10,7 @@ Type=simple
 User=ds4
 Group=ds4
 WorkingDirectory=/opt/ds4
+Environment=DS4_INSTANCE=%i
 EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env
 
