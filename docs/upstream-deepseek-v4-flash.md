@@ -32,6 +32,22 @@ These are tracked as optional GPU-kernel reference points for Spark:
 - `inference/` (reference scripts; small, but do not vendor)
 - `DeepSeek_V4.pdf` (technical report)
 
+## Weight footprint (HF API, no downloads)
+
+The official HF repos are large and must remain human-approved fixtures.
+
+As of the pinned commits in [`docs/upstream-manifest.md`](upstream-manifest.md):
+
+- Flash (`6976c7ff1b30a1b2cb7805021b8ba4684041f136`): `*.safetensors` sum is **148.66 GiB**
+- Flash-Base (`8855555deef230a27a21a8d6f294b7b7497759b6`): `*.safetensors` sum is **274.44 GiB**
+
+Reproduce (no clone, no LFS):
+
+```bash
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash --sum-safetensors
+./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash-Base --sum-safetensors
+```
+
 ## Weight download risk (Git LFS)
 
 - The HF repos include many `model-*.safetensors` files tracked by Git LFS.
