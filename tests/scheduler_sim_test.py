@@ -79,7 +79,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(t0), 4)
         self.assertNotEqual(set(t0[0].candidates), set(t0[1].candidates))
 
-    def test_trace_jsonl_layers_replay_increases_work_on_same_expert(self) -> None:
+    def test_trace_jsonl_layers_run_sequentially_across_experts(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             tmp_path = f.name
@@ -88,7 +88,7 @@ class SchedulerSimTest(unittest.TestCase):
                     {
                         "t_ms": 0.0,
                         "cls": "batch",
-                        "layers": [{"candidates": [0]}, {"candidates": [0]}],
+                        "layers": [{"candidates": [0]}, {"candidates": [1]}],
                     }
                 )
             )
@@ -98,7 +98,7 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertEqual(len(trace), 1)
             self.assertIsNotNone(trace[0].layers)
             cfg = scheduler_sim.SimConfig(
-                num_experts=1,
+                num_experts=2,
                 expert_parallelism=1,
                 expert_queue_max=10_000,
                 service_ms=1.0,
@@ -125,20 +125,14 @@ class SchedulerSimTest(unittest.TestCase):
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             tmp_path = f.name
-            f.write(
-                json.dumps(
-                    {
-                        "t_ms": 0.0,
-                        "cls": "batch",
-                        "layers": [{"candidates": [0]}, {"candidates": [0]}],
-                    }
-                )
-            )
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "layers": [{"candidates": [0]}, {"candidates": [1]}]}))
+            f.write("\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [1], "cost_scale": 5.0}))
             f.write("\n")
         try:
             trace = scheduler_sim.load_trace_jsonl(tmp_path)
             cfg = scheduler_sim.SimConfig(
-                num_experts=1,
+                num_experts=2,
                 expert_parallelism=1,
                 expert_queue_max=1,
                 service_ms=1.0,
