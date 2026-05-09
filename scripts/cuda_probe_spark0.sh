@@ -64,4 +64,7 @@ echo \"== run: cuda_sm121_fp8_conv ==\"
 echo
 echo \"== run: cuda_sm121_pipeline_memcpy_async ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_pipeline_memcpy_async
+echo
+echo \"== run: cuda_sm121_barrier_memcpy_async ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_barrier_memcpy_async
 "
