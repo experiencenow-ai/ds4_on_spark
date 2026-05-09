@@ -11,18 +11,34 @@ ds4_version_t ds4_version(void)
 
 int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 {
+	ds4_cuda_status_t st;
 	if ( ctx == 0 )
 		return(-1);
 	if ( cfg == 0 )
 		return(-2);
+	ctx->cfg = *cfg;
+	if ( ds4_log_set_level(cfg->log_level) < 0 )
+		return(-3);
 	if ( cfg->enable_cuda != 0 )
 	{
 		if ( ds4_cuda_is_enabled_build() == 0 )
-			return(-3);
+			return(-4);
+		st = ds4_cuda_init();
+		if ( ds4_cuda_is_ok(st) == 0 )
+		{
+			DS4_LOGE("ds4_ctx_apply_config: cuda init failed: %s",ds4_cuda_errstr(st));
+			return(-5);
+		}
+		if ( cfg->cuda_device >= 0 )
+		{
+			st = ds4_cuda_set_device(cfg->cuda_device);
+			if ( ds4_cuda_is_ok(st) == 0 )
+			{
+				DS4_LOGE("ds4_ctx_apply_config: cuda set_device(%d) failed: %s",cfg->cuda_device,ds4_cuda_errstr(st));
+				return(-6);
+			}
+		}
 	}
-	ctx->cfg = *cfg;
-	if ( ds4_log_set_level(cfg->log_level) < 0 )
-		return(-4);
 	return(0);
 }
 

@@ -311,9 +311,16 @@ def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> in
 def parse_inference_quant_constants(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
-	def modelargs_defaults() -> dict:
+	def parse_modelargs_defaults() -> dict:
 		in_model_args = False
-		out: dict[str, Optional[int]] = {"max_batch_size": None, "max_seq_len": None}
+		out: dict[str, object] = {
+			"max_batch_size": None,
+			"max_seq_len": None,
+			"dtype": None,
+			"scale_fmt": None,
+			"scale_dtype": None,
+			"expert_dtype": None,
+		}
 		for raw in text.splitlines():
 			line = raw.strip()
 			if line.startswith("class ModelArgs"):
@@ -323,12 +330,19 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 				break
 			if not in_model_args:
 				continue
-			if not line.startswith(("max_batch_size:", "max_seq_len:")):
+			if not line.startswith(tuple(f + ":" for f in out.keys())):
 				continue
 			if " = " not in line:
 				continue
 			field = line.split(":", 1)[0].strip()
 			rhs = line.split("=", 1)[1].strip()
+
+			if rhs == "None":
+				out[field] = None
+				continue
+			if len(rhs) >= 2 and rhs[0] in ("'", '"') and rhs[-1] == rhs[0]:
+				out[field] = rhs[1:-1]
+				continue
 			try:
 				out[field] = int(rhs)
 			except ValueError:
@@ -481,7 +495,11 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 	block_size = find_int("block_size")
 	fp4_block_size = find_int("fp4_block_size")
 	hc_eps = find_dataclass_float("hc_eps")
-	defaults = modelargs_defaults()
+	modelargs_defaults = parse_modelargs_defaults()
+	defaults = {
+		"max_batch_size": modelargs_defaults.get("max_batch_size"),
+		"max_seq_len": modelargs_defaults.get("max_seq_len"),
+	}
 	kv_act_quant_group_sizes = find_unique_act_quant_group_sizes()
 	attn_softmax_scale_expr = find_line_rhs("self.softmax_scale")
 	indexer_weights_expr = find_line_rhs("weights")
@@ -496,6 +514,7 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 			"indexer_weights_expr": indexer_weights_expr,
 		},
 		"reference_defaults": defaults,
+		"modelargs_defaults": modelargs_defaults,
 	}
 
 
@@ -911,6 +930,7 @@ def build_contract() -> dict:
 				"config_quantization_config": cfg.get("quantization_config"),
 				"inference_config": {
 					"dtype": inf.get("dtype"),
+					"scale_dtype": inf.get("scale_dtype", (inf_model.get("modelargs_defaults", {}) if isinstance(inf_model, dict) else {}).get("scale_dtype")),
 					"scale_fmt": inf.get("scale_fmt"),
 					"expert_dtype": inf.get("expert_dtype"),
 				},

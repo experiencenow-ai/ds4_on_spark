@@ -236,6 +236,11 @@ def main() -> int:
 						if got != want:
 							failures.append(Failure(61, f"contract summary compat.by_transformers_key[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
 							break
+
+				q = summary.get("quantization", {}) if isinstance(summary, dict) else {}
+				q_inf = q.get("inference_config", {}) if isinstance(q, dict) else {}
+				if not (isinstance(q_inf, dict) and q_inf.get("scale_dtype") == "fp8"):
+					failures.append(Failure(70, f"contract summary quantization.inference_config.scale_dtype must be 'fp8' (derived from inference/model.py ModelArgs default): {contract_summary}"))
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 

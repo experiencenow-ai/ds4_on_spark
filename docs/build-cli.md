@@ -32,7 +32,7 @@ Dump effective config (defaults + optional file + env):
 Override config fields from the command line:
 
 ```bash
-./build_cli/ds4_cli --log-level debug --cuda --dump-config
+./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --dump-config
 ```
 
 You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
