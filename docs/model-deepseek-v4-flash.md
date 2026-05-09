@@ -492,6 +492,8 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
 ```
 
+Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
+
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
 - Also record and review:
