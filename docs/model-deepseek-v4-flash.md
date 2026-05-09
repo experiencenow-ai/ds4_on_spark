@@ -427,6 +427,10 @@ For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
 - Treat MTP as **disabled/untrusted** unless the artifact is inspected and proven to contain `mtp.0.*` weights (and, ideally, MTP passes an oracle check; see below).
+- Record whether the runtime can expose draft logits or draft token IDs.
+- A successful MTP speedup is not enough by itself; the acceptance path must be
+  reproducible under deterministic sampling and must be disableable for oracle
+  comparisons.
 
 ## Next steps (oracle + remaining unknowns)
 
