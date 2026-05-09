@@ -18,6 +18,7 @@ REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 ```
 
 Omit args to use the same default targets.
+The discovery output prints `targets:` so the exact target list is visible in committed excerpts.
 
 ## Spark Probe (Redacted)
 
@@ -54,6 +55,7 @@ Notes:
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
 - When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
 - When multiple targets are provided, the probe prints `probe targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
+- The probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - The probe prints `selected compute_cap:` and `selected nvcc arch:` before the CUDA runtime probe section so the derived `-arch` choice is visible in committed excerpts.
 - The probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
@@ -68,7 +70,7 @@ Notes:
 - `nvidia-smi` driver + CUDA version.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
-- PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/current_link_{speed,width}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
+- PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/{current,max}_link_{speed,width}` + PCI IDs via `{vendor,device,subsystem_*}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available).
 - `nvcc` path and version (toolkit version).
 - `nvcc --list-gpu-arch` output (capped) to confirm supported SM targets (useful when `NVCC_ARCH=...` overrides fail).

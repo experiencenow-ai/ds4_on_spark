@@ -30,10 +30,10 @@ test: build
 	ctest --test-dir "$(BUILD_DIR)" $(CTEST_OPTS)
 
 check:
-	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CUDA=OFF DS4_WERROR=ON
+	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=OFF DS4_WERROR=ON
 
 check-cuda:
-	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CUDA=ON DS4_WERROR=ON
+	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=ON DS4_WERROR=ON
 
 install: build
 	@if [ -n "$(PREFIX)" ]; then cmake --install "$(BUILD_DIR)" --prefix "$(PREFIX)" $(INSTALL_OPTS); else cmake --install "$(BUILD_DIR)" $(INSTALL_OPTS); fi

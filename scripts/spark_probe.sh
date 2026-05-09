@@ -80,6 +80,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		fi
 	fi
 	echo "probe targets: $*"
+	echo "ssh opts: $SSH_OPTS"
 	for t in "$@"; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
@@ -139,6 +140,35 @@ if lspci -nn >/dev/null 2>&1; then
 	echo
 	echo "== pci nvidia (numeric ids) =="
 	lspci -nn | grep -i nvidia || true
+fi
+echo
+echo "== lspci gpu link state (capped) =="
+if command -v lspci >/dev/null 2>&1; then
+	gpu_buses="$(lspci -D -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
+	if [ "$gpu_buses" = "" ]; then
+		gpu_buses="$(lspci -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
+	fi
+	if [ "$gpu_buses" != "" ]; then
+		for bus in $gpu_buses; do
+			echo "-- $bus --"
+			vv="$(lspci -vv -s "$bus" 2>/dev/null || true)"
+			if [ "$vv" = "" ]; then
+				echo "lspci -vv produced no output (restricted?)"
+			else
+				link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
+				if [ "$link_lines" != "" ]; then
+					printf "%s\n" "$link_lines"
+				else
+					echo "no LnkCap/LnkSta fields found; header:"
+					printf "%s\n" "$vv" | head -n 3 || true
+				fi
+			fi
+		done
+	else
+		echo "no nvidia vga/3d controller buses found"
+	fi
+else
+	echo "lspci not found"
 fi
 echo
 echo "== nvidia-smi inventory (index + pci bus) =="
@@ -271,6 +301,11 @@ emit_sysfs_pcie_link()
 				sys="/sys/bus/pci/devices/$short_bus"
 				echo "-- $bus -> $short_bus --"
 				if [ -d "$sys" ]; then
+					[ -r "$sys/vendor" ] && echo "vendor: $(cat "$sys/vendor" 2>/dev/null || true)"
+					[ -r "$sys/device" ] && echo "device: $(cat "$sys/device" 2>/dev/null || true)"
+					[ -r "$sys/subsystem_vendor" ] && echo "subsystem_vendor: $(cat "$sys/subsystem_vendor" 2>/dev/null || true)"
+					[ -r "$sys/subsystem_device" ] && echo "subsystem_device: $(cat "$sys/subsystem_device" 2>/dev/null || true)"
+					[ -r "$sys/class" ] && echo "class: $(cat "$sys/class" 2>/dev/null || true)"
 					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
 					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
 					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"

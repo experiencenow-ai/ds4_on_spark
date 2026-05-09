@@ -106,3 +106,62 @@ Filesystem      Size  Used Avail Use% Mounted on
 == disks (summary) ==
 nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
+
+## Update: Probe Refresh (2026-05-09 16:10Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_probe_loop_1778342741/.git DS4_GIT_WORK_TREE=/private/tmp/ds4_git_spark_access_probe_loop_1778342741 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T161030Z_probe13.txt
+```
+
+```text
+== local meta ==
+Sat May  9 16:10:30 UTC 2026
+git: 51720ee
+probe targets: spark0@aitopatom-9ab9.local
+ssh opts: -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2
+```
+
+```text
+== pci link (sysfs, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+vendor: 0x10de
+device: 0x2e12
+subsystem_vendor: 0x10de
+subsystem_device: 0x0000
+class: 0x030000
+```
+
+## Update: Probe Refresh (2026-05-09 16:39Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T163948Z_probe16.txt
+```
+
+```text
+== local meta ==
+Sat May  9 16:39:48 UTC 2026
+git: c8f2283
+```
+
+```text
+== lspci gpu link state (capped) ==
+-- 000f:01:00.0 --
+no LnkCap/LnkSta fields found; header:
+000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1) (prog-if 00 [VGA controller])
+```
+
+```text
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+device0 cc: 12.1
+```

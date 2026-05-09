@@ -3,6 +3,8 @@
 
 #if defined(DS4_HAS_CUDA)
 #include <cuda_runtime.h>
+#include <limits.h>
+#include <stddef.h>
 
 extern "C" {
 
@@ -64,6 +66,10 @@ const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 		return("CUDA disabled");
 	if ( st.code == DS4_CUDA_ERR_NO_DEVICE )
 		return("No CUDA device");
+	if ( st.code == DS4_CUDA_ERR_INVALID_ARG )
+		return("Invalid argument");
+	if ( st.code == DS4_CUDA_ERR_SIZE_OVERFLOW )
+		return("Size overflow");
 	if ( st.code < 0 )
 		return("DS4 CUDA internal error");
 	err = (cudaError_t)st.code;
@@ -111,6 +117,153 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 		file = "?";
 	DS4_LOGE("cuda: %s:%d %s failed: %s",file,line,expr,cudaGetErrorString(err));
 	return(ds4_cuda_fail(cuda_err));
+}
+
+ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count)
+{
+	int dev_count;
+	cudaError_t err;
+	if ( out_count == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out_count = 0;
+	dev_count = 0;
+	err = cudaGetDeviceCount(&dev_count);
+	if ( err == cudaSuccess )
+	{
+		if ( dev_count <= 0 )
+			return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+		*out_count = dev_count;
+		return(ds4_cuda_ok());
+	}
+	if ( err == cudaErrorNoDevice )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+	return(ds4_cuda_fail((int32_t)err));
+}
+
+ds4_cuda_status_t ds4_cuda_device_info(ds4_cuda_device_info_t *out,int32_t dev_index)
+{
+	cudaDeviceProp prop;
+	cudaError_t err;
+	int32_t i,cap;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( dev_index < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	out->dev = dev_index;
+	out->major = 0;
+	out->minor = 0;
+	out->multiprocessor_count = 0;
+	out->total_global_mem = 0;
+	for (i=0; i<(int32_t)sizeof(out->name); i++)
+		out->name[i] = 0;
+	err = cudaGetDeviceProperties(&prop,dev_index);
+	if ( err != cudaSuccess )
+	{
+		if ( err == cudaErrorInvalidDevice || err == cudaErrorNoDevice )
+			return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+		return(ds4_cuda_fail((int32_t)err));
+	}
+	out->major = (int32_t)prop.major;
+	out->minor = (int32_t)prop.minor;
+	out->multiprocessor_count = (int32_t)prop.multiProcessorCount;
+	if ( prop.totalGlobalMem > (size_t)INT64_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	out->total_global_mem = (int64_t)prop.totalGlobalMem;
+	cap = (int32_t)(sizeof(out->name) - 1);
+	for (i=0; i<cap && prop.name[i]!=0; i++)
+		out->name[i] = prop.name[i];
+	out->name[i] = 0;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes)
+{
+	cudaError_t err;
+	size_t n;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out = 0;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (size_t)bytes;
+	err = cudaMalloc(out,n);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_free(void *ptr)
+{
+	cudaError_t err;
+	err = cudaFree(ptr);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes)
+{
+	cudaError_t err;
+	size_t n;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (size_t)bytes;
+	err = cudaMemset(dst,value,n);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_memcpy_h2d(void *dst,const void *src,int64_t bytes)
+{
+	cudaError_t err;
+	size_t n;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( src == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (size_t)bytes;
+	err = cudaMemcpy(dst,src,n,cudaMemcpyHostToDevice);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes)
+{
+	cudaError_t err;
+	size_t n;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( src == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (size_t)bytes;
+	err = cudaMemcpy(dst,src,n,cudaMemcpyDeviceToHost);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
 }
 
 }

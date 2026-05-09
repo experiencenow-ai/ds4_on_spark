@@ -33,6 +33,7 @@ Targets:
   bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
   transformers
+  sglang
   llama_cpp
   llama_cpp_deepseek_v4_flash
   llama_cpp_deepseek_v4_support_wip
@@ -226,6 +227,10 @@ fetch_one()
 			upstream="huggingface/transformers"; ref="refs/tags/v5.8.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
 			;;
+		sglang)
+			upstream="sgl-project/sglang"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
+			;;
 		llama_cpp)
 			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9085"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
@@ -294,6 +299,7 @@ main()
 		fetch_one bati_cpp
 		fetch_one vllm
 		fetch_one transformers
+		fetch_one sglang
 		fetch_one llama_cpp
 		fetch_one llama_cpp_deepseek_v4_flash
 		fetch_one llama_cpp_deepseek_v4_support_wip
