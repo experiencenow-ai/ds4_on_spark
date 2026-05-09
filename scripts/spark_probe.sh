@@ -67,6 +67,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo
 	ssh $SSH_OPTS "$target" 'set -eu
 export LANG=C LC_ALL=C
+export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
