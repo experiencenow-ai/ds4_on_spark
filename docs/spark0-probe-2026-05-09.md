@@ -292,6 +292,78 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 ```
 
+## Update: Probe Refresh (2026-05-09 23:37Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2344Z_loop_v3.txt
+```
+
+Notes:
+
+- The `nvidia-smi --query-gpu=pcie.link.*` snapshot reports `gen.max=1` while the `nvidia-smi -q` excerpt reports `Device Max: 5` / `Host Max: 5`. Keep both in committed excerpts; we likely need a deeper PCIe/firmware cross-check later.
+
+```text
+== local meta ==
+Sat May  9 23:37:41 UTC 2026
+git: 69f5626
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+NVML version        : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 49, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== pci link (sysfs, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+sysfs: /sys/devices/pci000f:00/000f:00:00.0/000f:01:00.0
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
+
+== nvidia-smi -q pci link (capped) ==
+        Bus Id                                         : 0000000F:01:00.0
+        GPU Link Info
+            PCIe Generation
+                Max                                    : 1
+                Current                                : 1
+                Device Max                             : 5
+                Host Max                               : 5
+            Link Width
+                Max                                    : 16x
+                Current                                : 1x
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda driver api version: 13000 (13.0)
+cuda runtime api version: 13000 (13.0)
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+```
+
 ## Update: Probe Refresh (2026-05-09 23:13Z)
 
 Commands run from the Mac:
