@@ -74,6 +74,20 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 	return(ds4_cuda_fail(cuda_err));
 }
 
+ds4_cuda_status_t ds4_cuda_check_last_error(const char *file,int32_t line)
+{
+	DS4_UNUSED(file);
+	DS4_UNUSED(line);
+	return(ds4_cuda_last_error());
+}
+
+ds4_cuda_status_t ds4_cuda_check_peek_last_error(const char *file,int32_t line)
+{
+	DS4_UNUSED(file);
+	DS4_UNUSED(line);
+	return(ds4_cuda_peek_last_error());
+}
+
 ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count)
 {
 	if ( out_count == 0 )

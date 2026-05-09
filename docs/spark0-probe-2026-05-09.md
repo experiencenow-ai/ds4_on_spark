@@ -166,37 +166,47 @@ nvcc arch: sm_121
 device0 cc: 12.1
 ```
 
-## Update: Probe Refresh (2026-05-09 17:07Z)
+## Update: Probe Refresh (2026-05-09 17:35Z)
 
 Commands run from the Mac:
 
 ```bash
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_probe_loop_1778346408 DS4_GIT_WORK_TREE="/Users/mac/.codex/worktrees/0734/New project 4" ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T170752Z.txt
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T1735Z_probe8.txt
 ```
 
 ```text
 == local meta ==
-Sat May  9 17:07:53 UTC 2026
+Sat May  9 17:35:39 UTC 2026
 git: ad143d0
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
 ```
 
 ```text
-== lspci gpu link state (capped) ==
--- 000f:01:00.0 --
-no LnkCap/LnkSta fields found; header:
-000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1) (prog-if 00 [VGA controller])
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi cuda version ==
+CUDA Version: 13.0
 ```
 
 ```text
-== nvidia-smi pcie link (max/current) ==
-columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
-0, 0000000F:01:00.0, 1, 1, 16, 1
-```
+== cuda toolkit ==
+Cuda compilation tools, release 13.0, V13.0.88
 
-```text
+== nvcc supported gpu arch (capped) ==
+compute_120
+compute_121
+
 == cuda runtime probe (nvcc, no deps) ==
 nvcc arch: sm_121
 cuda driver api version: 13000
 cuda runtime api version: 13000
+device0 name: NVIDIA GB10
 device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
 ```
