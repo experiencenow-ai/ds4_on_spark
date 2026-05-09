@@ -91,6 +91,20 @@ If this probe fails with `NVJITLINK_ERROR_MISSING_ARCH` or linker errors, treat 
 
 Observed on Spark0 (2026-05-09): probe prints `nvJitLinkVersion=13.0` and `nvjitlink_jit ok`.
 
+## CUDA Graph Stream Capture / Launch
+
+Many inference stacks (and some kernel libraries) use CUDA Graph stream capture to reduce kernel launch overhead and improve scheduling determinism.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke` is a tiny compile/run check that:
+
+- creates a non-default stream
+- begins stream capture (`cudaStreamBeginCapture`)
+- captures two tiny kernel launches that write a u32 value
+- ends capture to a `cudaGraph_t`, instantiates it (`cudaGraphInstantiateWithFlags`), and launches it (`cudaGraphLaunch`)
+- validates that the final writeback matches the expected value
+
+Observed on Spark0 (2026-05-09): probe prints `cuda_graph_smoke out=22222222`.
+
 ## `sm_120` → `sm_121` Binary Compatibility Probe
 
 Some upstream projects gate on `sm_120` (or have not yet added `sm_121`), so it is useful to know whether a binary compiled for `sm_120` runs correctly on GB10 (`sm_121`).
