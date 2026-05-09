@@ -68,6 +68,19 @@ If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATIO
 
 Observed on Spark0 (2026-05-09): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
 
+### NVRTC `--std=c++20` Gate (DeepGEMM-style JIT)
+
+DeepGEMM-style stacks compile CUDA code at runtime and often require C++20 in the NVRTC compile step.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_cxx20_jit` is a tiny compile/run check that:
+
+- Compiles a tiny kernel with `--std=c++20 --gpu-architecture=compute_121` via NVRTC.
+- Loads the PTX via the CUDA Driver API and launches the kernel.
+
+If this probe fails, treat it as “NVRTC cannot compile C++20 for `compute_121` on this toolkit”, even if `nvcc -arch=sm_121 -std=c++20` works.
+
+Observed on Spark0 (2026-05-09): probe prints `nvrtc_cxx20_jit ok out=0x1234567a`.
+
 ## nvcc Extended Lambda + Relaxed Constexpr Gate
 
 Many CUTLASS/DeepGEMM-style codebases rely on `nvcc` accepting and correctly compiling with flags like:

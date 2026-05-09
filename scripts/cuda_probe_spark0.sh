@@ -100,6 +100,7 @@ run_retry cuda_sm121_cp_async_bulk_tx \"$REMOTE_DIR\"/bin/cuda_sm121_cp_async_bu
 run_retry cuda_sm121_cccl_atomic_ref \"$REMOTE_DIR\"/bin/cuda_sm121_cccl_atomic_ref
 run_retry cuda_sm121_cuda_graph_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_cuda_graph_smoke
 run_retry cuda_sm121_nvrtc_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_jit
+run_retry cuda_sm121_nvrtc_cxx20_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_cxx20_jit
 run_retry cuda_sm121_nvcc_flags_probe \"$REMOTE_DIR\"/bin/cuda_sm121_nvcc_flags_probe
 run_retry cuda_sm121_nvjitlink_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvjitlink_jit
 run_retry cuda_sm121_cxx20_probe \"$REMOTE_DIR\"/bin/cuda_sm121_cxx20_probe
