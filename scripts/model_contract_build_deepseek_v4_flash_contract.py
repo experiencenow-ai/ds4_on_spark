@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import ast
 import json
 from collections import Counter
 from hashlib import sha256
@@ -48,61 +49,89 @@ def parse_encoding_constants(encoding_py: Path) -> dict:
 
 	text = encoding_py.read_text(encoding="utf-8")
 
-	def find_str(field: str) -> Optional[str]:
-		for line in text.splitlines():
-			line = line.strip()
-			if not line.startswith(field + ":"):
-				continue
-			if " = " not in line:
-				continue
-			rhs = line.split("=", 1)[1].strip()
-			if rhs.startswith('"') and rhs.endswith('"'):
-				return rhs[1:-1]
-			if rhs.startswith("'") and rhs.endswith("'"):
-				return rhs[1:-1]
-		return None
+	try:
+		mod = ast.parse(text, filename=str(encoding_py))
+	except SyntaxError:
+		return {"encoding_constants": None}
 
-	def find_template_concat(field: str, suffix_field: str, suffix_value: Optional[str]) -> Optional[str]:
-		if suffix_value is None:
+	assigns: dict[str, ast.AST] = {}
+	for node in mod.body:
+		if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+			assigns[node.targets[0].id] = node.value
+		if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+			assigns[node.target.id] = node.value
+
+	env: dict[str, object] = {}
+
+	def eval_expr(expr: Optional[ast.AST]) -> object:
+		if expr is None:
 			return None
-		for line in text.splitlines():
-			line = line.strip()
-			if not line.startswith(field + ":"):
-				continue
-			if " = " not in line:
-				continue
-			rhs = line.split("=", 1)[1].strip()
-			needle = "+ " + suffix_field
-			if needle not in rhs:
-				continue
-			prefix = rhs.split(needle, 1)[0].strip()
-			if prefix.startswith('"') and prefix.endswith('"'):
-				return prefix[1:-1] + suffix_value
-			if prefix.startswith("'") and prefix.endswith("'"):
-				return prefix[1:-1] + suffix_value
+		if isinstance(expr, ast.Constant):
+			return expr.value
+		if isinstance(expr, ast.Name):
+			return env.get(expr.id, None)
+		if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
+			l = eval_expr(expr.left)
+			r = eval_expr(expr.right)
+			if isinstance(l, str) and isinstance(r, str):
+				return l + r
+			return None
+		if isinstance(expr, ast.Dict):
+			out: dict[object, object] = {}
+			for k, v in zip(expr.keys, expr.values):
+				kk = eval_expr(k)
+				vv = eval_expr(v)
+				out[kk] = vv
+			return out
 		return None
 
-	bos_token = find_str("bos_token")
-	eos_token = find_str("eos_token")
-	thinking_start_token = find_str("thinking_start_token")
-	thinking_end_token = find_str("thinking_end_token")
-	dsml_token = find_str("dsml_token")
-	tool_calls_block_name = find_str("tool_calls_block_name")
-	assistant_msg_wo_eos_template = find_str("assistant_msg_wo_eos_template")
-	assistant_msg_template = find_str("assistant_msg_template")
-	if assistant_msg_template is None:
-		assistant_msg_template = find_template_concat("assistant_msg_template", "eos_token", eos_token)
+	for _ in range(8):
+		progress = False
+		for name, expr in assigns.items():
+			if name in env:
+				continue
+			v = eval_expr(expr)
+			if v is None:
+				continue
+			env[name] = v
+			progress = True
+		if not progress:
+			break
+
+	def str_or_none(v: object) -> Optional[str]:
+		return v if isinstance(v, str) else None
+
+	def dict_str_str_or_none(v: object) -> Optional[dict[str, str]]:
+		if not isinstance(v, dict):
+			return None
+		out: dict[str, str] = {}
+		for kk, vv in v.items():
+			if not isinstance(kk, str) or not isinstance(vv, str):
+				return None
+			out[kk] = vv
+		return out
 
 	return {
 		"encoding_constants": {
-			"bos_token": bos_token,
-			"eos_token": eos_token,
-			"thinking_start_token": thinking_start_token,
-			"thinking_end_token": thinking_end_token,
-			"dsml_token": dsml_token,
-			"tool_calls_block_name": tool_calls_block_name,
-			"assistant_msg_template": assistant_msg_template,
-			"assistant_msg_wo_eos_template": assistant_msg_wo_eos_template,
+			"bos_token": str_or_none(env.get("bos_token")),
+			"eos_token": str_or_none(env.get("eos_token")),
+			"thinking_start_token": str_or_none(env.get("thinking_start_token")),
+			"thinking_end_token": str_or_none(env.get("thinking_end_token")),
+			"dsml_token": str_or_none(env.get("dsml_token")),
+			"user_sp_token": str_or_none(env.get("USER_SP_TOKEN")),
+			"assistant_sp_token": str_or_none(env.get("ASSISTANT_SP_TOKEN")),
+			"latest_reminder_sp_token": str_or_none(env.get("LATEST_REMINDER_SP_TOKEN")),
+			"ds_task_sp_tokens": dict_str_str_or_none(env.get("DS_TASK_SP_TOKENS")),
+			"system_msg_template": str_or_none(env.get("system_msg_template")),
+			"user_msg_template": str_or_none(env.get("user_msg_template")),
+			"latest_reminder_msg_template": str_or_none(env.get("latest_reminder_msg_template")),
+			"assistant_msg_template": str_or_none(env.get("assistant_msg_template")),
+			"assistant_msg_wo_eos_template": str_or_none(env.get("assistant_msg_wo_eos_template")),
+			"thinking_template": str_or_none(env.get("thinking_template")),
+			"tool_calls_block_name": str_or_none(env.get("tool_calls_block_name")),
+			"tool_call_template": str_or_none(env.get("tool_call_template")),
+			"tool_calls_template": str_or_none(env.get("tool_calls_template")),
+			"tool_output_template": str_or_none(env.get("tool_output_template")),
 		}
 	}
 

@@ -335,6 +335,15 @@ Message rendering:
 
 The upstream string constants used by the encoder (`bos_token`, `eos_token`, `thinking_*`, `dsml_token`, etc.) are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `encoding_constants`.
 
+In addition to the special tokens, the contract summary records the **exact upstream message/tool templates** required to reproduce prompt rendering in external runtimes:
+
+- `encoding_constants.{system,user,latest_reminder}_msg_template`
+- `encoding_constants.assistant_msg_template` and `encoding_constants.assistant_msg_wo_eos_template`
+- `encoding_constants.thinking_template`
+- `encoding_constants.tool_call_template` and `encoding_constants.tool_calls_template`
+- Role markers: `encoding_constants.{user,assistant,latest_reminder}_sp_token`
+- Task-classifier tokens: `encoding_constants.ds_task_sp_tokens`
+
 ## Tensor key contract (checkpoint naming)
 
 Authoritative source: `model.safetensors.index.json` (weight map keys).
