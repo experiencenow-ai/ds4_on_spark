@@ -102,6 +102,14 @@ This script builds a small subset of the probes and then dumps the first lines o
 - `cuobjdump --dump-sass` output (to confirm the toolkit can decode `sm_121` SASS)
 - `nvdisasm` output (to confirm the disassembler recognizes `sm_121`)
 
+Currently it disassembles:
+
+- `cuda_sm121_probe`
+- `cuda_sm121_cp_async_bulk_tx`
+- `cuda_sm121_tma_bulk_tensor_2d`
+- `cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync`)
+- `cuda_sm121_wmma_smoke` (WMMA / tensor core proxy)
+
 This is useful when bringing up CUTLASS/DeepGEMM-style kernels, because it validates that the developer tooling can inspect the generated kernels on Spark0.
 
 ## Current Spark0 Results (2026-05-09)

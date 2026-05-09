@@ -40,7 +40,7 @@ echo
 echo \"== build (selected targets) ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_sm121_probe bin/cuda_sm121_cp_async_bulk_tx bin/cuda_sm121_tma_bulk_tensor_2d
+make bin/cuda_sm121_probe bin/cuda_sm121_cp_async_bulk_tx bin/cuda_sm121_tma_bulk_tensor_2d bin/cuda_sm121_ldmatrix_smoke bin/cuda_sm121_wmma_smoke
 echo
 dump_sass() {
 	name=\"\$1\"
@@ -68,5 +68,6 @@ dump_sass() {
 dump_sass cuda_sm121_probe \"$REMOTE_DIR\"/bin/cuda_sm121_probe
 dump_sass cuda_sm121_cp_async_bulk_tx \"$REMOTE_DIR\"/bin/cuda_sm121_cp_async_bulk_tx
 dump_sass cuda_sm121_tma_bulk_tensor_2d \"$REMOTE_DIR\"/bin/cuda_sm121_tma_bulk_tensor_2d
+dump_sass cuda_sm121_ldmatrix_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_ldmatrix_smoke
+dump_sass cuda_sm121_wmma_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_wmma_smoke
 "
-
