@@ -14,6 +14,7 @@ runtime, CUDA path, tokenizer/chat format, and memory envelope are real.
 - The run records exact runtime source, runtime commit, model source, quant,
   file size, sha256, command line, context length, token count, TTFT, tokens/sec
   where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+- Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
 - If the run fails, the report preserves the exact failure mode: unsupported

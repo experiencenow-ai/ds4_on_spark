@@ -436,6 +436,6 @@ For external/quantized artifacts:
   - Generator (weights required): `scripts/model_contract_generate_deepseek_v4_flash_oracle.py`
   - Output (commit only after review): `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`
 - The verifier enforces that any committed `logits_oracle.json` matches the pinned `upstream_commit.txt` and records core runtime metadata (TP size, seed, tokenizer hashes).
-- Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.
+- Upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4` (see `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `runtime.reference_defaults`), but Spark baselines may override them; record the exact values used since KV cache sizing depends on them.
 
 Before relying on MTP for speculative decoding, extend the logit oracle to cover the `mtp` path (weights required) and gate DS4’s `mtp` implementation against it.

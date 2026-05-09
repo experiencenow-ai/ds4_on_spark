@@ -111,6 +111,30 @@ def layer_type_from_ratio(ratio: int) -> str:
 def parse_inference_quant_constants(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
+	def modelargs_defaults() -> dict:
+		in_model_args = False
+		out: dict[str, Optional[int]] = {"max_batch_size": None, "max_seq_len": None}
+		for raw in text.splitlines():
+			line = raw.strip()
+			if line.startswith("class ModelArgs"):
+				in_model_args = True
+				continue
+			if in_model_args and line.startswith("class ") and not line.startswith("class ModelArgs"):
+				break
+			if not in_model_args:
+				continue
+			if not line.startswith(("max_batch_size:", "max_seq_len:")):
+				continue
+			if " = " not in line:
+				continue
+			field = line.split(":", 1)[0].strip()
+			rhs = line.split("=", 1)[1].strip()
+			try:
+				out[field] = int(rhs)
+			except ValueError:
+				out[field] = None
+		return out
+
 	def find_dataclass_float(field: str) -> Optional[float]:
 		for line in text.splitlines():
 			line = line.strip()
@@ -140,13 +164,15 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 	block_size = find_int("block_size")
 	fp4_block_size = find_int("fp4_block_size")
 	hc_eps = find_dataclass_float("hc_eps")
+	defaults = modelargs_defaults()
 
 	return {
 		"inference_model_constants": {
 			"block_size": block_size,
 			"fp4_block_size": fp4_block_size,
 			"hc_eps": hc_eps,
-		}
+		},
+		"reference_defaults": defaults,
 	}
 
 
@@ -338,6 +364,16 @@ def build_contract() -> dict:
 			"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
 			"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
 			"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
+			"per_layer_rule": {
+				"if_compress_ratio_nonzero": {
+					"rope_theta": "yarn_rope.compress_rope_theta",
+					"original_seq_len": "yarn_rope.original_seq_len",
+				},
+				"if_compress_ratio_zero": {
+					"rope_theta": "yarn_rope.rope_theta",
+					"original_seq_len": 0,
+				},
+			},
 		},
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
@@ -349,6 +385,8 @@ def build_contract() -> dict:
 			"window_size": int(cfg["sliding_window"]),
 			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
 			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+			"topk_mask_value": -1,
+			"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
 			"prefill": {
 				"compressed_index_offset": "seqlen",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
@@ -377,6 +415,7 @@ def build_contract() -> dict:
 					"namespace_prefix": "mtp.{j}.",
 				},
 				"runtime": {
+					"reference_defaults": inf_model.get("reference_defaults", {}),
 					"indexer": {
 						"index_n_heads": int(inf["index_n_heads"]),
 						"index_head_dim": int(inf["index_head_dim"]),
