@@ -242,9 +242,9 @@ def build_contract() -> dict:
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
 
-	contract = {
-		"format_version": 1,
-		"model": "deepseek_v4_flash",
+		contract = {
+			"format_version": 1,
+			"model": "deepseek_v4_flash",
 		"upstream": {
 			"hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
 			"hf_revision": "main",
@@ -275,14 +275,24 @@ def build_contract() -> dict:
 			"o_lora_rank": int(cfg["o_lora_rank"]),
 			"sliding_window": int(cfg["sliding_window"]),
 		},
-		"yarn_rope": {
-			"rope_theta": float(cfg.get("rope_theta", 10000)),
-			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
-			"original_seq_len": int(cfg.get("original_max_position_embeddings", inf.get("original_seq_len", 0))),
-			"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
-			"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
-			"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
-		},
+			"yarn_rope": {
+				"rope_theta": float(cfg.get("rope_theta", 10000)),
+				"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
+				"original_seq_len": int(cfg.get("original_max_position_embeddings", inf.get("original_seq_len", 0))),
+				"rope_factor": float(cfg.get("rope_scaling", {}).get("factor", inf.get("rope_factor", 0))),
+				"beta_fast": int(cfg.get("rope_scaling", {}).get("beta_fast", inf.get("beta_fast", 0))),
+				"beta_slow": int(cfg.get("rope_scaling", {}).get("beta_slow", inf.get("beta_slow", 0))),
+				"per_layer_rule": {
+					"if_compress_ratio_nonzero": {
+						"original_seq_len": "yarn_rope.original_seq_len",
+						"rope_theta": "yarn_rope.compress_rope_theta",
+					},
+					"if_compress_ratio_zero": {
+						"original_seq_len": 0,
+						"rope_theta": "yarn_rope.rope_theta",
+					},
+				},
+			},
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
 			"main_layer_types": layer_types,
@@ -298,15 +308,17 @@ def build_contract() -> dict:
 				"partial_rotary_factor": partial_rotary_factor,
 			}
 		},
-		"cache": {
-			"window_size": int(cfg["sliding_window"]),
-			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
-			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
-			"prefill": {
-				"compressed_index_offset": "seqlen",
-				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
-				"compress_indices": {"csa": "Indexer(...)", "hca": "get_compress_topk_idxs(...,offset=seqlen)"},
-			},
+			"cache": {
+				"window_size": int(cfg["sliding_window"]),
+				"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
+				"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+				"topk_mask_value": -1,
+				"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+				"prefill": {
+					"compressed_index_offset": "seqlen",
+					"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
+					"compress_indices": {"csa": "Indexer(...)", "hca": "get_compress_topk_idxs(...,offset=seqlen)"},
+				},
 			"decode": {
 				"compressed_index_offset": "window_size",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos>0)",

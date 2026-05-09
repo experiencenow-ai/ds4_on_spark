@@ -165,7 +165,7 @@ Interpretation (from `inference/model.py`):
   - No Indexer path; compressed top-k indices come from the deterministic `get_compress_topk_idxs(...)`.
   - Compression uses non-overlapping windows (`Compressor.overlap == false`).
   - KV cache has a sliding window segment plus a compressed segment sized by `max_seq_len // 128`.
-  - YaRN is enabled in these layers (uses `compress_rope_theta` and `original_seq_len=65536`).
+  - YaRN is enabled for any `compress_ratio != 0` layer (CSA + HCA): uses `compress_rope_theta` and `original_seq_len=65536`.
 
 Layer-by-layer `compress_ratio` schedule for the 43 main blocks:
 
@@ -206,6 +206,12 @@ Sparse attention index selection:
 - If `compress_ratio != 0`, concatenates compressed indices:
   - CSA (`ratio==4`): `Indexer(...)` chooses indices.
   - HCA (`ratio==128`): `get_compress_topk_idxs(...)` chooses indices.
+
+Index masking:
+
+- `get_window_topk_idxs(...)` emits `-1` sentinel indices to pad out positions that should be masked (not enough history in prefill, or `start_pos < window_size - 1` in decode).
+- In the prefill path (`start_pos == 0`), `get_compress_topk_idxs(...)` also emits `-1` to mask compressed positions that do not exist yet.
+- In `inference/kernel.py` `sparse_attn`, indices where `idx == -1` are masked out by setting their attention score to `-inf` and loading `kv=0` for those positions.
 
 Important indexing details (from `Attention.forward`):
 
