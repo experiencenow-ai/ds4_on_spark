@@ -94,6 +94,8 @@ Trace JSONL fields:
 - `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
 - `cost_scale`: optional per-token cost multiplier
 - `decode_ms`: optional observed per-token decode latency (the simulator reports `trace.decode_ms` and `trace.decode_error_ms` vs modeled latency when present)
+- `kv_tokens`: optional KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens` when present)
+- `expert_batch_size`: optional observed expert batch size (the simulator summarizes this under `trace.expert_batch_size` when present)
 
 ## Expert Queueing
 
