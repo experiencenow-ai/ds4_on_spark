@@ -49,6 +49,48 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(t0), 4)
         self.assertNotEqual(set(t0[0].candidates), set(t0[1].candidates))
 
+    def test_trace_jsonl_layers_replay_increases_work_on_same_expert(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(
+                json.dumps(
+                    {
+                        "t_ms": 0.0,
+                        "cls": "batch",
+                        "layers": [{"candidates": [0]}, {"candidates": [0]}],
+                    }
+                )
+            )
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path)
+            self.assertEqual(len(trace), 1)
+            self.assertIsNotNone(trace[0].layers)
+            cfg = scheduler_sim.SimConfig(
+                num_experts=1,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(len(m.token_lat_ms_batch), 1)
+            self.assertAlmostEqual(m.token_lat_ms_batch[0], 2.0, places=6)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_adaptive_k_hits_min_and_max(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

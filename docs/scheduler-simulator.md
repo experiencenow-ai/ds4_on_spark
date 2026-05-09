@@ -216,9 +216,15 @@ JSONL reads one JSON object per line with required fields:
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+- `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
+  - `candidates` (list[int]): ordered expert candidates for that layer (required)
+  - `scores` (optional list[number]): per-candidate router scores (same length as that layer's `candidates`)
+  - `k` (optional int): layer-specific chosen `K` (accepted, but the simulator still treats `k` as a per-token control input)
+  - `cost_scale` (optional number): layer-specific cost multiplier (multiplied into the top-level `cost_scale` when both are present)
+  - When `layers` is present, the simulator expects `candidates` to either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); it uses the per-layer candidate lists for admission.
 - `token_index` (optional int): monotonically increasing token index from the runtime (debugging aid only)
 - `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace`)
-- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc`.
+- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc` (when `layers` is present, use `layers[].scores` instead).
 - `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
 - `accepted_mtp` / `rejected_mtp` (optional int): runtime-friendly MTP accounting fields; when present, the simulator derives `mtp_accept_len` as:
   - `accepted_mtp + 1` (preferred), or
