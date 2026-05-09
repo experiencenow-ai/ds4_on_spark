@@ -13,6 +13,19 @@ Treat this as the practical upper bound for “single Spark” artifacts; anythi
 
 ## Candidates (pinned)
 
+## Reproducing the size numbers (no downloads)
+
+The GGUF “sizes” above are taken from the Git LFS pointer metadata in a metadata-only clone (i.e. `GIT_LFS_SKIP_SMUDGE=1` / LFS filters disabled). This lets us record exact byte counts without fetching multi‑GB blobs.
+
+To reproduce:
+
+```bash
+./scripts/fetch_upstreams.sh deepseek_v4_gguf_preyazz
+./scripts/upstream_hf_pointer_report.sh deepseek_v4_gguf_preyazz
+```
+
+Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gguf_batiai`, etc.).
+
 ### antirez/deepseek-v4-gguf (DS4-tuned IQ2XXS)
 
 - Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `ef3b960827870d69ed0b225c095a617c12d7e80d` (`refs/heads/main`)

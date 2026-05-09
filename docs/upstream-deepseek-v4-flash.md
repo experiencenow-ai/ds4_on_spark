@@ -30,6 +30,10 @@ Related checkpoint (same “official configs” approach):
 - When fetched via `scripts/fetch_upstreams.sh` with LFS disabled, these appear as small pointer stubs (first line `version https://git-lfs.github.com/spec/v1`), not actual weights.
 - Do not run `git lfs pull` (or any alternative fetch that resolves LFS blobs) inside `upstreams/deepseek_v4_*`.
 
+## HF storage backend note (Xet/LFS)
+
+The Hub increasingly serves large files via Xet-backed storage, while keeping Git-compatible workflows. Regardless of backend, this repo always treats the Git transport (`git ls-remote`, `git clone`) as the source of truth for the pinned commit hashes used by our fetch/verify scripts.
+
 ## Hugging Face revisions vs git commits
 
 Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) that don’t match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
