@@ -99,7 +99,7 @@ done
 if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \
 		-e 's/([0-9]{1,3}[.]){3}[0-9]{1,3}/<redacted-ipv4>/g' \
-		-e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/<redacted-mac>/g' \
+		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
 		"$tmp"
 else
