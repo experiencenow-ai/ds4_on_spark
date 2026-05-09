@@ -326,6 +326,8 @@ Trace sanity-check (contract summary only):
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
 ```
 
+Tip: in replay mode you can set `--num-experts 0` to infer `num_experts` from the trace (or `meta.num_experts`), and `--mtp-draft-len -1` to infer `mtp_draft_len` from `meta.mtp_draft_len` or consistent `accepted_mtp+rejected_mtp` fields.
+
 Synthetic trace dump (generate, write JSONL, and exit after printing the trace summary):
 
 ```bash
