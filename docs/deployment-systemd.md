@@ -7,6 +7,12 @@ Templates live in `deploy/systemd/` and are meant to be copied to:
 They are **examples**. Adjust flags and sandboxing once the runtime interface is
 stable.
 
+Optional (recommended): validate deploy assets + ops scripts before staging:
+
+```bash
+./scripts/ops_validate_deploy_assets.sh
+```
+
 ## Units
 
 - `ds4@.service`: long-running DS4 instance

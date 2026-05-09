@@ -49,6 +49,12 @@ sudo install -d -o ds4  -g ds4  -m 0750 /var/log/ds4
 
 2. Copy templates from this repo into place.
 
+Optional (recommended): validate deploy assets + ops scripts before staging:
+
+```bash
+./scripts/ops_validate_deploy_assets.sh
+```
+
 ```bash
 # From your Mac:
 rsync -av deploy/systemd/ <user>@spark0.local:/tmp/ds4-systemd/
