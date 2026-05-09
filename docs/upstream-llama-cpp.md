@@ -38,6 +38,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - Commit: `9d364087024da141510267e6b269ee495ca45176`
 - License: MIT
 - Notes: WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter support, referenced by “native FP4/FP8” V4 GGUF artifacts.
+  - Upstream PR reference: `ggml-org/llama.cpp` PR `#22378` (“Wip/deepseek v4 support”) was closed and marked “purely for reference”; it pointed at this branch. Some community GGUF repos still reference that PR URL.
 
 ### kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark
 

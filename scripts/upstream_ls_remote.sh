@@ -38,6 +38,7 @@ print_ref "DeepSeek-V4-Flash-Base (HF)" "https://huggingface.co/deepseek-ai/Deep
 print_ref "DeepSeek-V4-Flash GGUF (antirez, HF)" "https://huggingface.co/antirez/deepseek-v4-gguf"
 print_ref "DeepSeek-V4-Flash GGUF (Preyazz, HF)" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"
 print_ref "DeepSeek-V4-Flash GGUF (BatiAI, HF)" "https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF"
+print_ref "DeepSeek-V4-Flash GGUF (lovedheart, HF)" "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF"
 print_ref "DeepSeek-V4-Flash GGUF (nsparks, HF)" "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF"
 print_ref "DeepSeek-V4-Flash GGUF (cyberneurova, HF)" "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
 print_ref "vLLM" "https://github.com/vllm-project/vllm.git"
