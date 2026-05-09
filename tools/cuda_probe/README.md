@@ -17,6 +17,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
+- `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.
 
 ## Run
 
@@ -27,6 +28,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
 ./tools/cuda_probe/bin/cuda_sm121_smem_optin
 ./tools/cuda_probe/bin/cuda_sm121_devattrs
+./tools/cuda_probe/bin/cuda_sm121_fp8_conv
 ```
 
 ## Notes
@@ -39,5 +41,6 @@ Expected outputs:
   CUTLASS-style kernels that rely on `cudaFuncAttributeMaxDynamicSharedMemorySize`.
 - `cuda_sm121_devattrs` records device limits and runtime feature gates that commonly gate
   CUTLASS / custom GEMM kernel bring-up.
-- Both probes intentionally keep dependencies tiny and print errors verbatim so
+- `cuda_sm121_fp8_conv` is a compile/run check for CUDA’s FP8 conversion helpers.
+- These probes intentionally keep dependencies tiny and print errors verbatim so
   failures can be pasted into an issue/PR.
