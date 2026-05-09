@@ -27,6 +27,7 @@ class TokenRoute:
     k: Optional[int] = None
     scores: Optional[Tuple[float, ...]] = None
     mtp_accept_len: Optional[int] = None
+    cost_scale: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -700,7 +701,26 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
                     raise ValueError(f"{path}:{lineno}: mtp_accept_len must be >= 1")
                 mtp_accept_len = int(al_raw)
 
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=tuple(candidates), k=k, scores=scores, mtp_accept_len=mtp_accept_len))
+            cost_scale: Optional[float] = None
+            if "cost_scale" in obj and obj["cost_scale"] is not None:
+                cs_raw = obj["cost_scale"]
+                if not isinstance(cs_raw, (int, float)):
+                    raise ValueError(f"{path}:{lineno}: cost_scale must be a number")
+                if float(cs_raw) <= 0.0:
+                    raise ValueError(f"{path}:{lineno}: cost_scale must be > 0")
+                cost_scale = float(cs_raw)
+
+            routes.append(
+                TokenRoute(
+                    t_ms=t_ms,
+                    cls=cls,
+                    candidates=tuple(candidates),
+                    k=k,
+                    scores=scores,
+                    mtp_accept_len=mtp_accept_len,
+                    cost_scale=cost_scale,
+                )
+            )
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -1006,6 +1026,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     for route in trace:
         if len(route.candidates) == 0:
             raise ValueError("trace route candidates must be non-empty")
+        if route.cost_scale is not None and float(route.cost_scale) <= 0.0:
+            raise ValueError("trace route cost_scale must be > 0")
         if route.k is not None:
             if route.k <= 0:
                 raise ValueError("trace route k must be > 0")
@@ -1178,9 +1200,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 accept_len = _choose_mtp_accept_len(cfg, rng, metrics, route)
 
             for micro_i in range(micro_tokens):
-                cost_scale = 1.0
+                base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
+                cost_scale = base_cost_scale
                 if mtp_enabled and micro_i < cfg.mtp_draft_len:
-                    cost_scale = cfg.mtp_draft_cost_scale
+                    cost_scale *= cfg.mtp_draft_cost_scale
 
                 admitted = 0
                 for expert_id in _candidate_order(admit_policy, experts, route):
@@ -1296,7 +1319,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
-    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len).")
+    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, cost_scale).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)

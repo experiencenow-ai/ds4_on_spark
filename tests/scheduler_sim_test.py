@@ -357,6 +357,38 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_jsonl_cost_scale_parses_and_affects_makespan(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0],"cost_scale":2.0}\n')
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0],"cost_scale":2.0}\n')
+            trace = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual(trace[0].cost_scale, 2.0)
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=1,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+            )
+            m_scaled = scheduler_sim.run_simulation(cfg, trace)
+            m_base = scheduler_sim.run_simulation(cfg, [dataclasses.replace(r, cost_scale=None) for r in trace])
+            self.assertGreater(m_scaled.makespan_ms, m_base.makespan_ms)
+        finally:
+            os.unlink(path)
+
     def test_trace_jsonl_mtp_accept_len_overrides_sampling(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:

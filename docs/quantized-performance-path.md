@@ -44,6 +44,7 @@ One JSON object per line:
 - `k` (optional int): the chosen `K` for that token (required when using `--k-mode trace`)
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
 - `mtp_accept_len` (optional int): when replaying MTP (`--mtp-draft-len > 0`), the observed accept length for that verify step in the range `[1, mtp_draft_len+1]`
+- `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (shape-dependent service modeling)
 
 The simulator validates:
 
@@ -64,6 +65,7 @@ Optional but useful:
 
 - router scores/probabilities (`scores`) (enables `--admit-policy score_desc` in the simulator)
 - observed per-expert queue depth at enqueue time (for later model/validation)
+- an approximate per-token cost scale (`cost_scale`) (e.g., derived from expert GEMM shape or token type)
 
 ## MTP Status
 

@@ -186,6 +186,7 @@ Replay mode reads one JSON object per line with required fields:
 - `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace`)
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc`.
 - `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
+- `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (useful for shape-dependent service modeling in replay traces)
 
 Example:
 
