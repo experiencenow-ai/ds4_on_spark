@@ -74,6 +74,25 @@ control loop:
 This is intentionally simple; it is meant to generate stable, testable behavior
 and highlight oscillation or starvation regimes early.
 
+## MTP (Draft/Accept) Model
+
+This simulator includes a host-only approximation of **MTP draft/accept** behavior so we can explore
+the tradeoffs *before* touching CUDA runtime code.
+
+When `--mtp-draft-len > 0`, each trace element is treated as one **verify step** which performs:
+
+- Draft compute: enqueue `--mtp-draft-len` draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
+  - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
+- Verify compute: enqueue one verify micro-token at full cost.
+- Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
+  - Draft position `i` is accepted with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
+  - If all draft tokens are accepted, the simulator counts one extra **bonus token** (accept length `= draft_len + 1`).
+
+Notes:
+
+- Acceptance sampling is controlled by `--sim-seed` for determinism.
+- Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
+
 ## Running
 
 ```bash
@@ -91,6 +110,13 @@ Example: damp K oscillations and expose SLA violations:
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.95 --k-ema-alpha 0.2 --k-update-ms 1.0 --k-slew 1 --sla-interactive-ms 25 --json
+```
+
+MTP example (synthetic accept-all vs accept-none):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --mtp-draft-len 2 --mtp-accept-prob 1.0 --mtp-accept-decay 0.5 --mtp-draft-cost-scale 0.25 --json
+python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --mtp-draft-len 2 --mtp-accept-prob 0.0 --mtp-draft-cost-scale 0.25 --json
 ```
 
 ### Synthetic Trace Modes
@@ -139,6 +165,7 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-expe
 The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
+- `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max (admitted tokens only)
 - `sla`: per-class token-SLA violation counts/fractions (when `--sla-*-ms` is set)
 - `tokens`: token-level admitted vs dropped-by-backpressure counts
@@ -156,7 +183,7 @@ The simulator prints a JSON object with:
 
 ## Next Steps
 
-- Add a trace replay mode that reads real router outputs (when available).
+- Start collecting real quantized-runtime router traces and feed them into `--trace-jsonl` (see `docs/quantized-performance-path.md`).
 - Replace fixed `--service-ms` with a shape-dependent service model once DS4
   expert GEMM shapes are pinned down.
 - Use this harness to define production invariants (interactive p95 bounds,

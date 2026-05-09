@@ -96,6 +96,11 @@ class SimConfig:
     admit_policy: str = "ordered"
     sla_interactive_ms: float = 0.0
     sla_batch_ms: float = 0.0
+    sim_seed: int = 1
+    mtp_draft_len: int = 0
+    mtp_accept_prob: float = 0.0
+    mtp_accept_decay: float = 1.0
+    mtp_draft_cost_scale: float = 0.25
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     service_base_ms: float = 0.0
@@ -107,6 +112,7 @@ class Task:
     token_id: int
     cls: LatencyClass
     enqueue_ms: float
+    cost_scale: float = 1.0
     start_ms: Optional[float] = None
 
 
@@ -186,6 +192,18 @@ class SimMetrics:
     mean_pending_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_utilization_per_expert: List[float] = dataclasses.field(default_factory=list)
     saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
+    mtp_output_tokens: int = 0
+    mtp_verify_steps: int = 0
+    mtp_draft_len: int = 0
+    mtp_accept_prob: float = 0.0
+    mtp_accept_decay: float = 1.0
+    mtp_draft_tokens_total: int = 0
+    mtp_draft_tokens_accepted: int = 0
+    mtp_draft_tokens_rejected: int = 0
+    mtp_bonus_tokens: int = 0
+    mtp_accept_len_per_step: List[int] = dataclasses.field(default_factory=list)
+    mtp_pos_attempted: List[int] = dataclasses.field(default_factory=list)
+    mtp_pos_accepted: List[int] = dataclasses.field(default_factory=list)
 
     def to_jsonable(self) -> Dict[str, object]:
         def percentile(xs_sorted: Sequence[float], p: float) -> float:
@@ -249,6 +267,25 @@ class SimMetrics:
                     "makespan_ms": self.makespan_ms,
                     "token_throughput_tps": (float(self.num_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                     "task_throughput_tps": (float(self.admitted_tasks) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
+                },
+                "mtp": {
+                    "enabled": self.mtp_draft_len > 0,
+                    "output_tokens": self.mtp_output_tokens,
+                    "output_token_throughput_tps": (float(self.mtp_output_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
+                    "verify_steps": self.mtp_verify_steps,
+                    "draft_len": self.mtp_draft_len,
+                    "accept_prob": self.mtp_accept_prob,
+                    "accept_decay": self.mtp_accept_decay,
+                    "draft_tokens_total": self.mtp_draft_tokens_total,
+                    "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
+                    "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
+                    "bonus_tokens": self.mtp_bonus_tokens,
+                    "accept_len": summarize_ints(self.mtp_accept_len_per_step),
+                    "accept_rate": (float(self.mtp_draft_tokens_accepted) / float(self.mtp_draft_tokens_total)) if self.mtp_draft_tokens_total != 0 else 0.0,
+                    "per_pos_accept_rate_conditional": [
+                        (float(a) / float(t)) if t != 0 else 0.0
+                        for t, a in zip(self.mtp_pos_attempted, self.mtp_pos_accepted)
+                    ],
                 },
                 "token_latency_ms": {
                     "interactive": summarize(self.token_lat_ms_interactive),
@@ -660,6 +697,14 @@ def _service_time_ms(cfg: SimConfig, batch_size: int) -> float:
     return(cfg.service_base_ms + (per_task_ms * float(batch_size)))
 
 
+def _service_time_tasks_ms(cfg: SimConfig, tasks: Sequence[Task]) -> float:
+    per_task_ms = cfg.service_per_task_ms if cfg.service_per_task_ms >= 0.0 else cfg.service_ms
+    work = 0.0
+    for t in tasks:
+        work += float(t.cost_scale)
+    return(cfg.service_base_ms + (per_task_ms * work))
+
+
 def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int, evq: List[Event], seq_ref: List[int], metrics: SimMetrics) -> None:
     _promote_aged_batch(now_ms, cfg, eq, metrics)
     while eq.in_flight < cfg.expert_parallelism:
@@ -717,7 +762,37 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
 
         eq.in_flight += 1
         seq_ref[0] += 1
-        heapq.heappush(evq, Event(t_ms=(now_ms + _service_time_ms(cfg, len(tasks))), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
+        heapq.heappush(evq, Event(t_ms=(now_ms + _service_time_tasks_ms(cfg, tasks)), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
+
+
+def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics) -> int:
+    if cfg.mtp_draft_len <= 0:
+        return(1)
+    if cfg.mtp_accept_prob <= 0.0:
+        return(1)
+    if cfg.mtp_accept_prob > 1.0:
+        return(1)
+    if cfg.mtp_accept_decay <= 0.0:
+        return(1)
+
+    draft_len = cfg.mtp_draft_len
+    accepted_draft = 0
+    for i in range(draft_len):
+        metrics.mtp_pos_attempted[i] += 1
+        p = (cfg.mtp_accept_prob * (cfg.mtp_accept_decay ** float(i)))
+        if p >= 1.0 or rng.random() < p:
+            metrics.mtp_pos_accepted[i] += 1
+            accepted_draft += 1
+        else:
+            break
+
+    metrics.mtp_draft_tokens_total += draft_len
+    metrics.mtp_draft_tokens_accepted += accepted_draft
+    metrics.mtp_draft_tokens_rejected += (draft_len - accepted_draft)
+    if accepted_draft == draft_len:
+        metrics.mtp_bonus_tokens += 1
+        return(draft_len + 1)
+    return(accepted_draft + 1)
 
 
 def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
@@ -772,6 +847,17 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("sla_interactive_ms must be >= 0")
     if cfg.sla_batch_ms < 0.0:
         raise ValueError("sla_batch_ms must be >= 0")
+    if cfg.sim_seed < 0:
+        raise ValueError("sim_seed must be >= 0")
+    if cfg.mtp_draft_len < 0:
+        raise ValueError("mtp_draft_len must be >= 0")
+    if cfg.mtp_draft_len > 0:
+        if cfg.mtp_accept_prob < 0.0 or cfg.mtp_accept_prob > 1.0:
+            raise ValueError("mtp_accept_prob must be within [0,1]")
+        if cfg.mtp_accept_decay <= 0.0:
+            raise ValueError("mtp_accept_decay must be > 0")
+        if cfg.mtp_draft_cost_scale <= 0.0:
+            raise ValueError("mtp_draft_cost_scale must be > 0")
 
     for route in trace:
         if len(route.candidates) == 0:
@@ -791,6 +877,14 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
         saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
     )
+    rng = random.Random(cfg.sim_seed)
+    if cfg.mtp_draft_len > 0:
+        metrics.mtp_verify_steps = len(trace)
+        metrics.mtp_draft_len = cfg.mtp_draft_len
+        metrics.mtp_accept_prob = cfg.mtp_accept_prob
+        metrics.mtp_accept_decay = cfg.mtp_accept_decay
+        metrics.mtp_pos_attempted = [0 for _ in range(cfg.mtp_draft_len)]
+        metrics.mtp_pos_accepted = [0 for _ in range(cfg.mtp_draft_len)]
 
     k_ctrl: Dict[LatencyClass, KControllerState] = {LatencyClass.INTERACTIVE: KControllerState(), LatencyClass.BATCH: KControllerState()}
 
@@ -853,6 +947,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 raise RuntimeError("TOKEN_ARRIVAL missing task")
             tid = ev.tasks[0].token_id
             route = trace[tid]
+            mtp_enabled = (cfg.mtp_draft_len > 0)
             if k_signal == "global":
                 pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
             else:
@@ -906,30 +1001,44 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 metrics.chosen_k_batch.append(k)
 
             admitted = 0
-            for expert_id in _candidate_order(admit_policy, experts, route):
-                if admitted >= k:
-                    break
-                eq = experts[expert_id]
-                if eq.pending() >= cfg.expert_queue_max:
-                    metrics.dropped_tasks_backpressure += 1
+            admitted_verify = 0
+            micro_tokens = (cfg.mtp_draft_len + 1) if mtp_enabled else 1
+            accept_len = 1
+            if mtp_enabled:
+                accept_len = _sample_mtp_accept_len(cfg, rng, metrics)
+
+            for micro_i in range(micro_tokens):
+                cost_scale = 1.0
+                if mtp_enabled and micro_i < cfg.mtp_draft_len:
+                    cost_scale = cfg.mtp_draft_cost_scale
+
+                admitted = 0
+                for expert_id in _candidate_order(admit_policy, experts, route):
+                    if admitted >= k:
+                        break
+                    eq = experts[expert_id]
+                    if eq.pending() >= cfg.expert_queue_max:
+                        metrics.dropped_tasks_backpressure += 1
+                        if route.cls == LatencyClass.INTERACTIVE:
+                            metrics.dropped_tasks_backpressure_interactive += 1
+                        else:
+                            metrics.dropped_tasks_backpressure_batch += 1
+                        continue
+                    task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=cost_scale)
                     if route.cls == LatencyClass.INTERACTIVE:
-                        metrics.dropped_tasks_backpressure_interactive += 1
+                        eq.hi.append(task)
                     else:
-                        metrics.dropped_tasks_backpressure_batch += 1
-                    continue
-                task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms)
-                if route.cls == LatencyClass.INTERACTIVE:
-                    eq.hi.append(task)
-                else:
-                    eq.lo.append(task)
-                tokens[tid].remaining += 1
-                metrics.admitted_tasks += 1
-                if route.cls == LatencyClass.INTERACTIVE:
-                    metrics.admitted_tasks_interactive += 1
-                else:
-                    metrics.admitted_tasks_batch += 1
-                admitted += 1
-                _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
+                        eq.lo.append(task)
+                    tokens[tid].remaining += 1
+                    metrics.admitted_tasks += 1
+                    if route.cls == LatencyClass.INTERACTIVE:
+                        metrics.admitted_tasks_interactive += 1
+                    else:
+                        metrics.admitted_tasks_batch += 1
+                    admitted += 1
+                    if (not mtp_enabled) or micro_i == cfg.mtp_draft_len:
+                        admitted_verify += 1
+                    _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
 
             if tokens[tid].remaining == 0:
                 metrics.dropped_tokens_backpressure += 1
@@ -938,21 +1047,29 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 else:
                     metrics.dropped_tokens_backpressure_batch += 1
                 tokens[tid].done_ms = now_ms
+                if mtp_enabled:
+                    metrics.mtp_accept_len_per_step.append(0)
             else:
                 metrics.admitted_tokens += 1
                 if route.cls == LatencyClass.INTERACTIVE:
                     metrics.admitted_tokens_interactive += 1
-                    metrics.effective_k_interactive.append(admitted)
+                    metrics.effective_k_interactive.append(admitted_verify)
                 else:
                     metrics.admitted_tokens_batch += 1
-                    metrics.effective_k_batch.append(admitted)
+                    metrics.effective_k_batch.append(admitted_verify)
                 desired = min(k, len(route.candidates))
-                if admitted < desired:
+                if admitted_verify < desired:
                     metrics.partial_admit_tokens += 1
                     if route.cls == LatencyClass.INTERACTIVE:
                         metrics.partial_admit_tokens_interactive += 1
                     else:
                         metrics.partial_admit_tokens_batch += 1
+                if mtp_enabled:
+                    if admitted_verify == 0:
+                        metrics.mtp_accept_len_per_step.append(0)
+                    else:
+                        metrics.mtp_accept_len_per_step.append(accept_len)
+                        metrics.mtp_output_tokens += accept_len
 
         elif ev.kind == EventKind.TASK_DONE:
             if ev.tasks is None or len(ev.tasks) == 0:
@@ -1032,6 +1149,11 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--promote-ms", type=float, default=0.0, help="Per-expert aging: promote batch tasks to interactive queue once they wait this long (0 = disabled).")
     p.add_argument("--sla-interactive-ms", type=float, default=0.0, help="Token SLA: count interactive tokens with latency > this (0 = disabled).")
     p.add_argument("--sla-batch-ms", type=float, default=0.0, help="Token SLA: count batch tokens with latency > this (0 = disabled).")
+    p.add_argument("--sim-seed", type=int, default=1, help="Simulation seed (used for MTP accept/reject sampling).")
+    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled).")
+    p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
+    p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
+    p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -1129,6 +1251,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         admit_policy=args.admit_policy,
         sla_interactive_ms=args.sla_interactive_ms,
         sla_batch_ms=args.sla_batch_ms,
+        sim_seed=args.sim_seed,
+        mtp_draft_len=args.mtp_draft_len,
+        mtp_accept_prob=args.mtp_accept_prob,
+        mtp_accept_decay=args.mtp_accept_decay,
+        mtp_draft_cost_scale=args.mtp_draft_cost_scale,
     )
 
     metrics = run_simulation(sim_cfg, trace)

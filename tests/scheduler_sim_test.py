@@ -573,6 +573,79 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m.admitted_tokens_batch, 2)
         self.assertEqual(m.token_sla_violations_batch, 1)
 
+    def test_mtp_accept_all_produces_bonus_tokens(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for i in range(10)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=1.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.mtp_verify_steps, 10)
+        self.assertEqual(m.mtp_output_tokens, 30)
+        self.assertEqual(m.mtp_draft_tokens_total, 20)
+        self.assertEqual(m.mtp_draft_tokens_accepted, 20)
+        self.assertEqual(m.mtp_draft_tokens_rejected, 0)
+        self.assertEqual(m.mtp_bonus_tokens, 10)
+        self.assertEqual(m.mtp_accept_len_per_step, [3 for _ in range(10)])
+
+    def test_mtp_accept_none_degenerates_to_one_token(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for i in range(10)
+        ]
+        base = dict(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        cfg_no_mtp = scheduler_sim.SimConfig(**base)
+        cfg_mtp = scheduler_sim.SimConfig(**base, sim_seed=123, mtp_draft_len=2, mtp_accept_prob=0.0, mtp_draft_cost_scale=0.25)
+        m0 = scheduler_sim.run_simulation(cfg_no_mtp, trace)
+        m1 = scheduler_sim.run_simulation(cfg_mtp, trace)
+        self.assertEqual(m1.mtp_output_tokens, 10)
+        self.assertGreater(m1.makespan_ms, m0.makespan_ms)
+
 
 if __name__ == "__main__":
     unittest.main()
