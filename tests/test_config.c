@@ -190,5 +190,54 @@ int32_t test_config(void)
 		return(-36);
 	}
 	unlink(path);
+	unsetenv("DS4_CONFIG_PATH");
+	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
+	for (n=0; n<(int32_t)sizeof(path); n++)
+		path[n] = 0;
+	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_envpath_XXXXXX");
+	if ( plen <= 0 )
+		return(-37);
+	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
+		path[n] = "/tmp/ds4_cfg_envpath_XXXXXX"[n];
+	path[n] = 0;
+	fd = mkstemp(path);
+	if ( fd < 0 )
+		return(-38);
+	if ( ds4_write_all(fd,fbuf,(int32_t)(sizeof(fbuf) - 1)) < 0 )
+	{
+		close(fd);
+		unlink(path);
+		return(-39);
+	}
+	close(fd);
+	if ( setenv("DS4_CONFIG_PATH",path,1) != 0 )
+	{
+		unlink(path);
+		return(-40);
+	}
+	if ( setenv("DS4_LOG_LEVEL","3",1) != 0 )
+	{
+		unlink(path);
+		return(-41);
+	}
+	if ( ds4_config_load_auto(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
+	{
+		unlink(path);
+		return(-42);
+	}
+	if ( cfg.log_level != 3 )
+	{
+		unlink(path);
+		return(-43);
+	}
+	if ( cfg.enable_cuda != 1 )
+	{
+		unlink(path);
+		return(-44);
+	}
+	unlink(path);
+	unsetenv("DS4_CONFIG_PATH");
+	unsetenv("DS4_LOG_LEVEL");
 	return(0);
 }
