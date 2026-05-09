@@ -42,8 +42,10 @@ Implication:
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
 - FP8 matmul is verified via cuBLASLt on `sm_121` for E4M3 (see `cuda_cublaslt_fp8_smoke`), which de-risks early FP8 bring-up for DeepGEMM-style paths.
 - The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (observed `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
-- FP4 conversion helpers exist in CUDA 13 (`cuda_fp4.h`), but FP4 matmul support is cuBLASLt-stack dependent; use `cuda_cublaslt_fp4_smoke` as the first “does FP4 GEMM exist?” signal before investing in FP4 kernels.
-- Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88`): `cuda_cublaslt_fp4_smoke` returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection, so FP4 GEMM is not currently available via cuBLASLt on GB10.
+- FP4 conversion helpers exist in CUDA 13 (`cuda_fp4.h`), but FP4 matmul support and packing/scale semantics are cuBLASLt-stack dependent; use `cuda_cublaslt_fp4_smoke` / `cuda_cublaslt_fp4_sweep` as the first “does FP4 GEMM exist?” gate before investing in FP4 kernels.
+- Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88` / `cublasLtGetVersion=130101`):
+  - `cuda_cublaslt_fp4_sweep` reports `heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0` for BF16 output (`CUBLAS_COMPUTE_32F`), which suggests an FP4 matmul execution path exists in cuBLASLt on GB10.
+  - `cuda_cublaslt_fp4_smoke` currently prints `max_abs_err_vs_one=1` for a naive “identity×ones” check (so treat this as “matmul runs” not “numeric validated” until we wire a correct NVFP4 pack+scale recipe).
 
 Probe:
 

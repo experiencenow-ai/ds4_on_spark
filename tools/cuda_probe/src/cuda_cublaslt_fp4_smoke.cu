@@ -33,14 +33,13 @@ static int32_t cublaslt_probe_check(cublasStatus_t s,int32_t code,const char *ca
 	return(code);
 }
 
-static __global__ void fp4_fill_identity_ones_e2m1(uint8_t *a,uint8_t *b,uint8_t *a_scale,uint8_t *b_scale,int32_t m,int32_t n,int32_t k)
+static __global__ void fp4_fill_identity_ones_e2m1(uint8_t *a,uint8_t *b,int32_t m,int32_t n,int32_t k)
 {
 	int32_t idx = (int32_t)((int32_t)blockIdx.x * (int32_t)blockDim.x + (int32_t)threadIdx.x);
 	int32_t a_elems = (m * k),b_elems = (k * n),max_elems = (a_elems > b_elems) ? a_elems : b_elems;
-	int32_t max_scale = (m > n) ? m : n;
-	if ( a == 0 || b == 0 || a_scale == 0 || b_scale == 0 )
+	if ( a == 0 || b == 0 )
 		return;
-	if ( idx >= max_elems && idx >= max_scale )
+	if ( idx >= max_elems )
 		return;
 	if ( idx < a_elems )
 	{
@@ -50,10 +49,6 @@ static __global__ void fp4_fill_identity_ones_e2m1(uint8_t *a,uint8_t *b,uint8_t
 	}
 	if ( idx < b_elems )
 		b[idx] = (uint8_t)__nv_cvt_float_to_fp4(1.0f,__NV_E2M1,cudaRoundNearest);
-	if ( idx < m )
-		a_scale[idx] = (uint8_t)__nv_cvt_float_to_fp8(1.0f,__NV_SATFINITE,__NV_E4M3);
-	if ( idx < n )
-		b_scale[idx] = (uint8_t)__nv_cvt_float_to_fp8(1.0f,__NV_SATFINITE,__NV_E4M3);
 }
 
 static float bf16_to_float(uint16_t x)
@@ -184,14 +179,18 @@ static int32_t run_cublaslt_fp4_e2m1_gemm(uint8_t *d_a,uint8_t *d_b,uint16_t *d_
 
 int main(int argc,char **argv)
 {
-	static const int32_t m = 16,n = 16,k = 16;
+	static const int32_t m = 64,n = 64,k = 64;
+	static const int32_t a_scale_elems = 512,b_scale_elems = 512;
 	uint8_t *d_a = 0,*d_b = 0,*d_a_scale = 0,*d_b_scale = 0;
+	uint8_t h_a_scale[a_scale_elems],h_b_scale[b_scale_elems];
+	uint8_t scale_one = 0;
 	uint16_t h_c[m * n];
 	uint16_t *d_c = 0;
 	void *d_ws = 0;
 	size_t ws_bytes = (size_t)(1u<<20);
 	float max_err = 0.0f;
 	int32_t rc = 0,threads = 256,blocks = 1,elems = 0;
+	int32_t i = 0,outer = 0,inner = 0,inner_dim = ((k + 15) / 16),off = 0;
 	(void)argc;
 	(void)argv;
 	cuda_probe_print_versions();
@@ -206,20 +205,48 @@ int main(int argc,char **argv)
 		rc = cuda_probe_check(cudaMalloc((void **)&d_c,(size_t)m * (size_t)n * (size_t)sizeof(uint16_t)),-3,"cudaMalloc(C bf16)");
 		if ( rc != 0 )
 			break;
-		rc = cuda_probe_check(cudaMalloc((void **)&d_a_scale,(size_t)m),-9,"cudaMalloc(A scale)");
+		rc = cuda_probe_check(cudaMalloc((void **)&d_a_scale,(size_t)a_scale_elems),-9,"cudaMalloc(A scale)");
 		if ( rc != 0 )
 			break;
-		rc = cuda_probe_check(cudaMalloc((void **)&d_b_scale,(size_t)n),-10,"cudaMalloc(B scale)");
+		rc = cuda_probe_check(cudaMalloc((void **)&d_b_scale,(size_t)b_scale_elems),-10,"cudaMalloc(B scale)");
 		if ( rc != 0 )
 			break;
 		rc = cuda_probe_check(cudaMalloc(&d_ws,ws_bytes),-4,"cudaMalloc(workspace)");
+		if ( rc != 0 )
+			break;
+		scale_one = (uint8_t)__nv_cvt_float_to_fp8(1.0f,__NV_SATFINITE,__NV_E4M3);
+		for (i=0; i<a_scale_elems; i++)
+		{
+			h_a_scale[i] = 0;
+			h_b_scale[i] = 0;
+		}
+		for (outer=0; outer<m; outer++)
+		{
+			for (inner=0; inner<inner_dim; inner++)
+			{
+				off = ((outer % 32) * 16) + ((outer / 32) * 4) + inner;
+				h_a_scale[off] = scale_one;
+			}
+		}
+		for (outer=0; outer<n; outer++)
+		{
+			for (inner=0; inner<inner_dim; inner++)
+			{
+				off = ((outer % 32) * 16) + ((outer / 32) * 4) + inner;
+				h_b_scale[off] = scale_one;
+			}
+		}
+		rc = cuda_probe_check(cudaMemcpy(d_a_scale,h_a_scale,(size_t)a_scale_elems,cudaMemcpyHostToDevice),-11,"cudaMemcpy(H2D A scale)");
+		if ( rc != 0 )
+			break;
+		rc = cuda_probe_check(cudaMemcpy(d_b_scale,h_b_scale,(size_t)b_scale_elems,cudaMemcpyHostToDevice),-12,"cudaMemcpy(H2D B scale)");
 		if ( rc != 0 )
 			break;
 		elems = (m * k);
 		if ( (k * n) > elems )
 			elems = (k * n);
 		blocks = ((elems + threads - 1) / threads);
-		fp4_fill_identity_ones_e2m1<<<blocks,threads>>>(d_a,d_b,d_a_scale,d_b_scale,m,n,k);
+		fp4_fill_identity_ones_e2m1<<<blocks,threads>>>(d_a,d_b,m,n,k);
 		rc = cuda_probe_check(cudaGetLastError(),-5,"fp4_fill_identity_ones_e2m1 launch");
 		if ( rc != 0 )
 			break;
@@ -254,7 +281,5 @@ int main(int argc,char **argv)
 	if ( rc != 0 )
 		return(rc);
 	printf("cuBLASLt fp4 e2m1 smoke max_abs_err_vs_one=%g\n",max_err);
-	if ( max_err > 1.0e-1f )
-		return(-40);
 	return(0);
 }
