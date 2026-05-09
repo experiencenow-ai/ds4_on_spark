@@ -54,6 +54,7 @@ Notes:
 - When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
 - When multiple targets are provided, the probe prints `probe targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
+- If the `nvcc -arch=...` runtime probe compile fails (unsupported arch), the probe retries once without `-arch` so the runtime can still report `device0 cc: ...`.
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
 - If the checkout `.git` metadata is unusable (macOS provenance/permission), set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
@@ -66,6 +67,7 @@ Notes:
 - `nvcc` path and version (toolkit version).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - Any `warning:` line emitted by the probe when `nvcc release` and `cuda.h` disagree.
+- Any `note:` line emitted by the probe when `nvidia-smi` CUDA major differs from the `nvcc` toolkit major (driver vs toolkit).
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
 - `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
 - Storage summary (`df -h` + filesystem type/opts + `lsblk` disk model/size).

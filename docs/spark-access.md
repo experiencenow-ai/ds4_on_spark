@@ -31,7 +31,7 @@ Notes:
   - `PYTORCH_PROBE=1` attempt a `python3` torch probe (usually absent)
   - `NVCC_ARCH=sm_121` force the `nvcc` runtime probe to compile for a specific GPU arch (forwarded into the remote probe; defaults to deriving from the max `nvidia-smi` compute capability when available)
 - `scripts/spark_probe.sh` includes cuDNN hints (header macros when present + `ldconfig` library hits) to confirm whether cuDNN is installed.
-- `scripts/spark_probe.sh` also captures `nvidia-smi topo -m` (capped), PCIe link state (gen/width max/current), kernel module/version hints (`lsmod`, `modinfo nvidia`), CUDA header macros (`cuda.h`), a capped `dpkg-query` CUDA/NVIDIA package list, and a lightweight RDMA/ROCE summary (`/sys/class/infiniband` + `rdma link show`) to cross-check driver/toolkit/network facts. It emits a warning when the parsed `nvcc release` disagrees with `cuda.h` `CUDA_VERSION`.
+- `scripts/spark_probe.sh` also captures `nvidia-smi topo -m` (capped), PCIe link state (gen/width max/current), kernel module/version hints (`lsmod`, `modinfo nvidia`), CUDA header macros (`cuda.h`), a capped `dpkg-query` CUDA/NVIDIA package list, and a lightweight RDMA/ROCE summary (`/sys/class/infiniband` + `rdma link show`) to cross-check driver/toolkit/network facts. It emits a `warning:` when the parsed `nvcc release` disagrees with `cuda.h` `CUDA_VERSION`, and may emit a `note:` when `nvidia-smi`'s CUDA major differs from the `nvcc` toolkit major (driver vs toolkit). If the `nvcc -arch=...` runtime probe compile fails (unsupported arch), it retries once without `-arch` as a fallback.
 
 ### Mac-side Discovery (mDNS + reachability)
 
