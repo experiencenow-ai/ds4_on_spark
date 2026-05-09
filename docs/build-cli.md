@@ -12,8 +12,7 @@ cmake --build build
 Or via the Makefile wrapper:
 
 ```bash
-make clean
-make build
+make build BUILD_DIR=build_cli
 ```
 
 ## Run
@@ -21,11 +20,11 @@ make build
 Print the version:
 
 ```bash
-./build/ds4_cli --version
+./build_cli/ds4_cli --version
 ```
 
 Dump effective config (defaults + optional file + env):
 
 ```bash
-./build/ds4_cli --config path/to/ds4.conf --dump-config
+./build_cli/ds4_cli --config path/to/ds4.conf --dump-config
 ```

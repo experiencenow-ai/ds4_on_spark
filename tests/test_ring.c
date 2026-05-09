@@ -72,5 +72,7 @@ int32_t test_ring(void)
 		return(-27);
 	if ( n != 0 )
 		return(-28);
+	if ( ds4_ring_init(&r,mem,2,INT32_MAX) == 0 )
+		return(-29);
 	return(0);
 }

@@ -14,16 +14,14 @@ See also:
 ## Mac (no CUDA)
 
 ```bash
-make clean
-make build
-make test
+make build BUILD_DIR=build_macos
+make test BUILD_DIR=build_macos
 ```
 
 For a portable, CPU-only strict build (warnings-as-errors), use:
 
 ```bash
-make clean
-make check
+make check BUILD_DIR=build_macos_check
 ```
 
 ## Linux (optional CUDA)

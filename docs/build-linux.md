@@ -13,8 +13,7 @@ ctest --test-dir build --output-on-failure
 Or via the Makefile wrapper:
 
 ```bash
-make clean
-make check
+make check BUILD_DIR=build_linux_cpu
 ```
 
 ## CUDA (requires CUDA toolkit)
@@ -28,8 +27,7 @@ ctest --test-dir build --output-on-failure
 Or via the Makefile wrapper:
 
 ```bash
-make clean
-make check-cuda
+make check-cuda BUILD_DIR=build_linux_cuda
 ```
 
 If CUDA is not available, configuration fails with an explicit error when `DS4_ENABLE_CUDA=ON`.
