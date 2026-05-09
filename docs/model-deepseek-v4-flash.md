@@ -475,7 +475,12 @@ To inspect a trunk+sidecar pair, pass both paths:
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`:
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`.
+
+When multiple `--path` values are provided, the tool emits both:
+
+- per-artifact `topology_contract` (computed from that artifact's captured GGUF header metadata, when present)
+- a `combined.topology_contract` computed from the GGUF path with the most tensors (`combined.topology_contract_source_path` records which)
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.

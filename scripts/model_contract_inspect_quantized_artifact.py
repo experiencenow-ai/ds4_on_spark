@@ -664,12 +664,16 @@ def main() -> int:
 		first_mtp_keys: list[str] = []
 		mtp_keys_union: set[str] = set()
 		weight_keys_union: set[str] = set()
+		topology_candidate: Optional[InspectResult] = None
 		for res in results:
 			type_counts.update(res.tensor_type_counts)
 			mtp_type_counts.update(res.mtp_tensor_type_counts)
 			mtp_layer_ids.update(res.mtp_layer_ids)
 			mtp_keys_union.update(res.mtp_keys_all)
 			weight_keys_union.update(res.weight_keys_all)
+			if res.metadata:
+				if topology_candidate is None or res.tensor_count > topology_candidate.tensor_count:
+					topology_candidate = res
 			for k in res.first_mtp_keys:
 				if k in first_mtp_keys:
 					continue
@@ -678,9 +682,12 @@ def main() -> int:
 					break
 		mtp_contract = None
 		trunk_contract = None
+		topology_contract = None
 		if contract_summary is not None:
 			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
+			if topology_candidate is not None:
+				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -694,6 +701,8 @@ def main() -> int:
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
 			"trunk_contract": trunk_contract,
+			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
+			"topology_contract": topology_contract,
 		}
 
 	if args.json:
@@ -758,6 +767,18 @@ def main() -> int:
 					print(f"trunk_contract_missing_required: {k}")
 				for k in list(trunk_contract.get("forbidden_present", []))[:10]:
 					print(f"trunk_contract_forbidden_present: {k}")
+			topology_contract = combined.get("topology_contract", None)
+			if isinstance(topology_contract, dict) and topology_contract.get("checked") is True:
+				src = combined.get("topology_contract_source_path", None)
+				if isinstance(src, str) and src:
+					print(f"topology_contract_source_path: {src}")
+				mm = topology_contract.get("mismatches", None)
+				if isinstance(mm, list) and mm:
+					print(f"topology_contract_mismatches: {len(mm)}")
+					for m in mm[:10]:
+						print(f"topology_contract_mismatch: {m}")
+				else:
+					print("topology_contract_mismatches: 0")
 			for res in results:
 				print(f"artifact_path: {res.path}")
 				print(f"artifact_type: {res.artifact_type}")

@@ -23,6 +23,7 @@ tokenizer/chat format, and memory envelope are real.
     - `trunk_contract` (upstream tensor-key completeness for top-level + `layers.{i}.*`)
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
     - `topology_contract` (GGUF header metadata vs expected `hidden_size`, `block_count`, head counts, vocab size)
+    - For trunk+sidecar inspections (multiple `--path`), the JSON includes both per-artifact and `combined.*` summaries; use `combined.topology_contract_source_path` to see which GGUF header was used for the combined topology check.
 - If the run fails, the report preserves the exact failure mode: unsupported
   architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat
   mismatch, or runtime crash.
