@@ -18,6 +18,7 @@ tokenizer/chat format, and memory envelope are real.
 - Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
+- The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
 - If the run fails, the report preserves the exact failure mode: unsupported
   architecture, unsupported GGUF type, OOM, CUDA kernel failure, tokenizer/chat
   mismatch, or runtime crash.

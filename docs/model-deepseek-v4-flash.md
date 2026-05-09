@@ -232,6 +232,7 @@ Shared facts:
 - Each MoE layer routes each token to `n_activated_experts=6` routed experts **plus** 1 shared expert.
 - Expert outputs are accumulated (and `all_reduce`d across TP ranks) before adding the shared expert output.
 - Routing weights:
+  - Gate scores are computed in float32 (`linear(x.float(), gate.weight.float())`) even if the trunk runs in lower precision.
   - `scoring_func == sqrtsoftplus` implemented as `sqrt(softplus(linear(...)))`
   - If not softmax, weights are normalized to sum to 1 before multiplying by `route_scale`.
 
@@ -240,11 +241,15 @@ Hash-routed bootstrap layers:
 - For layers `0 <= layer_id < n_hash_layers` (here: layers 0–2), routing indices come from a static table:
   - tensor key: `layers.{i}.ffn.gate.tid2eid` (dtype `int32`)
 - For these layers, `layers.{i}.ffn.gate.bias` is absent in the checkpoint.
+- Even in hash mode, the gate still computes scores and routing weights from hidden state:
+  - `tid2eid[input_ids]` selects the expert IDs
+  - weights are computed by gathering the **unbiased** `original_scores` at those IDs, normalizing, then applying `route_scale`.
 
 Score-routed layers:
 
 - For layers `layer_id >= n_hash_layers` (here: layers 3–42), routing indices come from score top-k:
   - tensor key: `layers.{i}.ffn.gate.bias` (float32) exists and is applied only for expert selection.
+- Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
 
 ## Hyper-Connections (mHC)
