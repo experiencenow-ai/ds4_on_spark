@@ -185,6 +185,16 @@ need_nonempty DS4_METRICS_ADDR
 need_uint DS4_METRICS_PORT
 need_nonempty DS4_CONFIG_PATH
 
+if [ "${DS4_CONFIG_PATH:-}" != "" ]; then
+	if [ ! -f "$DS4_CONFIG_PATH" ]; then
+		echo "missing file: DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
+		err=1
+	elif [ ! -r "$DS4_CONFIG_PATH" ]; then
+		echo "unreadable file: DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
+		err=1
+	fi
+fi
+
 need_uint DS4_WORLD_SIZE
 need_uint DS4_RANK
 need_nonempty DS4_MASTER_ADDR
