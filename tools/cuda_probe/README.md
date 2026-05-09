@@ -15,6 +15,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_fatbin_probe`: compile/run sanity kernel built with explicit `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX).
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
@@ -39,6 +40,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_device_props
 ./tools/cuda_probe/bin/cuda_device_props_tiny
 ./tools/cuda_probe/bin/cuda_sm121_probe
+./tools/cuda_probe/bin/cuda_sm121_fatbin_probe
 ./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_sm120_compat_probe
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
@@ -62,6 +64,10 @@ Expected outputs:
 
 - `cuda_sm121_probe` compiles for `-arch=sm_121` and should fail fast if `nvcc`
   or the installed toolkit does not recognize `sm_121`.
+- `cuda_sm121_fatbin_probe` compiles for multiple targets via `-gencode` so the
+  output contains both `sm_120` + `sm_121` SASS, plus PTX for `compute_121`
+  (useful when you need “one binary” portability and/or want a short-term
+  fallback while upstream build systems catch up to `sm_121`).
 - `cuda_sm121_compile_probe.o` is a compile-only smoke check; it does not link
   against `cudart` and is useful when you only need to confirm that `nvcc`
   recognizes `sm_121`.
