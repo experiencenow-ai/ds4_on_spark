@@ -9,14 +9,14 @@ Host:
 Commands run from the Mac:
 
 ```bash
-REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe-2026-05-08.txt
 ```
 
 Notes:
 
 - `nvidia-smi` reports the driver CUDA compatibility version (`CUDA Version: 13.0`).
 - `nvcc` is installed at `/usr/local/cuda/bin/nvcc` (may not be on `$PATH` by default).
-- Use `REDACT=1` when saving probe output for commit; see `docs/spark0-hardware-baseline-2026-05-08.md` for a full redacted snapshot.
+- Use `REDACT=1` for any output you plan to commit; it strips IPv4/IPv6/MAC tokens.
 
 ## Key facts
 
@@ -59,11 +59,10 @@ NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 1
 CUDA runtime device properties (compiled and executed via `nvcc`):
 
 ```text
-device_count=1
-device=0 name=NVIDIA GB10
-compute_capability=12.1
-totalGlobalMem_bytes=128518373376
-multiProcessorCount=48
-memoryBusWidth_bits=256
-l2CacheSize_bytes=25165824
+cuda devices: 1
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+driver version: 13000
+runtime version: 13000
+global mem (bytes): 128518373376
 ```
