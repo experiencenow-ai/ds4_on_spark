@@ -128,6 +128,8 @@ Initial scope:
 - confirm the quantized artifact includes usable MTP weights or document why it
   does not
 - expose draft logits/tokens from the runtime or a sidecar path
+- when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
+- once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length
 
