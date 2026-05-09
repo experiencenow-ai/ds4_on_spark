@@ -45,6 +45,12 @@ ping -c 3 <peer-host-or-ip>
 ssh -o BatchMode=yes <peer-user>@<peer-host> hostname
 ```
 
+## Firewall + Routing Inspection (Read-only)
+
+For read-only routing + firewall inspection commands (some require `sudo`), see:
+
+- `docs/ops-firewall-routing-inspection.md`
+
 ## Safe Checks (Mac Side)
 
 Use explicit SSH options and keep known-hosts isolated:

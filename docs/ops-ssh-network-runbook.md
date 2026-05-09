@@ -16,6 +16,42 @@ ssh $SSH_OPTS <user>@spark0.local hostname
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark
 console.
 
+### Optional: Use An `ssh_config` File
+
+If you prefer a single config file instead of repeating long `SSH_OPTS`, this repo includes an example:
+
+- `deploy/config/ssh_config.ds4.spark01.example`
+
+Example usage (Mac-side):
+
+```bash
+cp deploy/config/ssh_config.ds4.spark01.example /private/tmp/ds4_ssh_config
+ssh -F /private/tmp/ds4_ssh_config spark0@<spark0-host> hostname
+SSH_OPTS='-F /private/tmp/ds4_ssh_config' ./scripts/ops_stage_deploy_assets.sh spark0@<spark0-host> spark0
+```
+
+## Known-Hosts Hygiene (Mac Side)
+
+When using a dedicated known-hosts file (recommended), use `ssh-keygen` helpers to inspect/remove entries safely:
+
+```bash
+KH=/private/tmp/ds4_spark_known_hosts
+ssh-keygen -F spark0.local -f "$KH" || true
+ssh-keygen -R spark0.local -f "$KH" || true
+```
+
+If the file is corrupted or you want a clean slate (you will re-accept host keys on next connect):
+
+```bash
+rm -f /private/tmp/ds4_spark_known_hosts
+```
+
+To debug which options are actually taking effect:
+
+```bash
+ssh -G $SSH_OPTS spark0@<spark0-host> 2>/dev/null | grep -E '^(userknownhostsfile|stricthostkeychecking|identityfile|batchmode) ' || true
+```
+
 ## Mac-Side Mesh Check (Optional)
 
 To quickly sanity-check both Sparks plus basic peer ping reachability:

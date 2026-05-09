@@ -48,6 +48,10 @@ Optional TCP reachability check (if `nc` is installed):
 nc -z -w 2 <peer-host-or-ip> 29500
 ```
 
+If ping/TCP fails (or looks one-way), capture read-only routing + firewall state (some commands require `sudo`):
+
+- `docs/ops-firewall-routing-inspection.md`
+
 Optional bandwidth check (only if both ends have `iperf3` installed):
 
 ```bash
