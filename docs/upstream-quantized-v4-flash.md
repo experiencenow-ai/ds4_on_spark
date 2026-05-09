@@ -57,6 +57,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
     - LFS sha256: `afd481ee689dce9037f70f39085fcdae5a5b096d521cdad43b19fa52bf8f4083`
 - Provenance notes:
   - Model card states these quants are “specific for the DS4 inference engine” and links to `https://github.com/antirez/ds4`.
+  - Single-GB10 report (2026-05-05): community run on `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` with `-hf antirez/deepseek-v4-gguf` (`https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`).
 - Single-Spark plausibility:
   - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the 80.8 GiB (~86.7 GB) footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
 
