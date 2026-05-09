@@ -264,6 +264,8 @@ class SimMetrics:
     dropped_tokens_backpressure_batch: int = 0
     task_queue_wait_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    task_queue_wait_ms_mtp_draft: List[float] = dataclasses.field(default_factory=list)
+    task_queue_wait_ms_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
     chosen_k_total_interactive: List[int] = dataclasses.field(default_factory=list)
@@ -298,6 +300,10 @@ class SimMetrics:
     starved_tasks: int = 0
     starved_tasks_interactive: int = 0
     starved_tasks_batch: int = 0
+    tasks_started_mtp_draft: int = 0
+    tasks_started_mtp_verify: int = 0
+    starved_tasks_mtp_draft: int = 0
+    starved_tasks_mtp_verify: int = 0
     promoted_tasks: int = 0
     forced_batch_starts: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
@@ -479,6 +485,22 @@ class SimMetrics:
                     "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
                     "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
                     "bonus_tokens": self.mtp_bonus_tokens,
+                    "tasks_started": {
+                        "draft": self.tasks_started_mtp_draft,
+                        "verify": self.tasks_started_mtp_verify,
+                    },
+                    "task_queue_wait_ms": {
+                        "draft": summarize(self.task_queue_wait_ms_mtp_draft),
+                        "verify": summarize(self.task_queue_wait_ms_mtp_verify),
+                    },
+                    "starved_tasks": {
+                        "draft": self.starved_tasks_mtp_draft,
+                        "verify": self.starved_tasks_mtp_verify,
+                    },
+                    "starved_task_frac": {
+                        "draft": (float(self.starved_tasks_mtp_draft) / float(self.tasks_started_mtp_draft)) if self.tasks_started_mtp_draft != 0 else 0.0,
+                        "verify": (float(self.starved_tasks_mtp_verify) / float(self.tasks_started_mtp_verify)) if self.tasks_started_mtp_verify != 0 else 0.0,
+                    },
                     "accept_len": summarize_ints(self.mtp_accept_len_per_step),
                     "draft_attempt_len": summarize_ints(self.mtp_draft_attempt_len_per_step),
                     "accept_rate": (float(self.mtp_draft_tokens_accepted) / float(self.mtp_draft_tokens_total)) if self.mtp_draft_tokens_total != 0 else 0.0,
@@ -2048,9 +2070,19 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
             metrics.tasks_started_per_expert[expert_id] += 1
             if wait_ms > metrics.max_task_queue_wait_ms_per_expert[expert_id]:
                 metrics.max_task_queue_wait_ms_per_expert[expert_id] = wait_ms
+            if task.mtp_phase == MtpPhase.DRAFT:
+                metrics.tasks_started_mtp_draft += 1
+                metrics.task_queue_wait_ms_mtp_draft.append(wait_ms)
+            elif task.mtp_phase == MtpPhase.VERIFY:
+                metrics.tasks_started_mtp_verify += 1
+                metrics.task_queue_wait_ms_mtp_verify.append(wait_ms)
             if wait_ms >= cfg.starvation_ms:
                 metrics.starved_tasks += 1
                 metrics.starved_tasks_started_per_expert[expert_id] += 1
+                if task.mtp_phase == MtpPhase.DRAFT:
+                    metrics.starved_tasks_mtp_draft += 1
+                elif task.mtp_phase == MtpPhase.VERIFY:
+                    metrics.starved_tasks_mtp_verify += 1
                 if task.cls == LatencyClass.INTERACTIVE:
                     metrics.starved_tasks_interactive += 1
                 else:

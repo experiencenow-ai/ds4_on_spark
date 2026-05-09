@@ -1871,6 +1871,46 @@ class SchedulerSimTest(unittest.TestCase):
         m1 = scheduler_sim.run_simulation(cfg1, trace)
         self.assertGreater(m1.makespan_ms, m0.makespan_ms)
 
+    def test_mtp_phase_queue_wait_and_starvation_metrics(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for i in range(3)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=0.0001,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.tasks_started_mtp_draft, len(trace) * 2)
+        self.assertEqual(m.tasks_started_mtp_verify, len(trace) * 1)
+        self.assertEqual(len(m.task_queue_wait_ms_mtp_draft), m.tasks_started_mtp_draft)
+        self.assertEqual(len(m.task_queue_wait_ms_mtp_verify), m.tasks_started_mtp_verify)
+        self.assertEqual(m.starved_tasks, (m.starved_tasks_mtp_draft + m.starved_tasks_mtp_verify))
+        self.assertLessEqual(m.starved_tasks_mtp_draft, m.tasks_started_mtp_draft)
+        self.assertLessEqual(m.starved_tasks_mtp_verify, m.tasks_started_mtp_verify)
+
     def test_output_token_latency_matches_token_latency_when_mtp_disabled(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

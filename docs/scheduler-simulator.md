@@ -149,6 +149,7 @@ Notes:
 
 - Acceptance sampling is controlled by `--sim-seed` for determinism.
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
+- Queueing effects are broken down by phase in the metrics JSON under `mtp.task_queue_wait_ms.{draft,verify}` and `mtp.starved_task_frac.{draft,verify}` (useful for spotting draft-induced verify starvation).
 
 ### Arrival Rate Units (MTP Comparisons)
 
