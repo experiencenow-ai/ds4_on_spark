@@ -358,6 +358,12 @@ Quantized linear layers include per-block scale tensors:
 
 DS4 must treat the `model.safetensors.index.json` key set as authoritative for loader compatibility.
 
+To make the key set easy to reference in downstream tooling (and to detect accidental fixture drift), `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records a stable fingerprint of the sorted weight-map keys:
+
+- `checkpoint_index.weight_map_num_tensors`
+- `checkpoint_index.weight_map_keys_sha256`
+- `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
+
 ### Quantization scale tensor semantics (FP8/FP4)
 
 Reference implementation: `inference/model.py` (`Linear`, `linear(...)`).

@@ -35,6 +35,13 @@ def sha256_file(path: Path) -> str:
 			h.update(chunk)
 	return h.hexdigest()
 
+def sha256_lines(lines: list[str]) -> str:
+	h = sha256()
+	for line in lines:
+		h.update(line.encode("utf-8"))
+		h.update(b"\n")
+	return h.hexdigest()
+
 def parse_encoding_constants(encoding_py: Path) -> dict:
 	if not encoding_py.exists():
 		return {"encoding_constants": None}
@@ -544,6 +551,9 @@ def build_contract() -> dict:
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
 	tensor_keys = build_tensor_key_summary(weight_keys, n_layers, int(cfg["n_routed_experts"]))
+	weight_map_files = [str(v) for v in weight_map.values()]
+	weight_map_file_counts = Counter(weight_map_files)
+	weight_map_keys_sha256 = sha256_lines(weight_keys)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -698,20 +708,20 @@ def build_contract() -> dict:
 						"hc_sinkhorn_iters": int(inf["hc_sinkhorn_iters"]),
 						"hc_eps": float(inf_model.get("inference_model_constants", {}).get("hc_eps", 1e-6)),
 					},
-					"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
+				"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
 				},
 				"tokenizer": {
 					"tokenizer_class": tok_cfg.get("tokenizer_class"),
 					"model_max_length": int(tok_cfg.get("model_max_length")),
 					"add_bos_token": bool(tok_cfg.get("add_bos_token")),
-				"add_eos_token": bool(tok_cfg.get("add_eos_token")),
-				"bos_token": tok_cfg.get("bos_token", {}).get("content"),
-				"eos_token": tok_cfg.get("eos_token", {}).get("content"),
-				"bos_token_id": int(cfg["bos_token_id"]),
-				"eos_token_id": int(cfg["eos_token_id"]),
-				"pad_token_is_eos": True,
-				"encoding_oracle_dir": "encoding/tests",
-			},
+					"add_eos_token": bool(tok_cfg.get("add_eos_token")),
+					"bos_token": tok_cfg.get("bos_token", {}).get("content"),
+					"eos_token": tok_cfg.get("eos_token", {}).get("content"),
+					"bos_token_id": int(cfg["bos_token_id"]),
+					"eos_token_id": int(cfg["eos_token_id"]),
+					"pad_token_is_eos": True,
+					"encoding_oracle_dir": "encoding/tests",
+				},
 			"quantization": {
 				"config_quantization_config": cfg.get("quantization_config"),
 				"inference_config": {
@@ -742,6 +752,10 @@ def build_contract() -> dict:
 				**enc,
 				"tensor_keys": tensor_keys,
 				"checkpoint_index": {
+					"weight_map_num_tensors": int(len(weight_keys)),
+					"weight_map_keys_sha256": weight_map_keys_sha256,
+					"weight_map_unique_files": int(len(weight_map_file_counts)),
+					"weight_map_file_counts": dict(weight_map_file_counts),
 					"metadata": idx.get("metadata", {}),
 				},
 		}

@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 
 
@@ -37,6 +38,12 @@ def find_mtp_layer_ids(weight_keys: set[str]) -> list[int]:
 			continue
 	return sorted(ids)
 
+def sha256_lines(lines: list[str]) -> str:
+	h = sha256()
+	for line in lines:
+		h.update(line.encode("utf-8"))
+		h.update(b"\n")
+	return h.hexdigest()
 
 def main() -> int:
 	failures: list[Failure] = []
@@ -78,6 +85,13 @@ def main() -> int:
 				moe_sem = summary.get("moe", {}).get("semantics", {})
 				if moe_sem.get("bias_affects_selection_only_comment") is None:
 					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
+
+				chk = summary.get("checkpoint_index", {})
+				expected_key_sha = sha256_lines(sorted(weight_keys))
+				if chk.get("weight_map_num_tensors") != int(len(weight_keys)):
+					failures.append(Failure(19, f"contract summary checkpoint_index.weight_map_num_tensors mismatch (expected {len(weight_keys)}): {contract_summary}"))
+				if chk.get("weight_map_keys_sha256") != expected_key_sha:
+					failures.append(Failure(27, f"contract summary checkpoint_index.weight_map_keys_sha256 mismatch (expected {expected_key_sha}): {contract_summary}"))
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 
