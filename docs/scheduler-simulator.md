@@ -135,6 +135,23 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+### Compare Variants (Ablations)
+
+Use `--compare label:JSON` to run one or more config variants against the
+baseline (the config implied by the other CLI flags). The JSON object can
+override any `SimConfig` field, plus `adaptive_k.*` fields.
+
+Example: compare MTP on vs off on the same synthetic trace:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --arrival-units output_tokens --arrival-rate-tps 8000 --mtp-draft-len 2 --mtp-accept-prob 0.7 --mtp-accept-decay 0.6 --json --compare 'mtp_off:{"mtp_draft_len":0}'
+```
+
+The output includes:
+
+- `baseline`: `summary` + full `metrics`
+- `variants.<label>`: `summary`, `delta_vs_baseline`, and full `metrics`
+
 Batching-style service model example:
 
 ```bash

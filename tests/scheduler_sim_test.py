@@ -222,6 +222,41 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLessEqual(mg.chosen_k_batch[idx], mc.chosen_k_batch[idx])
         self.assertGreater(mg.pending_signal_batch[idx], mc.pending_signal_batch[idx])
 
+    def test_compare_variants_reports_delta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1, 2, 3),
+            )
+            for i in range(200)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=4,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.1,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=2,
+                k_max_interactive=2,
+                k_min_batch=2,
+                k_max_batch=2,
+                q_low=0,
+                q_high=0,
+            ),
+            mtp_draft_len=2,
+            mtp_accept_prob=1.0,
+            mtp_accept_decay=1.0,
+        )
+        out = scheduler_sim.compare_simulation_variants(cfg, trace, [("mtp_off", {"mtp_draft_len": 0})])
+        base_out = out["baseline"]
+        var_out = out["variants"]["mtp_off"]
+        self.assertGreater(base_out["summary"]["output_tokens"], var_out["summary"]["output_tokens"])
+        self.assertLess(var_out["delta_vs_baseline"]["output_tokens"], 0.0)
+
     def test_starvation_counts_queue_wait(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
