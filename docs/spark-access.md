@@ -21,6 +21,7 @@ Notes:
 
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
 - When probing multiple Spark hosts (Spark0/Spark1), set `SPARK_KNOWN_HOSTS_PER_HOST=1` (or set `SPARK_KNOWN_HOSTS` explicitly) to keep host keys isolated per target.
+- When multiple targets are passed to `scripts/spark_probe.sh`, the probe prints `probe targets:` and one `known_hosts:` line per target so runs can be reproduced exactly.
 - Use `REDACT=1` for any output you plan to commit.
 - Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
 - If the checkout's `.git` metadata is not usable (provenance/permission issues), set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running.
@@ -28,9 +29,9 @@ Notes:
   - `NVIDIA_SMI_FULL=1` include full `nvidia-smi` output (verbose, process list)
   - `CUDA_RUNTIME_PROBE=0` skip the tiny `nvcc` compile+run probe
   - `PYTORCH_PROBE=1` attempt a `python3` torch probe (usually absent)
-  - `NVCC_ARCH=sm_121` force the `nvcc` runtime probe to compile for a specific GPU arch (defaults to deriving from the max `nvidia-smi` compute capability when available)
+  - `NVCC_ARCH=sm_121` force the `nvcc` runtime probe to compile for a specific GPU arch (forwarded into the remote probe; defaults to deriving from the max `nvidia-smi` compute capability when available)
 - `scripts/spark_probe.sh` includes cuDNN hints (header macros when present + `ldconfig` library hits) to confirm whether cuDNN is installed.
-- `scripts/spark_probe.sh` also captures `nvidia-smi topo -m` (capped) plus kernel module/version hints (`lsmod`, `modinfo nvidia`) and CUDA header macros (`cuda.h`) to cross-check driver/toolkit facts.
+- `scripts/spark_probe.sh` also captures `nvidia-smi topo -m` (capped), PCIe link state (gen/width max/current), kernel module/version hints (`lsmod`, `modinfo nvidia`), and CUDA header macros (`cuda.h`) to cross-check driver/toolkit facts. It emits a warning when the parsed `nvcc release` disagrees with `cuda.h` `CUDA_VERSION`.
 
 ### Mac-side Discovery (mDNS + reachability)
 
@@ -40,6 +41,7 @@ REDACT=1 ./scripts/mac_spark_discovery.sh
 
 Default targets (when no args are provided): `aitopatom-9ab9.local` and `spark1.local`.
 Pass additional hostnames/IPs explicitly if you need extra checks.
+Targets may also be passed as `user@host`; the script strips the `user@` prefix for mDNS resolution and TCP reachability checks.
 
 This prints:
 

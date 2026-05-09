@@ -645,6 +645,50 @@ device0 cc: 12.1
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 08:27Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09T0827Z_probe11.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The `probe targets:` + `known_hosts:` lines are emitted for reproducible multi-target runs.
+
+```text
+== local meta ==
+Sat May  9 08:27:00 UTC 2026
+git: 0984f56
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== nvidia-smi pcie link (max/current) ==
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 sms: 48
+```
+
 ## Update: Probe Refresh (2026-05-09 05:58Z)
 
 Commands run:
@@ -688,4 +732,47 @@ filename:       /lib/modules/6.17.0-1014-nvidia/kernel/nvidia-580-open/nvidia.ko
 version:        580.142
 srcversion:     C4BC8E95CA62E8363647ABA
 vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
+```
+
+## Update: Probe Refresh (2026-05-09 07:27Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09T0727Z_probe9.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The probe now attempts `nvidia-smi` PCIe link queries using either `pcie.link.*` or `pci.link.*` fields (depending on what the host supports).
+
+```text
+== local meta ==
+Sat May  9 07:27:30 UTC 2026
+git: 9172681
+probe target: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== nvidia-smi pcie link (max/current) ==
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 sms: 48
 ```

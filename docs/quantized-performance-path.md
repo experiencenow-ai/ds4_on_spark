@@ -72,6 +72,7 @@ Once the baseline quantized runtime can emit per-token routing, capture a trace
 and replay it:
 
 ```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-summary --json
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 64 --json
 ```
 

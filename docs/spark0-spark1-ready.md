@@ -25,6 +25,7 @@ Always use `REDACT=1` when saving output for commit.
 ```bash
 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local | tee /private/tmp/spark1-probe.txt
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local | tee /private/tmp/spark01-probe.txt
 ```
 
 Optional toggles:
@@ -51,8 +52,10 @@ Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
 - When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
+- When multiple targets are provided, the probe prints `probe targets:` and one `known_hosts:` line per target to make runs copy/paste reproducible.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
+- `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
 - If the checkout `.git` metadata is unusable (macOS provenance/permission), set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`.
 
 ## What To Record In `docs/spark0-*.md`
@@ -62,6 +65,7 @@ Notes:
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe).
 - `nvcc` path and version (toolkit version).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
+- Any `warning:` line emitted by the probe when `nvcc release` and `cuda.h` disagree.
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
 - `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
 - Storage summary (`df -h` + `lsblk` disk model/size).

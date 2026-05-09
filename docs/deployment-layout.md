@@ -89,3 +89,4 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Tighten systemd sandboxing only after CUDA + distributed smoke tests pass.
 - Optional Spark standalone systemd templates exist, but are not required for DS4: `docs/deployment-spark-standalone-systemd.md`.
 - Optional periodic preflight systemd timer exists: `deploy/systemd/ds4-preflight@.timer`.
+- Optional strict start template exists (wants strict preflight before start): `deploy/systemd/ds4-strict@.service`.

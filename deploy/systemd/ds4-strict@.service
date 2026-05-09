@@ -1,0 +1,51 @@
+[Unit]
+Description=DS4 service (%i, strict preflight)
+Wants=network-online.target
+After=network-online.target
+Wants=ds4-preflight-strict@%i.service
+After=ds4-preflight-strict@%i.service
+
+[Service]
+Type=simple
+User=ds4
+Group=ds4
+WorkingDirectory=/opt/ds4
+Environment=DS4_INSTANCE=%i
+EnvironmentFile=-/etc/ds4/ds4.env
+EnvironmentFile=/etc/ds4/ds4-%i.env
+
+# Provide the script on-host at /opt/ds4/scripts/ops_ds4_env_check.sh.
+ExecStartPre=/opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-%i.env
+
+# ExecStart is intentionally a template: the binary/flags will evolve as the engine
+# skeleton lands. Keep env keys stable and update only the command line here.
+ExecStart=/opt/ds4/bin/ds4_server --config ${DS4_CONFIG_PATH}
+
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+
+# Practical hardening that should not block CUDA drivers; tighten after soak tests.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+UMask=0027
+LimitNOFILE=1048576
+
+StateDirectory=ds4
+LogsDirectory=ds4
+
+[Install]
+WantedBy=multi-user.target
