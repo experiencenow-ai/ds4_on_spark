@@ -27,7 +27,7 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 ## Units
 
 - `ds4@.service`: long-running DS4 instance
-- `ds4-strict@.service`: long-running DS4 instance that *wants* `ds4-preflight-strict@%i.service` before start
+- `ds4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails)
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly); triggers `ds4-support-bundle@%i.service` on failure
 - `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`); triggers `ds4-support-bundle@%i.service` on failure
 - `ds4-support-bundle@.service`: oneshot support bundle collector (safe; see `docs/ops-support-bundle.md`); wired via `OnFailure=`
@@ -67,6 +67,8 @@ The staging helper also copies safe ops scripts to `/tmp/ds4-scripts/`; install 
 The units use `ConditionPathIsExecutable=` for `/opt/ds4/scripts/ops_ds4_env_check.sh`, `/opt/ds4/scripts/ops_tp2_readiness.sh`, and `/opt/ds4/scripts/ops_collect_support_bundle.sh`; if a unit is skipped, confirm those scripts were installed.
 
 Ensure `/etc/ds4/` and any `/etc/ds4/ds4-*.env` files are readable by the `ds4` service user (recommended: directory `root:ds4 0750`, files `root:ds4 0640`).
+
+The DS4 units create `/var/lib/ds4/ssh/` via `StateDirectory=` so readiness checks can persist SSH host keys under `/var/lib/ds4/ssh/known_hosts` (no manual `mkdir` required).
 
 ## Enable/Start (Human Runbook)
 

@@ -97,4 +97,4 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Optional periodic preflight systemd timers exist:
   - `deploy/systemd/ds4-preflight@.timer` (non-destructive)
   - `deploy/systemd/ds4-preflight-strict@.timer` (fails non-zero on missing/invalid TP=2 inputs)
-- Optional strict start template exists (wants strict preflight before start): `deploy/systemd/ds4-strict@.service`.
+- Optional strict start template exists (requires strict preflight before start): `deploy/systemd/ds4-strict@.service`.

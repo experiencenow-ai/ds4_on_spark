@@ -2,7 +2,7 @@
 Description=DS4 service (%i, strict preflight)
 Wants=network-online.target
 After=network-online.target
-Wants=ds4-preflight-strict@%i.service
+Requires=ds4-preflight-strict@%i.service
 After=ds4-preflight-strict@%i.service
 ConditionPathIsExecutable=/opt/ds4/bin/ds4_server
 
@@ -45,7 +45,7 @@ RestrictRealtime=true
 UMask=0027
 LimitNOFILE=1048576
 
-StateDirectory=ds4
+StateDirectory=ds4 ds4/ssh
 LogsDirectory=ds4
 
 [Install]

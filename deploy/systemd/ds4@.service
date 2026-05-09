@@ -45,7 +45,7 @@ RestrictRealtime=true
 UMask=0027
 LimitNOFILE=1048576
 
-StateDirectory=ds4
+StateDirectory=ds4 ds4/ssh
 LogsDirectory=ds4
 
 [Install]
