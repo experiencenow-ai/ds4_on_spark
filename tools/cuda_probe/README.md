@@ -27,8 +27,8 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
-- `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121`.
-- `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: link/run tiny cuBLASLt FP8 (E5M2) matmul for `sm_121` (tries multiple compute types; prints diagnostics).
+- `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121` (TN format; BF16 output).
+- `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: link/run tiny cuBLASLt FP8 (E5M2) matmul for `sm_121` (TN format; BF16 output; prints diagnostics).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke`: link/run tiny cuBLASLt FP4 (E2M1) matmul for `sm_121` (best-effort capability probe).
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
@@ -104,9 +104,9 @@ Expected outputs:
 - `cuda_cublaslt_smoke` is a minimal “link + run” check for `-lcublasLt` on
   `sm_121`.
 - `cuda_cublaslt_fp8_smoke` is a minimal “link + run” check for FP8 E4M3 matmul
-  via cuBLASLt on `sm_121`.
+  via cuBLASLt on `sm_121` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output.
 - `cuda_cublaslt_fp8_e5m2_smoke` is a minimal “link + run” check for FP8 E5M2
-  matmul via cuBLASLt on `sm_121` (tries multiple compute types; observed on Spark0 / CUDA 13.0 `V13.0.88`: returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection).
+  matmul via cuBLASLt on `sm_121` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output; treat `CUBLAS_STATUS_NOT_SUPPORTED` as an expected outcome until the stack advertises E5M2 support on GB10.
 - `cuda_cublaslt_fp4_smoke` is a minimal “link + run” check for FP4 E2M1 matmul
   via cuBLASLt on `sm_121`; treat `CUBLAS_STATUS_NOT_SUPPORTED` as an expected outcome until the stack advertises FP4 support for GB10.
 - `cuda_sm120_compat_probe` is a minimal “run an `sm_120`-compiled kernel on the device” check; if it succeeds on Spark0, it suggests `sm_120` SASS is a viable short-term compatibility target for GB10 (`sm_121`) (observed success on 2026-05-09).

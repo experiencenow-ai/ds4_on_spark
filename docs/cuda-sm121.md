@@ -269,8 +269,9 @@ DeepGEMM and many CUTLASS kernels use FP8 inputs; a quick “works-first” gate
 The probes `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` and `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke` are tiny compile/run checks that:
 
 - use FP8 E4M3 or E5M2 inputs for A/B (`CUDA_R_8F_E4M3` / `CUDA_R_8F_E5M2`)
-- accumulates into FP32 (`CUBLAS_COMPUTE_32F`) and writes FP32 output
-- uses default scale pointers (NULL ⇒ scale=1) to keep the API surface minimal
+- uses the narrow-precision-recommended “TN” format (A transposed, B non-transposed)
+- accumulates into FP32 (`CUBLAS_COMPUTE_32F`) and writes BF16 output (`CUDA_R_16BF`)
+- uses scalar scale pointers for A/B (scale=1) to keep the API surface minimal and match cuBLASLt narrow-precision conventions
 
 Observed on Spark0 (2026-05-09): `cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0`.
-Observed on Spark0 (2026-05-09): `cuda_cublaslt_fp8_e5m2_smoke` fails to find any supported algo even after trying `m=n=k` in `{16,64,128}`, multiple `cublasComputeType_t` values, and workspace sizes `{1MiB,16MiB}`.
+Observed on Spark0 (2026-05-09 / `cublasLtGetVersion=130101`): `cuda_cublaslt_fp8_e5m2_smoke` fails to find any supported algo even after trying `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}`.
