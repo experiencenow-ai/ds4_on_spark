@@ -93,11 +93,25 @@ else
 	echo \"(cuda_cublaslt_fp8_e5m2_smoke failed; continuing)\"
 fi
 echo
+echo \"== run: cuda_cublaslt_fp8_e5m2_sweep ==\"
+if \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp8_e5m2_sweep; then
+	:
+else
+	echo \"(cuda_cublaslt_fp8_e5m2_sweep failed; continuing)\" >&2
+fi
+echo
 echo \"== run: cuda_cublaslt_fp4_smoke ==\"
 if \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp4_smoke; then
 	:
 else
 	echo \"(cuda_cublaslt_fp4_smoke failed; continuing)\"
+fi
+echo
+echo \"== run: cuda_cublaslt_fp4_sweep ==\"
+if \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp4_sweep; then
+	:
+else
+	echo \"(cuda_cublaslt_fp4_sweep failed; continuing)\" >&2
 fi
 echo
 run_retry cuda_sm121_smem_optin \"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin

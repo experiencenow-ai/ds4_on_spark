@@ -53,7 +53,9 @@ What it does:
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
   - `cuda_cublaslt_fp8_smoke` (tiny cuBLASLt FP8 (E4M3) matmul smoke test)
   - `cuda_cublaslt_fp8_e5m2_smoke` (tiny cuBLASLt FP8 (E5M2) matmul smoke test)
+  - `cuda_cublaslt_fp8_e5m2_sweep` (sweep E5M2 configs to see whether any cuBLASLt path is supported)
   - `cuda_cublaslt_fp4_smoke` (tiny cuBLASLt FP4 (E2M1) matmul smoke test; best-effort capability probe)
+  - `cuda_cublaslt_fp4_sweep` (sweep FP4 configs to see whether any cuBLASLt path is supported)
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
   - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
@@ -87,7 +89,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_cublaslt_fp4_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_tma_bulk_tensor_1d`, `cuda_sm121_tma_bulk_tensor_2d`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_ldmatrix_smoke`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, `cuda_sm121_nvrtc_cxx20_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_cublaslt_fp8_e5m2_sweep`, `cuda_cublaslt_fp4_smoke`, `cuda_cublaslt_fp4_sweep`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_tma_bulk_tensor_1d`, `cuda_sm121_tma_bulk_tensor_2d`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_ldmatrix_smoke`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, `cuda_sm121_nvrtc_cxx20_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
 Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using the `__cluster_dims__` attribute (`tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu`) and prints whether it compiled or the first lines of the error output.
 
@@ -134,7 +136,8 @@ Observed:
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - cuBLASLt FP8 matmul smoke test succeeds (`max_abs_err_vs_one=0`)
 - cuBLASLt FP8 (E5M2) matmul smoke probe fails to find any supported algo on Spark0 (CUDA 13.0 `V13.0.88`) even after trying `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (the Spark runner continues past this failure; observed `cublasLtGetVersion=130101`)
-- cuBLASLt FP4 (E2M1) matmul smoke probe returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection on Spark0 (CUDA 13.0 `V13.0.88`) (the Spark runner continues past this failure)
+- cuBLASLt FP8 (E5M2) sweep returns `CUBLAS_STATUS_NOT_SUPPORTED` across BF16/F16/F32 output dtypes and `CUBLAS_COMPUTE_32F` / `CUBLAS_COMPUTE_32F_FAST_TF32` (observed `cublasLtGetVersion=130101`)
+- cuBLASLt FP4 (E2M1) heuristic selection succeeds for BF16 output (`cuda_cublaslt_fp4_sweep` prints `heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0`), but the current “identity×ones” numeric check in `cuda_cublaslt_fp4_smoke` still reports `max_abs_err_vs_one=1` (treat FP4 as “execution path exists”, not “numerically validated”, until we wire a correct NVFP4 pack/scale recipe)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
 - BF16 conversion probe succeeds (`cuda_bf16.h` conversions compile and run for `sm_121`)
@@ -173,8 +176,8 @@ cublasLtGetVersion=130101 cublasLtGetCudartVersion=13000
 cuBLASLt fp8 e5m2 probe try m=128 n=128 k=128 ws_bytes=16777216
 cuBLASLt fp8 e5m2 smoke: no supported configuration found
 (cuda_cublaslt_fp8_e5m2_smoke failed; continuing)
-cuBLASLt error cublasLtMatmulAlgoGetHeuristic: CUBLAS_STATUS_NOT_SUPPORTED
-(cuda_cublaslt_fp4_smoke failed; continuing)
+cuBLASLt fp4 e2m1 smoke max_abs_err_vs_one=1
+fp4_e2m1 sweep ws_bytes=1048576 D=CUDA_R_16BF compute=CUBLAS_COMPUTE_32F heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
 fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
