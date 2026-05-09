@@ -92,6 +92,7 @@ echo
 run_retry cuda_sm121_smem_optin \"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin
 run_retry cuda_sm121_devattrs \"$REMOTE_DIR\"/bin/cuda_sm121_devattrs
 run_retry cuda_sm121_fp8_conv \"$REMOTE_DIR\"/bin/cuda_sm121_fp8_conv
+run_retry cuda_sm121_bf16_conv \"$REMOTE_DIR\"/bin/cuda_sm121_bf16_conv
 run_retry cuda_sm121_pipeline_memcpy_async \"$REMOTE_DIR\"/bin/cuda_sm121_pipeline_memcpy_async
 run_retry cuda_sm121_barrier_memcpy_async \"$REMOTE_DIR\"/bin/cuda_sm121_barrier_memcpy_async
 run_retry cuda_sm121_cp_async_bulk_tx \"$REMOTE_DIR\"/bin/cuda_sm121_cp_async_bulk_tx
