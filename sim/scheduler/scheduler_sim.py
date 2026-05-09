@@ -27,6 +27,8 @@ class TokenRoute:
     k: Optional[int] = None
     scores: Optional[Tuple[float, ...]] = None
     mtp_accept_len: Optional[int] = None
+    accepted_mtp: Optional[int] = None
+    rejected_mtp: Optional[int] = None
     cost_scale: Optional[float] = None
 
 
@@ -720,6 +722,24 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
                     raise ValueError(f"{path}:{lineno}: mtp_accept_len must be >= 1")
                 mtp_accept_len = int(al_raw)
 
+            accepted_mtp: Optional[int] = None
+            if "accepted_mtp" in obj and obj["accepted_mtp"] is not None:
+                am_raw = obj["accepted_mtp"]
+                if not isinstance(am_raw, int):
+                    raise ValueError(f"{path}:{lineno}: accepted_mtp must be an integer")
+                if am_raw < 0:
+                    raise ValueError(f"{path}:{lineno}: accepted_mtp must be >= 0")
+                accepted_mtp = int(am_raw)
+
+            rejected_mtp: Optional[int] = None
+            if "rejected_mtp" in obj and obj["rejected_mtp"] is not None:
+                rm_raw = obj["rejected_mtp"]
+                if not isinstance(rm_raw, int):
+                    raise ValueError(f"{path}:{lineno}: rejected_mtp must be an integer")
+                if rm_raw < 0:
+                    raise ValueError(f"{path}:{lineno}: rejected_mtp must be >= 0")
+                rejected_mtp = int(rm_raw)
+
             cost_scale: Optional[float] = None
             if "cost_scale" in obj and obj["cost_scale"] is not None:
                 cs_raw = obj["cost_scale"]
@@ -737,6 +757,8 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
                     k=k,
                     scores=scores,
                     mtp_accept_len=mtp_accept_len,
+                    accepted_mtp=accepted_mtp,
+                    rejected_mtp=rejected_mtp,
                     cost_scale=cost_scale,
                 )
             )
@@ -990,6 +1012,16 @@ def _choose_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetri
         if accept_len < 1 or accept_len > (cfg.mtp_draft_len + 1):
             raise ValueError("trace route mtp_accept_len out of range for configured mtp_draft_len")
         return(accept_len)
+    if route.accepted_mtp is not None:
+        accept_len = (int(route.accepted_mtp) + 1)
+        if accept_len < 1 or accept_len > (cfg.mtp_draft_len + 1):
+            raise ValueError("trace route accepted_mtp out of range for configured mtp_draft_len")
+        return(accept_len)
+    if route.rejected_mtp is not None:
+        accept_len = ((cfg.mtp_draft_len - int(route.rejected_mtp)) + 1)
+        if accept_len < 1 or accept_len > (cfg.mtp_draft_len + 1):
+            raise ValueError("trace route rejected_mtp out of range for configured mtp_draft_len")
+        return(accept_len)
     return(_sample_mtp_accept_len(cfg, rng, metrics))
 
 
@@ -1086,8 +1118,11 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("trace route scores must have same length as candidates")
         if admit_policy == "score_desc" and route.scores is None:
             raise ValueError("admit_policy score_desc requires scores on every trace route")
-        if route.mtp_accept_len is not None and cfg.mtp_draft_len <= 0:
-            raise ValueError("trace route mtp_accept_len requires mtp_draft_len > 0")
+        if (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None) and cfg.mtp_draft_len <= 0:
+            raise ValueError("trace route mtp fields require mtp_draft_len > 0")
+        if route.accepted_mtp is not None and route.rejected_mtp is not None:
+            if (route.accepted_mtp + route.rejected_mtp) != cfg.mtp_draft_len:
+                raise ValueError("trace route accepted_mtp + rejected_mtp must equal mtp_draft_len")
         for expert_id in route.candidates:
             if expert_id < 0 or expert_id >= cfg.num_experts:
                 raise ValueError("trace route has expert_id out of range")
@@ -1393,7 +1428,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
-    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, cost_scale).")
+    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
