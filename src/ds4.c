@@ -15,9 +15,14 @@ int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 		return(-1);
 	if ( cfg == 0 )
 		return(-2);
+	if ( cfg->enable_cuda != 0 )
+	{
+		if ( ds4_cuda_is_enabled_build() == 0 )
+			return(-3);
+	}
 	ctx->cfg = *cfg;
 	if ( ds4_log_set_level(cfg->log_level) < 0 )
-		return(-3);
+		return(-4);
 	return(0);
 }
 
