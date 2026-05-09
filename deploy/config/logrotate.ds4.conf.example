@@ -1,0 +1,22 @@
+# Example DS4 logrotate config (install to /etc/logrotate.d/ds4).
+#
+# This is only needed if DS4 writes file logs under /var/log/ds4/*.log.
+# If DS4 logs exclusively to journald, skip logrotate and use `journalctl`.
+#
+# Human-run (example):
+#   sudo install -m 0644 /tmp/ds4-config/logrotate.ds4.conf.example /etc/logrotate.d/ds4
+#   sudo logrotate -d /etc/logrotate.d/ds4
+#   sudo logrotate -f /etc/logrotate.d/ds4
+
+/var/log/ds4/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # If your distro requires it (e.g. due to directory ownership checks):
+    su ds4 ds4
+    create 0640 ds4 ds4
+}
+
