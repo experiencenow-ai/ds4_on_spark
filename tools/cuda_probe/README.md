@@ -17,6 +17,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe`: compile/run separate-compilation (`-rdc=true`) device-link smoke test for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe`: compile/run sanity kernel built with explicit `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX).
+- `tools/cuda_probe/bin/cuda_sm121_dlto_probe`: compile/run device LTO (`-dlto`) smoke test for `sm_121` (toolchain gate for some CUDA build systems).
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
@@ -25,6 +26,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.
+- `tools/cuda_probe/bin/cuda_sm121_bf16_conv`: compile/run BF16 conversion plumbing via `cuda_bf16.h`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`: compile/run a `__pipeline_memcpy_async` (cp.async-style) copy from global->shared.
 - `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async`: compile/run `cuda::memcpy_async(..., barrier)` using CCCL’s `<cuda/barrier>` API.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx`: compile/run an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
@@ -45,6 +47,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_probe
 ./tools/cuda_probe/bin/cuda_sm121_rdc_probe
 ./tools/cuda_probe/bin/cuda_sm121_fatbin_probe
+./tools/cuda_probe/bin/cuda_sm121_dlto_probe
 ./tools/cuda_probe/bin/cuda_sm121_arch_report
 ./tools/cuda_probe/bin/cuda_sm120_compat_probe
 ./tools/cuda_probe/bin/cuda_cublaslt_smoke
@@ -53,6 +56,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_smem_optin
 ./tools/cuda_probe/bin/cuda_sm121_devattrs
 ./tools/cuda_probe/bin/cuda_sm121_fp8_conv
+./tools/cuda_probe/bin/cuda_sm121_bf16_conv
 ./tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx
@@ -75,6 +79,7 @@ Expected outputs:
   output contains both `sm_120` + `sm_121` SASS, plus PTX for `compute_121`
   (useful when you need “one binary” portability and/or want a short-term
   fallback while upstream build systems catch up to `sm_121`).
+- `cuda_sm121_dlto_probe` is a compile/run check that `nvcc` supports device LTO (`-dlto`) for `sm_121`; treat failures as a blocker for CUDA build systems that enable device LTO by default.
 - `cuda_sm121_compile_probe.o` is a compile-only smoke check; it does not link
   against `cudart` and is useful when you only need to confirm that `nvcc`
   recognizes `sm_121`.
@@ -90,6 +95,7 @@ Expected outputs:
 - `cuda_sm121_devattrs` records device limits and runtime feature gates that commonly gate
   CUTLASS / custom GEMM kernel bring-up.
 - `cuda_sm121_fp8_conv` is a compile/run check for CUDA’s FP8 conversion helpers.
+- `cuda_sm121_bf16_conv` is a compile/run check for CUDA’s BF16 conversion helpers.
 - `cuda_sm121_pipeline_memcpy_async` is a compile/run check for CUDA pipeline primitives (`cuda_pipeline_primitives.h`) used by cp.async-style kernels.
 - `cuda_sm121_barrier_memcpy_async` is a compile/run check for CCCL’s higher-level `cuda::barrier` + `cuda::memcpy_async` API (commonly used by templated kernels).
 - `cuda_sm121_cp_async_bulk_tx` is a compile/run check for CCCL’s internal `cuda::device::memcpy_async_tx` helper, which lowers to an explicit `cp.async.bulk` global->shared copy path on SM90+.

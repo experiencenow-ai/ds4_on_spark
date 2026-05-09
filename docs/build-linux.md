@@ -31,6 +31,7 @@ make check-cuda BUILD_DIR=build_linux_cuda
 ```
 
 If CUDA is not available, configuration fails with an explicit error when `DS4_ENABLE_CUDA=ON`.
+If the CUDA toolkit is present but no CUDA-capable device is available at runtime, `ds4_cuda_init()` returns `DS4_CUDA_ERR_NO_DEVICE` and unit tests treat that case as a soft pass.
 
 ## Sanitizers (CPU-only)
 

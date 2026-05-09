@@ -48,6 +48,12 @@ If this probe fails to link for `sm_121`, treat it as a toolchain/blocker for an
 
 Observed on Spark0 (2026-05-09): `rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de`.
 
+## Device LTO (`-dlto`)
+
+Some CUDA build systems enable device link-time optimization (LTO) to reduce register pressure and improve kernel inlining across translation units.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_dlto_probe` is a tiny compile/run gate that builds with `nvcc -arch=sm_121 -dlto` and validates a one-word kernel writeback.
+
 ## NVRTC JIT Compile For `compute_121`
 
 Some stacks compile CUDA device code at runtime (NVRTC) and then load PTX via the CUDA Driver API.

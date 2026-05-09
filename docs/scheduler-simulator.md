@@ -260,6 +260,12 @@ EOF
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route_dt.jsonl --trace-time-mode dt_ms --num-experts 8 --json
 ```
 
+Trace speedup (stress backpressure/starvation by compressing arrival times; `--trace-speedup 2` doubles offered load):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-speedup 2 --num-experts 8 --json
+```
+
 Trace sanity-check (contract summary only):
 
 ```bash
@@ -283,6 +289,7 @@ python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --
 The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
+- `work`: total service-slot time and work-units accounting (useful for comparing compute per output token, especially with MTP enabled)
 - `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
 - `trace.decode_ms.{interactive,batch}` and `trace.decode_error_ms.{interactive,batch}`: when trace replay includes `decode_ms`, summarize observed decode latency and error vs simulated token latency (admitted tokens only)
 - `trace.kv_tokens.{interactive,batch}` and `trace.expert_batch_size.{interactive,batch}`: when trace replay includes `kv_tokens` / `expert_batch_size`, summarize observed values for admitted tokens

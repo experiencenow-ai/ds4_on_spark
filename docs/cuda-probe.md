@@ -20,6 +20,7 @@ What it does:
   - `cuda_sm121_probe` (sanity kernel compiled for `sm_121`)
   - `cuda_sm121_rdc_probe` (separate compilation + device link smoke test for `sm_121`)
   - `cuda_sm121_fatbin_probe` (sanity kernel built via `-gencode` with `sm_120` + `sm_121` SASS plus `compute_121` PTX)
+  - `cuda_sm121_dlto_probe` (device LTO (`-dlto`) smoke test for `sm_121`)
   - `cuda_sm121_arch_report` (prints device CC + compiled `__CUDA_ARCH__`)
   - `cuda_sm120_compat_probe` (runs an `sm_120`-compiled kernel on the device; tests `sm_120`→`sm_121` compatibility)
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
@@ -28,6 +29,7 @@ What it does:
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
   - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
+  - `cuda_sm121_bf16_conv` (`cuda_bf16.h` conversion probe for BF16 plumbing; CUTLASS/DeepGEMM-style gate)
   - `cuda_sm121_pipeline_memcpy_async` (`__pipeline_memcpy_async` global->shared copy probe)
   - `cuda_sm121_barrier_memcpy_async` (`cuda::barrier` + `cuda::memcpy_async` copy probe)
   - `cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` global->shared copy via CCCL `cuda::device::memcpy_async_tx`)
@@ -52,7 +54,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
 
 ## Current Spark0 Results (2026-05-09)
@@ -71,11 +73,13 @@ Observed:
 - `-arch=sm_120` binaries run on GB10 (`sm_121`) successfully (probe prints `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - Runtime launches a tiny `sm_121` kernel successfully
 - Separate compilation (`-dc`) + device link (`-dlink`) succeeds for `sm_121` (`cuda_sm121_rdc_probe` runs and validates output)
+- Device LTO (`-dlto`) compile/run succeeds for `sm_121` (`cuda_sm121_dlto_probe` runs and validates output)
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - cuBLASLt FP8 matmul smoke test succeeds (`max_abs_err_vs_one=0`)
 - cuBLASLt FP8 (E5M2) matmul smoke probe returns `CUBLAS_STATUS_NOT_SUPPORTED` on Spark0 (CUDA 13.0 `V13.0.88`)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
+- BF16 conversion probe succeeds (`cuda_bf16.h` conversions compile and run for `sm_121`)
 - Pipeline memcpy-async probe succeeds (cp.async-style global->shared copy)
 - Barrier memcpy-async probe succeeds (`cuda::barrier` + `cuda::memcpy_async`)
 - Explicit `cp.async.bulk` (CCCL `memcpy_async_tx`) probe succeeds (`cuda_sm121_cp_async_bulk_tx`)
@@ -98,6 +102,7 @@ device[0]=NVIDIA GB10 cc=12.1 clock_khz=2418000 mem=128518373376
 kernel wrote 0xc0d3cafe
 rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de
 kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1210
+dlto_probe in=0x12345678 out=0xce5cb9c3 expect=0xce5cb9c3
 expect: compiled __CUDA_ARCH__=1200 for -arch=sm_120
 kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1200
 cuBLASLt sgemm smoke max_abs_err=0
@@ -107,6 +112,7 @@ cuBLASLt error cublasLtMatmulAlgoGetHeuristic: CUBLAS_STATUS_NOT_SUPPORTED
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
 fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
+bf16_conv x=1.250000 raw_x=0x3fa0 x_back=1.250000 y=-2.500000 raw_y=0xc020 y_back=-2.500000 v_back=(1.250000,-2.500000)
 pipeline_memcpy_async out=11111111 22222222 33333333 44444444
 barrier_memcpy_async ok first=decaf000 last=decaf01f
 cuda_graph_smoke out=22222222

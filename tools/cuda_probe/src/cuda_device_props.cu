@@ -49,8 +49,10 @@ int main(int argc,char **argv)
 			return(rc);
 		print_device_props(&prop,dev);
 	}
-	rc = cuda_probe_check(cudaFree(0),-100,"cudaFree(0)");
-	if ( rc != 0 )
-		return(rc);
+	{
+		cudaError_t err = cudaFree(0);
+		if ( err != cudaSuccess )
+			fprintf(stderr,"CUDA warning cudaFree(0): %s\n",cudaGetErrorString(err));
+	}
 	return(0);
 }

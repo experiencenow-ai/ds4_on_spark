@@ -21,6 +21,12 @@ After staging deploy assets to a Spark (they land under `/tmp/ds4-*` by default)
 /tmp/ds4-scripts/ops_validate_staged_assets.sh
 ```
 
+After installing systemd templates under `/etc/systemd/system/`, configs under `/etc/ds4/`, and scripts under `/opt/ds4/scripts/`:
+
+```bash
+/tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0
+```
+
 ## What It Checks
 
 - Required files exist under:
@@ -29,6 +35,7 @@ After staging deploy assets to a Spark (they land under `/tmp/ds4-*` by default)
   - `deploy/sysusers.d/`, `deploy/tmpfiles.d/`
 - All `scripts/ops*.sh` pass `sh -n` syntax checks
 - Env examples include the keys required by `scripts/ops_ds4_env_check.sh`
+  - On-host, it also runs `ops_ds4_env_check.sh` + `ops_tp2_readiness.sh` against `/etc/ds4/`
 
 ## When To Use It
 

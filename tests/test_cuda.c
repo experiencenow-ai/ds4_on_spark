@@ -4,7 +4,7 @@
 
 int32_t test_cuda(void)
 {
-	ds4_cuda_status_t st0,st1,st2,st3,st4;
+	ds4_cuda_status_t st0,st1,st2,st3,st4,st5;
 	const char *s;
 	st0 = ds4_cuda_ok();
 	if ( ds4_cuda_is_ok(st0) == 0 )
@@ -39,9 +39,18 @@ int32_t test_cuda(void)
 #if defined(DS4_HAS_CUDA)
 	if ( ds4_cuda_is_enabled_build() != 1 )
 		return(-10);
+	st5 = ds4_cuda_init();
+	if ( ds4_cuda_is_ok(st5) == 0 )
+	{
+		if ( st5.code != DS4_CUDA_ERR_NO_DEVICE )
+			return(-12);
+	}
 #else
 	if ( ds4_cuda_is_enabled_build() != 0 )
 		return(-11);
+	st5 = ds4_cuda_init();
+	if ( st5.code != DS4_CUDA_ERR_DISABLED )
+		return(-13);
 #endif
 	return(0);
 }

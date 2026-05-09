@@ -2,6 +2,9 @@ import unittest
 import tempfile
 import os
 import dataclasses
+import contextlib
+import io
+import json
 
 from sim.scheduler import scheduler_sim
 
@@ -375,6 +378,29 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertEqual(len(trace), 2)
             self.assertEqual(trace[0].t_ms, 0.0)
             self.assertAlmostEqual(trace[1].t_ms, 0.25, places=9)
+        finally:
+            os.unlink(path)
+
+    def test_trace_speedup_scales_timestamps(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=10.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(1,)),
+        ]
+        scaled = scheduler_sim.scale_trace_speedup(trace, 2.0)
+        self.assertEqual([r.t_ms for r in scaled], [0.0, 5.0])
+
+    def test_trace_speedup_applies_in_trace_summary(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0]}\n')
+                f.write('{"t_ms":10.0,"cls":"batch","candidates":[1]}\n')
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(["--trace-jsonl", path, "--trace-speedup", "2", "--trace-summary", "--json"])
+            self.assertEqual(rc, 0)
+            out = json.loads(buf.getvalue().strip())
+            self.assertEqual(out["t_ms"]["max"], 5.0)
         finally:
             os.unlink(path)
 
@@ -1297,6 +1323,49 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(steps_out, (1000.0 / 3.0))
         with self.assertRaises(ValueError):
             scheduler_sim.arrival_rate_steps_tps(1000.0, "bad_units", 2, 1.0, 1.0)
+
+    def test_work_units_and_service_slot_ms_track_mtp_efficiency(self) -> None:
+        trace_mtp = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0,),
+                k=1,
+                mtp_accept_len=3,
+            )
+        ]
+        trace_off = [dataclasses.replace(trace_mtp[0], mtp_accept_len=None)]
+        cfg_base = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+            service_base_ms=0.0,
+            service_per_task_ms=1.0,
+        )
+        m_off = scheduler_sim.run_simulation(dataclasses.replace(cfg_base, mtp_draft_len=0), trace_off)
+        m_on = scheduler_sim.run_simulation(
+            dataclasses.replace(cfg_base, mtp_draft_len=2, mtp_draft_cost_scale=0.25, mtp_accept_prob=0.0, mtp_accept_decay=1.0),
+            trace_mtp,
+        )
+        self.assertAlmostEqual(m_off.work_units_total, 1.0, places=6)
+        self.assertAlmostEqual(m_off.service_slot_ms_total, 1.0, places=6)
+        self.assertAlmostEqual(m_on.work_units_total, 1.5, places=6)
+        self.assertAlmostEqual(m_on.service_slot_ms_total, 1.5, places=6)
+        self.assertEqual(m_on.mtp_output_tokens, 3)
+        self.assertLess((m_on.service_slot_ms_total / float(m_on.mtp_output_tokens)), (m_off.service_slot_ms_total / float(m_off.admitted_tokens)))
 
 
 if __name__ == "__main__":
