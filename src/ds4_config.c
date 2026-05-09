@@ -167,9 +167,34 @@ static int32_t ds4_trim(const uint8_t *buf,int32_t len,int32_t *l0,int32_t *l1)
 	return(0);
 }
 
+static int32_t ds4_strip_inline_comment(const uint8_t *buf,int32_t *l0,int32_t *l1)
+{
+	int32_t i,end,t0,t1;
+	if ( buf == 0 )
+		return(-1);
+	if ( l0 == 0 )
+		return(-2);
+	if ( l1 == 0 )
+		return(-3);
+	end = *l1;
+	for (i=*l0; i<end; i++)
+	{
+		if ( buf[i] != '#' )
+			continue;
+		if ( i == *l0 || ds4_is_space(buf[i - 1]) != 0 )
+			end = i;
+		break;
+	}
+	if ( ds4_trim(buf + *l0,(end - *l0),&t0,&t1) < 0 )
+		return(-4);
+	*l0 = (*l0 + t0);
+	*l1 = (*l0 + (t1 - t0));
+	return(0);
+}
+
 int32_t ds4_config_parse_mem(ds4_config_t *cfg,const uint8_t *buf,int32_t len)
 {
-	int32_t i,j,line0,line1,eq,t0,t1,key0,key1,val0,val1;
+	int32_t i,j,line0,line1,eq,t0,t1,key0,key1,val0,val1,end1;
 	if ( cfg == 0 )
 		return(-1);
 	if ( buf == 0 )
@@ -188,16 +213,14 @@ int32_t ds4_config_parse_mem(ds4_config_t *cfg,const uint8_t *buf,int32_t len)
 				return(-4);
 			key0 = (line0 + t0);
 			key1 = (line0 + t1);
+			if ( ds4_strip_inline_comment(buf,&key0,&key1) < 0 )
+				return(-5);
 			if ( key0 == key1 )
 			{
 				line0 = (i + 1);
 				continue;
 			}
-			if ( buf[key0] == '#' )
-			{
-				line0 = (i + 1);
-				continue;
-			}
+			end1 = key1;
 			eq = -1;
 			for (j=key0; j<key1; j++)
 			{
@@ -208,17 +231,17 @@ int32_t ds4_config_parse_mem(ds4_config_t *cfg,const uint8_t *buf,int32_t len)
 				}
 			}
 			if ( eq < 0 )
-				return(-5);
-			if ( ds4_trim(buf + key0,(eq - key0),&t0,&t1) < 0 )
 				return(-6);
+			if ( ds4_trim(buf + key0,(eq - key0),&t0,&t1) < 0 )
+				return(-7);
 			key0 = (key0 + t0);
 			key1 = (key0 + (t1 - t0));
-			if ( ds4_trim(buf + (eq + 1),(line1 - (eq + 1)),&t0,&t1) < 0 )
-				return(-7);
+			if ( ds4_trim(buf + (eq + 1),(end1 - (eq + 1)),&t0,&t1) < 0 )
+				return(-8);
 			val0 = ((eq + 1) + t0);
 			val1 = ((eq + 1) + t1);
 			if ( ds4_config_parse_kv(cfg,(const char *)(buf + key0),(key1 - key0),(const char *)(buf + val0),(val1 - val0)) < 0 )
-				return(-8);
+				return(-9);
 			line0 = (i + 1);
 		}
 	}
