@@ -13,7 +13,7 @@ Included upstream sources (metadata only):
 - `contract_summary.json` (repo-generated, source-derived constants)
 - `tokenizer.json`, `tokenizer_config.json`
 - `encoding/*` (chat/tool/thinking encoder + gold vectors)
-- `inference/*` (reference runtime semantics: MLA, CSA/HCA cache compression, MoE, MTP)
+- `inference/*` (reference runtime semantics: MLA, CSA/HCA cache compression, MoE, MTP, FP8/FP4 quantization)
 
 Refresh:
 

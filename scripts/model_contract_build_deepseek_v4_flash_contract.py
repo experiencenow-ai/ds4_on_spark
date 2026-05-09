@@ -3,11 +3,13 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Optional
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
 DEFAULT_OUT = FIX / "contract_summary.json"
+INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 
 
 def load_json(path: Path):
@@ -32,11 +34,38 @@ def layer_type_from_ratio(ratio: int) -> str:
 	return "hca"
 
 
+def parse_inference_quant_constants(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+
+	def find_int(name: str) -> Optional[int]:
+		for line in text.splitlines():
+			line = line.strip()
+			if not line.startswith(name + " = "):
+				continue
+			rhs = line.split("=", 1)[1].strip()
+			try:
+				return int(rhs)
+			except ValueError:
+				return None
+		return None
+
+	block_size = find_int("block_size")
+	fp4_block_size = find_int("fp4_block_size")
+
+	return {
+		"inference_model_constants": {
+			"block_size": block_size,
+			"fp4_block_size": fp4_block_size,
+		}
+	}
+
+
 def build_contract() -> dict:
 	cfg = load_json(FIX / "config.json")
 	inf = load_json(FIX / "inference" / "config.json")
 	tok_cfg = load_json(FIX / "tokenizer_config.json")
 	idx = load_json(FIX / "model.safetensors.index.json")
+	inf_model = parse_inference_quant_constants(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
 	compress_ratios = list(cfg["compress_ratios"])
@@ -120,35 +149,47 @@ def build_contract() -> dict:
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
 			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
 		},
-		"mtp": {
-			"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
-			"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-			"namespace_prefix": "mtp.{j}.",
-		},
-		"tokenizer": {
-			"tokenizer_class": tok_cfg.get("tokenizer_class"),
-			"model_max_length": int(tok_cfg.get("model_max_length")),
-			"add_bos_token": bool(tok_cfg.get("add_bos_token")),
-			"add_eos_token": bool(tok_cfg.get("add_eos_token")),
-			"bos_token": tok_cfg.get("bos_token", {}).get("content"),
-			"eos_token": tok_cfg.get("eos_token", {}).get("content"),
-			"bos_token_id": int(cfg["bos_token_id"]),
-			"eos_token_id": int(cfg["eos_token_id"]),
-			"pad_token_is_eos": True,
-			"encoding_oracle_dir": "encoding/tests",
-		},
-		"tensor_keys": {
-			"tensor_key_count": len(weight_keys),
-			"required_top_level": [
-				"embed.weight",
-				"norm.weight",
-				"head.weight",
-				"hc_head_fn",
-				"hc_head_base",
-				"hc_head_scale",
-			],
-			"weight_index_source": "model.safetensors.index.json:weight_map",
-		},
+			"mtp": {
+				"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
+				"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+				"namespace_prefix": "mtp.{j}.",
+			},
+			"tokenizer": {
+				"tokenizer_class": tok_cfg.get("tokenizer_class"),
+				"model_max_length": int(tok_cfg.get("model_max_length")),
+				"add_bos_token": bool(tok_cfg.get("add_bos_token")),
+				"add_eos_token": bool(tok_cfg.get("add_eos_token")),
+				"bos_token": tok_cfg.get("bos_token", {}).get("content"),
+				"eos_token": tok_cfg.get("eos_token", {}).get("content"),
+				"bos_token_id": int(cfg["bos_token_id"]),
+				"eos_token_id": int(cfg["eos_token_id"]),
+				"pad_token_is_eos": True,
+				"encoding_oracle_dir": "encoding/tests",
+			},
+			"quantization": {
+				"config_quantization_config": cfg.get("quantization_config"),
+				"inference_config": {
+					"dtype": inf.get("dtype"),
+					"scale_fmt": inf.get("scale_fmt"),
+					"expert_dtype": inf.get("expert_dtype"),
+				},
+				**inf_model,
+			},
+			"tensor_keys": {
+				"tensor_key_count": len(weight_keys),
+				"required_top_level": [
+					"embed.weight",
+					"norm.weight",
+					"head.weight",
+					"hc_head_fn",
+					"hc_head_base",
+					"hc_head_scale",
+				],
+				"weight_index_source": "model.safetensors.index.json:weight_map",
+			},
+			"checkpoint_index": {
+				"metadata": idx.get("metadata", {}),
+			},
 	}
 	return contract
 
@@ -177,4 +218,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	raise SystemExit(main())
-

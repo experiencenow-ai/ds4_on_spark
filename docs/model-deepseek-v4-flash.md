@@ -94,6 +94,30 @@ Per-layer MoE (`layers.{i}.ffn.*`):
   - `w2`: `[hidden_size, moe_inter_dim]`
   - `w3`: `[moe_inter_dim, hidden_size]`
 
+## Quantization + scale tensors (FP8 trunk, FP4 experts)
+
+Upstream sources: `config.json` (`quantization_config`, `expert_dtype`) and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
+
+Checkpoint formats:
+
+- Trunk weights use FP8 (`e4m3`) with separate scale tensors:
+  - `quantization_config.quant_method`: `fp8`
+  - `quantization_config.fmt`: `e4m3`
+  - `quantization_config.scale_fmt`: `ue8m0` (power-of-2 scale rounding / MXFP style)
+  - `quantization_config.weight_block_size`: `[128,128]`
+- Expert weights use FP4 (from `config.json` `expert_dtype: fp4`):
+  - In the reference `Linear`, FP4 weights are stored packed as `float4_e2m1fn_x2` with shape `[out_features, in_features//2]` (logically `[out_features, in_features]`).
+  - FP4 scale tensors are `float8_e8m0fnu` with shape `[out_features, in_features//32]` (1 scale per 32 FP4 K-elements).
+
+Activation quantization in the reference runtime:
+
+- GEMM input activations are block-quantized to FP8 in blocks of `block_size=128`.
+- KV path uses QAT-style activation quantization on the **non-RoPE** dims only:
+  - `act_quant(kv[..., :-rope_head_dim], block_size=64, inplace=True)` (RoPE slice stays BF16 for positional precision).
+- The compressed KV path (`Compressor.rotate == true`) applies a Hadamard rotation then uses FP4 act quantization with `fp4_block_size=32`.
+
+DS4 must treat `*.scale` tensors and the block-size rules above as part of the execution contract; skipping them can preserve shapes but still diverge numerically.
+
 ## Attention schedule (sliding vs CSA vs HCA)
 
 Upstream does **not** ship an explicit `layer_types[]` array in `config.json`. Instead, attention type is derived from the per-layer `compress_ratios[]` (see `inference/model.py`, `Attention.compress_ratio = args.compress_ratios[layer_id]`).

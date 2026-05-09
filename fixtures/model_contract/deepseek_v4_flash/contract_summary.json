@@ -121,6 +121,11 @@
     },
     "window_size": 128
   },
+  "checkpoint_index": {
+    "metadata": {
+      "total_size": 159609485896
+    }
+  },
   "format_version": 1,
   "model": "deepseek_v4_flash",
   "moe": {
@@ -138,6 +143,27 @@
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
     "namespace_prefix": "mtp.{j}."
+  },
+  "quantization": {
+    "config_quantization_config": {
+      "activation_scheme": "dynamic",
+      "fmt": "e4m3",
+      "quant_method": "fp8",
+      "scale_fmt": "ue8m0",
+      "weight_block_size": [
+        128,
+        128
+      ]
+    },
+    "inference_config": {
+      "dtype": "fp8",
+      "expert_dtype": "fp4",
+      "scale_fmt": "ue8m0"
+    },
+    "inference_model_constants": {
+      "block_size": 128,
+      "fp4_block_size": 32
+    }
   },
   "tensor_keys": {
     "required_top_level": [
