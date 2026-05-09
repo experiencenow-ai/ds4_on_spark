@@ -33,8 +33,9 @@ check_ref()
 		return 1
 	fi
 
-	if [ "${got}" != "${expected}" ]; then
-		# Annotated tags return the tag object hash unless dereferenced.
+	if [[ "${ref}" == refs/tags/* ]]; then
+		# Annotated tags return the tag object hash unless dereferenced; always
+		# prefer the dereferenced commit when available.
 		local deref
 		deref="$(git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
 		if [ -n "${deref}" ]; then
