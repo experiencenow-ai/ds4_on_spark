@@ -44,6 +44,7 @@ REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.loc
 Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
+- When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - If the checkout `.git` metadata is unusable (macOS provenance/permission), set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`.
@@ -54,6 +55,8 @@ Notes:
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe).
 - `nvcc` path and version (toolkit version).
+- `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
+- `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
 - Storage summary (`df -h` + `lsblk` disk model/size).
 - Wired link status + speed when available (`ip link` + optional `ethtool`).

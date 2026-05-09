@@ -9,6 +9,7 @@ usage: spark_probe.sh [user@host]
 Environment:
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
+  SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
@@ -19,6 +20,7 @@ Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
+  SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
 USAGE
 }
 
@@ -30,7 +32,16 @@ case "${1:-}" in
 esac
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SPARK_KNOWN_HOSTS="${SPARK_KNOWN_HOSTS:-/private/tmp/ds4_spark_known_hosts}"
+SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
+if [ "${SPARK_KNOWN_HOSTS:-}" = "" ]; then
+	if [ "$SPARK_KNOWN_HOSTS_PER_HOST" = "1" ]; then
+		host="${target#*@}"
+		safe_host="$(printf "%s" "$host" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
+		SPARK_KNOWN_HOSTS="/private/tmp/ds4_spark_known_hosts.$safe_host"
+	else
+		SPARK_KNOWN_HOSTS="/private/tmp/ds4_spark_known_hosts"
+	fi
+fi
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
@@ -56,6 +67,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo
 	ssh $SSH_OPTS "$target" 'set -eu
 export LANG=C LC_ALL=C
+export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
@@ -116,6 +128,13 @@ else
 	echo "nvidia-smi not found"
 fi
 echo
+echo "== nvidia-smi topo (capped) =="
+if command -v nvidia-smi >/dev/null 2>&1; then
+	nvidia-smi topo -m 2>/dev/null | sed -E "s/\\x1B\\[[0-9;]*[[:alpha:]]//g" | head -n 120 || true
+else
+	echo "nvidia-smi not found"
+fi
+echo
 if [ "$nvidia_smi_full" = "1" ]; then
 	echo "== nvidia-smi full (verbose) =="
 	nvidia-smi || true
@@ -147,6 +166,15 @@ fi
 [ -e /usr/local/cuda ] && ls -ld /usr/local/cuda || true
 command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null || true
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
+echo
+echo "== cuda headers (cuda.h) =="
+cuda_h="/usr/local/cuda/include/cuda.h"
+if [ -r "$cuda_h" ]; then
+	echo "$cuda_h"
+	grep -E "^#define (CUDA_VERSION|CUDART_VERSION) " "$cuda_h" 2>/dev/null || true
+else
+	echo "cuda.h not found"
+fi
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
 ldconfig -p 2>/dev/null | grep -E "libcuda\\.so\\.1|libcudart\\.so" | head -n 20 || true
@@ -265,6 +293,19 @@ lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null | head -n 20 || true
 echo
 echo "== nvidia driver (proc) =="
 cat /proc/driver/nvidia/version 2>/dev/null | head -n 40 || true
+echo
+echo "== kernel modules (nvidia) =="
+lsmod 2>/dev/null | grep -E "^nvidia" || true
+echo
+echo "== modinfo nvidia (summary) =="
+if command -v modinfo >/dev/null 2>&1; then
+	modinfo nvidia 2>/dev/null | grep -E "^(filename:|description:|version:|srcversion:|vermagic:)" | head -n 40 || true
+else
+	echo "modinfo not found"
+fi
+echo
+echo "== /dev nvidia nodes =="
+ls -l /dev/nvidia* 2>/dev/null | head -n 80 || true
 '
 } >"$tmp"
 

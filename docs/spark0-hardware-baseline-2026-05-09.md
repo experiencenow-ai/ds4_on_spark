@@ -542,3 +542,72 @@ device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
+
+## Update: Probe Refresh (2026-05-09 04:52Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_12.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+
+== nvidia-smi cuda version ==
+CUDA Version                                           : 13.0
+
+== cuda runtime probe (nvcc, no deps) ==
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
+
+== disks (summary) ==
+NAME      SIZE MODEL                      ROTA TYPE
+nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
+```
+
+## Update: Probe Refresh (2026-05-09 05:26Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_0526Z.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- Includes `nvidia-smi topo -m` (capped) and kernel module metadata (`lsmod`, `modinfo nvidia`) for driver/toolkit cross-checks.
+
+```text
+== local meta ==
+Sat May  9 05:26:33 UTC 2026
+git: 310531d
+probe target: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 49, P0, [N/A]
+
+== nvidia-smi topo (capped) ==
+	GPU0	NIC0	NIC1	NIC2	NIC3	CPU Affinity	NUMA Affinity	GPU NUMA ID
+GPU0	 X 	NODE	NODE	NODE	NODE	0-19	0		N/A
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== modinfo nvidia (summary) ==
+filename:       /lib/modules/6.17.0-1014-nvidia/kernel/nvidia-580-open/nvidia.ko
+version:        580.142
+vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
+```
