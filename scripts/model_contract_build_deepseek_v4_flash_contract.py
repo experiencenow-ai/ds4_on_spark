@@ -387,6 +387,8 @@ def find_mtp_layer_ids(weight_keys: list[str]) -> list[int]:
 def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_experts: int) -> dict:
 	top = Counter(k.split(".", 1)[0] for k in weight_keys)
 	mtp0_key_count = sum(1 for k in weight_keys if k.startswith("mtp.0."))
+	mtp_embed_present = any(k.startswith("mtp.") and ".embed." in k for k in weight_keys)
+	mtp_head_present = any(k.startswith("mtp.") and ".head." in k for k in weight_keys)
 
 	def layer_ids_matching(suffix: str) -> list[int]:
 		ids = set()
@@ -414,6 +416,9 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 			"present": mtp0_key_count > 0,
 			"tensor_key_count": mtp0_key_count,
 		},
+		"mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
+		"mtp_embed_present": mtp_embed_present,
+		"mtp_head_present": mtp_head_present,
 		"mtp_layer_ids": find_mtp_layer_ids(weight_keys),
 		"layer_gate": {
 			"tid2eid_layer_ids": layer_ids_matching("ffn.gate.tid2eid"),
@@ -473,6 +478,19 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 			"attn.indexer.compressor.wgate.weight",
 			"attn.indexer.compressor.wkv.weight",
 		],
+		"required_mtp_additional_suffixes": [
+			"e_proj.weight",
+			"e_proj.scale",
+			"h_proj.weight",
+			"h_proj.scale",
+			"enorm.weight",
+			"hnorm.weight",
+			"norm.weight",
+			"hc_head_fn",
+			"hc_head_base",
+			"hc_head_scale",
+		],
+		"mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
 		"hash_gate_tensor_key_suffix": "ffn.gate.tid2eid",
 		"score_gate_tensor_key_suffix": "ffn.gate.bias",
 		"weight_index_source": "model.safetensors.index.json:weight_map",

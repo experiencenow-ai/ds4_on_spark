@@ -639,9 +639,13 @@
       "present": true,
       "tensor_key_count": 1575
     },
+    "mtp_embed_present": false,
+    "mtp_head_present": false,
     "mtp_layer_ids": [
       0
     ],
+    "mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
+    "mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
     "namespaces": [
       "embed",
       "hc_head_base",
@@ -696,6 +700,18 @@
       "attn.compressor.norm.weight",
       "attn.compressor.wgate.weight",
       "attn.compressor.wkv.weight"
+    ],
+    "required_mtp_additional_suffixes": [
+      "e_proj.weight",
+      "e_proj.scale",
+      "h_proj.weight",
+      "h_proj.scale",
+      "enorm.weight",
+      "hnorm.weight",
+      "norm.weight",
+      "hc_head_fn",
+      "hc_head_base",
+      "hc_head_scale"
     ],
     "required_top_level": [
       "embed.weight",

@@ -92,6 +92,15 @@ def main() -> int:
 					failures.append(Failure(19, f"contract summary checkpoint_index.weight_map_num_tensors mismatch (expected {len(weight_keys)}): {contract_summary}"))
 				if chk.get("weight_map_keys_sha256") != expected_key_sha:
 					failures.append(Failure(27, f"contract summary checkpoint_index.weight_map_keys_sha256 mismatch (expected {expected_key_sha}): {contract_summary}"))
+
+				tk = summary.get("tensor_keys", {})
+				if tk.get("mtp_embed_present") is not False:
+					failures.append(Failure(28, f"contract summary expects no mtp.*.embed.* keys in official checkpoint (tensor_keys.mtp_embed_present=false): {contract_summary}"))
+				if tk.get("mtp_head_present") is not False:
+					failures.append(Failure(29, f"contract summary expects no mtp.*.head.* keys in official checkpoint (tensor_keys.mtp_head_present=false): {contract_summary}"))
+				mtp_add = tk.get("required_mtp_additional_suffixes", None)
+				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
+					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 
@@ -255,6 +264,76 @@ def main() -> int:
 			if k not in weight_keys:
 				failures.append(Failure(30, f"missing required tensor key: {k}"))
 
+		if any(k.startswith(base + bad) for bad in ("attn.compressor.", "attn.indexer.")):
+			failures.append(Failure(32, f"unexpected {base}attn.compressor.* or {base}attn.indexer.* keys for MTP layer (must be sliding-only)"))
+		if (base + "ffn.gate.tid2eid") in weight_keys:
+			failures.append(Failure(33, f"unexpected {base}ffn.gate.tid2eid in MTP layer (must be score-routed)"))
+		for bad in ("embed.weight", "head.weight"):
+			if (base + bad) in weight_keys:
+				failures.append(Failure(34, f"unexpected {base}{bad} key (MTP shares top-level embed/head)"))
+
+		# Core attention + norms (same as a sliding score-routed trunk layer).
+		for suffix in (
+			"attn.attn_sink",
+			"attn.wq_a.weight",
+			"attn.wq_a.scale",
+			"attn.q_norm.weight",
+			"attn.wq_b.weight",
+			"attn.wq_b.scale",
+			"attn.wkv.weight",
+			"attn.wkv.scale",
+			"attn.kv_norm.weight",
+			"attn.wo_a.weight",
+			"attn.wo_a.scale",
+			"attn.wo_b.weight",
+			"attn.wo_b.scale",
+			"attn_norm.weight",
+		):
+			req_mtp(suffix)
+
+		# MoE gate + experts (score-routed).
+		for suffix in ("ffn.gate.weight", "ffn.gate.bias"):
+			req_mtp(suffix)
+		for suffix in (
+			"ffn.shared_experts.w1.weight",
+			"ffn.shared_experts.w1.scale",
+			"ffn.shared_experts.w2.weight",
+			"ffn.shared_experts.w2.scale",
+			"ffn.shared_experts.w3.weight",
+			"ffn.shared_experts.w3.scale",
+			"ffn_norm.weight",
+			"hc_attn_fn",
+			"hc_attn_base",
+			"hc_attn_scale",
+			"hc_ffn_fn",
+			"hc_ffn_base",
+			"hc_ffn_scale",
+		):
+			req_mtp(suffix)
+
+		# Experts: require 0..n_routed_experts-1 and the expected tensor key count.
+		mtp_expert_id_seen: set[int] = set()
+		mtp_expert_key_count = 0
+		for k in weight_keys:
+			if not k.startswith(base + "ffn.experts."):
+				continue
+			parts = k.split(".")
+			if len(parts) < 5:
+				continue
+			try:
+				eid = int(parts[4])
+			except ValueError:
+				continue
+			mtp_expert_id_seen.add(eid)
+			mtp_expert_key_count += 1
+
+		if mtp_expert_id_seen != set(range(n_routed_experts)):
+			failures.append(Failure(35, f"mtp layer {mtp_id} expert id set mismatch: expected 0..{n_routed_experts-1} got {sorted(mtp_expert_id_seen)[:8]}... ({len(mtp_expert_id_seen)} total)"))
+		expected_expert_key_count = n_routed_experts * 6
+		if mtp_expert_key_count != expected_expert_key_count:
+			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
+
+		# MTPBlock-specific projections + norms + HC head.
 		for suffix in (
 			"e_proj.weight",
 			"e_proj.scale",
@@ -266,8 +345,6 @@ def main() -> int:
 			"hc_head_fn",
 			"hc_head_base",
 			"hc_head_scale",
-			"ffn.gate.weight",
-			"ffn.gate.bias",
 		):
 			req_mtp(suffix)
 
