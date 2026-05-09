@@ -11,7 +11,7 @@ Usage:
 
 Notes:
   - Non-destructive; does not require sudo.
-  - Sources the env file (so do not point at untrusted content).
+  - Parses env files as simple KEY=VALUE assignments (no shell execution).
   - If DS4_INSTANCE is missing, it may be inferred from a filename like:
       /etc/ds4/ds4-spark0.env  -> DS4_INSTANCE=spark0
 EOF
@@ -32,10 +32,64 @@ if [ ! -r "$env_path" ]; then
     exit 2
 fi
 
-set -a
-# shellcheck disable=SC1090
-. "$env_path"
-set +a
+load_env_file()
+{
+    path="$1"
+    while IFS= read -r line || [ "$line" != "" ]; do
+        case "$line" in
+            ''|\#*)
+                continue
+                ;;
+        esac
+        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        case "$line" in
+            ''|\#*)
+                continue
+                ;;
+        esac
+        case "$line" in
+            export\ *)
+                line="${line#export }"
+                ;;
+        esac
+        case "$line" in
+            *=*)
+                key="${line%%=*}"
+                val="${line#*=}"
+                key="$(printf '%s' "$key" | sed -e 's/[[:space:]]*$//')"
+                val="$(printf '%s' "$val" | sed -e 's/^[[:space:]]*//')"
+                ;;
+            *)
+                continue
+                ;;
+        esac
+        case "$key" in
+            [A-Za-z_]*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+        case "$key" in
+            *[!A-Za-z0-9_]*)
+                continue
+                ;;
+        esac
+        case "$val" in
+            \"*\")
+                val="${val#\"}"
+                val="${val%\"}"
+                ;;
+            \'*\')
+                val="${val#\'}"
+                val="${val%\'}"
+                ;;
+        esac
+        export "$key=$val"
+    done < "$path"
+}
+
+load_env_file "$env_path"
 
 err=0
 

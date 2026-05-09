@@ -11,7 +11,7 @@ Usage:
 
 Notes:
   - Non-destructive; does not require sudo.
-  - Sources the env file (so do not point at untrusted content).
+  - Parses env files as simple KEY=VALUE assignments (no shell execution).
   - Uses `nc`/`curl` only when installed.
 EOF
 }
@@ -66,10 +66,58 @@ if [ ! -f "$env_path" ]; then
     exit 2
 fi
 
-set -a
-# shellcheck disable=SC1090
-. "$env_path"
-set +a
+while IFS= read -r line || [ "$line" != "" ]; do
+    case "$line" in
+        ''|\#*)
+            continue
+            ;;
+    esac
+    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    case "$line" in
+        ''|\#*)
+            continue
+            ;;
+    esac
+    case "$line" in
+        export\ *)
+            line="${line#export }"
+            ;;
+    esac
+    case "$line" in
+        *=*)
+            key="${line%%=*}"
+            val="${line#*=}"
+            key="$(printf '%s' "$key" | sed -e 's/[[:space:]]*$//')"
+            val="$(printf '%s' "$val" | sed -e 's/^[[:space:]]*//')"
+            ;;
+        *)
+            continue
+            ;;
+    esac
+    case "$key" in
+        [A-Za-z_]*)
+            ;;
+        *)
+            continue
+            ;;
+    esac
+    case "$key" in
+        *[!A-Za-z0-9_]*)
+            continue
+            ;;
+    esac
+    case "$val" in
+        \"*\")
+            val="${val#\"}"
+            val="${val%\"}"
+            ;;
+        \'*\')
+            val="${val#\'}"
+            val="${val%\'}"
+            ;;
+    esac
+    export "$key=$val"
+done < "$env_path"
 
 err=0
 
@@ -171,4 +219,3 @@ if [ "$err" -ne 0 ]; then
 fi
 
 echo "== OK =="
-
