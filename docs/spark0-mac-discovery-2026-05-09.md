@@ -134,6 +134,67 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+## Update: Discovery Refresh (2026-05-09 12:25Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T122547Z_probe16_branchprobe15.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- Spark1 is still not reachable from the Mac on TCP/22 (as of this snapshot).
+
+```text
+== meta ==
+Sat May  9 12:25:47 UTC 2026
+git: a3b042f
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+12:25:47.428  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+12:25:47.428  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 12:00Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_probe15_0w1j2j/repo/.git DS4_GIT_WORK_TREE='/Users/mac/.codex/worktrees/bbda/New project 4' ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09_probe15d_gitdir.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- Spark1 is still not reachable from the Mac on TCP/22 (as of this snapshot).
+- Used `DS4_GIT_DIR` + `DS4_GIT_WORK_TREE` overrides for a stable `git: <hash>` stamp (the provided worktree `.git` can be stale due to provenance/permissions).
+
+```text
+== meta ==
+Sat May  9 12:00:21 UTC 2026
+git: 59d06d0
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+12:00:21.896  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+12:00:21.896  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
 ## Update: Discovery Refresh (2026-05-09 11:26Z)
 
 Commands run:
