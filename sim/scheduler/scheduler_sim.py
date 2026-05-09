@@ -25,6 +25,7 @@ class TokenRoute:
     cls: LatencyClass
     candidates: Tuple[int, ...]
     scores: Optional[Tuple[float, ...]] = None
+    mtp_accept_len: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -642,7 +643,16 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
                     scores_list.append(float(s))
                 scores = tuple(scores_list)
 
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=tuple(candidates), scores=scores))
+            mtp_accept_len: Optional[int] = None
+            if "mtp_accept_len" in obj and obj["mtp_accept_len"] is not None:
+                al_raw = obj["mtp_accept_len"]
+                if not isinstance(al_raw, int):
+                    raise ValueError(f"{path}:{lineno}: mtp_accept_len must be an integer")
+                if al_raw < 1:
+                    raise ValueError(f"{path}:{lineno}: mtp_accept_len must be >= 1")
+                mtp_accept_len = int(al_raw)
+
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=tuple(candidates), scores=scores, mtp_accept_len=mtp_accept_len))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -795,6 +805,45 @@ def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetri
     return(accepted_draft + 1)
 
 
+def _record_mtp_accept_len(cfg: SimConfig, metrics: SimMetrics, accept_len: int) -> None:
+    if cfg.mtp_draft_len <= 0:
+        return
+    draft_len = cfg.mtp_draft_len
+    if accept_len < 1:
+        raise RuntimeError("accept_len must be >= 1")
+    if accept_len > (draft_len + 1):
+        raise RuntimeError("accept_len must be <= draft_len + 1")
+
+    accepted_draft = (accept_len - 1)
+    attempted = accepted_draft
+    if accept_len <= draft_len:
+        attempted += 1
+    if attempted > draft_len:
+        attempted = draft_len
+
+    for i in range(attempted):
+        metrics.mtp_pos_attempted[i] += 1
+        if i < accepted_draft:
+            metrics.mtp_pos_accepted[i] += 1
+
+    metrics.mtp_draft_tokens_total += draft_len
+    metrics.mtp_draft_tokens_accepted += accepted_draft
+    metrics.mtp_draft_tokens_rejected += (draft_len - accepted_draft)
+    if accept_len == (draft_len + 1):
+        metrics.mtp_bonus_tokens += 1
+
+
+def _choose_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics, route: TokenRoute) -> int:
+    if cfg.mtp_draft_len <= 0:
+        return(1)
+    if route.mtp_accept_len is not None:
+        accept_len = int(route.mtp_accept_len)
+        if accept_len < 1 or accept_len > (cfg.mtp_draft_len + 1):
+            raise ValueError("trace route mtp_accept_len out of range for configured mtp_draft_len")
+        return(accept_len)
+    return(_sample_mtp_accept_len(cfg, rng, metrics))
+
+
 def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if cfg.num_experts <= 0:
         raise ValueError("num_experts must be > 0")
@@ -864,6 +913,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("trace route candidates must be non-empty")
         if route.scores is not None and len(route.scores) != len(route.candidates):
             raise ValueError("trace route scores must have same length as candidates")
+        if route.mtp_accept_len is not None and cfg.mtp_draft_len <= 0:
+            raise ValueError("trace route mtp_accept_len requires mtp_draft_len > 0")
         for expert_id in route.candidates:
             if expert_id < 0 or expert_id >= cfg.num_experts:
                 raise ValueError("trace route has expert_id out of range")
@@ -1005,7 +1056,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             micro_tokens = (cfg.mtp_draft_len + 1) if mtp_enabled else 1
             accept_len = 1
             if mtp_enabled:
-                accept_len = _sample_mtp_accept_len(cfg, rng, metrics)
+                accept_len = _choose_mtp_accept_len(cfg, rng, metrics, route)
 
             for micro_i in range(micro_tokens):
                 cost_scale = 1.0
@@ -1065,6 +1116,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     else:
                         metrics.partial_admit_tokens_batch += 1
                 if mtp_enabled:
+                    if route.mtp_accept_len is not None and admitted_verify > 0:
+                        _record_mtp_accept_len(cfg, metrics, accept_len)
                     if admitted_verify == 0:
                         metrics.mtp_accept_len_per_step.append(0)
                     else:
@@ -1121,7 +1174,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
-    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates).")
+    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional scores, mtp_accept_len).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)

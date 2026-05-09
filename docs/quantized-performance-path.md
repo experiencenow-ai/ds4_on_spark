@@ -34,6 +34,7 @@ One JSON object per line:
 - `cls` (string): `"interactive"` or `"batch"`
 - `candidates` (list[int]): ordered expert candidates for that token
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
+- `mtp_accept_len` (optional int): when replaying MTP (`--mtp-draft-len > 0`), the observed accept length for that verify step in the range `[1, mtp_draft_len+1]`
 
 The simulator validates:
 
@@ -59,12 +60,12 @@ Optional but useful:
 As of this track:
 
 - The simulator models MTP accept/reject with synthetic knobs (`--mtp-*`), producing acceptance and output-token throughput metrics.
-- There is **no** real quantized-runtime MTP trace ingestion yet (accept lengths / rejection positions are not collected).
+- Trace replay optionally supports per-step `mtp_accept_len` (accept length per verify step), but there are **no** real quantized-runtime MTP traces checked into this repo yet.
 
 Next trace milestones for MTP:
 
 - log the draft length per verify step (or configured `gamma`)
-- log observed accept length per step (how many draft tokens were accepted, plus whether a bonus token was emitted)
+- log observed accept length per step (`mtp_accept_len`): `1..gamma+1` where `gamma` is the configured draft length
 
 ## Practical Loop
 
@@ -77,4 +78,3 @@ Next trace milestones for MTP:
 
 When the trace-backed simulator results support an optimization (MTP or expert queueing),
 prefer documenting the acceptance/throughput evidence here before touching runtime code.
-

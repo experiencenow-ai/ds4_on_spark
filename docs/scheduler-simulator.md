@@ -149,6 +149,7 @@ Replay mode reads one JSON object per line with required fields:
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
+- `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
 
 Example:
 
