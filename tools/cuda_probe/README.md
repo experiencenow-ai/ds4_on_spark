@@ -27,6 +27,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`: compile/run a `__pipeline_memcpy_async` (cp.async-style) copy from global->shared.
 - `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async`: compile/run `cuda::memcpy_async(..., barrier)` using CCCL’s `<cuda/barrier>` API.
+- `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx`: compile/run an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
 - `tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref`: compile/run CCCL `cuda::atomic_ref` (device-scope + block-scope) atomics on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke`: compile/run CUDA graph capture → instantiate → launch smoke test on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit`: compile PTX via NVRTC (`--gpu-architecture=compute_121`), load via CUDA Driver API, and launch a tiny kernel.
@@ -54,6 +55,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_fp8_conv
 ./tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async
 ./tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async
+./tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx
 ./tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref
 ./tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke
 ./tools/cuda_probe/bin/cuda_sm121_nvrtc_jit
@@ -90,6 +92,7 @@ Expected outputs:
 - `cuda_sm121_fp8_conv` is a compile/run check for CUDA’s FP8 conversion helpers.
 - `cuda_sm121_pipeline_memcpy_async` is a compile/run check for CUDA pipeline primitives (`cuda_pipeline_primitives.h`) used by cp.async-style kernels.
 - `cuda_sm121_barrier_memcpy_async` is a compile/run check for CCCL’s higher-level `cuda::barrier` + `cuda::memcpy_async` API (commonly used by templated kernels).
+- `cuda_sm121_cp_async_bulk_tx` is a compile/run check for CCCL’s internal `cuda::device::memcpy_async_tx` helper, which lowers to an explicit `cp.async.bulk` global->shared copy path on SM90+.
 - `cuda_sm121_cccl_atomic_ref` is a compile/run check for CCCL atomics (`cuda::atomic_ref`), which many template kernels use for counters, epilogues, and synchronization-side channels.
 - `cuda_sm121_cuda_graph_smoke` is a compile/run check that CUDA graph stream capture, instantiation, and launch work correctly for `sm_121`.
 - `cuda_sm121_nvrtc_jit` is a compile/run check for NVRTC + the driver PTX loader; it validates `--gpu-architecture=compute_121` and a minimal “compile PTX → load module → launch kernel” path used by JIT compilation flows.

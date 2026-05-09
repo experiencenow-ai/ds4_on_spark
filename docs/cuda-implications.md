@@ -16,6 +16,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2).
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` validates an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
 - `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` validates that `nvcc` accepts common template-kernel compile flags (`--extended-lambda` + `--expt-relaxed-constexpr`) with `-std=c++20` for `sm_121` (CUTLASS/DeepGEMM-style compile gate).
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe` validates that `nvcc` + `nvlink` can perform separate compilation (`-dc`) + device link (`-dlink`) for `sm_121` (multi-translation-unit CUDA build gate; observed success on Spark0: 2026-05-09).
@@ -55,6 +56,7 @@ Next probe step:
 - Run `tools/cuda_probe/bin/cuda_sm120_compat_probe` on Spark0 to establish whether `sm_120` SASS is a viable short-term compatibility target for GB10.
 - Confirm the required shared-memory footprint fits within `cudaDevAttrMaxSharedMemoryPerBlockOptin` for any CUTLASS kernels we plan to bring up.
 - Confirm that pipeline primitives (cp.async-style global->shared copies) work on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
+- Confirm that bulk async copy plumbing compiles and runs on GB10; see `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` path used by CCCL/CUTLASS-style code).
 - Confirm that tensor core matmul plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`.
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
 - Note: this repo’s pinned DeepGEMM upstream uses a CUTLASS submodule; we intentionally do not auto-init submodules in the probe loop (see `docs/upstream-deepgemm.md`), so a CUTLASS compile/run probe requires an explicit submodule init (extra downloads).
