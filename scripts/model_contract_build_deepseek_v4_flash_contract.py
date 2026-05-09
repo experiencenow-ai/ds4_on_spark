@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -37,6 +38,20 @@ def layer_type_from_ratio(ratio: int) -> str:
 def parse_inference_quant_constants(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
+	def find_dataclass_float(field: str) -> Optional[float]:
+		for line in text.splitlines():
+			line = line.strip()
+			if not line.startswith(field + ":"):
+				continue
+			if " = " not in line:
+				continue
+			rhs = line.split("=", 1)[1].strip()
+			try:
+				return float(rhs)
+			except ValueError:
+				return None
+		return None
+
 	def find_int(name: str) -> Optional[int]:
 		for line in text.splitlines():
 			line = line.strip()
@@ -51,12 +66,119 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 
 	block_size = find_int("block_size")
 	fp4_block_size = find_int("fp4_block_size")
+	hc_eps = find_dataclass_float("hc_eps")
 
 	return {
 		"inference_model_constants": {
 			"block_size": block_size,
 			"fp4_block_size": fp4_block_size,
+			"hc_eps": hc_eps,
 		}
+	}
+
+
+def find_mtp_layer_ids(weight_keys: list[str]) -> list[int]:
+	ids = set()
+	for k in weight_keys:
+		if not k.startswith("mtp."):
+			continue
+		parts = k.split(".", 2)
+		if len(parts) < 2:
+			continue
+		try:
+			ids.add(int(parts[1]))
+		except ValueError:
+			continue
+	return sorted(ids)
+
+
+def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_experts: int) -> dict:
+	top = Counter(k.split(".", 1)[0] for k in weight_keys)
+
+	def layer_ids_matching(suffix: str) -> list[int]:
+		ids = set()
+		for k in weight_keys:
+			if not k.startswith("layers."):
+				continue
+			if not k.endswith(suffix):
+				continue
+			parts = k.split(".")
+			if len(parts) < 2:
+				continue
+			try:
+				i = int(parts[1])
+			except ValueError:
+				continue
+			if 0 <= i < n_layers:
+				ids.add(i)
+		return sorted(ids)
+
+	return {
+		"tensor_key_count": len(weight_keys),
+		"namespaces": sorted(top.keys()),
+		"top_level_prefix_counts": dict(top),
+		"mtp_layer_ids": find_mtp_layer_ids(weight_keys),
+		"layer_gate": {
+			"tid2eid_layer_ids": layer_ids_matching("ffn.gate.tid2eid"),
+			"gate_bias_layer_ids": layer_ids_matching("ffn.gate.bias"),
+		},
+		"expected_expert_key_count_per_layer": int(n_routed_experts) * 6,
+		"required_top_level": [
+			"embed.weight",
+			"norm.weight",
+			"head.weight",
+			"hc_head_fn",
+			"hc_head_base",
+			"hc_head_scale",
+		],
+		"required_layer_suffixes": [
+			"attn.attn_sink",
+			"attn.wq_a.weight",
+			"attn.wq_a.scale",
+			"attn.q_norm.weight",
+			"attn.wq_b.weight",
+			"attn.wq_b.scale",
+			"attn.wkv.weight",
+			"attn.wkv.scale",
+			"attn.kv_norm.weight",
+			"attn.wo_a.weight",
+			"attn.wo_a.scale",
+			"attn.wo_b.weight",
+			"attn.wo_b.scale",
+			"attn_norm.weight",
+			"ffn.gate.weight",
+			"ffn.shared_experts.w1.weight",
+			"ffn.shared_experts.w1.scale",
+			"ffn.shared_experts.w2.weight",
+			"ffn.shared_experts.w2.scale",
+			"ffn.shared_experts.w3.weight",
+			"ffn.shared_experts.w3.scale",
+			"ffn_norm.weight",
+			"hc_attn_fn",
+			"hc_attn_base",
+			"hc_attn_scale",
+			"hc_ffn_fn",
+			"hc_ffn_base",
+			"hc_ffn_scale",
+		],
+		"required_layer_suffixes_compress_ratio_nonzero": [
+			"attn.compressor.ape",
+			"attn.compressor.norm.weight",
+			"attn.compressor.wgate.weight",
+			"attn.compressor.wkv.weight",
+		],
+		"required_layer_suffixes_compress_ratio_4": [
+			"attn.indexer.wq_b.weight",
+			"attn.indexer.wq_b.scale",
+			"attn.indexer.weights_proj.weight",
+			"attn.indexer.compressor.ape",
+			"attn.indexer.compressor.norm.weight",
+			"attn.indexer.compressor.wgate.weight",
+			"attn.indexer.compressor.wkv.weight",
+		],
+		"hash_gate_tensor_key_suffix": "ffn.gate.tid2eid",
+		"score_gate_tensor_key_suffix": "ffn.gate.bias",
+		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
 
 
@@ -76,6 +198,7 @@ def build_contract() -> dict:
 
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
+	tensor_keys = build_tensor_key_summary(weight_keys, n_layers, int(cfg["n_routed_experts"]))
 
 	contract = {
 		"format_version": 1,
@@ -138,7 +261,7 @@ def build_contract() -> dict:
 				"compress_indices": {"csa": "Indexer(...,offset=window_size)", "hca": "get_compress_topk_idxs(...,offset=window_size)"},
 			},
 		},
-		"moe": {
+			"moe": {
 			"n_routed_experts": int(cfg["n_routed_experts"]),
 			"n_shared_experts": int(cfg["n_shared_experts"]),
 			"n_activated_experts": int(cfg["num_experts_per_tok"]),
@@ -147,17 +270,30 @@ def build_contract() -> dict:
 			"route_scale": float(cfg["routed_scaling_factor"]),
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
-			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
-		},
-			"mtp": {
-				"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
-				"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-				"namespace_prefix": "mtp.{j}.",
+				"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
 			},
-			"tokenizer": {
-				"tokenizer_class": tok_cfg.get("tokenizer_class"),
-				"model_max_length": int(tok_cfg.get("model_max_length")),
-				"add_bos_token": bool(tok_cfg.get("add_bos_token")),
+				"mtp": {
+					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
+					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+					"namespace_prefix": "mtp.{j}.",
+				},
+				"runtime": {
+					"indexer": {
+						"index_n_heads": int(inf["index_n_heads"]),
+						"index_head_dim": int(inf["index_head_dim"]),
+						"index_topk": int(inf["index_topk"]),
+					},
+					"hyper_connections": {
+						"hc_mult": int(inf["hc_mult"]),
+						"hc_sinkhorn_iters": int(inf["hc_sinkhorn_iters"]),
+						"hc_eps": float(inf_model.get("inference_model_constants", {}).get("hc_eps", 1e-6)),
+					},
+					"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
+				},
+				"tokenizer": {
+					"tokenizer_class": tok_cfg.get("tokenizer_class"),
+					"model_max_length": int(tok_cfg.get("model_max_length")),
+					"add_bos_token": bool(tok_cfg.get("add_bos_token")),
 				"add_eos_token": bool(tok_cfg.get("add_eos_token")),
 				"bos_token": tok_cfg.get("bos_token", {}).get("content"),
 				"eos_token": tok_cfg.get("eos_token", {}).get("content"),
@@ -173,24 +309,13 @@ def build_contract() -> dict:
 					"scale_fmt": inf.get("scale_fmt"),
 					"expert_dtype": inf.get("expert_dtype"),
 				},
-				**inf_model,
-			},
-			"tensor_keys": {
-				"tensor_key_count": len(weight_keys),
-				"required_top_level": [
-					"embed.weight",
-					"norm.weight",
-					"head.weight",
-					"hc_head_fn",
-					"hc_head_base",
-					"hc_head_scale",
-				],
-				"weight_index_source": "model.safetensors.index.json:weight_map",
-			},
-			"checkpoint_index": {
-				"metadata": idx.get("metadata", {}),
-			},
-	}
+					**inf_model,
+				},
+				"tensor_keys": tensor_keys,
+				"checkpoint_index": {
+					"metadata": idx.get("metadata", {}),
+				},
+		}
 	return contract
 
 

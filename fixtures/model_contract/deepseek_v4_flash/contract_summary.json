@@ -162,10 +162,133 @@
     },
     "inference_model_constants": {
       "block_size": 128,
-      "fp4_block_size": 32
+      "fp4_block_size": 32,
+      "hc_eps": 1e-06
     }
   },
+  "runtime": {
+    "hyper_connections": {
+      "hc_eps": 1e-06,
+      "hc_mult": 4,
+      "hc_sinkhorn_iters": 20
+    },
+    "indexer": {
+      "index_head_dim": 128,
+      "index_n_heads": 64,
+      "index_topk": 512
+    },
+    "swiglu_limit": 10.0
+  },
   "tensor_keys": {
+    "expected_expert_key_count_per_layer": 1536,
+    "hash_gate_tensor_key_suffix": "ffn.gate.tid2eid",
+    "layer_gate": {
+      "gate_bias_layer_ids": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42
+      ],
+      "tid2eid_layer_ids": [
+        0,
+        1,
+        2
+      ]
+    },
+    "mtp_layer_ids": [
+      0
+    ],
+    "namespaces": [
+      "embed",
+      "hc_head_base",
+      "hc_head_fn",
+      "hc_head_scale",
+      "head",
+      "layers",
+      "mtp",
+      "norm"
+    ],
+    "required_layer_suffixes": [
+      "attn.attn_sink",
+      "attn.wq_a.weight",
+      "attn.wq_a.scale",
+      "attn.q_norm.weight",
+      "attn.wq_b.weight",
+      "attn.wq_b.scale",
+      "attn.wkv.weight",
+      "attn.wkv.scale",
+      "attn.kv_norm.weight",
+      "attn.wo_a.weight",
+      "attn.wo_a.scale",
+      "attn.wo_b.weight",
+      "attn.wo_b.scale",
+      "attn_norm.weight",
+      "ffn.gate.weight",
+      "ffn.shared_experts.w1.weight",
+      "ffn.shared_experts.w1.scale",
+      "ffn.shared_experts.w2.weight",
+      "ffn.shared_experts.w2.scale",
+      "ffn.shared_experts.w3.weight",
+      "ffn.shared_experts.w3.scale",
+      "ffn_norm.weight",
+      "hc_attn_fn",
+      "hc_attn_base",
+      "hc_attn_scale",
+      "hc_ffn_fn",
+      "hc_ffn_base",
+      "hc_ffn_scale"
+    ],
+    "required_layer_suffixes_compress_ratio_4": [
+      "attn.indexer.wq_b.weight",
+      "attn.indexer.wq_b.scale",
+      "attn.indexer.weights_proj.weight",
+      "attn.indexer.compressor.ape",
+      "attn.indexer.compressor.norm.weight",
+      "attn.indexer.compressor.wgate.weight",
+      "attn.indexer.compressor.wkv.weight"
+    ],
+    "required_layer_suffixes_compress_ratio_nonzero": [
+      "attn.compressor.ape",
+      "attn.compressor.norm.weight",
+      "attn.compressor.wgate.weight",
+      "attn.compressor.wkv.weight"
+    ],
     "required_top_level": [
       "embed.weight",
       "norm.weight",
@@ -174,7 +297,18 @@
       "hc_head_base",
       "hc_head_scale"
     ],
+    "score_gate_tensor_key_suffix": "ffn.gate.bias",
     "tensor_key_count": 69187,
+    "top_level_prefix_counts": {
+      "embed": 1,
+      "hc_head_base": 1,
+      "hc_head_fn": 1,
+      "hc_head_scale": 1,
+      "head": 1,
+      "layers": 67606,
+      "mtp": 1575,
+      "norm": 1
+    },
     "weight_index_source": "model.safetensors.index.json:weight_map"
   },
   "tokenizer": {
