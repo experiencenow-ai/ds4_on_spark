@@ -53,6 +53,7 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
 - routed expert IDs / top-k scores
 - expert batch sizes / queue depth
 - MTP draft/accepted/rejected counters
+- CUDA fallback / graph placement (best-effort): run `scripts/benchmark_llamacpp_server_sweep.py` and inspect `fattn_reservation_probe.json` + the `node_kind_*` / `sched_reserve_*` fields (see `docs/baseline-fattn-reservation.md`).
 
 The llama.cpp Spark baseline script also supports a **best-effort token trace** capture:
 

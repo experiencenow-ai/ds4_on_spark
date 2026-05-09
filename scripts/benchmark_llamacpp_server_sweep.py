@@ -143,18 +143,49 @@ def scan_fattn_reservation(log_path):
         "fattn_node_unique": 0,
         "fattn_cpu_line_count": 0,
         "fattn_cuda_line_count": 0,
+        "sched_reserve_line_count": 0,
+        "sched_reserve_graph_nodes": None,
+        "sched_reserve_graph_splits": None,
+        "sched_reserve_took_ms": None,
+        "node_kind_unique": 0,
+        "node_kind_cpu_top": [],
+        "node_kind_cuda_top": [],
         "match_lines": [],
         "fattn_nodes_sample": [],
+        "node_kinds_sample": [],
     }
     if not log_path or not os.path.exists(log_path):
         return out
     nodes = set()
+    kind_nodes = set()
+    kind_cpu = {}
+    kind_cuda = {}
     match_lines = []
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 ln = line.rstrip("\n")
                 is_match = False
+                if ln.startswith("sched_reserve:"):
+                    out["sched_reserve_line_count"] += 1
+                    m = re.search(r"graph nodes\\s*=\\s*(\\d+)", ln)
+                    if m is not None:
+                        try:
+                            out["sched_reserve_graph_nodes"] = int(m.group(1))
+                        except ValueError:
+                            pass
+                    m = re.search(r"graph splits\\s*=\\s*(\\d+)", ln)
+                    if m is not None:
+                        try:
+                            out["sched_reserve_graph_splits"] = int(m.group(1))
+                        except ValueError:
+                            pass
+                    m = re.search(r"reserve took\\s*([0-9]+(?:\\.[0-9]+)?)\\s*ms", ln)
+                    if m is not None:
+                        try:
+                            out["sched_reserve_took_ms"] = float(m.group(1))
+                        except ValueError:
+                            pass
                 if "Flash Attention was auto, set to disabled" in ln:
                     out["seen_fattn_disabled"] = True
                     is_match = True
@@ -171,6 +202,14 @@ def scan_fattn_reservation(log_path):
                     if "cuda" in low:
                         out["fattn_cuda_line_count"] += 1
                     is_match = True
+                for m in re.finditer(r"(__[A-Za-z0-9_]+__)-\\d+", ln):
+                    kind_nodes.add(m.group(1))
+                    low = ln.lower()
+                    if "cpu" in low:
+                        kind_cpu[m.group(1)] = kind_cpu.get(m.group(1), 0) + 1
+                    if "cuda" in low:
+                        kind_cuda[m.group(1)] = kind_cuda.get(m.group(1), 0) + 1
+                    is_match = True
                 if is_match and len(match_lines) < 50:
                     match_lines.append(ln[:4000])
     except Exception:
@@ -178,6 +217,10 @@ def scan_fattn_reservation(log_path):
     out["fattn_node_unique"] = len(nodes)
     out["match_lines"] = match_lines
     out["fattn_nodes_sample"] = sorted(nodes)[:50]
+    out["node_kind_unique"] = len(kind_nodes)
+    out["node_kinds_sample"] = sorted(kind_nodes)[:50]
+    out["node_kind_cpu_top"] = sorted(kind_cpu.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
+    out["node_kind_cuda_top"] = sorted(kind_cuda.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
     return out
 
 
@@ -298,6 +341,13 @@ def main():
         meta["fattn_seen_sched_reserve_cpu"] = str(bool(fattn.get("seen_sched_reserve_cpu_fattn")))
         meta["fattn_line_count"] = str(int(fattn.get("fattn_line_count") or 0))
         meta["fattn_node_unique"] = str(int(fattn.get("fattn_node_unique") or 0))
+        meta["sched_reserve_line_count"] = str(int(fattn.get("sched_reserve_line_count") or 0))
+        meta["sched_reserve_graph_nodes"] = str(fattn.get("sched_reserve_graph_nodes") or "NA")
+        meta["sched_reserve_graph_splits"] = str(fattn.get("sched_reserve_graph_splits") or "NA")
+        meta["sched_reserve_took_ms"] = str(fattn.get("sched_reserve_took_ms") or "NA")
+        meta["node_kind_unique"] = str(int(fattn.get("node_kind_unique") or 0))
+        meta["node_kind_cpu_top"] = json.dumps(fattn.get("node_kind_cpu_top") or [], sort_keys=True)
+        meta["node_kind_cuda_top"] = json.dumps(fattn.get("node_kind_cuda_top") or [], sort_keys=True)
         meta["fattn_probe_json"] = fattn_probe_path
         write_summary(summary_path, rows, meta)
         print("summary=" + summary_path)

@@ -38,6 +38,9 @@ The script writes these fields into `server_sweep.md` metadata:
 - `fattn_seen_disabled`: should be `False` on a healthy runtime
 - `fattn_seen_sched_reserve_cpu`: should be `False` on a healthy runtime
 - `fattn_line_count` / `fattn_node_unique`: should be non-zero when the runtime logs `__fattn__` scheduling placement
+- `sched_reserve_graph_nodes` / `sched_reserve_graph_splits` / `sched_reserve_took_ms`: best-effort parse of reservation summary lines (helps compare graph size / split count)
+- `node_kind_unique`: unique `__op__` kinds seen in the log (best-effort)
+- `node_kind_cpu_top` / `node_kind_cuda_top`: best-effort top-k counts by `__op__` kind, based on whether each matching log line mentions `cpu` / `cuda`
 
 Interpretation:
 
