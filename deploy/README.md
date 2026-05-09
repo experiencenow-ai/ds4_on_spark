@@ -17,7 +17,8 @@ edit host-specific values, then enable services with `systemctl`.
 `deploy/systemd/` contains systemd templates:
 
 - `ds4@.service` expects:
-  - an env file at `/etc/ds4/ds4-%i.env`
+  - an optional shared env file at `/etc/ds4/ds4.env`
+  - an env file at `/etc/ds4/ds4-%i.env` (loaded after `ds4.env`)
   - an optional config at `/etc/ds4/ds4-%i.yaml`
 - Optional Spark standalone examples:
   - `spark-master@.service`
@@ -51,6 +52,8 @@ sudo systemd-tmpfiles --create || true
 - `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
+
+If you want shared defaults across instances, copy `ds4.env.example` to `/etc/ds4/ds4.env` and keep instance-specific keys in `ds4-%i.env`.
 
 ## Staging Helper
 

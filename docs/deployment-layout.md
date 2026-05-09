@@ -60,6 +60,8 @@ Then on the Spark:
 
 ```bash
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
+# optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
+# if [ ! -f /etc/ds4/ds4.env ]; then sudo install -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
 sudo systemctl daemon-reload
 ```
@@ -69,6 +71,7 @@ sudo systemctl daemon-reload
 The systemd unit in `deploy/systemd/ds4@.service` expects:
 
 - `/opt/ds4/bin/ds4_server`
+- optional shared env at `/etc/ds4/ds4.env`
 - `/etc/ds4/ds4-spark0.env`
 
 ## Safety Notes

@@ -27,7 +27,8 @@ Notes:
 - If you want the SSH check, set `DS4_PEER_SSH` to a login-capable operator user
   (e.g. your distro’s default user) and set `SSH_OPTS` in the env file to point at
   an identity file and a dedicated known-hosts path (see the commented example in
-  `deploy/config/ds4-spark*.env.example`).
+  `deploy/config/ds4-spark*.env.example`). If `SSH_OPTS` is not set, `ops_tp2_readiness.sh`
+  defaults to storing peer host keys under `/var/lib/ds4/ssh/known_hosts`.
 - If you do not want SSH checks, leave `DS4_PEER_SSH` empty; the script will skip it.
 
 ## Wired Reachability
