@@ -258,6 +258,7 @@ JSONL reads one JSON object per line with required fields:
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+  - Replay requires `--num-experts > expert_id_range.max` (see `--trace-summary`); the simulator rejects out-of-range expert IDs with a clear error.
 - Inline metadata records are also accepted in JSONL and ignored by the simulator's event stream:
   - `{"type":"meta","meta":{...}}` (preferred), or
   - `{"meta":{...}}` when no other routing fields are present
