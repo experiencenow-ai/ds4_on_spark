@@ -15,6 +15,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
   - Observed on Spark0 (2026-05-08): `MaxSharedMemoryPerBlockOptin=101376` bytes
 - `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2).
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
+- `tools/cuda_probe/bin/cuda_sm121_bf16_conv` validates that CUDA BF16 helpers (`cuda_bf16.h`) compile and run for `sm_121` (BF16 data plumbing gate for many CUTLASS-style kernels).
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` validates an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
@@ -59,6 +60,7 @@ Next probe step:
 - Confirm that pipeline primitives (cp.async-style global->shared copies) work on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
 - Confirm that bulk async copy plumbing compiles and runs on GB10; see `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` path used by CCCL/CUTLASS-style code).
 - Confirm that tensor core matmul plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`.
+- Confirm that BF16 conversion/data plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_bf16_conv`.
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
 - Note: this repo’s pinned DeepGEMM upstream uses a CUTLASS submodule; we intentionally do not auto-init submodules in the probe loop (see `docs/upstream-deepgemm.md`), so a CUTLASS compile/run probe requires an explicit submodule init (extra downloads).
 
@@ -85,6 +87,7 @@ Next probe step:
 - Build and run the smallest DeepGEMM example on Spark0, capture exact failure mode, then decide whether to patch arch detection or switch to CUTLASS/cuBLASLt for the early kernels.
 - Run `tools/cuda_probe/bin/cuda_sm120_compat_probe` to determine whether `sm_120`-targeted build artifacts are likely to run on GB10 (useful when upstream build scripts have not added `sm_121` yet).
 - Confirm that `cuda_fp8.h` conversion helpers compile and run on GB10 (DeepGEMM uses FP8 paths); see `tools/cuda_probe/bin/cuda_sm121_fp8_conv`.
+- Confirm that `cuda_bf16.h` conversion/data helpers compile and run on GB10 (DeepGEMM-like kernels often use BF16 intermediates); see `tools/cuda_probe/bin/cuda_sm121_bf16_conv`.
 - Confirm that pipeline primitives (cp.async-style mainloop plumbing) compile and run on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
 - If DeepGEMM depends on large dynamic shared memory, use `cuda_sm121_smem_optin` output as the initial feasibility gate before deeper porting work.
 - If DeepGEMM is blocked on missing submodules, use `cuda_sm121_devattrs` to record the baseline device limits and features while deciding whether to pull CUTLASS into the tree.

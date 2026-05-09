@@ -137,12 +137,16 @@ echo "== pci nvidia =="
 lspci | grep -i nvidia || true
 echo
 echo "== nvidia-smi inventory (index + pci bus) =="
+have_smi="0"
+q=""
 if command -v nvidia-smi >/dev/null 2>&1; then
-	q=""
+	have_smi="1"
+	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
 	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then
 		echo "$q"
 	else
+		echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
 		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 		[ "$q" != "" ] && echo "$q"
 		echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
@@ -154,6 +158,17 @@ compute_cap=""
 if [ "$q" != "" ]; then
 	compute_cap="$(printf "%s\n" "$q" | awk -F"," "{ c=\$5; gsub(/^[ \\t]+|[ \\t]+$/, \"\", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,\".\"); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != \"\" ) print bestc; }")"
 fi
+compute_cap_q=""
+smi_q=""
+smi_cuda_ver=""
+if [ "$have_smi" = "1" ]; then
+	smi_q="$(nvidia-smi -q 2>/dev/null || true)"
+	smi_cuda_ver="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*CUDA Version[[:space:]]*:[[:space:]]*([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
+	compute_cap_q="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Compute Capability[[:space:]]*:[[:space:]]*([0-9]+)[.]([0-9]+).*/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }")"
+fi
+if [ "$compute_cap" = "" ] && [ "$compute_cap_q" != "" ]; then
+	compute_cap="$compute_cap_q"
+fi
 nvcc_arch=""
 if [ "${NVCC_ARCH:-}" != "" ]; then
 	nvcc_arch="$NVCC_ARCH"
@@ -163,10 +178,25 @@ fi
 if [ "$compute_cap" != "" ]; then
 	echo "selected compute_cap: $compute_cap"
 fi
+if [ "$compute_cap_q" != "" ]; then
+	echo "compute_cap (-q): $compute_cap_q"
+	if [ "$compute_cap" != "" ] && [ "$compute_cap" != "$compute_cap_q" ]; then
+		echo "warning: compute_cap selected $compute_cap != nvidia-smi -q compute_cap $compute_cap_q"
+	fi
+fi
+if [ "$nvcc_arch" != "" ]; then
+	echo "selected nvcc arch: $nvcc_arch"
+else
+	echo "selected nvcc arch: default"
+fi
 echo
 echo "== nvidia-smi cuda version =="
-smi_cuda_ver="$(nvidia-smi -q 2>/dev/null | sed -nE "s/^[[:space:]]*CUDA Version[[:space:]]*:[[:space:]]*([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
-[ "$smi_cuda_ver" != "" ] && echo "CUDA Version: $smi_cuda_ver" || (nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true)
+[ "$have_smi" = "1" ] && [ "$smi_cuda_ver" = "" ] && smi_cuda_ver="$(printf "%s\n" "$smi_q" | grep -i "cuda version" | sed -nE "s/.*([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
+if [ "$have_smi" = "1" ]; then
+	[ "$smi_cuda_ver" != "" ] && echo "CUDA Version: $smi_cuda_ver" || echo "CUDA Version: unknown"
+else
+	echo "nvidia-smi not found"
+fi
 echo
 echo "== nvidia-smi pcie link (max/current) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -179,6 +209,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 			echo "pcie link query not supported"
 			printf "%s\n" "$pcie_q" | head -n 2
 		else
+			echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
 			echo "$pcie_q"
 		fi
 	else
@@ -196,6 +227,7 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 			echo "power/clocks query not supported"
 			printf "%s\n" "$pwr_q" | head -n 2
 		else
+			echo "columns: index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory"
 			echo "$pwr_q"
 		fi
 	else
