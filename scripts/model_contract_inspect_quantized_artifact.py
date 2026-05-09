@@ -452,6 +452,7 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 
 	topo = contract_summary.get("topology", {})
 	mtp = contract_summary.get("mtp", {})
+	yarn = contract_summary.get("yarn_rope", {})
 
 	def expected_int(name: str) -> Optional[int]:
 		try:
@@ -464,6 +465,11 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 	expected_heads = expected_int("num_attention_heads")
 	expected_kv_heads = expected_int("num_key_value_heads")
 	expected_vocab = expected_int("vocab_size")
+	expected_rope_dim = expected_int("rope_head_dim")
+	try:
+		expected_rope_theta = float(yarn.get("rope_theta"))
+	except Exception:
+		expected_rope_theta = None
 	try:
 		expected_mtp_layers = int(mtp.get("n_mtp_layers", 0))
 	except Exception:
@@ -478,17 +484,30 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 				continue
 		return None
 
+	def pick_float(keys: list[str]) -> Optional[float]:
+		for k in keys:
+			v = metadata.get(k, None)
+			try:
+				return float(v)
+			except Exception:
+				continue
+		return None
+
 	embedding_keys = [k for k in metadata.keys() if k.endswith(".embedding_length")]
 	block_keys = [k for k in metadata.keys() if k.endswith(".block_count")]
 	vocab_keys = [k for k in metadata.keys() if k.endswith(".vocab_size")]
 	head_keys = [k for k in metadata.keys() if k.endswith(".head_count")]
 	kv_head_keys = [k for k in metadata.keys() if k.endswith(".head_count_kv")]
+	rope_dim_keys = [k for k in metadata.keys() if k.endswith(".rope.dimension_count")]
+	rope_freq_base_keys = [k for k in metadata.keys() if k.endswith(".rope.freq_base")]
 
 	embedding_len = pick_int(sorted(embedding_keys))
 	block_count = pick_int(sorted(block_keys))
 	vocab_size = pick_int(sorted(vocab_keys))
 	head_count = pick_int(sorted(head_keys))
 	kv_head_count = pick_int(sorted(kv_head_keys))
+	rope_dim = pick_int(sorted(rope_dim_keys))
+	rope_freq_base = pick_float(sorted(rope_freq_base_keys))
 
 	mismatches: list[str] = []
 
@@ -498,10 +517,18 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 		if int(got) != int(expected):
 			mismatches.append(f"{label}: got={got} expected={expected}")
 
+	def check_eq_float(label: str, got: Optional[float], expected: Optional[float]) -> None:
+		if got is None or expected is None:
+			return
+		if float(got) != float(expected):
+			mismatches.append(f"{label}: got={got} expected={expected}")
+
 	check_eq("embedding_length", embedding_len, expected_hidden)
 	check_eq("vocab_size", vocab_size, expected_vocab)
 	check_eq("head_count", head_count, expected_heads)
 	check_eq("head_count_kv", kv_head_count, expected_kv_heads)
+	check_eq("rope_dimension_count", rope_dim, expected_rope_dim)
+	check_eq_float("rope_freq_base", rope_freq_base, expected_rope_theta)
 
 	block_count_ok = None
 	if block_count is not None and expected_layers is not None:
@@ -520,6 +547,8 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 		"vocab_size": vocab_size,
 		"head_count": head_count,
 		"head_count_kv": kv_head_count,
+		"rope_dimension_count": rope_dim,
+		"rope_freq_base": rope_freq_base,
 		"mismatches": mismatches[:20],
 	}
 

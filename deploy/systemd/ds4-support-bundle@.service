@@ -2,6 +2,7 @@
 Description=DS4 support bundle collector (%i)
 Wants=network-online.target
 After=network-online.target
+ConditionPathIsExecutable=/opt/ds4/scripts/ops_collect_support_bundle.sh
 
 [Service]
 Type=oneshot
