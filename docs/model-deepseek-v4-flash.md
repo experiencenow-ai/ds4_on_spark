@@ -215,6 +215,14 @@ Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
 
 DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
 
+### Attention scaling + activation QAT constants
+
+These constants are **source-derived** from `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.inference_model_constants` to avoid accidental drift:
+
+- KV activation QAT group size(s): `kv_act_quant_group_sizes` (expected: `[64]`)
+- Attention softmax scaling expression: `attn_softmax_scale_expr` (expected: `self.head_dim ** -0.5`)
+- CSA Indexer per-token weights scaling expression: `indexer_weights_expr` (expected: `self.weights_proj(x) * (self.softmax_scale * self.n_heads ** -0.5)`)
+
 ### Attention sink semantics (`attn_sink`)
 
 Reference implementation: `inference/kernel.py` (`sparse_attn`).

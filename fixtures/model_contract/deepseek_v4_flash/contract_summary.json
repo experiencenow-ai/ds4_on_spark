@@ -401,9 +401,12 @@
       "scale_fmt": "ue8m0"
     },
     "inference_model_constants": {
+      "attn_softmax_scale_expr": "self.head_dim ** -0.5",
       "block_size": 128,
       "fp4_block_size": 32,
-      "hc_eps": 1e-06
+      "hc_eps": 1e-06,
+      "indexer_weights_expr": "self.weights_proj(x) * (self.softmax_scale * self.n_heads ** -0.5)",
+      "kv_act_quant_group_sizes": []
     },
     "linear_tensor_contract": {
       "fp4": {
