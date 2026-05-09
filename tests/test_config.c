@@ -1,20 +1,11 @@
 #include "ds4/config.h"
+#include "ds4/str.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include "test_suite.h"
-
-static int32_t ds4_cstr_len_i32(const char *s)
-{
-	int32_t n;
-	if ( s == 0 )
-		return(0);
-	for (n=0; s[n]!=0; n++)
-		;
-	return(n);
-}
 
 static int32_t ds4_write_all(int32_t fd,const uint8_t *buf,int32_t len)
 {

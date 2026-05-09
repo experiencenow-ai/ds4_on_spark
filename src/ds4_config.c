@@ -1,55 +1,8 @@
 #include "ds4/config.h"
+#include "ds4/str.h"
 
 #include <stdlib.h>
 #include <stdio.h>
-
-static int32_t ds4_span_eq(const char *a,int32_t alen,const char *b)
-{
-	int32_t i;
-	if ( a == 0 )
-		return(0);
-	if ( alen <= 0 )
-		return(0);
-	for (i=0; b[i]!=0; i++)
-	{
-		if ( i >= alen )
-			return(0);
-		if ( a[i] != b[i] )
-			return(0);
-	}
-	if ( i != alen )
-		return(0);
-	return(1);
-}
-
-static uint8_t ds4_ascii_lower(uint8_t c)
-{
-	if ( c >= 'A' && c <= 'Z' )
-		return((uint8_t)(c + ('a' - 'A')));
-	return(c);
-}
-
-static int32_t ds4_span_eq_ci(const char *a,int32_t alen,const char *b)
-{
-	int32_t i;
-	uint8_t ca,cb;
-	if ( a == 0 )
-		return(0);
-	if ( alen <= 0 )
-		return(0);
-	for (i=0; b[i]!=0; i++)
-	{
-		if ( i >= alen )
-			return(0);
-		ca = ds4_ascii_lower((uint8_t)a[i]);
-		cb = ds4_ascii_lower((uint8_t)b[i]);
-		if ( ca != cb )
-			return(0);
-	}
-	if ( i != alen )
-		return(0);
-	return(1);
-}
 
 static int32_t ds4_parse_i32(const char *s,int32_t slen,int32_t *out)
 {
@@ -109,16 +62,6 @@ static int32_t ds4_parse_bool(const char *s,int32_t slen,int32_t *out)
 		return(0);
 	}
 	return(-5);
-}
-
-static int32_t ds4_cstr_len_i32(const char *s)
-{
-	int32_t n;
-	if ( s == 0 )
-		return(0);
-	for (n=0; s[n]!=0; n++)
-		;
-	return(n);
 }
 
 int32_t ds4_config_defaults(ds4_config_t *cfg)
@@ -284,7 +227,6 @@ int32_t ds4_config_parse_file(ds4_config_t *cfg,const char *path,uint8_t *buf,in
 {
 	FILE *fp;
 	int32_t n,err;
-	size_t n0;
 	if ( cfg == 0 )
 		return(-1);
 	if ( path == 0 )
@@ -296,8 +238,7 @@ int32_t ds4_config_parse_file(ds4_config_t *cfg,const char *path,uint8_t *buf,in
 	fp = fopen(path,"rb");
 	if ( fp == 0 )
 		return(-5);
-	n0 = fread(buf,1,(size_t)cap,fp);
-	n = (int32_t)n0;
+	n = (int32_t)fread(buf,1,(size_t)cap,fp);
 	if ( (n < 0) || (n > cap) )
 	{
 		fclose(fp);

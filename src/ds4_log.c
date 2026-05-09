@@ -1,5 +1,6 @@
 #include "ds4/log.h"
 #include "ds4/common.h"
+#include "ds4/str.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -7,16 +8,6 @@
 static int32_t g_level = 2;
 static ds4_log_sink_fn g_sink = 0;
 static void *g_sink_ctx = 0;
-
-static int32_t ds4_cstr_len_i32(const char *s)
-{
-	int32_t n;
-	if ( s == 0 )
-		return(0);
-	for (n=0; s[n]!=0; n++)
-		;
-	return(n);
-}
 
 static void ds4_default_sink(void *ctx,int32_t level,const char *msg)
 {
