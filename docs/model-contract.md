@@ -77,3 +77,8 @@ Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
 - Ensure the oracle covers both prefill (`start_pos == 0`) and decode (`start_pos > 0`) so KV-cache semantics are exercised.
+
+Machine-readable MTP gating:
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
+- `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).

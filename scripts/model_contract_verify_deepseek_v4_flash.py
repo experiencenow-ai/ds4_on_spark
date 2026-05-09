@@ -197,6 +197,26 @@ def main() -> int:
 				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
 					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
 
+				mtp = summary.get("mtp", {})
+				trust = mtp.get("trust_gates", {}) if isinstance(mtp, dict) else {}
+				if not isinstance(trust, dict):
+					failures.append(Failure(68, f"contract summary mtp.trust_gates must be an object: {contract_summary}"))
+				else:
+					expected = {
+						"artifact_requires_mtp_contract_complete": True,
+						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"oracle_requires_include_mtp": True,
+						"oracle_requires_mtp_trace": True,
+						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+						"acceptance_requires_prefill_and_decode": True,
+						"acceptance_topk_ids_exact": True,
+					}
+					for k, want in expected.items():
+						got = trust.get(k)
+						if got != want:
+							failures.append(Failure(69, f"contract summary mtp.trust_gates[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
+
 				compat = summary.get("compat", {})
 				bt = compat.get("by_transformers_key", {}) if isinstance(compat, dict) else {}
 				if not isinstance(bt, dict):
