@@ -370,4 +370,5 @@ This repo includes a verifier for these invariants: `scripts/model_contract_veri
   - Prompt cases: `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`
   - Generator (weights required): `scripts/model_contract_generate_deepseek_v4_flash_oracle.py`
   - Output (commit only after review): `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`
+- The verifier enforces that any committed `logits_oracle.json` matches the pinned `upstream_commit.txt` and records core runtime metadata (TP size, seed, tokenizer hashes).
 - Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.

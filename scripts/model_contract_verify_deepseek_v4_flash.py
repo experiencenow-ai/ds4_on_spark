@@ -257,6 +257,39 @@ def main() -> int:
 		if oracle is not None:
 			if int(oracle.get("format_version", 0)) != 1:
 				failures.append(Failure(51, f"logits oracle has unexpected format_version (expected 1): {oracle_path}"))
+			if str(oracle.get("upstream_commit", "")) != upstream_commit:
+				failures.append(Failure(54, f"logits oracle upstream_commit must match pinned fixtures upstream_commit.txt ({upstream_commit}): {oracle_path}"))
+			ws = oracle.get("world_size")
+			if not isinstance(ws, int) or ws < 1:
+				failures.append(Failure(55, f"logits oracle world_size must be an integer >= 1: {oracle_path}"))
+			seed = oracle.get("seed")
+			if not isinstance(seed, int):
+				failures.append(Failure(56, f"logits oracle seed must be an integer: {oracle_path}"))
+			ref = oracle.get("reference")
+			if not isinstance(ref, dict):
+				failures.append(Failure(57, f"logits oracle missing reference object: {oracle_path}"))
+			else:
+				ma = ref.get("model_args")
+				if not isinstance(ma, dict):
+					failures.append(Failure(58, f"logits oracle reference.model_args must be an object: {oracle_path}"))
+				else:
+					if not isinstance(ma.get("n_layers"), int) or int(ma.get("n_layers")) != n_layers:
+						failures.append(Failure(59, f"logits oracle reference.model_args.n_layers must match fixtures n_layers={n_layers}: {oracle_path}"))
+					if not isinstance(ma.get("window_size"), int) or int(ma.get("window_size")) != int(inf["window_size"]):
+						failures.append(Failure(60, f"logits oracle reference.model_args.window_size must match fixtures window_size={inf['window_size']}: {oracle_path}"))
+					crl = ma.get("compress_ratios_len")
+					if not isinstance(crl, int) or crl != len(compress_ratios):
+						failures.append(Failure(61, f"logits oracle reference.model_args.compress_ratios_len must match fixtures compress_ratios length={len(compress_ratios)}: {oracle_path}"))
+
+			sha_map = oracle.get("tokenizer_sha256", {})
+			if sha_map is not None and not isinstance(sha_map, dict):
+				failures.append(Failure(62, f"logits oracle tokenizer_sha256 must be an object when present: {oracle_path}"))
+			if isinstance(sha_map, dict):
+				for k, v in list(sha_map.items())[:4]:
+					if not isinstance(k, str) or not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v):
+						failures.append(Failure(63, f"logits oracle tokenizer_sha256 entries must be sha256 hex strings: {oracle_path}"))
+						break
+
 			cases = oracle.get("cases")
 			if not isinstance(cases, list) or not cases:
 				failures.append(Failure(52, f"logits oracle must contain non-empty cases[]: {oracle_path}"))

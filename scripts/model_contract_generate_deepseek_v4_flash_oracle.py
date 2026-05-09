@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from argparse import ArgumentParser
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,22 @@ def init_dist() -> tuple[int, int, int]:
 		if not dist.is_initialized():
 			dist.init_process_group("nccl")
 	return world_size, rank, local_rank
+
+
+def sha256_file(path: Path) -> str:
+	h = sha256()
+	with path.open("rb") as f:
+		for chunk in iter(lambda: f.read(1024 * 1024), b""):
+			h.update(chunk)
+	return h.hexdigest()
+
+
+def try_version(modname: str) -> str:
+	try:
+		m = __import__(modname)
+		return str(getattr(m, "__version__", "unknown"))
+	except Exception:
+		return "missing"
 
 
 def suppress_print_for_nonzero_rank(rank: int) -> None:
@@ -150,9 +167,34 @@ def main() -> int:
 	default_topk = int(prompts.get("default_topk", 64))
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip() if (FIX / "upstream_commit.txt").exists() else ""
 
+	ckpt_tokenizer_json = ckpt_path / "tokenizer.json"
+	ckpt_tokenizer_cfg = ckpt_path / "tokenizer_config.json"
+	tokenizer_sha = {}
+	if ckpt_tokenizer_json.exists():
+		tokenizer_sha["tokenizer.json"] = sha256_file(ckpt_tokenizer_json)
+	if ckpt_tokenizer_cfg.exists():
+		tokenizer_sha["tokenizer_config.json"] = sha256_file(ckpt_tokenizer_cfg)
+
 	results: dict[str, Any] = {
 		"format_version": 1,
 		"upstream_commit": upstream_commit,
+		"reference": {
+			"inference_config": str(Path(args.config).name),
+			"model_args": {
+				"max_batch_size": int(model_args.max_batch_size),
+				"max_seq_len": int(model_args.max_seq_len),
+				"n_layers": int(model_args.n_layers),
+				"compress_ratios_len": int(len(getattr(model_args, "compress_ratios", []))),
+				"window_size": int(model_args.window_size),
+			},
+		},
+		"runtime_versions": {
+			"python": sys.version.split()[0],
+			"torch": try_version("torch"),
+			"transformers": try_version("transformers"),
+			"safetensors": try_version("safetensors"),
+		},
+		"tokenizer_sha256": tokenizer_sha,
 		"world_size": world_size,
 		"seed": 33377335,
 		"cases": [],
@@ -215,4 +257,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	raise SystemExit(main())
-
