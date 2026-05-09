@@ -173,6 +173,47 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_infer_num_experts_from_trace_uses_meta(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 7))]
+        meta: dict[str, object] = {"num_experts": 10}
+        self.assertEqual(scheduler_sim.infer_num_experts_from_trace(trace, meta), 10)
+
+    def test_infer_num_experts_from_trace_falls_back_to_trace_range(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 9))]
+        self.assertEqual(scheduler_sim.infer_num_experts_from_trace(trace), 10)
+
+    def test_infer_mtp_draft_len_from_trace_uses_meta(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1))]
+        meta: dict[str, object] = {"mtp_draft_len": 3}
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace, meta), 3)
+
+    def test_infer_mtp_draft_len_from_trace_from_accepted_and_rejected(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), accepted_mtp=1, rejected_mtp=1),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), accepted_mtp=0, rejected_mtp=2),
+        ]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
+
+    def test_trace_replay_auto_num_experts_and_mtp_draft_len(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0, 7], "accepted_mtp": 1, "rejected_mtp": 1}))
+            f.write("\n")
+            f.write(json.dumps({"t_ms": 1.0, "cls": "batch", "candidates": [7, 0], "accepted_mtp": 2, "rejected_mtp": 0}))
+            f.write("\n")
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(["--trace-jsonl", tmp_path, "--num-experts", "0", "--mtp-draft-len", "-1", "--service-ms", "0.01", "--json"])
+            self.assertEqual(rc, 0)
+            out = json.loads(buf.getvalue())
+            self.assertEqual(out.get("expert_queue", {}).get("num_experts"), 8)
+            self.assertEqual(out.get("mtp", {}).get("draft_len"), 2)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_adaptive_k_hits_min_and_max(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
