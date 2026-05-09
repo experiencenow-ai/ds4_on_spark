@@ -24,7 +24,7 @@ The sizes below are taken from Git LFS pointer metadata (no GGUF downloads), as 
 | C | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 81.0 | Plausible | Popular “V4 loader + kernels” fork referenced by teamblobfish; more headroom than ~90–100 GiB options. |
 | D | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `Preyazz/DeepSeek-V4-Flash-GGUF` Q2_K (`6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d`) | MIT / MIT | 96.2 | Plausible but tight | Leaves limited headroom for KV/cache; `wip/deepseek-v4-support` is explicitly “reference/WIP” upstream (PR `#22378` was closed). |
 | E | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | Treat as blocked until a human verifies licensing; also sharded. |
-| F | `antirez/ds4` (`baa084482020263a17a3b33a238f6f0809b425fd`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
+| F | `antirez/ds4` (`8e7575be0ef44bd97c5ebaccf49ef85e05048b7b`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
 
 Fixture provenance note:
 
