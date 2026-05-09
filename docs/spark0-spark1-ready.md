@@ -41,6 +41,12 @@ REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local 
 REDACT=1 CUDA_RUNTIME_PROBE=0 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
 ```
 
+- Force the `nvcc` runtime probe compile arch (defaults to deriving from the max `nvidia-smi` compute capability when available):
+
+```bash
+REDACT=1 NVCC_ARCH=sm_121 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+```
+
 Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).

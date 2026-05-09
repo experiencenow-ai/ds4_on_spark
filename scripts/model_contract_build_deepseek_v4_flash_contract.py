@@ -161,16 +161,49 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 				return None
 		return None
 
+	def find_unique_act_quant_group_sizes() -> list[int]:
+		sizes: set[int] = set()
+		for raw in text.splitlines():
+			line = raw.strip()
+			if not line.startswith("act_quant("):
+				continue
+			parts = [p.strip() for p in line.split(",")]
+			if len(parts) < 3:
+				continue
+			if "[...:-rd]" not in parts[0].replace(" ", "") and ":-rd" not in parts[0]:
+				continue
+			try:
+				sizes.add(int(parts[1]))
+			except ValueError:
+				continue
+		return sorted(sizes)
+
+	def find_line_rhs(prefix: str) -> Optional[str]:
+		for raw in text.splitlines():
+			line = raw.strip()
+			if not line.startswith(prefix):
+				continue
+			if " = " not in line:
+				continue
+			return line.split("=", 1)[1].strip()
+		return None
+
 	block_size = find_int("block_size")
 	fp4_block_size = find_int("fp4_block_size")
 	hc_eps = find_dataclass_float("hc_eps")
 	defaults = modelargs_defaults()
+	kv_act_quant_group_sizes = find_unique_act_quant_group_sizes()
+	attn_softmax_scale_expr = find_line_rhs("self.softmax_scale")
+	indexer_weights_expr = find_line_rhs("weights")
 
 	return {
 		"inference_model_constants": {
 			"block_size": block_size,
 			"fp4_block_size": fp4_block_size,
 			"hc_eps": hc_eps,
+			"kv_act_quant_group_sizes": kv_act_quant_group_sizes,
+			"attn_softmax_scale_expr": attn_softmax_scale_expr,
+			"indexer_weights_expr": indexer_weights_expr,
 		},
 		"reference_defaults": defaults,
 	}

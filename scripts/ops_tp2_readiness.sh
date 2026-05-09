@@ -285,7 +285,11 @@ check_file()
         return 0
     fi
     if [ -f "$path" ]; then
-        echo "$label: ok ($path)"
+        if [ -r "$path" ]; then
+            echo "$label: ok ($path)"
+        else
+            echo "$label: unreadable ($path)"
+        fi
         return 0
     fi
     echo "$label: missing ($path)"
@@ -379,6 +383,7 @@ echo "== identity =="
 hostname || true
 id || true
 uname -a || true
+ulimit -n 2>/dev/null || true
 echo
 
 echo "== time =="
