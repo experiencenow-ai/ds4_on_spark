@@ -139,6 +139,11 @@ sudo logrotate -d /etc/logrotate.d/ds4 || true
 # Merge this into your Prometheus config and reload Prometheus.
 cat /tmp/ds4-config/prometheus-scrape.ds4.yml.example
 
+== optional (sysctl network tuning, human-run) ==
+# Host-wide settings; review before applying.
+sudo install -m 0644 /tmp/ds4-config/sysctl.ds4.conf.example /etc/sysctl.d/99-ds4.conf
+sudo sysctl --system
+
 == optional (pin Spark0/Spark1 hostnames, human-run) ==
 # Use only if you are NOT relying on mDNS (`*.local`) and you have a stable wired subnet.
 # Review, then append to /etc/hosts on each Spark:

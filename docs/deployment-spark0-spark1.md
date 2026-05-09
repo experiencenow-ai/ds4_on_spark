@@ -208,4 +208,5 @@ journalctl -u ds4-preflight@spark0.service -n 200 --no-pager
 - Logging + metrics: `docs/ops-logging-metrics.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=2 readiness checklist: `docs/ops-tp2-readiness.md`
+- Optional sysctl network tuning: `docs/ops-sysctl-network-tuning.md`
 - Optional Spark standalone systemd: `docs/deployment-spark-standalone-systemd.md`
