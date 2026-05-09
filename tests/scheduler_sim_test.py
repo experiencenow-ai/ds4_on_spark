@@ -217,6 +217,60 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_canonicalize_jsonl_writes_meta_and_derives_t_ms_and_accept_len(self) -> None:
+        in_path = ""
+        out_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f_in:
+            in_path = f_in.name
+            f_in.write(json.dumps({"type": "meta", "meta": {"runtime_commit": "abc123"}}))
+            f_in.write("\n")
+            f_in.write(json.dumps({"dt_ms": 0.1, "cls": "batch", "candidates": [0, 7], "accepted_mtp": 1, "rejected_mtp": 1}))
+            f_in.write("\n")
+            f_in.write(json.dumps({"dt_ms": 0.2, "cls": "batch", "candidates": [7, 0], "accepted_mtp": 0, "rejected_mtp": 2}))
+            f_in.write("\n")
+        with tempfile.NamedTemporaryFile("w", delete=False) as f_out:
+            out_path = f_out.name
+
+        try:
+            rc = scheduler_sim.main(
+                [
+                    "--trace-jsonl",
+                    in_path,
+                    "--trace-time-mode",
+                    "dt_ms",
+                    "--num-experts",
+                    "0",
+                    "--mtp-draft-len",
+                    "-1",
+                    "--canonicalize-trace-jsonl",
+                    out_path,
+                ]
+            )
+            self.assertEqual(rc, 0)
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                lines = [ln.strip() for ln in f.readlines() if ln.strip() != ""]
+            self.assertGreaterEqual(len(lines), 3)
+
+            meta_obj = json.loads(lines[0])
+            self.assertEqual(meta_obj.get("type"), "meta")
+            meta = meta_obj.get("meta") or {}
+            self.assertEqual(meta.get("runtime_commit"), "abc123")
+            self.assertEqual(meta.get("canonicalized_trace"), True)
+            self.assertEqual(meta.get("num_experts"), 8)
+            self.assertEqual(meta.get("mtp_draft_len"), 2)
+
+            r0 = json.loads(lines[1])
+            self.assertAlmostEqual(float(r0.get("t_ms")), 0.1, places=9)
+            self.assertEqual(r0.get("mtp_accept_len"), 2)
+            r1 = json.loads(lines[2])
+            self.assertAlmostEqual(float(r1.get("t_ms")), 0.3, places=9)
+            self.assertEqual(r1.get("mtp_accept_len"), 1)
+        finally:
+            for p in (in_path, out_path):
+                if p != "" and os.path.exists(p):
+                    os.unlink(p)
+
     def test_adaptive_k_hits_min_and_max(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
