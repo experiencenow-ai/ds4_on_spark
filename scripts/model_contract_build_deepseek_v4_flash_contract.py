@@ -201,6 +201,20 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 		"expert_compute_fp32_expr": expert_fp32,
 	}
 
+def parse_inference_moe_hash_routing(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+	hash_enable = find_first_line_containing(text, "self.hash = layer_id < args.n_hash_layers")
+	tid2eid_decl = find_first_line_containing(text, "self.tid2eid = nn.Parameter")
+	hash_indices = find_first_line_containing(text, "indices = self.tid2eid")
+	bias_none = find_first_line_containing(text, "self.bias = None")
+
+	return {
+		"hash_enabled_expr": hash_enable,
+		"tid2eid_decl_expr": tid2eid_decl,
+		"hash_indices_expr": hash_indices,
+		"bias_none_expr": bias_none,
+	}
+
 def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> int:
 	if compress_ratio == 0:
 		return int(window_size)
@@ -585,6 +599,7 @@ def build_contract() -> dict:
 	inf_model = parse_inference_quant_constants(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	sem = parse_inference_mla_and_cache_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	moe_sem = parse_inference_moe_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
+	moe_hash_sem = parse_inference_moe_hash_routing(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
@@ -747,8 +762,14 @@ def build_contract() -> dict:
 			"route_scale": float(cfg["routed_scaling_factor"]),
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
-				"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
-				"semantics": moe_sem,
+			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+			"semantics": moe_sem,
+			"hash_routing": {
+				"hash_layer_ids": list(range(int(cfg["num_hash_layers"]))),
+				"tid2eid_dtype": "int32",
+				"tid2eid_shape": [int(cfg["vocab_size"]), int(cfg["num_experts_per_tok"])],
+				**moe_hash_sem,
+			},
 			},
 				"mtp": {
 					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
