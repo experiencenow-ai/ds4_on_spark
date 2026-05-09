@@ -33,10 +33,12 @@ int32_t test_config(void)
 	static const uint8_t buf0[] = "log_level=3\nenable_cuda=false\n";
 	static const uint8_t buf1[] = "enable_cuda=ON\n";
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
+	static const uint8_t capbuf[] = "log_level=1\n";
 	char path[64];
 	char out[64];
-	int32_t fd,plen,n;
+	int32_t fd,plen,n,out_len;
 	uint8_t io_buf[64];
+	uint8_t io_cap_buf[12];
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
@@ -115,5 +117,69 @@ int32_t test_config(void)
 	}
 	unlink(path);
 	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
+	for (n=0; n<(int32_t)sizeof(path); n++)
+		path[n] = 0;
+	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_empty_XXXXXX");
+	if ( plen <= 0 )
+		return(-22);
+	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
+		path[n] = "/tmp/ds4_cfg_empty_XXXXXX"[n];
+	path[n] = 0;
+	fd = mkstemp(path);
+	if ( fd < 0 )
+		return(-23);
+	close(fd);
+	if ( ds4_config_load(&cfg,path,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
+	{
+		unlink(path);
+		return(-24);
+	}
+	if ( cfg.log_level != 2 )
+	{
+		unlink(path);
+		return(-25);
+	}
+	unlink(path);
+	for (n=0; n<(int32_t)sizeof(path); n++)
+		path[n] = 0;
+	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_cap_XXXXXX");
+	if ( plen <= 0 )
+		return(-26);
+	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
+		path[n] = "/tmp/ds4_cfg_cap_XXXXXX"[n];
+	path[n] = 0;
+	fd = mkstemp(path);
+	if ( fd < 0 )
+		return(-27);
+	if ( ds4_write_all(fd,capbuf,(int32_t)(sizeof(capbuf) - 1)) < 0 )
+	{
+		close(fd);
+		unlink(path);
+		return(-28);
+	}
+	close(fd);
+	if ( ds4_config_defaults(&cfg) < 0 )
+	{
+		unlink(path);
+		return(-29);
+	}
+	out_len = 0;
+	if ( ds4_config_parse_file(&cfg,path,io_cap_buf,(int32_t)sizeof(io_cap_buf),&out_len) < 0 )
+	{
+		unlink(path);
+		return(-30);
+	}
+	if ( out_len != (int32_t)sizeof(io_cap_buf) )
+	{
+		unlink(path);
+		return(-31);
+	}
+	if ( cfg.log_level != 1 )
+	{
+		unlink(path);
+		return(-32);
+	}
+	unlink(path);
 	return(0);
 }
