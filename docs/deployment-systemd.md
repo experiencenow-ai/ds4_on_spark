@@ -61,6 +61,8 @@ journalctl -u ds4@spark0.service -n 200 --no-pager
 journalctl -u ds4-preflight@spark0.service -n 200 --no-pager
 ```
 
+For optional journald persistence, file-log rotation, and Prometheus scrape conventions, see `docs/ops-logging-metrics.md` and the examples under `deploy/config/`.
+
 ## Hardening Guidance
 
 `deploy/systemd/ds4@.service` includes conservative sandboxing. Avoid enabling

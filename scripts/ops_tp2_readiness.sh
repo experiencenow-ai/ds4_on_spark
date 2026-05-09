@@ -329,6 +329,47 @@ check_listen()
     fi
 }
 
+metrics_url_host()
+{
+    host="${1:-}"
+    if [ "$host" = "" ] || [ "$host" = "0.0.0.0" ]; then
+        host="127.0.0.1"
+    fi
+    case "$host" in
+        \[*\])
+            echo "$host"
+            return 0
+            ;;
+        *:*)
+            echo "[$host]"
+            return 0
+            ;;
+    esac
+    echo "$host"
+    return 0
+}
+
+check_metrics_endpoint()
+{
+    addr="${1:-}"
+    port="${2:-}"
+    if [ "$port" = "" ]; then
+        echo "metrics: skip (DS4_METRICS_PORT unset)"
+        return 0
+    fi
+    host="$(metrics_url_host "$addr")"
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsS --max-time 2 "http://${host}:${port}/metrics" >/dev/null 2>&1; then
+            echo "metrics: http ok (${host}:${port})"
+        else
+            echo "metrics: http failed (${host}:${port})"
+        fi
+        return 0
+    fi
+    echo "metrics: curl missing; skip (${host}:${port})"
+    return 0
+}
+
 echo "== ds4 tp=2 preflight =="
 echo "self: $self"
 date -Is 2>/dev/null || date || true
@@ -379,6 +420,10 @@ echo
 echo "== ports (optional) =="
 check_listen "${DS4_MASTER_PORT:-}" "master port"
 check_listen "${DS4_METRICS_PORT:-}" "metrics port"
+echo
+
+echo "== metrics endpoint (optional) =="
+check_metrics_endpoint "${DS4_METRICS_ADDR:-}" "${DS4_METRICS_PORT:-}"
 echo
 
 echo "== gpu =="

@@ -63,4 +63,13 @@ sudo /opt/ds4/scripts/ops_spark_standalone_check.sh --role worker --env /etc/ds4
 sudo install -d -m 0755 /etc/systemd/journald.conf.d
 sudo install -m 0644 /tmp/ds4-config/journald.ds4.conf.example /etc/systemd/journald.conf.d/ds4.conf
 sudo systemctl restart systemd-journald
+
+== optional (logrotate for file logs, human-run) ==
+# Skip if DS4 logs exclusively to journald.
+sudo install -m 0644 /tmp/ds4-config/logrotate.ds4.conf.example /etc/logrotate.d/ds4
+sudo logrotate -d /etc/logrotate.d/ds4 || true
+
+== optional (Prometheus scrape snippet, human-run) ==
+# Merge this into your Prometheus config and reload Prometheus.
+cat /tmp/ds4-config/prometheus-scrape.ds4.yml.example
 EOF
