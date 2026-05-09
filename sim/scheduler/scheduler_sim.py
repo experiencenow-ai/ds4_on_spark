@@ -228,9 +228,14 @@ class SimMetrics:
     k_changes_batch: int = 0
     effective_k_interactive: List[int] = dataclasses.field(default_factory=list)
     effective_k_batch: List[int] = dataclasses.field(default_factory=list)
+    effective_k_total_interactive: List[int] = dataclasses.field(default_factory=list)
+    effective_k_total_batch: List[int] = dataclasses.field(default_factory=list)
     partial_admit_tokens: int = 0
     partial_admit_tokens_interactive: int = 0
     partial_admit_tokens_batch: int = 0
+    partial_admit_any_layer_tokens: int = 0
+    partial_admit_any_layer_tokens_interactive: int = 0
+    partial_admit_any_layer_tokens_batch: int = 0
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -438,6 +443,9 @@ class SimMetrics:
                     "partial_admit": self.partial_admit_tokens,
                     "partial_admit_interactive": self.partial_admit_tokens_interactive,
                     "partial_admit_batch": self.partial_admit_tokens_batch,
+                    "partial_admit_any_layer": self.partial_admit_any_layer_tokens,
+                    "partial_admit_any_layer_interactive": self.partial_admit_any_layer_tokens_interactive,
+                    "partial_admit_any_layer_batch": self.partial_admit_any_layer_tokens_batch,
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -468,6 +476,10 @@ class SimMetrics:
                 "effective_k": {
                     "interactive": summarize_ints(self.effective_k_interactive),
                     "batch": summarize_ints(self.effective_k_batch),
+                },
+                "effective_k_total": {
+                    "interactive": summarize_ints(self.effective_k_total_interactive),
+                    "batch": summarize_ints(self.effective_k_total_batch),
                 },
                 "tasks": {
                     "admitted": self.admitted_tasks,
@@ -726,19 +738,40 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
     return(routes)
 
 
-def load_trace_jsonl(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
+def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict[str, object]] = None) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
     routes: List[TokenRoute] = []
     t_ms_accum = 0.0
+
+    def merge_meta(payload: object, lineno: int) -> None:
+        if meta_out is None:
+            return
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path}:{lineno}: meta payload must be a JSON object")
+        for k, v in payload.items():
+            if not isinstance(k, str):
+                raise ValueError(f"{path}:{lineno}: meta keys must be strings")
+            meta_out[k] = v
+
     with open(path, "r", encoding="utf-8") as f:
         for lineno, line in enumerate(f, 1):
             line = line.strip()
             if line == "":
                 continue
+            if line.startswith("#"):
+                continue
             obj = json.loads(line)
             if not isinstance(obj, dict):
                 raise ValueError(f"{path}:{lineno}: expected JSON object")
+
+            if "type" in obj and obj["type"] in ("meta", "trace_meta"):
+                payload = obj.get("meta", {k: v for k, v in obj.items() if k != "type"})
+                merge_meta(payload, lineno)
+                continue
+            if "meta" in obj and "cls" not in obj and "candidates" not in obj and "layers" not in obj and "t_ms" not in obj and "dt_ms" not in obj:
+                merge_meta(obj["meta"], lineno)
+                continue
 
             if time_mode == "t_ms":
                 if "dt_ms" in obj and obj["dt_ms"] is not None:
@@ -1395,7 +1428,7 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
             f.write("\n")
 
 
-def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) -> Dict[str, object]:
+def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, meta: Optional[Dict[str, object]] = None) -> Dict[str, object]:
     def summarize(xs: Sequence[float]) -> Dict[str, object]:
         if len(xs) == 0:
             return({"count": 0})
@@ -1519,6 +1552,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) 
             "expert_batch_size": present_expert_batch_size,
         },
     }
+    if meta is not None and len(meta) != 0:
+        out["meta"] = meta
     if min_expert is not None and max_expert is not None:
         out["expert_id_range"] = {"min": int(min_expert), "max": int(max_expert)}
     if len(k_vals) != 0:
@@ -2118,7 +2153,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 metrics.chosen_k_batch.append(k)
 
             admitted = 0
-            admitted_verify = 0
+            admitted_verify_layer0 = 0
+            admitted_verify_total = 0
+            desired_verify_layer0 = 0
+            partial_any_layer = False
             micro_tokens = (cfg.mtp_draft_len + 1) if mtp_enabled else 1
             accept_len = 1
             if mtp_enabled:
@@ -2130,6 +2168,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             layers = _route_layers(route)
             base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
             for micro_i in range(micro_tokens):
+                is_verify = ((not mtp_enabled) or micro_i == cfg.mtp_draft_len)
                 cost_scale = base_cost_scale
                 mtp_phase = MtpPhase.NONE
                 if mtp_enabled and micro_i < cfg.mtp_draft_len:
@@ -2168,9 +2207,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         else:
                             metrics.admitted_tasks_batch += 1
                         admitted += 1
-                        if ((not mtp_enabled) or micro_i == cfg.mtp_draft_len) and li == 0:
-                            admitted_verify += 1
                         _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
+                    if is_verify:
+                        desired_layer = min(k, len(lr.candidates))
+                        admitted_verify_total += admitted
+                        if admitted < desired_layer:
+                            partial_any_layer = True
+                        if li == 0:
+                            admitted_verify_layer0 = admitted
+                            desired_verify_layer0 = desired_layer
 
             if tokens[tid].remaining == 0:
                 metrics.dropped_tokens_backpressure += 1
@@ -2186,21 +2231,30 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 metrics.admitted_tokens += 1
                 if route.cls == LatencyClass.INTERACTIVE:
                     metrics.admitted_tokens_interactive += 1
-                    metrics.effective_k_interactive.append(admitted_verify)
+                    metrics.effective_k_interactive.append(admitted_verify_layer0)
+                    metrics.effective_k_total_interactive.append(admitted_verify_total)
                 else:
                     metrics.admitted_tokens_batch += 1
-                    metrics.effective_k_batch.append(admitted_verify)
-                desired = min(k, len(layers[0].candidates))
-                if admitted_verify < desired:
+                    metrics.effective_k_batch.append(admitted_verify_layer0)
+                    metrics.effective_k_total_batch.append(admitted_verify_total)
+                if desired_verify_layer0 == 0:
+                    desired_verify_layer0 = min(k, len(layers[0].candidates))
+                if admitted_verify_layer0 < desired_verify_layer0:
                     metrics.partial_admit_tokens += 1
                     if route.cls == LatencyClass.INTERACTIVE:
                         metrics.partial_admit_tokens_interactive += 1
                     else:
                         metrics.partial_admit_tokens_batch += 1
+                if partial_any_layer:
+                    metrics.partial_admit_any_layer_tokens += 1
+                    if route.cls == LatencyClass.INTERACTIVE:
+                        metrics.partial_admit_any_layer_tokens_interactive += 1
+                    else:
+                        metrics.partial_admit_any_layer_tokens_batch += 1
                 if mtp_enabled:
-                    if admitted_verify > 0 and (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None):
+                    if admitted_verify_layer0 > 0 and (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None):
                         _record_mtp_accept_len(cfg, metrics, accept_len)
-                    if admitted_verify == 0:
+                    if admitted_verify_layer0 == 0:
                         metrics.mtp_accept_len_per_step.append(0)
                         tokens[tid].output_len = 0
                     else:
@@ -2394,6 +2448,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size).")
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
+    p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
@@ -2469,13 +2524,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.dump_trace_jsonl.strip() != "" and args.dump_trace_csv.strip() != "":
         raise SystemExit("Choose at most one: --dump-trace-jsonl or --dump-trace-csv")
 
+    trace_meta: Dict[str, object] = {}
+    if args.trace_meta_json.strip() != "":
+        if args.trace_jsonl == "" and args.trace_csv == "":
+            raise SystemExit("--trace-meta-json requires --trace-jsonl or --trace-csv")
+        try:
+            with open(args.trace_meta_json, "r", encoding="utf-8") as f:
+                obj = json.load(f)
+        except OSError as e:
+            raise SystemExit(f"--trace-meta-json read failed: {e}")
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"--trace-meta-json parse failed: {e}")
+        if not isinstance(obj, dict):
+            raise SystemExit("--trace-meta-json must contain a JSON object")
+        trace_meta.update(obj)
+
     if args.trace_jsonl != "" or args.trace_csv != "":
         if args.dump_trace_jsonl.strip() != "" or args.dump_trace_csv.strip() != "":
             raise SystemExit("--dump-trace-* is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.arrival_units.strip().lower() != "steps":
             raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.trace_jsonl != "":
-            trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower())
+            trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower(), meta_out=trace_meta)
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
         if trace_speedup != 1.0:
@@ -2484,7 +2554,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             except ValueError as e:
                 raise SystemExit(str(e))
         if args.trace_summary:
-            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
+            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len, meta=trace_meta)
             if args.json:
                 print(json.dumps(out, sort_keys=True))
                 return(0)
@@ -2554,7 +2624,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.dump_trace_csv.strip() != "":
             write_trace_csv(args.dump_trace_csv, trace)
         if args.trace_summary:
-            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
+            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len, meta=trace_meta)
             if args.json:
                 print(json.dumps(out, sort_keys=True))
                 return(0)
@@ -2619,9 +2689,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 raise SystemExit(f"--compare JSON for '{label}' must be an object/dict")
             variants.append((label, overrides))
         out = compare_simulation_variants(sim_cfg, trace, variants)
+        if len(trace_meta) != 0:
+            out["trace_meta"] = trace_meta
     else:
         metrics = run_simulation(sim_cfg, trace)
         out = metrics.to_jsonable()
+        if len(trace_meta) != 0:
+            trace_out = out.get("trace")
+            if isinstance(trace_out, dict):
+                trace_out["meta"] = trace_meta
     if args.json:
         print(json.dumps(out, sort_keys=True))
         return(0)

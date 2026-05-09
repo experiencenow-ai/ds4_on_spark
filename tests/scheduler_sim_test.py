@@ -91,6 +91,64 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(
+                json.dumps(
+                    {
+                        "t_ms": 0.0,
+                        "cls": "batch",
+                        "layers": [{"candidates": [0]}, {"candidates": [0]}],
+                    }
+                )
+            )
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path)
+            cfg = scheduler_sim.SimConfig(
+                num_experts=1,
+                expert_parallelism=1,
+                expert_queue_max=1,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.partial_admit_tokens, 0)
+            self.assertEqual(m.partial_admit_any_layer_tokens, 1)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_jsonl_meta_record_ignored_and_collected(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "meta", "meta": {"runtime_commit": "abc123", "num_layers": 2}}))
+            f.write("\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "interactive", "candidates": [0]}))
+            f.write("\n")
+        try:
+            meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, meta_out=meta)
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(meta.get("runtime_commit"), "abc123")
+            self.assertEqual(meta.get("num_layers"), 2)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_adaptive_k_hits_min_and_max(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
