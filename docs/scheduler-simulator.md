@@ -78,6 +78,18 @@ control loop:
 This is intentionally simple; it is meant to generate stable, testable behavior
 and highlight oscillation or starvation regimes early.
 
+### Trace-Driven K (Replay)
+
+When replaying a real quantized-runtime trace, you can bypass the controller and use the
+per-token `k` decisions from the trace:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mode trace --json
+```
+
+This is useful for validating the queueing/backpressure/MTP layers against a real schedule before
+tuning the controller.
+
 ## MTP (Draft/Accept) Model
 
 This simulator includes a host-only approximation of **MTP draft/accept** behavior so we can explore
@@ -152,6 +164,7 @@ Replay mode reads one JSON object per line with required fields:
 - `t_ms` (number): arrival time in milliseconds
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+- `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace`)
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc`.
 - `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
 
@@ -183,6 +196,7 @@ The simulator prints a JSON object with:
 - `tasks.forced_batch_starts`: number of times `--hi-burst` forced a batch start
 - `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
+  - also includes time-weighted pending-depth percentiles across expert-time (`pending_depth_time_weighted.p{50,95,99}`)
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
 - `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`
 

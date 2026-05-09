@@ -26,6 +26,12 @@ Once the baseline quantized runtime can emit per-token routing, capture a trace 
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 64 --json
 ```
 
+If the runtime trace also includes the per-token chosen `K`, you can replay it directly:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mode trace --num-experts 64 --json
+```
+
 ### Trace Schema (JSONL)
 
 One JSON object per line:
@@ -33,6 +39,7 @@ One JSON object per line:
 - `t_ms` (number): token arrival time in milliseconds
 - `cls` (string): `"interactive"` or `"batch"`
 - `candidates` (list[int]): ordered expert candidates for that token
+- `k` (optional int): the chosen `K` for that token (required when using `--k-mode trace`)
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
 - `mtp_accept_len` (optional int): when replaying MTP (`--mtp-draft-len > 0`), the observed accept length for that verify step in the range `[1, mtp_draft_len+1]`
 
@@ -49,6 +56,7 @@ To make the first replay meaningful, log at least:
 - token enqueue timestamp (`t_ms`) at the scheduler boundary (before admission/backpressure)
 - latency class (`cls`) derived from request lane / priority
 - ordered candidate expert ids (`candidates`) as produced by the router
+- chosen `K` (optional): per-token `k` if/when the runtime has an adaptive-K controller
 
 Optional but useful:
 

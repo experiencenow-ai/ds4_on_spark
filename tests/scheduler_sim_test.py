@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 import os
+import dataclasses
 
 from sim.scheduler import scheduler_sim
 
@@ -284,6 +285,67 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertGreater(m.makespan_ms, 0.0)
         finally:
             os.unlink(path)
+
+    def test_trace_jsonl_k_and_k_mode_trace_override_controller(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0,1,2],"k":1}\n')
+
+            trace = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual(trace[0].k, 1)
+
+            cfg_trace = scheduler_sim.SimConfig(
+                num_experts=3,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=3,
+                    k_max_interactive=3,
+                    k_min_batch=3,
+                    k_max_batch=3,
+                    q_low=0,
+                    q_high=0,
+                ),
+                k_mode="trace",
+            )
+            m_trace = scheduler_sim.run_simulation(cfg_trace, trace)
+            self.assertEqual(m_trace.chosen_k_batch, [1])
+            self.assertEqual(m_trace.admitted_tasks, 1)
+
+            cfg_ctrl = dataclasses.replace(cfg_trace, k_mode="controller")
+            m_ctrl = scheduler_sim.run_simulation(cfg_ctrl, trace)
+            self.assertEqual(m_ctrl.chosen_k_batch, [3])
+            self.assertEqual(m_ctrl.admitted_tasks, 3)
+        finally:
+            os.unlink(path)
+
+    def test_k_mode_trace_requires_k_field(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1, 2))]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=3,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+        with self.assertRaises(ValueError):
+            scheduler_sim.run_simulation(cfg, trace)
 
     def test_trace_jsonl_scores_length_must_match_candidates(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
