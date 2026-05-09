@@ -14,6 +14,22 @@ ssh $SSH_OPTS <user>@spark0.local hostname
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark
 console.
 
+## Peer SSH From DS4 Preflight (Optional)
+
+`deploy/systemd/ds4-preflight@.service` runs `scripts/ops_tp2_readiness.sh` as the
+`ds4` service user. That script can optionally attempt an SSH hop to the peer if
+`DS4_PEER_SSH` is set in `/etc/ds4/ds4-<instance>.env`.
+
+Notes:
+
+- The `ds4` service user is commonly configured with `/usr/sbin/nologin`, so it is
+  **not** a good SSH login target (avoid `ds4@peer`).
+- If you want the SSH check, set `DS4_PEER_SSH` to a login-capable operator user
+  (e.g. your distro’s default user) and set `SSH_OPTS` in the env file to point at
+  an identity file and a dedicated known-hosts path (see the commented example in
+  `deploy/config/ds4-spark*.env.example`).
+- If you do not want SSH checks, leave `DS4_PEER_SSH` empty; the script will skip it.
+
 ## Wired Reachability
 
 Spark0 currently has wired IPv4 `10.0.0.2/24`. If the Mac is not on that subnet,
