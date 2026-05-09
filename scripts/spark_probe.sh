@@ -130,7 +130,7 @@ fi
 echo
 echo "== nvidia-smi topo (capped) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
-	nvidia-smi topo -m 2>/dev/null | head -n 120 || true
+	nvidia-smi topo -m 2>/dev/null | sed -E "s/\\x1B\\[[0-9;]*[[:alpha:]]//g" | head -n 120 || true
 else
 	echo "nvidia-smi not found"
 fi
