@@ -292,6 +292,8 @@ class SimMetrics:
     forced_batch_starts: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
     mean_pending_per_expert: List[float] = dataclasses.field(default_factory=list)
+    max_pending_work_per_expert: List[float] = dataclasses.field(default_factory=list)
+    mean_pending_work_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_utilization_per_expert: List[float] = dataclasses.field(default_factory=list)
     saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist: List[float] = dataclasses.field(default_factory=list)
@@ -556,6 +558,12 @@ class SimMetrics:
                     "max_pending_max": max(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
+                    "work": {
+                        "max_pending_p50": statistics.median(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
+                        "max_pending_max": max(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
+                        "mean_pending_p50": statistics.median(self.mean_pending_work_per_expert) if len(self.mean_pending_work_per_expert) != 0 else 0.0,
+                        "mean_pending_max": max(self.mean_pending_work_per_expert) if len(self.mean_pending_work_per_expert) != 0 else 0.0,
+                    },
                     "pending_depth_time_weighted": {
                         "max_depth": (len(self.pending_depth_hist) - 1) if len(self.pending_depth_hist) != 0 else 0,
                         "overflow_time_ms": self.pending_depth_hist_overflow,
@@ -2161,6 +2169,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         pending_units=pending_units,
         max_pending_per_expert=[0 for _ in range(cfg.num_experts)],
         mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)],
+        max_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
+        mean_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
         mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
         saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
         pending_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
@@ -2185,10 +2195,12 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
     # Time-weighted pending depth: integral pending(t) dt / makespan.
     pending_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
+    pending_work_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
     inflight_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
     saturated_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
     last_t_ms = 0.0
     last_pending: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_work: List[float] = [0.0 for _ in range(cfg.num_experts)]
     last_hi_queue: List[int] = [0 for _ in range(cfg.num_experts)]
     last_lo_queue: List[int] = [0 for _ in range(cfg.num_experts)]
     last_inflight: List[int] = [0 for _ in range(cfg.num_experts)]
@@ -2202,6 +2214,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         if dt != 0.0:
             for e in range(cfg.num_experts):
                 pending_area[e] += (float(last_pending[e]) * dt)
+                pending_work_area[e] += (float(last_pending_work[e]) * dt)
                 inflight_area[e] += (float(last_inflight[e]) * dt)
                 saturated_area[e] += (float(last_saturated[e]) * dt)
                 if hist_len != 0:
@@ -2225,12 +2238,15 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     def snapshot_state() -> None:
         for e in range(cfg.num_experts):
             last_pending[e] = experts[e].pending()
+            last_pending_work[e] = experts[e].pending_work()
             last_hi_queue[e] = len(experts[e].hi)
             last_lo_queue[e] = len(experts[e].lo)
             last_inflight[e] = experts[e].in_flight
             last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             if last_pending[e] > metrics.max_pending_per_expert[e]:
                 metrics.max_pending_per_expert[e] = last_pending[e]
+            if last_pending_work[e] > metrics.max_pending_work_per_expert[e]:
+                metrics.max_pending_work_per_expert[e] = float(last_pending_work[e])
 
     evq: List[Event] = []
     seq_ref = [0]
@@ -2687,6 +2703,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     metrics.makespan_ms = makespan_ms
     for e in range(cfg.num_experts):
         metrics.mean_pending_per_expert[e] = (pending_area[e] / makespan_ms)
+        metrics.mean_pending_work_per_expert[e] = (pending_work_area[e] / makespan_ms)
         metrics.mean_utilization_per_expert[e] = (inflight_area[e] / (makespan_ms * float(cfg.expert_parallelism)))
         metrics.saturated_time_frac_per_expert[e] = (saturated_area[e] / makespan_ms)
     return(metrics)

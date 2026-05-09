@@ -362,6 +362,7 @@ The simulator prints a JSON object with:
 - `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
 - `tokens.partial_admit_any_layer*`: like `tokens.partial_admit*`, but triggers when *any* routing layer under-admits during the verify step
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
+  - also includes `expert_queue.work` (per-expert max/mean pending work units, time-weighted) so `--pending-units work` has observable queue depth
   - also includes time-weighted depth percentiles across expert-time:
     - `pending_depth_time_weighted.p{50,95,99}`: total outstanding tasks (queued + in-flight)
     - `hi_queue_depth_time_weighted.p{50,95,99}`: interactive queue depth (queued only)
