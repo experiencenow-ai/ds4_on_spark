@@ -273,6 +273,13 @@ fi
 echo
 ldconfig -p 2>/dev/null | grep -E "libcudnn" | head -n 20 || true
 echo
+echo "== cuda demo_suite (deviceQuery, optional) =="
+if [ -x /usr/local/cuda/extras/demo_suite/deviceQuery ]; then
+	/usr/local/cuda/extras/demo_suite/deviceQuery 2>/dev/null | head -n 120 || true
+else
+	echo "deviceQuery not found"
+fi
+echo
 echo "== cuda runtime probe (nvcc, no deps) =="
 if [ "$cuda_runtime_probe" = "1" ] && [ "$nvcc_bin" != "" ]; then
 	echo "nvcc arch: ${nvcc_arch:-default}"
@@ -358,7 +365,15 @@ if command -v ethtool >/dev/null 2>&1; then
 	for iface in $ifaces; do
 		echo "-- ethtool $iface --"
 		ethtool "$iface" 2>/dev/null | grep -E "^(Settings for|\\s*Speed:|\\s*Duplex:|\\s*Auto-negotiation:|\\s*Link detected:)" || true
+		ethtool -i "$iface" 2>/dev/null | grep -E "^(driver:|version:|firmware-version:|bus-info:)" || true
 	done
+fi
+echo
+echo "== filesystems (type + opts) =="
+if command -v findmnt >/dev/null 2>&1; then
+	findmnt -no TARGET,FSTYPE,OPTIONS / /home 2>/dev/null || findmnt -no TARGET,FSTYPE,OPTIONS / 2>/dev/null || true
+else
+	echo "findmnt not found"
 fi
 echo
 echo "== storage =="
