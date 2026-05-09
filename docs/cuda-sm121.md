@@ -41,3 +41,13 @@ Template GEMMs often rely on large dynamic shared-memory allocations gated by:
 The probe `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints the device limit and validates a launch that opts in to the reported maximum.
 
 Observed on Spark0 (2026-05-08): `MaxSharedMemoryPerBlockOptin=101376` bytes.
+
+## FP8 Header + Conversion Plumbing
+
+DeepGEMM and some CUTLASS kernels depend on CUDA’s FP8 conversion helpers.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_fp8_conv` is a tiny compile/run check that:
+
+- includes `cuda_fp8.h`
+- converts a `float` to FP8 storage (`e4m3` and `e5m2`)
+- converts back to `__half_raw` and prints the raw bits

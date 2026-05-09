@@ -21,6 +21,7 @@ What it does:
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
+  - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
 
 Environment overrides:
 
@@ -34,9 +35,9 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, and `cuda_sm121_devattrs` for `sm_121`.
+It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, and `cuda_sm121_fp8_conv` for `sm_121`.
 
-## Current Spark0 Results (2026-05-08)
+## Current Spark0 Results (2026-05-09)
 
 Commands run:
 
@@ -52,6 +53,7 @@ Observed:
 - Runtime launches a tiny `sm_121` kernel successfully
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
+- FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 
 Selected output excerpt:
@@ -65,6 +67,7 @@ kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1210
 cuBLASLt sgemm smoke max_abs_err=0
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
+fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
 ```
 
 ## Where The Probe Lives
