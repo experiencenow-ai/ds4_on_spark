@@ -786,6 +786,29 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_expert_id_out_of_range_rejected(self) -> None:
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(2,))]
+        with self.assertRaises(ValueError) as ctx:
+            scheduler_sim.run_simulation(cfg, trace)
+        self.assertIn("out of range", str(ctx.exception))
+
     def test_write_trace_jsonl_roundtrip(self) -> None:
         trace = scheduler_sim.generate_synthetic_trace(
             scheduler_sim.TraceConfig(

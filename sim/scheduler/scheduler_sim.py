@@ -1772,6 +1772,27 @@ def _route_layers(route: TokenRoute) -> Tuple[LayerRoute, ...]:
     return(route.layers)
 
 
+def _validate_trace_expert_ids(trace: Sequence[TokenRoute], num_experts: int) -> None:
+    if num_experts <= 0:
+        return
+    for i, r in enumerate(trace):
+        token_index = r.token_index
+        token_tag = f"trace[{i}]"
+        if token_index is not None:
+            token_tag += f" token_index={int(token_index)}"
+        token_tag += f" t_ms={float(r.t_ms)}"
+
+        if r.layers is not None:
+            for li, lr in enumerate(_route_layers(r)):
+                for e in lr.candidates:
+                    if e < 0 or e >= num_experts:
+                        raise ValueError(f"{token_tag}: layers[{li}].candidates expert_id={int(e)} out of range for num_experts={int(num_experts)}")
+        else:
+            for e in r.candidates:
+                if e < 0 or e >= num_experts:
+                    raise ValueError(f"{token_tag}: candidates expert_id={int(e)} out of range for num_experts={int(num_experts)}")
+
+
 def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
     if admit_policy == "ordered":
         return(candidates)
@@ -2109,6 +2130,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("mtp_verify_per_draft_cost_scale must be >= 0")
     else:
         mtp_draft_attempt_policy = "full"
+
+    _validate_trace_expert_ids(trace, cfg.num_experts)
 
     for route in trace:
         if route.cost_scale is not None and float(route.cost_scale) <= 0.0:
