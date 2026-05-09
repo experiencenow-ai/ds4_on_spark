@@ -31,6 +31,8 @@ The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pat
 - Runtime CC from `cudaGetDeviceProperties` (e.g. `12.1`)
 - The compiled device macro `__CUDA_ARCH__` from a `-arch=sm_121` build (expected `1210`)
 
+If your toolkit supports it, `nvcc --list-gpu-arch` and `nvcc --list-gpu-code` should include `compute_121` / `sm_121`.
+
 ## `sm_120` → `sm_121` Binary Compatibility Probe
 
 Some upstream projects gate on `sm_120` (or have not yet added `sm_121`), so it is useful to know whether a binary compiled for `sm_120` runs correctly on GB10 (`sm_121`).

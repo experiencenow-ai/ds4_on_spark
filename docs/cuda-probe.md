@@ -15,6 +15,7 @@ What it does:
 - Ships `tools/cuda_probe/` to Spark0 (no remote git clone required).
 - Builds with `/usr/local/cuda/bin/nvcc`.
 - Runs:
+  - `cuda_device_props_tiny` (one-line runtime + device summary)
   - `cuda_device_props` (runtime + device properties)
   - `cuda_sm121_probe` (sanity kernel compiled for `sm_121`)
   - `cuda_sm121_arch_report` (prints device CC + compiled `__CUDA_ARCH__`)
@@ -39,7 +40,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It compiles `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, and `cuda_sm121_wmma_smoke` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, and `cuda_sm121_wmma_smoke` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 
 ## Current Spark0 Results (2026-05-09)
 
