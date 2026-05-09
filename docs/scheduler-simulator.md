@@ -75,6 +75,9 @@ congestion signal derived from expert pending depth:
 
 - `--k-signal global` (default): `max_pending` is max pending across all experts
 - `--k-signal candidates`: `max_pending` is max pending among this token's candidates
+- `--k-signal class`: `max_pending` is max pending in this token’s latency-class
+  queue (interactive or batch) plus in-flight work, across all experts (helps
+  decouple interactive K from batch backlog under strict priority)
 
 When the trace contains multiple MoE layers (`layers[]`), you can choose whether the controller
 produces one `K` per trace entry or one `K` per layer:
@@ -345,7 +348,7 @@ The simulator prints a JSON object with:
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
   - also includes controller update/change counts when `--k-update-ms` / `--k-slew` are used
-- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates}`); useful for choosing `--q-low/--q-high`
+- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates,class}`); useful for choosing `--q-low/--q-high`
 - `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
 - `effective_k_total.{interactive,batch}`: like `effective_k`, but summed across all routing layers when `layers` is present
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
@@ -354,7 +357,10 @@ The simulator prints a JSON object with:
 - `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
 - `tokens.partial_admit_any_layer*`: like `tokens.partial_admit*`, but triggers when *any* routing layer under-admits during the verify step
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
-  - also includes time-weighted pending-depth percentiles across expert-time (`pending_depth_time_weighted.p{50,95,99}`)
+  - also includes time-weighted depth percentiles across expert-time:
+    - `pending_depth_time_weighted.p{50,95,99}`: total outstanding tasks (queued + in-flight)
+    - `hi_queue_depth_time_weighted.p{50,95,99}`: interactive queue depth (queued only)
+    - `lo_queue_depth_time_weighted.p{50,95,99}`: batch queue depth (queued only)
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
 - `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`
 
