@@ -61,6 +61,7 @@ MTP (multi-token prediction) oracle requirements:
     - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
     - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`
+    - `scripts/model_contract_inspect_quantized_artifact.py` reports these as `mtp_sidecar_contract` (rather than a full upstream `mtp_contract`)
   - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
 

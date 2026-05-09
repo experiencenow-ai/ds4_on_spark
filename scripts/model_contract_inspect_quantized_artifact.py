@@ -54,8 +54,11 @@ def read_bytes(f: BinaryIO, n: int) -> bytes:
 
 
 def read_gguf_string(f: BinaryIO) -> str:
-	n = read_u32_le(f)
-	b = read_bytes(f, n)
+	# GGUF strings are: uint64_t length + UTF-8 bytes (no NUL terminator).
+	n = read_u64_le(f)
+	if n > (256 * 1024 * 1024):
+		raise ValueError(f"unreasonable gguf string length: {n}")
+	b = read_bytes(f, int(n))
 	try:
 		return b.decode("utf-8")
 	except UnicodeDecodeError:
@@ -63,7 +66,7 @@ def read_gguf_string(f: BinaryIO) -> str:
 
 
 def skip_gguf_value(f: BinaryIO, value_type: int) -> None:
-	# Types follow gguf spec: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
+	# Types follow gguf spec: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
 	if value_type in (0, 1, 7):  # u8, i8, bool
 		read_bytes(f, 1)
 		return
@@ -494,6 +497,67 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 	}
 
 
+MTP_SIDECAR_EXPECTED_TENSORS: list[str] = [
+	"mtp.0.hc_head_base.weight",
+	"mtp.0.hc_head_fn.weight",
+	"mtp.0.hc_head_scale.weight",
+	"mtp.0.e_proj.weight",
+	"mtp.0.h_proj.weight",
+	"mtp.0.enorm.weight",
+	"mtp.0.hnorm.weight",
+	"mtp.0.norm.weight",
+	"mtp.0.hc_attn_fn.weight",
+	"mtp.0.hc_attn_scale.weight",
+	"mtp.0.hc_attn_base.weight",
+	"mtp.0.attn_norm.weight",
+	"mtp.0.attn_q_a.weight",
+	"mtp.0.attn_q_a_norm.weight",
+	"mtp.0.attn_q_b.weight",
+	"mtp.0.attn_kv.weight",
+	"mtp.0.attn_kv_a_norm.weight",
+	"mtp.0.attn_sinks.weight",
+	"mtp.0.attn_output_a.weight",
+	"mtp.0.attn_output_b.weight",
+	"mtp.0.hc_ffn_fn.weight",
+	"mtp.0.hc_ffn_scale.weight",
+	"mtp.0.hc_ffn_base.weight",
+	"mtp.0.ffn_norm.weight",
+	"mtp.0.ffn_gate_inp.weight",
+	"mtp.0.exp_probs_b.bias",
+	"mtp.0.ffn_gate_exps.weight",
+	"mtp.0.ffn_up_exps.weight",
+	"mtp.0.ffn_down_exps.weight",
+	"mtp.0.ffn_gate_shexp.weight",
+	"mtp.0.ffn_up_shexp.weight",
+	"mtp.0.ffn_down_shexp.weight",
+]
+
+
+def compute_mtp_sidecar_contract(mtp_keys: set[str]) -> dict[str, Any]:
+	# DS4-tuned MTP sidecars (general.architecture=deepseek4_mtp_support) are not
+	# full official mtp.* checkpoints. They are expected to contain exactly this
+	# 32-tensor mtp.0.* table.
+	if not mtp_keys:
+		return {"checked": False, "reason": "no mtp.* tensors present"}
+	expected = set(MTP_SIDECAR_EXPECTED_TENSORS)
+	missing = sorted(expected - mtp_keys)
+	extra = sorted(mtp_keys - expected)
+	out: dict[str, Any] = {
+		"checked": True,
+		"expected_tensor_count": len(MTP_SIDECAR_EXPECTED_TENSORS),
+		"found_tensor_count": len(mtp_keys),
+		"complete": (not missing and not extra and len(mtp_keys) == len(MTP_SIDECAR_EXPECTED_TENSORS)),
+		"missing_count": len(missing),
+		"extra_count": len(extra),
+		"missing_sample": missing[:20],
+		"extra_sample": extra[:20],
+	}
+	if any(not k.startswith("mtp.0.") for k in mtp_keys):
+		out["complete"] = False
+		out["namespace_error"] = True
+	return out
+
+
 def inspect_safetensors_index(path: Path) -> InspectResult:
 	data = load_json(path)
 	weight_map = data.get("weight_map", None)
@@ -642,6 +706,9 @@ def main() -> int:
 		except Exception:
 			contract_summary = None
 
+	def is_mtp_sidecar(metadata: dict[str, Any]) -> bool:
+		return (metadata.get("general.architecture", None) == "deepseek4_mtp_support")
+
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		return {
 			"path": res.path,
@@ -681,10 +748,19 @@ def main() -> int:
 				if len(first_mtp_keys) >= 20:
 					break
 		mtp_contract = None
+		mtp_sidecar_contract = None
 		trunk_contract = None
 		topology_contract = None
+		if any(is_mtp_sidecar(r.metadata) for r in results):
+			sidecar_union = set()
+			for r in results:
+				if is_mtp_sidecar(r.metadata):
+					sidecar_union.update(r.mtp_keys_all)
+			mtp_sidecar_contract = compute_mtp_sidecar_contract(sidecar_union)
+			mtp_contract = {"checked": False, "reason": "deepseek4_mtp_support sidecar present; mtp_sidecar_contract applies"}
+		elif contract_summary is not None:
+				mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 		if contract_summary is not None:
-			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
 			if topology_candidate is not None:
 				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
@@ -700,6 +776,7 @@ def main() -> int:
 			"mtp_layer_ids": sorted(mtp_layer_ids),
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
+			"mtp_sidecar_contract": mtp_sidecar_contract,
 			"trunk_contract": trunk_contract,
 			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"topology_contract": topology_contract,
@@ -708,8 +785,12 @@ def main() -> int:
 	if args.json:
 		if len(results) == 1:
 			out = as_dict(results[0])
-			if contract_summary is not None:
+			if is_mtp_sidecar(results[0].metadata):
+				out["mtp_sidecar_contract"] = compute_mtp_sidecar_contract(set(results[0].mtp_keys_all))
+				out["mtp_contract"] = {"checked": False, "reason": "deepseek4_mtp_support sidecar; mtp_sidecar_contract applies"}
+			elif contract_summary is not None:
 				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
+			if contract_summary is not None:
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
@@ -722,10 +803,23 @@ def main() -> int:
 							{
 								**as_dict(r),
 								**(
+									(
+										{
+											"mtp_sidecar_contract": compute_mtp_sidecar_contract(set(r.mtp_keys_all)),
+											"mtp_contract": {"checked": False, "reason": "deepseek4_mtp_support sidecar; mtp_sidecar_contract applies"},
+										}
+										if is_mtp_sidecar(r.metadata)
+										else (
+											{}
+											if contract_summary is None
+											else {"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary)}
+										)
+									)
+								),
+								**(
 									{}
 									if contract_summary is None
 									else {
-										"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 									}
@@ -759,6 +853,14 @@ def main() -> int:
 					print(f"mtp_contract_missing_required: {k}")
 				for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 					print(f"mtp_contract_forbidden_present: {k}")
+			mtp_sidecar_contract = combined.get("mtp_sidecar_contract", None)
+			if isinstance(mtp_sidecar_contract, dict) and mtp_sidecar_contract.get("checked") is True:
+				print(f"mtp_sidecar_contract_complete: {str(bool(mtp_sidecar_contract.get('complete', False))).lower()}")
+				print(f"mtp_sidecar_contract_missing_count: {int(mtp_sidecar_contract.get('missing_count', 0))}")
+				for k in list(mtp_sidecar_contract.get("missing_sample", []))[:10]:
+					print(f"mtp_sidecar_contract_missing: {k}")
+				for k in list(mtp_sidecar_contract.get("extra_sample", []))[:10]:
+					print(f"mtp_sidecar_contract_extra: {k}")
 			trunk_contract = combined.get("trunk_contract", None)
 			if isinstance(trunk_contract, dict) and trunk_contract.get("checked") is True:
 				print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
@@ -814,14 +916,24 @@ def main() -> int:
 			for k in res.first_mtp_keys:
 				print(f"mtp_key: {k}")
 			if contract_summary is not None:
-				mtp_contract = compute_mtp_contract(set(res.mtp_keys_all), contract_summary)
-				if mtp_contract.get("checked") is True:
-					print(f"mtp_contract_complete: {str(bool(mtp_contract.get('complete', False))).lower()}")
-					print(f"mtp_contract_missing_required_count: {int(mtp_contract.get('missing_required_count', 0))}")
-					for k in list(mtp_contract.get("missing_required_sample", []))[:10]:
-						print(f"mtp_contract_missing_required: {k}")
-					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
-						print(f"mtp_contract_forbidden_present: {k}")
+				if is_mtp_sidecar(res.metadata):
+					mtp_sidecar_contract = compute_mtp_sidecar_contract(set(res.mtp_keys_all))
+					if mtp_sidecar_contract.get("checked") is True:
+						print(f"mtp_sidecar_contract_complete: {str(bool(mtp_sidecar_contract.get('complete', False))).lower()}")
+						print(f"mtp_sidecar_contract_missing_count: {int(mtp_sidecar_contract.get('missing_count', 0))}")
+						for k in list(mtp_sidecar_contract.get("missing_sample", []))[:10]:
+							print(f"mtp_sidecar_contract_missing: {k}")
+						for k in list(mtp_sidecar_contract.get("extra_sample", []))[:10]:
+							print(f"mtp_sidecar_contract_extra: {k}")
+					else:
+						mtp_contract = compute_mtp_contract(set(res.mtp_keys_all), contract_summary)
+						if mtp_contract.get("checked") is True:
+							print(f"mtp_contract_complete: {str(bool(mtp_contract.get('complete', False))).lower()}")
+							print(f"mtp_contract_missing_required_count: {int(mtp_contract.get('missing_required_count', 0))}")
+							for k in list(mtp_contract.get("missing_required_sample", []))[:10]:
+								print(f"mtp_contract_missing_required: {k}")
+							for k in list(mtp_contract.get("forbidden_present", []))[:10]:
+								print(f"mtp_contract_forbidden_present: {k}")
 				trunk_contract = compute_trunk_contract(set(res.weight_keys_all), contract_summary)
 				if trunk_contract.get("checked") is True:
 					print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
