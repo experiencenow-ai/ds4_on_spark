@@ -1,0 +1,96 @@
+# Quantized Performance Path (Single-Spark → Native DS4)
+
+This document describes the **minimum-risk** path to a credible quantized performance baseline, starting with an **existing external runtime** on **one Spark (Spark0)** and advancing toward native `ds4_on_spark` measurements.
+
+Constraints:
+
+- Do **not** automate large model downloads or long builds.
+- Prefer read-only probes and low-cost smoke generations first.
+- Record full provenance (runtime, model artifact, quant, hashes, command line, env).
+
+## Milestone 0: First Token Stream (Quantized Single-Spark)
+
+Canonical definition: `docs/quantized-single-spark.md`.
+
+Success means: one command on Spark0 produces non-empty generated text from a DeepSeek V4 Flash-family **quantized artifact**, with a baseline report capturing:
+
+- runtime provenance (source + revision, or binary hash/version)
+- model provenance (source, quant, file size, sha256)
+- exact command line + key env knobs
+- TTFT, tokens/sec where available
+- GPU snapshots + CPU RSS
+- stdout/stderr + exit code
+- failure mode classification when it fails
+
+## Milestone 1: Small-Cost Repeatability
+
+Once Milestone 0 succeeds, immediately establish repeatability without growing cost:
+
+- Same model + runtime, same prompt, **2 runs** (cold + warm)
+- `CTX=2048`, `N_TOKENS=32` (or smaller if needed)
+- Confirm the baseline report contains stable provenance fields and predictable failure modes.
+
+## Milestone 2: “Smallest Credible” Artifact Envelope
+
+Goal: the smallest artifact that is still credible for V4 Flash behavior, for iteration speed.
+
+- Prefer a small quant (example: `Q2_K`) for first smoke.
+- If the runtime supports it, validate a second quant (example: `Q3_K_M`) with the same run shape to sanity-check quality/memory pressure deltas.
+- Keep context and tokens small until memory growth behavior is characterized.
+
+## Milestone 3: Read-Only Instrumentation (After First Success)
+
+After the first successful run, prioritize instrumentation that does **not** require runtime modifications:
+
+- **Per-run GPU polling**: `nvidia-smi` CSV sampled during the run.
+  - The baseline scripts already support `GPU_SAMPLE=1` (default) and emit `nvidia_smi_poll.csv`.
+  - Adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) for higher/lower resolution.
+- **CPU RSS**: captured by the wrapper (`max_rss_*` fields).
+- **KV / memory growth proxy**: inferred from GPU polling deltas during prefill vs decode.
+
+Then, add runtime-exposed counters only when the runtime makes them available (do not guess flags):
+
+- routed expert IDs / top-k scores
+- expert batch sizes / queue depth
+- MTP draft/accepted/rejected counters
+
+## Spark0 Command Shape (No Downloads/Builds)
+
+From the Mac:
+
+```sh
+ALLOW_RUN=1 \
+RUNTIME_LABEL=v4-capable-llama \
+MODEL_SOURCE='<hf-repo-or-local-note>' \
+MODEL_QUANT=Q2_K \
+MODEL_GGUF=/abs/path/to/model.gguf \
+LLAMA_CLI=/abs/path/to/v4-capable/llama-cli \
+CTX=2048 \
+N_TOKENS=32 \
+N_GPU_LAYERS=99 \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+Notes:
+
+- Prompts are passed to Spark as base64 (`PROMPT_B64`) to avoid shell quoting pitfalls; the report records prompt **hash + length**, not the prompt text.
+- The Spark scripts do not install packages or fetch weights; they only run when `ALLOW_RUN=1`.
+
+## Next: External Runtime Baselines (llama.cpp / vLLM)
+
+Use the same `scripts/run_baseline_existing_runtime.sh` entrypoint to capture:
+
+- llama.cpp (Spark/CUDA) baseline behavior for known-good small GGUFs
+- vLLM package presence + version probe, and (when a model dir is already present) a gated generation probe
+
+Do not treat these as correctness proofs for V4 Flash; they are operational references (drivers, CUDA, memory envelope, throughput sanity).
+
+## Later: Native `ds4_on_spark` Measurements
+
+Only after the external-runtime quantized single-Spark run is repeatable and instrumented:
+
+- run `ds4_on_spark` native benchmarks on Spark0 (then TP/dual-Spark as appropriate)
+- compare baseline envelopes: TTFT, decode t/s, GPU memory growth, crash modes
+
+Keep baseline reports using `docs/baseline-template.md` structure where committed.
+

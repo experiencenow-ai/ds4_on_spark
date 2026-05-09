@@ -48,6 +48,11 @@ If it loads and generates, rerun with:
 - one representative chat prompt rendered through the DeepSeek V4 encoding path
 - a second run after process restart to separate cold-load time from generation
 
+## Instrumentation Hooks (Read-only)
+
+- GPU polling during runs: set `GPU_SAMPLE=1` (default) and adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) to emit `nvidia_smi_poll.csv` alongside the normal `nvidia-smi` snapshots.
+- See `docs/quantized-performance-path.md` for the ordered instrumentation path after the first successful token stream.
+
 ## Failure Triage
 
 - `unsupported architecture` or `unknown model`: switch runtime first; do not modify DS4 code.
@@ -62,4 +67,3 @@ If it loads and generates, rerun with:
 - Upstream intake owns quantized artifact and runtime-fork provenance.
 - Model contract owns tokenizer/encoding and quant-format compatibility notes.
 - Build skeleton/native DS4 work should not block this milestone; it uses the results as a measured baseline.
-

@@ -3,6 +3,24 @@ set -eu
 
 target_note="llama.cpp baseline (Spark/CUDA)"
 
+b64_dec()
+{
+    if [ "${1:-}" = "" ]; then
+        return 0
+    fi
+    if command -v base64 >/dev/null 2>&1; then
+        if printf %s "$1" | base64 -d >/dev/null 2>&1; then
+            printf %s "$1" | base64 -d
+            return 0
+        fi
+        if printf %s "$1" | base64 --decode >/dev/null 2>&1; then
+            printf %s "$1" | base64 --decode
+            return 0
+        fi
+    fi
+    return 1
+}
+
 LLAMA_DIR="${LLAMA_DIR:-$HOME/src/llama.cpp}"
 LLAMA_CLI="${LLAMA_CLI:-}"
 RUNTIME_LABEL="${RUNTIME_LABEL:-llama.cpp-compatible}"
@@ -19,6 +37,15 @@ OUT_DIR="${OUT_DIR:-/tmp/baseline_llamacpp}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
+GPU_SAMPLE="${GPU_SAMPLE:-1}"
+GPU_SAMPLE_INTERVAL_S="${GPU_SAMPLE_INTERVAL_S:-1}"
+
+if [ "${PROMPT_B64:-}" != "" ]; then
+    PROMPT="$(b64_dec "$PROMPT_B64" || echo "$PROMPT")"
+fi
+if [ "${EXTRA_ARGS_B64:-}" != "" ]; then
+    EXTRA_ARGS="$(b64_dec "$EXTRA_ARGS_B64" || echo "$EXTRA_ARGS")"
+fi
 
 mkdir -p "$OUT_DIR"
 
@@ -36,6 +63,34 @@ GPU_PRE="$OUT_DIR/nvidia_smi_pre.txt"
 nvidia-smi >"$GPU_PRE" 2>&1 || true
 cat "$GPU_PRE" || true
 echo
+
+gpu_sampler_pid=""
+gpu_sampler_file="$OUT_DIR/nvidia_smi_poll.csv"
+
+gpu_sampler_start()
+{
+    if [ "$GPU_SAMPLE" != "1" ]; then
+        return 0
+    fi
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        return 0
+    fi
+    (nvidia-smi --query-gpu=timestamp,index,memory.used,memory.total,utilization.gpu,utilization.memory,power.draw --format=csv -l "$GPU_SAMPLE_INTERVAL_S" >"$gpu_sampler_file" 2>&1) &
+    gpu_sampler_pid=$!
+    echo "gpu_sampler_pid=$gpu_sampler_pid"
+    echo "gpu_sampler_file=$gpu_sampler_file"
+    echo
+}
+
+gpu_sampler_stop()
+{
+    if [ "$gpu_sampler_pid" = "" ]; then
+        return 0
+    fi
+    kill "$gpu_sampler_pid" 2>/dev/null || true
+    wait "$gpu_sampler_pid" 2>/dev/null || true
+    gpu_sampler_pid=""
+}
 
 if [ "$LLAMA_CLI" = "" ] && [ ! -d "$LLAMA_DIR" ]; then
     echo "missing LLAMA_DIR=$LLAMA_DIR"
@@ -137,7 +192,11 @@ elif command -v shasum >/dev/null 2>&1; then
 fi
 LLAMA_CLI_VERSION="$("$LLAMA_CLI" --version 2>/dev/null | head -n 1 | tr -s ' ' | sed 's/[[:space:]]*$//' || true)"
 
-python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$LLAMA_CLI_SHA256" "$LLAMA_CLI_VERSION"
+rc_run=0
+trap gpu_sampler_stop EXIT
+gpu_sampler_start
+
+python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$LLAMA_CLI_SHA256" "$LLAMA_CLI_VERSION" || rc_run=$?
 import hashlib, os, resource, re, subprocess, sys, time, shlex
 
 llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, llama_cli_sha256, llama_cli_version = sys.argv[1:]
@@ -248,8 +307,13 @@ print("\n".join(summary_lines))
 sys.exit(rc)
 PY
 
+gpu_sampler_stop
+trap - EXIT
+
 echo
 echo "== gpu snapshot (post) =="
 GPU_POST="$OUT_DIR/nvidia_smi_post.txt"
 nvidia-smi >"$GPU_POST" 2>&1 || true
 cat "$GPU_POST" || true
+
+exit "$rc_run"

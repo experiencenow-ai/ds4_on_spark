@@ -13,6 +13,7 @@ This baseline track is designed to capture **exact command lines**, **model arti
 - TTFT (time to first token)
 - tokens/sec (prefill + generation where possible)
 - memory usage (CPU RSS + GPU memory snapshot)
+- optional GPU polling during runs (`nvidia_smi_poll.csv` when `GPU_SAMPLE=1`)
 - failure modes (exact stderr / return codes)
 
 ## Safety Gates (non-negotiable)
@@ -49,6 +50,7 @@ This writes a markdown report to a local output directory and includes:
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is best-effort via async streaming when available; otherwise reported as `NA` and you should rely on load + generation wall time)
 - quantized single-Spark milestone guidance: see `docs/quantized-single-spark.md` (no downloads are automated)
+- performance path narrative: see `docs/quantized-performance-path.md`
 
 ## One-command entrypoint (Mac local: antirez/ds4)
 
@@ -75,11 +77,11 @@ When using `scripts/run_baseline_existing_runtime.sh`, the model path inputs (`M
 
 Per-script useful env vars:
 
-- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
+- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`
-- `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
-- `scripts/benchmark_vllm_spark.sh`: `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`, `OUT_DIR`
+- `scripts/benchmark_llamacpp_spark.sh`: `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
+- `scripts/benchmark_vllm_spark.sh`: `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 
 ## Required Fixtures

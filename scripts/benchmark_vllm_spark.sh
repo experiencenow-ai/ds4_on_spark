@@ -1,6 +1,24 @@
 #!/usr/bin/env sh
 set -eu
 
+b64_dec()
+{
+    if [ "${1:-}" = "" ]; then
+        return 0
+    fi
+    if command -v base64 >/dev/null 2>&1; then
+        if printf %s "$1" | base64 -d >/dev/null 2>&1; then
+            printf %s "$1" | base64 -d
+            return 0
+        fi
+        if printf %s "$1" | base64 --decode >/dev/null 2>&1; then
+            printf %s "$1" | base64 --decode
+            return 0
+        fi
+    fi
+    return 1
+}
+
 OUT_DIR="${OUT_DIR:-/tmp/baseline_vllm}"
 mkdir -p "$OUT_DIR"
 
@@ -10,6 +28,15 @@ PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 MAX_TOKENS="${MAX_TOKENS:-256}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
 MEASURE_TTFT="${MEASURE_TTFT:-1}"
+GPU_SAMPLE="${GPU_SAMPLE:-1}"
+GPU_SAMPLE_INTERVAL_S="${GPU_SAMPLE_INTERVAL_S:-1}"
+
+if [ "${VLLM_MODEL_B64:-}" != "" ]; then
+    VLLM_MODEL="$(b64_dec "$VLLM_MODEL_B64" || echo "$VLLM_MODEL")"
+fi
+if [ "${PROMPT_B64:-}" != "" ]; then
+    PROMPT="$(b64_dec "$PROMPT_B64" || echo "$PROMPT")"
+fi
 
 echo "== vLLM probe (Spark) =="
 date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
@@ -20,6 +47,34 @@ GPU_PRE="$OUT_DIR/nvidia_smi_pre.txt"
 nvidia-smi >"$GPU_PRE" 2>&1 || true
 cat "$GPU_PRE" || true
 echo
+
+gpu_sampler_pid=""
+gpu_sampler_file="$OUT_DIR/nvidia_smi_poll.csv"
+
+gpu_sampler_start()
+{
+    if [ "$GPU_SAMPLE" != "1" ]; then
+        return 0
+    fi
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        return 0
+    fi
+    (nvidia-smi --query-gpu=timestamp,index,memory.used,memory.total,utilization.gpu,utilization.memory,power.draw --format=csv -l "$GPU_SAMPLE_INTERVAL_S" >"$gpu_sampler_file" 2>&1) &
+    gpu_sampler_pid=$!
+    echo "gpu_sampler_pid=$gpu_sampler_pid"
+    echo "gpu_sampler_file=$gpu_sampler_file"
+    echo
+}
+
+gpu_sampler_stop()
+{
+    if [ "$gpu_sampler_pid" = "" ]; then
+        return 0
+    fi
+    kill "$gpu_sampler_pid" 2>/dev/null || true
+    wait "$gpu_sampler_pid" 2>/dev/null || true
+    gpu_sampler_pid=""
+}
 
 echo "== python =="
 command -v python3 || true
@@ -79,7 +134,11 @@ echo
 LOG_RAW="$OUT_DIR/vllm_generate_probe.txt"
 LOG_SUMMARY="$OUT_DIR/vllm_generate_probe.summary.txt"
 
-python3 - <<'PY' "$VLLM_MODEL" "$PROMPT" "$MAX_TOKENS" "$TENSOR_PARALLEL_SIZE" "$MEASURE_TTFT" "$LOG_RAW" "$LOG_SUMMARY"
+rc_run=0
+trap gpu_sampler_stop EXIT
+gpu_sampler_start
+
+python3 - <<'PY' "$VLLM_MODEL" "$PROMPT" "$MAX_TOKENS" "$TENSOR_PARALLEL_SIZE" "$MEASURE_TTFT" "$LOG_RAW" "$LOG_SUMMARY" || rc_run=$?
 import asyncio, resource, sys, time
 
 model, prompt, max_tokens_s, tp_s, measure_ttft_s, log_raw, log_summary = sys.argv[1:]
@@ -215,8 +274,13 @@ print("\n".join(summary))
 raise SystemExit(rc)
 PY
 
+gpu_sampler_stop
+trap - EXIT
+
 echo
 echo "== gpu snapshot (post) =="
 GPU_POST="$OUT_DIR/nvidia_smi_post.txt"
 nvidia-smi >"$GPU_POST" 2>&1 || true
 cat "$GPU_POST" || true
+
+exit "$rc_run"
