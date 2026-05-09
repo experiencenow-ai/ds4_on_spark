@@ -9,6 +9,7 @@ usage: spark_probe.sh [user@host]
 Environment:
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
+  DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
   PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
@@ -45,7 +46,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "== local meta =="
 	date -u
 	if command -v git >/dev/null 2>&1; then
-		if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		if [ "${DS4_GIT_DIR:-}" != "" ]; then
+			echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$PWD" rev-parse --short HEAD 2>/dev/null || true)"
+		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 		fi
 	fi
@@ -106,6 +109,13 @@ echo
 echo "== nvidia-smi cuda version =="
 nvidia-smi -q 2>/dev/null | grep -i "cuda version" | head -n 5 || true
 echo
+echo "== nvidia-smi gpu list =="
+if command -v nvidia-smi >/dev/null 2>&1; then
+	nvidia-smi -L 2>/dev/null || true
+else
+	echo "nvidia-smi not found"
+fi
+echo
 if [ "$nvidia_smi_full" = "1" ]; then
 	echo "== nvidia-smi full (verbose) =="
 	nvidia-smi || true
@@ -123,6 +133,16 @@ if [ "$nvcc_bin" != "" ]; then
 	ls -l "$nvcc_bin" || true
 else
 	echo "nvcc not found"
+fi
+ptxas_bin=""
+if [ -x /usr/local/cuda/bin/ptxas ]; then
+	ptxas_bin="/usr/local/cuda/bin/ptxas"
+elif command -v ptxas >/dev/null 2>&1; then
+	ptxas_bin="$(command -v ptxas)"
+fi
+if [ "$ptxas_bin" != "" ]; then
+	echo "ptxas: $ptxas_bin"
+	"$ptxas_bin" --version 2>/dev/null | head -n 3 || true
 fi
 [ -e /usr/local/cuda ] && ls -ld /usr/local/cuda || true
 command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null || true
@@ -174,18 +194,21 @@ int main()
 	std::printf("cuda devices: %d\n",device_count);
 	if ( device_count <= 0 )
 		return(0);
-	if ( cudaGetDeviceProperties(&prop,dev) != cudaSuccess )
-	{
-		std::printf("cudaGetDeviceProperties failed\n");
-		return(2);
-	}
 	cudaRuntimeGetVersion(&runtime_v);
 	cudaDriverGetVersion(&driver_v);
-	std::printf("device0 name: %s\n",prop.name);
-	std::printf("device0 cc: %d.%d\n",prop.major,prop.minor);
-	std::printf("driver version: %d\n",driver_v);
-	std::printf("runtime version: %d\n",runtime_v);
-	std::printf("global mem (bytes): %llu\n",(unsigned long long)prop.totalGlobalMem);
+	std::printf("cuda driver api version: %d\n",driver_v);
+	std::printf("cuda runtime api version: %d\n",runtime_v);
+	for (dev=0; dev<device_count; dev++)
+	{
+		if ( cudaGetDeviceProperties(&prop,dev) != cudaSuccess )
+		{
+			std::printf("cudaGetDeviceProperties failed for dev %d\n",dev);
+			return(2);
+		}
+		std::printf("device%d name: %s\n",dev,prop.name);
+		std::printf("device%d cc: %d.%d\n",dev,prop.major,prop.minor);
+		std::printf("device%d global mem (bytes): %llu\n",dev,(unsigned long long)prop.totalGlobalMem);
+	}
 	return(0);
 }
 CU
@@ -247,8 +270,9 @@ cat /proc/driver/nvidia/version 2>/dev/null | head -n 40 || true
 if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \
 		-e 's/([0-9]{1,3}[.]){3}[0-9]{1,3}/<redacted-ipv4>/g' \
-		-e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/<redacted-mac>/g' \
+		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+		-e 's/UUID: [^)]*/UUID: <redacted-gpu-uuid>/g' \
 		"$tmp"
 else
 	cat "$tmp"

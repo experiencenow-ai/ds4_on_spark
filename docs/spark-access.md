@@ -22,6 +22,7 @@ Notes:
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
 - Use `REDACT=1` for any output you plan to commit.
 - Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
+- If the checkout's `.git` metadata is not usable (provenance/permission issues), set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running.
 - `scripts/spark_probe.sh` optional toggles:
   - `NVIDIA_SMI_FULL=1` include full `nvidia-smi` output (verbose, process list)
   - `CUDA_RUNTIME_PROBE=0` skip the tiny `nvcc` compile+run probe
@@ -52,6 +53,7 @@ REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp
 
 The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting host keys. Use `REDACT=1` when saving output for commit; the redacted snapshot is suitable to paste into `docs/spark0-*.md`.
 If the driver-side `nvidia-smi` compute capability query is unavailable, the `nvcc` runtime probe is the fallback source for compute capability (`device0 cc:`).
+When `REDACT=1`, the probe also scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 
 ## Spark1 Ready Checklist
 

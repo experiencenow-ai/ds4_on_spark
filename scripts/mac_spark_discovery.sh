@@ -14,7 +14,8 @@ Runs lightweight macOS-side discovery for Spark hosts:
 - TCP/22 reachability probes
 
 Environment:
-  REDACT=1   Redact IPv4/IPv6/MAC addresses from output
+  DS4_GIT_DIR Optional git dir override for printing `git: <hash>`
+  REDACT=1    Redact IPv4/IPv6/MAC addresses from output
 
 Examples:
   ./scripts/mac_spark_discovery.sh
@@ -43,7 +44,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 echo "== meta =="
 date -u
 if command -v git >/dev/null 2>&1; then
-	if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	if [ "${DS4_GIT_DIR:-}" != "" ]; then
+		echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$PWD" rev-parse --short HEAD 2>/dev/null || true)"
+	elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 		echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 	fi
 fi
@@ -99,7 +102,7 @@ done
 if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \
 		-e 's/([0-9]{1,3}[.]){3}[0-9]{1,3}/<redacted-ipv4>/g' \
-		-e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/<redacted-mac>/g' \
+		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
 		"$tmp"
 else
