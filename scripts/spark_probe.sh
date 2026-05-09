@@ -353,9 +353,28 @@ emit_sysfs_pcie_link()
 	return 0
 }
 
+emit_smi_q_pci_link()
+{
+	label="$1"
+	echo "== nvidia-smi -q pci link (capped${label}) =="
+	if [ "$have_smi" = "1" ] && [ "$smi_q" != "" ]; then
+		pci_lines="$(printf "%s\n" "$smi_q" | awk '"'"'BEGIN{in_pci=0;count=0} $0 ~ /^[[:space:]]*PCI[[:space:]]*$/ {in_pci=1;next} in_pci==1 && $0 ~ /^[[:space:]]*Fan Speed/ {exit} in_pci==1 {print;count++; if(count>=120) exit }'"'"')"
+		if [ "$pci_lines" != "" ]; then
+			printf "%s\n" "$pci_lines"
+		else
+			echo "no PCI section found in nvidia-smi -q"
+		fi
+	else
+		echo "nvidia-smi -q not available"
+	fi
+	return 0
+}
+
 emit_pcie_link ""
 echo
 emit_sysfs_pcie_link ""
+echo
+emit_smi_q_pci_link ""
 echo
 echo "== nvidia-smi power/clocks (summary) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
