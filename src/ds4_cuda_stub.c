@@ -24,11 +24,14 @@ int32_t ds4_cuda_is_ok(ds4_cuda_status_t st)
 
 const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 {
-	DS4_UNUSED(st);
-	return("CUDA disabled");
+	if ( st.code == 0 )
+		return("OK");
+	if ( st.code == DS4_CUDA_ERR_DISABLED )
+		return("CUDA disabled");
+	return("CUDA error (disabled build)");
 }
 
 ds4_cuda_status_t ds4_cuda_last_error(void)
 {
-	return(ds4_cuda_fail(-1));
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }

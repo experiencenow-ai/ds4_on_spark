@@ -20,10 +20,21 @@ Work units:
 - Each expert is a small server with:
   - fixed parallelism (`--expert-parallelism`)
   - two FIFO queues (interactive first, then batch)
-  - fixed service time per task (`--service-ms`)
+  - a simple service model:
+    - default (no batching): fixed service time per task (`--service-ms`)
+    - optional batching: start up to `--batch-max-{interactive,batch}` tasks at once on an expert worker, with service time
+      `--service-base-ms + --service-per-task-ms * batch_size` (when `--service-per-task-ms=-1`, it uses `--service-ms`)
 
 Starvation is counted when a task waits in an expert queue for at least
 `--starvation-ms` before it starts service.
+
+### Candidate Admission Policy
+
+When `K < len(candidates)`, the simulator must pick which experts receive tasks.
+Two policies are supported:
+
+- `--admit-policy ordered` (default): admit in router-provided order
+- `--admit-policy least_pending`: admit the least-pending experts among the candidates (ties broken by router order)
 
 ### Per-Expert Service Discipline
 
@@ -60,6 +71,12 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+Batching-style service model example:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --batch-max-batch 8 --service-base-ms 0.05 --service-per-task-ms 0.02 --json
+```
+
 ### Synthetic Trace Modes
 
 Default synthetic mode is Zipf-skewed expert popularity:
@@ -82,6 +99,7 @@ Replay mode reads one JSON object per line with required fields:
 - `t_ms` (number): arrival time in milliseconds
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`)
 
 Example:
 
@@ -102,9 +120,11 @@ The simulator prints a JSON object with:
 - `tokens`: token-level admitted vs dropped-by-backpressure counts
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
+- `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
 - `tasks.promoted`: number of batch tasks promoted by `--promote-ms`
 - `tasks.forced_batch_starts`: number of times `--hi-burst` forced a batch start
+- `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
 - `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`

@@ -64,5 +64,6 @@ for f in "${FILES[@]}"; do
   fetch_one "$f"
 done
 
-echo "OK: fetched $((${#FILES[@]})) files into $OUT_DIR"
+python3 scripts/model_contract_build_deepseek_v4_flash_contract.py >/dev/null
 
+echo "OK: fetched $((${#FILES[@]})) files into $OUT_DIR (and regenerated contract_summary.json)"

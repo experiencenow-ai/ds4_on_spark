@@ -32,6 +32,36 @@ int32_t ds4_arena_init(ds4_arena_t *a,uint8_t *mem,int32_t size)
 	return(0);
 }
 
+int32_t ds4_arena_reset(ds4_arena_t *a)
+{
+	if ( a == 0 )
+		return(-1);
+	a->used = 0;
+	return(0);
+}
+
+int32_t ds4_arena_mark(ds4_arena_t *a,int32_t *out_mark)
+{
+	if ( a == 0 )
+		return(-1);
+	if ( out_mark == 0 )
+		return(-2);
+	*out_mark = a->used;
+	return(0);
+}
+
+int32_t ds4_arena_release(ds4_arena_t *a,int32_t mark)
+{
+	if ( a == 0 )
+		return(-1);
+	if ( mark < 0 )
+		return(-2);
+	if ( mark > a->size )
+		return(-3);
+	a->used = mark;
+	return(0);
+}
+
 int32_t ds4_arena_alloc(ds4_arena_t *a,int32_t size,int32_t align,void **out)
 {
 	int32_t used2;

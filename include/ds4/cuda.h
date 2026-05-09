@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define DS4_CUDA_ERR_DISABLED (-1)
+
 typedef struct
 {
 	int32_t code;

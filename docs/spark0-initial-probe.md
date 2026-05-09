@@ -7,7 +7,7 @@ Host:
 - mDNS name: `aitopatom-9ab9.local`
 - Linux hostname: `aitopatom-9ab9`
 - Login user used for probes: `spark0`
-- SSH key auth: working from the Mac with `/Users/mac/.ssh/id_rsa`
+- SSH key auth: working from the Mac with `~/.ssh/id_rsa`
 
 Operating system:
 
@@ -43,10 +43,10 @@ Storage:
 Network:
 
 - Wired interface: `enP7s7`
-- Wired IPv4: `10.0.0.2/24`
+- Wired IPv4: `<redacted-ipv4>/24`
 - Wired MTU: 9000
 - Wi-Fi interface: `wlP9s9`
-- Wi-Fi IPv4 during probe: `172.16.11.228/24`
+- Wi-Fi IPv4 during probe: `<redacted-ipv4>/24`
 - Default route currently uses Wi-Fi
 
 Immediate implications:

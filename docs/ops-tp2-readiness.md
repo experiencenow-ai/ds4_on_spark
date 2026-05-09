@@ -84,7 +84,7 @@ repo-provided checks via the systemd oneshot:
 sudo systemctl start ds4-preflight@spark0.service
 ```
 
-`ds4-preflight@.service` reads optional peer settings from `/etc/ds4/ds4-%i.env`:
+`ds4-preflight@.service` validates and reads optional peer settings from `/etc/ds4/ds4-%i.env`:
 
 - `DS4_PEER_HOST` for ping/TCP checks
 - `DS4_PEER_SSH` for an optional SSH hop (leave empty to skip)
@@ -92,10 +92,10 @@ sudo systemctl start ds4-preflight@spark0.service
 Avoid setting `DS4_PEER_SSH` to `ds4@...` because the `ds4` service account is
 typically configured with `/usr/sbin/nologin`.
 
-For ad-hoc runs without systemd, the script supports sourcing the env file:
+For ad-hoc runs without systemd, the script supports parsing the env file:
 
 ```bash
-/opt/ds4/scripts/ops_tp2_readiness.sh --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
+sudo /opt/ds4/scripts/ops_tp2_readiness.sh --env /etc/ds4/ds4-spark0.env --self spark0 --peer spark1.local --peer-ssh <peer-user>@spark1.local
 ```
 
 ## Optional: Spark Standalone Sanity

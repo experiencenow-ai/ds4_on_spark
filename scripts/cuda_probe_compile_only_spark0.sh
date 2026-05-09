@@ -26,8 +26,20 @@ ssh $SSH_OPTS "$target" "set -eu
 echo \"== nvcc ==\"
 if [ -x /usr/local/cuda/bin/nvcc ]; then
 	/usr/local/cuda/bin/nvcc --version
+	echo
+	echo \"== nvcc: --list-gpu-arch (if supported) ==\"
+	/usr/local/cuda/bin/nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
+	echo
+	echo \"== nvcc: --list-gpu-code (if supported) ==\"
+	/usr/local/cuda/bin/nvcc --list-gpu-code 2>/dev/null || echo \"(nvcc --list-gpu-code not supported)\"
 elif command -v nvcc >/dev/null 2>&1; then
 	nvcc --version
+	echo
+	echo \"== nvcc: --list-gpu-arch (if supported) ==\"
+	nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
+	echo
+	echo \"== nvcc: --list-gpu-code (if supported) ==\"
+	nvcc --list-gpu-code 2>/dev/null || echo \"(nvcc --list-gpu-code not supported)\"
 else
 	echo \"nvcc not found\" >&2
 	exit 3
@@ -36,5 +48,5 @@ echo
 echo \"== compile-only sm_121 probes ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs
+make bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_fp8_conv bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm120_compat_probe bin/cuda_sm121_barrier_memcpy_async bin/cuda_sm121_wmma_smoke
 "

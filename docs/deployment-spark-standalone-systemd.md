@@ -36,7 +36,7 @@ This stages Spark templates under `/tmp/ds4-systemd/` and env examples under `/t
 1) Install the Spark env file for the instance:
 
 ```bash
-sudo install -m 0640 /tmp/ds4-config/spark-spark0.env.example /etc/ds4/spark-spark0.env
+sudo install -g ds4 -m 0640 /tmp/ds4-config/spark-spark0.env.example /etc/ds4/spark-spark0.env
 ```
 
 2) Review the units, then install them:
@@ -67,4 +67,3 @@ sudo systemctl start  spark-worker@spark0.service
 - These templates assume Spark is installed at `${SPARK_HOME}` and provides `bin/spark-class`.
 - The units run as `ds4` by default for convenience; adjust `User=`/`Group=` to match your Spark packaging.
 - Port conventions are listed in `docs/ops-spark0-spark1-network-ports.md`.
-

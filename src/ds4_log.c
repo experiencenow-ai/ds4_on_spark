@@ -1,5 +1,6 @@
 #include "ds4/log.h"
 #include "ds4/common.h"
+#include "ds4/str.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -56,4 +57,70 @@ int32_t ds4_logf(int32_t level,const char *fmt,...)
 		sink = ds4_default_sink;
 	sink(g_sink_ctx,level,buf);
 	return(0);
+}
+
+int32_t ds4_log_buf_init(ds4_log_buf_t *lb,char *buf,int32_t cap)
+{
+	if ( lb == 0 )
+		return(-1);
+	lb->buf = buf;
+	lb->cap = cap;
+	lb->used = 0;
+	lb->truncated = 0;
+	if ( buf == 0 )
+		return(-2);
+	if ( cap <= 0 )
+		return(-3);
+	buf[0] = 0;
+	return(0);
+}
+
+void ds4_log_buf_sink(void *ctx,int32_t level,const char *msg)
+{
+	ds4_log_buf_t *lb;
+	int32_t msglen,i,avail,copylen;
+	DS4_UNUSED(level);
+	lb = (ds4_log_buf_t *)ctx;
+	if ( lb == 0 )
+		return;
+	if ( lb->buf == 0 )
+		return;
+	if ( lb->cap <= 0 )
+		return;
+	if ( msg == 0 )
+		msg = "";
+	if ( lb->used < 0 )
+		lb->used = 0;
+	if ( lb->used >= lb->cap )
+	{
+		lb->truncated = 1;
+		lb->buf[lb->cap - 1] = 0;
+		return;
+	}
+	avail = (lb->cap - lb->used - 1);
+	if ( avail <= 0 )
+	{
+		lb->truncated = 1;
+		lb->buf[lb->cap - 1] = 0;
+		return;
+	}
+	msglen = ds4_cstr_len_i32(msg);
+	copylen = msglen;
+	if ( copylen > avail )
+	{
+		copylen = avail;
+		lb->truncated = 1;
+	}
+	for (i=0; i<copylen; i++)
+		lb->buf[lb->used + i] = msg[i];
+	lb->used += copylen;
+	avail = (lb->cap - lb->used - 1);
+	if ( avail > 0 )
+	{
+		lb->buf[lb->used] = '\n';
+		lb->used += 1;
+	}
+	else
+		lb->truncated = 1;
+	lb->buf[lb->used] = 0;
 }

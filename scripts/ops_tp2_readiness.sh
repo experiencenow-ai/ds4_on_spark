@@ -24,7 +24,7 @@ Environment:
 Notes:
   - This script is non-destructive and should not require sudo.
   - It does not modify networking, systemd, or GPU settings.
-  - `--env` sources the env file; use only on trusted content.
+  - `--env` parses the env file as simple KEY=VALUE assignments (no shell execution).
 EOF
 }
 
@@ -74,13 +74,71 @@ if [ "$env_path" != "" ]; then
         echo "missing env file: $env_path" >&2
         exit 2
     fi
-    set -a
-    # shellcheck disable=SC1090
-    . "$env_path"
-    set +a
+    if [ ! -r "$env_path" ]; then
+        echo "unreadable env file (check owner/group/mode): $env_path" >&2
+        exit 2
+    fi
+    while IFS= read -r line || [ "$line" != "" ]; do
+        case "$line" in
+            ''|\#*)
+                continue
+                ;;
+        esac
+        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        case "$line" in
+            ''|\#*)
+                continue
+                ;;
+        esac
+        case "$line" in
+            export\ *)
+                line="${line#export }"
+                ;;
+        esac
+        case "$line" in
+            *=*)
+                key="${line%%=*}"
+                val="${line#*=}"
+                key="$(printf '%s' "$key" | sed -e 's/[[:space:]]*$//')"
+                val="$(printf '%s' "$val" | sed -e 's/^[[:space:]]*//')"
+                ;;
+            *)
+                continue
+                ;;
+        esac
+        case "$key" in
+            [A-Za-z_]*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+        case "$key" in
+            *[!A-Za-z0-9_]*)
+                continue
+                ;;
+        esac
+        case "$val" in
+            \"*\")
+                val="${val#\"}"
+                val="${val%\"}"
+                ;;
+            \'*\')
+                val="${val#\'}"
+                val="${val%\'}"
+                ;;
+        esac
+        export "$key=$val"
+    done < "$env_path"
 fi
 
-SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/var/tmp/ds4_known_hosts}"
+if [ "${SSH_OPTS:-}" = "" ]; then
+    known_hosts="/var/lib/ds4/ssh/known_hosts"
+    if [ ! -d "/var/lib/ds4/ssh" ]; then
+        known_hosts="/var/tmp/ds4_known_hosts"
+    fi
+    SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
+fi
 
 if [ "$peer" = "" ]; then
     peer="${DS4_PEER_HOST:-}"
