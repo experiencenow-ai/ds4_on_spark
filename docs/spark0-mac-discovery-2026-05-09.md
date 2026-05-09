@@ -134,6 +134,35 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+## Update: Discovery Refresh (2026-05-09 11:26Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T1126Z_probe14.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+
+```text
+== meta ==
+Sat May  9 11:26:07 UTC 2026
+git: f0c1afa
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+11:26:07.960  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+11:26:07.960  Add        3  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
 ## Update: Discovery Refresh (2026-05-09 10:54Z)
 
 Commands run:
