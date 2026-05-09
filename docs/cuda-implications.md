@@ -17,6 +17,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
+- `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` validates that `nvcc` accepts common template-kernel compile flags (`--extended-lambda` + `--expt-relaxed-constexpr`) with `-std=c++20` for `sm_121` (CUTLASS/DeepGEMM-style compile gate).
 - `tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref` validates CCCL atomics (`cuda::atomic_ref`) compile and run for `sm_121` (template-kernel plumbing dependency).
 - `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit` validates an NVRTC “compile to PTX for `compute_121` → load via Driver API → launch kernel” path; this is a useful gate for any JIT compilation flows on GB10 (observed success on Spark0: 2026-05-09).
 - `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit` validates an NVRTC+nvJitLink “compile to PTX for `compute_121` → link to `sm_121` CUBIN → load via Driver API → launch kernel” path; this is a useful gate for JIT flows that rely on nvJitLink (observed success on Spark0: 2026-05-09).
