@@ -14,6 +14,7 @@ This is intentionally narrow:
 - Trunk GGUF (DeepSeek V4 Flash): the main model artifact already used by the baseline runtime loop.
 - MTP sidecar GGUF (DS4-tuned 32‑tensor table): e.g. `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`.
   - Use `scripts/model_contract_probe_mtp_sidecar.py` first; it must return `ok=true`.
+  - Optional llama.cpp-side sanity check (local file): apply `docs/llamacpp-mtp-sidecar-probe.md` and run `llama-ds4-mtp-sidecar-probe --json` (must also return `ok=true`).
 
 ## Required probe output
 
