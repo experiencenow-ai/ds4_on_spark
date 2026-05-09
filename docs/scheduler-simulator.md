@@ -106,7 +106,7 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
 
 - Draft compute: enqueue `--mtp-draft-len` draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
-- Verify compute: enqueue one verify micro-token at full cost.
+- Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
   - Draft position `i` is accepted with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
   - If all draft tokens are accepted, the simulator counts one extra **bonus token** (accept length `= draft_len + 1`).
@@ -218,6 +218,7 @@ The simulator prints a JSON object with:
 - `sim`: makespan + token/task throughput
 - `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max (admitted tokens only)
+- `output_token_latency_ms.{interactive,batch}`: token latency distribution weighted by realized output tokens (MTP-aware; equals `token_latency_ms` when MTP is disabled)
 - `sla`: per-class token-SLA violation counts/fractions (when `--sla-*-ms` is set)
 - `tokens`: token-level admitted vs dropped-by-backpressure counts
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
