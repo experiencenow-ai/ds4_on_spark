@@ -1,0 +1,95 @@
+#!/usr/bin/env sh
+set -eu
+
+usage()
+{
+	cat <<'EOF'
+ops_validate_deploy_assets.sh -- validate deploy/ + ops scripts (safe)
+
+Usage:
+  ops_validate_deploy_assets.sh
+
+Notes:
+  - Non-destructive; intended to run from the repo root (Mac-side).
+  - Performs lightweight consistency checks for deploy assets:
+    - required template/example files exist
+    - ops scripts pass `sh -n`
+    - env examples include required keys expected by ops_ds4_env_check.sh
+EOF
+}
+
+root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$root"
+
+need_file()
+{
+	path="$1"
+	if [ ! -f "$path" ]; then
+		echo "missing: $path" >&2
+		exit 2
+	fi
+}
+
+need_key_in_file()
+{
+	key="$1"
+	path="$2"
+	if ! grep -E "^[[:space:]]*${key}=" "$path" >/dev/null 2>&1; then
+		echo "missing key in $path: $key" >&2
+		exit 2
+	fi
+}
+
+echo "== validate deploy assets =="
+
+need_file "deploy/README.md"
+need_file "deploy/sysusers.d/ds4.conf"
+need_file "deploy/tmpfiles.d/ds4.conf"
+
+need_file "deploy/systemd/ds4@.service"
+need_file "deploy/systemd/ds4-strict@.service"
+need_file "deploy/systemd/ds4-preflight@.service"
+need_file "deploy/systemd/ds4-preflight-strict@.service"
+need_file "deploy/systemd/ds4-preflight@.timer"
+
+need_file "deploy/config/ds4.env.example"
+need_file "deploy/config/ds4-spark0.env.example"
+need_file "deploy/config/ds4-spark1.env.example"
+need_file "deploy/config/ds4-spark0.yaml.example"
+need_file "deploy/config/ds4-spark1.yaml.example"
+need_file "deploy/config/journald.ds4.conf.example"
+need_file "deploy/config/logrotate.ds4.conf.example"
+need_file "deploy/config/prometheus-scrape.ds4.yml.example"
+
+need_file "scripts/ops_stage_deploy_assets.sh"
+need_file "scripts/ops_ds4_env_check.sh"
+need_file "scripts/ops_tp2_readiness.sh"
+need_file "scripts/ops_spark_standalone_check.sh"
+need_file "scripts/ops_spark01_mesh_check.sh"
+
+echo "== sh -n (ops scripts) =="
+sh -n scripts/ops_stage_deploy_assets.sh
+sh -n scripts/ops_ds4_env_check.sh
+sh -n scripts/ops_tp2_readiness.sh
+sh -n scripts/ops_spark_standalone_check.sh
+sh -n scripts/ops_spark01_mesh_check.sh
+sh -n scripts/ops_validate_deploy_assets.sh
+
+echo "== env examples include required keys =="
+for env in deploy/config/ds4.env.example deploy/config/ds4-spark0.env.example deploy/config/ds4-spark1.env.example; do
+	need_key_in_file "DS4_INSTANCE" "$env"
+	need_key_in_file "DS4_HOME" "$env"
+	need_key_in_file "DS4_STATE_DIR" "$env"
+	need_key_in_file "DS4_LOG_DIR" "$env"
+	need_key_in_file "DS4_LOG_LEVEL" "$env"
+	need_key_in_file "DS4_LOG_FORMAT" "$env"
+	need_key_in_file "DS4_METRICS_ADDR" "$env"
+	need_key_in_file "DS4_METRICS_PORT" "$env"
+	need_key_in_file "DS4_CONFIG_PATH" "$env"
+	need_key_in_file "DS4_WORLD_SIZE" "$env"
+	need_key_in_file "DS4_RANK" "$env"
+	need_key_in_file "DS4_MASTER_ADDR" "$env"
+	need_key_in_file "DS4_MASTER_PORT" "$env"
+done
+
+echo "== ok =="

@@ -37,6 +37,12 @@ If your checkout contains `deploy/sysusers.d/` and `deploy/tmpfiles.d/`, you can
 
 ## Stage Templates From Your Mac
 
+Optional (recommended): validate deploy assets + ops scripts before staging:
+
+```bash
+./scripts/ops_validate_deploy_assets.sh
+```
+
 From this repo root (on the Mac):
 
 ```bash
