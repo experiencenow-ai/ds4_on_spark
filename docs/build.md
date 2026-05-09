@@ -35,3 +35,4 @@ ctest --test-dir build --output-on-failure
 ```
 
 `DS4_ENABLE_CUDA` is `OFF` by default on macOS.
+Sanitizers are CPU-only; configuration fails if `DS4_ENABLE_CUDA=ON` with `DS4_ENABLE_ASAN`/`DS4_ENABLE_UBSAN`.

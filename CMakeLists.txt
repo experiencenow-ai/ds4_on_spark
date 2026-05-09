@@ -19,6 +19,10 @@ else()
 endif()
 option(DS4_ENABLE_CUDA "Enable CUDA build (requires CUDA toolkit)" ${_DS4_CUDA_DEFAULT})
 
+if(DS4_ENABLE_CUDA AND (DS4_ENABLE_ASAN OR DS4_ENABLE_UBSAN))
+	message(FATAL_ERROR "Sanitizers are CPU-only; set DS4_ENABLE_CUDA=OFF or disable sanitizers")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(ds4_warnings)
