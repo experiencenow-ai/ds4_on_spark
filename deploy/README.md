@@ -51,6 +51,7 @@ sudo systemd-tmpfiles --create || true
 - `ds4-spark0.yaml.example`, `ds4-spark1.yaml.example` : runtime config placeholders (schema TBD)
 - `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
+- `hosts.ds4.spark01.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1
 - `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
