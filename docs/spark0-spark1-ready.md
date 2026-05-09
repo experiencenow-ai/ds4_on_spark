@@ -51,6 +51,6 @@ Notes:
 - `nvidia-smi` driver + CUDA version.
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe).
 - `nvcc` path and version (toolkit version).
+- cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
 - Storage summary (`df -h` + `lsblk` disk model/size).
 - Wired link status + speed when available (`ip link` + optional `ethtool`).
-
