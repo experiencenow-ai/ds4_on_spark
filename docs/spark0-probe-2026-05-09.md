@@ -325,3 +325,50 @@ port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
 hca_type: MT4129
 port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
 ```
+
+## Update: Probe Refresh (2026-05-09 19:39Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T1939Z_loop_v5.txt
+```
+
+```text
+== local meta ==
+Sat May  9 19:38:56 UTC 2026
+git: 3fd13b3
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+
+== pci link (sysfs, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+sysfs: /sys/devices/pci000f:00/000f:00:00.0/000f:01:00.0
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+```
+
+```text
+== cuda toolkit ==
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+```
