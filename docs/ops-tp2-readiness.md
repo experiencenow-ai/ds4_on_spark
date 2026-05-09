@@ -118,6 +118,9 @@ If `DS4_METRICS_PORT` is set and `curl` is available, `ops_tp2_readiness.sh` als
 attempts a fast HTTP probe of `http://<metrics-host>:<port>/metrics` (best-effort,
 non-fatal). When `DS4_METRICS_ADDR=0.0.0.0`, it probes `127.0.0.1`.
 
+If `DS4_PEER_HOST` is set, it also attempts a best-effort peer probe of
+`http://<peer-host>:<DS4_METRICS_PORT>/metrics` (useful for catching firewall/routing issues early).
+
 ## Optional: Periodic Preflight (Systemd Timer)
 
 If you want readiness checks to run automatically on boot and periodically after,
