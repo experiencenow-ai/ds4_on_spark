@@ -109,6 +109,9 @@ echo
 echo \"== run: cuda_sm121_cccl_atomic_ref ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_cccl_atomic_ref
 echo
+echo \"== run: cuda_sm121_cuda_graph_smoke ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_cuda_graph_smoke
+echo
 echo \"== run: cuda_sm121_nvrtc_jit ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_jit
 echo \"== run: cuda_sm121_nvcc_flags_probe ==\"
