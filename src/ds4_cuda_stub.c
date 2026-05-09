@@ -74,6 +74,29 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 	return(ds4_cuda_fail(cuda_err));
 }
 
+ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count)
+{
+	if ( out_count == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out_count = 0;
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_device_info(ds4_cuda_device_info_t *out,int32_t dev_index)
+{
+	int32_t i;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	out->dev = dev_index;
+	out->major = 0;
+	out->minor = 0;
+	out->multiprocessor_count = 0;
+	out->total_global_mem = 0;
+	for (i=0; i<(int32_t)sizeof(out->name); i++)
+		out->name[i] = 0;
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
 ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes)
 {
 	DS4_UNUSED(bytes);
