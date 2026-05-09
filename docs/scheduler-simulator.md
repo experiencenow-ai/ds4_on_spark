@@ -38,6 +38,16 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
+### Multi-Layer Routes
+
+When a trace record includes `layers[]` (multi-MoE-layer routes), the simulator treats the token’s work as a sequence of **stages**:
+
+- for each micro-token (verify-only, or draft+verify when MTP is enabled), run layer 0, then layer 1, then layer 2, ...
+- tasks for later layers are not enqueued until the previous layer’s tasks complete
+- if a given layer cannot admit any tasks because all of that layer’s candidates are full, the simulator skips that layer (models layer-local token dropping via the residual path)
+
+This makes per-token latency approximately additive across layers, which better matches transformer execution than admitting all layers concurrently.
+
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.
@@ -237,7 +247,7 @@ JSONL reads one JSON object per line with required fields:
   - `scores` (optional list[number]): per-candidate router scores (same length as that layer's `candidates`)
   - `k` (optional int): layer-specific chosen `K`. When using `--k-mode trace`, you may omit top-level `k` if every layer provides `k`.
   - `cost_scale` (optional number): layer-specific cost multiplier (multiplied into the top-level `cost_scale` when both are present)
-  - When `layers` is present, the simulator expects `candidates` to either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); it uses the per-layer candidate lists for admission.
+  - When `layers` is present, the simulator expects `candidates` to either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); it uses the per-layer candidate lists for admission and runs the layers sequentially.
 - `token_index` (optional int): monotonically increasing token index from the runtime (debugging aid only)
 - `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace` unless every layer provides `layers[].k`)
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc` (when `layers` is present, use `layers[].scores` instead).
