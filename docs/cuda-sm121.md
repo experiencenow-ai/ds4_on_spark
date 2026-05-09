@@ -217,6 +217,17 @@ The probe `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` is a tiny compile/r
 - issues a 64-byte global->shared copy via `cuda::device::memcpy_async_tx` (which lowers to `cp.async.bulk` on SM90+)
 - waits via `cuda::barrier` and validates the copied values
 
+## Inline PTX `ldmatrix.sync` (CUTLASS-style gate)
+
+CUTLASS and similar template kernels often rely on inline PTX for tensor-core data movement (e.g., `ldmatrix.sync` loads from shared memory).
+
+The probe `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke` is a tiny compile/run check that:
+
+- emits `cvta.to.shared` + `ldmatrix.sync.aligned.m8n8.x4.shared.b16` inline PTX
+- launches a single warp and checks the loaded registers are non-zero
+
+Treat failures as an immediate blocker for CUTLASS-style kernels that rely on inline PTX mainloops.
+
 ## WMMA Tensor Core Smoke (CUTLASS-style proxy)
 
 CUTLASS and other template GEMM libraries rely on tensor core matmul plumbing.

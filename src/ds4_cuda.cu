@@ -34,6 +34,36 @@ int32_t ds4_cuda_is_enabled_build(void)
 	return(1);
 }
 
+ds4_cuda_status_t ds4_cuda_get_device(int32_t *out_dev)
+{
+	int dev;
+	cudaError_t err;
+	if ( out_dev == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out_dev = -1;
+	dev = -1;
+	err = cudaGetDevice(&dev);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	*out_dev = (int32_t)dev;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_set_device(int32_t dev)
+{
+	cudaError_t err;
+	if ( dev < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	err = cudaSetDevice((int)dev);
+	if ( err != cudaSuccess )
+	{
+		if ( err == cudaErrorInvalidDevice || err == cudaErrorNoDevice )
+			return(ds4_cuda_fail(DS4_CUDA_ERR_NO_DEVICE));
+		return(ds4_cuda_fail((int32_t)err));
+	}
+	return(ds4_cuda_ok());
+}
+
 ds4_cuda_status_t ds4_cuda_init(void)
 {
 	int dev_count;
@@ -119,6 +149,20 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 	return(ds4_cuda_fail(cuda_err));
 }
 
+ds4_cuda_status_t ds4_cuda_check_last_error(const char *file,int32_t line)
+{
+	cudaError_t err;
+	err = cudaGetLastError();
+	return(ds4_cuda_check_i32((int32_t)err,"cudaGetLastError()",file,line));
+}
+
+ds4_cuda_status_t ds4_cuda_check_peek_last_error(const char *file,int32_t line)
+{
+	cudaError_t err;
+	err = cudaPeekAtLastError();
+	return(ds4_cuda_check_i32((int32_t)err,"cudaPeekAtLastError()",file,line));
+}
+
 ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count)
 {
 	int dev_count;
@@ -176,6 +220,126 @@ ds4_cuda_status_t ds4_cuda_device_info(ds4_cuda_device_info_t *out,int32_t dev_i
 	return(ds4_cuda_ok());
 }
 
+ds4_cuda_status_t ds4_cuda_stream_create(ds4_cuda_stream_t *out,int32_t flags)
+{
+	cudaStream_t s;
+	cudaError_t err;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	out->h = 0;
+	if ( flags != DS4_CUDA_STREAM_FLAGS_DEFAULT )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	s = 0;
+	err = cudaStreamCreate(&s);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	out->h = (void *)s;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_stream_destroy(ds4_cuda_stream_t *s)
+{
+	cudaError_t err;
+	if ( s == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( s->h == 0 )
+		return(ds4_cuda_ok());
+	err = cudaStreamDestroy((cudaStream_t)s->h);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	s->h = 0;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_stream_synchronize(ds4_cuda_stream_t s)
+{
+	cudaError_t err;
+	if ( s.h == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	err = cudaStreamSynchronize((cudaStream_t)s.h);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_event_create(ds4_cuda_event_t *out,int32_t flags)
+{
+	cudaEvent_t e;
+	cudaError_t err;
+	unsigned int cuda_flags;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	out->h = 0;
+	if ( (flags & ~DS4_CUDA_EVENT_FLAGS_DISABLE_TIMING) != 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	cuda_flags = 0;
+	if ( (flags & DS4_CUDA_EVENT_FLAGS_DISABLE_TIMING) != 0 )
+		cuda_flags |= (unsigned int)cudaEventDisableTiming;
+	e = 0;
+	err = cudaEventCreateWithFlags(&e,cuda_flags);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	out->h = (void *)e;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_event_destroy(ds4_cuda_event_t *e)
+{
+	cudaError_t err;
+	if ( e == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( e->h == 0 )
+		return(ds4_cuda_ok());
+	err = cudaEventDestroy((cudaEvent_t)e->h);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	e->h = 0;
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_event_record(ds4_cuda_event_t e,ds4_cuda_stream_t s)
+{
+	cudaError_t err;
+	if ( e.h == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( s.h == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	err = cudaEventRecord((cudaEvent_t)e.h,(cudaStream_t)s.h);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_event_synchronize(ds4_cuda_event_t e)
+{
+	cudaError_t err;
+	if ( e.h == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	err = cudaEventSynchronize((cudaEvent_t)e.h);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_event_elapsed_ms(float *out_ms,ds4_cuda_event_t start,ds4_cuda_event_t end)
+{
+	cudaError_t err;
+	float ms;
+	if ( out_ms == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out_ms = 0.0f;
+	if ( start.h == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( end.h == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	ms = 0.0f;
+	err = cudaEventElapsedTime(&ms,(cudaEvent_t)start.h,(cudaEvent_t)end.h);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	*out_ms = ms;
+	return(ds4_cuda_ok());
+}
+
 ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes)
 {
 	cudaError_t err;
@@ -200,6 +364,35 @@ ds4_cuda_status_t ds4_cuda_free(void *ptr)
 {
 	cudaError_t err;
 	err = cudaFree(ptr);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_malloc_host(void **out,int64_t bytes)
+{
+	cudaError_t err;
+	size_t n;
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out = 0;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (size_t)bytes;
+	err = cudaMallocHost(out,n);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_free_host(void *ptr)
+{
+	cudaError_t err;
+	err = cudaFreeHost(ptr);
 	if ( err != cudaSuccess )
 		return(ds4_cuda_fail((int32_t)err));
 	return(ds4_cuda_ok());

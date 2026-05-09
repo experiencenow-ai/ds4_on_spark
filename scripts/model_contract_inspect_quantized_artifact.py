@@ -452,6 +452,7 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 
 	topo = contract_summary.get("topology", {})
 	mtp = contract_summary.get("mtp", {})
+	yarn = contract_summary.get("yarn_rope", {})
 
 	def expected_int(name: str) -> Optional[int]:
 		try:
@@ -464,6 +465,11 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 	expected_heads = expected_int("num_attention_heads")
 	expected_kv_heads = expected_int("num_key_value_heads")
 	expected_vocab = expected_int("vocab_size")
+	expected_rope_dim = expected_int("rope_head_dim")
+	try:
+		expected_rope_theta = float(yarn.get("rope_theta"))
+	except Exception:
+		expected_rope_theta = None
 	try:
 		expected_mtp_layers = int(mtp.get("n_mtp_layers", 0))
 	except Exception:
@@ -478,17 +484,30 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 				continue
 		return None
 
+	def pick_float(keys: list[str]) -> Optional[float]:
+		for k in keys:
+			v = metadata.get(k, None)
+			try:
+				return float(v)
+			except Exception:
+				continue
+		return None
+
 	embedding_keys = [k for k in metadata.keys() if k.endswith(".embedding_length")]
 	block_keys = [k for k in metadata.keys() if k.endswith(".block_count")]
 	vocab_keys = [k for k in metadata.keys() if k.endswith(".vocab_size")]
 	head_keys = [k for k in metadata.keys() if k.endswith(".head_count")]
 	kv_head_keys = [k for k in metadata.keys() if k.endswith(".head_count_kv")]
+	rope_dim_keys = [k for k in metadata.keys() if k.endswith(".rope.dimension_count")]
+	rope_freq_base_keys = [k for k in metadata.keys() if k.endswith(".rope.freq_base")]
 
 	embedding_len = pick_int(sorted(embedding_keys))
 	block_count = pick_int(sorted(block_keys))
 	vocab_size = pick_int(sorted(vocab_keys))
 	head_count = pick_int(sorted(head_keys))
 	kv_head_count = pick_int(sorted(kv_head_keys))
+	rope_dim = pick_int(sorted(rope_dim_keys))
+	rope_freq_base = pick_float(sorted(rope_freq_base_keys))
 
 	mismatches: list[str] = []
 
@@ -498,10 +517,18 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 		if int(got) != int(expected):
 			mismatches.append(f"{label}: got={got} expected={expected}")
 
+	def check_eq_float(label: str, got: Optional[float], expected: Optional[float]) -> None:
+		if got is None or expected is None:
+			return
+		if float(got) != float(expected):
+			mismatches.append(f"{label}: got={got} expected={expected}")
+
 	check_eq("embedding_length", embedding_len, expected_hidden)
 	check_eq("vocab_size", vocab_size, expected_vocab)
 	check_eq("head_count", head_count, expected_heads)
 	check_eq("head_count_kv", kv_head_count, expected_kv_heads)
+	check_eq("rope_dimension_count", rope_dim, expected_rope_dim)
+	check_eq_float("rope_freq_base", rope_freq_base, expected_rope_theta)
 
 	block_count_ok = None
 	if block_count is not None and expected_layers is not None:
@@ -520,6 +547,8 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 		"vocab_size": vocab_size,
 		"head_count": head_count,
 		"head_count_kv": kv_head_count,
+		"rope_dimension_count": rope_dim,
+		"rope_freq_base": rope_freq_base,
 		"mismatches": mismatches[:20],
 	}
 
@@ -598,6 +627,39 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 		"missing_required_count": len(missing_sorted),
 		"missing_required_sample": missing_sorted[:20],
 		"forbidden_present": forbidden_sorted[:20],
+	}
+
+def compute_mtp_trust(mtp_present: bool, mtp_contract: Optional[dict[str, Any]], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
+	if not mtp_present:
+		return {"checked": True, "trusted": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+
+	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
+		return {"checked": False, "trusted": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+
+	trust_gates = None
+	if isinstance(contract_summary, dict):
+		trust_gates = contract_summary.get("mtp", {}).get("trust_gates", None)
+	if not isinstance(trust_gates, dict):
+		trust_gates = {}
+
+	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
+	if requires_complete and mtp_contract.get("complete") is not True:
+		return {
+			"checked": True,
+			"trusted": False,
+			"status": "incomplete",
+			"reasons": ["mtp_contract.complete != true"],
+		}
+
+	reasons = ["structural mtp.* keys complete"]
+	if trust_gates.get("oracle_requires_include_mtp") is True or trust_gates.get("oracle_requires_mtp_trace") is True:
+		reasons.append("requires logits oracle with include_mtp before trusting MTP")
+
+	return {
+		"checked": True,
+		"trusted": False,
+		"status": "structural_complete_untrusted",
+		"reasons": reasons,
 	}
 
 
@@ -858,6 +920,7 @@ def main() -> int:
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
 			if topology_candidate is not None:
 				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
+		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -870,6 +933,7 @@ def main() -> int:
 			"mtp_layer_ids": sorted(mtp_layer_ids),
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
+			"mtp_trust": mtp_trust,
 			"trunk_contract": trunk_contract,
 			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"topology_contract": topology_contract,
@@ -880,6 +944,7 @@ def main() -> int:
 			out = as_dict(results[0])
 			if contract_summary is not None:
 				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
+				out["mtp_trust"] = compute_mtp_trust(bool(out.get("mtp_present", False)), out.get("mtp_contract"), contract_summary)
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
@@ -896,6 +961,7 @@ def main() -> int:
 									if contract_summary is None
 									else {
 										"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
+										"mtp_trust": compute_mtp_trust(bool(r.mtp_present), compute_mtp_contract(set(r.mtp_keys_all), contract_summary), contract_summary),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 									}

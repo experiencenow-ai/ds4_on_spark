@@ -28,7 +28,7 @@ If you install the systemd templates from `deploy/systemd/` to `/etc/systemd/sys
 sudo systemctl start ds4-support-bundle@spark0.service
 ```
 
-`ds4-preflight-strict@.service` is wired to trigger `ds4-support-bundle@%i.service` automatically on failure.
+`ds4-preflight@.service` and `ds4-preflight-strict@.service` are wired to trigger `ds4-support-bundle@%i.service` automatically on failure.
 
 ## What It Captures
 

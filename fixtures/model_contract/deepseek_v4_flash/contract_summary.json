@@ -273,6 +273,7 @@
     "by_transformers_key": {
       "compress_ratios": "attention_schedule.compress_ratios",
       "compress_rope_theta": "yarn_rope.compress_rope_theta",
+      "expert_dtype": "quantization.inference_config.expert_dtype",
       "head_dim": "topology.head_dim",
       "hidden_size": "topology.hidden_size",
       "moe_intermediate_size": "moe.moe_inter_dim",
@@ -283,11 +284,17 @@
       "num_hash_layers": "moe.n_hash_layers",
       "num_hidden_layers": "topology.num_hidden_layers",
       "num_key_value_heads": "topology.num_key_value_heads",
+      "num_nextn_predict_layers": "mtp.n_mtp_layers",
       "o_groups": "topology.o_groups",
       "o_lora_rank": "topology.o_lora_rank",
       "original_max_position_embeddings": "yarn_rope.original_seq_len",
       "q_lora_rank": "topology.q_lora_rank",
       "qk_rope_head_dim": "topology.rope_head_dim",
+      "quantization_config.activation_scheme": "quantization.config_quantization_config.activation_scheme",
+      "quantization_config.fmt": "quantization.config_quantization_config.fmt",
+      "quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
+      "quantization_config.scale_fmt": "quantization.config_quantization_config.scale_fmt",
+      "quantization_config.weight_block_size": "quantization.config_quantization_config.weight_block_size",
       "rope_scaling.beta_fast": "yarn_rope.beta_fast",
       "rope_scaling.beta_slow": "yarn_rope.beta_slow",
       "rope_scaling.factor": "yarn_rope.rope_factor",
@@ -413,6 +420,12 @@
         "transformers_key": "scoring_func"
       },
       {
+        "canonical_path": "mtp.n_mtp_layers",
+        "concept": "num_nextn_predict_layers",
+        "inference_key": null,
+        "transformers_key": "num_nextn_predict_layers"
+      },
+      {
         "canonical_path": "yarn_rope.rope_theta",
         "concept": "rope_theta",
         "inference_key": "rope_theta",
@@ -458,13 +471,43 @@
         "canonical_path": "quantization.inference_config.expert_dtype",
         "concept": "expert_dtype",
         "inference_key": "expert_dtype",
-        "transformers_key": null
+        "transformers_key": "expert_dtype"
       },
       {
         "canonical_path": "quantization.inference_config.scale_fmt",
         "concept": "scale_fmt",
         "inference_key": "scale_fmt",
         "transformers_key": null
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.quant_method",
+        "concept": "quant_method",
+        "inference_key": null,
+        "transformers_key": "quantization_config.quant_method"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.fmt",
+        "concept": "quant_fmt",
+        "inference_key": null,
+        "transformers_key": "quantization_config.fmt"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.activation_scheme",
+        "concept": "activation_scheme",
+        "inference_key": null,
+        "transformers_key": "quantization_config.activation_scheme"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.scale_fmt",
+        "concept": "scale_fmt_cfg",
+        "inference_key": null,
+        "transformers_key": "quantization_config.scale_fmt"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.weight_block_size",
+        "concept": "weight_block_size",
+        "inference_key": null,
+        "transformers_key": "quantization_config.weight_block_size"
       }
     ]
   },
@@ -509,6 +552,22 @@
   "model": "deepseek_v4_flash",
   "moe": {
     "hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
+    "hash_routing": {
+      "bias_none_expr": "self.bias = None",
+      "hash_enabled_expr": "self.hash = layer_id < args.n_hash_layers",
+      "hash_indices_expr": "indices = self.tid2eid[input_ids]",
+      "hash_layer_ids": [
+        0,
+        1,
+        2
+      ],
+      "tid2eid_decl_expr": "self.tid2eid = nn.Parameter(torch.empty(args.vocab_size, args.n_activated_experts, dtype=torch.int32), requires_grad=False)",
+      "tid2eid_dtype": "int32",
+      "tid2eid_shape": [
+        129280,
+        6
+      ]
+    },
     "moe_inter_dim": 2048,
     "n_activated_experts": 6,
     "n_hash_layers": 3,
@@ -533,7 +592,17 @@
   "mtp": {
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
-    "namespace_prefix": "mtp.{j}."
+    "namespace_prefix": "mtp.{j}.",
+    "trust_gates": {
+      "acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+      "acceptance_requires_prefill_and_decode": true,
+      "acceptance_topk_ids_exact": true,
+      "artifact_requires_mtp_contract_complete": true,
+      "artifact_requires_namespace_prefix": "mtp.{j}.",
+      "oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+      "oracle_requires_include_mtp": true,
+      "oracle_requires_mtp_trace": true
+    }
   },
   "quantization": {
     "config_quantization_config": {
@@ -763,7 +832,64 @@
     "eos_token_id": 1,
     "model_max_length": 1048576,
     "pad_token_is_eos": true,
-    "tokenizer_class": "PreTrainedTokenizerFast"
+    "tokenizer_class": "PreTrainedTokenizerFast",
+    "tokenizer_json_summary": {
+      "added_special_tokens_count": 1230,
+      "added_token_id_max": 129279,
+      "added_token_id_min": 0,
+      "added_tokens_count": 1283,
+      "base_vocab_size": 128000,
+      "decoder": {
+        "add_prefix_space": true,
+        "trim_offsets": true,
+        "type": "ByteLevel",
+        "use_regex": true
+      },
+      "effective_vocab_size": 129280,
+      "effective_vocab_size_matches_config": true,
+      "merges_count": 127741,
+      "model_type": "BPE",
+      "normalizer": {
+        "sequence": [],
+        "type": "Sequence"
+      },
+      "post_processor": {
+        "add_prefix_space": true,
+        "trim_offsets": false,
+        "type": "ByteLevel",
+        "use_regex": true
+      },
+      "pre_tokenizer": {
+        "sequence": [
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "\\p{N}{1,3}",
+            "type": "Split"
+          },
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff]+",
+            "type": "Split"
+          },
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "[!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~][A-Za-z]+|[^\r\n\\p{L}\\p{P}\\p{S}]?[\\p{L}\\p{M}]+| ?[\\p{P}\\p{S}]+[\r\n]*|\\s*[\r\n]+|\\s+(?!\\S)|\\s+",
+            "type": "Split"
+          },
+          {
+            "add_prefix_space": false,
+            "trim_offsets": true,
+            "type": "ByteLevel",
+            "use_regex": false
+          }
+        ],
+        "type": "Sequence"
+      },
+      "tokenizers_json_version": "1.0"
+    }
   },
   "topology": {
     "head_dim": 512,

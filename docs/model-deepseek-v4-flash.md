@@ -263,6 +263,7 @@ Hash-routed bootstrap layers:
 
 - For layers `0 <= layer_id < n_hash_layers` (here: layers 0–2), routing indices come from a static table:
   - tensor key: `layers.{i}.ffn.gate.tid2eid` (dtype `int32`)
+  - logical shape: `[vocab_size, n_activated_experts]` (here: `[129280, 6]`), indexed by `input_ids`
 - For these layers, `layers.{i}.ffn.gate.bias` is absent in the checkpoint.
 - Even in hash mode, the gate still computes scores and routing weights from hidden state:
   - `tid2eid[input_ids]` selects the expert IDs
@@ -275,7 +276,10 @@ Score-routed layers:
 - Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
 
-These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics` so downstream tooling can validate external runtime logs/configs without guessing.
+These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under:
+
+- `moe.semantics` (score computation + normalization + scaling expressions)
+- `moe.hash_routing` (hash-gating enable/indices expressions + `tid2eid` shape/dtype)
 
 ## Hyper-Connections (mHC)
 
@@ -324,6 +328,14 @@ Tokenizer (from `tokenizer_config.json`):
 - BOS token string: `<｜begin▁of▁sentence｜>` (`bos_token_id: 0` in `config.json`)
 - EOS token string: `<｜end▁of▁sentence｜>` (`eos_token_id: 1` in `config.json`)
 - PAD token is EOS.
+
+Tokenizer backend (from `tokenizer.json`):
+
+- Model: `BPE` (base vocab size 128000 + merges; effective vocab size matches `vocab_size=129280` once added tokens are applied).
+- Pre-tokenizer: a `Sequence` of 3 `Split` regex passes followed by `ByteLevel` (this controls the **exact** text → byte-level pieces fed into BPE).
+- Post-processor + decoder: `ByteLevel`.
+
+These backend pipeline facts (including the exact `Split` regex patterns and `ByteLevel` flags) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tokenizer.tokenizer_json_summary` so external runtimes can reproduce tokenization without guessing.
 
 Message rendering:
 
@@ -469,6 +481,14 @@ Official-source safetensors **do** include the MTP namespace:
 
 - `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json` contains `mtp.0.*` (1,575 tensor keys as of the pinned upstream commit).
 
+As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
+
+Recorded probe outputs (range-read header + tensor table only; no full downloads):
+
+- `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
+- `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
+- `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
+
 For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
@@ -508,11 +528,13 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co
 ```
 
 Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
+Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`.
 
 As of 2026-05-09, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
+- When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make the “structural complete but still needs an oracle” status explicit in JSON.
 - Also record and review:
   - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
   - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)

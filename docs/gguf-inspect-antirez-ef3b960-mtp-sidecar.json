@@ -1,0 +1,111 @@
+{
+  "artifact_type": "gguf.url",
+  "first_mtp_keys": [
+    "mtp.0.hc_head_base.weight",
+    "mtp.0.hc_head_fn.weight",
+    "mtp.0.hc_head_scale.weight",
+    "mtp.0.hc_attn_base.weight",
+    "mtp.0.hc_ffn_base.weight",
+    "mtp.0.hc_attn_fn.weight",
+    "mtp.0.hc_attn_scale.weight",
+    "mtp.0.hc_ffn_fn.weight",
+    "mtp.0.hc_ffn_scale.weight",
+    "mtp.0.attn_sinks.weight"
+  ],
+  "first_tensor_keys": [
+    "mtp.0.hc_head_base.weight",
+    "mtp.0.hc_head_fn.weight",
+    "mtp.0.hc_head_scale.weight",
+    "mtp.0.hc_attn_base.weight",
+    "mtp.0.hc_ffn_base.weight",
+    "mtp.0.hc_attn_fn.weight",
+    "mtp.0.hc_attn_scale.weight",
+    "mtp.0.hc_ffn_fn.weight",
+    "mtp.0.hc_ffn_scale.weight",
+    "mtp.0.attn_sinks.weight",
+    "mtp.0.attn_q_a.weight",
+    "mtp.0.attn_q_b.weight",
+    "mtp.0.attn_q_a_norm.weight",
+    "mtp.0.attn_output_a.weight",
+    "mtp.0.attn_kv.weight",
+    "mtp.0.attn_kv_a_norm.weight",
+    "mtp.0.attn_output_b.weight",
+    "mtp.0.attn_norm.weight",
+    "mtp.0.ffn_norm.weight",
+    "mtp.0.ffn_gate_shexp.weight"
+  ],
+  "gguf_version": 3,
+  "metadata": {
+    "general.architecture": "deepseek4_mtp_support",
+    "general.name": "DeepSeek V4 Flash MTP support"
+  },
+  "mtp_contract": {
+    "checked": true,
+    "complete": false,
+    "forbidden_present": [],
+    "missing_required_count": 1568,
+    "missing_required_sample": [
+      "mtp.0.attn.attn_sink",
+      "mtp.0.attn.kv_norm.weight",
+      "mtp.0.attn.q_norm.weight",
+      "mtp.0.attn.wkv.scale",
+      "mtp.0.attn.wkv.weight",
+      "mtp.0.attn.wo_a.scale",
+      "mtp.0.attn.wo_a.weight",
+      "mtp.0.attn.wo_b.scale",
+      "mtp.0.attn.wo_b.weight",
+      "mtp.0.attn.wq_a.scale",
+      "mtp.0.attn.wq_a.weight",
+      "mtp.0.attn.wq_b.scale",
+      "mtp.0.attn.wq_b.weight",
+      "mtp.0.e_proj.scale",
+      "mtp.0.ffn.experts.0.w1.scale",
+      "mtp.0.ffn.experts.0.w1.weight",
+      "mtp.0.ffn.experts.0.w2.scale",
+      "mtp.0.ffn.experts.0.w2.weight",
+      "mtp.0.ffn.experts.0.w3.scale",
+      "mtp.0.ffn.experts.0.w3.weight"
+    ],
+    "mtp_layer_ids_present": [
+      0
+    ]
+  },
+  "mtp_layer_ids": [
+    0
+  ],
+  "mtp_present": true,
+  "mtp_tensor_count": 32,
+  "mtp_tensor_type_counts": {
+    "F32": 19,
+    "Q4_K": 3,
+    "Q8_0": 10
+  },
+  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+  "tensor_count": 32,
+  "tensor_key_namespace_evidence": [
+    "found mtp.* tensor namespace"
+  ],
+  "tensor_key_namespace_guess": "deepseek-upstream-mtp-only",
+  "tensor_type_counts": {
+    "F32": 19,
+    "Q4_K": 3,
+    "Q8_0": 10
+  },
+  "topology_contract": {
+    "block_count": null,
+    "block_count_ok": null,
+    "checked": true,
+    "embedding_length": null,
+    "head_count": null,
+    "head_count_kv": null,
+    "mismatches": [],
+    "rope_dimension_count": null,
+    "rope_freq_base": null,
+    "vocab_size": null
+  },
+  "trunk_contract": {
+    "checked": false,
+    "reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable"
+  },
+  "url_prefix_bytes": 262144
+}

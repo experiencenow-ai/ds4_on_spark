@@ -97,6 +97,23 @@ def main() -> int:
 						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
 					if enc.get("eos_token") != tok.get("eos_token"):
 						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+					tok_js = tok.get("tokenizer_json_summary")
+					if not isinstance(tok_js, dict):
+						failures.append(Failure(40, f"contract summary missing tokenizer.tokenizer_json_summary (expected dict): {contract_summary}"))
+					else:
+						if tok_js.get("model_type") != "BPE":
+							failures.append(Failure(41, f"contract summary tokenizer.tokenizer_json_summary.model_type must be BPE: {contract_summary}"))
+						if tok_js.get("effective_vocab_size_matches_config") is not True:
+							failures.append(Failure(42, f"contract summary tokenizer.tokenizer_json_summary.effective_vocab_size_matches_config must be true: {contract_summary}"))
+						pre = tok_js.get("pre_tokenizer")
+						post = tok_js.get("post_processor")
+						dec = tok_js.get("decoder")
+						if not (isinstance(pre, dict) and pre.get("type") == "Sequence"):
+							failures.append(Failure(43, f"contract summary tokenizer.tokenizer_json_summary.pre_tokenizer must be a Sequence: {contract_summary}"))
+						if not (isinstance(post, dict) and post.get("type") == "ByteLevel"):
+							failures.append(Failure(44, f"contract summary tokenizer.tokenizer_json_summary.post_processor must be ByteLevel: {contract_summary}"))
+						if not (isinstance(dec, dict) and dec.get("type") == "ByteLevel"):
+							failures.append(Failure(45, f"contract summary tokenizer.tokenizer_json_summary.decoder must be ByteLevel: {contract_summary}"))
 					required_enc_fields = [
 						"system_msg_template",
 						"user_msg_template",
@@ -136,6 +153,33 @@ def main() -> int:
 				moe_sem = summary.get("moe", {}).get("semantics", {})
 				if moe_sem.get("bias_affects_selection_only_comment") is None:
 					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
+				moe = summary.get("moe", {})
+				moe_hash = moe.get("hash_routing", {}) if isinstance(moe, dict) else {}
+				try:
+					n_hash = int(moe.get("n_hash_layers", 0)) if isinstance(moe, dict) else 0
+				except Exception:
+					n_hash = 0
+					if n_hash > 0:
+						if not isinstance(moe_hash, dict):
+							failures.append(Failure(40, f"contract summary missing moe.hash_routing dict (hash routing is enabled with n_hash_layers={n_hash}): {contract_summary}"))
+						else:
+							expected_ids = list(range(n_hash))
+							if moe_hash.get("hash_layer_ids") != expected_ids:
+								failures.append(Failure(41, f"contract summary moe.hash_routing.hash_layer_ids mismatch (expected {expected_ids}): {contract_summary}"))
+							if moe_hash.get("tid2eid_dtype") != "int32":
+								failures.append(Failure(42, f"contract summary moe.hash_routing.tid2eid_dtype must be 'int32': {contract_summary}"))
+							try:
+								expected_shape = [int(summary.get("topology", {}).get("vocab_size")), int(moe.get("n_activated_experts"))]
+							except Exception:
+								expected_shape = None
+							if expected_shape is not None and moe_hash.get("tid2eid_shape") != expected_shape:
+								failures.append(Failure(43, f"contract summary moe.hash_routing.tid2eid_shape mismatch (expected {expected_shape}): {contract_summary}"))
+							need_exprs = ["hash_enabled_expr", "hash_indices_expr"]
+							for k in need_exprs:
+								v = moe_hash.get(k)
+								if not (isinstance(v, str) and v):
+									failures.append(Failure(44, f"contract summary moe.hash_routing missing {k} expression string: {contract_summary}"))
+									break
 
 				chk = summary.get("checkpoint_index", {})
 				expected_key_sha = sha256_lines(sorted(weight_keys))
@@ -152,6 +196,46 @@ def main() -> int:
 				mtp_add = tk.get("required_mtp_additional_suffixes", None)
 				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
 					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
+
+				mtp = summary.get("mtp", {})
+				trust = mtp.get("trust_gates", {}) if isinstance(mtp, dict) else {}
+				if not isinstance(trust, dict):
+					failures.append(Failure(68, f"contract summary mtp.trust_gates must be an object: {contract_summary}"))
+				else:
+					expected = {
+						"artifact_requires_mtp_contract_complete": True,
+						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"oracle_requires_include_mtp": True,
+						"oracle_requires_mtp_trace": True,
+						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+						"acceptance_requires_prefill_and_decode": True,
+						"acceptance_topk_ids_exact": True,
+					}
+					for k, want in expected.items():
+						got = trust.get(k)
+						if got != want:
+							failures.append(Failure(69, f"contract summary mtp.trust_gates[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
+
+				compat = summary.get("compat", {})
+				bt = compat.get("by_transformers_key", {}) if isinstance(compat, dict) else {}
+				if not isinstance(bt, dict):
+					failures.append(Failure(60, f"contract summary compat.by_transformers_key must be an object: {contract_summary}"))
+				else:
+					expected = {
+						"num_nextn_predict_layers": "mtp.n_mtp_layers",
+						"expert_dtype": "quantization.inference_config.expert_dtype",
+						"quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
+						"quantization_config.fmt": "quantization.config_quantization_config.fmt",
+						"quantization_config.activation_scheme": "quantization.config_quantization_config.activation_scheme",
+						"quantization_config.scale_fmt": "quantization.config_quantization_config.scale_fmt",
+						"quantization_config.weight_block_size": "quantization.config_quantization_config.weight_block_size",
+					}
+					for k, want in expected.items():
+						got = bt.get(k)
+						if got != want:
+							failures.append(Failure(61, f"contract summary compat.by_transformers_key[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 

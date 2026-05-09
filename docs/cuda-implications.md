@@ -9,6 +9,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
+- CUDA 13 developer tooling (`cuobjdump --dump-sass`, `nvdisasm`) can decode `sm_121` binaries on Spark0 (validated via `scripts/cuda_probe_disasm_spark0.sh`: 2026-05-09)
 - `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe` shows that an `sm_120`-compiled kernel runs successfully on GB10 (`sm_121`) (observed `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints `cudaDevAttrMaxSharedMemoryPerBlockOptin` and validates an opt-in dynamic shared-memory launch
@@ -19,7 +20,9 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_fp4_conv` validates that CUDA 13 FP4 conversion helpers (`cuda_fp4.h`, E2M1) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` validates an explicit `cp.async.bulk` global->shared copy path via CCCL’s internal `cuda::device::memcpy_async_tx` (CUTLASS-style bulk async copy plumbing).
+- `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke` validates that inline PTX `ldmatrix.sync` loads from shared memory compile and run on `sm_121` (CUTLASS-style inline-PTX gate).
 - `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_1d` validates a minimal TMA `cp.async.bulk.tensor.1d` load using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (CUTLASS TMA load plumbing gate).
+- `tools/cuda_probe/bin/cuda_sm121_tma_bulk_tensor_2d` validates a minimal TMA `cp.async.bulk.tensor.2d` load using a tensor map encoded via the driver API `cuTensorMapEncodeTiled` (2D traversal gate used by many tile schedulers).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
 - `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` validates that `nvcc` accepts common template-kernel compile flags (`--extended-lambda` + `--expt-relaxed-constexpr`) with `-std=c++20` for `sm_121` (CUTLASS/DeepGEMM-style compile gate).
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe` validates that `nvcc` + `nvlink` can perform separate compilation (`-dc`) + device link (`-dlink`) for `sm_121` (multi-translation-unit CUDA build gate; observed success on Spark0: 2026-05-09).
@@ -31,7 +34,6 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit` validates an NVRTC+nvJitLink “compile to PTX for `compute_121` → link to `sm_121` CUBIN → load via Driver API → launch kernel” path; this is a useful gate for JIT flows that rely on nvJitLink (observed success on Spark0: 2026-05-09).
 - `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` validates that WMMA (`mma.h`) tensor core matmul plumbing compiles and runs for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cluster_launch` validates that thread-block cluster launches (`cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension`) and `cooperative_groups::this_cluster()` compile and run for `sm_121` (observed on Spark0: `cluster_launch_supported=1`, `max_cluster_size_portable=8`).
-
 ## cuBLASLt
 
 Implication:
@@ -57,7 +59,7 @@ Implication:
 - CUTLASS is the most likely path for “bring-up on `sm_121`” when we need custom GEMMs beyond cuBLASLt.
 - Any CUTLASS integration work must explicitly include `sm_121` in its arch list; do not assume `sm_100` build settings apply.
 - If `sm_121` is not available in a given upstream build system yet, validate whether building for `sm_120` runs correctly on GB10 first (see `cuda_sm120_compat_probe` below).
-- CUTLASS 3-style TMA loads appear viable on GB10; the `cuda_sm121_tma_bulk_tensor_1d` probe is a minimal “tensor map encode + `cp.async.bulk.tensor`” gate that should fail fast if TMA plumbing is missing or broken.
+- CUTLASS 3-style TMA loads appear viable on GB10; the `cuda_sm121_tma_bulk_tensor_1d` / `cuda_sm121_tma_bulk_tensor_2d` probes are minimal “tensor map encode + `cp.async.bulk.tensor`” gates that should fail fast if TMA plumbing is missing or broken.
 
 Next probe step:
 
@@ -66,6 +68,7 @@ Next probe step:
 - Confirm the required shared-memory footprint fits within `cudaDevAttrMaxSharedMemoryPerBlockOptin` for any CUTLASS kernels we plan to bring up.
 - Confirm that pipeline primitives (cp.async-style global->shared copies) work on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
 - Confirm that bulk async copy plumbing compiles and runs on GB10; see `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` path used by CCCL/CUTLASS-style code).
+- Confirm that inline PTX mainloop plumbing is viable on GB10; see `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync` gate).
 - Confirm that tensor core matmul plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`.
 - Confirm that BF16 conversion/data plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_bf16_conv`.
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
