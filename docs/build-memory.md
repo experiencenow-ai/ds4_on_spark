@@ -26,3 +26,10 @@ Notes:
 
 - The pool does not currently detect double-free; keep ownership disciplined at call sites.
 - The pool stores its free list inside the blocks themselves; a freed block’s first 4 bytes are used for internal bookkeeping.
+
+## Ring Buffer (`ds4_ring_t`)
+
+`ds4_ring_t` is a fixed-size ring queue backed by caller-provided memory:
+
+- `ds4_ring_push` / `ds4_ring_pop`: push/pop fixed-size elements by copying.
+- Useful for bounded event queues, message passing between components, or simple telemetry buffers.

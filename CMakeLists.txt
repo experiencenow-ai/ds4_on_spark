@@ -28,6 +28,7 @@ include(CheckLanguage)
 add_library(ds4
 	src/ds4_arena.c
 	src/ds4_pool.c
+	src/ds4_ring.c
 	src/ds4_config.c
 	src/ds4_log.c
 	src/ds4.c
@@ -59,6 +60,7 @@ if(DS4_ENABLE_TESTS)
 		tests/test_main.c
 		tests/test_arena.c
 		tests/test_pool.c
+		tests/test_ring.c
 		tests/test_config.c
 		tests/test_log.c
 		tests/test_ctx.c
