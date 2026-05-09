@@ -21,6 +21,7 @@ Related checkpoint (same “official configs” approach):
 - `config.json`, `generation_config.json`
 - `tokenizer.json`, `tokenizer_config.json`
 - `encoding/` (tokenizer-related assets)
+- `inference/` (reference scripts; small, but do not vendor)
 - `DeepSeek_V4.pdf` (technical report)
 
 ## Weight download risk (Git LFS)
@@ -28,6 +29,16 @@ Related checkpoint (same “official configs” approach):
 - The HF repos include many `model-*.safetensors` files tracked by Git LFS.
 - When fetched via `scripts/fetch_upstreams.sh` with LFS disabled, these appear as small pointer stubs (first line `version https://git-lfs.github.com/spec/v1`), not actual weights.
 - Do not run `git lfs pull` (or any alternative fetch that resolves LFS blobs) inside `upstreams/deepseek_v4_*`.
+
+## Hugging Face revisions vs git commits
+
+Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) that don’t match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
+
+To see the exact git commit for the pinned ref, use:
+
+```bash
+git ls-remote https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash refs/heads/main
+```
 
 ## vLLM references
 
