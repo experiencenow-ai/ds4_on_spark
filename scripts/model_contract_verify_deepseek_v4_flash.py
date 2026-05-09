@@ -196,6 +196,26 @@ def main() -> int:
 				mtp_add = tk.get("required_mtp_additional_suffixes", None)
 				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
 					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
+
+				compat = summary.get("compat", {})
+				bt = compat.get("by_transformers_key", {}) if isinstance(compat, dict) else {}
+				if not isinstance(bt, dict):
+					failures.append(Failure(60, f"contract summary compat.by_transformers_key must be an object: {contract_summary}"))
+				else:
+					expected = {
+						"num_nextn_predict_layers": "mtp.n_mtp_layers",
+						"expert_dtype": "quantization.inference_config.expert_dtype",
+						"quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
+						"quantization_config.fmt": "quantization.config_quantization_config.fmt",
+						"quantization_config.activation_scheme": "quantization.config_quantization_config.activation_scheme",
+						"quantization_config.scale_fmt": "quantization.config_quantization_config.scale_fmt",
+						"quantization_config.weight_block_size": "quantization.config_quantization_config.weight_block_size",
+					}
+					for k, want in expected.items():
+						got = bt.get(k)
+						if got != want:
+							failures.append(Failure(61, f"contract summary compat.by_transformers_key[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 
