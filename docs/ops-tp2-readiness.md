@@ -84,6 +84,12 @@ repo-provided checks via the systemd oneshot:
 sudo systemctl start ds4-preflight@spark0.service
 ```
 
+To gate a TP=2 run on required inputs via systemd, use the strict variant:
+
+```bash
+sudo systemctl start ds4-preflight-strict@spark0.service
+```
+
 `ds4-preflight@.service` validates and reads optional peer settings from `/etc/ds4/ds4-%i.env`:
 
 - `DS4_PEER_HOST` for ping/TCP checks

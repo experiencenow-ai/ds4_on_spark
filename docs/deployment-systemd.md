@@ -11,6 +11,7 @@ stable.
 
 - `ds4@.service`: long-running DS4 instance
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly)
+- `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`)
 - Optional Spark standalone helpers: `spark-master@.service`, `spark-worker@.service` (see `docs/deployment-spark-standalone-systemd.md`)
 
 ## Instance Naming
