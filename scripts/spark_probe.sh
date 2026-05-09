@@ -151,7 +151,18 @@ if command -v lspci >/dev/null 2>&1; then
 	if [ "$gpu_buses" != "" ]; then
 		for bus in $gpu_buses; do
 			echo "-- $bus --"
-			lspci -vv -s "$bus" 2>/dev/null | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true
+			vv="$(lspci -vv -s "$bus" 2>/dev/null || true)"
+			if [ "$vv" = "" ]; then
+				echo "lspci -vv produced no output (restricted?)"
+			else
+				link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
+				if [ "$link_lines" != "" ]; then
+					printf "%s\n" "$link_lines"
+				else
+					echo "no LnkCap/LnkSta fields found; header:"
+					printf "%s\n" "$vv" | head -n 3 || true
+				fi
+			fi
 		done
 	else
 		echo "no nvidia vga/3d controller buses found"
