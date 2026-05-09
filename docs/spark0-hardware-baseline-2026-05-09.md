@@ -612,6 +612,39 @@ version:        580.142
 vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
 ```
 
+## Update: Probe Refresh (2026-05-09 06:26Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_0626Z.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- `selected compute_cap:` records the max driver-reported compute capability used to derive `nvcc -arch` when `NVCC_ARCH` is unset.
+
+```text
+== local meta ==
+Sat May  9 06:26:28 UTC 2026
+git: 3a6df73
+probe target: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 sms: 48
+```
+
 ## Update: Probe Refresh (2026-05-09 05:58Z)
 
 Commands run:
