@@ -30,6 +30,7 @@ What it does:
   - `cuda_sm121_barrier_memcpy_async` (`cuda::barrier` + `cuda::memcpy_async` copy probe)
   - `cuda_sm121_cccl_atomic_ref` (CCCL `cuda::atomic_ref` device-scope + block-scope atomics)
   - `cuda_sm121_nvrtc_jit` (NVRTC compile-to-PTX + Driver API module load/launch for `compute_121`)
+  - `cuda_sm121_nvjitlink_jit` (NVRTC compile-to-PTX + nvJitLink PTX→CUBIN + Driver API module load/launch for `sm_121`)
   - `cuda_sm121_cxx20_probe` (`-std=c++20` toolchain probe; DeepGEMM-style build gate)
   - `cuda_sm121_wmma_smoke` (`mma.h` WMMA matmul smoke test; CUTLASS-style proxy)
   - `cuda_sm121_cluster_launch` (thread-block cluster launch + `cooperative_groups::this_cluster().block_rank()` smoke test)
@@ -46,7 +47,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, and `cuda_sm121_nvrtc_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 
 ## Current Spark0 Results (2026-05-09)
 
@@ -72,6 +73,7 @@ Observed:
 - Barrier memcpy-async probe succeeds (`cuda::barrier` + `cuda::memcpy_async`)
 - CCCL atomic-ref probe succeeds (`cuda::atomic_ref`)
 - NVRTC JIT probe succeeds (`nvrtc supportedArchs` includes `121`; driver loads PTX and launches kernel)
+- nvJitLink JIT probe succeeds (nvJitLink links `compute_121` PTX to an `sm_121` CUBIN and driver loads/launches the kernel)
 - C++20 toolchain probe succeeds (`-std=c++20`)
 - WMMA matmul smoke test succeeds (`wmma_smoke ... max_abs_err=0`)
 - Cluster launch probe succeeds (`cluster_block_rank out[0]=0 out[1]=1`)
@@ -99,6 +101,8 @@ barrier_memcpy_async ok first=decaf000 last=decaf01f
 nvrtcVersion=13.0
 nvrtc supportedArchs: 75 80 86 87 88 89 90 100 103 110 120 121
 nvrtc_jit ok out=0x12345679
+nvJitLinkVersion=13.0
+nvjitlink_jit ok out=0x12345679
 wmma_smoke C00=16.000000 C255=16.000000 max_abs_err=0.000000
 cluster_launch_supported=1
 max_cluster_size_portable=8
