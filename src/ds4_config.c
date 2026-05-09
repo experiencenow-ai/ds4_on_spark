@@ -7,7 +7,8 @@
 
 static int32_t ds4_parse_i32(const char *s,int32_t slen,int32_t *out)
 {
-	int32_t i,neg,v;
+	int32_t i,neg;
+	int64_t acc,limit;
 	if ( s == 0 )
 		return(-1);
 	if ( out == 0 )
@@ -21,16 +22,33 @@ static int32_t ds4_parse_i32(const char *s,int32_t slen,int32_t *out)
 		neg = 1;
 		i = 1;
 	}
-	v = 0;
+	if ( i >= slen )
+		return(-4);
+	limit = (int64_t)INT32_MAX;
+	if ( neg != 0 )
+		limit = ((int64_t)INT32_MAX + (int64_t)1);
+	acc = 0;
 	for (; i<slen; i++)
 	{
+		int32_t digit;
 		if ( (s[i] < '0') || (s[i] > '9') )
-			return(-4);
-		v = ((v * 10) + (s[i] - '0'));
+			return(-5);
+		digit = (int32_t)(s[i] - '0');
+		if ( acc > ((limit - (int64_t)digit) / (int64_t)10) )
+			return(-6);
+		acc = ((acc * (int64_t)10) + (int64_t)digit);
 	}
 	if ( neg != 0 )
-		v = -v;
-	*out = v;
+	{
+		if ( acc == ((int64_t)INT32_MAX + (int64_t)1) )
+		{
+			*out = INT32_MIN;
+			return(0);
+		}
+		*out = (int32_t)(-acc);
+		return(0);
+	}
+	*out = (int32_t)acc;
 	return(0);
 }
 
