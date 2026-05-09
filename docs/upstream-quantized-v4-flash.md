@@ -2,6 +2,8 @@
 
 This repo does **not** vendor model weights. The entries below are **references only** for (a) provenance + licensing and (b) a quick “could this plausibly fit on one Spark?” filter. Any GGUF download remains a human-approved fixture.
 
+For a runtime+artifact pairing matrix (what runs where), see [`docs/upstream-single-spark-v4-flash.md`](upstream-single-spark-v4-flash.md).
+
 ## Single-Spark memory baseline (Spark0)
 
 Based on [`docs/spark0-hardware-baseline-2026-05-09.md`](spark0-hardware-baseline-2026-05-09.md), Spark0 has:
