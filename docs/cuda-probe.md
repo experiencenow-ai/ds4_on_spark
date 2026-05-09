@@ -2,6 +2,28 @@
 
 This track keeps probe-only CUDA snippets that answer: “Can we compile for and run on GB10 (CC 12.1 / `sm_121`) with the installed CUDA toolkit?”
 
+## Spark0: Tiny Smoke (Fast Path)
+
+When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” check:
+
+```bash
+./scripts/cuda_probe_tiny_spark0.sh
+```
+
+This builds and runs only:
+
+- `cuda_device_props_tiny`
+- `cuda_sm121_compile_probe.o` (compile-only gate)
+- `cuda_sm121_probe`
+
+## Spark0: Tiny Compile-Only `sm_121`
+
+When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
+
+```bash
+./scripts/cuda_probe_compile_only_tiny_spark0.sh
+```
+
 ## Spark0: Compile + Run
 
 From the Mac (this repo checkout):
