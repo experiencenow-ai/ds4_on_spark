@@ -10,13 +10,19 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | Name | Upstream | Ref | Commit | License | Notes |
 | --- | --- | --- | --- | --- | --- |
 | ds4 | `antirez/ds4` | `refs/heads/main` | `d615ab08c8bce9b8242963ecece5aed6b5a79367` | MIT | DeepSeek-V4-Flash-specific native engine (Metal-first); semantics + KV-cache design reference; do not run upstream model-download scripts. |
-| DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/tags/v2.1.1.post3` | `c9f8b34dcdacc20aa746b786f983492c51072870` | MIT | CUDA GEMM kernels; treat as optional accelerator reference. |
+| DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/heads/main` | `891d57b4db1071624b5c8fa0d1e51cb317fa709f` | MIT | CUDA GEMM kernels; treat as optional accelerator reference. |
 | DeepSeek-V3 (code) | `deepseek-ai/DeepSeek-V3` | `refs/tags/v1.0.0` | `f6e34dd26772dd4a216be94a8899276c5dca9e43` | MIT (code) | Repo has distinct code vs model/weights licensing. |
 | DeepSeek-V4-Flash (HF) | `huggingface.co/deepseek-ai/DeepSeek-V4-Flash` | `refs/heads/main` | `6976c7ff1b30a1b2cb7805021b8ba4684041f136` | MIT | HF repo is “official code/configs” source; fetch with `GIT_LFS_SKIP_SMUDGE=1` to avoid weights; commit here is from git transport (`git ls-remote`), not the HF web UI revision string. |
 | DeepSeek-V4-Flash-Base (HF) | `huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base` | `refs/heads/main` | `8855555deef230a27a21a8d6f294b7b7497759b6` | MIT | Optional checkpoint; fetch metadata-only (no weights) via `GIT_LFS_SKIP_SMUDGE=1`; commit here is from git transport (`git ls-remote`), not the HF web UI revision string. |
 | vLLM | `vllm-project/vllm` | `refs/tags/v0.20.2` | `bc150f50299199599673614f80d12a196f377655` | Apache-2.0 | Inference runtime reference; includes DeepSeek-V4 model support docs. |
 | Transformers | `huggingface/transformers` | `refs/tags/v5.8.0` | `a9e70365af64e028d40d8c7909deb7f138b49857` | Apache-2.0 | Reference for HF config/tokenization + model wrappers. |
 | llama.cpp | `ggml-org/llama.cpp` | `refs/tags/b8833` | `45cac7ca703fb9085eae62b9121fca01d20177f6` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling (pinned to a release tag). |
+| llama.cpp (DeepSeek V4 Flash fork) | `antirez/llama.cpp-deepseek-v4-flash` | `refs/heads/main` | `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` | MIT | Flash-specific fork widely referenced by community GGUFs; not in upstream `ggml-org/llama.cpp` yet. |
+| llama.cpp (DeepSeek V4 support WIP) | `nisparks/llama.cpp` | `refs/heads/wip/deepseek-v4-support` | `9d364087024da141510267e6b269ee495ca45176` | MIT | WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter; required by some “native FP4/FP8” GGUF artifacts. |
+| llama.cpp (CUDA Spark fork) | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` | `refs/heads/master` | `9222e55c13c965ccb7e9104fda58796edd84a732` | MIT | CUDA fork reported running on a single DGX Spark/GB10; validate perf + memory headroom on target Spark. |
+| DeepSeek-V4-Flash GGUF (antirez) | `huggingface.co/antirez/deepseek-v4-gguf` | `refs/heads/main` | `ef3b960827870d69ed0b225c095a617c12d7e80d` | MIT | Single-file GGUF (~87 GB) tuned for `ds4` and used as single-Spark candidate; do not download without human approval. |
+| DeepSeek-V4-Flash GGUF (native FP4/FP8) | `huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF` | `refs/heads/main` | `0b34e0b629c706396002496e795e9f910f7bf69f` | DeepSeek (link) | Single-file GGUF (~146 GB) 1:1 FP4/FP8 conversion; requires V4 loader + FP8/MXFP4 kernel support; do not download without human approval. |
+| DeepSeek-V4-Flash GGUF (abliterated) | `huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF` | `refs/heads/main` | `665c8e035e2602d12d28b84920808b158f337e09` | MIT | Experimental safety-research artifact; includes Q2_K (~99 GB) and Q8_0 (~302 GB) variants; do not download without human approval. |
 
 ## Fetching
 
@@ -44,3 +50,4 @@ To verify that the **pinned** refs/commits in this manifest still resolve upstre
 - [`docs/upstream-deepseek-v4-flash.md`](upstream-deepseek-v4-flash.md)
 - [`docs/upstream-vllm-transformers.md`](upstream-vllm-transformers.md)
 - [`docs/upstream-llama-cpp.md`](upstream-llama-cpp.md)
+- [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md)
