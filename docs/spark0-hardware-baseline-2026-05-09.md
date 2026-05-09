@@ -11,7 +11,7 @@ Host:
 Commands run:
 
 ```bash
-REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_01.txt
+DS4_GIT_DIR=/private/tmp/ds4_git/.git REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_04.txt
 ```
 
 High-level facts observed (from the probe output below):
@@ -27,6 +27,8 @@ High-level facts observed (from the probe output below):
 - CUDA compute capability (nvidia-smi + nvcc probe): `12.1`
 - CUDA toolkit (nvcc): 13.0 (V13.0.88)
 - `nvcc` path: `/usr/local/cuda/bin/nvcc` (not on default `PATH`)
+- `ptxas` path: `/usr/local/cuda/bin/ptxas`
+- CUDA driver/runtime API version (nvcc probe): `13000` (CUDA 13.0)
 - Wired NIC: `enP7s7`, MTU 9000, link speed 10Gb/s (ethtool)
 - Default route: via Wi-Fi during probe
 - Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
@@ -37,16 +39,17 @@ High-level facts observed (from the probe output below):
 
 Notes:
 
-- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
 - Re-run without `REDACT=1` only for local debugging; do not commit raw network identifiers.
 
 ```text
 == local meta ==
-Sat May  9 01:04:52 UTC 2026
+Sat May  9 03:18:30 UTC 2026
+git: 1877e10
 probe target: spark0@aitopatom-9ab9.local
 
 == probe meta ==
-Sat May  9 01:04:53 UTC 2026
+Sat May  9 03:18:30 UTC 2026
 target user: spark0
 
 == identity ==
@@ -147,10 +150,13 @@ Python 3.12.3
 000f:01:00.0 VGA compatible controller: NVIDIA Corporation Device 2e12 (rev a1)
 
 == nvidia-smi query (driver + compute capability) ==
-NVIDIA GB10, 580.142, 12.1, 46, P0, [N/A]
+NVIDIA GB10, 580.142, 12.1, 47, P0, [N/A]
 
 == nvidia-smi cuda version ==
 CUDA Version                                           : 13.0
+
+== nvidia-smi gpu list ==
+GPU 0: NVIDIA GB10 (UUID: <redacted-gpu-uuid>)
 
 == cuda toolkit ==
 nvcc: NVIDIA (R) Cuda compiler driver
@@ -159,6 +165,10 @@ Built on Wed_Aug_20_01:57:39_PM_PDT_2025
 Cuda compilation tools, release 13.0, V13.0.88
 Build cuda_13.0.r13.0/compiler.36424714_0
 -rwxr-xr-x 1 root root 24513032 Aug 21  2025 /usr/local/cuda/bin/nvcc
+ptxas: /usr/local/cuda/bin/ptxas
+ptxas: NVIDIA (R) Ptx optimizing assembler
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Wed_Aug_20_01:53:56_PM_PDT_2025
 lrwxrwxrwx 1 root root 22 Dec 17 21:40 /usr/local/cuda -> /etc/alternatives/cuda
 /usr/local/cuda-13.0
 
@@ -173,11 +183,11 @@ cudnn headers not found
 
 == cuda runtime probe (nvcc, no deps) ==
 cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
 device0 name: NVIDIA GB10
 device0 cc: 12.1
-driver version: 13000
-runtime version: 13000
-global mem (bytes): 128518373376
+device0 global mem (bytes): 128518373376
 
 == network ==
 lo               UNKNOWN        <redacted-ipv4>/8 
