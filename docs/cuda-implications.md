@@ -18,6 +18,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async` validates that CUDA pipeline primitives (`__pipeline_memcpy_async` / cp.async-style) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` validates that `nvcc` + the host toolchain can compile C++20 (`-std=c++20`) for `sm_121` (DeepGEMM-style build gate).
 - `tools/cuda_probe/bin/cuda_sm121_cccl_atomic_ref` validates CCCL atomics (`cuda::atomic_ref`) compile and run for `sm_121` (template-kernel plumbing dependency).
+- `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit` validates an NVRTC “compile to PTX for `compute_121` → load via Driver API → launch kernel” path; this is a useful gate for any JIT compilation flows on GB10 (observed success on Spark0: 2026-05-09).
 - `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` validates that WMMA (`mma.h`) tensor core matmul plumbing compiles and runs for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cluster_launch` validates that thread-block cluster launches (`cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension`) and `cooperative_groups::this_cluster()` compile and run for `sm_121` (observed on Spark0: `cluster_launch_supported=1`, `max_cluster_size_portable=8`).
 
