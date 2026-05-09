@@ -98,6 +98,11 @@ sudo systemctl start ds4-preflight-strict@spark0.service
 Avoid setting `DS4_PEER_SSH` to `ds4@...` because the `ds4` service account is
 typically configured with `/usr/sbin/nologin`.
 
+When `DS4_PEER_SSH` is set and `DS4_MASTER_ADDR`/`DS4_MASTER_PORT` are present,
+`ops_tp2_readiness.sh` also performs a **peer → master** backcheck via SSH
+(peer-side ping/TCP and an optional metrics HTTP probe) to catch one-way
+firewall/routing issues early.
+
 For ad-hoc runs without systemd, the script supports parsing the env file:
 
 ```bash
