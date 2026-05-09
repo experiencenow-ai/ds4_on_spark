@@ -27,6 +27,12 @@ REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp
 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local | tee /private/tmp/spark1-probe.txt
 ```
 
+If you want one combined snapshot (useful for side-by-side comparisons), `scripts/spark_probe.sh` accepts multiple targets:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local | tee /private/tmp/spark0-spark1-probe.txt
+```
+
 Optional toggles:
 
 - Include full `nvidia-smi` output (verbose; includes process list + timestamps):
@@ -51,6 +57,7 @@ Notes:
 
 - The probe writes SSH host keys to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`).
 - When probing multiple Spark hosts, consider `SPARK_KNOWN_HOSTS_PER_HOST=1` so Spark0 and Spark1 keep separate known_hosts files.
+- If you pass multiple probe targets and do not set `SPARK_KNOWN_HOSTS` explicitly, the probe defaults to per-host known_hosts to avoid mixing host keys.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.

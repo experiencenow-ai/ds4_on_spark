@@ -70,6 +70,11 @@ REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
 ```
 
 If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
+If you want a single, comparable snapshot across hosts, `scripts/spark_probe.sh` also accepts multiple targets:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local | tee /private/tmp/spark0-spark1-probe.txt
+```
 
 ## Diagnosis
 

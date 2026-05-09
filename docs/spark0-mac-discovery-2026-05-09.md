@@ -133,6 +133,42 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+## Update: Mac Discovery Refresh (2026-05-09 07:57Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09_probe10.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
+- The discovery script now labels the route table section as `== routes ==` (actual redaction still requires `REDACT=1`).
+
+```text
+== meta ==
+Sat May  9 07:57:04 UTC 2026
+git: 4616c0a
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+ 7:57:04.909  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+DATE: ---Sat 09 May 2026---
+Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
+ 7:57:09.917  Add  40000003      10  aitopatom-9ab9.local.                  <redacted-ipv4>                                     120
+-- spark1.local --
+
+== known target checks ==
+spark0@aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
 ## Update: Discovery Refresh (2026-05-09 07:27Z)
 
 Commands run:
