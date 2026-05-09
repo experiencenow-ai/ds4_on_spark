@@ -84,6 +84,11 @@ sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark0.service
 # optional strict variant (fails non-zero on missing/invalid TP=2 inputs):
 # sudo systemctl start ds4-preflight-strict@spark0.service
+#
+# optional periodic preflight timer (runs on boot + periodically after):
+# sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight@.timer /etc/systemd/system/
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now ds4-preflight@spark0.timer
 ```
 
 On Spark1:
@@ -98,6 +103,11 @@ sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark1.service
 # optional strict variant (fails non-zero on missing/invalid TP=2 inputs):
 # sudo systemctl start ds4-preflight-strict@spark1.service
+#
+# optional periodic preflight timer (runs on boot + periodically after):
+# sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight@.timer /etc/systemd/system/
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now ds4-preflight@spark1.timer
 ```
 
 Notes:

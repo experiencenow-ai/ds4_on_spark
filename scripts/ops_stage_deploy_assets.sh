@@ -79,6 +79,12 @@ sudo systemctl start ds4-preflight@${instance}.service
 # Fails non-zero if required TP=2 inputs are missing/invalid.
 sudo systemctl start ds4-preflight-strict@${instance}.service
 
+== optional (periodic preflight timer, human-run) ==
+# Runs non-destructive preflight on boot and periodically after.
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight@${instance}.timer
+
 == optional (Spark standalone systemd, human-run) ==
 sudo install -m 0644 /tmp/ds4-systemd/spark-*.service /etc/systemd/system/
 sudo install -g ds4 -m 0640 /tmp/ds4-config/spark-${instance}.env.example /etc/ds4/spark-${instance}.env
