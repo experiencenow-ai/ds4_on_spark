@@ -120,7 +120,7 @@ else
 fi
 compute_cap=""
 if [ "$q" != "" ]; then
-	compute_cap="$(printf "%s\n" "$q" | awk -F"," "{ c=\\$5; gsub(/^[ \\t]+|[ \\t]+$/, \"\", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,\".\"); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != \"\" ) print bestc; }")"
+	compute_cap="$(printf "%s\n" "$q" | awk -F"," "{ c=\$5; gsub(/^[ \\t]+|[ \\t]+$/, \"\", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,\".\"); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != \"\" ) print bestc; }")"
 fi
 nvcc_arch=""
 if [ "${NVCC_ARCH:-}" != "" ]; then
