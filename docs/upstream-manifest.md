@@ -16,7 +16,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | DeepSeek-V4-Flash-Base (HF) | `huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base` | `refs/heads/main` | `8855555deef230a27a21a8d6f294b7b7497759b6` | MIT | Optional checkpoint; also fetch metadata-only (no weights) via `GIT_LFS_SKIP_SMUDGE=1`. |
 | vLLM | `vllm-project/vllm` | `refs/tags/v0.20.2` | `bc150f50299199599673614f80d12a196f377655` | Apache-2.0 | Inference runtime reference; includes DeepSeek-V4 model support docs. |
 | Transformers | `huggingface/transformers` | `refs/tags/v5.8.0` | `a9e70365af64e028d40d8c7909deb7f138b49857` | Apache-2.0 | Reference for HF config/tokenization + model wrappers. |
-| llama.cpp | `ggml-org/llama.cpp` | `refs/heads/master` | `b46812de78f8fbcb6cf0154947e8633ebc78d9ac` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling. |
+| llama.cpp | `ggml-org/llama.cpp` | `refs/tags/b8833` | `45cac7ca703fb9085eae62b9121fca01d20177f6` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling (pinned to a release tag). |
 
 ## Fetching
 

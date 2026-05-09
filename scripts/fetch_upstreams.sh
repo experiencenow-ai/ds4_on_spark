@@ -102,7 +102,7 @@ fetch_one()
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "refs/tags/v5.8.0"
 			;;
 		llama_cpp)
-			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/heads/master"
+			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/tags/b8833"
 			;;
 		*)
 			echo "Unknown target: ${target}" >&2
