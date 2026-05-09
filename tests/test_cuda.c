@@ -7,7 +7,7 @@ int32_t test_cuda(void)
 	ds4_cuda_status_t st0,st1,st2,st3,st4,st5;
 	ds4_cuda_device_info_t di;
 	const char *s;
-	void *dev;
+	void *dev,*host;
 	int32_t dev_count;
 	st0 = ds4_cuda_ok();
 	if ( ds4_cuda_is_ok(st0) == 0 )
@@ -81,6 +81,14 @@ int32_t test_cuda(void)
 			return(-28);
 		if ( di.total_global_mem <= 0 )
 			return(-29);
+		host = 0;
+		st0 = ds4_cuda_malloc_host(&host,64);
+		if ( ds4_cuda_is_ok(st0) == 0 || host == 0 )
+			return(-33);
+		((uint8_t *)host)[0] = 0x5a;
+		st0 = ds4_cuda_free_host(host);
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-34);
 		dev = 0;
 		for (i=0; i<(int32_t)sizeof(h0); i++)
 		{
@@ -138,6 +146,15 @@ int32_t test_cuda(void)
 		return(-20);
 	if ( dev != 0 )
 		return(-21);
+	host = (void *)0x1;
+	st0 = ds4_cuda_malloc_host(&host,16);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-35);
+	if ( host != 0 )
+		return(-36);
+	st0 = ds4_cuda_free_host((void *)0x1);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-37);
 #endif
 	return(0);
 }

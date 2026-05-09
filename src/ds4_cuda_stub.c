@@ -126,6 +126,21 @@ ds4_cuda_status_t ds4_cuda_free(void *ptr)
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }
 
+ds4_cuda_status_t ds4_cuda_malloc_host(void **out,int64_t bytes)
+{
+	DS4_UNUSED(bytes);
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out = 0;
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_free_host(void *ptr)
+{
+	DS4_UNUSED(ptr);
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
 ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes)
 {
 	DS4_UNUSED(dst);

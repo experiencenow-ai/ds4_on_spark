@@ -39,6 +39,8 @@ ds4_cuda_status_t ds4_cuda_device_count(int32_t *out_count);
 ds4_cuda_status_t ds4_cuda_device_info(ds4_cuda_device_info_t *out,int32_t dev_index);
 ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes);
 ds4_cuda_status_t ds4_cuda_free(void *ptr);
+ds4_cuda_status_t ds4_cuda_malloc_host(void **out,int64_t bytes);
+ds4_cuda_status_t ds4_cuda_free_host(void *ptr);
 ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes);
 ds4_cuda_status_t ds4_cuda_memcpy_h2d(void *dst,const void *src,int64_t bytes);
 ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes);
