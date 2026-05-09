@@ -15,6 +15,8 @@ function(ds4_target_sanitizers target enable_asan enable_ubsan)
 	endif()
 
 	string(REPLACE ";" "," _ds4_sans "${_ds4_san_list}")
-	target_compile_options(${target} PRIVATE -fno-omit-frame-pointer -fsanitize=${_ds4_sans})
+	target_compile_options(${target} PRIVATE
+		$<$<COMPILE_LANGUAGE:C>:-fno-omit-frame-pointer;-fsanitize=${_ds4_sans}>
+	)
 	target_link_options(${target} PRIVATE -fsanitize=${_ds4_sans})
 endfunction()

@@ -34,4 +34,5 @@ check-cuda:
 	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CUDA=ON DS4_WERROR=ON
 
 clean:
+	@if [ -z "$(BUILD_DIR)" ] || [ "$(BUILD_DIR)" = "/" ] || [ "$(BUILD_DIR)" = "." ]; then echo "Refusing to remove BUILD_DIR='$(BUILD_DIR)'"; exit 2; fi
 	rm -rf "$(BUILD_DIR)"
