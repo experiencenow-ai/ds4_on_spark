@@ -192,6 +192,24 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 	return(1);
 }
 
+int32_t ds4_config_parse_kv_cstr(ds4_config_t *cfg,const char *k,const char *v)
+{
+	int32_t klen,vlen;
+	if ( cfg == 0 )
+		return(-1);
+	if ( k == 0 )
+		return(-2);
+	if ( v == 0 )
+		return(-3);
+	klen = ds4_cstr_len_i32(k);
+	if ( klen <= 0 )
+		return(-4);
+	vlen = ds4_cstr_len_i32(v);
+	if ( vlen <= 0 )
+		return(-5);
+	return(ds4_config_parse_kv(cfg,k,klen,v,vlen));
+}
+
 static int32_t ds4_is_space(uint8_t c)
 {
 	if ( c == ' ' || c == '\t' || c == '\r' )

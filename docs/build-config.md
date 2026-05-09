@@ -25,6 +25,10 @@ Supported keys:
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 
+## C string helpers
+
+For CLI-style overrides where keys and values are NUL-terminated strings, `ds4_config_parse_kv_cstr` computes lengths and forwards to `ds4_config_parse_kv`.
+
 ## CUDA gating
 
 `enable_cuda` is a runtime toggle, but CUDA support is also a build-time choice:
