@@ -141,6 +141,13 @@ sudo systemctl enable ds4@spark1.service
 sudo systemctl start  ds4@spark1.service
 ```
 
+If you want strict TP=2 gating on start, use `ds4-strict@.service` instead:
+
+```bash
+sudo systemctl enable ds4-strict@spark0.service
+sudo systemctl start  ds4-strict@spark0.service
+```
+
 Logs:
 
 ```bash
