@@ -349,6 +349,62 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLessEqual(mg.chosen_k_batch[idx], mc.chosen_k_batch[idx])
         self.assertGreater(mg.pending_signal_batch[idx], mc.pending_signal_batch[idx])
 
+    def test_k_scope_layer_uses_layer_local_congestion_for_chosen_k_total(self) -> None:
+        trace: list[scheduler_sim.TokenRoute] = []
+        for i in range(10):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.0001,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                    layers=(
+                        scheduler_sim.LayerRoute(candidates=(0,)),
+                        scheduler_sim.LayerRoute(candidates=(0,)),
+                    ),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.002,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1, 2, 3, 4),
+                layers=(
+                    scheduler_sim.LayerRoute(candidates=(0,)),
+                    scheduler_sim.LayerRoute(candidates=(1, 2, 3, 4)),
+                ),
+            )
+        )
+        trace.sort(key=lambda r: r.t_ms)
+
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=0,
+            q_high=1,
+        )
+        base = dict(
+            num_experts=5,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            k_mode="controller",
+            k_signal="candidates",
+        )
+        cfg_token = scheduler_sim.SimConfig(**base, k_scope="token")
+        cfg_layer = scheduler_sim.SimConfig(**base, k_scope="layer")
+
+        m_token = scheduler_sim.run_simulation(cfg_token, trace)
+        m_layer = scheduler_sim.run_simulation(cfg_layer, trace)
+        idx = next(i for i, r in enumerate(trace) if r.candidates == (0, 1, 2, 3, 4))
+        self.assertEqual(m_token.chosen_k_total_batch[idx], 2)
+        self.assertEqual(m_layer.chosen_k_total_batch[idx], 5)
+
     def test_compare_variants_reports_delta(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
