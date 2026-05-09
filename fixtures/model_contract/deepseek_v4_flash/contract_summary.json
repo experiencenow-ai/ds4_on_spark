@@ -768,8 +768,10 @@
       "inference_config_json": "inference/config.json",
       "inference_kernel_py": "inference/kernel.py",
       "inference_model_py": "inference/model.py",
+      "oracle_prompts_json": "oracle/prompts.json",
       "tokenizer_config_json": "tokenizer_config.json",
       "tokenizer_json": "tokenizer.json",
+      "upstream_commit_txt": "upstream_commit.txt",
       "weight_index_json": "model.safetensors.index.json"
     },
     "fixtures_sha256": {
@@ -790,7 +792,8 @@
       "model.safetensors.index.json": "7e975ba3bef8947a94e7da0abd60888375b232b4dfad883d59653e65c6ba522a",
       "oracle/prompts.json": "214a1db0e1f301afc2df0a89db99d755db383dcd43b917710a5241555b8f4c4c",
       "tokenizer.json": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
-      "tokenizer_config.json": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547"
+      "tokenizer_config.json": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+      "upstream_commit.txt": "d8249ed1b51232dccf45c69169711e62b7bcf7b82100dbec557984aea7838aa9"
     },
     "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
     "hf_revision": "main",

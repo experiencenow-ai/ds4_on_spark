@@ -80,6 +80,7 @@ def main() -> int:
 					"encoding/tests/test_input_4.json",
 					"encoding/tests/test_output_4.txt",
 					"oracle/prompts.json",
+					"upstream_commit.txt",
 				]
 				for k in expected_sha_keys:
 					if fixture_sha.get(k) is None:
@@ -96,6 +97,8 @@ def main() -> int:
 						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
 					if enc.get("eos_token") != tok.get("eos_token"):
 						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
+					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):

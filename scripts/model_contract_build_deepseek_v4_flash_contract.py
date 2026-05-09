@@ -599,6 +599,7 @@ def build_contract() -> dict:
 	fixture_sha = {}
 	for rel in (
 		"config.json",
+		"upstream_commit.txt",
 		"generation_config.json",
 		"inference/config.json",
 		"inference/kernel.py",
@@ -638,6 +639,8 @@ def build_contract() -> dict:
 				"tokenizer_config_json": "tokenizer_config.json",
 				"weight_index_json": "model.safetensors.index.json",
 				"encoding_oracle": "encoding/tests/*",
+				"oracle_prompts_json": "oracle/prompts.json",
+				"upstream_commit_txt": "upstream_commit.txt",
 			},
 		},
 		"compat": build_compat_mappings(),
