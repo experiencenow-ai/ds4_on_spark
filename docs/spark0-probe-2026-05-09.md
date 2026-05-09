@@ -292,6 +292,68 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 ```
 
+## Update: Probe Refresh (2026-05-09 21:42Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T2143Z_loop_v9.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens (including compressed IPv6 `::` forms).
+
+```text
+== local meta ==
+Sat May  9 21:42:34 UTC 2026
+git: 6164658
+probe targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+NVML version        : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi -q pci link (capped) ==
+        Bus Id                                         : 0000000F:01:00.0
+        GPU Link Info
+            PCIe Generation
+                Max                                    : 1
+                Current                                : 1
+                Device Max                             : 5
+                Host Max                               : 5
+            Link Width
+                Max                                    : 16x
+                Current                                : 1x
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+ptxas: /usr/local/cuda/bin/ptxas
+ptxas: NVIDIA (R) Ptx optimizing assembler
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+```
+
 ## Update: Probe Refresh (2026-05-09 20:06Z)
 
 Commands run from the Mac:
