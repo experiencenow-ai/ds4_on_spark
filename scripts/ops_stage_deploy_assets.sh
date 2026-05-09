@@ -125,6 +125,13 @@ sudo /opt/ds4/scripts/ops_spark_standalone_check.sh --role worker --env /etc/ds4
 # Useful when preflight fails or logs/metrics look suspicious (non-destructive; review bundle before sharing).
 /opt/ds4/scripts/ops_collect_support_bundle.sh --instance ${instance} --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-${instance}.env
 
+== optional (periodic support bundle timer, human-run) ==
+# Captures a support bundle periodically (defaults to weekly with a randomized delay).
+# Bundles land in /tmp by default; review disk/retention expectations before enabling.
+sudo install -m 0644 /tmp/ds4-systemd/ds4-support-bundle@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-support-bundle@${instance}.timer
+
 == optional (journald persistence, human-run) ==
 sudo install -d -m 0755 /etc/systemd/journald.conf.d
 sudo install -m 0644 /tmp/ds4-config/journald.ds4.conf.example /etc/systemd/journald.conf.d/ds4.conf
