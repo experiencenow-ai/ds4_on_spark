@@ -272,6 +272,15 @@ if [ "$nvcc_bin" != "" ]; then
 else
 	echo "nvcc not found"
 fi
+if [ "$nvcc_bin" != "" ]; then
+	echo
+	echo "== nvcc supported gpu arch (capped) =="
+	if "$nvcc_bin" --list-gpu-arch >/dev/null 2>&1; then
+		"$nvcc_bin" --list-gpu-arch 2>/dev/null | head -n 200 || true
+	else
+		echo "nvcc --list-gpu-arch not supported"
+	fi
+fi
 ptxas_bin=""
 if [ -x /usr/local/cuda/bin/ptxas ]; then
 	ptxas_bin="/usr/local/cuda/bin/ptxas"
