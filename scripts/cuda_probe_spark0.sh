@@ -88,6 +88,9 @@ echo \"== run: cuda_sm121_barrier_memcpy_async ==\"
 echo
 echo \"== run: cuda_sm121_cccl_atomic_ref ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_cccl_atomic_ref
+echo
+echo \"== run: cuda_sm121_nvrtc_jit ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_jit
 echo \"== run: cuda_sm121_cxx20_probe ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_cxx20_probe
 echo \"== run: cuda_sm121_wmma_smoke ==\"

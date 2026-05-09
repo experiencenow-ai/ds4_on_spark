@@ -33,6 +33,20 @@ The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pat
 
 If your toolkit supports it, `nvcc --list-gpu-arch` and `nvcc --list-gpu-code` should include `compute_121` / `sm_121`.
 
+## NVRTC JIT Compile For `compute_121`
+
+Some stacks compile CUDA device code at runtime (NVRTC) and then load PTX via the CUDA Driver API.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit`:
+
+- Calls `nvrtcGetSupportedArchs` and prints the supported virtual architectures (e.g. `80`, `90`, `100`, …).
+- Compiles a tiny kernel with `--gpu-architecture=compute_121` to PTX via NVRTC.
+- Loads the PTX with `cuModuleLoadDataEx` and launches the kernel, validating a minimal “NVRTC → PTX → Driver load → launch” path.
+
+If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATION`, treat it as “NVRTC cannot target `compute_121` on this host/toolkit” even if `nvcc -arch=sm_121` works.
+
+Observed on Spark0 (2026-05-09): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
+
 ## `sm_120` → `sm_121` Binary Compatibility Probe
 
 Some upstream projects gate on `sm_120` (or have not yet added `sm_121`), so it is useful to know whether a binary compiled for `sm_120` runs correctly on GB10 (`sm_121`).
