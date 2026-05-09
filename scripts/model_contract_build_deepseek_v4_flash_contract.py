@@ -611,6 +611,15 @@ def build_contract() -> dict:
 		p = FIX / rel
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
+	for p in sorted((FIX / "encoding" / "tests").glob("*")):
+		if p.is_file():
+			fixture_sha[str(p.relative_to(FIX))] = sha256_file(p)
+	for rel in (
+		"oracle/prompts.json",
+	):
+		p = FIX / rel
+		if p.exists():
+			fixture_sha[rel] = sha256_file(p)
 
 	contract = {
 		"format_version": 1,

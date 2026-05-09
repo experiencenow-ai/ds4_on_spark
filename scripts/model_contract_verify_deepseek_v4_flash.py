@@ -70,6 +70,33 @@ def main() -> int:
 		else:
 			try:
 				summary = load_json(contract_summary)
+				up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
+				fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
+				if not isinstance(fixture_sha, dict):
+					fixture_sha = {}
+				expected_sha_keys = [
+					"encoding/tests/test_input_1.json",
+					"encoding/tests/test_output_1.txt",
+					"encoding/tests/test_input_4.json",
+					"encoding/tests/test_output_4.txt",
+					"oracle/prompts.json",
+				]
+				for k in expected_sha_keys:
+					if fixture_sha.get(k) is None:
+						failures.append(Failure(32, f"contract summary missing upstream.fixtures_sha256 entry for {k}: {contract_summary}"))
+						break
+				enc_test_keys = [k for k in fixture_sha.keys() if isinstance(k, str) and k.startswith("encoding/tests/")]
+				if len(enc_test_keys) < 8:
+					failures.append(Failure(33, f"contract summary must record sha256 for encoding oracle vectors under encoding/tests/* (expected >=8, got {len(enc_test_keys)}): {contract_summary}"))
+
+				enc = summary.get("encoding_constants", {}) if isinstance(summary, dict) else {}
+				tok = summary.get("tokenizer", {}) if isinstance(summary, dict) else {}
+				if isinstance(enc, dict) and isinstance(tok, dict):
+					if enc.get("bos_token") != tok.get("bos_token"):
+						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
+					if enc.get("eos_token") != tok.get("eos_token"):
+						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):
 					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))

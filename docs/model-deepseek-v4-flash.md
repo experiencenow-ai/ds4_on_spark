@@ -11,7 +11,7 @@ Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
-- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, and config-field compatibility mappings)
+- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, plus sha256 fingerprints for the pinned encoding oracle vectors and oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
