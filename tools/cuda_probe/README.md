@@ -47,6 +47,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe`: compile/run a device-lambda kernel using `--extended-lambda` + `--expt-relaxed-constexpr` with `-std=c++20` for `sm_121` (CUTLASS/DeepGEMM-style compile flags gate).
 - `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit`: compile PTX via NVRTC, link to CUBIN via nvJitLink (`-arch=sm_121`), then load via CUDA Driver API and launch a tiny kernel.
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_probe`: compile/run `-std=c++20` toolchain smoke test for `sm_121` (DeepGEMM-style build gate).
+- `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke`: compile/run an inline PTX `ldmatrix.sync` load from shared memory (CUTLASS-style inline-PTX gate).
 - `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`: compile/run a tiny WMMA (`mma.h`) matmul smoke test on `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_cluster_launch`: compile/run a thread-block cluster launch (`cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension`) and validate `cooperative_groups::this_cluster().block_rank()`.
 
@@ -82,6 +83,7 @@ Expected outputs:
 ./tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe
 ./tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit
 ./tools/cuda_probe/bin/cuda_sm121_cxx20_probe
+./tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke
 ./tools/cuda_probe/bin/cuda_sm121_wmma_smoke
 ./tools/cuda_probe/bin/cuda_sm121_cluster_launch
 ```
