@@ -77,6 +77,7 @@ Notes:
 - Any `note:` line emitted by the probe when `nvidia-smi` CUDA major differs from the `nvcc` toolkit major (driver vs toolkit).
 - cuDNN presence/version when available (probe prints header macros + `ldconfig` hits).
 - `nvidia-smi topo -m` (capped) + `modinfo nvidia` summary to capture GPU/driver topology and module version metadata.
+- Numeric PCI IDs (`lspci -nn` + optional `nvidia-smi --query-gpu=pci.device_id,...`) to cross-check GPU/bridge identity without root.
 - Storage summary (`df -h` + filesystem type/opts + `lsblk` disk model/size).
 - Wired link status + speed when available (`ip link` + optional `ethtool` + `ethtool -i` driver/firmware).
 - Capped CUDA/NVIDIA package inventory (`dpkg-query`), when available.

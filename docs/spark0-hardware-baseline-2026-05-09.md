@@ -543,6 +543,28 @@ device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 15:42Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-09T154208Z_probe12.txt
+```
+
+Notes:
+
+- This refresh adds numeric PCI IDs (`lspci -nn`) and an `nvidia-smi` PCI ID query (when supported) to cross-check GPU identity.
+
+```text
+== pci nvidia (numeric ids) ==
+0000:00:00.0 PCI bridge [0604]: NVIDIA Corporation Device [10de:22ce] (rev 01)
+000f:01:00.0 VGA compatible controller [0300]: NVIDIA Corporation Device [10de:2e12] (rev a1)
+
+== nvidia-smi pci ids (optional) ==
+columns: index,pci.bus_id,pci.device_id,pci.sub_device_id
+0, 0000000F:01:00.0, 0x2E1210DE, 0x10DE
+```
+
 ## Update: Probe Refresh (2026-05-09 11:24Z)
 
 Commands run:
