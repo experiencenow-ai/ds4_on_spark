@@ -109,6 +109,18 @@ Notes:
 - Acceptance sampling is controlled by `--sim-seed` for determinism.
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
 
+### Arrival Rate Units (MTP Comparisons)
+
+By default `--arrival-rate-tps` is interpreted as **verify steps per second** (one trace entry per step).
+When exploring MTP, it is often more useful to hold **output tokens per second** constant instead.
+
+For synthetic traces only, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from `--mtp-accept-prob/--mtp-accept-decay`.
+
+Notes:
+
+- `--num-tokens` still controls the number of verify steps (trace entries). Use `mtp.output_tokens` in the metrics JSON to see the realized output-token volume.
+- Trace replay (`--trace-jsonl`) uses the `t_ms` values as-is (verify-step timestamps), so `--arrival-units` is rejected in replay mode.
+
 ## Running
 
 ```bash
@@ -133,6 +145,13 @@ MTP example (synthetic accept-all vs accept-none):
 ```bash
 python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --mtp-draft-len 2 --mtp-accept-prob 1.0 --mtp-accept-decay 0.5 --mtp-draft-cost-scale 0.25 --json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --mtp-draft-len 2 --mtp-accept-prob 0.0 --mtp-draft-cost-scale 0.25 --json
+```
+
+MTP example (hold output-token arrival rate constant across accept rates):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --arrival-units output_tokens --arrival-rate-tps 8000 --mtp-draft-len 2 --mtp-accept-prob 1.0 --mtp-accept-decay 0.5 --mtp-draft-cost-scale 0.25 --json
+python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --arrival-units output_tokens --arrival-rate-tps 8000 --mtp-draft-len 2 --mtp-accept-prob 0.0 --mtp-draft-cost-scale 0.25 --json
 ```
 
 ### Synthetic Trace Modes

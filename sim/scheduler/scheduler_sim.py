@@ -721,6 +721,39 @@ class KControllerState:
     k: int = 0
 
 
+def expected_mtp_accept_len(mtp_draft_len: int, mtp_accept_prob: float, mtp_accept_decay: float) -> float:
+    if mtp_draft_len <= 0:
+        return(1.0)
+    if mtp_accept_prob <= 0.0:
+        return(1.0)
+    if mtp_accept_decay <= 0.0:
+        return(1.0)
+
+    exp_len = 1.0
+    p_prod = 1.0
+    for i in range(mtp_draft_len):
+        p = (mtp_accept_prob * (mtp_accept_decay ** float(i)))
+        if p < 0.0:
+            p = 0.0
+        if p > 1.0:
+            p = 1.0
+        p_prod *= p
+        exp_len += p_prod
+    return(exp_len)
+
+
+def arrival_rate_steps_tps(arrival_rate_tps: float, arrival_units: str, mtp_draft_len: int, mtp_accept_prob: float, mtp_accept_decay: float) -> float:
+    units = arrival_units.strip().lower()
+    if units == "steps":
+        return(arrival_rate_tps)
+    if units == "output_tokens":
+        exp_len = expected_mtp_accept_len(mtp_draft_len, mtp_accept_prob, mtp_accept_decay)
+        if exp_len <= 0.0:
+            exp_len = 1.0
+        return(arrival_rate_tps / exp_len)
+    raise ValueError("arrival_units must be 'steps' or 'output_tokens'")
+
+
 def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
     if cls == LatencyClass.INTERACTIVE:
         k_min, k_max = adapt.k_min_interactive, adapt.k_max_interactive
@@ -1270,6 +1303,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--num-candidates", type=int, default=16)
     p.add_argument("--interactive-prob", type=float, default=0.3)
     p.add_argument("--arrival-rate-tps", type=float, default=5000.0)
+    p.add_argument("--arrival-units", type=str, default="steps", help="Interpret --arrival-rate-tps as steps (verify steps) or output_tokens (rescale by expected MTP accept length when enabled). Synthetic traces only.")
     p.add_argument("--burst-prob", type=float, default=0.05)
     p.add_argument("--burst-scale", type=float, default=8.0)
     p.add_argument("--zipf-alpha", type=float, default=1.1)
@@ -1319,8 +1353,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
 
     if args.trace_jsonl != "":
+        if args.arrival_units.strip().lower() != "steps":
+            raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl)")
         trace = load_trace_jsonl(args.trace_jsonl)
     else:
+        try:
+            arrival_rate_tps = arrival_rate_steps_tps(args.arrival_rate_tps, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay)
+        except ValueError as e:
+            raise SystemExit(str(e))
+
         mode = args.trace_mode.strip().lower()
         if mode == "zipf":
             trace_cfg = TraceConfig(
@@ -1328,7 +1369,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 num_experts=args.num_experts,
                 num_candidates=args.num_candidates,
                 interactive_prob=args.interactive_prob,
-                arrival_rate_tps=args.arrival_rate_tps,
+                arrival_rate_tps=arrival_rate_tps,
                 burst_prob=args.burst_prob,
                 burst_scale=args.burst_scale,
                 zipf_alpha=args.zipf_alpha,
@@ -1341,7 +1382,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 num_experts=args.num_experts,
                 num_candidates=args.num_candidates,
                 interactive_prob=args.interactive_prob,
-                arrival_rate_tps=args.arrival_rate_tps,
+                arrival_rate_tps=arrival_rate_tps,
                 burst_prob=args.burst_prob,
                 burst_scale=args.burst_scale,
                 hotset_size=args.hotset_size,
@@ -1356,7 +1397,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 num_experts=args.num_experts,
                 num_candidates=args.num_candidates,
                 interactive_prob=args.interactive_prob,
-                arrival_rate_tps=args.arrival_rate_tps,
+                arrival_rate_tps=arrival_rate_tps,
                 burst_prob=args.burst_prob,
                 burst_scale=args.burst_scale,
                 zipf_alpha=args.zipf_alpha,

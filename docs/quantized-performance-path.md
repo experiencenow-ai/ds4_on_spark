@@ -18,6 +18,8 @@ The goal is to identify:
 - safe default invariants (max starvation, acceptable drop rate, target p95 latency)
 - whether MTP’s output-token throughput can plausibly offset its draft overhead for realistic accept rates
 
+Tip: for synthetic traces, `--arrival-units output_tokens` lets you keep output-token demand fixed while varying MTP accept rates, which makes queue-depth / starvation comparisons more meaningful.
+
 ## Phase 1: Real Router Trace Replay (JSONL)
 
 Once the baseline quantized runtime can emit per-token routing, capture a trace and replay it:
@@ -74,6 +76,8 @@ Next trace milestones for MTP:
 
 - log the draft length per verify step (or configured `gamma`)
 - log observed accept length per step (`mtp_accept_len`): `1..gamma+1` where `gamma` is the configured draft length
+
+Note: replay traces use `t_ms` as verify-step timestamps. Today `--arrival-units` is only supported for synthetic trace generation (it rescales synthetic step arrivals using the modeled expected accept length).
 
 ## Practical Loop
 

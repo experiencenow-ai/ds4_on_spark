@@ -825,6 +825,20 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m1.mtp_output_tokens, 10)
         self.assertGreater(m1.makespan_ms, m0.makespan_ms)
 
+    def test_expected_mtp_accept_len_simple_cases(self) -> None:
+        self.assertAlmostEqual(scheduler_sim.expected_mtp_accept_len(0, 1.0, 1.0), 1.0)
+        self.assertAlmostEqual(scheduler_sim.expected_mtp_accept_len(2, 0.0, 1.0), 1.0)
+        self.assertAlmostEqual(scheduler_sim.expected_mtp_accept_len(2, 1.0, 1.0), 3.0)
+        self.assertAlmostEqual(scheduler_sim.expected_mtp_accept_len(2, 0.5, 1.0), 1.75)
+
+    def test_arrival_units_output_tokens_rescales_steps_rate(self) -> None:
+        steps = scheduler_sim.arrival_rate_steps_tps(1000.0, "steps", 2, 1.0, 1.0)
+        self.assertAlmostEqual(steps, 1000.0)
+        steps_out = scheduler_sim.arrival_rate_steps_tps(1000.0, "output_tokens", 2, 1.0, 1.0)
+        self.assertAlmostEqual(steps_out, (1000.0 / 3.0))
+        with self.assertRaises(ValueError):
+            scheduler_sim.arrival_rate_steps_tps(1000.0, "bad_units", 2, 1.0, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
