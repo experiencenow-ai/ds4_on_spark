@@ -219,6 +219,46 @@ Commands run from the Mac:
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T1815Z_loop_v2c.txt
 ```
 
+## Update: Probe Refresh (2026-05-09 19:06Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-09T1906Z_loop_v4.txt
+```
+
+```text
+== local meta ==
+Sat May  9 19:06:32 UTC 2026
+git: 49403f0
+probe targets: spark0@aitopatom-9ab9.local
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 47, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi cuda version ==
+CUDA Version: 13.0
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+```
+
 ```text
 == pci link (sysfs, current/max) ==
 -- 0000000F:01:00.0 -> 000f:01:00.0 --
