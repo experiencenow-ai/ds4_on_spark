@@ -129,7 +129,7 @@ fetch_one()
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "refs/tags/v5.8.0"
 			;;
 		llama_cpp)
-			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/tags/b8833"
+			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "refs/tags/b9085"
 			;;
 		llama_cpp_deepseek_v4_flash)
 			clone_or_update "llama_cpp_deepseek_v4_flash" "https://github.com/antirez/llama.cpp-deepseek-v4-flash.git" "refs/heads/main"
