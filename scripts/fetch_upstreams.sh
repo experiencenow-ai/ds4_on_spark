@@ -22,6 +22,7 @@ Targets:
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_batiai    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_lovedheart  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_nsparks   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_cyberneurova  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
@@ -113,6 +114,9 @@ fetch_one()
 		deepseek_v4_gguf_batiai)
 			clone_or_update_nolfs "deepseek_v4_gguf_batiai" "https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
 			;;
+		deepseek_v4_gguf_lovedheart)
+			clone_or_update_nolfs "deepseek_v4_gguf_lovedheart" "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
+			;;
 		deepseek_v4_gguf_nsparks)
 			clone_or_update_nolfs "deepseek_v4_gguf_nsparks" "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF" "refs/heads/main"
 			;;
@@ -164,6 +168,7 @@ main()
 		fetch_one deepseek_v4_gguf_antirez
 		fetch_one deepseek_v4_gguf_preyazz
 		fetch_one deepseek_v4_gguf_batiai
+		fetch_one deepseek_v4_gguf_lovedheart
 		fetch_one deepseek_v4_gguf_nsparks
 		fetch_one deepseek_v4_gguf_cyberneurova
 		fetch_one bati_cpp
