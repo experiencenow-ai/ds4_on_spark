@@ -13,6 +13,14 @@ From the repo root:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
+## Run (Spark Side)
+
+After staging deploy assets to a Spark (they land under `/tmp/ds4-*` by default):
+
+```bash
+/tmp/ds4-scripts/ops_validate_staged_assets.sh
+```
+
 ## What It Checks
 
 - Required files exist under:
