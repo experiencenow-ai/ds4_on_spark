@@ -146,6 +146,26 @@ The probe `tools/cuda_probe/bin/cuda_sm121_fp8_conv` is a tiny compile/run check
 - converts a `float` to FP8 storage (`e4m3` and `e5m2`)
 - converts back to `__half_raw` and prints the raw bits
 
+## BF16 Header + Conversion Plumbing
+
+Many CUTLASS/DeepGEMM-style kernels use BF16 intermediates.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_bf16_conv` is a tiny compile/run check that:
+
+- includes `cuda_bf16.h`
+- converts floats to `__nv_bfloat16_raw` and back
+- prints the raw BF16 bits and float round-trips
+
+## FP4 Header + Conversion Plumbing
+
+Some DeepGEMM-style paths may use FP4 (E2M1). CUDA 13 ships FP4 helpers under `cuda_fp4.h`.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_fp4_conv` is a tiny compile/run check that:
+
+- includes `cuda_fp4.h`
+- converts a `float` to FP4 storage (`e2m1`)
+- converts back to `__half_raw` and prints the raw bits
+
 ## Pipeline memcpy-async (cp.async-style mainloops)
 
 Many CUTLASS and custom GEMM kernels rely on CUDA pipeline primitives (cp.async-style) to move data from global memory into shared memory efficiently.
