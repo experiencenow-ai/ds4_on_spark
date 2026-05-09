@@ -86,7 +86,7 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - `/opt/ds4/bin/ds4_server`
 - optional shared env at `/etc/ds4/ds4.env`
 - `/etc/ds4/ds4-spark0.env`
-- optional config at `/etc/ds4/ds4-spark0.yaml`
+- a config file at `/etc/ds4/ds4-spark0.yaml` (may be minimal `{}` until the schema is defined)
 
 ## Safety Notes
 

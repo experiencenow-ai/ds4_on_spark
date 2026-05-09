@@ -79,6 +79,8 @@ Record:
 - measured bandwidth/latency
 - driver + NCCL versions
 
+If you later run TP=2 through DS4 (not `nccl-tests` directly), consider pinning the intended NIC by setting `NCCL_SOCKET_IFNAME=<wired-ifname>` in `/etc/ds4/ds4-%i.env` (leave it unset until you need it). `ops_tp2_readiness.sh` already prints `ip route get` hints to help catch accidental Wi‑Fi vs wired routing early.
+
 ## Automation Hook
 
 Once Spark-side scripts are installed under `/opt/ds4/scripts/`, you can run the
