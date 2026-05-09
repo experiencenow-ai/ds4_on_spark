@@ -25,6 +25,32 @@ Treat this as the practical upper bound for “single Spark” artifacts; anythi
 - Single-Spark plausibility:
   - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the ~87 GB footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
 
+### Preyazz/DeepSeek-V4-Flash-GGUF (community Q2_K/Q3_K_M/Q4_K_M)
+
+- Source: `https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF` @ `6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d` (`refs/heads/main`)
+- License: MIT (model card)
+- Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
+  - Q2_K: `DeepSeek-V4-Flash-Q2_K.gguf` (103283751520 bytes, ~96.2 GiB)
+  - Q3_K_M: `DeepSeek-V4-Flash-Q3_K_M.gguf` (135535174240 bytes, ~126.2 GiB)
+  - Q4_K_M: `DeepSeek-V4-Flash-Q4_K_M.gguf` (172037991008 bytes, ~160.2 GiB)
+- Runtime requirement:
+  - Model card states it requires a DeepSeek-V4-capable llama.cpp (example reference: `nisparks/llama.cpp` branch `wip/deepseek-v4-support`).
+- Single-Spark plausibility:
+  - **Q2_K plausible but tight** on Spark0-class hardware (96.2 GiB leaves limited KV/cache headroom).
+  - **Q3_K_M/Q4_K_M not plausible** on Spark0-class memory (artifact alone exceeds ~119 GiB host RAM / ~119.7 GiB VRAM).
+
+### batiai/DeepSeek-V4-Flash-GGUF (early-access shards; requires bati.cpp)
+
+- Source: `https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF` @ `70c9597f26a5b4747272477fff37986c4ce484ef` (`refs/heads/main`)
+- License: MIT (model card)
+- Artifacts (not fetched here; totals are from git-lfs pointer metadata across shards):
+  - Q3_K_M: 3 shards (total 135410907136 bytes, ~126.1 GiB)
+  - Q4_K_M: 4 shards (total 171918014464 bytes, ~160.1 GiB)
+- Runtime requirement:
+  - Model card states inference requires `batiai/bati.cpp` (not mainline `ggml-org/llama.cpp`).
+- Single-Spark plausibility:
+  - **Not plausible** on Spark0-class memory (Q3_K_M total exceeds ~119 GiB host RAM / ~119.7 GiB VRAM).
+
 ### nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF (native FP4/FP8)
 
 - Source: `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF` @ `0b34e0b629c706396002496e795e9f910f7bf69f` (`refs/heads/main`)
@@ -52,6 +78,7 @@ Treat this as the practical upper bound for “single Spark” artifacts; anythi
 - `https://github.com/antirez/llama.cpp-deepseek-v4-flash` @ `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` (MIT)
 - `https://github.com/nisparks/llama.cpp` `wip/deepseek-v4-support` @ `9d364087024da141510267e6b269ee495ca45176` (MIT)
 - `https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` @ `9222e55c13c965ccb7e9104fda58796edd84a732` (MIT)
+- `https://github.com/batiai/bati.cpp` @ `c7b64fe065164335b882e02a848fd4015b3c060a` (`refs/tags/v0.1.2`, MIT)
 
 ## Notes / non-goals
 

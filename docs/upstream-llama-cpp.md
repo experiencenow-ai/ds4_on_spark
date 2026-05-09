@@ -59,7 +59,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - GPU builds (when applicable): prefer explicit build flags (CUDA/HIP/Vulkan) and validate the device CC / backend at runtime.
 - Example CUDA build invocation (from upstream build docs):
   - `cmake -B build -DGGML_CUDA=ON`
-  - Optionally pin compute capabilities explicitly: `-DCMAKE_CUDA_ARCHITECTURES="86;89"` (set this for your Spark GPUs).
+  - Optionally pin compute capabilities explicitly: `-DCMAKE_CUDA_ARCHITECTURES="121"` (Spark GB10 / SM121).
 - Unified-memory fallback (Linux): upstream documents `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` as a way to swap to system RAM when VRAM is exhausted (often slower, but can avoid OOM crashes).
 - Treat llama.cpp as a reference runtime for “no Python” deployments and for tooling patterns (convert + serve).
 

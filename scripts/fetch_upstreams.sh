@@ -20,8 +20,11 @@ Targets:
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_batiai    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_nsparks   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_cyberneurova  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
   transformers
   llama_cpp
@@ -104,11 +107,20 @@ fetch_one()
 		deepseek_v4_gguf_antirez)
 			clone_or_update_nolfs "deepseek_v4_gguf_antirez" "https://huggingface.co/antirez/deepseek-v4-gguf" "refs/heads/main"
 			;;
+		deepseek_v4_gguf_preyazz)
+			clone_or_update_nolfs "deepseek_v4_gguf_preyazz" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
+			;;
+		deepseek_v4_gguf_batiai)
+			clone_or_update_nolfs "deepseek_v4_gguf_batiai" "https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
+			;;
 		deepseek_v4_gguf_nsparks)
 			clone_or_update_nolfs "deepseek_v4_gguf_nsparks" "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF" "refs/heads/main"
 			;;
 		deepseek_v4_gguf_cyberneurova)
 			clone_or_update_nolfs "deepseek_v4_gguf_cyberneurova" "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF" "refs/heads/main"
+			;;
+		bati_cpp)
+			clone_or_update "bati_cpp" "https://github.com/batiai/bati.cpp.git" "refs/tags/v0.1.2"
 			;;
 		vllm)
 			clone_or_update "vllm" "https://github.com/vllm-project/vllm.git" "refs/tags/v0.20.2"
@@ -150,8 +162,11 @@ main()
 		fetch_one deepseek_v4_flash_hf
 		fetch_one deepseek_v4_flash_base_hf
 		fetch_one deepseek_v4_gguf_antirez
+		fetch_one deepseek_v4_gguf_preyazz
+		fetch_one deepseek_v4_gguf_batiai
 		fetch_one deepseek_v4_gguf_nsparks
 		fetch_one deepseek_v4_gguf_cyberneurova
+		fetch_one bati_cpp
 		fetch_one vllm
 		fetch_one transformers
 		fetch_one llama_cpp
