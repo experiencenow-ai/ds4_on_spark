@@ -121,6 +121,7 @@ echo
 echo "== /opt/ds4 scripts =="
 need_exec "$scripts_dir/ops_ds4_env_check.sh"
 need_exec "$scripts_dir/ops_tp2_readiness.sh"
+need_exec "$scripts_dir/ops_collect_support_bundle.sh"
 echo "ok"
 echo
 
