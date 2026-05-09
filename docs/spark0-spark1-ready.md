@@ -7,6 +7,7 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 - Capture non-secret hardware + toolchain facts (CPU/RAM/storage/GPU/CUDA toolchain).
 - Verify CUDA compute capability via multiple sources (`nvidia-smi` query + a tiny `nvcc` runtime probe).
 - Keep committed artifacts safe: redact IP/MAC tokens.
+- Preserve non-secret package/version facts while redacting network identifiers (the probe redaction avoids clobbering version strings like `0ubuntu0.24.04.1`).
 
 ## Mac-Side Discovery
 

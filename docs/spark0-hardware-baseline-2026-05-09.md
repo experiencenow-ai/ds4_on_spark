@@ -543,6 +543,48 @@ device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 11:24Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09T1124Z_probe14.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- Redaction is now delimiter-aware: it redacts actual IP addresses without clobbering non-secret version strings like `0ubuntu0.24.04.1`.
+
+```text
+== local meta ==
+Sat May  9 11:24:43 UTC 2026
+git: f0c1afa
+probe targets: spark0@aitopatom-9ab9.local
+
+== packages (cuda/nvidia, dpkg, capped) ==
+nvidia-compute-utils-580	580.142-0ubuntu0.24.04.1
+nvidia-driver-580-open	580.142-0ubuntu0.24.04.1
+nvidia-firmware-580-580.95.05	580.95.05-0ubuntu0.24.04.3
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 51, P0, [N/A]
+selected compute_cap: 12.1
+
+== cuda toolkit ==
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
+```
+
 ## Update: Probe Refresh (2026-05-09 10:27Z)
 
 Commands run:
