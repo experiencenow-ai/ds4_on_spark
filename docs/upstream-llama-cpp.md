@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/tags/b8833`
-- Commit: `45cac7ca703fb9085eae62b9121fca01d20177f6`
+- Ref: `refs/tags/b9085`
+- Commit: `046e2844370208007c116fab448ed4033d77653f`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -38,6 +38,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - Commit: `9d364087024da141510267e6b269ee495ca45176`
 - License: MIT
 - Notes: WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter support, referenced by “native FP4/FP8” V4 GGUF artifacts.
+  - Upstream PR reference: `ggml-org/llama.cpp` PR `#22378` (“Wip/deepseek v4 support”) was closed and marked “purely for reference”; it pointed at this branch. Some community GGUF repos still reference that PR URL.
 
 ### kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark
 
@@ -49,9 +50,9 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/b8833/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b8833/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b8833/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9085/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9085/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9085/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 

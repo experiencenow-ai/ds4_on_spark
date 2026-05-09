@@ -26,3 +26,5 @@ Verify:
 ```bash
 python3 scripts/model_contract_verify_deepseek_v4_flash.py
 ```
+
+Quantized artifacts (GGUF) are not stored here, but when inspecting a human-provided GGUF conversion note that some communities ship MTP weights as a separate sidecar file. `scripts/model_contract_inspect_quantized_artifact.py` supports passing multiple `--path` values (trunk + MTP sidecar) and emits a combined `mtp_present` summary in `--json` mode.

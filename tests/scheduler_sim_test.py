@@ -222,6 +222,41 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLessEqual(mg.chosen_k_batch[idx], mc.chosen_k_batch[idx])
         self.assertGreater(mg.pending_signal_batch[idx], mc.pending_signal_batch[idx])
 
+    def test_compare_variants_reports_delta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1, 2, 3),
+            )
+            for i in range(200)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=4,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.1,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=2,
+                k_max_interactive=2,
+                k_min_batch=2,
+                k_max_batch=2,
+                q_low=0,
+                q_high=0,
+            ),
+            mtp_draft_len=2,
+            mtp_accept_prob=1.0,
+            mtp_accept_decay=1.0,
+        )
+        out = scheduler_sim.compare_simulation_variants(cfg, trace, [("mtp_off", {"mtp_draft_len": 0})])
+        base_out = out["baseline"]
+        var_out = out["variants"]["mtp_off"]
+        self.assertGreater(base_out["summary"]["output_tokens"], var_out["summary"]["output_tokens"])
+        self.assertLess(var_out["delta_vs_baseline"]["output_tokens"], 0.0)
+
     def test_starvation_counts_queue_wait(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
@@ -284,6 +319,42 @@ class SchedulerSimTest(unittest.TestCase):
             m = scheduler_sim.run_simulation(cfg, trace)
             self.assertEqual(m.num_tokens, 2)
             self.assertGreater(m.makespan_ms, 0.0)
+        finally:
+            os.unlink(path)
+
+    def test_trace_jsonl_duplicate_candidates_rejected(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0,0]}\n')
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(path)
+        finally:
+            os.unlink(path)
+
+    def test_write_trace_jsonl_roundtrip(self) -> None:
+        trace = scheduler_sim.generate_synthetic_trace(
+            scheduler_sim.TraceConfig(
+                num_tokens=64,
+                num_experts=8,
+                num_candidates=4,
+                interactive_prob=0.5,
+                arrival_rate_tps=1000.0,
+                burst_prob=0.0,
+                burst_scale=1.0,
+                zipf_alpha=1.1,
+                seed=123,
+            )
+        )
+        fd, path = tempfile.mkstemp(prefix="sched_trace_out_", suffix=".jsonl")
+        try:
+            os.close(fd)
+            scheduler_sim.write_trace_jsonl(path, trace)
+            loaded = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual(len(loaded), len(trace))
+            self.assertEqual([r.t_ms for r in loaded], [r.t_ms for r in trace])
+            self.assertEqual([r.cls for r in loaded], [r.cls for r in trace])
+            self.assertEqual([r.candidates for r in loaded], [r.candidates for r in trace])
         finally:
             os.unlink(path)
 

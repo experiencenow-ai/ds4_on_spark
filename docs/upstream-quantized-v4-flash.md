@@ -73,6 +73,19 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - Single-Spark plausibility:
   - **Not plausible** on Spark0-class memory (Q3_K_M total exceeds ~119 GiB host RAM / ~119.7 GiB VRAM).
 
+### lovedheart/DeepSeek-V4-Flash-GGUF (Q2_K shards; PR-referenced runtime)
+
+- Source: `https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF` @ `cd42deba41ac0536e68b125dfc367197b0ec3038` (`refs/heads/main`)
+- License: **UNKNOWN** (no `LICENSE` file present in a metadata-only git clone; treat as unknown until verified by a human)
+- Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
+  - Q2_K shards: 23 files under `Q2_K/` (total 100451521792 bytes, ~93.6 GiB)
+  - `DeepSeek-V4-Flash-MXFP4_MOE.gguf` (150225324672 bytes, ~139.9 GiB)
+- Runtime requirement:
+  - Repo README instructs compiling llama.cpp PR `https://github.com/ggml-org/llama.cpp/pull/22378` (PR is closed and was explicitly “for reference”); in practice this maps to the pinned `nisparks/llama.cpp` `wip/deepseek-v4-support` branch.
+- Single-Spark plausibility:
+  - **Q2_K plausible but tight** on Spark0-class hardware (93.6 GiB leaves limited KV/cache headroom); note that it is sharded and may require an explicit merge step before use.
+  - **MXFP4_MOE not plausible** on Spark0-class memory (139.9 GiB > ~119 GiB host RAM / ~119.7 GiB VRAM).
+
 ### nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF (native FP4/FP8)
 
 - Source: `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF` @ `0b34e0b629c706396002496e795e9f910f7bf69f` (`refs/heads/main`)

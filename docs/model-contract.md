@@ -46,6 +46,8 @@ MTP (multi-token prediction) oracle requirements:
 - If DS4 enables speculative decoding via `mtp.0.*`, treat MTP as a **separate execution path** with its own acceptance gate.
 - Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
   - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py` and record both `tensor_type_counts` (GGUF quant types present) and any `metadata.general.*` fields it emits.
+  - Some community conversions ship MTP weights as a **sidecar** GGUF separate from the main trunk GGUF. In that case, inspect *both* files and treat “MTP present” as a property of the artifact **set**:
+    - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json`
   - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
 
 Recommended DS4 comparison rule (when enabling DS4 gating):

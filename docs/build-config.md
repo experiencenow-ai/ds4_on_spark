@@ -20,8 +20,15 @@ Rules:
 
 Supported keys:
 
-- `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`)
+- `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`) or a case-insensitive name (`error`, `warn`/`warning`, `info`, `debug`)
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
+
+## CUDA gating
+
+`enable_cuda` is a runtime toggle, but CUDA support is also a build-time choice:
+
+- If DS4 is built without CUDA (`DS4_ENABLE_CUDA=OFF`), enabling CUDA via config will cause `ds4_ctx_apply_config` to fail.
+- If DS4 is built with CUDA, `DS4_HAS_CUDA` is defined and `ds4_cuda_is_enabled_build()` returns `1`.
 
 ## Environment variables
 

@@ -311,58 +311,124 @@ def detect_and_inspect(path: Path) -> InspectResult:
 
 def main() -> int:
 	parser = ArgumentParser()
-	parser.add_argument("--path", type=str, required=True, help="Quantized artifact path: .gguf, model.safetensors.index.json, or a directory containing it.")
+	parser.add_argument(
+		"--path",
+		type=str,
+		action="append",
+		required=True,
+		help="Quantized artifact path: .gguf, model.safetensors.index.json, or a directory containing it. May be passed multiple times (e.g. trunk + MTP sidecar).",
+	)
 	parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
 	parser.add_argument("--require-mtp", action="store_true", help="Exit non-zero if no mtp.* tensors are present.")
 	args = parser.parse_args()
 
-	try:
-		res = detect_and_inspect(Path(args.path))
-	except Exception as e:
-		print(f"ERROR: {e}")
-		return 2
+	results: list[InspectResult] = []
+	for p in args.path:
+		try:
+			results.append(detect_and_inspect(Path(p)))
+		except Exception as e:
+			print(f"ERROR: {e}")
+			return 2
+
+	def as_dict(res: InspectResult) -> dict[str, Any]:
+		return {
+			"path": res.path,
+			"artifact_type": res.artifact_type,
+			"gguf_version": res.gguf_version,
+			"metadata": res.metadata,
+			"tensor_count": res.tensor_count,
+			"tensor_type_counts": res.tensor_type_counts,
+			"mtp_present": res.mtp_present,
+			"mtp_tensor_count": res.mtp_tensor_count,
+			"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
+			"mtp_layer_ids": res.mtp_layer_ids,
+			"first_mtp_keys": res.first_mtp_keys,
+		}
+
+	def combine(results: list[InspectResult]) -> dict[str, Any]:
+		type_counts: Counter[str] = Counter()
+		mtp_type_counts: Counter[str] = Counter()
+		mtp_layer_ids: set[int] = set()
+		first_mtp_keys: list[str] = []
+		for res in results:
+			type_counts.update(res.tensor_type_counts)
+			mtp_type_counts.update(res.mtp_tensor_type_counts)
+			mtp_layer_ids.update(res.mtp_layer_ids)
+			for k in res.first_mtp_keys:
+				if k in first_mtp_keys:
+					continue
+				first_mtp_keys.append(k)
+				if len(first_mtp_keys) >= 20:
+					break
+		return {
+			"paths": [r.path for r in results],
+			"artifact_types": [r.artifact_type for r in results],
+			"tensor_count": sum(r.tensor_count for r in results),
+			"tensor_type_counts": dict(sorted(type_counts.items())),
+			"mtp_present": any(r.mtp_present for r in results),
+			"mtp_paths": [r.path for r in results if r.mtp_present],
+			"mtp_tensor_count": sum(r.mtp_tensor_count for r in results),
+			"mtp_tensor_type_counts": dict(sorted(mtp_type_counts.items())),
+			"mtp_layer_ids": sorted(mtp_layer_ids),
+			"first_mtp_keys": first_mtp_keys,
+		}
 
 	if args.json:
-		print(
-			json.dumps(
-				{
-					"path": res.path,
-					"artifact_type": res.artifact_type,
-					"gguf_version": res.gguf_version,
-					"metadata": res.metadata,
-					"tensor_count": res.tensor_count,
-					"tensor_type_counts": res.tensor_type_counts,
-					"mtp_present": res.mtp_present,
-					"mtp_tensor_count": res.mtp_tensor_count,
-					"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
-					"mtp_layer_ids": res.mtp_layer_ids,
-					"first_mtp_keys": res.first_mtp_keys,
-				},
-				indent=2,
-				sort_keys=True,
+		if len(results) == 1:
+			print(json.dumps(as_dict(results[0]), indent=2, sort_keys=True))
+		else:
+			print(
+				json.dumps(
+					{
+						"combined": combine(results),
+						"artifacts": [as_dict(r) for r in results],
+					},
+					indent=2,
+					sort_keys=True,
+				)
 			)
-		)
 	else:
-		print(f"path: {res.path}")
-		print(f"artifact_type: {res.artifact_type}")
-		if res.gguf_version is not None:
-			print(f"gguf_version: {res.gguf_version}")
-		for k in sorted(res.metadata.keys()):
-			print(f"metadata: {k}={res.metadata[k]}")
-		print(f"tensor_count: {res.tensor_count}")
-		if res.tensor_type_counts:
-			for k in sorted(res.tensor_type_counts.keys()):
-				print(f"tensor_type_count: {k}={res.tensor_type_counts[k]}")
-		print(f"mtp_present: {str(res.mtp_present).lower()}")
-		print(f"mtp_tensor_count: {res.mtp_tensor_count}")
-		if res.mtp_tensor_type_counts:
-			for k in sorted(res.mtp_tensor_type_counts.keys()):
-				print(f"mtp_tensor_type_count: {k}={res.mtp_tensor_type_counts[k]}")
-		print(f"mtp_layer_ids: {res.mtp_layer_ids}")
-		for k in res.first_mtp_keys:
-			print(f"mtp_key: {k}")
+		if len(results) > 1:
+			combined = combine(results)
+			print(f"tensor_count: {combined['tensor_count']}")
+			for k in sorted(combined["tensor_type_counts"].keys()):
+				print(f"tensor_type_count: {k}={combined['tensor_type_counts'][k]}")
+			print(f"mtp_present: {str(combined['mtp_present']).lower()}")
+			print(f"mtp_tensor_count: {combined['mtp_tensor_count']}")
+			for k in sorted(combined["mtp_tensor_type_counts"].keys()):
+				print(f"mtp_tensor_type_count: {k}={combined['mtp_tensor_type_counts'][k]}")
+			print(f"mtp_layer_ids: {combined['mtp_layer_ids']}")
+			for k in combined["first_mtp_keys"]:
+				print(f"mtp_key: {k}")
+			for res in results:
+				print(f"artifact_path: {res.path}")
+				print(f"artifact_type: {res.artifact_type}")
+				if res.gguf_version is not None:
+					print(f"gguf_version: {res.gguf_version}")
+				for k in sorted(res.metadata.keys()):
+					print(f"metadata: {k}={res.metadata[k]}")
+		else:
+			res = results[0]
+			print(f"path: {res.path}")
+			print(f"artifact_type: {res.artifact_type}")
+			if res.gguf_version is not None:
+				print(f"gguf_version: {res.gguf_version}")
+			for k in sorted(res.metadata.keys()):
+				print(f"metadata: {k}={res.metadata[k]}")
+			print(f"tensor_count: {res.tensor_count}")
+			if res.tensor_type_counts:
+				for k in sorted(res.tensor_type_counts.keys()):
+					print(f"tensor_type_count: {k}={res.tensor_type_counts[k]}")
+			print(f"mtp_present: {str(res.mtp_present).lower()}")
+			print(f"mtp_tensor_count: {res.mtp_tensor_count}")
+			if res.mtp_tensor_type_counts:
+				for k in sorted(res.mtp_tensor_type_counts.keys()):
+					print(f"mtp_tensor_type_count: {k}={res.mtp_tensor_type_counts[k]}")
+			print(f"mtp_layer_ids: {res.mtp_layer_ids}")
+			for k in res.first_mtp_keys:
+				print(f"mtp_key: {k}")
 
-	if args.require_mtp and not res.mtp_present:
+	if args.require_mtp and not any(r.mtp_present for r in results):
 		return 1
 	return 0
 

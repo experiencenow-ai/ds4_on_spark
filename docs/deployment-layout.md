@@ -16,6 +16,7 @@ the wired subnet is standardized.
 Suggested DS4 layout on each Spark:
 
 - `/opt/ds4/` : code + binaries (root-owned, read-only at runtime)
+- `/opt/ds4/scripts/` : safe ops helpers (root-owned, 0755)
 - `/etc/ds4/` : config and env files (root-owned, 0640)
 - `/var/lib/ds4/` : state (model cache, checkpoints, artifacts)
 - `/var/log/ds4/` : optional file logs (journald is preferred)
@@ -65,6 +66,10 @@ sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
 # if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
+sudo install -d -m 0755 /opt/ds4/scripts
+sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
 sudo systemctl daemon-reload
 ```
 
@@ -75,6 +80,7 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - `/opt/ds4/bin/ds4_server`
 - optional shared env at `/etc/ds4/ds4.env`
 - `/etc/ds4/ds4-spark0.env`
+- optional config at `/etc/ds4/ds4-spark0.yaml`
 
 ## Safety Notes
 
@@ -82,3 +88,5 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Prefer journald over file logs until retention/rotation is designed.
 - Tighten systemd sandboxing only after CUDA + distributed smoke tests pass.
 - Optional Spark standalone systemd templates exist, but are not required for DS4: `docs/deployment-spark-standalone-systemd.md`.
+- Optional periodic preflight systemd timer exists: `deploy/systemd/ds4-preflight@.timer`.
+- Optional strict start template exists (wants strict preflight before start): `deploy/systemd/ds4-strict@.service`.

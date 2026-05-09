@@ -22,6 +22,8 @@ edit host-specific values, then enable services with `systemctl`.
   - an optional config at `/etc/ds4/ds4-%i.yaml`
   - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
   - `ExecStartPre` validates `ds4.env` (when present) and `ds4-%i.env`
+- Optional: `ds4-strict@.service` is like `ds4@.service` but *wants* `ds4-preflight-strict@%i.service` before start.
+- Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional Spark standalone examples:
   - `spark-master@.service`
   - `spark-worker@.service`
