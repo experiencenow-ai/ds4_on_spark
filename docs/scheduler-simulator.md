@@ -135,6 +135,23 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+### Compare Variants (Ablations)
+
+Use `--compare label:JSON` to run one or more config variants against the
+baseline (the config implied by the other CLI flags). The JSON object can
+override any `SimConfig` field, plus `adaptive_k.*` fields.
+
+Example: compare MTP on vs off on the same synthetic trace:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --num-tokens 20000 --arrival-units output_tokens --arrival-rate-tps 8000 --mtp-draft-len 2 --mtp-accept-prob 0.7 --mtp-accept-decay 0.6 --json --compare 'mtp_off:{"mtp_draft_len":0}'
+```
+
+The output includes:
+
+- `baseline`: `summary` + full `metrics`
+- `variants.<label>`: `summary`, `delta_vs_baseline`, and full `metrics`
+
 Batching-style service model example:
 
 ```bash
@@ -213,6 +230,18 @@ cat > /tmp/route.jsonl <<'EOF'
 {"t_ms":0.2,"cls":"batch","candidates":[7,2,3,5]}
 EOF
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-experts 8 --json
+```
+
+Trace sanity-check (contract summary only):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
+```
+
+Synthetic trace dump (generate, write JSONL, and exit after printing the trace summary):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --num-experts 16 --dump-trace-jsonl /tmp/synth_route.jsonl --trace-summary --json
 ```
 
 ## Metrics

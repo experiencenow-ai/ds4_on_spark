@@ -686,9 +686,13 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
             for c in cand_raw:
                 if not isinstance(c, int):
                     raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                if c < 0:
+                    raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
                 candidates.append(c)
             if len(candidates) == 0:
                 raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+            if len(set(candidates)) != len(candidates):
+                raise ValueError(f"{path}:{lineno}: candidates must be unique")
 
             k: Optional[int] = None
             if "k" in obj and obj["k"] is not None:
@@ -765,6 +769,121 @@ def load_trace_jsonl(path: str) -> List[TokenRoute]:
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
+
+
+def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
+    if path.strip() == "":
+        raise ValueError("path must be non-empty")
+    with open(path, "w", encoding="utf-8") as f:
+        for r in trace:
+            obj: Dict[str, object] = {
+                "t_ms": float(r.t_ms),
+                "cls": str(r.cls.value),
+                "candidates": list(r.candidates),
+            }
+            if r.k is not None:
+                obj["k"] = int(r.k)
+            if r.scores is not None:
+                obj["scores"] = list(r.scores)
+            if r.mtp_accept_len is not None:
+                obj["mtp_accept_len"] = int(r.mtp_accept_len)
+            if r.accepted_mtp is not None:
+                obj["accepted_mtp"] = int(r.accepted_mtp)
+            if r.rejected_mtp is not None:
+                obj["rejected_mtp"] = int(r.rejected_mtp)
+            if r.cost_scale is not None:
+                obj["cost_scale"] = float(r.cost_scale)
+            f.write(json.dumps(obj, sort_keys=True))
+            f.write("\n")
+
+
+def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0) -> Dict[str, object]:
+    def summarize(xs: Sequence[float]) -> Dict[str, object]:
+        if len(xs) == 0:
+            return({"count": 0})
+        xs_sorted = sorted(xs)
+        idx50 = int(math.floor(0.50 * float(len(xs_sorted) - 1)))
+        idx95 = int(math.floor(0.95 * float(len(xs_sorted) - 1)))
+        idx99 = int(math.floor(0.99 * float(len(xs_sorted) - 1)))
+        return(
+            {
+                "count": len(xs_sorted),
+                "mean": statistics.fmean(xs_sorted),
+                "min": float(xs_sorted[0]),
+                "p50": float(xs_sorted[idx50]),
+                "p95": float(xs_sorted[idx95]),
+                "p99": float(xs_sorted[idx99]),
+                "max": float(xs_sorted[-1]),
+            }
+        )
+
+    num_i = 0
+    num_b = 0
+    t_ms: List[float] = []
+    cand_lens: List[float] = []
+    k_vals: List[float] = []
+    accept_lens: List[float] = []
+    min_expert: Optional[int] = None
+    max_expert: Optional[int] = None
+
+    present_k = 0
+    present_scores = 0
+    present_accept_len = 0
+    present_accepted_mtp = 0
+    present_rejected_mtp = 0
+    present_cost_scale = 0
+
+    for r in trace:
+        if r.cls == LatencyClass.INTERACTIVE:
+            num_i += 1
+        else:
+            num_b += 1
+        t_ms.append(float(r.t_ms))
+        cand_lens.append(float(len(r.candidates)))
+        if len(r.candidates) != 0:
+            lo = min(r.candidates)
+            hi = max(r.candidates)
+            min_expert = lo if min_expert is None else min(min_expert, lo)
+            max_expert = hi if max_expert is None else max(max_expert, hi)
+
+        if r.k is not None:
+            present_k += 1
+            k_vals.append(float(r.k))
+        if r.scores is not None:
+            present_scores += 1
+        if r.mtp_accept_len is not None:
+            present_accept_len += 1
+            accept_lens.append(float(r.mtp_accept_len))
+        elif r.accepted_mtp is not None:
+            present_accepted_mtp += 1
+            accept_lens.append(float(int(r.accepted_mtp) + 1))
+        elif r.rejected_mtp is not None:
+            present_rejected_mtp += 1
+            if mtp_draft_len > 0:
+                accept_lens.append(float((mtp_draft_len - int(r.rejected_mtp)) + 1))
+        if r.cost_scale is not None:
+            present_cost_scale += 1
+
+    out: Dict[str, object] = {
+        "tokens": {"count": len(trace), "interactive": num_i, "batch": num_b},
+        "t_ms": summarize(t_ms),
+        "candidates_len": summarize(cand_lens),
+        "optional_fields_present": {
+            "k": present_k,
+            "scores": present_scores,
+            "mtp_accept_len": present_accept_len,
+            "accepted_mtp": present_accepted_mtp,
+            "rejected_mtp": present_rejected_mtp,
+            "cost_scale": present_cost_scale,
+        },
+    }
+    if min_expert is not None and max_expert is not None:
+        out["expert_id_range"] = {"min": int(min_expert), "max": int(max_expert)}
+    if len(k_vals) != 0:
+        out["k"] = summarize(k_vals)
+    if len(accept_lens) != 0:
+        out["mtp_accept_len_derived"] = summarize(accept_lens)
+    return(out)
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -1426,9 +1545,103 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     return(metrics)
 
 
+def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
+    def _p_or_zero(xs: Sequence[float], p: float) -> float:
+        if len(xs) == 0:
+            return(0.0)
+        xs_sorted = sorted(xs)
+        x = (p * float(len(xs_sorted) - 1))
+        i0 = int(math.floor(x))
+        i1 = int(math.ceil(x))
+        if i0 == i1:
+            return(float(xs_sorted[i0]))
+        frac = (x - float(i0))
+        return(float(xs_sorted[i0]) * (1.0 - frac) + (float(xs_sorted[i1]) * frac))
+
+    makespan_ms = metrics.makespan_ms
+    token_tps = (float(metrics.num_tokens) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
+    task_tps = (float(metrics.admitted_tasks) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
+    output_tokens = float(metrics.mtp_output_tokens) if metrics.mtp_draft_len > 0 else float(metrics.admitted_tokens)
+    output_tps = (output_tokens * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
+    dropped = float(metrics.dropped_tokens_backpressure)
+    denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
+    drop_frac = (dropped / denom) if denom > 0.0 else 0.0
+    return(
+        {
+            "makespan_ms": float(makespan_ms),
+            "token_throughput_tps": float(token_tps),
+            "task_throughput_tps": float(task_tps),
+            "output_tokens": float(output_tokens),
+            "output_token_throughput_tps": float(output_tps),
+            "drop_frac_tokens": float(drop_frac),
+            "token_p50_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.50)),
+            "token_p95_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.95)),
+            "token_p50_batch_ms": float(_p_or_zero(metrics.token_lat_ms_batch, 0.50)),
+            "token_p95_batch_ms": float(_p_or_zero(metrics.token_lat_ms_batch, 0.95)),
+            "output_token_p50_interactive_ms": float(_p_or_zero(metrics.output_token_lat_ms_interactive, 0.50)),
+            "output_token_p95_interactive_ms": float(_p_or_zero(metrics.output_token_lat_ms_interactive, 0.95)),
+            "output_token_p50_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.50)),
+            "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
+            "starved_tasks": float(metrics.starved_tasks),
+            "dropped_tasks_backpressure": float(metrics.dropped_tasks_backpressure),
+        }
+    )
+
+
+def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> SimConfig:
+    fields = set(SimConfig.__dataclass_fields__.keys())
+    adapt_fields = set(AdaptiveKConfig.__dataclass_fields__.keys())
+    replace_kwargs: Dict[str, object] = {}
+    adapt_kwargs: Dict[str, object] = {}
+    for k, v in overrides.items():
+        if k.startswith("adaptive_k."):
+            sub = k[len("adaptive_k.") :]
+            if sub not in adapt_fields:
+                raise ValueError(f"Unknown AdaptiveKConfig field '{sub}' in override '{k}'")
+            adapt_kwargs[sub] = v
+            continue
+        if k not in fields:
+            raise ValueError(f"Unknown SimConfig field '{k}' in override")
+        replace_kwargs[k] = v
+    cfg = base
+    if len(adapt_kwargs) != 0:
+        cfg = dataclasses.replace(cfg, adaptive_k=dataclasses.replace(cfg.adaptive_k, **adapt_kwargs))
+    if len(replace_kwargs) != 0:
+        cfg = dataclasses.replace(cfg, **replace_kwargs)
+    return(cfg)
+
+
+def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute], variants: Sequence[Tuple[str, Dict[str, object]]]) -> Dict[str, object]:
+    out: Dict[str, object] = {}
+    base_metrics = run_simulation(base_cfg, trace)
+    base_json = base_metrics.to_jsonable()
+    base_summary = compare_summary_jsonable(base_metrics)
+    out["baseline"] = {"overrides": {}, "summary": base_summary, "metrics": base_json}
+
+    variants_out: Dict[str, object] = {}
+    for label, overrides in variants:
+        cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
+        m = run_simulation(cfg, trace)
+        summary = compare_summary_jsonable(m)
+        delta: Dict[str, float] = {}
+        for k, v in summary.items():
+            base_v = float(base_summary.get(k, 0.0))
+            delta[k] = (float(v) - base_v)
+        variants_out[label] = {
+            "overrides": overrides,
+            "summary": summary,
+            "delta_vs_baseline": delta,
+            "metrics": m.to_jsonable(),
+        }
+    out["variants"] = variants_out
+    return(out)
+
+
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale).")
+    p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
+    p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file (t_ms, cls, candidates) before simulation.")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64)
     p.add_argument("--num-tokens", type=int, default=20000)
@@ -1480,6 +1693,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
 
+    p.add_argument("--compare", action="append", default=[], help="Run labeled variant(s) vs the baseline config. Format: label:JSON, with optional keys like mtp_draft_len or adaptive_k.q_high.")
     p.add_argument("--json", action="store_true", help="Print JSON metrics only.")
     return(p.parse_args(argv))
 
@@ -1488,9 +1702,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
 
     if args.trace_jsonl != "":
+        if args.dump_trace_jsonl.strip() != "":
+            raise SystemExit("--dump-trace-jsonl is only supported for synthetic trace generation (omit --trace-jsonl)")
         if args.arrival_units.strip().lower() != "steps":
             raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl)")
         trace = load_trace_jsonl(args.trace_jsonl)
+        if args.trace_summary:
+            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
+            if args.json:
+                print(json.dumps(out, sort_keys=True))
+                return(0)
+            print("== trace summary ==")
+            print(json.dumps(out, indent=2, sort_keys=True))
+            return(0)
     else:
         try:
             arrival_rate_tps = arrival_rate_steps_tps(args.arrival_rate_tps, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay)
@@ -1543,6 +1767,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else:
             raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf, hotset, or markov.")
 
+        if args.dump_trace_jsonl.strip() != "":
+            write_trace_jsonl(args.dump_trace_jsonl, trace)
+        if args.trace_summary:
+            out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len)
+            if args.json:
+                print(json.dumps(out, sort_keys=True))
+                return(0)
+            print("== trace summary ==")
+            print(json.dumps(out, indent=2, sort_keys=True))
+            return(0)
+
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,
         k_max_interactive=args.k_max_interactive,
@@ -1583,8 +1818,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
     )
 
-    metrics = run_simulation(sim_cfg, trace)
-    out = metrics.to_jsonable()
+    if len(args.compare) != 0:
+        variants: List[Tuple[str, Dict[str, object]]] = []
+        for spec in args.compare:
+            if ":" not in spec:
+                raise SystemExit("--compare expects 'label:JSON' (missing ':')")
+            label, js = spec.split(":", 1)
+            label = label.strip()
+            if label == "":
+                raise SystemExit("--compare expects a non-empty label before ':'")
+            try:
+                overrides = json.loads(js)
+            except json.JSONDecodeError as e:
+                raise SystemExit(f"--compare JSON parse failed for '{label}': {e}")
+            if not isinstance(overrides, dict):
+                raise SystemExit(f"--compare JSON for '{label}' must be an object/dict")
+            variants.append((label, overrides))
+        out = compare_simulation_variants(sim_cfg, trace, variants)
+    else:
+        metrics = run_simulation(sim_cfg, trace)
+        out = metrics.to_jsonable()
     if args.json:
         print(json.dumps(out, sort_keys=True))
         return(0)
