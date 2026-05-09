@@ -79,6 +79,12 @@ sudo systemctl start ds4-preflight@${instance}.service
 # Fails non-zero if required TP=2 inputs are missing/invalid.
 sudo systemctl start ds4-preflight-strict@${instance}.service
 
+== optional (strict DS4 start, human-run) ==
+# Starts DS4 only after strict preflight succeeds.
+# NOTE: `ds4-strict@.service` is a separate unit template (installed by the `ds4*.service` glob above).
+sudo systemctl enable ds4-strict@${instance}.service
+sudo systemctl start  ds4-strict@${instance}.service
+
 == optional (periodic preflight timer, human-run) ==
 # Runs non-destructive preflight on boot and periodically after.
 sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight@.timer /etc/systemd/system/

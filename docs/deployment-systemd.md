@@ -10,6 +10,7 @@ stable.
 ## Units
 
 - `ds4@.service`: long-running DS4 instance
+- `ds4-strict@.service`: long-running DS4 instance that *wants* `ds4-preflight-strict@%i.service` before start
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly)
 - `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`)
 - Optional Spark standalone helpers: `spark-master@.service`, `spark-worker@.service` (see `docs/deployment-spark-standalone-systemd.md`)
@@ -53,6 +54,13 @@ sudo systemctl start  ds4-preflight@spark0.service
 
 sudo systemctl enable ds4@spark0.service
 sudo systemctl start  ds4@spark0.service
+```
+
+If you want strict TP=2 gating on start, enable the strict service instead:
+
+```bash
+sudo systemctl enable ds4-strict@spark0.service
+sudo systemctl start  ds4-strict@spark0.service
 ```
 
 Inspect logs:
