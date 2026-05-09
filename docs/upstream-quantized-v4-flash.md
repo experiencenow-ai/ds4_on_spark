@@ -20,6 +20,7 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | Plausible (headroom for KV/cache still required) |
 | `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | Plausible but tight (limited KV/cache headroom) |
 | `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | Plausible but tight (limited KV/cache headroom) |
+| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) |
 
 ## Reproducing the size numbers (no downloads)
 
@@ -108,10 +109,25 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - Single-Spark plausibility:
   - **Q2_K plausible but tight** on Spark0-class hardware (92.0 GiB / ~98.8 GB leaves limited KV/cache headroom); **Q8_0 not plausible** (too large).
 
+### teamblobfish/DeepSeek-V4-Flash-GGUF (multi-quant sharded GGUFs)
+
+- Source: `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF` @ `ed189bf9706efc321f8db142cefae9e6f1da6e85` (`refs/heads/main`)
+- License: MIT (model card)
+- Runtime requirement (per upstream README):
+  - Requires a DeepSeek-V4-capable llama.cpp fork; upstream recommends `cchuter/llama.cpp` branch `feat/v4-port`.
+- Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
+  - IQ2_XXS-XL (2 shards): total 78518818624 bytes (73.1 GiB)
+  - IQ2_XS-XL (2 shards): total 87007827744 bytes (81.0 GiB)
+  - Q2_K-XL (3 shards): total 107034192768 bytes (99.7 GiB)
+- Single-Spark plausibility:
+  - **IQ2_XXS-XL / IQ2_XS-XL plausible** on Spark0-class memory (leave more KV/cache headroom than ~90–100 GiB candidates).
+  - **Q2_K-XL plausible but tight** on Spark0-class memory (99.7 GiB leaves limited KV/cache headroom).
+
 ## Related runtime forks (pinned)
 
 - `https://github.com/antirez/llama.cpp-deepseek-v4-flash` @ `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` (MIT)
 - `https://github.com/nisparks/llama.cpp` `wip/deepseek-v4-support` @ `9d364087024da141510267e6b269ee495ca45176` (MIT)
+- `https://github.com/cchuter/llama.cpp` `feat/v4-port` @ `19b63dc368dfef6db6783e5ba3143927b7ed1c96` (MIT)
 - `https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` @ `9222e55c13c965ccb7e9104fda58796edd84a732` (MIT)
 - `https://github.com/batiai/bati.cpp` @ `c7b64fe065164335b882e02a848fd4015b3c060a` (`refs/tags/v0.1.2`, MIT)
 

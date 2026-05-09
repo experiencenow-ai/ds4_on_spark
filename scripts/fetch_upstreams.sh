@@ -25,13 +25,18 @@ Targets:
   deepseek_v4_gguf_lovedheart  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_nsparks   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_cyberneurova  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_teamblobfish  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
   transformers
   llama_cpp
   llama_cpp_deepseek_v4_flash
   llama_cpp_deepseek_v4_support_wip
+  llama_cpp_deepseek_v4_port_cchuter
   llama_cpp_cuda_spark
+  spark_v4_bringup_mockingjay
+  spark_v4_bringup_bigs
+  deepseek_v4_flash_sm120_patch
   all
 EOF
 }
@@ -123,6 +128,9 @@ fetch_one()
 		deepseek_v4_gguf_cyberneurova)
 			clone_or_update_nolfs "deepseek_v4_gguf_cyberneurova" "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF" "refs/heads/main"
 			;;
+		deepseek_v4_gguf_teamblobfish)
+			clone_or_update_nolfs "deepseek_v4_gguf_teamblobfish" "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF" "refs/heads/main"
+			;;
 		bati_cpp)
 			clone_or_update "bati_cpp" "https://github.com/batiai/bati.cpp.git" "refs/tags/v0.1.2"
 			;;
@@ -141,8 +149,20 @@ fetch_one()
 		llama_cpp_deepseek_v4_support_wip)
 			clone_or_update "llama_cpp_deepseek_v4_support_wip" "https://github.com/nisparks/llama.cpp.git" "refs/heads/wip/deepseek-v4-support"
 			;;
+		llama_cpp_deepseek_v4_port_cchuter)
+			clone_or_update "llama_cpp_deepseek_v4_port_cchuter" "https://github.com/cchuter/llama.cpp.git" "refs/heads/feat/v4-port"
+			;;
 		llama_cpp_cuda_spark)
 			clone_or_update "llama_cpp_cuda_spark" "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git" "refs/heads/master"
+			;;
+		spark_v4_bringup_mockingjay)
+			clone_or_update "spark_v4_bringup_mockingjay" "https://github.com/Mockingjay1316/deepseek-v4-flash-spark.git" "refs/heads/master"
+			;;
+		spark_v4_bringup_bigs)
+			clone_or_update "spark_v4_bringup_bigs" "https://github.com/bigs/deepseek-v4-flash-dgx-spark.git" "refs/heads/main"
+			;;
+		deepseek_v4_flash_sm120_patch)
+			clone_or_update "deepseek_v4_flash_sm120_patch" "https://github.com/0xSero/deepseek-v4-flash-sm120.git" "refs/heads/main"
 			;;
 		*)
 			echo "Unknown target: ${target}" >&2
@@ -171,13 +191,18 @@ main()
 		fetch_one deepseek_v4_gguf_lovedheart
 		fetch_one deepseek_v4_gguf_nsparks
 		fetch_one deepseek_v4_gguf_cyberneurova
+		fetch_one deepseek_v4_gguf_teamblobfish
 		fetch_one bati_cpp
 		fetch_one vllm
 		fetch_one transformers
 		fetch_one llama_cpp
 		fetch_one llama_cpp_deepseek_v4_flash
 		fetch_one llama_cpp_deepseek_v4_support_wip
+		fetch_one llama_cpp_deepseek_v4_port_cchuter
 		fetch_one llama_cpp_cuda_spark
+		fetch_one spark_v4_bringup_mockingjay
+		fetch_one spark_v4_bringup_bigs
+		fetch_one deepseek_v4_flash_sm120_patch
 		echo "Fetched: ${UPSTREAM_DIR}"
 		return 0
 	fi

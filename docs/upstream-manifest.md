@@ -19,6 +19,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | llama.cpp | `ggml-org/llama.cpp` | `refs/tags/b9085` | `046e2844370208007c116fab448ed4033d77653f` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling (pinned to a release tag). |
 | llama.cpp (DeepSeek V4 Flash fork) | `antirez/llama.cpp-deepseek-v4-flash` | `refs/heads/main` | `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` | MIT | Flash-specific fork widely referenced by community GGUFs; not in upstream `ggml-org/llama.cpp` yet. |
 | llama.cpp (DeepSeek V4 support WIP) | `nisparks/llama.cpp` | `refs/heads/wip/deepseek-v4-support` | `9d364087024da141510267e6b269ee495ca45176` | MIT | WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter; required by some “native FP4/FP8” GGUF artifacts. |
+| llama.cpp (DeepSeek V4 port fork) | `cchuter/llama.cpp` | `refs/heads/feat/v4-port` | `19b63dc368dfef6db6783e5ba3143927b7ed1c96` | MIT | V4-capable fork referenced by `teamblobfish/DeepSeek-V4-Flash-GGUF`; includes V4 loader + kernels not merged upstream. |
 | llama.cpp (CUDA Spark fork) | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` | `refs/heads/master` | `9222e55c13c965ccb7e9104fda58796edd84a732` | MIT | CUDA fork reported running on a single DGX Spark/GB10; validate perf + memory headroom on target Spark. |
 | DeepSeek-V4-Flash GGUF (antirez) | `huggingface.co/antirez/deepseek-v4-gguf` | `refs/heads/main` | `ef3b960827870d69ed0b225c095a617c12d7e80d` | MIT | Single-file GGUF (~87 GB) tuned for `ds4` and used as single-Spark candidate; do not download without human approval. |
 | DeepSeek-V4-Flash GGUF (Preyazz) | `huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF` | `refs/heads/main` | `6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d` | MIT | Single-file Q2_K (~96 GiB) candidate; requires V4-capable llama.cpp fork (see `nisparks/llama.cpp` WIP); do not download without human approval. |
@@ -26,7 +27,11 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | DeepSeek-V4-Flash GGUF (lovedheart) | `huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF` | `refs/heads/main` | `cd42deba41ac0536e68b125dfc367197b0ec3038` | UNKNOWN | Sharded Q2_K total ~93.6 GiB (single-Spark plausible but tight); README references llama.cpp PR `#22378` (closed; see `nisparks/llama.cpp` WIP); do not download without human approval. |
 | DeepSeek-V4-Flash GGUF (native FP4/FP8) | `huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF` | `refs/heads/main` | `0b34e0b629c706396002496e795e9f910f7bf69f` | DeepSeek (link) | Single-file GGUF (~146 GB) 1:1 FP4/FP8 conversion; requires V4 loader + FP8/MXFP4 kernel support; do not download without human approval. |
 | DeepSeek-V4-Flash GGUF (abliterated) | `huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF` | `refs/heads/main` | `665c8e035e2602d12d28b84920808b158f337e09` | MIT | Experimental safety-research artifact; includes Q2_K (~99 GB) and Q8_0 (~302 GB) variants; do not download without human approval. |
+| DeepSeek-V4-Flash GGUF (teamblobfish) | `huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF` | `refs/heads/main` | `ed189bf9706efc321f8db142cefae9e6f1da6e85` | MIT | Sharded GGUF repo with multiple quant variants (IQ*/Q*); metadata-only fetch only; do not download weights without human approval. |
 | bati.cpp | `batiai/bati.cpp` | `refs/tags/v0.1.2` | `c7b64fe065164335b882e02a848fd4015b3c060a` | MIT | Early-access runtime referenced by `batiai/DeepSeek-V4-Flash-GGUF`; CUDA build path exists but is not yet validated on Spark. |
+| Spark bring-up (pruned checkpoint) | `Mockingjay1316/deepseek-v4-flash-spark` | `refs/heads/master` | `08045f89d9716d3249ce834be1a1b1d91fd40859` | MIT | Single-Spark reference: prunes learned-router experts (example 256→128) and uses a streaming loader to avoid unified-memory OOM. |
+| Spark bring-up (native checkpoint runtime) | `bigs/deepseek-v4-flash-dgx-spark` | `refs/heads/main` | `4410e814a76a1a9d662576e2a35fa4a8965d2edc` | UNKNOWN | Research runtime + OpenAI-compatible server for native FP8/FP4 checkpoint layout on Spark; includes inspection + manifest tooling; do not run without human-approved fixtures/hardware time. |
+| Blackwell/SGLang arch patch (reference) | `0xSero/deepseek-v4-flash-sm120` | `refs/heads/main` | `c2eac5a9b2b457881d69b1164d909e8beab9286e` | Apache-2.0 | SM120 patch for SGLang FlashMLA sparse-decode kernels; may inform SM121/Spark troubleshooting. |
 
 ## Fetching
 
@@ -55,3 +60,4 @@ To verify that the **pinned** refs/commits in this manifest still resolve upstre
 - [`docs/upstream-vllm-transformers.md`](upstream-vllm-transformers.md)
 - [`docs/upstream-llama-cpp.md`](upstream-llama-cpp.md)
 - [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md)
+- [`docs/upstream-spark-v4-bringup.md`](upstream-spark-v4-bringup.md)

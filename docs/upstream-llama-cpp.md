@@ -40,6 +40,14 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - Notes: WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter support, referenced by “native FP4/FP8” V4 GGUF artifacts.
   - Upstream PR reference: `ggml-org/llama.cpp` PR `#22378` (“Wip/deepseek v4 support”) was closed and marked “purely for reference”; it pointed at this branch. Some community GGUF repos still reference that PR URL.
 
+### cchuter/llama.cpp (feat/v4-port)
+
+- Repo: `https://github.com/cchuter/llama.cpp`
+- Ref: `refs/heads/feat/v4-port`
+- Commit: `19b63dc368dfef6db6783e5ba3143927b7ed1c96`
+- License: MIT
+- Notes: V4-aware fork referenced by `teamblobfish/DeepSeek-V4-Flash-GGUF`; includes V4 loader + V4-specific kernel paths not merged into the pinned `ggml-org/llama.cpp` release tag.
+
 ### kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark
 
 - Repo: `https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark`
@@ -75,5 +83,6 @@ To fetch the pinned DeepSeek-V4 forks into `./upstreams`:
 ```bash
 ./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_flash
 ./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_support_wip
+./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_port_cchuter
 ./scripts/fetch_upstreams.sh llama_cpp_cuda_spark
 ```
