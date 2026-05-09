@@ -29,6 +29,24 @@ Related checkpoint (same “official configs” approach):
 - When fetched via `scripts/fetch_upstreams.sh` with LFS disabled, these appear as small pointer stubs (first line `version https://git-lfs.github.com/spec/v1`), not actual weights.
 - Do not run `git lfs pull` (or any alternative fetch that resolves LFS blobs) inside `upstreams/deepseek_v4_*`.
 
+## Quantized single-Spark candidates
+
+Quantized community artifacts are useful for the intermediate "one Spark
+produces tokens" milestone, but they are not canonical sources of model
+semantics. Track them as runtime fixtures, not upstream truth.
+
+Before using any quantized artifact, record:
+
+- HF repo and exact revision
+- file list, file sizes, and sha256 for downloaded files
+- declared quantization type and declared base model
+- required runtime fork/branch/commit
+- license and conversion notes
+
+Do not add community quantized model repos to `scripts/fetch_upstreams.sh` unless
+the fetch remains metadata-only. Large GGUF or safetensor downloads must remain
+human-approved, manual fixture setup.
+
 ## vLLM references
 
 DeepSeek-V4 support is documented/implemented in vLLM (see `vllm.model_executor.models.deepseek_v4`):

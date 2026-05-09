@@ -363,6 +363,26 @@ MTP block (`mtp.0.*`):
 
 This repo includes a verifier for these invariants: `scripts/model_contract_verify_deepseek_v4_flash.py`.
 
+## Quantized single-Spark compatibility
+
+The first Spark0 token-generation milestone may use a community GGUF or runtime
+fork before DS4 has a native loader. Treat that as an execution baseline only:
+the source-derived contract above remains authoritative.
+
+For each quantized artifact tested, record:
+
+- artifact format (`GGUF`, HF safetensors, or other)
+- declared quant (`Q2_K`, `Q3_K_M`, native `F8_E4M3 + MXFP4`, etc.)
+- declared base model and conversion path
+- runtime repo, branch, and commit required to load it
+- whether the runtime claims to preserve native FP8/FP4 scales or has
+  re-quantized through another representation
+- tokenizer/chat-template behavior used for the prompt
+
+Any successful external-runtime output must still be followed by a contract
+check: prompt rendering must match the encoding oracle, and native DS4 logits
+must eventually be validated against official-source oracle fixtures.
+
 ## Next steps (oracle + remaining unknowns)
 
 - The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
