@@ -1715,6 +1715,12 @@ def arrival_rate_steps_tps(arrival_rate_tps: float, arrival_units: str, mtp_draf
     raise ValueError("arrival_units must be 'steps' or 'output_tokens'")
 
 
+def expert_pending_for_class(eq: ExpertQueue, cls: LatencyClass) -> int:
+    if cls == LatencyClass.INTERACTIVE:
+        return(eq.in_flight_tasks + len(eq.hi))
+    return(eq.in_flight_tasks + len(eq.lo))
+
+
 def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
     if cls == LatencyClass.INTERACTIVE:
         k_min, k_max = adapt.k_min_interactive, adapt.k_max_interactive
@@ -2013,8 +2019,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("k_mode must be 'controller' or 'trace'")
 
     k_signal = cfg.k_signal.strip().lower()
-    if k_signal not in ("global", "candidates"):
-        raise ValueError("k_signal must be 'global' or 'candidates'")
+    if k_signal not in ("global", "candidates", "class"):
+        raise ValueError("k_signal must be 'global', 'candidates', or 'class'")
 
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
@@ -2448,8 +2454,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
             if k_signal == "global":
                 pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-            else:
+            elif k_signal == "candidates":
                 pending_signal = float(max(experts[e].pending() for e in route.candidates))
+            else:
+                pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
 
             if route.cls == LatencyClass.INTERACTIVE:
                 metrics.pending_signal_interactive.append(pending_signal)
@@ -2477,8 +2485,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     for li, lr in enumerate(layers):
                         if k_signal == "global":
                             layer_pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                        else:
+                        elif k_signal == "candidates":
                             layer_pending_signal = float(max(experts[e].pending() for e in lr.candidates))
+                        else:
+                            layer_pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
                         cs = k_ctrl_layer.get((route.cls, li))
                         if cs is None:
                             cs = KControllerState()
@@ -2779,7 +2789,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--k-update-ms", type=float, default=0.0, help="Adaptive-K control: minimum time between K updates (0 = per-token).")
     p.add_argument("--k-slew", type=int, default=0, help="Adaptive-K control: max |delta K| per controller update (0 = unlimited).")
     p.add_argument("--k-mode", type=str, default="controller", help="K source: controller (default) or trace (use per-route k from JSONL).")
-    p.add_argument("--k-signal", type=str, default="global", help="Adaptive-K congestion signal: global (max pending across all experts) or candidates (max pending among this token's candidates).")
+    p.add_argument(
+        "--k-signal",
+        type=str,
+        default="global",
+        help="Adaptive-K congestion signal: global (max total pending across all experts), candidates (max total pending among this token's candidates), or class (max pending in this token's latency-class queue + in-flight across all experts).",
+    )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")

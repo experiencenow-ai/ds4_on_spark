@@ -383,6 +383,51 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLessEqual(mg.chosen_k_batch[idx], mc.chosen_k_batch[idx])
         self.assertGreater(mg.pending_signal_batch[idx], mc.pending_signal_batch[idx])
 
+    def test_k_signal_class_ignores_other_class_queue_backlog(self) -> None:
+        trace: list[scheduler_sim.TokenRoute] = []
+        for i in range(50):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=float(i) * 0.001,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.0025,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(1,),
+            )
+        )
+        trace.sort(key=lambda r: r.t_ms)
+
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=2,
+        )
+        base = dict(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+        )
+        m_global = scheduler_sim.run_simulation(scheduler_sim.SimConfig(**base, k_signal="global"), trace)
+        m_class = scheduler_sim.run_simulation(scheduler_sim.SimConfig(**base, k_signal="class"), trace)
+
+        self.assertEqual(len(m_global.chosen_k_interactive), 1)
+        self.assertEqual(len(m_class.chosen_k_interactive), 1)
+        self.assertLessEqual(m_global.chosen_k_interactive[0], m_class.chosen_k_interactive[0])
+        self.assertGreater(m_global.pending_signal_interactive[0], m_class.pending_signal_interactive[0])
+
     def test_k_scope_layer_uses_layer_local_congestion_for_chosen_k_total(self) -> None:
         trace: list[scheduler_sim.TokenRoute] = []
         for i in range(10):
