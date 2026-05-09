@@ -7,7 +7,7 @@ Host:
 - mDNS name: `aitopatom-9ab9.local`
 - Linux hostname: `aitopatom-9ab9`
 - Login user used for probes: `spark0`
-- SSH key auth: working from the Mac with `/Users/mac/.ssh/id_rsa`
+- SSH key auth: working from the Mac with `~/.ssh/id_rsa`
 
 Operating system:
 
@@ -52,8 +52,8 @@ Network:
 Immediate implications:
 
 - The Spark is ready for CUDA compile/probe work.
-- Direct Mac-to-Spark wired IPv4 still needs the Mac to have an IPv4 in the Spark wired `/24`
-  subnet, for example `<redacted-ipv4>/24` on the Mac wired port.
+- Direct Mac-to-Spark wired IPv4 still needs the Mac to have a `10.0.0.0/24`
+  address, for example `10.0.0.1/24` on the Mac wired port.
 - Until that alias is set, SSH by hostname may route over Wi-Fi/link-local.
 - The next useful probe is a tiny CUDA device property binary compiled with
   `/usr/local/cuda/bin/nvcc`, because `torch.cuda` is unavailable.
@@ -61,4 +61,4 @@ Immediate implications:
 Follow-ups:
 
 - `nvcc` is installed under `/usr/local/cuda/bin/nvcc` and may not be on `$PATH`.
-- A reproducible probe run is summarized in `docs/spark0-probe-2026-05-08.md`, with full redacted output in `docs/spark0-hardware-baseline-2026-05-08.md`.
+- A reproducible probe run (including a tiny `nvcc`-compiled device properties binary that confirms compute capability) is captured in `docs/spark0-probe-2026-05-08.md`.
