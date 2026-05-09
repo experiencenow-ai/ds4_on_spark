@@ -509,6 +509,22 @@
   "model": "deepseek_v4_flash",
   "moe": {
     "hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
+    "hash_routing": {
+      "bias_none_expr": "self.bias = None",
+      "hash_enabled_expr": "self.hash = layer_id < args.n_hash_layers",
+      "hash_indices_expr": "indices = self.tid2eid[input_ids]",
+      "hash_layer_ids": [
+        0,
+        1,
+        2
+      ],
+      "tid2eid_decl_expr": "self.tid2eid = nn.Parameter(torch.empty(args.vocab_size, args.n_activated_experts, dtype=torch.int32), requires_grad=False)",
+      "tid2eid_dtype": "int32",
+      "tid2eid_shape": [
+        129280,
+        6
+      ]
+    },
     "moe_inter_dim": 2048,
     "n_activated_experts": 6,
     "n_hash_layers": 3,

@@ -263,6 +263,7 @@ Hash-routed bootstrap layers:
 
 - For layers `0 <= layer_id < n_hash_layers` (here: layers 0–2), routing indices come from a static table:
   - tensor key: `layers.{i}.ffn.gate.tid2eid` (dtype `int32`)
+  - logical shape: `[vocab_size, n_activated_experts]` (here: `[129280, 6]`), indexed by `input_ids`
 - For these layers, `layers.{i}.ffn.gate.bias` is absent in the checkpoint.
 - Even in hash mode, the gate still computes scores and routing weights from hidden state:
   - `tid2eid[input_ids]` selects the expert IDs
@@ -275,7 +276,10 @@ Score-routed layers:
 - Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
 
-These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics` so downstream tooling can validate external runtime logs/configs without guessing.
+These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under:
+
+- `moe.semantics` (score computation + normalization + scaling expressions)
+- `moe.hash_routing` (hash-gating enable/indices expressions + `tid2eid` shape/dtype)
 
 ## Hyper-Connections (mHC)
 
