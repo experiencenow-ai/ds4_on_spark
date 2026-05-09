@@ -25,6 +25,7 @@ edit host-specific values, then enable services with `systemctl`.
 - Optional: `ds4-strict@.service` is like `ds4@.service` but *wants* `ds4-preflight-strict@%i.service` before start.
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional: `ds4-preflight-strict@.timer` runs strict preflight on boot and periodically after.
+- Optional: `ds4-support-bundle@.service` collects a non-destructive support bundle (triggered automatically when `ds4-preflight-strict@.service` fails; can also be started manually).
 - Optional Spark standalone examples:
   - `spark-master@.service`
   - `spark-worker@.service`

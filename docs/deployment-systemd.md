@@ -27,7 +27,8 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 - `ds4@.service`: long-running DS4 instance
 - `ds4-strict@.service`: long-running DS4 instance that *wants* `ds4-preflight-strict@%i.service` before start
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly)
-- `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`)
+- `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`); it also triggers `ds4-support-bundle@%i.service` on failure
+- `ds4-support-bundle@.service`: oneshot support bundle collector (safe; see `docs/ops-support-bundle.md`)
 - Optional: `ds4-preflight@.timer`: periodic non-destructive preflight
 - Optional: `ds4-preflight-strict@.timer`: periodic strict preflight
 - Optional Spark standalone helpers: `spark-master@.service`, `spark-worker@.service` (see `docs/deployment-spark-standalone-systemd.md`)

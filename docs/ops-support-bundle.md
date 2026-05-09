@@ -20,6 +20,16 @@ You can also run it directly from a repo checkout:
 
 The script prints an output `.tgz` path under `/tmp/` (and leaves the unpacked directory alongside it).
 
+### Optional: Systemd Unit (Human Run)
+
+If you install the systemd templates from `deploy/systemd/` to `/etc/systemd/system/`, you can also run the support bundle collector via:
+
+```bash
+sudo systemctl start ds4-support-bundle@spark0.service
+```
+
+`ds4-preflight-strict@.service` is wired to trigger `ds4-support-bundle@%i.service` automatically on failure.
+
 ## What It Captures
 
 Best-effort snapshots of:
@@ -34,4 +44,3 @@ Best-effort snapshots of:
 ## Redaction Guidance
 
 The script avoids dumping whole env files, but you should still **review the bundle before sharing** and redact anything sensitive (hostnames, IPs, paths, etc.) as needed.
-
