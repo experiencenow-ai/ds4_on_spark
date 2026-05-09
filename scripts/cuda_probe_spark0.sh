@@ -106,6 +106,9 @@ echo
 echo \"== run: cuda_sm121_barrier_memcpy_async ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_barrier_memcpy_async
 echo
+echo \"== run: cuda_sm121_cp_async_bulk_tx ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_cp_async_bulk_tx
+echo
 echo \"== run: cuda_sm121_cccl_atomic_ref ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_cccl_atomic_ref
 echo

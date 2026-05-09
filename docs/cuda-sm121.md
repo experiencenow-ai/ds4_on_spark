@@ -160,6 +160,16 @@ The probe `tools/cuda_probe/bin/cuda_sm121_barrier_memcpy_async` is a tiny compi
 - issues a per-thread `cuda::memcpy_async(..., barrier)` global->shared copy
 - waits via `barrier.arrive_and_wait()` and validates the copied values
 
+## CCCL `cp.async.bulk` via `memcpy_async_tx` (CUTLASS-style bulk copies)
+
+Some newer templated mainloops use `cp.async.bulk` rather than the older `cp.async` path, especially for larger transfers and more explicit completion mechanisms.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` is a tiny compile/run check that:
+
+- includes CCCL’s internal `<cuda/__memcpy_async/memcpy_async_tx.h>`
+- issues a 64-byte global->shared copy via `cuda::device::memcpy_async_tx` (which lowers to `cp.async.bulk` on SM90+)
+- waits via `cuda::barrier` and validates the copied values
+
 ## WMMA Tensor Core Smoke (CUTLASS-style proxy)
 
 CUTLASS and other template GEMM libraries rely on tensor core matmul plumbing.
