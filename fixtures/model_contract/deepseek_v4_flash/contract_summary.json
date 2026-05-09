@@ -471,12 +471,30 @@
   "encoding_constants": {
     "assistant_msg_template": "{reasoning}{content}{tool_calls}<\uff5cend\u2581of\u2581sentence\uff5c>",
     "assistant_msg_wo_eos_template": "{reasoning}{content}{tool_calls}",
+    "assistant_sp_token": "<\uff5cAssistant\uff5c>",
     "bos_token": "<\uff5cbegin\u2581of\u2581sentence\uff5c>",
+    "ds_task_sp_tokens": {
+      "action": "<\uff5caction\uff5c>",
+      "authority": "<\uff5cauthority\uff5c>",
+      "domain": "<\uff5cdomain\uff5c>",
+      "query": "<\uff5cquery\uff5c>",
+      "read_url": "<\uff5cread_url\uff5c>",
+      "title": "<\uff5ctitle\uff5c>"
+    },
     "dsml_token": "\uff5cDSML\uff5c",
     "eos_token": "<\uff5cend\u2581of\u2581sentence\uff5c>",
+    "latest_reminder_msg_template": "{content}",
+    "latest_reminder_sp_token": "<\uff5clatest_reminder\uff5c>",
+    "system_msg_template": "{content}",
     "thinking_end_token": "</think>",
     "thinking_start_token": "<think>",
-    "tool_calls_block_name": "tool_calls"
+    "thinking_template": "{reasoning_content}",
+    "tool_call_template": "<{dsml_token}invoke name=\"{name}\">\n{arguments}\n</{dsml_token}invoke>",
+    "tool_calls_block_name": "tool_calls",
+    "tool_calls_template": "<{dsml_token}{tc_block_name}>\n{tool_calls}\n</{dsml_token}{tc_block_name}>",
+    "tool_output_template": "<tool_result>{content}</tool_result>",
+    "user_msg_template": "{content}",
+    "user_sp_token": "<\uff5cUser\uff5c>"
   },
   "format_version": 1,
   "mla": {

@@ -97,6 +97,27 @@ def main() -> int:
 						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
 					if enc.get("eos_token") != tok.get("eos_token"):
 						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+					required_enc_fields = [
+						"system_msg_template",
+						"user_msg_template",
+						"assistant_msg_template",
+						"assistant_msg_wo_eos_template",
+						"thinking_template",
+						"tool_call_template",
+						"tool_calls_template",
+					]
+					for f in required_enc_fields:
+						v = enc.get(f)
+						if not (isinstance(v, str) and v):
+							failures.append(Failure(37, f"contract summary missing encoding_constants.{f} (expected non-empty string): {contract_summary}"))
+							break
+					task_tokens = enc.get("ds_task_sp_tokens")
+					if not isinstance(task_tokens, dict):
+						failures.append(Failure(38, f"contract summary missing encoding_constants.ds_task_sp_tokens (expected dict): {contract_summary}"))
+					else:
+						expected_task_keys = {"action", "query", "authority", "domain", "title", "read_url"}
+						if set(task_tokens.keys()) != expected_task_keys:
+							failures.append(Failure(39, f"contract summary encoding_constants.ds_task_sp_tokens keys mismatch (expected {sorted(expected_task_keys)}): {contract_summary}"))
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 
