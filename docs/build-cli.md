@@ -34,3 +34,10 @@ You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
 ```bash
 DS4_CONFIG_PATH=path/to/ds4.conf ./build_cli/ds4_cli --dump-config
 ```
+
+## Tests (Smoke)
+
+When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests that run:
+
+- `ds4_cli --version`
+- `ds4_cli --dump-config`
