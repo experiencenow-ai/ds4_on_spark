@@ -129,6 +129,7 @@ class SimConfig:
     mtp_accept_decay: float = 1.0
     mtp_draft_cost_scale: float = 0.25
     mtp_verify_per_draft_cost_scale: float = 0.0
+    mtp_draft_attempt_policy: str = "full"
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     batch_wait_interactive_ms: float = 0.0
@@ -269,11 +270,13 @@ class SimMetrics:
     mtp_draft_len: int = 0
     mtp_accept_prob: float = 0.0
     mtp_accept_decay: float = 1.0
+    mtp_draft_attempt_policy: str = "full"
     mtp_draft_tokens_total: int = 0
     mtp_draft_tokens_accepted: int = 0
     mtp_draft_tokens_rejected: int = 0
     mtp_bonus_tokens: int = 0
     mtp_accept_len_per_step: List[int] = dataclasses.field(default_factory=list)
+    mtp_draft_attempt_len_per_step: List[int] = dataclasses.field(default_factory=list)
     mtp_pos_attempted: List[int] = dataclasses.field(default_factory=list)
     mtp_pos_accepted: List[int] = dataclasses.field(default_factory=list)
 
@@ -408,11 +411,13 @@ class SimMetrics:
                     "draft_len": self.mtp_draft_len,
                     "accept_prob": self.mtp_accept_prob,
                     "accept_decay": self.mtp_accept_decay,
+                    "draft_attempt_policy": self.mtp_draft_attempt_policy,
                     "draft_tokens_total": self.mtp_draft_tokens_total,
                     "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
                     "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
                     "bonus_tokens": self.mtp_bonus_tokens,
                     "accept_len": summarize_ints(self.mtp_accept_len_per_step),
+                    "draft_attempt_len": summarize_ints(self.mtp_draft_attempt_len_per_step),
                     "accept_rate": (float(self.mtp_draft_tokens_accepted) / float(self.mtp_draft_tokens_total)) if self.mtp_draft_tokens_total != 0 else 0.0,
                     "per_pos_accept_rate_conditional": [
                         (float(a) / float(t)) if t != 0 else 0.0
@@ -1788,7 +1793,7 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
         heapq.heappush(evq, Event(t_ms=(now_ms + dt_ms), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
 
 
-def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics) -> int:
+def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics, draft_attempt_policy: str) -> int:
     if cfg.mtp_draft_len <= 0:
         return(1)
     if cfg.mtp_accept_prob <= 0.0:
@@ -1800,25 +1805,29 @@ def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetri
 
     draft_len = cfg.mtp_draft_len
     accepted_draft = 0
+    attempted = 0
     for i in range(draft_len):
         metrics.mtp_pos_attempted[i] += 1
         p = (cfg.mtp_accept_prob * (cfg.mtp_accept_decay ** float(i)))
         if p >= 1.0 or rng.random() < p:
             metrics.mtp_pos_accepted[i] += 1
             accepted_draft += 1
+            attempted += 1
         else:
+            attempted += 1
             break
 
-    metrics.mtp_draft_tokens_total += draft_len
+    total_draft = draft_len if draft_attempt_policy == "full" else attempted
+    metrics.mtp_draft_tokens_total += total_draft
     metrics.mtp_draft_tokens_accepted += accepted_draft
-    metrics.mtp_draft_tokens_rejected += (draft_len - accepted_draft)
+    metrics.mtp_draft_tokens_rejected += (total_draft - accepted_draft)
     if accepted_draft == draft_len:
         metrics.mtp_bonus_tokens += 1
         return(draft_len + 1)
     return(accepted_draft + 1)
 
 
-def _record_mtp_accept_len(cfg: SimConfig, metrics: SimMetrics, accept_len: int) -> None:
+def _record_mtp_accept_len(cfg: SimConfig, metrics: SimMetrics, accept_len: int, draft_attempt_policy: str) -> None:
     if cfg.mtp_draft_len <= 0:
         return
     draft_len = cfg.mtp_draft_len
@@ -1839,14 +1848,15 @@ def _record_mtp_accept_len(cfg: SimConfig, metrics: SimMetrics, accept_len: int)
         if i < accepted_draft:
             metrics.mtp_pos_accepted[i] += 1
 
-    metrics.mtp_draft_tokens_total += draft_len
+    total_draft = draft_len if draft_attempt_policy == "full" else attempted
+    metrics.mtp_draft_tokens_total += total_draft
     metrics.mtp_draft_tokens_accepted += accepted_draft
-    metrics.mtp_draft_tokens_rejected += (draft_len - accepted_draft)
+    metrics.mtp_draft_tokens_rejected += (total_draft - accepted_draft)
     if accept_len == (draft_len + 1):
         metrics.mtp_bonus_tokens += 1
 
 
-def _choose_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics, route: TokenRoute) -> int:
+def _choose_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics, route: TokenRoute, draft_attempt_policy: str) -> int:
     if cfg.mtp_draft_len <= 0:
         return(1)
     if route.mtp_accept_len is not None:
@@ -1864,7 +1874,17 @@ def _choose_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetri
         if accept_len < 1 or accept_len > (cfg.mtp_draft_len + 1):
             raise ValueError("trace route rejected_mtp out of range for configured mtp_draft_len")
         return(accept_len)
-    return(_sample_mtp_accept_len(cfg, rng, metrics))
+    return(_sample_mtp_accept_len(cfg, rng, metrics, draft_attempt_policy))
+
+
+def _mtp_attempted_draft_len(draft_len: int, accept_len: int) -> int:
+    if draft_len <= 0:
+        return(0)
+    if accept_len < 1:
+        return(0)
+    if accept_len >= (draft_len + 1):
+        return(draft_len)
+    return(min(draft_len, accept_len))
 
 
 def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
@@ -1935,6 +1955,9 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if cfg.mtp_draft_len < 0:
         raise ValueError("mtp_draft_len must be >= 0")
     if cfg.mtp_draft_len > 0:
+        mtp_draft_attempt_policy = cfg.mtp_draft_attempt_policy.strip().lower()
+        if mtp_draft_attempt_policy not in ("full", "stop_at_reject"):
+            raise ValueError("mtp_draft_attempt_policy must be 'full' or 'stop_at_reject'")
         if cfg.mtp_accept_prob < 0.0 or cfg.mtp_accept_prob > 1.0:
             raise ValueError("mtp_accept_prob must be within [0,1]")
         if cfg.mtp_accept_decay <= 0.0:
@@ -1943,6 +1966,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("mtp_draft_cost_scale must be > 0")
         if cfg.mtp_verify_per_draft_cost_scale < 0.0:
             raise ValueError("mtp_verify_per_draft_cost_scale must be >= 0")
+    else:
+        mtp_draft_attempt_policy = "full"
 
     for route in trace:
         if route.cost_scale is not None and float(route.cost_scale) <= 0.0:
@@ -2012,6 +2037,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         metrics.mtp_draft_len = cfg.mtp_draft_len
         metrics.mtp_accept_prob = cfg.mtp_accept_prob
         metrics.mtp_accept_decay = cfg.mtp_accept_decay
+        metrics.mtp_draft_attempt_policy = mtp_draft_attempt_policy
         metrics.mtp_pos_attempted = [0 for _ in range(cfg.mtp_draft_len)]
         metrics.mtp_pos_accepted = [0 for _ in range(cfg.mtp_draft_len)]
 
@@ -2157,27 +2183,31 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             admitted_verify_total = 0
             desired_verify_layer0 = 0
             partial_any_layer = False
-            micro_tokens = (cfg.mtp_draft_len + 1) if mtp_enabled else 1
             accept_len = 1
+            draft_attempt_len = 0
             if mtp_enabled:
-                accept_len = _choose_mtp_accept_len(cfg, rng, metrics, route)
+                accept_len = _choose_mtp_accept_len(cfg, rng, metrics, route, mtp_draft_attempt_policy)
                 tokens[tid].output_len = accept_len
+                draft_attempt_len = cfg.mtp_draft_len
+                if mtp_draft_attempt_policy == "stop_at_reject":
+                    draft_attempt_len = _mtp_attempted_draft_len(cfg.mtp_draft_len, accept_len)
             else:
                 tokens[tid].output_len = 1
+            micro_tokens = (draft_attempt_len + 1) if mtp_enabled else 1
 
             layers = _route_layers(route)
             base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
             for micro_i in range(micro_tokens):
-                is_verify = ((not mtp_enabled) or micro_i == cfg.mtp_draft_len)
+                is_verify = ((not mtp_enabled) or micro_i == draft_attempt_len)
                 cost_scale = base_cost_scale
                 mtp_phase = MtpPhase.NONE
-                if mtp_enabled and micro_i < cfg.mtp_draft_len:
+                if mtp_enabled and micro_i < draft_attempt_len:
                     cost_scale *= cfg.mtp_draft_cost_scale
                     mtp_phase = MtpPhase.DRAFT
-                elif mtp_enabled and micro_i == cfg.mtp_draft_len and cfg.mtp_verify_per_draft_cost_scale > 0.0:
-                    cost_scale *= (1.0 + (cfg.mtp_verify_per_draft_cost_scale * float(cfg.mtp_draft_len)))
+                elif mtp_enabled and micro_i == draft_attempt_len and cfg.mtp_verify_per_draft_cost_scale > 0.0:
+                    cost_scale *= (1.0 + (cfg.mtp_verify_per_draft_cost_scale * float(draft_attempt_len)))
                     mtp_phase = MtpPhase.VERIFY
-                elif mtp_enabled and micro_i == cfg.mtp_draft_len:
+                elif mtp_enabled and micro_i == draft_attempt_len:
                     mtp_phase = MtpPhase.VERIFY
 
                 for li, lr in enumerate(layers):
@@ -2227,6 +2257,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 tokens[tid].output_len = 0
                 if mtp_enabled:
                     metrics.mtp_accept_len_per_step.append(0)
+                    metrics.mtp_draft_attempt_len_per_step.append(0)
             else:
                 metrics.admitted_tokens += 1
                 if route.cls == LatencyClass.INTERACTIVE:
@@ -2253,12 +2284,14 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         metrics.partial_admit_any_layer_tokens_batch += 1
                 if mtp_enabled:
                     if admitted_verify_layer0 > 0 and (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None):
-                        _record_mtp_accept_len(cfg, metrics, accept_len)
+                        _record_mtp_accept_len(cfg, metrics, accept_len, mtp_draft_attempt_policy)
                     if admitted_verify_layer0 == 0:
                         metrics.mtp_accept_len_per_step.append(0)
+                        metrics.mtp_draft_attempt_len_per_step.append(0)
                         tokens[tid].output_len = 0
                     else:
                         metrics.mtp_accept_len_per_step.append(accept_len)
+                        metrics.mtp_draft_attempt_len_per_step.append(draft_attempt_len)
                         metrics.mtp_output_tokens += accept_len
 
         elif ev.kind == EventKind.TASK_DONE:
@@ -2490,6 +2523,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
+    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -2670,6 +2704,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_accept_decay=args.mtp_accept_decay,
         mtp_draft_cost_scale=args.mtp_draft_cost_scale,
         mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
+        mtp_draft_attempt_policy=args.mtp_draft_attempt_policy,
     )
 
     if len(args.compare) != 0:
