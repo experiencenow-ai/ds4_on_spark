@@ -118,6 +118,17 @@ If `DS4_METRICS_PORT` is set and `curl` is available, `ops_tp2_readiness.sh` als
 attempts a fast HTTP probe of `http://<metrics-host>:<port>/metrics` (best-effort,
 non-fatal). When `DS4_METRICS_ADDR=0.0.0.0`, it probes `127.0.0.1`.
 
+## Optional: Periodic Preflight (Systemd Timer)
+
+If you want readiness checks to run automatically on boot and periodically after,
+install and enable the timer template (human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight@spark0.timer
+```
+
 ## Optional: Spark Standalone Sanity
 
 If Spark is managed locally via systemd, you can also sanity check the Spark env (non-destructive):
