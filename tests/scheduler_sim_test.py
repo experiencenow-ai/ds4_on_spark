@@ -151,6 +151,9 @@ class SchedulerSimTest(unittest.TestCase):
             m = scheduler_sim.run_simulation(cfg, trace)
             self.assertEqual(m.partial_admit_tokens, 0)
             self.assertEqual(m.partial_admit_any_layer_tokens, 1)
+            self.assertEqual(m.skipped_stages_backpressure, 1)
+            self.assertEqual(m.skipped_stages_backpressure_batch, 1)
+            self.assertEqual(m.skipped_stages_backpressure_verify, 1)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)

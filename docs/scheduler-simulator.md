@@ -48,6 +48,8 @@ When a trace record includes `layers[]` (multi-MoE-layer routes), the simulator 
 
 This makes per-token latency approximately additive across layers, which better matches transformer execution than admitting all layers concurrently.
 
+Stage skips (layer-local residual-path drops) are summarized under `stages.skipped_backpressure*` in the simulator JSON output.
+
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.

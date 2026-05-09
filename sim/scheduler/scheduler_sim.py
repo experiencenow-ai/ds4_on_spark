@@ -281,6 +281,11 @@ class SimMetrics:
     partial_admit_any_layer_tokens: int = 0
     partial_admit_any_layer_tokens_interactive: int = 0
     partial_admit_any_layer_tokens_batch: int = 0
+    skipped_stages_backpressure: int = 0
+    skipped_stages_backpressure_interactive: int = 0
+    skipped_stages_backpressure_batch: int = 0
+    skipped_stages_backpressure_verify: int = 0
+    skipped_stages_backpressure_draft: int = 0
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -506,6 +511,13 @@ class SimMetrics:
                     "partial_admit_any_layer": self.partial_admit_any_layer_tokens,
                     "partial_admit_any_layer_interactive": self.partial_admit_any_layer_tokens_interactive,
                     "partial_admit_any_layer_batch": self.partial_admit_any_layer_tokens_batch,
+                },
+                "stages": {
+                    "skipped_backpressure": self.skipped_stages_backpressure,
+                    "skipped_backpressure_interactive": self.skipped_stages_backpressure_interactive,
+                    "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
+                    "skipped_backpressure_verify": self.skipped_stages_backpressure_verify,
+                    "skipped_backpressure_draft": self.skipped_stages_backpressure_draft,
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -2508,7 +2520,18 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
         while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
             stage = ts.stages[ts.stage_idx]
+            desired_stage = min(stage.k, len(stage.candidates))
             admitted = _enqueue_stage(now_ms, tid, stage)
+            if admitted == 0 and desired_stage > 0:
+                metrics.skipped_stages_backpressure += 1
+                if ts.cls == LatencyClass.INTERACTIVE:
+                    metrics.skipped_stages_backpressure_interactive += 1
+                else:
+                    metrics.skipped_stages_backpressure_batch += 1
+                if stage.is_verify:
+                    metrics.skipped_stages_backpressure_verify += 1
+                else:
+                    metrics.skipped_stages_backpressure_draft += 1
             if admitted != 0:
                 _token_first_admit(tid)
             if stage.is_verify:
