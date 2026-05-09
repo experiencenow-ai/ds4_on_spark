@@ -40,6 +40,10 @@ const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 		return("CUDA disabled");
 	if ( st.code == DS4_CUDA_ERR_NO_DEVICE )
 		return("No CUDA device");
+	if ( st.code == DS4_CUDA_ERR_INVALID_ARG )
+		return("Invalid argument");
+	if ( st.code == DS4_CUDA_ERR_SIZE_OVERFLOW )
+		return("Size overflow");
 	if ( st.code < 0 )
 		return("DS4 CUDA internal error");
 	return("CUDA error (disabled build)");
@@ -68,4 +72,43 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 	if ( cuda_err == 0 )
 		return(ds4_cuda_ok());
 	return(ds4_cuda_fail(cuda_err));
+}
+
+ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes)
+{
+	DS4_UNUSED(bytes);
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	*out = 0;
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_free(void *ptr)
+{
+	DS4_UNUSED(ptr);
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes)
+{
+	DS4_UNUSED(dst);
+	DS4_UNUSED(value);
+	DS4_UNUSED(bytes);
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_memcpy_h2d(void *dst,const void *src,int64_t bytes)
+{
+	DS4_UNUSED(dst);
+	DS4_UNUSED(src);
+	DS4_UNUSED(bytes);
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
+ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes)
+{
+	DS4_UNUSED(dst);
+	DS4_UNUSED(src);
+	DS4_UNUSED(bytes);
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }

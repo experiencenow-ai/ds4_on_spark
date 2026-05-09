@@ -6,6 +6,7 @@ int32_t test_cuda(void)
 {
 	ds4_cuda_status_t st0,st1,st2,st3,st4,st5;
 	const char *s;
+	void *dev;
 	st0 = ds4_cuda_ok();
 	if ( ds4_cuda_is_ok(st0) == 0 )
 		return(-1);
@@ -45,12 +46,58 @@ int32_t test_cuda(void)
 		if ( st5.code != DS4_CUDA_ERR_NO_DEVICE )
 			return(-12);
 	}
+	else
+	{
+		uint8_t h0[16],h1[16];
+		int32_t i;
+		dev = 0;
+		for (i=0; i<(int32_t)sizeof(h0); i++)
+		{
+			h0[i] = (uint8_t)i;
+			h1[i] = 0;
+		}
+		st0 = ds4_cuda_malloc(&dev,(int64_t)sizeof(h0));
+		if ( ds4_cuda_is_ok(st0) == 0 || dev == 0 )
+			return(-14);
+		st0 = ds4_cuda_memset(dev,0,(int64_t)sizeof(h0));
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-15);
+		st0 = ds4_cuda_memcpy_h2d(dev,h0,(int64_t)sizeof(h0));
+		if ( ds4_cuda_is_ok(st0) == 0 )
+		{
+			ds4_cuda_free(dev);
+			return(-16);
+		}
+		st0 = ds4_cuda_memcpy_d2h(h1,dev,(int64_t)sizeof(h1));
+		if ( ds4_cuda_is_ok(st0) == 0 )
+		{
+			ds4_cuda_free(dev);
+			return(-17);
+		}
+		for (i=0; i<(int32_t)sizeof(h0); i++)
+		{
+			if ( h0[i] != h1[i] )
+			{
+				ds4_cuda_free(dev);
+				return(-18);
+			}
+		}
+		st0 = ds4_cuda_free(dev);
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-19);
+	}
 #else
 	if ( ds4_cuda_is_enabled_build() != 0 )
 		return(-11);
 	st5 = ds4_cuda_init();
 	if ( st5.code != DS4_CUDA_ERR_DISABLED )
 		return(-13);
+	dev = (void *)0x1;
+	st0 = ds4_cuda_malloc(&dev,16);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-20);
+	if ( dev != 0 )
+		return(-21);
 #endif
 	return(0);
 }
