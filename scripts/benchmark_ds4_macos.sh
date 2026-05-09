@@ -95,11 +95,17 @@ LOG_RAW="$OUT_DIR/ds4.log"
 LOG_SUMMARY="$OUT_DIR/ds4.summary.txt"
 
 echo "== run =="
+echo "prompt_chars=$(printf %s \"$PROMPT\" | wc -c | tr -d ' ')"
+if command -v sha256sum >/dev/null 2>&1; then
+    echo "prompt_sha256=$(printf %s \"$PROMPT\" | sha256sum | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    echo "prompt_sha256=$(printf %s \"$PROMPT\" | shasum -a 256 | awk '{print $1}')"
+fi
 echo "cmd=$DS4_BIN -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX $EXTRA_ARGS"
 echo
 
 python3 - <<'PY' "$DS4_BIN" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY"
-import os, resource, re, subprocess, sys, time, shlex, platform
+import hashlib, os, resource, re, subprocess, sys, time, shlex, platform
 
 ds4_bin, model, prompt, n_tokens, ctx, extra_args, log_raw, log_summary = sys.argv[1:]
 
@@ -154,6 +160,11 @@ if model_size_bytes is None:
     summary_lines.append("model_size_bytes=NA")
 else:
     summary_lines.append("model_size_bytes=%d" % model_size_bytes)
+summary_lines.append("prompt_chars=%d" % len(prompt.encode("utf-8")))
+summary_lines.append("prompt_sha256=%s" % hashlib.sha256(prompt.encode("utf-8")).hexdigest())
+summary_lines.append("ctx=%s" % ctx)
+summary_lines.append("n_tokens=%s" % n_tokens)
+summary_lines.append("extra_args=%s" % (extra_args.replace(" ", "_") if extra_args else "NA"))
 if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
 else:

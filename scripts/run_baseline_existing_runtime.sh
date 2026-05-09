@@ -9,7 +9,20 @@ ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
 LLAMA_DIR="${LLAMA_DIR:-}"
 MODEL_GGUF="${MODEL_GGUF:-}"
+LLAMA_CLI="${LLAMA_CLI:-}"
+RUNTIME_LABEL="${RUNTIME_LABEL:-}"
+MODEL_SOURCE="${MODEL_SOURCE:-}"
+MODEL_QUANT="${MODEL_QUANT:-}"
+LLAMA_PROMPT="${LLAMA_PROMPT:-${PROMPT:-}}"
+CTX="${CTX:-}"
+N_TOKENS="${N_TOKENS:-}"
+N_GPU_LAYERS="${N_GPU_LAYERS:-}"
+EXTRA_ARGS="${EXTRA_ARGS:-}"
 VLLM_MODEL="${VLLM_MODEL:-}"
+VLLM_PROMPT="${VLLM_PROMPT:-${PROMPT:-}}"
+MAX_TOKENS="${MAX_TOKENS:-}"
+TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-}"
+MEASURE_TTFT="${MEASURE_TTFT:-}"
 DS4_DIR="${DS4_DIR:-}"
 DS4_MODEL_GGUF="${DS4_MODEL_GGUF:-}"
 
@@ -27,6 +40,23 @@ repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 REPORT_MD="$OUT_DIR/baseline_existing_runtime.md"
 
+prompt_meta_line()
+{
+    s="$1"
+    if [ "$s" = "" ]; then
+        echo "prompt=default"
+        return 0
+    fi
+    chars="$(printf %s "$s" | wc -c | tr -d ' ')"
+    sha="NA"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha="$(printf %s "$s" | sha256sum | awk '{print $1}' || echo NA)"
+    elif command -v shasum >/dev/null 2>&1; then
+        sha="$(printf %s "$s" | shasum -a 256 | awk '{print $1}' || echo NA)"
+    fi
+    echo "prompt_chars=$chars prompt_sha256=$sha"
+}
+
 extract_baseline_summary()
 {
     in="$1"
@@ -43,7 +73,11 @@ extract_baseline_summary()
 }
 
 REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN LLAMA_DIR='${LLAMA_DIR}' MODEL_GGUF='${MODEL_GGUF}' /tmp/benchmark_llamacpp_spark.sh"
-REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN VLLM_MODEL='${VLLM_MODEL}' /tmp/benchmark_vllm_spark.sh"
+REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN LLAMA_DIR='${LLAMA_DIR}' MODEL_GGUF='${MODEL_GGUF}' LLAMA_CLI='${LLAMA_CLI}' RUNTIME_LABEL='${RUNTIME_LABEL}' MODEL_SOURCE='${MODEL_SOURCE}' MODEL_QUANT='${MODEL_QUANT}' PROMPT='${LLAMA_PROMPT}' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS='${EXTRA_ARGS}' OUT_DIR='/tmp/baseline_llamacpp_${ts}' /tmp/benchmark_llamacpp_spark.sh"
+REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN VLLM_MODEL='${VLLM_MODEL}' PROMPT='${VLLM_PROMPT}' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='/tmp/baseline_vllm_${ts}' /tmp/benchmark_vllm_spark.sh"
+
+LLAMA_PROMPT_META="$(prompt_meta_line "$LLAMA_PROMPT")"
+VLLM_PROMPT_META="$(prompt_meta_line "$VLLM_PROMPT")"
 
 {
     echo "# Existing Runtime Baseline (Spark)"
@@ -58,14 +92,27 @@ REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_v
     echo "## Command Line (local)"
     echo
     echo '```sh'
-    echo "RUN_DS4_MACOS=$RUN_DS4_MACOS ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN LLAMA_DIR='$LLAMA_DIR' MODEL_GGUF='$MODEL_GGUF' VLLM_MODEL='$VLLM_MODEL' DS4_DIR='$DS4_DIR' DS4_MODEL_GGUF='$DS4_MODEL_GGUF' SSH_OPTS='$SSH_OPTS' $0 $target"
+    echo "RUN_DS4_MACOS=$RUN_DS4_MACOS ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN LLAMA_DIR='$LLAMA_DIR' MODEL_GGUF='$MODEL_GGUF' LLAMA_CLI='$LLAMA_CLI' RUNTIME_LABEL='$RUNTIME_LABEL' MODEL_SOURCE='$MODEL_SOURCE' MODEL_QUANT='$MODEL_QUANT' LLAMA_PROMPT='<omitted>' LLAMA_PROMPT_META='$LLAMA_PROMPT_META' CTX='$CTX' N_TOKENS='$N_TOKENS' N_GPU_LAYERS='$N_GPU_LAYERS' EXTRA_ARGS='$EXTRA_ARGS' VLLM_MODEL='$VLLM_MODEL' VLLM_PROMPT='<omitted>' VLLM_PROMPT_META='$VLLM_PROMPT_META' MAX_TOKENS='$MAX_TOKENS' TENSOR_PARALLEL_SIZE='$TENSOR_PARALLEL_SIZE' MEASURE_TTFT='$MEASURE_TTFT' DS4_DIR='$DS4_DIR' DS4_MODEL_GGUF='$DS4_MODEL_GGUF' SSH_OPTS='$SSH_OPTS' $0 $target"
     echo '```'
     echo
     echo "## Inputs (optional)"
     echo
     echo "- LLAMA_DIR: ${LLAMA_DIR:-<default on spark>}"
     echo "- MODEL_GGUF (llama.cpp): ${MODEL_GGUF:-<unset>}"
+    echo "- LLAMA_CLI (llama.cpp override): ${LLAMA_CLI:-<unset>}"
+    echo "- RUNTIME_LABEL (llama.cpp): ${RUNTIME_LABEL:-<unset>}"
+    echo "- MODEL_SOURCE (llama.cpp): ${MODEL_SOURCE:-<unset>}"
+    echo "- MODEL_QUANT (llama.cpp): ${MODEL_QUANT:-<unset>}"
+    echo "- LLAMA_PROMPT (llama.cpp): $(prompt_meta_line "$LLAMA_PROMPT")"
+    echo "- CTX (llama.cpp): ${CTX:-<default>}"
+    echo "- N_TOKENS (llama.cpp): ${N_TOKENS:-<default>}"
+    echo "- N_GPU_LAYERS (llama.cpp): ${N_GPU_LAYERS:-<default>}"
+    echo "- EXTRA_ARGS (llama.cpp): ${EXTRA_ARGS:-<default>}"
     echo "- VLLM_MODEL (hf dir): ${VLLM_MODEL:-<unset>}"
+    echo "- VLLM_PROMPT (vLLM): $(prompt_meta_line "$VLLM_PROMPT")"
+    echo "- MAX_TOKENS (vLLM): ${MAX_TOKENS:-<default>}"
+    echo "- TENSOR_PARALLEL_SIZE (vLLM): ${TENSOR_PARALLEL_SIZE:-<default>}"
+    echo "- MEASURE_TTFT (vLLM): ${MEASURE_TTFT:-<default>}"
     echo "- DS4_DIR (macos): ${DS4_DIR:-<default local>}"
     echo "- DS4_MODEL_GGUF (macos): ${DS4_MODEL_GGUF:-<unset>}"
     echo

@@ -4,6 +4,10 @@ set -eu
 target_note="llama.cpp baseline (Spark/CUDA)"
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/src/llama.cpp}"
+LLAMA_CLI="${LLAMA_CLI:-}"
+RUNTIME_LABEL="${RUNTIME_LABEL:-llama.cpp-compatible}"
+MODEL_SOURCE="${MODEL_SOURCE:-unknown}"
+MODEL_QUANT="${MODEL_QUANT:-unknown}"
 MODEL_GGUF="${MODEL_GGUF:-}"
 PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 CTX="${CTX:-8192}"
@@ -22,6 +26,9 @@ echo "== $target_note =="
 date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
 echo "cwd=$PWD"
 echo "out_dir=$OUT_DIR"
+echo "runtime_label=$RUNTIME_LABEL"
+echo "model_source=$MODEL_SOURCE"
+echo "model_quant=$MODEL_QUANT"
 echo
 
 echo "== gpu snapshot (pre) =="
@@ -30,13 +37,13 @@ nvidia-smi >"$GPU_PRE" 2>&1 || true
 cat "$GPU_PRE" || true
 echo
 
-if [ ! -d "$LLAMA_DIR" ]; then
+if [ "$LLAMA_CLI" = "" ] && [ ! -d "$LLAMA_DIR" ]; then
     echo "missing LLAMA_DIR=$LLAMA_DIR"
     if [ "$ALLOW_FETCH" = "1" ]; then
         mkdir -p "$(dirname "$LLAMA_DIR")"
         git clone https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
     else
-        echo "set ALLOW_FETCH=1 to clone llama.cpp on Spark"
+        echo "set ALLOW_FETCH=1 to clone llama.cpp on Spark (or set LLAMA_CLI=/abs/path/to/llama-cli)"
         exit 2
     fi
 fi
@@ -45,24 +52,33 @@ echo "== llama.cpp revision =="
 if [ -d "$LLAMA_DIR/.git" ]; then
     (cd "$LLAMA_DIR" && git rev-parse HEAD) || true
 fi
+if [ "$LLAMA_CLI" != "" ]; then
+    echo "llama_cli_override=$LLAMA_CLI"
+fi
 echo
 
 if [ "$ALLOW_BUILD" = "1" ]; then
+    if [ "$LLAMA_CLI" != "" ]; then
+        echo "LLAMA_CLI is set; skipping build under LLAMA_DIR"
+        echo
+    else
     echo "== build (cuda) =="
     (cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release)
     (cd "$LLAMA_DIR" && cmake --build build --config Release)
     echo
+    fi
 else
     echo "== build skipped =="
     echo "set ALLOW_BUILD=1 to compile llama.cpp on Spark"
     echo
 fi
 
-LLAMA_CLI=""
-if [ -x "$LLAMA_DIR/build/bin/llama-cli" ]; then
-    LLAMA_CLI="$LLAMA_DIR/build/bin/llama-cli"
-elif [ -x "$LLAMA_DIR/build/bin/main" ]; then
-    LLAMA_CLI="$LLAMA_DIR/build/bin/main"
+if [ "$LLAMA_CLI" = "" ]; then
+    if [ -x "$LLAMA_DIR/build/bin/llama-cli" ]; then
+        LLAMA_CLI="$LLAMA_DIR/build/bin/llama-cli"
+    elif [ -x "$LLAMA_DIR/build/bin/main" ]; then
+        LLAMA_CLI="$LLAMA_DIR/build/bin/main"
+    fi
 fi
 
 if [ "$ALLOW_RUN" != "1" ]; then
@@ -88,21 +104,43 @@ if [ ! -r "$MODEL_GGUF" ]; then
 fi
 
 echo "== model artifact =="
+echo "model_source=$MODEL_SOURCE"
+echo "model_quant=$MODEL_QUANT"
 ls -lh "$MODEL_GGUF" || true
-command -v sha256sum >/dev/null 2>&1 && sha256sum "$MODEL_GGUF" || true
+wc -c "$MODEL_GGUF" || true
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$MODEL_GGUF" || true
+elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$MODEL_GGUF" || true
+fi
 echo
 
 LOG_RAW="$OUT_DIR/llama_cli.log"
 LOG_SUMMARY="$OUT_DIR/llama_cli.summary.txt"
 
 echo "== run =="
+echo "prompt_chars=$(printf %s \"$PROMPT\" | wc -c | tr -d ' ')"
+if command -v sha256sum >/dev/null 2>&1; then
+    echo "prompt_sha256=$(printf %s \"$PROMPT\" | sha256sum | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    echo "prompt_sha256=$(printf %s \"$PROMPT\" | shasum -a 256 | awk '{print $1}')"
+fi
 echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS --timings $EXTRA_ARGS"
 echo
 
-python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY"
-import os, resource, re, subprocess, sys, time, shlex
+LLAMA_CLI_SHA256=""
+LLAMA_CLI_VERSION=""
+if command -v sha256sum >/dev/null 2>&1; then
+    LLAMA_CLI_SHA256="$(sha256sum "$LLAMA_CLI" 2>/dev/null | awk '{print $1}' || true)"
+elif command -v shasum >/dev/null 2>&1; then
+    LLAMA_CLI_SHA256="$(shasum -a 256 "$LLAMA_CLI" 2>/dev/null | awk '{print $1}' || true)"
+fi
+LLAMA_CLI_VERSION="$("$LLAMA_CLI" --version 2>/dev/null | head -n 1 | tr -s ' ' | sed 's/[[:space:]]*$//' || true)"
 
-llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary = sys.argv[1:]
+python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$LLAMA_CLI_SHA256" "$LLAMA_CLI_VERSION"
+import hashlib, os, resource, re, subprocess, sys, time, shlex
+
+llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, llama_cli_sha256, llama_cli_version = sys.argv[1:]
 
 cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl, "--timings"]
 if extra_args.strip():
@@ -119,6 +157,11 @@ timings_lines = []
 with open(log_raw, "w", encoding="utf-8") as f:
     f.write("cmd=" + " ".join(shlex.quote(x) for x in cmd) + "\n")
     f.write("utc_start=" + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
+    f.write("runtime_label=" + runtime_label + "\n")
+    f.write("model_source=" + model_source + "\n")
+    f.write("model_quant=" + model_quant + "\n")
+    f.write("llama_cli_sha256=" + llama_cli_sha256 + "\n")
+    f.write("llama_cli_version=" + llama_cli_version + "\n")
     f.flush()
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -165,12 +208,22 @@ for tl in timings_lines:
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
+summary_lines.append("runtime_label=%s" % runtime_label)
+summary_lines.append("model_source=%s" % model_source)
+summary_lines.append("model_quant=%s" % model_quant)
+summary_lines.append("prompt_chars=%d" % len(prompt.encode("utf-8")))
+summary_lines.append("prompt_sha256=%s" % hashlib.sha256(prompt.encode("utf-8")).hexdigest())
 summary_lines.append("llama_cli=%s" % llama_cli)
+summary_lines.append("llama_cli_sha256=%s" % (llama_cli_sha256 or "NA"))
+summary_lines.append("llama_cli_version=%s" % (llama_cli_version.replace(" ", "_") if llama_cli_version else "NA"))
 summary_lines.append("model_path=%s" % model)
 if model_size_bytes is None:
     summary_lines.append("model_size_bytes=NA")
 else:
     summary_lines.append("model_size_bytes=%d" % model_size_bytes)
+summary_lines.append("ctx=%s" % ctx)
+summary_lines.append("n_tokens=%s" % n_tokens)
+summary_lines.append("n_gpu_layers=%s" % ngl)
 if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
 else:
