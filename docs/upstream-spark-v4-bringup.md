@@ -23,7 +23,7 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - Repo: `https://github.com/bigs/deepseek-v4-flash-dgx-spark`
 - Ref: `refs/heads/main`
 - Commit: `4410e814a76a1a9d662576e2a35fa4a8965d2edc`
-- License: UNKNOWN (GitHub API does not report a repo license; verify before reuse)
+- License: UNKNOWN (no `LICENSE*` file detected at pinned commit; see `./scripts/upstream_license_probe.sh` before reuse)
 - What it is (from upstream README, summarized):
   - Research runtime + OpenAI-compatible server for running DeepSeek-V4-Flash from the **native FP8/FP4 checkpoint layout**, with Spark-specific measurement/guardrails.
   - Includes scripts for checkpoint inspection + weight-manifest generation and a guarded Docker runner for Spark experiments.
@@ -44,4 +44,3 @@ This project **must not** download or vendor large checkpoints/weights; treat th
   - Reference for “Blackwell arch gaps” when using containerized runtimes; could be relevant if Spark/GB10 (SM121) hits similar architecture filtering issues in third-party images.
 - Risk notes:
   - Not Spark/SM121-specific; treat as a reference until validated on actual Spark hardware.
-

@@ -26,7 +26,7 @@ Build notes (Spark / GPU nodes, high level):
 
 - Repo: `https://github.com/huggingface/transformers`
 - Ref: `refs/tags/v5.8.0`
-- Commit: `a9e70365af64e028d40d8c7909deb7f138b49857`
+- Commit: `049d2bf1220747b6d39e2a978b9f5fe0defa1dca`
 - License: Apache-2.0 (see upstream `LICENSE`)
 - DeepSeek-V4 docs: `https://huggingface.co/docs/transformers/model_doc/deepseek_v4`
 

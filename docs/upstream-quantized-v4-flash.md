@@ -77,7 +77,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 ### lovedheart/DeepSeek-V4-Flash-GGUF (Q2_K shards; PR-referenced runtime)
 
 - Source: `https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF` @ `cd42deba41ac0536e68b125dfc367197b0ec3038` (`refs/heads/main`)
-- License: **UNKNOWN** (no `LICENSE` file present in a metadata-only git clone; treat as unknown until verified by a human)
+- License: **UNKNOWN** (no `LICENSE*` file detected at pinned commit; see `./scripts/upstream_license_probe.sh`; treat as unknown until verified by a human)
 - Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
   - Q2_K shards: 23 files under `Q2_K/` (total 100451521792 bytes, ~93.6 GiB)
   - `DeepSeek-V4-Flash-MXFP4_MOE.gguf` (150225324672 bytes, ~139.9 GiB)
