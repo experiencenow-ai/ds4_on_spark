@@ -23,6 +23,8 @@ Supported keys:
 - `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`) or a case-insensitive name (`error`, `warn`/`warning`, `info`, `debug`)
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
 
+`ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
+
 ## CUDA gating
 
 `enable_cuda` is a runtime toggle, but CUDA support is also a build-time choice:
