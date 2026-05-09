@@ -85,7 +85,15 @@ lspci | grep -i nvidia || true
 echo
 echo "== nvidia-smi query (driver + compute capability) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
-	nvidia-smi --query-gpu=gpu_name,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true
+	q=""
+	q="$(nvidia-smi --query-gpu=gpu_name,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+	if [ "$q" != "" ]; then
+		echo "$q"
+	else
+		q="$(nvidia-smi --query-gpu=gpu_name,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+		[ "$q" != "" ] && echo "$q"
+		echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+	fi
 else
 	echo "nvidia-smi not found"
 fi
@@ -117,6 +125,28 @@ command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null |
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
 ldconfig -p 2>/dev/null | grep -E "libcuda\\.so\\.1|libcudart\\.so" | head -n 20 || true
+echo
+echo "== cudnn (headers + libs) =="
+cudnn_hdr_found="0"
+for hdr in \
+	/usr/local/cuda/include/cudnn_version.h \
+	/usr/local/cuda/include/cudnn.h \
+	/usr/include/cudnn_version.h \
+	/usr/include/cudnn.h \
+	/usr/include/x86_64-linux-gnu/cudnn_version.h \
+	/usr/include/x86_64-linux-gnu/cudnn.h
+do
+	if [ -r "$hdr" ]; then
+		echo "-- $hdr --"
+		grep -E "^#define CUDNN_(MAJOR|MINOR|PATCHLEVEL)" "$hdr" 2>/dev/null | head -n 20 || true
+		cudnn_hdr_found="1"
+	fi
+done
+if [ "$cudnn_hdr_found" = "0" ]; then
+	echo "cudnn headers not found"
+fi
+echo
+ldconfig -p 2>/dev/null | grep -E "libcudnn" | head -n 20 || true
 echo
 echo "== cuda runtime probe (nvcc, no deps) =="
 if [ "$cuda_runtime_probe" = "1" ] && [ "$nvcc_bin" != "" ]; then
