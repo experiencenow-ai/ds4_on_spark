@@ -120,7 +120,7 @@ else
 fi
 compute_cap=""
 if [ "$q" != "" ]; then
-	compute_cap="$(printf "%s\n" "$q" | head -n 1 | cut -d',' -f5 | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+	compute_cap="$(printf "%s\n" "$q" | head -n 1 | cut -d',' -f5 | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//")"
 	case "$compute_cap" in
 		[0-9]*.[0-9]*)
 			;;
@@ -133,7 +133,7 @@ nvcc_arch=""
 if [ "${NVCC_ARCH:-}" != "" ]; then
 	nvcc_arch="$NVCC_ARCH"
 elif [ "$compute_cap" != "" ]; then
-	nvcc_arch="sm_$(printf "%s" "$compute_cap" | sed -E 's/[^0-9.]//g; s/[.]//g')"
+	nvcc_arch="sm_$(printf "%s" "$compute_cap" | sed -E "s/[^0-9.]//g; s/[.]//g")"
 fi
 echo
 echo "== nvidia-smi cuda version =="
