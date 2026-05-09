@@ -214,6 +214,7 @@ Replay mode reads one JSON object per line with required fields:
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+- `token_index` (optional int): monotonically increasing token index from the runtime (debugging aid only)
 - `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace`)
 - `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc`.
 - `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
@@ -223,6 +224,8 @@ Replay mode reads one JSON object per line with required fields:
   - if both are provided, `accepted_mtp + rejected_mtp` must equal `mtp_draft_len`
 - `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (useful for shape-dependent service modeling in replay traces)
 - `decode_ms` (optional number): observed per-token decode latency from a runtime trace; the simulator records `trace.decode_ms` and `trace.decode_error_ms` to compare the model to the trace
+- `kv_tokens` (optional int): KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens`)
+- `expert_batch_size` (optional int): observed expert batch size (the simulator summarizes this under `trace.expert_batch_size`)
 
 Example:
 
@@ -263,6 +266,7 @@ The simulator prints a JSON object with:
 - `sim`: makespan + token/task throughput
 - `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
 - `trace.decode_ms.{interactive,batch}` and `trace.decode_error_ms.{interactive,batch}`: when trace replay includes `decode_ms`, summarize observed decode latency and error vs simulated token latency (admitted tokens only)
+- `trace.kv_tokens.{interactive,batch}` and `trace.expert_batch_size.{interactive,batch}`: when trace replay includes `kv_tokens` / `expert_batch_size`, summarize observed values for admitted tokens
 - `token_latency_ms.{interactive,batch}`: count/mean/p50/p95/p99/max (admitted tokens only)
 - `output_token_latency_ms.{interactive,batch}`: token latency distribution weighted by realized output tokens (MTP-aware; equals `token_latency_ms` when MTP is disabled)
 - `sla`: per-class token-SLA violation counts/fractions (when `--sla-*-ms` is set)

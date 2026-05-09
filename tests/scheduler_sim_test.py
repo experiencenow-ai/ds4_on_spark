@@ -322,6 +322,49 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_jsonl_extra_fields_parse_and_record_metrics(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"token_index":0,"cls":"interactive","candidates":[0,1],"kv_tokens":128,"expert_batch_size":4,"decode_ms":1.5}\n')
+                f.write('{"t_ms":0.01,"token_index":1,"cls":"batch","candidates":[1,0],"kv_tokens":256,"expert_batch_size":8,"decode_ms":2.0}\n')
+            trace = scheduler_sim.load_trace_jsonl(path)
+            self.assertEqual([r.token_index for r in trace], [0, 1])
+            self.assertEqual(trace[0].kv_tokens, 128)
+            self.assertEqual(trace[1].kv_tokens, 256)
+            self.assertEqual(trace[0].expert_batch_size, 4)
+            self.assertEqual(trace[1].expert_batch_size, 8)
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=2,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=0.1,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.admitted_tokens_interactive, 1)
+            self.assertEqual(m.admitted_tokens_batch, 1)
+            self.assertEqual(m.trace_kv_tokens_interactive, [128.0])
+            self.assertEqual(m.trace_kv_tokens_batch, [256.0])
+            self.assertEqual(m.trace_expert_batch_size_interactive, [4.0])
+            self.assertEqual(m.trace_expert_batch_size_batch, [8.0])
+            mj = m.to_jsonable()
+            self.assertEqual(mj["trace"]["kv_tokens"]["interactive"]["count"], 1)
+            self.assertEqual(mj["trace"]["expert_batch_size"]["batch"]["count"], 1)
+        finally:
+            os.unlink(path)
+
     def test_trace_jsonl_dt_ms_time_mode_loads(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:
