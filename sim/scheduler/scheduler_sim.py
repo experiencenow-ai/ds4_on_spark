@@ -122,6 +122,7 @@ class SimConfig:
     adaptive_k: AdaptiveKConfig
     k_mode: str = "controller"
     k_signal: str = "global"
+    pending_units: str = "tasks"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -150,6 +151,7 @@ class Task:
     cost_scale: float = 1.0
     mtp_phase: MtpPhase = MtpPhase.NONE
     start_ms: Optional[float] = None
+    served_hi: bool = False
 
 
 @dataclass(frozen=True)
@@ -194,12 +196,24 @@ class ExpertQueue:
     lo: Deque[Task] = dataclasses.field(default_factory=deque)
     in_flight: int = 0
     in_flight_tasks: int = 0
+    pending_work_hi: float = 0.0
+    pending_work_lo: float = 0.0
+    in_flight_work_hi: float = 0.0
+    in_flight_work_lo: float = 0.0
     hi_burst: int = 0
     hi_wakeup_ms: float = -1.0
     lo_wakeup_ms: float = -1.0
 
     def pending(self) -> int:
         return(len(self.hi) + len(self.lo) + self.in_flight_tasks)
+
+    def pending_work(self) -> float:
+        return(self.pending_work_hi + self.pending_work_lo + self.in_flight_work_hi + self.in_flight_work_lo)
+
+    def pending_work_for_queue(self, cls: LatencyClass) -> float:
+        if cls == LatencyClass.INTERACTIVE:
+            return(self.pending_work_hi + self.in_flight_work_hi)
+        return(self.pending_work_lo + self.in_flight_work_lo)
 
 
 class EventKind(enum.IntEnum):
@@ -222,6 +236,7 @@ class SimMetrics:
     num_tokens: int = 0
     makespan_ms: float = 0.0
     k_mode: str = "controller"
+    pending_units: str = "tasks"
     trace_decode_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     trace_decode_ms_batch: List[float] = dataclasses.field(default_factory=list)
     trace_decode_error_ms_interactive: List[float] = dataclasses.field(default_factory=list)
@@ -417,6 +432,7 @@ class SimMetrics:
                 },
                 "trace": {
                     "k_mode": self.k_mode,
+                    "pending_units": self.pending_units,
                     "decode_ms": {
                         "interactive": summarize(self.trace_decode_ms_interactive),
                         "batch": summarize(self.trace_decode_ms_batch),
@@ -578,7 +594,9 @@ def _promote_aged_batch(now_ms: float, cfg: SimConfig, eq: ExpertQueue, metrics:
         if (now_ms - t0.enqueue_ms) < cfg.promote_ms:
             break
         eq.lo.popleft()
+        eq.pending_work_lo -= float(t0.cost_scale)
         eq.hi.append(t0)
+        eq.pending_work_hi += float(t0.cost_scale)
         metrics.promoted_tasks += 1
 
 
@@ -1828,7 +1846,12 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
         n = min(batch_max, len(q))
         tasks: List[Task] = []
         for _i in range(n):
-            tasks.append(q.popleft())
+            t = q.popleft()
+            tasks.append(t)
+            if serving_hi:
+                eq.pending_work_hi -= float(t.cost_scale)
+            else:
+                eq.pending_work_lo -= float(t.cost_scale)
         if len(tasks) == 0:
             break
 
@@ -1855,6 +1878,7 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
             else:
                 metrics.task_queue_wait_ms_batch.append(wait_ms)
             task.start_ms = now_ms
+            task.served_hi = serving_hi
 
         per_task_ms = cfg.service_per_task_ms if cfg.service_per_task_ms >= 0.0 else cfg.service_ms
         work_units_total = 0.0
@@ -1886,6 +1910,10 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
 
         eq.in_flight += 1
         eq.in_flight_tasks += len(tasks)
+        if serving_hi:
+            eq.in_flight_work_hi += work_units_total
+        else:
+            eq.in_flight_work_lo += work_units_total
         seq_ref[0] += 1
         heapq.heappush(evq, Event(t_ms=(now_ms + dt_ms), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
 
@@ -2022,6 +2050,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     if k_signal not in ("global", "candidates", "class"):
         raise ValueError("k_signal must be 'global', 'candidates', or 'class'")
 
+    pending_units = cfg.pending_units.strip().lower()
+    if pending_units not in ("tasks", "work"):
+        raise ValueError("pending_units must be 'tasks' or 'work'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -2126,6 +2158,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     metrics = SimMetrics(
         num_tokens=len(trace),
         k_mode=k_mode,
+        pending_units=pending_units,
         max_pending_per_expert=[0 for _ in range(cfg.num_experts)],
         mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)],
         mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
@@ -2314,8 +2347,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase)
             if route.cls == LatencyClass.INTERACTIVE:
                 eq.hi.append(task)
+                eq.pending_work_hi += float(task.cost_scale)
             else:
                 eq.lo.append(task)
+                eq.pending_work_lo += float(task.cost_scale)
             tokens[tid].remaining += 1
             metrics.admitted_tasks += 1
             if route.cls == LatencyClass.INTERACTIVE:
@@ -2452,12 +2487,20 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
 
             layers = _route_layers(route)
 
-            if k_signal == "global":
-                pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-            elif k_signal == "candidates":
-                pending_signal = float(max(experts[e].pending() for e in route.candidates))
+            if pending_units == "work":
+                if k_signal == "global":
+                    pending_signal = float(max(experts[e].pending_work() for e in range(cfg.num_experts)))
+                elif k_signal == "candidates":
+                    pending_signal = float(max(experts[e].pending_work() for e in route.candidates))
+                else:
+                    pending_signal = float(max(experts[e].pending_work_for_queue(route.cls) for e in range(cfg.num_experts)))
             else:
-                pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
+                if k_signal == "global":
+                    pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
+                elif k_signal == "candidates":
+                    pending_signal = float(max(experts[e].pending() for e in route.candidates))
+                else:
+                    pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
 
             if route.cls == LatencyClass.INTERACTIVE:
                 metrics.pending_signal_interactive.append(pending_signal)
@@ -2483,12 +2526,20 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     layer_ks = [k for _ in range(len(layers))]
                 else:
                     for li, lr in enumerate(layers):
-                        if k_signal == "global":
-                            layer_pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                        elif k_signal == "candidates":
-                            layer_pending_signal = float(max(experts[e].pending() for e in lr.candidates))
+                        if pending_units == "work":
+                            if k_signal == "global":
+                                layer_pending_signal = float(max(experts[e].pending_work() for e in range(cfg.num_experts)))
+                            elif k_signal == "candidates":
+                                layer_pending_signal = float(max(experts[e].pending_work() for e in lr.candidates))
+                            else:
+                                layer_pending_signal = float(max(experts[e].pending_work_for_queue(route.cls) for e in range(cfg.num_experts)))
                         else:
-                            layer_pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
+                            if k_signal == "global":
+                                layer_pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
+                            elif k_signal == "candidates":
+                                layer_pending_signal = float(max(experts[e].pending() for e in lr.candidates))
+                            else:
+                                layer_pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
                         cs = k_ctrl_layer.get((route.cls, li))
                         if cs is None:
                             cs = KControllerState()
@@ -2588,6 +2639,21 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             if eq.in_flight_tasks < len(ev.tasks):
                 raise RuntimeError("in_flight_tasks underflow")
             eq.in_flight_tasks -= len(ev.tasks)
+
+            done_work_hi = 0.0
+            done_work_lo = 0.0
+            for task in ev.tasks:
+                u = float(task.cost_scale)
+                if task.served_hi:
+                    done_work_hi += u
+                else:
+                    done_work_lo += u
+            if eq.in_flight_work_hi < (done_work_hi - 1e-12):
+                raise RuntimeError("in_flight_work_hi underflow")
+            if eq.in_flight_work_lo < (done_work_lo - 1e-12):
+                raise RuntimeError("in_flight_work_lo underflow")
+            eq.in_flight_work_hi -= done_work_hi
+            eq.in_flight_work_lo -= done_work_lo
 
             for task in ev.tasks:
                 tid = task.token_id
@@ -2795,6 +2861,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="global",
         help="Adaptive-K congestion signal: global (max total pending across all experts), candidates (max total pending among this token's candidates), or class (max pending in this token's latency-class queue + in-flight across all experts).",
     )
+    p.add_argument("--pending-units", type=str, default="tasks", help="Adaptive-K pending units: tasks (default) uses outstanding task counts; work uses sum(cost_scale) of queued + in-flight work per expert.")
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
@@ -2957,6 +3024,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         adaptive_k=adapt,
         k_mode=args.k_mode,
         k_signal=args.k_signal,
+        pending_units=args.pending_units,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,
