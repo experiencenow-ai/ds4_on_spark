@@ -96,6 +96,7 @@ if(DS4_ENABLE_TESTS)
 	if(TARGET ds4_cli)
 		add_test(NAME ds4_cli_version COMMAND $<TARGET_FILE:ds4_cli> --version)
 		add_test(NAME ds4_cli_dump_config COMMAND $<TARGET_FILE:ds4_cli> --dump-config)
+		add_test(NAME ds4_cli_dump_config_overrides COMMAND $<TARGET_FILE:ds4_cli> --log-level debug --no-cuda --dump-config)
 	endif()
 	add_test(NAME ds4_install_consumer
 		COMMAND "${CMAKE_COMMAND}"
