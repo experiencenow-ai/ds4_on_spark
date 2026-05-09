@@ -93,10 +93,10 @@ Trace JSONL fields:
 - `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
   - `candidates`: ordered expert candidates for that layer (required)
   - `scores`: optional per-candidate scores (same length as that layer's `candidates`)
-  - `k`: optional layer-local chosen `K` (accepted, but the simulator still treats `K` as a per-token control input)
+  - `k`: optional layer-local chosen `K`. When using `--k-mode trace`, you may omit top-level `k` if every layer provides `k`.
   - `cost_scale`: optional layer-specific cost multiplier (multiplied into top-level `cost_scale` when both are present)
   - when `layers` is present, `candidates` should either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); the simulator uses the per-layer candidate lists for admission
-- `k`: optional chosen `K`; required with `--k-mode trace`
+- `k`: optional chosen `K`; required with `--k-mode trace` unless every layer provides `layers[].k`
 - `scores`: optional per-candidate router scores (when `layers` is present, use `layers[].scores`; top-level `scores` are not valid when `layers` is present)
 - `mtp_accept_len`: optional accept length for MTP replay
 - `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted

@@ -802,6 +802,75 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_k_mode_trace_accepts_per_layer_k_when_layers_present(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"interactive","candidates":[0,1,2,3],"layers":[{"candidates":[0,1],"k":1},{"candidates":[2,3],"k":2}]}\n')
+            trace = scheduler_sim.load_trace_jsonl(path)
+
+            cfg = scheduler_sim.SimConfig(
+                num_experts=4,
+                expert_parallelism=1,
+                expert_queue_max=10_000,
+                service_ms=1.0,
+                starvation_ms=1e9,
+                hi_burst=0,
+                promote_ms=0.0,
+                adaptive_k=scheduler_sim.AdaptiveKConfig(
+                    k_min_interactive=1,
+                    k_max_interactive=1,
+                    k_min_batch=1,
+                    k_max_batch=1,
+                    q_low=0,
+                    q_high=0,
+                ),
+                k_mode="trace",
+            )
+            m = scheduler_sim.run_simulation(cfg, trace)
+            self.assertEqual(m.admitted_tokens, 1)
+            self.assertEqual(m.dropped_tokens_backpressure, 0)
+            self.assertEqual(m.admitted_tasks, 3)
+            self.assertEqual(m.chosen_k_interactive, [1])
+            self.assertEqual(m.effective_k_interactive, [1])
+            self.assertEqual(m.effective_k_total_interactive, [3])
+        finally:
+            os.unlink(path)
+
+    def test_k_mode_trace_requires_k_for_all_layers_when_route_k_missing(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0, 1, 2, 3),
+                layers=(
+                    scheduler_sim.LayerRoute(candidates=(0, 1), k=None),
+                    scheduler_sim.LayerRoute(candidates=(2, 3), k=2),
+                ),
+                k=None,
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=4,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+        with self.assertRaises(ValueError):
+            scheduler_sim.run_simulation(cfg, trace)
+
     def test_trace_jsonl_mtp_accept_len_overrides_sampling(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:
