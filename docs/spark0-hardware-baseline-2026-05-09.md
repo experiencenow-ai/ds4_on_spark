@@ -11,7 +11,7 @@ Host:
 Commands run:
 
 ```bash
-REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09.txt
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_01.txt
 ```
 
 High-level facts observed (from the probe output below):
@@ -31,6 +31,7 @@ High-level facts observed (from the probe output below):
 - Default route: via Wi-Fi during probe
 - Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
 - NVIDIA driver (proc): Open Kernel Module `580.142` build timestamp `2026-03-03`
+- cuDNN: not detected (no headers/libs found via probe)
 
 ## Spark Probe Output (Redacted)
 
@@ -41,11 +42,11 @@ Notes:
 
 ```text
 == local meta ==
-Sat May  9 00:34:07 UTC 2026
+Sat May  9 01:04:52 UTC 2026
 probe target: spark0@aitopatom-9ab9.local
 
 == probe meta ==
-Sat May  9 00:34:08 UTC 2026
+Sat May  9 01:04:53 UTC 2026
 target user: spark0
 
 == identity ==
@@ -160,12 +161,15 @@ Build cuda_13.0.r13.0/compiler.36424714_0
 -rwxr-xr-x 1 root root 24513032 Aug 21  2025 /usr/local/cuda/bin/nvcc
 lrwxrwxrwx 1 root root 22 Dec 17 21:40 /usr/local/cuda -> /etc/alternatives/cuda
 /usr/local/cuda-13.0
-/usr/local/cuda-13.0
 
 == cuda libraries (ldconfig, first hits) ==
 	libcudart.so.13 (libc6,AArch64) => /usr/local/cuda/targets/sbsa-linux/lib/libcudart.so.13
 	libcudart.so (libc6,AArch64) => /usr/local/cuda/targets/sbsa-linux/lib/libcudart.so
 	libcuda.so.1 (libc6,AArch64) => /lib/aarch64-linux-gnu/libcuda.so.1
+
+== cudnn (headers + libs) ==
+cudnn headers not found
+
 
 == cuda runtime probe (nvcc, no deps) ==
 cuda devices: 1
@@ -255,4 +259,3 @@ nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 NVRM version: NVIDIA UNIX Open Kernel Module for aarch64  580.142  Release Build  (dvs-builder@U22-I3-H10-02-1)  Tue Mar  3 19:08:06 UTC 2026
 GCC version:  gcc version 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 
 ```
-
