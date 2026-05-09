@@ -264,6 +264,40 @@ class SchedulerSimTest(unittest.TestCase):
         m = scheduler_sim.run_simulation(cfg, trace)
         self.assertGreater(m.dropped_tasks_backpressure, 0)
 
+    def test_time_weighted_queue_depth_hilo_hist_present_and_nonzero(self) -> None:
+        trace: list[scheduler_sim.TokenRoute] = []
+        for i in range(20):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=0.0,
+                    cls=scheduler_sim.LatencyClass.INTERACTIVE if (i % 2) == 0 else scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=5.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            pending_hist_max_depth=64,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(len(m.hi_queue_depth_hist), len(m.pending_depth_hist))
+        self.assertEqual(len(m.lo_queue_depth_hist), len(m.pending_depth_hist))
+        self.assertGreater(sum(m.hi_queue_depth_hist), 0.0)
+        self.assertGreater(sum(m.lo_queue_depth_hist), 0.0)
+
     def test_backpressure_drops_tokens_and_excludes_latency(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

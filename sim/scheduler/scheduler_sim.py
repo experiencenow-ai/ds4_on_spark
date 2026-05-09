@@ -281,6 +281,10 @@ class SimMetrics:
     saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist_overflow: float = 0.0
+    hi_queue_depth_hist: List[float] = dataclasses.field(default_factory=list)
+    hi_queue_depth_hist_overflow: float = 0.0
+    lo_queue_depth_hist: List[float] = dataclasses.field(default_factory=list)
+    lo_queue_depth_hist_overflow: float = 0.0
     work_units_total: float = 0.0
     work_units_interactive: float = 0.0
     work_units_batch: float = 0.0
@@ -542,6 +546,20 @@ class SimMetrics:
                         "p50": hist_int_percentile(self.pending_depth_hist, self.pending_depth_hist_overflow, 0.50),
                         "p95": hist_int_percentile(self.pending_depth_hist, self.pending_depth_hist_overflow, 0.95),
                         "p99": hist_int_percentile(self.pending_depth_hist, self.pending_depth_hist_overflow, 0.99),
+                    },
+                    "hi_queue_depth_time_weighted": {
+                        "max_depth": (len(self.hi_queue_depth_hist) - 1) if len(self.hi_queue_depth_hist) != 0 else 0,
+                        "overflow_time_ms": self.hi_queue_depth_hist_overflow,
+                        "p50": hist_int_percentile(self.hi_queue_depth_hist, self.hi_queue_depth_hist_overflow, 0.50),
+                        "p95": hist_int_percentile(self.hi_queue_depth_hist, self.hi_queue_depth_hist_overflow, 0.95),
+                        "p99": hist_int_percentile(self.hi_queue_depth_hist, self.hi_queue_depth_hist_overflow, 0.99),
+                    },
+                    "lo_queue_depth_time_weighted": {
+                        "max_depth": (len(self.lo_queue_depth_hist) - 1) if len(self.lo_queue_depth_hist) != 0 else 0,
+                        "overflow_time_ms": self.lo_queue_depth_hist_overflow,
+                        "p50": hist_int_percentile(self.lo_queue_depth_hist, self.lo_queue_depth_hist_overflow, 0.50),
+                        "p95": hist_int_percentile(self.lo_queue_depth_hist, self.lo_queue_depth_hist_overflow, 0.95),
+                        "p99": hist_int_percentile(self.lo_queue_depth_hist, self.lo_queue_depth_hist_overflow, 0.99),
                     },
                 },
                 "expert_utilization": summarize_experts(self.mean_utilization_per_expert),
@@ -2108,6 +2126,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
         pending_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_depth_hist_overflow=0.0,
+        hi_queue_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        hi_queue_depth_hist_overflow=0.0,
+        lo_queue_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        lo_queue_depth_hist_overflow=0.0,
     )
     rng = random.Random(cfg.sim_seed)
     if cfg.mtp_draft_len > 0:
@@ -2128,6 +2150,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     saturated_area: List[float] = [0.0 for _ in range(cfg.num_experts)]
     last_t_ms = 0.0
     last_pending: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_hi_queue: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_lo_queue: List[int] = [0 for _ in range(cfg.num_experts)]
     last_inflight: List[int] = [0 for _ in range(cfg.num_experts)]
     last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
 
@@ -2147,11 +2171,23 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         metrics.pending_depth_hist_overflow += dt
                     else:
                         metrics.pending_depth_hist[depth] += dt
+                    hi_depth = last_hi_queue[e]
+                    if hi_depth >= hist_len:
+                        metrics.hi_queue_depth_hist_overflow += dt
+                    else:
+                        metrics.hi_queue_depth_hist[hi_depth] += dt
+                    lo_depth = last_lo_queue[e]
+                    if lo_depth >= hist_len:
+                        metrics.lo_queue_depth_hist_overflow += dt
+                    else:
+                        metrics.lo_queue_depth_hist[lo_depth] += dt
         last_t_ms = now_ms
 
     def snapshot_state() -> None:
         for e in range(cfg.num_experts):
             last_pending[e] = experts[e].pending()
+            last_hi_queue[e] = len(experts[e].hi)
+            last_lo_queue[e] = len(experts[e].lo)
             last_inflight[e] = experts[e].in_flight
             last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             if last_pending[e] > metrics.max_pending_per_expert[e]:
