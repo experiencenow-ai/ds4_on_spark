@@ -106,6 +106,7 @@ class SimConfig:
     mtp_accept_prob: float = 0.0
     mtp_accept_decay: float = 1.0
     mtp_draft_cost_scale: float = 0.25
+    mtp_verify_per_draft_cost_scale: float = 0.0
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     batch_wait_interactive_ms: float = 0.0
@@ -130,6 +131,7 @@ class TokenState:
     chosen_k: int
     remaining: int
     done_ms: Optional[float] = None
+    output_len: int = 1
 
 
 @dataclass
@@ -168,6 +170,8 @@ class SimMetrics:
     k_mode: str = "controller"
     token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    output_token_lat_ms_interactive: List[float] = dataclasses.field(default_factory=list)
+    output_token_lat_ms_batch: List[float] = dataclasses.field(default_factory=list)
     token_sla_violations_interactive: int = 0
     token_sla_violations_batch: int = 0
     admitted_tokens: int = 0
@@ -331,6 +335,10 @@ class SimMetrics:
                 "token_latency_ms": {
                     "interactive": summarize(self.token_lat_ms_interactive),
                     "batch": summarize(self.token_lat_ms_batch),
+                },
+                "output_token_latency_ms": {
+                    "interactive": summarize(self.output_token_lat_ms_interactive),
+                    "batch": summarize(self.output_token_lat_ms_batch),
                 },
                 "sla": {
                     "token_violations_interactive": self.token_sla_violations_interactive,
@@ -1059,6 +1067,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             raise ValueError("mtp_accept_decay must be > 0")
         if cfg.mtp_draft_cost_scale <= 0.0:
             raise ValueError("mtp_draft_cost_scale must be > 0")
+        if cfg.mtp_verify_per_draft_cost_scale < 0.0:
+            raise ValueError("mtp_verify_per_draft_cost_scale must be >= 0")
 
     for route in trace:
         if len(route.candidates) == 0:
@@ -1241,12 +1251,17 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
             accept_len = 1
             if mtp_enabled:
                 accept_len = _choose_mtp_accept_len(cfg, rng, metrics, route)
+                tokens[tid].output_len = accept_len
+            else:
+                tokens[tid].output_len = 1
 
             for micro_i in range(micro_tokens):
                 base_cost_scale = float(route.cost_scale) if route.cost_scale is not None else 1.0
                 cost_scale = base_cost_scale
                 if mtp_enabled and micro_i < cfg.mtp_draft_len:
                     cost_scale *= cfg.mtp_draft_cost_scale
+                elif mtp_enabled and micro_i == cfg.mtp_draft_len and cfg.mtp_verify_per_draft_cost_scale > 0.0:
+                    cost_scale *= (1.0 + (cfg.mtp_verify_per_draft_cost_scale * float(cfg.mtp_draft_len)))
 
                 admitted = 0
                 for expert_id in _candidate_order(admit_policy, experts, route):
@@ -1283,6 +1298,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 else:
                     metrics.dropped_tokens_backpressure_batch += 1
                 tokens[tid].done_ms = now_ms
+                tokens[tid].output_len = 0
                 if mtp_enabled:
                     metrics.mtp_accept_len_per_step.append(0)
             else:
@@ -1305,6 +1321,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         _record_mtp_accept_len(cfg, metrics, accept_len)
                     if admitted_verify == 0:
                         metrics.mtp_accept_len_per_step.append(0)
+                        tokens[tid].output_len = 0
                     else:
                         metrics.mtp_accept_len_per_step.append(accept_len)
                         metrics.mtp_output_tokens += accept_len
@@ -1342,6 +1359,11 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                         metrics.token_lat_ms_batch.append(lat_ms)
                         if cfg.sla_batch_ms > 0.0 and lat_ms > cfg.sla_batch_ms:
                             metrics.token_sla_violations_batch += 1
+                    if ts.output_len > 0:
+                        if ts.cls == LatencyClass.INTERACTIVE:
+                            metrics.output_token_lat_ms_interactive.extend([lat_ms for _ in range(ts.output_len)])
+                        else:
+                            metrics.output_token_lat_ms_batch.extend([lat_ms for _ in range(ts.output_len)])
 
             _start_tasks(now_ms, cfg, eq, ev.expert_id, evq, seq_ref, metrics)
         elif ev.kind == EventKind.EXPERT_WAKE:
@@ -1407,6 +1429,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
+    p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -1522,6 +1545,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_accept_prob=args.mtp_accept_prob,
         mtp_accept_decay=args.mtp_accept_decay,
         mtp_draft_cost_scale=args.mtp_draft_cost_scale,
+        mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
     )
 
     metrics = run_simulation(sim_cfg, trace)
