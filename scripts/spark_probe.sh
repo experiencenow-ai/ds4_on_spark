@@ -9,6 +9,7 @@ usage: spark_probe.sh [user@host]
 Environment:
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
+  DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
   PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
@@ -45,7 +46,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "== local meta =="
 	date -u
 	if command -v git >/dev/null 2>&1; then
-		if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		if [ "${DS4_GIT_DIR:-}" != "" ]; then
+			echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$PWD" rev-parse --short HEAD 2>/dev/null || true)"
+		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 		fi
 	fi
