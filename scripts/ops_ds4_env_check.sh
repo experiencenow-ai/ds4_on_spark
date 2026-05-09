@@ -200,6 +200,35 @@ need_uint DS4_RANK
 need_nonempty DS4_MASTER_ADDR
 need_uint DS4_MASTER_PORT
 
+port_in_range()
+{
+    key="$1"
+    eval "val=\${$key:-}"
+    case "$val" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+    if [ "$val" -lt 1 ] || [ "$val" -gt 65535 ]; then
+        echo "invalid port: $key=$val (expected 1-65535)" >&2
+        err=1
+        return 1
+    fi
+    return 0
+}
+
+warn()
+{
+    echo "warning: $*" >&2
+}
+
+if [ "${DS4_METRICS_PORT:-}" != "" ]; then
+    port_in_range DS4_METRICS_PORT || true
+fi
+if [ "${DS4_MASTER_PORT:-}" != "" ]; then
+    port_in_range DS4_MASTER_PORT || true
+fi
+
 if [ "${DS4_WORLD_SIZE:-0}" = "1" ]; then
     if [ "${DS4_RANK:-0}" != "0" ]; then
         echo "invalid: DS4_WORLD_SIZE=1 requires DS4_RANK=0" >&2
@@ -208,6 +237,14 @@ if [ "${DS4_WORLD_SIZE:-0}" = "1" ]; then
 fi
 
 if [ "${DS4_WORLD_SIZE:-0}" != "1" ]; then
+    case "${DS4_MASTER_ADDR:-}" in
+        127.0.0.1|localhost)
+            warn "DS4_MASTER_ADDR=${DS4_MASTER_ADDR} looks loopback for DS4_WORLD_SIZE=${DS4_WORLD_SIZE} (verify multi-host vs single-host intent)"
+            ;;
+    esac
+    if [ "${DS4_PEER_HOST:-}" = "" ]; then
+        warn "DS4_PEER_HOST is empty (peer ping/TCP checks will be skipped)"
+    fi
     if [ "${DS4_INSTANCE:-}" = "spark0" ] && [ "${DS4_RANK:-}" != "0" ]; then
         echo "invalid: spark0 should use DS4_RANK=0 for TP=2" >&2
         err=1

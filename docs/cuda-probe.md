@@ -22,6 +22,7 @@ What it does:
   - `cuda_sm120_compat_probe` (runs an `sm_120`-compiled kernel on the device; tests `sm_120`→`sm_121` compatibility)
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
   - `cuda_cublaslt_fp8_smoke` (tiny cuBLASLt FP8 (E4M3) matmul smoke test)
+  - `cuda_cublaslt_fp8_e5m2_smoke` (tiny cuBLASLt FP8 (E5M2) matmul smoke test)
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
   - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
@@ -45,7 +46,7 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, and `cuda_sm121_nvrtc_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, and `cuda_sm121_nvrtc_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 
 ## Current Spark0 Results (2026-05-09)
 
@@ -64,6 +65,7 @@ Observed:
 - Runtime launches a tiny `sm_121` kernel successfully
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - cuBLASLt FP8 matmul smoke test succeeds (`max_abs_err_vs_one=0`)
+- cuBLASLt FP8 (E5M2) matmul smoke probe returns `CUBLAS_STATUS_NOT_SUPPORTED` on Spark0 (CUDA 13.0 `V13.0.88`)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
 - Pipeline memcpy-async probe succeeds (cp.async-style global->shared copy)
@@ -87,6 +89,8 @@ expect: compiled __CUDA_ARCH__=1200 for -arch=sm_120
 kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1200
 cuBLASLt sgemm smoke max_abs_err=0
 cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0
+cuBLASLt error cublasLtMatmulAlgoGetHeuristic: CUBLAS_STATUS_NOT_SUPPORTED
+(cuda_cublaslt_fp8_e5m2_smoke failed; continuing)
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
 fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
