@@ -13,6 +13,14 @@ Treat this as the practical upper bound for “single Spark” artifacts; anythi
 
 ## Candidates (pinned)
 
+Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~119 GiB host RAM / ~119.7 GiB VRAM):
+
+| Source | Artifact | Size (bytes) | Size (GiB) | Single-Spark plausibility |
+| --- | --- | ---: | ---: | --- |
+| `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | Plausible (headroom for KV/cache still required) |
+| `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | Plausible but tight (limited KV/cache headroom) |
+| `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | Plausible but tight (limited KV/cache headroom) |
+
 ## Reproducing the size numbers (no downloads)
 
 The GGUF “sizes” above are taken from the Git LFS pointer metadata in a metadata-only clone (i.e. `GIT_LFS_SKIP_SMUDGE=1` / LFS filters disabled). This lets us record exact byte counts without fetching multi‑GB blobs.
@@ -30,13 +38,14 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 - Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `ef3b960827870d69ed0b225c095a617c12d7e80d` (`refs/heads/main`)
 - License: MIT (model card)
-- Artifact (not fetched here):
-  - `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf`
-  - Size: ~86.7 GB
+- Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
+  - IQ2XXS: `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` (86720111200 bytes, 80.8 GiB)
+  - Q4KExperts (too large for single Spark): `DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf` (164633502304 bytes, 153.3 GiB)
+  - MTP sidecar: `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` (3807602400 bytes, 3.5 GiB)
 - Provenance notes:
   - Model card states these quants are “specific for the DS4 inference engine” and links to `https://github.com/antirez/ds4`.
 - Single-Spark plausibility:
-  - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the ~87 GB footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
+  - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the 80.8 GiB (~86.7 GB) footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
 
 ### Preyazz/DeepSeek-V4-Flash-GGUF (community Q2_K/Q3_K_M/Q4_K_M)
 
@@ -80,11 +89,11 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 - Source: `https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF` @ `665c8e035e2602d12d28b84920808b158f337e09` (`refs/heads/main`)
 - License: MIT (model card)
-- Artifacts (not fetched here):
-  - Q2_K: 98.8 GB (RAM floor stated: 128 GB)
-  - Q8_0: ~282 GB (RAM floor stated: 320 GB)
+- Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
+  - Q2_K: `cyberneurova-DeepSeek-V4-Flash-abliterated-Q2_K.gguf` (98810926400 bytes, 92.0 GiB; model card also describes this as “98.8 GB”)
+  - Q8_0: `cyberneurova-DeepSeek-V4-Flash-abliterated-Q8_0.gguf` (302251447616 bytes, 281.5 GiB; model card also describes this as “282 GB”)
 - Single-Spark plausibility:
-  - **Q2_K plausible but tight** on Spark0-class hardware (98.8 GB leaves limited KV/cache headroom); **Q8_0 not plausible** (too large).
+  - **Q2_K plausible but tight** on Spark0-class hardware (92.0 GiB / ~98.8 GB leaves limited KV/cache headroom); **Q8_0 not plausible** (too large).
 
 ## Related runtime forks (pinned)
 
