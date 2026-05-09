@@ -612,6 +612,46 @@ version:        580.142
 vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
 ```
 
+## Update: Probe Refresh (2026-05-09 06:57Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_probe8.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
+- The probe now prints a PCIe link state line (gen/width max/current) and a CUDA toolkit cross-check (`nvcc release` vs `cuda.h CUDA_VERSION`).
+
+```text
+== local meta ==
+Sat May  9 06:57:52 UTC 2026
+git: 6106232
+probe target: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+selected compute_cap: 12.1
+
+== nvidia-smi pcie link state ==
+0, 1, 1, 16, 1
+
+== cuda toolkit cross-check ==
+nvcc release: 13.0
+cuda.h CUDA_VERSION: 13.0 (13000)
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000
+cuda runtime api version: 13000
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 sms: 48
+```
+
 ## Update: Probe Refresh (2026-05-09 06:26Z)
 
 Commands run:
