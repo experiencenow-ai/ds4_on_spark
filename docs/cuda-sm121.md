@@ -34,6 +34,20 @@ The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pat
 
 If your toolkit supports it, `nvcc --list-gpu-arch` and `nvcc --list-gpu-code` should include `compute_121` / `sm_121`.
 
+## Separate Compilation / Device Link (`-rdc=true`)
+
+Some CUDA codebases (and some build systems) rely on separate compilation and device linking (`nvlink`), especially when device functions span translation units.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_rdc_probe` is a tiny multi-translation-unit smoke test that builds via:
+
+- `nvcc -dc` (relocatable device code objects)
+- `nvcc -dlink` (device link step)
+- final host link
+
+If this probe fails to link for `sm_121`, treat it as a toolchain/blocker for any multi-file CUDA components (even if single-file `-arch=sm_121` probes compile and run).
+
+Observed on Spark0 (2026-05-09): `rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de`.
+
 ## NVRTC JIT Compile For `compute_121`
 
 Some stacks compile CUDA device code at runtime (NVRTC) and then load PTX via the CUDA Driver API.

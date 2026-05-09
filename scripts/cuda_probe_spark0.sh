@@ -59,6 +59,9 @@ echo
 echo \"== run: cuda_sm121_probe ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_probe
 echo
+echo \"== run: cuda_sm121_rdc_probe ==\"
+\"$REMOTE_DIR\"/bin/cuda_sm121_rdc_probe
+echo
 echo \"== run: cuda_sm121_fatbin_probe ==\"
 \"$REMOTE_DIR\"/bin/cuda_sm121_fatbin_probe
 echo
