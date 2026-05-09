@@ -471,6 +471,12 @@ Official-source safetensors **do** include the MTP namespace:
 
 As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
 
+Recorded probe outputs (range-read header + tensor table only; no full downloads):
+
+- `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
+- `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
+- `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
+
 For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
