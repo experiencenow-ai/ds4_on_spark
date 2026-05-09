@@ -149,6 +149,7 @@ Notes:
 
 - Acceptance sampling is controlled by `--sim-seed` for determinism.
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
+- Queueing effects are broken down by phase in the metrics JSON under `mtp.task_queue_wait_ms.{draft,verify}` and `mtp.starved_task_frac.{draft,verify}` (useful for spotting draft-induced verify starvation).
 
 ### Arrival Rate Units (MTP Comparisons)
 
@@ -265,6 +266,13 @@ JSONL reads one JSON object per line with required fields:
   - `{"type":"meta","meta":{...}}` (preferred), or
   - `{"meta":{...}}` when no other routing fields are present
   - You can also pass a sidecar metadata JSON via `--trace-meta-json` (its keys are merged into the trace summary; inline records override it).
+
+If you have a raw runtime trace that uses `dt_ms` deltas (or emits `accepted_mtp` / `rejected_mtp` but not `mtp_accept_len`), you can canonicalize it into the simulator’s preferred strict JSONL form (writes a meta header plus derived `t_ms`/`mtp_accept_len`):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
 - `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
   - `candidates` (list[int]): ordered expert candidates for that layer (required)
   - `scores` (optional list[number]): per-candidate router scores (same length as that layer's `candidates`)

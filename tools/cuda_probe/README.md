@@ -29,7 +29,9 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121` (TN format; BF16 output).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: link/run tiny cuBLASLt FP8 (E5M2) matmul for `sm_121` (TN format; BF16 output; prints diagnostics).
+- `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_sweep`: sweep cuBLASLt FP8 (E5M2) matmul configs (workspace, output dtype, compute type) to see whether any configuration is supported on the installed stack.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke`: link/run tiny cuBLASLt FP4 (E2M1) matmul for `sm_121` (best-effort capability probe).
+- `tools/cuda_probe/bin/cuda_cublaslt_fp4_sweep`: sweep cuBLASLt FP4 (E2M1) matmul configs (workspace, output dtype, compute type) to see whether any configuration is supported on the installed stack.
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin`: print `MaxSharedMemoryPerBlockOptin` and run a dynamic shared-memory launch.
 - `tools/cuda_probe/bin/cuda_sm121_devattrs`: dump CUTLASS/DeepGEMM-relevant `cudaDeviceGetAttribute` values.
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv`: compile/run FP8 conversion plumbing via `cuda_fp8.h`.

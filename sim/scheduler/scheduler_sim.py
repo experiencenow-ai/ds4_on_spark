@@ -264,6 +264,8 @@ class SimMetrics:
     dropped_tokens_backpressure_batch: int = 0
     task_queue_wait_ms_interactive: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    task_queue_wait_ms_mtp_draft: List[float] = dataclasses.field(default_factory=list)
+    task_queue_wait_ms_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
     chosen_k_total_interactive: List[int] = dataclasses.field(default_factory=list)
@@ -298,6 +300,10 @@ class SimMetrics:
     starved_tasks: int = 0
     starved_tasks_interactive: int = 0
     starved_tasks_batch: int = 0
+    tasks_started_mtp_draft: int = 0
+    tasks_started_mtp_verify: int = 0
+    starved_tasks_mtp_draft: int = 0
+    starved_tasks_mtp_verify: int = 0
     promoted_tasks: int = 0
     forced_batch_starts: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
@@ -479,6 +485,22 @@ class SimMetrics:
                     "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
                     "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
                     "bonus_tokens": self.mtp_bonus_tokens,
+                    "tasks_started": {
+                        "draft": self.tasks_started_mtp_draft,
+                        "verify": self.tasks_started_mtp_verify,
+                    },
+                    "task_queue_wait_ms": {
+                        "draft": summarize(self.task_queue_wait_ms_mtp_draft),
+                        "verify": summarize(self.task_queue_wait_ms_mtp_verify),
+                    },
+                    "starved_tasks": {
+                        "draft": self.starved_tasks_mtp_draft,
+                        "verify": self.starved_tasks_mtp_verify,
+                    },
+                    "starved_task_frac": {
+                        "draft": (float(self.starved_tasks_mtp_draft) / float(self.tasks_started_mtp_draft)) if self.tasks_started_mtp_draft != 0 else 0.0,
+                        "verify": (float(self.starved_tasks_mtp_verify) / float(self.tasks_started_mtp_verify)) if self.tasks_started_mtp_verify != 0 else 0.0,
+                    },
                     "accept_len": summarize_ints(self.mtp_accept_len_per_step),
                     "draft_attempt_len": summarize_ints(self.mtp_draft_attempt_len_per_step),
                     "accept_rate": (float(self.mtp_draft_tokens_accepted) / float(self.mtp_draft_tokens_total)) if self.mtp_draft_tokens_total != 0 else 0.0,
@@ -1578,6 +1600,79 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
             f.write("\n")
 
 
+def _derive_mtp_accept_len(route: TokenRoute, mtp_draft_len: int) -> Optional[int]:
+    if route.mtp_accept_len is not None:
+        return(int(route.mtp_accept_len))
+    if route.accepted_mtp is not None:
+        return(int(route.accepted_mtp) + 1)
+    if route.rejected_mtp is not None and mtp_draft_len > 0:
+        return((int(mtp_draft_len) - int(route.rejected_mtp)) + 1)
+    return(None)
+
+
+def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> None:
+    if path.strip() == "":
+        raise ValueError("path must be non-empty")
+    meta_out: Dict[str, object] = {} if meta is None else dict(meta)
+    meta_out["canonicalized_trace"] = True
+
+    inferred_num_experts = infer_num_experts_from_trace(trace, meta)
+    if inferred_num_experts is not None and "num_experts" not in meta_out:
+        meta_out["num_experts"] = int(inferred_num_experts)
+    inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+    if inferred_mtp_draft_len is not None and "mtp_draft_len" not in meta_out:
+        meta_out["mtp_draft_len"] = int(inferred_mtp_draft_len)
+
+    mtp_draft_len = 0
+    if isinstance(meta_out.get("mtp_draft_len"), int):
+        mtp_draft_len = int(meta_out["mtp_draft_len"])
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "meta", "meta": meta_out}, sort_keys=True))
+        f.write("\n")
+        for r in trace:
+            obj: Dict[str, object] = {
+                "t_ms": float(r.t_ms),
+                "cls": str(r.cls.value),
+                "candidates": list(r.candidates),
+            }
+            if r.layers is not None and len(r.layers) != 0:
+                layers_json: List[Dict[str, object]] = []
+                for lr in r.layers:
+                    lobj: Dict[str, object] = {"candidates": list(lr.candidates)}
+                    if lr.k is not None:
+                        lobj["k"] = int(lr.k)
+                    if lr.scores is not None:
+                        lobj["scores"] = list(lr.scores)
+                    if lr.cost_scale is not None:
+                        lobj["cost_scale"] = float(lr.cost_scale)
+                    layers_json.append(lobj)
+                obj["layers"] = layers_json
+            if r.token_index is not None:
+                obj["token_index"] = int(r.token_index)
+            if r.k is not None:
+                obj["k"] = int(r.k)
+            if r.scores is not None:
+                obj["scores"] = list(r.scores)
+            mtp_accept_len = _derive_mtp_accept_len(r, mtp_draft_len)
+            if mtp_accept_len is not None:
+                obj["mtp_accept_len"] = int(mtp_accept_len)
+            if r.accepted_mtp is not None:
+                obj["accepted_mtp"] = int(r.accepted_mtp)
+            if r.rejected_mtp is not None:
+                obj["rejected_mtp"] = int(r.rejected_mtp)
+            if r.cost_scale is not None:
+                obj["cost_scale"] = float(r.cost_scale)
+            if r.decode_ms is not None:
+                obj["decode_ms"] = float(r.decode_ms)
+            if r.kv_tokens is not None:
+                obj["kv_tokens"] = int(r.kv_tokens)
+            if r.expert_batch_size is not None:
+                obj["expert_batch_size"] = int(r.expert_batch_size)
+            f.write(json.dumps(obj, sort_keys=True))
+            f.write("\n")
+
+
 def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, meta: Optional[Dict[str, object]] = None) -> Dict[str, object]:
     def summarize(xs: Sequence[float]) -> Dict[str, object]:
         if len(xs) == 0:
@@ -1975,9 +2070,19 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
             metrics.tasks_started_per_expert[expert_id] += 1
             if wait_ms > metrics.max_task_queue_wait_ms_per_expert[expert_id]:
                 metrics.max_task_queue_wait_ms_per_expert[expert_id] = wait_ms
+            if task.mtp_phase == MtpPhase.DRAFT:
+                metrics.tasks_started_mtp_draft += 1
+                metrics.task_queue_wait_ms_mtp_draft.append(wait_ms)
+            elif task.mtp_phase == MtpPhase.VERIFY:
+                metrics.tasks_started_mtp_verify += 1
+                metrics.task_queue_wait_ms_mtp_verify.append(wait_ms)
             if wait_ms >= cfg.starvation_ms:
                 metrics.starved_tasks += 1
                 metrics.starved_tasks_started_per_expert[expert_id] += 1
+                if task.mtp_phase == MtpPhase.DRAFT:
+                    metrics.starved_tasks_mtp_draft += 1
+                elif task.mtp_phase == MtpPhase.VERIFY:
+                    metrics.starved_tasks_mtp_verify += 1
                 if task.cls == LatencyClass.INTERACTIVE:
                     metrics.starved_tasks_interactive += 1
                 else:
@@ -2938,6 +3043,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
+    p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len) and exit. Requires --trace-jsonl/--trace-csv.")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
@@ -3019,6 +3125,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.dump_trace_jsonl.strip() != "" and args.dump_trace_csv.strip() != "":
         raise SystemExit("Choose at most one: --dump-trace-jsonl or --dump-trace-csv")
 
+    if args.canonicalize_trace_jsonl.strip() != "" and args.trace_jsonl == "" and args.trace_csv == "":
+        raise SystemExit("--canonicalize-trace-jsonl requires --trace-jsonl or --trace-csv")
+
     trace_meta: Dict[str, object] = {}
     if args.trace_meta_json.strip() != "":
         if args.trace_jsonl == "" and args.trace_csv == "":
@@ -3067,6 +3176,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 return(0)
             print("== trace summary ==")
             print(json.dumps(out, indent=2, sort_keys=True))
+            return(0)
+
+        if args.canonicalize_trace_jsonl.strip() != "":
+            try:
+                write_trace_jsonl_canonical(args.canonicalize_trace_jsonl, trace, meta=trace_meta)
+            except (ValueError, OSError) as e:
+                raise SystemExit(str(e))
             return(0)
     else:
         if args.num_experts <= 0:
