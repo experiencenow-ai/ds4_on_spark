@@ -33,6 +33,11 @@ When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
 ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 ```
 
+This also performs best-effort toolchain-only checks when supported:
+
+- If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
+- If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
+
 ## Spark0: Kernel Bring-up Tiny (CUTLASS/DeepGEMM Gates)
 
 When you want a small, focused “kernel plumbing” gate set (no cuBLASLt) that is still representative for CUTLASS/DeepGEMM-style kernels:

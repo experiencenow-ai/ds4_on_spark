@@ -68,8 +68,64 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 	fi
 
 echo
-echo \"== compile-only (tiny) ==\"
+echo \"== nvcc: sm_121 variant compile (best-effort) ==\"
 cd \"$REMOTE_DIR\"
+mkdir -p bin
+try_variant() {
+	arch=\"\$1\"
+	if [ \"\${list_gpu_code}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-code not supported; skipping \${arch})\"
+		return 0
+	fi
+	if echo \"\${list_gpu_code}\" | grep -q \"\${arch}\"; then
+		echo \"-- \${arch}\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/cuda_\${arch}_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_\${arch}_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"variant_\${arch}: OK\"
+		else
+			echo \"variant_\${arch}: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_\${arch}_compile_probe.err || true
+		fi
+	else
+		echo \"(nvcc --list-gpu-code missing \${arch}; skipping)\"
+	fi
+}
+try_variant sm_121a
+try_variant sm_121f
+
+echo
+echo \"== compile-only (tiny) ==\"
 make clean
 make bin/cuda_sm121_compile_probe.o
+
+echo
+echo \"== nvcc: -arch=sm_121 emits embedded PTX (best-effort) ==\"
+CUOBJDUMP=\"\"
+if [ -x /usr/local/cuda/bin/cuobjdump ]; then
+	CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
+elif command -v cuobjdump >/dev/null 2>&1; then
+	CUOBJDUMP=\"cuobjdump\"
+fi
+if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+	echo \"(cuobjdump not found; skipping)\"
+else
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=sm_121 -fatbin -o bin/cuda_sm121_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_sm121_arch_shorthand.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -arch=sm_121 failed rc=\$rc)\" >&2
+		head -n 40 bin/cuda_sm121_arch_shorthand.err || true
+		else
+			if \$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+				echo \"ptx_embed: OK\"
+			else
+				echo \"ptx_embed: MISSING\" >&2
+				\$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | head -n 40 || true
+			fi
+		fi
+	fi
 "
