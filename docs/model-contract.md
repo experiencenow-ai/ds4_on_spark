@@ -17,8 +17,10 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Contract doc: `docs/model-deepseek-v4-flash.md`
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, and config-field compatibility mappings for interpreting external runtimes)
+  - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
   - Compat mappings also cover MTP (`num_nextn_predict_layers`) and `config.json` quantization knobs (`quantization_config.*`) so external runtime configs can be normalized without guessing.
   - Tokenizer section also records a `tokenizer.tokenizer_json_summary` snapshot (BPE backend + exact pre-tokenizer `Split` regex patterns + `ByteLevel` flags) so external runtimes can reproduce tokenization without guessing.
+  - `scripts/model_contract_verify_deepseek_v4_flash.py` also cross-checks tokenizer invariants against the pinned fixtures (BOS/EOS token IDs, `add_bos_token/add_eos_token`, `model_max_length`, and “PAD is EOS”) so contract consumers can treat these as enforced facts, not just documentation.
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
   - Upstream section records sha256 of the pinned upstream commit (`upstream_commit.txt`), encoding oracle vectors (`encoding/tests/*`), and oracle prompt set (`oracle/prompts.json`) to keep drift machine-detectable.
@@ -68,14 +70,14 @@ MTP (multi-token prediction) oracle requirements:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json`
   - Some DS4-tuned sidecars (e.g. `antirez/deepseek-v4-gguf`) are not full official `mtp.0.*` checkpoints; they use a compact 32‑tensor `mtp.0.*` table for DS4’s MTP path and advertise `general.architecture=deepseek4_mtp_support`. Before attempting to load these in external runtimes, validate the sidecar header/tensor directory (no full model download required):
     - Local file: `python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json`
-    - Hugging Face URL (range-reads only the header/tensor table; requires HTTP 206 + `Content-Range`): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
-    - Pinned antirez reference: `./scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh`
+    - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
     - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`
     - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`
     - Metadata-only inspection confirms these sidecars can be `mtp_present == true` but still **incomplete** relative to the upstream `mtp.0.*` contract (example: pinned antirez sidecar has `mtp_tensor_count == 32` and `mtp_contract.complete == false`).
   - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
+    - Validate the probe JSON shape with: `python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json ...`
 
 Recommended DS4 comparison rule (when enabling DS4 gating):
 
