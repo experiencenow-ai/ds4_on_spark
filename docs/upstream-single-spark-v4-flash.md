@@ -31,6 +31,17 @@ Important: Most community GGUF conversions are trunk-only and drop the upstream 
 | G | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | None | Treat as blocked until a human verifies licensing; also sharded. |
 | H | `antirez/ds4` (`8e7575be0ef44bd97c5ebaccf49ef85e05048b7b`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | Sidecar exists (incomplete) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
 
+MTP status notes:
+
+- `None` means metadata-only inspection found no `mtp.*` tensors in the GGUF tensor directory; treat MTP/speculative decoding as unavailable on that artifact.
+- `Sidecar exists (incomplete)` means the trunk GGUF drops `mtp.0.*` but the repo ships a separate MTP GGUF whose `mtp.0.*` tensor set is **incomplete** relative to the upstream `mtp.0.*` contract; treat MTP as disabled/untrusted.
+- Even if an artifact set preserves a *complete* `mtp.0.*` namespace, MTP is still untrusted until a logits oracle exercises `MTPBlock.forward(...)` (see `docs/model-contract.md` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.trust_gates`).
+
+Recorded metadata-only inspections (no downloads):
+
+- `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json` (trunk: `mtp_present=false`)
+- `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json` + `docs/mtp-sidecar-probe-antirez-ef3b960.json` (sidecar: `mtp_present=true`, `mtp_contract.complete=false`)
+
 Fixture provenance note:
 
 - If a human approves a GGUF download, record and verify the artifact `sha256` against the HF API `lfs.sha256` values listed in [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md). This lets us validate fixtures without trusting filenames.

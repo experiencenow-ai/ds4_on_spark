@@ -68,6 +68,24 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_M (2 shards)` | 64508041632 | 60.1 | `c0d4aac8...f2856` + `812b1367...d2d81f` | Plausible (sharded; more headroom than ~70–100 GiB candidates) | None (trunk-only conversions commonly drop `mtp.0.*`) |
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | `a2472110...a04fdce` + `aedfb2c7...ea9bf92` | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) | None (trunk-only conversions commonly drop `mtp.0.*`) |
 
+### Quantized MTP status key (high-performance path)
+
+- `None`: no `mtp.*` tensors detected in the GGUF tensor directory (treat MTP as absent/disabled).
+- `Trunk drops mtp.0.*; ships a sidecar (incomplete)`: trunk GGUF has no `mtp.*`; a separate sidecar GGUF contains `mtp.0.*` keys but does **not** satisfy the upstream `mtp.0.*` tensor-key completeness contract (treat MTP as incomplete/untrusted until proven otherwise).
+- Even if an artifact set does preserve a *complete* `mtp.0.*` namespace, MTP is still **untrusted** until a logits oracle exercises `MTPBlock.forward(...)` (see `docs/model-contract.md` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.trust_gates`).
+
+### Recorded metadata-only GGUF inspections (no downloads)
+
+These JSON outputs were produced by `scripts/model_contract_inspect_quantized_artifact.py --url ... --json` (range-reads header + tensor table only):
+
+- Trunk (MTP absent):
+  - `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
+  - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
+  - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
+- Sidecar (MTP present but incomplete):
+  - `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
+  - `docs/mtp-sidecar-probe-antirez-ef3b960.json`
+
 ## Reproducing the size numbers (no downloads)
 
 The GGUF “sizes” above are taken from the Git LFS pointer metadata in a metadata-only clone (i.e. `GIT_LFS_SKIP_SMUDGE=1` / LFS filters disabled). This lets us record exact byte counts without fetching multi‑GB blobs.
