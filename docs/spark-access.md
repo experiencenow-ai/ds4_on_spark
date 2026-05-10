@@ -118,6 +118,8 @@ For quick smoke checks (especially when Spark1 is flaky/not-yet-provisioned), us
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh spark1.local || true
 ```
 
+In summary mode, the Spark probe suppresses larger/diagnostic-only sections (for example, `nvcc --list-gpu-*` lists and the full `/usr/local/cuda/version.json` dump). It still records the key CUDA/toolchain facts (including `selected compute_cap`, the `nvcc` release banner when present, and `cuda version.json` `cuda: <version>` when available) so Spark1 bring-up checks stay readable.
+
 ## Spark1 Ready Checklist
 
 When Spark1 exists (or a second Spark is provisioned), the same scripts should work with a new target:
