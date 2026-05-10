@@ -124,11 +124,16 @@ def main() -> int:
 
 	for k in ("seed", "verify_step_idx", "base_next_token_id", "mtp_draft_token_id"):
 		expect_int(k, get_required(probe, k, errors), errors)
-	for k in ("temperature", "top_k", "top_p"):
-		expect_number(k, get_required(probe, k, errors), errors)
+	expect_number("temperature", get_required(probe, "temperature", errors), errors)
+	expect_int("top_k", get_required(probe, "top_k", errors), errors)
+	expect_number("top_p", get_required(probe, "top_p", errors), errors)
 
 	expect_type("base_next_token", probe.get("base_next_token", ""), str, errors)
 	expect_type("mtp_draft_token", probe.get("mtp_draft_token", ""), str, errors)
+
+	verify_step_idx = probe.get("verify_step_idx", None)
+	if isinstance(verify_step_idx, int) and verify_step_idx != 0:
+		errors.append(f"verify_step_idx is {verify_step_idx}, expected 0 for this probe")
 
 	mtp_params = get_dict("mtp_params", get_required(probe, "mtp_params", errors), errors)
 	if mtp_params is not None:
@@ -139,7 +144,12 @@ def main() -> int:
 			warnings.append(f"mtp_params contains extra keys: {extra}")
 
 	expect_bool("ok", get_required(probe, "ok", errors), errors)
-	expect_list("errors", get_required(probe, "errors", errors), errors)
+	err_list = get_required(probe, "errors", errors)
+	expect_list("errors", err_list, errors)
+	if isinstance(err_list, list):
+		for i, v in enumerate(err_list[:256]):
+			if not isinstance(v, str):
+				errors.append(f"errors[{i}] has type {type(v).__name__}, expected str")
 
 	if probe.get("temperature", None) not in (None, 0.0):
 		warnings.append("temperature is not 0.0 (probe is intended to be deterministic)")
@@ -172,4 +182,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-
