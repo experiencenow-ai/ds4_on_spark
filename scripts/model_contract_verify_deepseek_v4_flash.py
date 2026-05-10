@@ -51,6 +51,7 @@ def main() -> int:
 	cfg = load_json(FIX / "config.json")
 	inf = load_json(FIX / "inference" / "config.json")
 	idx = load_json(FIX / "model.safetensors.index.json")
+	tok_cfg = load_json(FIX / "tokenizer_config.json")
 	weight_map = idx.get("weight_map", {})
 	weight_keys = set(weight_map.keys())
 
@@ -97,6 +98,41 @@ def main() -> int:
 						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
 					if enc.get("eos_token") != tok.get("eos_token"):
 						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+					try:
+						cfg_bos_id = int(cfg.get("bos_token_id"))
+						cfg_eos_id = int(cfg.get("eos_token_id"))
+					except Exception:
+						cfg_bos_id = None
+						cfg_eos_id = None
+					if cfg_bos_id is not None and tok.get("bos_token_id") != cfg_bos_id:
+						failures.append(Failure(80, f"contract summary tokenizer.bos_token_id must match config.json bos_token_id={cfg_bos_id}: {contract_summary}"))
+					if cfg_eos_id is not None and tok.get("eos_token_id") != cfg_eos_id:
+						failures.append(Failure(81, f"contract summary tokenizer.eos_token_id must match config.json eos_token_id={cfg_eos_id}: {contract_summary}"))
+					if tok.get("pad_token_is_eos") is not True:
+						failures.append(Failure(82, f"contract summary tokenizer.pad_token_is_eos must be true (per tokenizer_config.json): {contract_summary}"))
+
+					def _tok_cfg_content(x):
+						if isinstance(x, dict):
+							return x.get("content")
+						if isinstance(x, str):
+							return x
+						return None
+
+					tok_cfg_bos = _tok_cfg_content(tok_cfg.get("bos_token"))
+					tok_cfg_eos = _tok_cfg_content(tok_cfg.get("eos_token"))
+					tok_cfg_pad = _tok_cfg_content(tok_cfg.get("pad_token"))
+					if tok_cfg_bos is not None and tok.get("bos_token") != tok_cfg_bos:
+						failures.append(Failure(83, f"contract summary tokenizer.bos_token must match tokenizer_config.json bos_token.content: {contract_summary}"))
+					if tok_cfg_eos is not None and tok.get("eos_token") != tok_cfg_eos:
+						failures.append(Failure(84, f"contract summary tokenizer.eos_token must match tokenizer_config.json eos_token.content: {contract_summary}"))
+					if tok_cfg_pad is not None and tok_cfg_eos is not None and tok_cfg_pad != tok_cfg_eos:
+						failures.append(Failure(85, f"tokenizer_config.json pad_token.content must match eos_token.content (pad token is EOS): {contract_summary}"))
+					if tok.get("add_bos_token") != bool(tok_cfg.get("add_bos_token", False)):
+						failures.append(Failure(86, f"contract summary tokenizer.add_bos_token must match tokenizer_config.json add_bos_token: {contract_summary}"))
+					if tok.get("add_eos_token") != bool(tok_cfg.get("add_eos_token", False)):
+						failures.append(Failure(87, f"contract summary tokenizer.add_eos_token must match tokenizer_config.json add_eos_token: {contract_summary}"))
+					if tok.get("model_max_length") != tok_cfg.get("model_max_length"):
+						failures.append(Failure(88, f"contract summary tokenizer.model_max_length must match tokenizer_config.json model_max_length: {contract_summary}"))
 					tok_js = tok.get("tokenizer_json_summary")
 					if not isinstance(tok_js, dict):
 						failures.append(Failure(40, f"contract summary missing tokenizer.tokenizer_json_summary (expected dict): {contract_summary}"))
