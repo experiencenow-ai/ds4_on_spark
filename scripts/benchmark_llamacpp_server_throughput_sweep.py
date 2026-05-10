@@ -533,6 +533,7 @@ def run_wave(base_url, prompt_words, n_predict, cache_prompt, concurrency, repea
             "agg_generated_tokens": int(gen_tok_total),
             "agg_prompt_tok_s": (float(prompt_tok_total) / float(wave_wall_s)) if wave_wall_s > 0 else None,
             "agg_generated_tok_s": (float(gen_tok_total) / float(wave_wall_s)) if wave_wall_s > 0 else None,
+            "agg_total_tok_s": (float(prompt_tok_total + gen_tok_total) / float(wave_wall_s)) if wave_wall_s > 0 else None,
             "requests": req_rows,
         }
         out_rows.append(agg)
@@ -599,11 +600,11 @@ def write_summary(
                 f.write(json.dumps(best_total_by_concurrency[conc], indent=2, sort_keys=True))
                 f.write("\n```\n\n")
 
-        f.write("| parallel | batch | ubatch | prompt_words | concurrency | repeats | ok | errors | wall_s | agg_prompt_tok_s | agg_gen_tok_s | fattn_disabled | fattn_backend0_only | multislot_sched_reserve_fail |\n")
-        f.write("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: |\n")
+        f.write("| parallel | batch | ubatch | prompt_words | concurrency | repeats | ok | errors | wall_s | agg_prompt_tok_s | agg_total_tok_s | agg_gen_tok_s | fattn_disabled | fattn_backend0_only | multislot_sched_reserve_fail |\n")
+        f.write("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: |\n")
         for c in combos:
             f.write(
-                "| %s | %s | %s | %s | %s | %s | %s | %s | %.6f | %s | %s | %s | %s | %s |\n"
+                "| %s | %s | %s | %s | %s | %s | %s | %s | %.6f | %s | %s | %s | %s | %s | %s |\n"
                 % (
                     c.get("parallel", "NA"),
                     c.get("batch", "NA"),
@@ -615,6 +616,7 @@ def write_summary(
                     c.get("error_count", 0),
                     float(c.get("wave_wall_s", 0.0)),
                     "%.6f" % float(c["agg_prompt_tok_s"]) if c.get("agg_prompt_tok_s") is not None else "NA",
+                    "%.6f" % float(c["agg_total_tok_s"]) if c.get("agg_total_tok_s") is not None else "NA",
                     "%.6f" % float(c["agg_generated_tok_s"]) if c.get("agg_generated_tok_s") is not None else "NA",
                     "Y" if bool(c.get("fattn_seen_disabled")) else "N",
                     "Y" if bool(c.get("fattn_backend0_only")) else "N",
@@ -691,7 +693,7 @@ def main():
     per_request_timeout_s = env_float("REQUEST_TIMEOUT_S", max(180.0, float(ctx) / 10.0))
 
     prompt_sizes = split_ints(os.environ.get("PROMPT_WORDS", "4096"))
-    conc_values = split_ints(os.environ.get("CONCURRENCY", "1 2 4"))
+    conc_values = split_ints(os.environ.get("CONCURRENCY", "1 2 4 8"))
     parallel_values = split_opt_ints(os.environ.get("PARALLEL_VALUES", "1 2"))
     batch_values = split_opt_ints(os.environ.get("BATCH_VALUES", ""))
     ubatch_values = split_opt_ints(os.environ.get("UBATCH_VALUES", ""))

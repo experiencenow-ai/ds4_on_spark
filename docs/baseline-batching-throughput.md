@@ -67,6 +67,7 @@ Each sweep “wave” reports:
 
 - `agg_prompt_tok_s`: aggregate prompt token throughput over the wave wall time
 - `agg_generated_tok_s`: aggregate decode throughput over the wave wall time
+- `agg_total_tok_s`: aggregate total token throughput (`prompt + decode`) over the wave wall time
 
 Choose the best configuration based on your target:
 
