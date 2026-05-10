@@ -549,6 +549,13 @@ if [ "$nvcc_bin" != "" ]; then
 	else
 		echo "nvcc --list-gpu-arch not supported"
 	fi
+	echo
+	echo "== nvcc supported gpu code (capped) =="
+	if "$nvcc_bin" --list-gpu-code >/dev/null 2>&1; then
+		"$nvcc_bin" --list-gpu-code 2>/dev/null | head -n 200 || true
+	else
+		echo "nvcc --list-gpu-code not supported"
+	fi
 fi
 ptxas_bin=""
 if [ -x /usr/local/cuda/bin/ptxas ]; then
