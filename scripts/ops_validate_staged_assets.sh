@@ -98,6 +98,7 @@ need_file "$scripts_dir/ops_spark_standalone_check.sh"
 need_file "$scripts_dir/ops_collect_support_bundle.sh"
 need_file "$scripts_dir/ops_validate_staged_assets.sh"
 need_file "$scripts_dir/ops_validate_installed_assets.sh"
+need_file "$scripts_dir/ops_install_staged_assets.sh"
 
 echo "== sh -n (staged ops scripts) =="
 sh -n "$scripts_dir/ops_ds4_env_check.sh"
@@ -106,6 +107,7 @@ sh -n "$scripts_dir/ops_spark_standalone_check.sh"
 sh -n "$scripts_dir/ops_collect_support_bundle.sh"
 sh -n "$scripts_dir/ops_validate_staged_assets.sh"
 sh -n "$scripts_dir/ops_validate_installed_assets.sh"
+sh -n "$scripts_dir/ops_install_staged_assets.sh"
 
 echo "== env examples include required keys =="
 for env in "$config_dir/ds4.env.example" "$config_dir/ds4-spark0.env.example" "$config_dir/ds4-spark1.env.example"; do

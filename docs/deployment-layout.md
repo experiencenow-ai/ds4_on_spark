@@ -67,6 +67,15 @@ If you prefer a single command that also stages safe ops scripts, use `scripts/o
 
 Then on the Spark:
 
+Recommended: use the staged installer wrapper (human-run; review first):
+
+```bash
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1> --start-preflight
+# optional: add --install-timers, --install-spark-units, and/or --strict
+```
+
+Manual step-by-step (equivalent):
+
 ```bash
 sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
