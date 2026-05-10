@@ -100,6 +100,37 @@ except Exception as e:
 print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
+python3 - "$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" "$OUT_DIR/contract_probe.json" 2>/dev/null <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+try:
+    doc = json.loads(src.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+if not isinstance(doc, dict):
+    raise SystemExit(0)
+dst.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+
+if python3 - "$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY'; then
+import json
+import sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+doc = json.loads(p.read_text(encoding="utf-8"))
+raise SystemExit(0 if bool(doc.get("ok", False)) else 1)
+PY
+	echo "== generating llama.cpp MTP sidecar binder skeleton (local) =="
+	python3 "$repo_root/scripts/model_contract_generate_llamacpp_mtp_sidecar_binder.py" \
+		--sidecar-probe-json "$OUT_DIR/contract_probe.json" \
+		>"$OUT_DIR/deepseek4_mtp_sidecar.hpp" 2>/dev/null || true
+fi
+
 {
 	echo "## Results"
 	echo
@@ -122,7 +153,9 @@ PY
 	echo
 	echo "- stdout: $OUT_DIR/remote_mtp_sidecar_probe_stdout.txt"
 	echo "- stderr: $OUT_DIR/remote_mtp_sidecar_probe_stderr.txt"
+	echo "- full JSON (if parseable): $OUT_DIR/contract_probe.json"
 	echo "- parsed status: $OUT_DIR/contract_probe_parse.json"
+	echo "- binder skeleton (if ok=true): $OUT_DIR/deepseek4_mtp_sidecar.hpp"
 	echo
 } >>"$REPORT_MD"
 
