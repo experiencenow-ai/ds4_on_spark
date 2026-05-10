@@ -19,7 +19,7 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 Use discovery first to confirm which `*.local` targets resolve and whether TCP/22 is reachable.
 
 ```bash
-REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 ```
 
 Omit args to use the same default targets.
@@ -32,9 +32,9 @@ If `spark1.local` does not resolve from the Mac yet, keep the probe flow the sam
 Always use `REDACT=1` when saving output for commit.
 
 ```bash
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark1.local | tee /private/tmp/spark1-probe.txt
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/spark01-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local | tee /private/tmp/spark1-probe.txt
+(SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local || true) | tee /private/tmp/spark01-probe-summary.txt
 ```
 
 Optional toggles:
