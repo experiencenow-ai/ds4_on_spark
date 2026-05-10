@@ -16,6 +16,11 @@ cd tools/cuda_probe
 make
 ```
 
+Subset builds:
+
+- `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh`.
+- `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
+
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
