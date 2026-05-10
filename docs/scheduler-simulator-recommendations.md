@@ -90,6 +90,40 @@ Key signals (from the report JSON):
 
 Recommendation (synthetic): keep an **adaptive batch-K controller** available; fixed high batch K can sharply inflate backpressure drops under overload. Tune thresholds against real traces once available.
 
+## Adaptive K Signal Choice (Global vs Candidates vs Class)
+
+Scenario: two-stream overload with non-trivial interactive demand (`interactive_arrival_rate_tps=2000`) plus saturated batch demand (`batch_arrival_rate_tps=20000`), small expert queue (`expert_queue_max=128`), and adaptive K enabled.
+
+Compare `k_signal` policies:
+
+- `global`: congestion signal is max pending across all experts
+- `candidates`: congestion signal is max pending among this token’s candidate experts
+- `class`: congestion signal is max pending in this token’s latency-class queue only
+
+Key signals to inspect (from the report JSON):
+
+- `token_p95_interactive_ms` and `sla_violation_frac_tokens_interactive` (interactive safety)
+- `drop_frac_tokens_batch` and `pending_depth_time_weighted_p95` (congestion + backpressure pressure)
+
+Recommendation (synthetic): default to **`k_signal=global`** (or `candidates`) until real traces are replayed. In this overload regime, `k_signal=class` can over-admit interactive work and amplify interactive SLA violations even when a reservation is present.
+
+## Batch Starvation Knobs (hi_burst vs promote_ms)
+
+Scenario: mixed load with more uniform routing (low Zipf skew) to isolate service-discipline effects. Strict priority can starve batch tasks even when interactive latency is healthy.
+
+Compare:
+
+- strict priority (`hi_burst=0`, `promote_ms=0`)
+- bounded priority (`hi_burst=8`) to force periodic batch starts
+- aging (`promote_ms=20ms`) and combined (`hi_burst=8` + `promote_ms=20ms`)
+
+Key signals to inspect (from the report JSON):
+
+- `starved_task_frac_batch` (batch starvation)
+- `token_p95_interactive_ms` (interactive tail cost)
+
+Recommendation (synthetic): keep **`hi_burst`** as a default anti-starvation safety valve; treat `promote_ms` as an opt-in knob that can reduce starvation further but may inflate interactive tail latency.
+
 ## Next Step (Real Traces)
 
 These are synthetic signals only. The next gating artifact for scheduler work is a real quantized-runtime JSONL route trace (routing + latency + optional MTP accounting) that can be replayed via:
