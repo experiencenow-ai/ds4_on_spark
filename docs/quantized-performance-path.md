@@ -160,6 +160,7 @@ Trace JSONL fields:
 
 - `t_ms`: token arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and emit per-line `dt_ms` deltas.
 - `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
+- Runtime traces may emit microsecond/nanosecond variants (`t_us` / `t_ns` or `dt_us` / `dt_ns`); `--trace-input-format runtime` (or `trace_extract.py`) normalizes them into millisecond `t_ms` / `dt_ms` fields.
 - `cls`: `"interactive"` or `"batch"`
 - `candidates`: ordered expert candidates for that token
 - `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:

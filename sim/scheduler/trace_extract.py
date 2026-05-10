@@ -85,6 +85,12 @@ def _extract_time(obj: Dict[str, object]) -> Tuple[Optional[float], Optional[flo
             raise ValueError("time_us field must be a number")
         return(float(t_us_raw) / 1000.0, None)
 
+    t_ns_raw = _get_any(obj, ("t_ns", "ts_ns", "timestamp_ns", "time_ns"))
+    if t_ns_raw is not None:
+        if not isinstance(t_ns_raw, (int, float)):
+            raise ValueError("time_ns field must be a number")
+        return(float(t_ns_raw) / 1_000_000.0, None)
+
     dt_raw = _get_any(obj, ("dt_ms", "delta_ms"))
     if dt_raw is not None:
         if not isinstance(dt_raw, (int, float)):
@@ -96,6 +102,12 @@ def _extract_time(obj: Dict[str, object]) -> Tuple[Optional[float], Optional[flo
         if not isinstance(dt_us_raw, (int, float)):
             raise ValueError("dt_us field must be a number")
         return(None, float(dt_us_raw) / 1000.0)
+
+    dt_ns_raw = _get_any(obj, ("dt_ns", "delta_ns"))
+    if dt_ns_raw is not None:
+        if not isinstance(dt_ns_raw, (int, float)):
+            raise ValueError("dt_ns field must be a number")
+        return(None, float(dt_ns_raw) / 1_000_000.0)
 
     return(None, None)
 
