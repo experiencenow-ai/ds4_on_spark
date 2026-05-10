@@ -276,11 +276,36 @@ static int32_t ds4_cli_dump_config(const ds4_config_t *cfg)
 	return(0);
 }
 
+static void ds4_cli_print_config_diag(const ds4_config_diag_t *d,int32_t strict_cfg,int32_t unknown)
+{
+	if ( strict_cfg != 0 )
+	{
+		if ( unknown > 0 )
+		{
+			if ( d != 0 && d->line > 0 )
+				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys (line %d)\n",unknown,d->line);
+			else
+				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys\n",unknown);
+			return;
+		}
+		if ( d != 0 && d->line > 0 )
+			fprintf(stderr,"ds4_cli: failed to load config (strict) (line %d)\n",d->line);
+		else
+			fprintf(stderr,"ds4_cli: failed to load config (strict)\n");
+		return;
+	}
+	if ( d != 0 && d->line > 0 )
+		fprintf(stderr,"ds4_cli: failed to load config (line %d)\n",d->line);
+	else
+		fprintf(stderr,"ds4_cli: failed to load config\n");
+}
+
 int main(int argc,char **argv)
 {
 	ds4_config_t cfg;
 	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
+	ds4_config_diag_t diag;
 	int32_t dump_cfg,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
 	dump_cfg = 0;
 	print_ver = 0;
@@ -305,21 +330,15 @@ int main(int argc,char **argv)
 		ds4_cli_usage(stderr,argv != 0 ? argv[0] : 0);
 		return(2);
 	}
+	ds4_config_diag_init(&diag);
+	unknown = -1;
 	if ( strict_cfg != 0 )
-		err = ds4_config_load_auto_ex(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown);
+		err = ds4_config_load_auto_ex_diag(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown,&diag);
 	else
-		err = ds4_config_load_auto(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0);
+		err = ds4_config_load_auto_ex_diag(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0,0,&unknown,&diag);
 	if ( err < 0 )
 	{
-		if ( strict_cfg != 0 )
-		{
-			if ( unknown > 0 )
-				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys\n",unknown);
-			else
-				fprintf(stderr,"ds4_cli: failed to load config (strict)\n");
-		}
-		else
-			fprintf(stderr,"ds4_cli: failed to load config\n");
+		ds4_cli_print_config_diag(&diag,strict_cfg,unknown);
 		return(1);
 	}
 	if ( log_level != 0 )
