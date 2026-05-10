@@ -23,6 +23,7 @@ DS4_EXTERN_C_BEGIN
 int32_t ds4_ctx_init(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_mem,int32_t arena_size);
 int32_t ds4_ctx_init_auto(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_mem,int32_t arena_size);
 int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg);
+int32_t ds4_ctx_deinit(ds4_ctx_t *ctx);
 int32_t ds4_ctx_log_ring_init(ds4_ctx_t *ctx,ds4_log_entry_t *entries,int32_t entry_count);
 int32_t ds4_ctx_log_ring_init_arena(ds4_ctx_t *ctx,int32_t entry_count);
 int32_t ds4_ctx_log_ring_detach(ds4_ctx_t *ctx);
