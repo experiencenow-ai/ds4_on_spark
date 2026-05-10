@@ -147,7 +147,7 @@ int32_t ds4_ctx_init_auto(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_
 		return(-4);
 	ctx->log_ring_ready = 0;
 	ctx->log_ring_attached = 0;
-	if ( ds4_arena_init(&ctx->arena,arena_mem,arena_size) < 0 )
+	if ( ds4_arena_init_ex(&ctx->arena,arena_mem,arena_size,16) < 0 )
 		return(-5);
 	tmp = *cfg;
 	if ( tmp.log_ring_entries > 0 )
@@ -172,7 +172,7 @@ int32_t ds4_ctx_init(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_mem,i
 		return(-4);
 	ctx->log_ring_ready = 0;
 	ctx->log_ring_attached = 0;
-	if ( ds4_arena_init(&ctx->arena,arena_mem,arena_size) < 0 )
+	if ( ds4_arena_init_ex(&ctx->arena,arena_mem,arena_size,16) < 0 )
 		return(-5);
 	if ( ds4_ctx_apply_config(ctx,cfg) < 0 )
 		return(-6);
