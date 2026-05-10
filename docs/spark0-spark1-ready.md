@@ -87,6 +87,7 @@ Notes:
 - `nvcc` path and version (toolkit version).
 - `/usr/local/cuda/version.json` (when present) to capture toolkit component versions.
 - `nvcc --list-gpu-arch` output (capped) to confirm supported SM targets (useful when `NVCC_ARCH=...` overrides fail).
+- `nvcc --list-gpu-code` output (capped) to confirm supported `sm_###` code targets (useful when mapping `compute_cap` -> `NVCC_ARCH=sm_...`).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - Any `warning:` line emitted by the probe when `nvcc release` and `cuda.h` disagree.
 - Any `note:` line emitted by the probe when `nvidia-smi` CUDA major differs from the `nvcc` toolkit major (driver vs toolkit).

@@ -52,6 +52,12 @@ Additional probe run (09:13Z refresh, loop-filtered storage output, temporary gi
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0918Z_loop.txt
 ```
 
+Additional probe run (10:13Z refresh, committed `nvcc --list-gpu-code` output):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T101326Z_loop_spark_access_nvcc_code_commit.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -106,6 +112,46 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+```
+
+### Single-target probe (Spark0, 10:13Z, `nvcc --list-gpu-code`)
+
+```text
+== local meta ==
+Sun May 10 10:13:26 UTC 2026
+git: 0874be4
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvcc supported gpu arch (capped) ==
+compute_75
+compute_80
+compute_86
+compute_87
+compute_88
+compute_89
+compute_90
+compute_100
+compute_110
+compute_103
+compute_120
+compute_121
+
+== nvcc supported gpu code (capped) ==
+sm_75
+sm_80
+sm_86
+sm_87
+sm_88
+sm_89
+sm_90
+sm_100
+sm_110
+sm_103
+sm_120
+sm_121
 ```
 
 ### Single-target probe (Spark0, 02:21Z, PCIe query mismatch warning)

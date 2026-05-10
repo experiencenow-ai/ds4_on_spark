@@ -62,6 +62,12 @@ Refreshed again (09:13Z, loop-filtered storage output, temporary gitdir):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0918Z_loop.txt
 ```
 
+Refreshed again (10:13Z, committed `nvcc --list-gpu-code` output):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T101326Z_loop_spark_access_nvcc_code_commit.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -74,6 +80,7 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - CUDA version reported by nvidia-smi: `13.0`
 - CUDA compute capability: `12.1` (nvidia-smi + nvcc runtime probe)
 - CUDA toolkit (nvcc): 13.0 (V13.0.88), `nvcc` at `/usr/local/cuda/bin/nvcc` (not on default `PATH`)
+- `nvcc --list-gpu-code` includes `sm_121`, matching the observed compute capability (`12.1`) and `NVCC_ARCH=sm_121` probe default
 - CUDA toolkit component versions (`/usr/local/cuda/version.json`): CUDA SDK 13.0.3, cuDART 13.0.96, CCCL 13.0.85
 - CUDA header macro (`cuda.h`): `#define CUDA_VERSION 13000`
 - GPU memory (cuda runtime probe): 128,518,373,376 bytes (~119.7 GiB)
