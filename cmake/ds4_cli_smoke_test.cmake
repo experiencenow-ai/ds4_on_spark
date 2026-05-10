@@ -57,6 +57,27 @@ if(DS4_MODE STREQUAL "ctx_smoke")
 	return()
 endif()
 
+if(DS4_MODE STREQUAL "cuda_smoke_disabled")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --smoke-cuda
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli cuda smoke failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "cuda build:" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli cuda smoke stdout missing 'cuda build:'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "cuda: disabled by config" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli cuda smoke stdout missing 'cuda: disabled by config'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
 if(DS4_MODE STREQUAL "config_file_dump")
 	set(_ds4_cfg "${DS4_TMP_DIR}/ds4_cli_smoke.conf")
 	file(WRITE "${_ds4_cfg}" "log_level=debug\nunknown_key=1\nenable_cuda=0\n")

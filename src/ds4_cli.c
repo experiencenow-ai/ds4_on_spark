@@ -49,13 +49,72 @@ static int32_t ds4_cli_smoke_ctx(const ds4_config_t *cfg)
 	return(0);
 }
 
+static int32_t ds4_cli_smoke_cuda(const ds4_config_t *cfg)
+{
+	ds4_cuda_status_t st;
+	ds4_cuda_device_info_t di;
+	const char *s;
+	int32_t build_has_cuda,dev_count,cur_dev,dev;
+	if ( cfg == 0 )
+		return(-1);
+	build_has_cuda = ds4_cuda_is_enabled_build();
+	printf("cuda build: %s\n",build_has_cuda != 0 ? "enabled" : "disabled");
+	printf("cuda config: enable_cuda=%d cuda_device=%d\n",cfg->enable_cuda,cfg->cuda_device);
+	if ( cfg->enable_cuda == 0 )
+	{
+		printf("cuda: disabled by config\n");
+		return(0);
+	}
+	if ( build_has_cuda == 0 )
+	{
+		printf("cuda: unavailable (build)\n");
+		return(-2);
+	}
+	st = ds4_cuda_init();
+	if ( ds4_cuda_is_ok(st) == 0 )
+	{
+		s = ds4_cuda_errstr(st);
+		printf("cuda: init failed: %s\n",s != 0 ? s : "?");
+		return(-3);
+	}
+	dev_count = -1;
+	st = ds4_cuda_device_count(&dev_count);
+	if ( ds4_cuda_is_ok(st) == 0 )
+	{
+		s = ds4_cuda_errstr(st);
+		printf("cuda: device_count failed: %s\n",s != 0 ? s : "?");
+		return(-4);
+	}
+	cur_dev = -1;
+	st = ds4_cuda_get_device(&cur_dev);
+	if ( ds4_cuda_is_ok(st) == 0 )
+	{
+		s = ds4_cuda_errstr(st);
+		printf("cuda: get_device failed: %s\n",s != 0 ? s : "?");
+		return(-5);
+	}
+	dev = cfg->cuda_device;
+	if ( dev == DS4_CUDA_DEVICE_AUTO )
+		dev = cur_dev;
+	memset(&di,0,(int32_t)sizeof(di));
+	st = ds4_cuda_device_info(&di,dev);
+	if ( ds4_cuda_is_ok(st) == 0 )
+	{
+		s = ds4_cuda_errstr(st);
+		printf("cuda: device_info failed: %s\n",s != 0 ? s : "?");
+		return(-6);
+	}
+	printf("cuda device: count=%d current=%d selected=%d name=%s cc=%d.%d mem=%" PRId64 "\n",dev_count,cur_dev,dev,di.name,di.major,di.minor,di.total_global_mem);
+	return(0);
+}
+
 static void ds4_cli_usage(FILE *fp,const char *argv0)
 {
 	if ( fp == 0 )
 		return;
 	if ( argv0 == 0 )
 		argv0 = "ds4_cli";
-	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--log-ring-entries N] [--dump-config] [--version] [--smoke-ctx]\n",argv0);
+	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--log-ring-entries N] [--dump-config] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
 	fprintf(fp,"  --config PATH     Load key=value config file (PATH or '-')\n");
 	fprintf(fp,"  --strict-config   Reject unknown keys in config file\n");
 	fprintf(fp,"  --log-level LVL   Override log_level (0..3 or error/warn/info/debug)\n");
@@ -68,10 +127,11 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --dump-config     Print effective config to stdout\n");
 	fprintf(fp,"  --version         Print ds4 version\n");
 	fprintf(fp,"  --smoke-ctx       Init a ctx (static arena), log one line, print one log-ring entry\n");
+	fprintf(fp,"  --smoke-cuda      Print CUDA build/config status and (if enabled) probe one device\n");
 	fprintf(fp,"  --help            Show this help\n");
 }
 
-static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *print_ver,int32_t *smoke_ctx)
+static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
 {
 	int32_t i;
 	const char *a;
@@ -95,6 +155,8 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		return(-9);
 	if ( smoke_ctx == 0 )
 		return(-18);
+	if ( smoke_cuda == 0 )
+		return(-19);
 	*cfg_path = 0;
 	*strict_cfg = 0;
 	*log_level = 0;
@@ -105,6 +167,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 	*dump_cfg = 0;
 	*print_ver = 0;
 	*smoke_ctx = 0;
+	*smoke_cuda = 0;
 	for (i=1; i<argc; i++)
 	{
 		a = argv[i];
@@ -190,6 +253,11 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 			*smoke_ctx = 1;
 			continue;
 		}
+		if ( strcmp(a,"--smoke-cuda") == 0 )
+		{
+			*smoke_cuda = 1;
+			continue;
+		}
 		return(-17);
 	}
 	return(0);
@@ -213,11 +281,12 @@ int main(int argc,char **argv)
 	ds4_config_t cfg;
 	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
-	int32_t dump_cfg,print_ver,strict_cfg,smoke_ctx,err,unknown;
+	int32_t dump_cfg,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
 	dump_cfg = 0;
 	print_ver = 0;
 	strict_cfg = 0;
 	smoke_ctx = 0;
+	smoke_cuda = 0;
 	unknown = -1;
 	cfg_path = 0;
 	log_level = 0;
@@ -225,7 +294,7 @@ int main(int argc,char **argv)
 	cuda_device = 0;
 	arena_size = 0;
 	log_ring_entries = 0;
-	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&log_ring_entries,&dump_cfg,&print_ver,&smoke_ctx);
+	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&log_ring_entries,&dump_cfg,&print_ver,&smoke_ctx,&smoke_cuda);
 	if ( err != 0 )
 	{
 		if ( err > 0 )
@@ -289,6 +358,15 @@ int main(int argc,char **argv)
 		if ( err < 0 )
 		{
 			fprintf(stderr,"ds4_cli: smoke ctx failed (%d)\n",err);
+			return(1);
+		}
+	}
+	if ( smoke_cuda != 0 )
+	{
+		err = ds4_cli_smoke_cuda(&cfg);
+		if ( err < 0 )
+		{
+			fprintf(stderr,"ds4_cli: smoke cuda failed (%d)\n",err);
 			return(1);
 		}
 	}
