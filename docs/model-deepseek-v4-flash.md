@@ -577,6 +577,7 @@ For each quantized artifact tested, record:
 - captured quantization metadata from `scripts/model_contract_inspect_quantized_artifact.py`:
   - `tensor_type_counts` (overall GGUF tensor types present)
   - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
+  - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`)
 
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
