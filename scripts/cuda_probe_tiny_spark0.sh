@@ -57,15 +57,15 @@ echo \"== nvcc: --list-gpu-code (if supported) ==\"
 list_gpu_code=\$(\$NVCC --list-gpu-code 2>/dev/null || true)
 if [ \"\${list_gpu_code}\" = \"\" ]; then
 	echo \"(nvcc --list-gpu-code not supported)\"
-else
-	printf \"%s\n\" \"\${list_gpu_code}\"
-	if echo \"\${list_gpu_code}\" | grep -q \"sm_121\"; then
-		:
 	else
-		echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
-		exit 5
+		printf \"%s\n\" \"\${list_gpu_code}\"
+		if echo \"\${list_gpu_code}\" | grep -q \"sm_121\"; then
+			:
+		else
+			echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
+			exit 5
+		fi
 	fi
-fi
 
 echo
 echo \"== build (tiny) ==\"
@@ -81,12 +81,13 @@ run_retry() {
 	if \"\$@\"; then
 		echo
 		return 0
+	else
+		rc=\$?
+		echo \"(\${name} failed rc=\${rc}; retrying once)\" >&2
+		sleep 1
+		\"\$@\"
+		echo
 	fi
-	rc=\$?
-	echo \"(\${name} failed rc=\${rc}; retrying once)\" >&2
-	sleep 1
-	\"\$@\"
-	echo
 }
 
 run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
