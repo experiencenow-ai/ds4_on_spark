@@ -170,6 +170,35 @@ int32_t test_config(void)
 	unsetenv("DS4_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-153);
+	if ( setenv("DS4_LOG_LEVEL","",1) != 0 )
+		return(-154);
+	if ( setenv("DS4_ENABLE_CUDA","",1) != 0 )
+		return(-155);
+	if ( setenv("DS4_CUDA_DEVICE","",1) != 0 )
+		return(-156);
+	if ( setenv("DS4_ARENA_SIZE","",1) != 0 )
+		return(-157);
+	if ( setenv("DS4_LOG_RING_ENTRIES","",1) != 0 )
+		return(-158);
+	if ( ds4_config_parse_env(&cfg) < 0 )
+		return(-159);
+	if ( cfg.log_level != 2 )
+		return(-160);
+	if ( cfg.enable_cuda != 0 )
+		return(-161);
+	if ( cfg.cuda_device != DS4_CUDA_DEVICE_AUTO )
+		return(-162);
+	if ( cfg.arena_size != 0 )
+		return(-163);
+	if ( cfg.log_ring_entries != 0 )
+		return(-164);
+	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
+	unsetenv("DS4_CUDA_DEVICE");
+	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_LOG_RING_ENTRIES");
+	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-107);
 	if ( setenv("DS4_ENABLE_CUDA","2147483648",1) != 0 )
 		return(-108);
