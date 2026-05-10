@@ -293,6 +293,59 @@ def _expert_batching_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _admit_policy_skew_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 64 if quick else 256
+    num_experts = 8
+    candidates = tuple(range(num_experts))
+    trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=candidates) for _ in range(num_tokens)]
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=num_experts,
+        expert_parallelism=1,
+        expert_queue_max=100_000,
+        service_ms=1.0,
+        starvation_ms=1e9,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=2,
+            k_max_batch=2,
+            q_low=0,
+            q_high=0,
+        ),
+        admit_policy="ordered",
+        sim_seed=123,
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("least_pending", {"admit_policy": "least_pending"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "admit_policy_skew",
+            "trace_cfg": {
+                "trace_mode": "manual_burst_same_time",
+                "num_tokens": int(num_tokens),
+                "num_experts": int(num_experts),
+                "candidates": list(candidates),
+                "cls": "batch",
+                "t_ms": 0.0,
+            },
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "default_admit_policy": "ordered",
+                "experimental_admit_policy": "least_pending",
+                "reason": "Synthetic burst stress: least_pending spreads work across candidates and sharply reduces load skew/makespan, but it ignores router preference order; validate on real traces before enabling in runtime.",
+            },
+        }
+    )
+
+
 def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
     num_tokens = 8000 if quick else 40000
     interactive_output_tps = 500.0
@@ -523,6 +576,7 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "mtp_efficiency_sweep": _mtp_efficiency_sweep(quick),
         "adaptive_k_batch": _adaptive_k_batch_scenario(quick),
         "expert_batching": _expert_batching_scenario(quick),
+        "admit_policy_skew": _admit_policy_skew_scenario(quick),
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),

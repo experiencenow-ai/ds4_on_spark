@@ -634,6 +634,36 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(float(s.get("expert_utilization_gini", 0.0)), 0.60)
         self.assertAlmostEqual(float(s.get("expert_tasks_started_top1_frac", 0.0)), 1.0, places=6)
 
+    def test_admit_policy_least_pending_reduces_load_skew_and_makespan(self) -> None:
+        candidates = tuple(range(8))
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=candidates) for _ in range(256)]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=8,
+            expert_parallelism=1,
+            expert_queue_max=100_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=2,
+                k_max_batch=2,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+        )
+        ordered = scheduler_sim.run_simulation(dataclasses.replace(cfg, admit_policy="ordered"), trace)
+        balanced = scheduler_sim.run_simulation(dataclasses.replace(cfg, admit_policy="least_pending"), trace)
+        s_ordered = scheduler_sim.compare_summary_jsonable(ordered)
+        s_balanced = scheduler_sim.compare_summary_jsonable(balanced)
+        self.assertGreater(float(s_ordered.get("expert_tasks_started_gini", 0.0)), 0.70)
+        self.assertLess(float(s_balanced.get("expert_tasks_started_gini", 1.0)), 0.20)
+        self.assertLess(float(s_balanced.get("expert_tasks_started_top1_frac", 1.0)), float(s_ordered.get("expert_tasks_started_top1_frac", 0.0)))
+        self.assertLess(float(s_balanced.get("makespan_ms", 1e9)), float(s_ordered.get("makespan_ms", 0.0)))
+
     def test_summary_json_compare_omits_full_metrics(self) -> None:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
