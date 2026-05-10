@@ -90,6 +90,21 @@ MTP (multi-token prediction) oracle requirements:
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
     - Validate the probe JSON shape with: `python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json ...`
 
+Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-10):
+
+| Pinned probe output | Artifact kind | `mtp_present` | `mtp_contract.complete` | Note |
+|---|---|---:|---:|---|
+| `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
+| `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
+| `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
+| `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json` | MTP sidecar GGUF | true | false | compact DS4-tuned sidecar (`mtp_tensor_count=32`), not full upstream `mtp.0.*` |
+
+Refresh the pinned probe outputs reproducibly (header + tensor table Range reads only; refuses servers that don’t honor Range):
+
+```bash
+scripts/model_contract_refresh_v4flash_gguf_inspects.sh
+```
+
 Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
