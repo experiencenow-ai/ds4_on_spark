@@ -17,31 +17,18 @@ Rule of thumb: artifacts above ~100 GiB leave limited headroom for runtime + KV/
 
 The sizes below are taken from Git LFS pointer metadata (no GGUF downloads), as documented in [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md).
 
-Important: Most community GGUF conversions are trunk-only and drop the upstream `mtp.0.*` namespace. Treat MTP/speculative decoding as unavailable on the GGUF path unless an artifact set explicitly includes MTP and passes the acceptance gates in [`docs/model-contract.md`](model-contract.md).
-
-| Candidate | Runtime (pinned) | Artifact (pinned) | License | Size (GiB) | Single-Spark plausibility | MTP (`mtp.0.*`) | Notes |
-| --- | --- | --- | --- | ---: | --- | --- | --- |
-| A | `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` IQ1_M (`cd14d4663786e5fa368e560324b10e92110f39c2`) | MIT / MIT | 62.9 | Plausible | None | Most headroom for KV/cache among pinned GGUF candidates; runtime is a DeepSeek-V4-capable llama.cpp fork (CPU/CUDA/ROCm/Vulkan claimed). |
-| B | `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` IQ2_XXS shards (`cd14d4663786e5fa368e560324b10e92110f39c2`) | MIT / MIT | 72.6 | Plausible | None | Sharded; requires the same V4-capable llama.cpp fork; verify shard auto-load behavior + KV/cache sizing. |
-| C | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` (`9222e55c13c965ccb7e9104fda58796edd84a732`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Plausible | Sidecar exists (incomplete) | Reported running on a single GB10-class Spark: `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970` |
-| D | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` (`9222e55c13c965ccb7e9104fda58796edd84a732`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XXS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 73.1 | Plausible | None | Most Spark-targeted CUDA fork in manifest; shard auto-load behavior is documented upstream (point at shard 00001). |
-| E | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 81.0 | Plausible | None | Popular “V4 loader + kernels” fork referenced by teamblobfish; more headroom than ~90–100 GiB options. |
-| I | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ1_S-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 57.3 | Plausible | None | Smaller teamblobfish quant (sharded) with the most KV/cache headroom among pinned GGUF options in that repo. |
-| J | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ1_M shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 60.1 | Plausible | None | Slightly larger than IQ1_S-XL, but still among the best KV/cache headroom options for a single Spark. |
-| F | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `Preyazz/DeepSeek-V4-Flash-GGUF` Q2_K (`6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d`) | MIT / MIT | 96.2 | Plausible but tight | None | Leaves limited headroom for KV/cache; `wip/deepseek-v4-support` is explicitly “reference/WIP” upstream (PR `#22378` was closed). |
-| G | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | None | Treat as blocked until a human verifies licensing; also sharded. |
-| H | `antirez/ds4` (`8e7575be0ef44bd97c5ebaccf49ef85e05048b7b`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | Sidecar exists (incomplete) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
-
-MTP status notes:
-
-- `None` means metadata-only inspection found no `mtp.*` tensors in the GGUF tensor directory; treat MTP/speculative decoding as unavailable on that artifact.
-- `Sidecar exists (incomplete)` means the trunk GGUF drops `mtp.0.*` but the repo ships a separate MTP GGUF whose `mtp.0.*` tensor set is **incomplete** relative to the upstream `mtp.0.*` contract; treat MTP as disabled/untrusted.
-- Even if an artifact set preserves a *complete* `mtp.0.*` namespace, MTP is still untrusted until a logits oracle exercises `MTPBlock.forward(...)` (see `docs/model-contract.md` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.trust_gates`).
-
-Recorded metadata-only inspections (no downloads):
-
-- `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json` (trunk: `mtp_present=false`)
-- `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json` + `docs/mtp-sidecar-probe-antirez-ef3b960.json` (sidecar: `mtp_present=true`, `mtp_contract.complete=false`)
+| Candidate | Runtime (pinned) | Artifact (pinned) | License | Size (GiB) | Single-Spark plausibility | Notes |
+| --- | --- | --- | --- | ---: | --- | --- |
+| A | `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` IQ1_M (`2ec8dbea27dbf6483ae14b60e610b65c49727d13`) | MIT / MIT | 62.9 | Plausible | Most headroom for KV/cache among pinned GGUF candidates; runtime is a DeepSeek-V4-capable llama.cpp fork (CPU/CUDA/ROCm/Vulkan claimed). |
+| B | `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` IQ2_XXS shards (`2ec8dbea27dbf6483ae14b60e610b65c49727d13`) | MIT / MIT | 72.6 | Plausible | Sharded; requires the same V4-capable llama.cpp fork; verify shard auto-load behavior + KV/cache sizing. |
+| J | `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` IQ3_XXS (`2ec8dbea27dbf6483ae14b60e610b65c49727d13`) | MIT / MIT | 104.2 | Plausible but tight | Leaves limited headroom for KV/cache on Spark0 baseline; keep as a reference in case IQ1/2 variants regress. |
+| C | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` (`9222e55c13c965ccb7e9104fda58796edd84a732`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Plausible | Reported running on a single GB10-class Spark: `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970` |
+| D | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` (`9222e55c13c965ccb7e9104fda58796edd84a732`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XXS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 73.1 | Plausible | Most Spark-targeted CUDA fork in manifest; shard auto-load behavior is documented upstream (point at shard 00001). |
+| E | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 81.0 | Plausible | Popular “V4 loader + kernels” fork referenced by teamblobfish; more headroom than ~90–100 GiB options. |
+| I | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ1_S-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 57.3 | Plausible | Smaller teamblobfish quant (sharded) with the most KV/cache headroom among pinned GGUF options in that repo. |
+| F | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `Preyazz/DeepSeek-V4-Flash-GGUF` Q2_K (`6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d`) | MIT / MIT | 96.2 | Plausible but tight | Leaves limited headroom for KV/cache; `wip/deepseek-v4-support` is explicitly “reference/WIP” upstream (PR `#22378` was closed). |
+| G | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | Treat as blocked until a human verifies licensing; also sharded. |
+| H | `antirez/ds4` (`8e7575be0ef44bd97c5ebaccf49ef85e05048b7b`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
 
 Fixture provenance note:
 

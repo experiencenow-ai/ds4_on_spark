@@ -56,35 +56,18 @@ Treat this as the practical upper bound for “single Spark” artifacts; anythi
 
 Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~119 GiB host RAM / ~119.7 GiB VRAM):
 
-| Source | Artifact | Size (bytes) | Size (GiB) | LFS sha256 (content) | Single-Spark plausibility | MTP (`mtp.0.*`) status |
-| --- | --- | ---: | ---: | --- | --- | --- |
-| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ1_M.gguf` | 67505962560 | 62.9 | `a7c64ba7...3c58a22c` | Plausible (more headroom than IQ2 quants; requires V4-capable llama.cpp fork) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ2_XXS...(2 shards)` | 77907836672 | 72.6 | `0e4356c7...9d0ae99b` + `5dd29236...45da5c5e7` | Plausible (sharded; requires V4-capable llama.cpp fork) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | `31598c67...e86fd8c` | Plausible (headroom for KV/cache still required) | Trunk drops `mtp.0.*`; ships a sidecar (incomplete; see below) |
-| `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | `3edea7ba...6528c993` | Plausible but tight (limited KV/cache headroom) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | `1d494194...a9d7ec6b` | Plausible but tight (limited KV/cache headroom) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `lovedheart/DeepSeek-V4-Flash-GGUF` | `Q2_K (23 shards)` | 100451521792 | 93.6 | (see shard list below) | Plausible but tight (license UNKNOWN; sharded; requires V4-capable llama.cpp) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_S-XL (2 shards)` | 61540800288 | 57.3 | `4f99d953...a3d13b` + `b15ce531...1495b5` | Plausible (sharded; more headroom than ~70–100 GiB candidates) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_M (2 shards)` | 64508041632 | 60.1 | `c0d4aac8...f2856` + `812b1367...d2d81f` | Plausible (sharded; more headroom than ~70–100 GiB candidates) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | `a2472110...a04fdce` + `aedfb2c7...ea9bf92` | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) | None (trunk-only conversions commonly drop `mtp.0.*`) |
-
-### Quantized MTP status key (high-performance path)
-
-- `None`: no `mtp.*` tensors detected in the GGUF tensor directory (treat MTP as absent/disabled).
-- `Trunk drops mtp.0.*; ships a sidecar (incomplete)`: trunk GGUF has no `mtp.*`; a separate sidecar GGUF contains `mtp.0.*` keys but does **not** satisfy the upstream `mtp.0.*` tensor-key completeness contract (treat MTP as incomplete/untrusted until proven otherwise).
-- Even if an artifact set does preserve a *complete* `mtp.0.*` namespace, MTP is still **untrusted** until a logits oracle exercises `MTPBlock.forward(...)` (see `docs/model-contract.md` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.trust_gates`).
-
-### Recorded metadata-only GGUF inspections (no downloads)
-
-These JSON outputs were produced by `scripts/model_contract_inspect_quantized_artifact.py --url ... --json` (range-reads header + tensor table only):
-
-- Trunk (MTP absent):
-  - `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
-  - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
-  - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
-- Sidecar (MTP present but incomplete):
-  - `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
-  - `docs/mtp-sidecar-probe-antirez-ef3b960.json`
+| Source | Artifact | Size (bytes) | Size (GiB) | LFS sha256 (content) | Single-Spark plausibility |
+| --- | --- | ---: | ---: | --- | --- |
+| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ1_M.gguf` | 67505962560 | 62.9 | `a7c64ba7...3c58a22c` | Plausible (more headroom than IQ2 quants; requires V4-capable llama.cpp fork) |
+| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ2_XXS...(2 shards)` | 77907836672 | 72.6 | `0e4356c7...9d0ae99b` + `5dd29236...45da5c5e7` | Plausible (sharded; requires V4-capable llama.cpp fork) |
+| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ3_XXS.gguf` | 111834815936 | 104.2 | `e2e075f4...68dda5f2` | Plausible but tight (limited KV/cache headroom) |
+| `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | `31598c67...e86fd8c` | Plausible (headroom for KV/cache still required) |
+| `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | `3edea7ba...6528c993` | Plausible but tight (limited KV/cache headroom) |
+| `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | `1d494194...a9d7ec6b` | Plausible but tight (limited KV/cache headroom) |
+| `lovedheart/DeepSeek-V4-Flash-GGUF` | `Q2_K (23 shards)` | 100451521792 | 93.6 | (see shard list below) | Plausible but tight (license UNKNOWN; sharded; requires V4-capable llama.cpp) |
+| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_S-XL (2 shards)` | 61540800288 | 57.3 | `4f99d953...a3d13b` + `b15ce531...1495b5` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
+| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_M (2 shards)` | 64508041632 | 60.1 | `c0d4aac8...f2856` + `812b1367...d2d81f` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
+| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | `a2472110...a04fdce` + `aedfb2c7...ea9bf92` | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) |
 
 ## Reproducing the size numbers (no downloads)
 
@@ -122,9 +105,9 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - Single-Spark plausibility:
   - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the 80.8 GiB (~86.7 GB) footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
 
-### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS shards)
+### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS + IQ3_XXS)
 
-- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `cd14d4663786e5fa368e560324b10e92110f39c2` (`refs/heads/main`)
+- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `2ec8dbea27dbf6483ae14b60e610b65c49727d13` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement:
   - Requires `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
@@ -136,11 +119,15 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
     - LFS sha256 shards:
       - `0e4356c7f2e3876bd5757bbaa4f2b7530370063939083048a320816a9d0ae99b` (`...IQ2_XXS-00001-of-00002...`, 49491736416 bytes)
       - `5dd29236696a4bec748c2d4e194dd4719473970873fc1f34422f92845da5c5e7` (`...IQ2_XXS-00002-of-00002...`, 28416100256 bytes)
+  - IQ3_XXS: `deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS.gguf` (111834815936 bytes, 104.2 GiB)
+    - LFS sha256: `e2e075f47075025b595fe843cd624c1e821f751d2eae2661a55d9a2168dda5f2`
   - BF16-ish (not single-Spark plausible): `deepseek-ai__DeepSeek-V4-Flash-bf16.gguf` (161799012416 bytes, 150.7 GiB)
     - LFS sha256: `0576a182aa80478733495f013fc7dd2ce71cbf9de8c4d59230a8c2724cad6614`
 - Single-Spark plausibility:
   - **IQ1_M plausible** on Spark0-class memory (more headroom for KV/cache than ~70–90 GiB IQ2/Q2_K candidates).
   - **IQ2_XXS plausible** on Spark0-class memory; still needs KV/cache sizing validation; note it is sharded.
+  - **IQ3_XXS plausible but tight** on Spark0-class memory (104.2 GiB leaves limited KV/cache headroom).
+  - **BF16-ish not plausible** on Spark0-class memory (150.7 GiB > ~119 GiB host RAM / ~119.7 GiB VRAM).
 
 ### Preyazz/DeepSeek-V4-Flash-GGUF (community Q2_K/Q3_K_M/Q4_K_M)
 
@@ -268,20 +255,6 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - `https://github.com/cchuter/llama.cpp` `feat/v4-port` @ `19b63dc368dfef6db6783e5ba3143927b7ed1c96` (MIT)
 - `https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` @ `9222e55c13c965ccb7e9104fda58796edd84a732` (MIT)
 - `https://github.com/batiai/bati.cpp` @ `c7b64fe065164335b882e02a848fd4015b3c060a` (`refs/tags/v0.1.2`, MIT)
-
-## Quantized MTP compatibility (high-performance path)
-
-The upstream DeepSeek-V4-Flash checkpoint includes an explicit `mtp.0.*` namespace (see the contract doc + verifier). Many community GGUF conversions drop `mtp.0.*` entirely.
-
-Pinned observation from metadata-only GGUF inspection (range-read header + tensor directory; no full downloads):
-
-- Trunk GGUF examples currently pinned in `docs/model-contract.md` report `mtp_present=false` / `mtp_namespace.has_mtp0=false`.
-- Some conversions ship MTP as a **separate GGUF sidecar**, but metadata-only probing confirms the pinned `antirez/deepseek-v4-gguf` sidecar is **incomplete** relative to the upstream `mtp.0.*` tensor-key contract (and should not be treated as a drop-in substitute without an oracle).
-
-Before enabling MTP/speculative decoding on any quantized artifact set:
-
-- Treat “`mtp.0.*` is present and structurally complete” as necessary but not sufficient.
-- Require an MTP logits oracle gate as documented in `docs/model-contract.md` (“MTP oracle requirements”).
 
 ## Notes / non-goals
 
