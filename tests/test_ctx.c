@@ -22,6 +22,22 @@ int32_t test_ctx(void)
 		return(-3);
 	if ( ctx.arena.base != mem )
 		return(-4);
+	cfg.log_ring_entries = 4;
+	if ( ds4_ctx_init_auto(&ctx,&cfg,mem,(int32_t)sizeof(mem)) < 0 )
+		return(-16);
+	if ( DS4_LOGI("ctx auto log ring") < 0 )
+		return(-17);
+	if ( ds4_ctx_log_ring_count(&ctx,&c) < 0 )
+		return(-18);
+	if ( c <= 0 )
+		return(-19);
+	if ( ds4_ctx_log_ring_pop(&ctx,&e) < 0 )
+		return(-20);
+	if ( strcmp(e.msg,"ctx auto log ring") != 0 )
+		return(-21);
+	cfg.log_ring_entries = 0;
+	if ( ds4_ctx_apply_config(&ctx,&cfg) < 0 )
+		return(-22);
 	cfg.enable_cuda = 1;
 	err = ds4_ctx_apply_config(&ctx,&cfg);
 	if ( ds4_cuda_is_enabled_build() == 0 )
