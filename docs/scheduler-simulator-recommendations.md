@@ -54,6 +54,21 @@ From the report JSON:
 
 Recommendation (synthetic): don’t enable MTP by default unless real traces show **measured** acceptance rate comfortably above ~`0.27` for the chosen `draft_len` and cost model; otherwise treat it as an opt-in experiment.
 
+## MTP (Congestion Safety + Draft Attempt Policy)
+
+Scenario: two-stream overload (interactive + saturated batch) with a small expert queue (`expert_queue_max=128`) and reservation enabled (`expert_queue_reserve_interactive=16`). This tests whether MTP draft work can amplify queue pressure and harm interactive SLA/starvation, even when MTP looks efficient in a low-congestion sweep.
+
+This scenario holds *output-token demand* approximately constant by scaling verify-step arrivals using the model-expected accept length (equivalent to `--arrival-units output_tokens` in the CLI, but implemented inside the harness).
+
+Key signals to inspect (from the report JSON, per accept probability):
+
+- `mtp_full` vs `mtp_stop_at_reject`:
+  - `service_slot_ms_per_output_token` (efficiency)
+  - `sla_violation_frac_tokens_interactive` (interactive SLA safety)
+  - `starved_task_frac_mtp_verify` (verify-phase starvation under draft pressure)
+
+Recommendation (synthetic): default MTP compute policy should behave like `stop_at_reject` (don’t always compute full `gamma` drafts). Even at accept_prob `0.0`, this reduces wasted draft work vs `full`, which is a safer baseline under unknown/low accept regimes. Validate the full queueing story on real quantized-runtime traces before enabling MTP.
+
 ## Adaptive K (Batch Throttling Under Congestion)
 
 Scenario: two-stream arrivals (interactive + batch) with sustained overload, small per-expert queue (`expert_queue_max=128`), and `service_ms=1.0`. Compare:
