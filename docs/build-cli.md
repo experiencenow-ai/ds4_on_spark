@@ -44,7 +44,7 @@ Reject unknown keys in the config file:
 Override config fields from the command line:
 
 ```bash
-./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --dump-config
+./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --arena-size 4096 --log-ring-entries 64 --dump-config
 ```
 
 You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
