@@ -64,6 +64,7 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
+- Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required)
 - Compiles and runs it with `-arch=sm_121` and `-arch=native`
 - Prints runtime device info + the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `native` missing)
@@ -198,6 +199,7 @@ Observed:
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `nvcc --list-gpu-arch` includes `compute_121` when supported
 - `nvcc --list-gpu-code` includes `sm_121` when supported
+- `nvcc -arch=compute_121 -c` compile-only probe succeeds when `compute_121` is advertised (toolchain PTX-target gate)
 - `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
