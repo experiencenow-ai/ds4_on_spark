@@ -208,6 +208,12 @@ The output includes:
 - `baseline`: `summary` + full `metrics`
 - `variants.<label>`: `summary`, `delta_vs_baseline`, and full `metrics`
 
+To dump per-token results for the baseline and each variant (useful when debugging real trace replay), include `--dump-sim-jsonl` with a `{label}` placeholder:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --summary-json --dump-sim-jsonl '/tmp/sim_{label}.jsonl' --compare 'reserve:{"expert_queue_reserve_interactive":16}' --compare 'no_reserve:{"expert_queue_reserve_interactive":0}'
+```
+
 Batching-style service model example:
 
 ```bash
