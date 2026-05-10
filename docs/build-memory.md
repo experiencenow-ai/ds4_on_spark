@@ -41,3 +41,5 @@ Notes:
 - Initialize with caller-provided `ds4_log_entry_t` storage.
 - Wire into the logger with `ds4_log_set_sink(ds4_log_ring_sink,&ring)`.
 - When full, it evicts the oldest entry and keeps the newest.
+
+When using `ds4_ctx_t`, you can allocate the log ring backing store from the ctx arena (still caller-owned memory) via `ds4_ctx_log_ring_init_arena`.
