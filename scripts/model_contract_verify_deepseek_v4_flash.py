@@ -288,6 +288,24 @@ def main() -> int:
 				q_inf = q.get("inference_config", {}) if isinstance(q, dict) else {}
 				if not (isinstance(q_inf, dict) and q_inf.get("scale_dtype") == "fp8"):
 					failures.append(Failure(70, f"contract summary quantization.inference_config.scale_dtype must be 'fp8' (derived from inference/model.py ModelArgs default): {contract_summary}"))
+				else:
+					want = inf.get("dtype")
+					if not (isinstance(want, str) and q_inf.get("dtype") == want):
+						failures.append(Failure(73, f"contract summary quantization.inference_config.dtype mismatch (expected inference/config.json dtype={want!r}): {contract_summary}"))
+					want = inf.get("expert_dtype")
+					if not (isinstance(want, str) and q_inf.get("expert_dtype") == want):
+						failures.append(Failure(74, f"contract summary quantization.inference_config.expert_dtype mismatch (expected inference/config.json expert_dtype={want!r}): {contract_summary}"))
+					want = inf.get("scale_fmt")
+					if not (isinstance(want, str) and q_inf.get("scale_fmt") == want):
+						failures.append(Failure(75, f"contract summary quantization.inference_config.scale_fmt mismatch (expected inference/config.json scale_fmt={want!r}): {contract_summary}"))
+					want = cfg.get("expert_dtype")
+					if isinstance(want, str) and q_inf.get("expert_dtype") != want:
+						failures.append(Failure(76, f"fixtures/config.json expert_dtype mismatch between config.json and inference/config.json (config.json expert_dtype={want!r}, inference/config.json expert_dtype={q_inf.get('expert_dtype')!r}): {contract_summary}"))
+
+				q_cfg = q.get("config_quantization_config", None) if isinstance(q, dict) else None
+				want_cfg = cfg.get("quantization_config", None)
+				if want_cfg is not None and q_cfg != want_cfg:
+					failures.append(Failure(77, f"contract summary quantization.config_quantization_config mismatch (expected config.json quantization_config): {contract_summary}"))
 
 				oracle = summary.get("oracle", {})
 				if not isinstance(oracle, dict):

@@ -135,6 +135,11 @@ Activation quantization in the reference runtime:
 
 DS4 must treat `*.scale` tensors and the block-size rules above as part of the execution contract; skipping them can preserve shapes but still diverge numerically.
 
+Flash vs Flash-Base compatibility note:
+
+- DeepSeek’s official HF ecosystem also publishes `deepseek-ai/DeepSeek-V4-Flash-Base` which differs in **expert quantization** (`expert_dtype="fp8"` vs Flash `expert_dtype="fp4"`). External runtimes (and conversion pipelines) must not mix these variants: expert dtype changes both the correct expert kernel family and the expected linear scale dtype/format behavior.
+- For DS4 contract purposes, treat `quantization.inference_config.expert_dtype` as the canonical “Flash vs Base” switch (source-derived from upstream `inference/config.json`). If an external artifact/runtime cannot expose or preserve this field, treat MoE expert execution as **high risk** until validated by an oracle.
+
 ## Attention schedule (sliding vs CSA vs HCA)
 
 Upstream does **not** ship an explicit `layer_types[]` array in `config.json`. Instead, attention type is derived from the per-layer `compress_ratios[]` (see `inference/model.py`, `Attention.compress_ratio = args.compress_ratios[layer_id]`).
@@ -206,6 +211,15 @@ Important indexing details (from `Attention.forward`):
 
 - Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
 - Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
+
+### Sparse attention masking rule (sentinel indices)
+
+Reference implementation: `inference/kernel.py` (`sparse_attn`).
+
+- Sparse top-k index buffers use `topk_mask_value == -1` as a sentinel.
+- When an index is masked (`idx == -1`), the kernel must behave as if `score=-inf` and `kv=0` (i.e. it contributes nothing to the softmax numerator and cannot introduce NaNs via invalid gathers).
+
+These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value` and `cache.sparse_attn_mask_rule`.
 
 ### MLA positional semantics (partial RoPE + inverse on output)
 
