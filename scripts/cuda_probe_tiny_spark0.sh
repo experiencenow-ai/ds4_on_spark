@@ -71,7 +71,7 @@ echo
 echo \"== build (tiny) ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_device_props_tiny bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe bin/cuda_sm121_arch_report
+make tiny
 
 echo
 run_retry() {

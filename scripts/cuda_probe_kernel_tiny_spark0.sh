@@ -71,7 +71,7 @@ echo
 	echo \"== build (kernel-tiny) ==\"
 	cd \"$REMOTE_DIR\"
 	make clean
-	make bin/cuda_device_props_tiny bin/cuda_sm121_compile_probe.o bin/cuda_sm121_arch_report bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_fp8_conv bin/cuda_sm121_bf16_conv bin/cuda_sm121_fp4_conv bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm121_barrier_memcpy_async bin/cuda_sm121_cp_async_bulk_tx bin/cuda_sm121_tma_bulk_tensor_1d bin/cuda_sm121_tma_bulk_tensor_2d bin/cuda_sm121_cccl_atomic_ref bin/cuda_sm121_cuda_graph_smoke bin/cuda_sm121_nvrtc_jit bin/cuda_sm121_nvrtc_cxx20_jit bin/cuda_sm121_nvjitlink_jit bin/cuda_sm121_nvcc_flags_probe bin/cuda_sm121_cxx20_probe bin/cuda_sm121_ldmatrix_smoke bin/cuda_sm121_wmma_smoke bin/cuda_sm121_cluster_launch
+	make kernel_tiny
 
 echo
 run_retry() {
