@@ -41,7 +41,7 @@ index 0000000..1c12591
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N] [--load-weights]\n", prog);
++    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -149,7 +149,6 @@ index 0000000..1c12591
 +    std::string path;
 +    bool json = false;
 +    int payload_sample_bytes = 0;
-+    bool load_weights = false;
 +
 +    for (int i = 1; i < argc; i++) {
 +        const char * arg = argv[i];
@@ -173,11 +172,6 @@ index 0000000..1c12591
 +            continue;
 +        }
 +
-+        if (std::strcmp(arg, "--load-weights") == 0) {
-+            load_weights = true;
-+            continue;
-+        }
-+
 +        if (std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0) {
 +            usage(argv[0]);
 +            return 0;
@@ -197,7 +191,7 @@ index 0000000..1c12591
 +
 +    ggml_context * ctx_meta = nullptr;
 +    gguf_init_params params = {
-+        /*.no_alloc =*/ !load_weights,
++        /*.no_alloc =*/ true,
 +        /*.ctx      =*/ &ctx_meta,
 +    };
 +
@@ -222,17 +216,6 @@ index 0000000..1c12591
 +    }
 +
 +    const int64_t n_tensors = gguf_get_n_tensors(ctx_gguf);
-+
-+    size_t blob_bytes = 0;
-+    if (load_weights) {
-+        for (int64_t tid = 0; tid < n_tensors; tid++) {
-+            const size_t offs = gguf_get_tensor_offset(ctx_gguf, tid);
-+            const size_t sz = gguf_get_tensor_size(ctx_gguf, tid);
-+            if (offs + sz > blob_bytes) {
-+                blob_bytes = offs + sz;
-+            }
-+        }
-+    }
 +
 +    // verify expected tensor set
 +    std::unordered_set<std::string> expected;
@@ -272,7 +255,7 @@ index 0000000..1c12591
 +    int64_t n_head = -1;
 +    int64_t n_head_dim = -1;
 +    int64_t n_lora_q = -1;
-+    int64_t n_lora_o = -1;
++    int64_t q_dim = -1;
 +    int64_t n_expert = -1;
 +    int64_t n_ff_exp = -1;
 +    int64_t n_hc = -1;
@@ -300,7 +283,7 @@ index 0000000..1c12591
 +
 +        const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
 +        if (t_q_b != nullptr && t_q_b->n_dims == 2) {
-+            n_lora_o = t_q_b->ne[0];
++            q_dim = t_q_b->ne[1];
 +        }
 +
 +        const ggml_tensor * t_exp_bias = ggml_get_tensor(ctx_meta, "mtp.0.exp_probs_b.bias");
@@ -344,6 +327,9 @@ index 0000000..1c12591
 +            if (t_attn_out_b && t_attn_out_b->n_dims == 2) {
 +                if (t_attn_out_b->ne[1] != n_embd) errors.push_back("shape mismatch: mtp.0.attn_output_b.weight");
 +            }
++            if (t_attn_out_a && t_attn_out_a->n_dims == 2 && t_attn_out_b && t_attn_out_b->n_dims == 2) {
++                if (t_attn_out_a->ne[1] != t_attn_out_b->ne[0]) errors.push_back("shape mismatch: mtp.0.attn_output_{a,b}.weight");
++            }
 +        }
 +
 +        if (n_lora_q > 0) {
@@ -361,11 +347,16 @@ index 0000000..1c12591
 +            if (!tensor_is_2d(t_kv, n_embd, n_head_dim)) errors.push_back("shape mismatch: mtp.0.attn_kv.weight");
 +        }
 +
-+        if (n_head > 0 && n_head_dim > 0 && n_lora_o > 0) {
++        if (n_head_dim > 0) {
++            const ggml_tensor * t_kv_a_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_kv_a_norm.weight");
++            if (!tensor_is_1d_len(t_kv_a_norm, n_head_dim)) errors.push_back("shape mismatch: mtp.0.attn_kv_a_norm.weight");
++        }
++
++        if (n_head > 0 && n_head_dim > 0 && n_lora_q > 0) {
 +            const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
 +            const int64_t want_out = n_head * n_head_dim;
 +            if (t_q_b && t_q_b->n_dims == 2) {
-+                if (t_q_b->ne[0] != n_lora_o || t_q_b->ne[1] != want_out) {
++                if (t_q_b->ne[0] != n_lora_q || t_q_b->ne[1] != want_out) {
 +                    errors.push_back("shape mismatch: mtp.0.attn_q_b.weight");
 +                }
 +            }
@@ -379,9 +370,22 @@ index 0000000..1c12591
 +            if (!tensor_is_3d(t_gate_exps, n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_exps.weight");
 +            if (!tensor_is_3d(t_up_exps,   n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_up_exps.weight");
 +            if (!tensor_is_3d(t_down_exps, n_ff_exp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_down_exps.weight");
++
++            const ggml_tensor * t_gate_inp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_inp.weight");
++            if (!tensor_is_2d(t_gate_inp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_inp.weight");
++
++            const ggml_tensor * t_gate_shexp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_shexp.weight");
++            const ggml_tensor * t_up_shexp   = ggml_get_tensor(ctx_meta, "mtp.0.ffn_up_shexp.weight");
++            const ggml_tensor * t_down_shexp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_down_shexp.weight");
++            if (!tensor_is_2d(t_gate_shexp, n_embd, n_ff_exp)) errors.push_back("shape mismatch: mtp.0.ffn_gate_shexp.weight");
++            if (!tensor_is_2d(t_up_shexp,   n_embd, n_ff_exp)) errors.push_back("shape mismatch: mtp.0.ffn_up_shexp.weight");
++            if (!tensor_is_2d(t_down_shexp, n_ff_exp, n_embd)) errors.push_back("shape mismatch: mtp.0.ffn_down_shexp.weight");
 +        }
 +
 +        if (n_hc > 0) {
++            const int64_t hc_dim = (n_embd > 0 ? n_embd * n_hc : -1);
++            const int64_t hc_mix_dim = (2 * n_hc) + (n_hc * n_hc);
++
 +            const ggml_tensor * t_hc_attn_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_scale.weight");
 +            const ggml_tensor * t_hc_ffn_scale  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_scale.weight");
 +            const ggml_tensor * t_hc_head_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_scale.weight");
@@ -393,7 +397,21 @@ index 0000000..1c12591
 +            const ggml_tensor * t_hc_head_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_base.weight");
 +            const ggml_tensor * t_hc_head_fn   = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_fn.weight");
 +            if (!tensor_is_1d_len(t_hc_head_base, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_base.weight");
-+            if (!tensor_is_2d(t_hc_head_fn, 16384, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_fn.weight");
++            if (hc_dim > 0) {
++                if (!tensor_is_2d(t_hc_head_fn, hc_dim, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_fn.weight");
++            }
++
++            if (hc_dim > 0) {
++                const ggml_tensor * t_hc_attn_fn   = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_fn.weight");
++                const ggml_tensor * t_hc_attn_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_base.weight");
++                const ggml_tensor * t_hc_ffn_fn    = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_fn.weight");
++                const ggml_tensor * t_hc_ffn_base  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_base.weight");
++
++                if (!tensor_is_2d(t_hc_attn_fn, hc_dim, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_attn_fn.weight");
++                if (!tensor_is_1d_len(t_hc_attn_base, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_attn_base.weight");
++                if (!tensor_is_2d(t_hc_ffn_fn, hc_dim, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_ffn_fn.weight");
++                if (!tensor_is_1d_len(t_hc_ffn_base, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_ffn_base.weight");
++            }
 +        }
 +    }
 +
@@ -448,25 +466,6 @@ index 0000000..1c12591
 +        }
 +    }
 +
-+    if (load_weights) {
-+        for (const auto & name : expected_tensor_names()) {
-+            const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
-+            if (t == nullptr) {
-+                errors.push_back("load-weights: missing tensor '" + name + "'");
-+                continue;
-+            }
-+            if (t->data == nullptr) {
-+                errors.push_back("load-weights: tensor has null data '" + name + "'");
-+                continue;
-+            }
-+            const size_t nbytes = (size_t) ggml_nbytes(t);
-+            if (nbytes == 0) {
-+                errors.push_back("load-weights: tensor has zero bytes '" + name + "'");
-+                continue;
-+            }
-+        }
-+    }
-+
 +    const bool ok = errors.empty() && missing.empty() && extra.empty();
 +
 +    if (!json) {
@@ -474,10 +473,6 @@ index 0000000..1c12591
 +            std::printf("ok=true\n");
 +            std::printf("architecture=%s\n", arch.empty() ? "(missing)" : arch.c_str());
 +            std::printf("tensor_count=%" PRId64 "\n", n_tensors);
-+            if (load_weights) {
-+                std::printf("loaded_weights=true\n");
-+                std::printf("blob_bytes=%zu\n", blob_bytes);
-+            }
 +            if (payload_sample_bytes > 0) {
 +                std::printf("payload_sample_bytes=%d\n", payload_sample_bytes);
 +                for (const auto & e : payload_samples) {
@@ -508,11 +503,18 @@ index 0000000..1c12591
 +        std::printf("  \"path\": \"%s\",\n", json_escape(path).c_str());
 +        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
 +        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
-+        std::printf("  \"loaded_weights\": %s,\n", load_weights ? "true" : "false");
-+        if (load_weights) {
-+            std::printf("  \"blob_bytes\": %zu,\n", blob_bytes);
-+        }
 +        std::printf("  \"payload_sample_bytes\": %d,\n", payload_sample_bytes);
++
++        std::printf("  \"derived_params\": {");
++        std::printf("\"n_embd\":%" PRId64 ",", (n_embd > 0 ? n_embd : 0));
++        std::printf("\"n_head\":%" PRId64 ",", (n_head > 0 ? n_head : 0));
++        std::printf("\"n_head_dim\":%" PRId64 ",", (n_head_dim > 0 ? n_head_dim : 0));
++        std::printf("\"n_hc\":%" PRId64 ",", (n_hc > 0 ? n_hc : 0));
++        std::printf("\"n_lora_q\":%" PRId64 ",", (n_lora_q > 0 ? n_lora_q : 0));
++        std::printf("\"q_dim\":%" PRId64 ",", (q_dim > 0 ? q_dim : 0));
++        std::printf("\"n_expert\":%" PRId64 ",", (n_expert > 0 ? n_expert : 0));
++        std::printf("\"n_ff_exp\":%" PRId64 "", (n_ff_exp > 0 ? n_ff_exp : 0));
++        std::printf("},\n");
 +
 +        std::printf("  \"missing\": [");
 +        for (size_t i = 0; i < missing.size(); i++) {
