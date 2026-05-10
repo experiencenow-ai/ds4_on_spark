@@ -84,10 +84,12 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_device_props_tiny`
 - `cuda_sm121_compile_probe.o` (compile-only gate)
 - `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)
+- `cuda_sm121_smem_optin` (shared-memory opt-in + max dynamic shared-memory launch gate)
 - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
 - `cuda_sm121_pipeline_memcpy_async` (cp.async-style global->shared copy)
 - `cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` global->shared copy via CCCL)
 - `cuda_sm121_tma_bulk_tensor_1d` (TMA `cp.async.bulk.tensor.1d` load via `cuTensorMapEncodeTiled`)
+- `cuda_sm121_tma_bulk_tensor_2d` (TMA `cp.async.bulk.tensor.2d` load via `cuTensorMapEncodeTiled`)
 - `cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync` gate)
 - `cuda_sm121_wmma_smoke` (WMMA plumbing proxy)
 - `cuda_sm121_cxx20_probe` (C++20 toolchain gate)
@@ -97,7 +99,7 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 
 The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
 
-Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; NVRTC `supportedArchs` includes `121`.
+Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
 
 ## Spark0: Compile + Run
 
