@@ -2335,6 +2335,33 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_preserves_layers_and_unions_candidates(self) -> None:
+        obj = {
+            "t_ms": 1.0,
+            "cls": "batch",
+            "layers": [
+                {"experts": [1, 2], "router_scores": [0.2, 0.1], "chosen_k": 1},
+                {"route": {"experts": [2, 3], "router_scores": [0.5, 0.4], "k": 2, "cost_scale": 0.5}},
+            ],
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [1, 2, 3])
+        self.assertNotIn("scores", rec)
+        self.assertNotIn("k", rec)
+        layers = rec.get("layers")
+        self.assertIsInstance(layers, list)
+        assert isinstance(layers, list)
+        self.assertEqual(len(layers), 2)
+        self.assertEqual(layers[0].get("candidates"), [1, 2])
+        self.assertEqual(layers[0].get("scores"), [0.2, 0.1])
+        self.assertEqual(layers[0].get("k"), 1)
+        self.assertEqual(layers[1].get("candidates"), [2, 3])
+        self.assertEqual(layers[1].get("scores"), [0.5, 0.4])
+        self.assertEqual(layers[1].get("k"), 2)
+        self.assertAlmostEqual(float(layers[1].get("cost_scale", 0.0)), 0.5, places=6)
+
     def test_trace_extract_filters_route_type(self) -> None:
         route = {"type": "moe_route", "t_ms": 0.0, "cls": "batch", "candidates": [0]}
         other = {"type": "log", "t_ms": 0.0, "msg": "hello"}

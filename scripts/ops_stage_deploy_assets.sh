@@ -60,10 +60,15 @@ rsync_run "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-script
 rsync_run "$root/scripts/ops_collect_support_bundle.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_staged_assets.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_installed_assets.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_install_staged_assets.sh" "$target:/tmp/ds4-scripts/"
 
 cat <<EOF
 
-== next (on Spark, human-run) ==
+== quick install (on Spark, human-run) ==
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance ${instance} --start-preflight
+# optional: add --install-timers, --install-spark-units, and/or --strict
+
+== manual step-by-step (equivalent, on Spark, human-run) ==
 sudo install -d -m 0755 /etc/sysusers.d /etc/tmpfiles.d
 sudo install -m 0644 /tmp/ds4-sysusers/ds4.conf /etc/sysusers.d/ds4.conf
 sudo install -m 0644 /tmp/ds4-tmpfiles/ds4.conf /etc/tmpfiles.d/ds4.conf
