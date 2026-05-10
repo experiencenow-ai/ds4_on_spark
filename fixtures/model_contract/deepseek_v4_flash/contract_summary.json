@@ -471,7 +471,9 @@
         "canonical_path": "quantization.inference_config.expert_dtype",
         "concept": "expert_dtype",
         "inference_key": "expert_dtype",
-        "transformers_key": "expert_dtype"
+        "note": "HF refs/pr/14 removes config.json expert_dtype; treat inference/config.json expert_dtype as canonical.",
+        "transformers_key": "expert_dtype",
+        "transformers_key_optional": true
       },
       {
         "canonical_path": "quantization.inference_config.scale_fmt",
@@ -1070,9 +1072,13 @@
     "tokenizer_class": "PreTrainedTokenizerFast",
     "tokenizer_json_summary": {
       "added_special_tokens_count": 1230,
+      "added_special_tokens_count_ge_base_vocab": 1227,
       "added_token_id_max": 129279,
+      "added_token_id_max_ge_base_vocab": 129279,
       "added_token_id_min": 0,
+      "added_token_id_min_ge_base_vocab": 128000,
       "added_tokens_count": 1283,
+      "added_tokens_count_ge_base_vocab": 1280,
       "base_vocab_size": 128000,
       "decoder": {
         "add_prefix_space": true,
