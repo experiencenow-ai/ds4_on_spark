@@ -15,6 +15,18 @@ make test BUILD_DIR=build_macos
 make check BUILD_DIR=build_macos_check
 ```
 
+## Sanitizers (Makefile, CPU-only)
+
+```bash
+make check-sanitize BUILD_DIR=build_macos_sanitize
+```
+
+## Release (Makefile, CPU-only)
+
+```bash
+make check-release BUILD_DIR=build_macos_release
+```
+
 ## Strict warnings (CMake)
 
 ```bash

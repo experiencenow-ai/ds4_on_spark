@@ -26,13 +26,15 @@ The sizes below are taken from Git LFS pointer metadata (no GGUF downloads), as 
 | D | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` (`9222e55c13c965ccb7e9104fda58796edd84a732`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XXS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 73.1 | Plausible | Most Spark-targeted CUDA fork in manifest; shard auto-load behavior is documented upstream (point at shard 00001). |
 | E | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ2_XS-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 81.0 | Plausible | Popular “V4 loader + kernels” fork referenced by teamblobfish; more headroom than ~90–100 GiB options. |
 | I | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ1_S-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 57.3 | Plausible | Smaller teamblobfish quant (sharded) with the most KV/cache headroom among pinned GGUF options in that repo. |
+| K | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ1_M-XL shards (`ed189bf9706efc321f8db142cefae9e6f1da6e85`) | MIT / MIT | 63.2 | Plausible | Still significant headroom for KV/cache vs ~70–100 GiB candidates; sharded artifact. |
 | F | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `Preyazz/DeepSeek-V4-Flash-GGUF` Q2_K (`6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d`) | MIT / MIT | 96.2 | Plausible but tight | Leaves limited headroom for KV/cache; `wip/deepseek-v4-support` is explicitly “reference/WIP” upstream (PR `#22378` was closed). |
 | G | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | Treat as blocked until a human verifies licensing; also sharded. |
-| H | `antirez/ds4` (`8e7575be0ef44bd97c5ebaccf49ef85e05048b7b`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
+| H | `antirez/ds4` (`22ca6abd732ecc59f87378e022b9e5850c9fa377`) | `antirez/deepseek-v4-gguf` IQ2XXS (`ef3b960827870d69ed0b225c095a617c12d7e80d`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
 
 Fixture provenance note:
 
 - If a human approves a GGUF download, record and verify the artifact `sha256` against the HF API `lfs.sha256` values listed in [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md). This lets us validate fixtures without trusting filenames.
+- For `antirez/deepseek-v4-gguf`, there is also a separate MTP sidecar GGUF (~3.5 GiB). Only fetch it if the chosen runtime needs MTP; verify its `sha256` the same way (see `docs/mtp-ds4-reference.md` and `docs/llamacpp-mtp-sidecar-probe.md`).
 
 ## Candidates (native checkpoint path)
 

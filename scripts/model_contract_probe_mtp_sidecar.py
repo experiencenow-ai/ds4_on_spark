@@ -398,12 +398,17 @@ def main() -> int:
 
 	label = ""
 	fetched_bytes: Optional[int] = None
+	file_size: Optional[int] = None
 	data_off = 0
 	alignment = 0
 	if args.path is not None:
 		path = Path(args.path)
 		label = str(path)
 		version, meta, tensors, data_off, alignment = parse_gguf(path)
+		try:
+			file_size = int(path.stat().st_size)
+		except Exception:
+			file_size = None
 	else:
 		label = str(args.url)
 		version, meta, tensors, fetched_bytes, data_off, alignment = parse_gguf_url_prefix(
@@ -421,8 +426,35 @@ def main() -> int:
 	}
 	if fetched_bytes is not None:
 		out["url_prefix_bytes"] = int(fetched_bytes)
+	if file_size is not None:
+		out["file_size"] = int(file_size)
+
+	tensors_by_offset = sorted(tensors, key=lambda t: (int(t.rel_offset), t.name))
+	spans: dict[str, Optional[int]] = {}
+	next_rel_off: dict[str, Optional[int]] = {}
+	for i, t in enumerate(tensors_by_offset):
+		if i + 1 < len(tensors_by_offset):
+			nxt = tensors_by_offset[i + 1]
+			delta = int(nxt.rel_offset) - int(t.rel_offset)
+			if delta > 0:
+				spans[t.name] = int(delta)
+			else:
+				spans[t.name] = None
+			next_rel_off[t.name] = int(nxt.rel_offset)
+		else:
+			spans[t.name] = None
+			next_rel_off[t.name] = None
 	out["tensors"] = [
-		{"name": t.name, "type": ggml_type_name(int(t.ggml_type)), "type_code": int(t.ggml_type), "dims": [int(x) for x in t.dims]}
+		{
+			"name": t.name,
+			"type": ggml_type_name(int(t.ggml_type)),
+			"type_code": int(t.ggml_type),
+			"dims": [int(x) for x in t.dims],
+			"rel_offset": int(t.rel_offset),
+			"abs_offset": int(data_off + int(t.rel_offset)),
+			"span_bytes": spans.get(t.name, None),
+			"next_rel_offset": next_rel_off.get(t.name, None),
+		}
 		for t in sorted(tensors, key=lambda x: x.name)
 	]
 
@@ -431,6 +463,17 @@ def main() -> int:
 		errors.append(f"gguf version is {version}, expected 3")
 	if meta.get("general.architecture", None) != "deepseek4_mtp_support":
 		errors.append(f"general.architecture is {meta.get('general.architecture', None)!r}, expected 'deepseek4_mtp_support'")
+
+	if (data_off % alignment) != 0:
+		errors.append(f"data_offset {data_off} is not aligned to alignment {alignment}")
+
+	last_rel = -1
+	for t in tensors_by_offset:
+		if (int(t.rel_offset) % alignment) != 0:
+			errors.append(f"tensor {t.name} rel_offset {t.rel_offset} is not aligned to alignment {alignment}")
+		if int(t.rel_offset) < last_rel:
+			errors.append(f"tensor offsets not sorted (saw {t.rel_offset} after {last_rel})")
+		last_rel = int(t.rel_offset)
 
 	expected_names = [
 		"mtp.0.hc_head_base.weight",
@@ -599,22 +642,13 @@ def main() -> int:
 		out["payload_sample_bytes"] = int(sample_n)
 		out["payload_samples"] = {}
 
-		tensors_by_offset = sorted(tensors, key=lambda t: int(t.rel_offset))
-		spans: dict[str, int] = {}
-		for i, t in enumerate(tensors_by_offset):
-			if i + 1 < len(tensors_by_offset):
-				nxt = tensors_by_offset[i + 1]
-				delta = int(nxt.rel_offset) - int(t.rel_offset)
-				if delta > 0:
-					spans[t.name] = int(delta)
-
 		if args.path is not None:
 			with Path(args.path).open("rb") as f:
 				for t in tensors_by_offset:
 					abs_off = int(data_off + int(t.rel_offset))
 					want = int(sample_n)
-					span = spans.get(t.name, 0)
-					if span > 0 and span < want:
+					span = spans.get(t.name, None)
+					if span is not None and span > 0 and span < want:
 						want = int(span)
 					f.seek(abs_off)
 					b = f.read(want)
@@ -628,8 +662,8 @@ def main() -> int:
 			for t in tensors_by_offset:
 				abs_off = int(data_off + int(t.rel_offset))
 				want = int(sample_n)
-				span = spans.get(t.name, 0)
-				if span > 0 and span < want:
+				span = spans.get(t.name, None)
+				if span is not None and span > 0 and span < want:
 					want = int(span)
 				try:
 					b = fetch_url_range(url, abs_off, want, timeout_s=timeout_s)

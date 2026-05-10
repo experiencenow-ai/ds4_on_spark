@@ -8,13 +8,20 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Ref: `refs/heads/main`
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
-  - Note (as of 2026-05-10): we treat this HF repo as the canonical public “official configs” source; a GitHub search under `deepseek-ai/*` did not show a dedicated DeepSeek-V4-Flash code repo.
+  - Note (as of 2026-05-10): we treat this HF repo as the canonical public “official configs” source; `deepseek-ai`’s GitHub org does not list a dedicated DeepSeek-V4(-Flash) code/config repo (checked via `gh repo list deepseek-ai --limit 100 | rg -i v4`).
 
 Related checkpoint (same “official configs” approach):
 
 - `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base`
   - Ref: `refs/heads/main`
   - Commit: `8855555deef230a27a21a8d6f294b7b7497759b6`
+  - License: MIT (see HF `LICENSE`)
+
+Related FP8 checkpoint mirror (serving-oriented; weights are huge):
+
+- `https://huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8`
+  - Ref: `refs/heads/main`
+  - Commit: `ae01d80c06cdfe30581edfd0e1c5449dc7ed7f17`
   - License: MIT (see HF `LICENSE`)
 
 ## Related official kernel repos (reference)
@@ -40,12 +47,14 @@ As of the pinned commits in [`docs/upstream-manifest.md`](upstream-manifest.md):
 
 - Flash (`6976c7ff1b30a1b2cb7805021b8ba4684041f136`): `*.safetensors` sum is **148.66 GiB**
 - Flash-Base (`8855555deef230a27a21a8d6f294b7b7497759b6`): `*.safetensors` sum is **274.44 GiB**
+- SGLang FP8 mirror (`ae01d80c06cdfe30581edfd0e1c5449dc7ed7f17`): `*.safetensors` sum is **273.85 GiB**
 
 Reproduce (no clone, no LFS):
 
 ```bash
 ./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash --sum-safetensors
 ./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash-Base --sum-safetensors
+./scripts/upstream_hf_api_report.sh sgl-project/DeepSeek-V4-Flash-FP8 --sum-safetensors
 ```
 
 ## Weight download risk (Git LFS)
@@ -60,7 +69,7 @@ The Hub increasingly serves large files via Xet-backed storage, while keeping Gi
 
 ## Hugging Face revisions vs git commits
 
-Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) that don’t match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
+Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) or Xet-backed “tree” IDs that do not match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
 
 To see the HF API-reported revision SHA (and file sizes) without cloning/downloading:
 

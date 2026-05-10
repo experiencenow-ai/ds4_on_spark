@@ -69,6 +69,16 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 The report includes a `## MTP sidecar contract probe (Spark)` section with the
 JSON output from `scripts/model_contract_probe_mtp_sidecar.py`.
 
+If you also want a llama.cpp-side **loader gate** (optionally loads the sidecar
+tensor blob into RAM via `--load-weights`, still without loading the trunk),
+use the combined runner:
+
+```sh
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 LOAD_WEIGHTS=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@aitopatom-9ab9.local
+```
+
 After the first successful quantized run, prefer instrumentation over immediate
 optimization. The next useful report should say whether the runtime can expose:
 

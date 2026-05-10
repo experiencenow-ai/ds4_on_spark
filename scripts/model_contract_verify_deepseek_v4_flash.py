@@ -209,27 +209,27 @@ def main() -> int:
 					n_hash = int(moe.get("n_hash_layers", 0)) if isinstance(moe, dict) else 0
 				except Exception:
 					n_hash = 0
-					if n_hash > 0:
-						if not isinstance(moe_hash, dict):
-							failures.append(Failure(40, f"contract summary missing moe.hash_routing dict (hash routing is enabled with n_hash_layers={n_hash}): {contract_summary}"))
-						else:
-							expected_ids = list(range(n_hash))
-							if moe_hash.get("hash_layer_ids") != expected_ids:
-								failures.append(Failure(41, f"contract summary moe.hash_routing.hash_layer_ids mismatch (expected {expected_ids}): {contract_summary}"))
-							if moe_hash.get("tid2eid_dtype") != "int32":
-								failures.append(Failure(42, f"contract summary moe.hash_routing.tid2eid_dtype must be 'int32': {contract_summary}"))
-							try:
-								expected_shape = [int(summary.get("topology", {}).get("vocab_size")), int(moe.get("n_activated_experts"))]
-							except Exception:
-								expected_shape = None
-							if expected_shape is not None and moe_hash.get("tid2eid_shape") != expected_shape:
-								failures.append(Failure(43, f"contract summary moe.hash_routing.tid2eid_shape mismatch (expected {expected_shape}): {contract_summary}"))
-							need_exprs = ["hash_enabled_expr", "hash_indices_expr"]
-							for k in need_exprs:
-								v = moe_hash.get(k)
-								if not (isinstance(v, str) and v):
-									failures.append(Failure(44, f"contract summary moe.hash_routing missing {k} expression string: {contract_summary}"))
-									break
+				if n_hash > 0:
+					if not isinstance(moe_hash, dict):
+						failures.append(Failure(40, f"contract summary missing moe.hash_routing dict (hash routing is enabled with n_hash_layers={n_hash}): {contract_summary}"))
+					else:
+						expected_ids = list(range(n_hash))
+						if moe_hash.get("hash_layer_ids") != expected_ids:
+							failures.append(Failure(41, f"contract summary moe.hash_routing.hash_layer_ids mismatch (expected {expected_ids}): {contract_summary}"))
+						if moe_hash.get("tid2eid_dtype") != "int32":
+							failures.append(Failure(42, f"contract summary moe.hash_routing.tid2eid_dtype must be 'int32': {contract_summary}"))
+						try:
+							expected_shape = [int(summary.get("topology", {}).get("vocab_size")), int(moe.get("n_activated_experts"))]
+						except Exception:
+							expected_shape = None
+						if expected_shape is not None and moe_hash.get("tid2eid_shape") != expected_shape:
+							failures.append(Failure(43, f"contract summary moe.hash_routing.tid2eid_shape mismatch (expected {expected_shape}): {contract_summary}"))
+						need_exprs = ["hash_enabled_expr", "hash_indices_expr"]
+						for k in need_exprs:
+							v = moe_hash.get(k)
+							if not (isinstance(v, str) and v):
+								failures.append(Failure(44, f"contract summary moe.hash_routing missing {k} expression string: {contract_summary}"))
+								break
 
 				chk = summary.get("checkpoint_index", {})
 				expected_key_sha = sha256_lines(sorted(weight_keys))
@@ -412,6 +412,53 @@ def main() -> int:
 	for j in range(n_mtp_layers):
 		if compress_ratios[n_layers + j] != 0:
 			failures.append(Failure(9, f"mtp compress_ratio must be 0 (sliding-only) at compress_ratios[{n_layers + j}], got {compress_ratios[n_layers + j]}"))
+
+	# Contract summary must include a Transformers-compatible per-layer schedule derived from compress_ratios.
+	try:
+		attn = summary.get("attention_schedule", {}) if isinstance(summary, dict) else {}
+		if isinstance(attn, dict):
+			tf_types = attn.get("transformers_main_layer_types", None)
+			if not isinstance(tf_types, list) or len(tf_types) != n_layers:
+				failures.append(Failure(101, f"contract summary attention_schedule.transformers_main_layer_types must be a list of length n_layers={n_layers}: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:n_layers]):
+					r = int(r)
+					want = "sliding_attention" if r == 0 else ("compressed_sparse_attention" if r == 4 else "heavily_compressed_attention")
+					if tf_types[i] != want:
+						failures.append(Failure(102, f"contract summary transformers_main_layer_types[{i}] mismatch (got {tf_types[i]!r} expected {want!r}): {contract_summary}"))
+						break
+
+			tf_rates = attn.get("transformers_compress_rates", None)
+			want_rates = {"compressed_sparse_attention": 4, "heavily_compressed_attention": 128, "sliding_attention": 0}
+			if tf_rates != want_rates:
+				failures.append(Failure(103, f"contract summary attention_schedule.transformers_compress_rates mismatch (got {tf_rates!r} expected {want_rates!r}): {contract_summary}"))
+
+			tf_mtp = attn.get("transformers_mtp_layer_types", None)
+			if n_mtp_layers > 0:
+				if not isinstance(tf_mtp, list) or len(tf_mtp) != n_mtp_layers:
+					failures.append(Failure(104, f"contract summary attention_schedule.transformers_mtp_layer_types must be a list of length n_mtp_layers={n_mtp_layers}: {contract_summary}"))
+				else:
+					for j, r in enumerate(compress_ratios[n_layers : n_layers + n_mtp_layers]):
+						r = int(r)
+						want = "sliding_attention" if r == 0 else ("compressed_sparse_attention" if r == 4 else "heavily_compressed_attention")
+						if tf_mtp[j] != want:
+							failures.append(Failure(105, f"contract summary transformers_mtp_layer_types[{j}] mismatch (got {tf_mtp[j]!r} expected {want!r}): {contract_summary}"))
+							break
+
+			moe = summary.get("moe", {}) if isinstance(summary, dict) else {}
+			if isinstance(moe, dict):
+				tf_mlp = moe.get("transformers_mlp_layer_types", None)
+				if not isinstance(tf_mlp, list) or len(tf_mlp) != n_layers:
+					failures.append(Failure(106, f"contract summary moe.transformers_mlp_layer_types must be a list of length n_layers={n_layers}: {contract_summary}"))
+				else:
+					for i in range(n_layers):
+						want = "hash_moe" if i < n_hash_layers else "moe"
+						if tf_mlp[i] != want:
+							failures.append(Failure(107, f"contract summary moe.transformers_mlp_layer_types[{i}] mismatch (got {tf_mlp[i]!r} expected {want!r}): {contract_summary}"))
+							break
+	except Exception:
+		# If the contract summary is missing, other checks will flag it earlier.
+		pass
 
 	# Top-level required tensors.
 	for k in ("embed.weight", "norm.weight", "head.weight", "hc_head_fn", "hc_head_base", "hc_head_scale"):

@@ -5,7 +5,7 @@ This document records **source pointers** into the pinned `antirez/ds4` upstream
 Upstream repo + pin:
 
 - Repo: `https://github.com/antirez/ds4`
-- Commit: `8e7575be0ef44bd97c5ebaccf49ef85e05048b7b` (see `docs/upstream-ds4.md`)
+- Commit: `22ca6abd732ecc59f87378e022b9e5850c9fa377` (see `docs/upstream-ds4.md`)
 - File: `upstreams/ds4/ds4.c` (fetched via `./scripts/fetch_upstreams.sh ds4`, ignored by git)
 
 ## Tensor bindings (`mtp.0.*` contract)
@@ -65,4 +65,3 @@ Design note: the fast path relies on being able to either (a) commit verified sp
   - Controlled via env vars like `DS4_MTP_PROBE` and `DS4_MTP_FULL_LOGITS`.
 
 This is useful for debugging wiring, but it is **not** a replacement for the repo’s correctness oracle / acceptance-metrics work, which must only be attempted after the one-token draft probe is implemented and deterministic.
-
