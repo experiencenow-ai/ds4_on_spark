@@ -3096,6 +3096,30 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
         frac = (x - float(i0))
         return(float(xs_sorted[i0]) * (1.0 - frac) + (float(xs_sorted[i1]) * frac))
 
+    def _hist_int_percentile(hist_time_ms: Sequence[float], overflow_time_ms: float, p: float) -> int:
+        if p <= 0.0:
+            return(0)
+        if p >= 1.0:
+            if overflow_time_ms > 0.0:
+                return(len(hist_time_ms))
+            if len(hist_time_ms) == 0:
+                return(0)
+            return(len(hist_time_ms) - 1)
+        total = float(sum(hist_time_ms)) + float(overflow_time_ms)
+        if total <= 0.0:
+            return(0)
+        target = (p * total)
+        acc = 0.0
+        for d, t in enumerate(hist_time_ms):
+            acc += float(t)
+            if acc >= target:
+                return(int(d))
+        if overflow_time_ms > 0.0:
+            return(len(hist_time_ms))
+        if len(hist_time_ms) == 0:
+            return(0)
+        return(len(hist_time_ms) - 1)
+
     makespan_ms = metrics.makespan_ms
     token_tps = (float(metrics.num_tokens) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
     task_tps = (float(metrics.admitted_tasks) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
@@ -3107,8 +3131,18 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
     tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
     starved_task_frac = (float(metrics.starved_tasks) / tasks_started_total) if tasks_started_total > 0.0 else 0.0
+    starved_task_frac_interactive = (float(metrics.starved_tasks_interactive) / float(len(metrics.task_queue_wait_ms_interactive))) if len(metrics.task_queue_wait_ms_interactive) != 0 else 0.0
+    starved_task_frac_batch = (float(metrics.starved_tasks_batch) / float(len(metrics.task_queue_wait_ms_batch))) if len(metrics.task_queue_wait_ms_batch) != 0 else 0.0
+    starved_task_frac_mtp_draft = (float(metrics.starved_tasks_mtp_draft) / float(metrics.tasks_started_mtp_draft)) if metrics.tasks_started_mtp_draft > 0 else 0.0
+    starved_task_frac_mtp_verify = (float(metrics.starved_tasks_mtp_verify) / float(metrics.tasks_started_mtp_verify)) if metrics.tasks_started_mtp_verify > 0 else 0.0
     partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
+    dropped_interactive = float(metrics.dropped_tokens_backpressure_interactive)
+    denom_interactive = float(metrics.admitted_tokens_interactive + metrics.dropped_tokens_backpressure_interactive)
+    drop_frac_interactive = (dropped_interactive / denom_interactive) if denom_interactive > 0.0 else 0.0
+    dropped_batch = float(metrics.dropped_tokens_backpressure_batch)
+    denom_batch = float(metrics.admitted_tokens_batch + metrics.dropped_tokens_backpressure_batch)
+    drop_frac_batch = (dropped_batch / denom_batch) if denom_batch > 0.0 else 0.0
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -3119,6 +3153,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
             "drop_frac_tokens": float(drop_frac),
+            "drop_frac_tokens_interactive": float(drop_frac_interactive),
+            "drop_frac_tokens_batch": float(drop_frac_batch),
             "partial_admit_frac_tokens": float(partial_admit_frac),
             "token_p50_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.50)),
             "token_p95_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.95)),
@@ -3130,6 +3166,10 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
             "starved_tasks": float(metrics.starved_tasks),
             "starved_task_frac": float(starved_task_frac),
+            "starved_task_frac_interactive": float(starved_task_frac_interactive),
+            "starved_task_frac_batch": float(starved_task_frac_batch),
+            "starved_task_frac_mtp_draft": float(starved_task_frac_mtp_draft),
+            "starved_task_frac_mtp_verify": float(starved_task_frac_mtp_verify),
             "dropped_tasks_backpressure": float(metrics.dropped_tasks_backpressure),
             "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
             "expert_max_pending_tasks_max": float(max(metrics.max_pending_per_expert)) if len(metrics.max_pending_per_expert) != 0 else 0.0,
@@ -3143,6 +3183,9 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "expert_utilization_p95": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.95)),
             "expert_saturation_p50": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.50)),
             "expert_saturation_p95": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.95)),
+            "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
+            "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
+            "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
         }
     )
