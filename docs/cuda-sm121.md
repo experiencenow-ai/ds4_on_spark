@@ -21,6 +21,8 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 When those targets are present, `scripts/cuda_probe_compile_only_tiny_spark0.sh` does a best-effort compile of `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` for each variant and prints `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure).
 
+Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`.
+
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
 When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
