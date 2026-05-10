@@ -859,6 +859,28 @@ def compute_mtp_trust(mtp_present: bool, mtp_contract: Optional[dict[str, Any]],
 	if not isinstance(trust_gates, dict):
 		trust_gates = {}
 
+	# Namespace contract: MTP must preserve the expected `mtp.{j}.` prefixes (and
+	# include mtp.0.* when the contract expects mtp ids starting at 0).
+	if isinstance(contract_summary, dict):
+		ids = mtp_contract.get("mtp_layer_ids_present", [])
+		if isinstance(ids, list):
+			ns = compute_mtp_namespace_status(ids, contract_summary)
+			if trust_gates.get("artifact_requires_mtp_namespace_expected_complete") is True and ns.get("expected_complete") is not True:
+				missing = ns.get("missing_expected_layer_ids", [])
+				return {
+					"checked": True,
+					"trusted": False,
+					"status": "namespace_incomplete",
+					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
+				}
+			if trust_gates.get("artifact_requires_mtp_namespace_has_mtp0") is True and ns.get("has_mtp0") is not True:
+				return {
+					"checked": True,
+					"trusted": False,
+					"status": "namespace_missing_mtp0",
+					"reasons": ["mtp_namespace.has_mtp0 != true"],
+				}
+
 	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
 	if requires_complete and mtp_contract.get("complete") is not True:
 		return {
