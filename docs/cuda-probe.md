@@ -68,7 +68,8 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 - Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
 - Runs best-effort compile-only `-gencode` probes for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` when `compute_121` is advertised (multi-target build plumbing gate)
 - Compiles and runs it with `-arch=sm_121` and `-arch=native`
-- Prints runtime device info + the device-observed `__CUDA_ARCH__`
+- Prints a `cuda_device_props_tiny`-schema one-line driver/runtime + key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers)
+- Prints the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `native` missing)
 
 ## Spark0: Kernel Bring-up Tiny (CUTLASS/DeepGEMM Gates)
