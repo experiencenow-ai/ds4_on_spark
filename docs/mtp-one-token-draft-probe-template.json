@@ -1,0 +1,31 @@
+{
+  "runtime_repo": "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark",
+  "runtime_commit": "9222e55",
+  "trunk_gguf_path": "/abs/path/to/DeepSeek-V4-Flash-*.gguf",
+  "mtp_sidecar_path": "/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf",
+  "prompt": "Template prompt (replace with the probe prompt).",
+  "seed": 1234,
+  "temperature": 0.0,
+  "top_k": 1,
+  "top_p": 1.0,
+  "verify_step_idx": 0,
+  "base_next_token_id": 0,
+  "base_next_token": "",
+  "mtp_draft_token_id": 0,
+  "mtp_draft_token": "",
+  "mtp_params": {
+    "n_embd": 4096,
+    "n_head": 64,
+    "n_head_dim": 512,
+    "n_hc": 4,
+    "n_lora_q": 1024,
+    "n_out_group": 8,
+    "n_lora_o": 1024,
+    "n_expert": 256,
+    "n_ff_exp": 2048
+  },
+  "ok": false,
+  "errors": [
+    "Template only: replace fields with real probe output."
+  ]
+}
