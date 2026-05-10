@@ -71,6 +71,12 @@ probe_one()
 	curl -fsS -m 10 -o /dev/null "${url}" 2>/dev/null
 }
 
+hf_declared_license()
+{
+	local upstream="$1"
+	"${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}" | awk '/^license:/ {print $2; exit}'
+}
+
 LICENSE_PATHS=(
 	"LICENSE"
 	"LICENSE.txt"
@@ -99,6 +105,11 @@ while IFS=$'\t' read -r name upstream commit declared; do
 		if [[ "${upstream}" == huggingface.co/* ]] && [[ "${declared:-UNKNOWN}" != UNKNOWN* ]]; then
 			if probe_one "${upstream}" "${commit}" "README.md"; then
 				printf "OK   %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "README.md"
+				continue
+			fi
+			api_license="$(hf_declared_license "${upstream}" || true)"
+			if [ -n "${api_license}" ] && [ "${api_license}" != "UNKNOWN" ]; then
+				printf "OK   %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "HF_API_LICENSE:${api_license}"
 				continue
 			fi
 		fi

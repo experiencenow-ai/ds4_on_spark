@@ -45,6 +45,22 @@ print_ref()
 	local ref="${3:-HEAD}"
 
 	printf "== %s\n" "${name}"
+	if [[ "${url}" == https://huggingface.co/* ]]; then
+		local repo sha
+		repo="${url#https://huggingface.co/}"
+		sha="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${repo}" | awk '/^sha:/ {print $2; exit}')"
+		if [ -z "${sha}" ] || [ "${sha}" = "UNKNOWN" ]; then
+			printf "ref: (hf api) UNKNOWN\n\n"
+			return 0
+		fi
+		if [ "${ref}" = "HEAD" ]; then
+			printf "ref: refs/heads/main\tHEAD\n"
+			printf "%s\tHEAD\n\n" "${sha}"
+			return 0
+		fi
+		printf "%s\t%s\n\n" "${sha}" "${ref}"
+		return 0
+	fi
 	if [ "${ref}" = "HEAD" ]; then
 		GIT_TERMINAL_PROMPT=0 git ls-remote --symref "${url}" HEAD | sed -n '1,2p'
 	else
@@ -101,6 +117,24 @@ print_pinned()
 	local expected="$5"
 	local got
 
+	if [[ "${upstream}" == huggingface.co/* ]]; then
+		if [ "${ref}" != "refs/heads/main" ] && [ "${ref}" != "refs/heads/master" ]; then
+			printf "== %s\n" "${name}"
+			printf "upstream:  %s\n" "${upstream}"
+			printf "ref:       %s\n" "${ref}"
+			printf "expected:  %s\n" "${expected}"
+			printf "got:       UNSUPPORTED_HF_REF\n\n"
+			return 0
+		fi
+		got="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}" | awk '/^sha:/ {print $2; exit}')"
+		printf "== %s\n" "${name}"
+		printf "upstream:  %s\n" "${upstream}"
+		printf "ref:       %s\n" "${ref}"
+		printf "expected:  %s\n" "${expected}"
+		printf "got:       %s\n\n" "${got:-MISSING}"
+		return 0
+	fi
+
 	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
 	if [ -z "${got}" ]; then
 		printf "== %s\n" "${name}"
@@ -142,6 +176,9 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash GGUF (nsparks, HF)" "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (cyberneurova, HF)" "https://huggingface.co/cyberneurova/CyberNeurova-DeepSeek-V4-Flash-abliterated-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (teamblobfish, HF)" "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF"
+	print_ref "DeepSeek-V4-Flash GGUF (asidaddy, HF)" "https://huggingface.co/asidaddy/Deepseek-V4-Flash-GGUF"
+	print_ref "DeepSeek-V4-Flash GGUF (Volko76, HF)" "https://huggingface.co/Volko76/DeepSeek-V4-Flash-GGUF"
+	print_ref "DeepSeek-V4-Flash GGUF (setar007, HF)" "https://huggingface.co/setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF"
 	print_ref "vLLM" "https://github.com/vllm-project/vllm.git"
 	print_ref "Transformers" "https://github.com/huggingface/transformers.git"
 	print_ref "SGLang" "https://github.com/sgl-project/sglang.git"
