@@ -41,6 +41,12 @@ Refreshed again (08:43Z, `origin/main` at `git: 3a42299`, temporary gitdir):
 REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T083825Z/git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T084323Z_loop.txt
 ```
 
+Refreshed again (09:13Z, loop-filtered storage output, temporary gitdir):
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T0919Z_loop.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
@@ -111,6 +117,17 @@ spark1.local: not reachable
 == meta ==
 Sun May 10 08:43:25 UTC 2026
 git: 3a42299
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 09:13:52 UTC 2026
+git: afbc122
 targets: aitopatom-9ab9.local spark1.local
 
 == known target checks ==

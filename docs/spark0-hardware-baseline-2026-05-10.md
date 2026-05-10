@@ -56,6 +56,12 @@ Refreshed again (08:43Z, `origin/main` at `git: 3a42299`, temporary gitdir):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T083825Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T084323Z_loop.txt
 ```
 
+Refreshed again (09:13Z, loop-filtered storage output, temporary gitdir):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0918Z_loop.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -77,5 +83,6 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - `nvidia-smi -q` also reports `Device Max`/`Host Max` Gen5 + x16, suggesting downtraining/training rather than a true capability limit
 - When supported, the probe also prints `nvidia-smi` optional CSV fields `pcie.link.gen.gpumax` / `pcie.link.gen.hostmax`, which match the `nvidia-smi -q` `Device Max`/`Host Max` Gen5 report (while the legacy `pcie.link.gen.max` field remains `1` on this host)
 - Sysfs path-chain shows the upstream bridge reporting `max_link_speed: 32.0 GT/s`, while the GPU endpoint reports `max_link_speed: 2.5 GT/s`; keep treating link reporting as potentially inconsistent and rely on multiple sources until the PCIe story is resolved
+- As of the 09:13Z refresh (`git: afbc122`), the sysfs path-chain also showed the upstream bridge reporting `current_link_speed: Unknown` and `current_link_width: 0` even while the endpoint continued to report Gen1 x1; treat upstream `current_link_*` as best-effort until corroborated
 - RDMA/ROCE devices present (`/sys/class/infiniband`, Mellanox `MT4129`), but ports were `DOWN`/`Disabled` during the probe
 - cuDNN: not detected by the probe (no headers/libs found)

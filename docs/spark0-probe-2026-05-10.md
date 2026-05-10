@@ -46,6 +46,12 @@ Additional probe run (08:43Z refresh, `origin/main` at `git: 3a42299`, temporary
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T083825Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T084323Z_loop.txt
 ```
 
+Additional probe run (09:13Z refresh, loop-filtered storage output, temporary gitdir):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0918Z_loop.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -295,6 +301,56 @@ selected nvcc arch: sm_121
       "name" : "CUDA NVCC",
       "version" : "13.0.88"
    },
+```
+
+### Single-target probe (Spark0, 09:13Z refresh, loop-filtered storage output, `git: afbc122`)
+
+```text
+== local meta ==
+Sun May 10 09:13:41 UTC 2026
+git: afbc122
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 66, P0, [N/A]
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== pci link (sysfs, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 current_link_speed: Unknown
+path 000f:00:00.0 current_link_width: 0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
+```
+
+```text
+== storage ==
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p2  3.7T  123G  3.4T   4% /
+NAME         SIZE TYPE MOUNTPOINTS
+nvme0n1      3.7T disk
+|-nvme0n1p1  512M part /boot/efi
+`-nvme0n1p2  3.7T part /
+
+== disks (summary) ==
+NAME     SIZE MODEL                      ROTA TYPE
+nvme0n1  3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
 
 ### Multi-target probe (Spark0 ok, Spark1 unreachable)
