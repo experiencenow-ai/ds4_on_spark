@@ -7,9 +7,12 @@ import sys
 from pathlib import Path
 
 
+class _VerifyError(RuntimeError):
+	pass
+
+
 def _die(msg: str) -> None:
-	print(msg, file=sys.stderr)
-	raise SystemExit(2)
+	raise _VerifyError(msg)
 
 
 def _read_text(path: Path) -> str:
@@ -101,8 +104,21 @@ def main() -> None:
 	ds4_c_path = Path(args.ds4_c)
 	py_path = Path(args.python_probe)
 
-	ds4_names = _extract_ds4_expected_names(ds4_c_path)
-	py_names = _extract_python_expected_names(py_path)
+	try:
+		ds4_names = _extract_ds4_expected_names(ds4_c_path)
+		py_names = _extract_python_expected_names(py_path)
+	except _VerifyError as e:
+		if args.json:
+			out = {
+				"ok": False,
+				"errors": [str(e)],
+				"ds4_c": str(ds4_c_path),
+				"python_probe": str(py_path),
+			}
+			print(json.dumps(out, indent=2, sort_keys=True))
+			raise SystemExit(2)
+		print(str(e), file=sys.stderr)
+		raise SystemExit(2)
 
 	ds4_set = set(ds4_names)
 	py_set = set(py_names)
