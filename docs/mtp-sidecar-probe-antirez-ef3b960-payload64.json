@@ -15,6 +15,7 @@
   },
   "errors": [],
   "extra_tensors": [],
+  "file_size": 3807602400,
   "gguf_version": 3,
   "metadata": {
     "deepseek4.expert_count": 256,
@@ -143,8 +144,8 @@
       "offset": 264608
     },
     "mtp.0.hc_attn_scale.weight": {
-      "fnv1a64": "6cfb50eaadb81e00",
-      "n": 32,
+      "fnv1a64": "025512a4447dbe00",
+      "n": 12,
       "offset": 1837472
     },
     "mtp.0.hc_ffn_base.weight": {
@@ -158,13 +159,13 @@
       "offset": 1837504
     },
     "mtp.0.hc_ffn_scale.weight": {
-      "fnv1a64": "20bfae419fbb21e4",
-      "n": 32,
+      "fnv1a64": "4194d94cfe04fca4",
+      "n": 12,
       "offset": 3410368
     },
     "mtp.0.hc_head_base.weight": {
-      "fnv1a64": "93d4d24b4d73acef",
-      "n": 32,
+      "fnv1a64": "f8ff7b1560bdf92f",
+      "n": 16,
       "offset": 2208
     },
     "mtp.0.hc_head_fn.weight": {
@@ -173,8 +174,8 @@
       "offset": 2240
     },
     "mtp.0.hc_head_scale.weight": {
-      "fnv1a64": "2b9bb820befbd16b",
-      "n": 32,
+      "fnv1a64": "05a3e4b2d268641b",
+      "n": 4,
       "offset": 264384
     },
     "mtp.0.hnorm.weight": {
@@ -196,8 +197,11 @@
         4096,
         512
       ],
+      "n_elements": 2097152,
       "name": "mtp.0.attn_kv.weight",
       "next_rel_offset": 81400384,
+      "payload_bytes": 2228224,
+      "payload_end_abs": 81402592,
       "rel_offset": 79172160,
       "span_bytes": 2228224,
       "type": "Q8_0",
@@ -208,8 +212,11 @@
       "dims": [
         512
       ],
+      "n_elements": 512,
       "name": "mtp.0.attn_kv_a_norm.weight",
       "next_rel_offset": 81402432,
+      "payload_bytes": 2048,
+      "payload_end_abs": 81404640,
       "rel_offset": 81400384,
       "span_bytes": 2048,
       "type": "F32",
@@ -220,8 +227,11 @@
       "dims": [
         4096
       ],
+      "n_elements": 4096,
       "name": "mtp.0.attn_norm.weight",
       "next_rel_offset": 117070400,
+      "payload_bytes": 16384,
+      "payload_end_abs": 117072608,
       "rel_offset": 117054016,
       "span_bytes": 16384,
       "type": "F32",
@@ -233,8 +243,11 @@
         4096,
         8192
       ],
+      "n_elements": 33554432,
       "name": "mtp.0.attn_output_a.weight",
       "next_rel_offset": 79172160,
+      "payload_bytes": 35651584,
+      "payload_end_abs": 79174368,
       "rel_offset": 43520576,
       "span_bytes": 35651584,
       "type": "Q8_0",
@@ -246,8 +259,11 @@
         8192,
         4096
       ],
+      "n_elements": 33554432,
       "name": "mtp.0.attn_output_b.weight",
       "next_rel_offset": 117054016,
+      "payload_bytes": 35651584,
+      "payload_end_abs": 117056224,
       "rel_offset": 81402432,
       "span_bytes": 35651584,
       "type": "Q8_0",
@@ -259,8 +275,11 @@
         4096,
         1024
       ],
+      "n_elements": 4194304,
       "name": "mtp.0.attn_q_a.weight",
       "next_rel_offset": 7864896,
+      "payload_bytes": 4456448,
+      "payload_end_abs": 7867104,
       "rel_offset": 3408448,
       "span_bytes": 4456448,
       "type": "Q8_0",
@@ -271,8 +290,11 @@
       "dims": [
         1024
       ],
+      "n_elements": 1024,
       "name": "mtp.0.attn_q_a_norm.weight",
       "next_rel_offset": 43520576,
+      "payload_bytes": 4096,
+      "payload_end_abs": 43522784,
       "rel_offset": 43516480,
       "span_bytes": 4096,
       "type": "F32",
@@ -284,8 +306,11 @@
         1024,
         32768
       ],
+      "n_elements": 33554432,
       "name": "mtp.0.attn_q_b.weight",
       "next_rel_offset": 43516480,
+      "payload_bytes": 35651584,
+      "payload_end_abs": 43518688,
       "rel_offset": 7864896,
       "span_bytes": 35651584,
       "type": "Q8_0",
@@ -296,8 +321,11 @@
       "dims": [
         64
       ],
+      "n_elements": 64,
       "name": "mtp.0.attn_sinks.weight",
       "next_rel_offset": 3408448,
+      "payload_bytes": 256,
+      "payload_end_abs": 3410656,
       "rel_offset": 3408192,
       "span_bytes": 256,
       "type": "F32",
@@ -309,8 +337,11 @@
         4096,
         4096
       ],
+      "n_elements": 16777216,
       "name": "mtp.0.e_proj.weight",
       "next_rel_offset": 3789725248,
+      "payload_bytes": 17825792,
+      "payload_end_abs": 3789727456,
       "rel_offset": 3771899456,
       "span_bytes": 17825792,
       "type": "Q8_0",
@@ -321,8 +352,11 @@
       "dims": [
         4096
       ],
+      "n_elements": 4096,
       "name": "mtp.0.enorm.weight",
       "next_rel_offset": 3807567424,
+      "payload_bytes": 16384,
+      "payload_end_abs": 3807569632,
       "rel_offset": 3807551040,
       "span_bytes": 16384,
       "type": "F32",
@@ -333,8 +367,11 @@
       "dims": [
         256
       ],
+      "n_elements": 256,
       "name": "mtp.0.exp_probs_b.bias",
       "next_rel_offset": 3771899456,
+      "payload_bytes": 1024,
+      "payload_end_abs": 3771901664,
       "rel_offset": 3771898432,
       "span_bytes": 1024,
       "type": "F32",
@@ -347,8 +384,11 @@
         4096,
         256
       ],
+      "n_elements": 2147483648,
       "name": "mtp.0.ffn_down_exps.weight",
       "next_rel_offset": 3767704128,
+      "payload_bytes": 1207959552,
+      "payload_end_abs": 3767706336,
       "rel_offset": 2559744576,
       "span_bytes": 1207959552,
       "type": "Q4_K",
@@ -360,8 +400,11 @@
         2048,
         4096
       ],
+      "n_elements": 8388608,
       "name": "mtp.0.ffn_down_shexp.weight",
       "next_rel_offset": 143825472,
+      "payload_bytes": 8912896,
+      "payload_end_abs": 143827680,
       "rel_offset": 134912576,
       "span_bytes": 8912896,
       "type": "Q8_0",
@@ -374,8 +417,11 @@
         2048,
         256
       ],
+      "n_elements": 2147483648,
       "name": "mtp.0.ffn_gate_exps.weight",
       "next_rel_offset": 1351785024,
+      "payload_bytes": 1207959552,
+      "payload_end_abs": 1351787232,
       "rel_offset": 143825472,
       "span_bytes": 1207959552,
       "type": "Q4_K",
@@ -387,8 +433,11 @@
         4096,
         256
       ],
+      "n_elements": 1048576,
       "name": "mtp.0.ffn_gate_inp.weight",
       "next_rel_offset": 3771898432,
+      "payload_bytes": 4194304,
+      "payload_end_abs": 3771900640,
       "rel_offset": 3767704128,
       "span_bytes": 4194304,
       "type": "F32",
@@ -400,8 +449,11 @@
         4096,
         2048
       ],
+      "n_elements": 8388608,
       "name": "mtp.0.ffn_gate_shexp.weight",
       "next_rel_offset": 125999680,
+      "payload_bytes": 8912896,
+      "payload_end_abs": 126001888,
       "rel_offset": 117086784,
       "span_bytes": 8912896,
       "type": "Q8_0",
@@ -412,8 +464,11 @@
       "dims": [
         4096
       ],
+      "n_elements": 4096,
       "name": "mtp.0.ffn_norm.weight",
       "next_rel_offset": 117086784,
+      "payload_bytes": 16384,
+      "payload_end_abs": 117088992,
       "rel_offset": 117070400,
       "span_bytes": 16384,
       "type": "F32",
@@ -426,8 +481,11 @@
         2048,
         256
       ],
+      "n_elements": 2147483648,
       "name": "mtp.0.ffn_up_exps.weight",
       "next_rel_offset": 2559744576,
+      "payload_bytes": 1207959552,
+      "payload_end_abs": 2559746784,
       "rel_offset": 1351785024,
       "span_bytes": 1207959552,
       "type": "Q4_K",
@@ -439,8 +497,11 @@
         4096,
         2048
       ],
+      "n_elements": 8388608,
       "name": "mtp.0.ffn_up_shexp.weight",
       "next_rel_offset": 134912576,
+      "payload_bytes": 8912896,
+      "payload_end_abs": 134914784,
       "rel_offset": 125999680,
       "span_bytes": 8912896,
       "type": "Q8_0",
@@ -452,8 +513,11 @@
         4096,
         4096
       ],
+      "n_elements": 16777216,
       "name": "mtp.0.h_proj.weight",
       "next_rel_offset": 3807551040,
+      "payload_bytes": 17825792,
+      "payload_end_abs": 3807553248,
       "rel_offset": 3789725248,
       "span_bytes": 17825792,
       "type": "Q8_0",
@@ -464,8 +528,11 @@
       "dims": [
         24
       ],
+      "n_elements": 24,
       "name": "mtp.0.hc_attn_base.weight",
       "next_rel_offset": 262304,
+      "payload_bytes": 96,
+      "payload_end_abs": 264512,
       "rel_offset": 262208,
       "span_bytes": 96,
       "type": "F32",
@@ -477,8 +544,11 @@
         16384,
         24
       ],
+      "n_elements": 393216,
       "name": "mtp.0.hc_attn_fn.weight",
       "next_rel_offset": 1835264,
+      "payload_bytes": 1572864,
+      "payload_end_abs": 1837472,
       "rel_offset": 262400,
       "span_bytes": 1572864,
       "type": "F32",
@@ -489,8 +559,11 @@
       "dims": [
         3
       ],
+      "n_elements": 3,
       "name": "mtp.0.hc_attn_scale.weight",
       "next_rel_offset": 1835296,
+      "payload_bytes": 12,
+      "payload_end_abs": 1837484,
       "rel_offset": 1835264,
       "span_bytes": 32,
       "type": "F32",
@@ -501,8 +574,11 @@
       "dims": [
         24
       ],
+      "n_elements": 24,
       "name": "mtp.0.hc_ffn_base.weight",
       "next_rel_offset": 262400,
+      "payload_bytes": 96,
+      "payload_end_abs": 264608,
       "rel_offset": 262304,
       "span_bytes": 96,
       "type": "F32",
@@ -514,8 +590,11 @@
         16384,
         24
       ],
+      "n_elements": 393216,
       "name": "mtp.0.hc_ffn_fn.weight",
       "next_rel_offset": 3408160,
+      "payload_bytes": 1572864,
+      "payload_end_abs": 3410368,
       "rel_offset": 1835296,
       "span_bytes": 1572864,
       "type": "F32",
@@ -526,8 +605,11 @@
       "dims": [
         3
       ],
+      "n_elements": 3,
       "name": "mtp.0.hc_ffn_scale.weight",
       "next_rel_offset": 3408192,
+      "payload_bytes": 12,
+      "payload_end_abs": 3410380,
       "rel_offset": 3408160,
       "span_bytes": 32,
       "type": "F32",
@@ -538,8 +620,11 @@
       "dims": [
         4
       ],
+      "n_elements": 4,
       "name": "mtp.0.hc_head_base.weight",
       "next_rel_offset": 32,
+      "payload_bytes": 16,
+      "payload_end_abs": 2224,
       "rel_offset": 0,
       "span_bytes": 32,
       "type": "F32",
@@ -551,8 +636,11 @@
         16384,
         4
       ],
+      "n_elements": 65536,
       "name": "mtp.0.hc_head_fn.weight",
       "next_rel_offset": 262176,
+      "payload_bytes": 262144,
+      "payload_end_abs": 264384,
       "rel_offset": 32,
       "span_bytes": 262144,
       "type": "F32",
@@ -563,8 +651,11 @@
       "dims": [
         1
       ],
+      "n_elements": 1,
       "name": "mtp.0.hc_head_scale.weight",
       "next_rel_offset": 262208,
+      "payload_bytes": 4,
+      "payload_end_abs": 264388,
       "rel_offset": 262176,
       "span_bytes": 32,
       "type": "F32",
@@ -575,8 +666,11 @@
       "dims": [
         4096
       ],
+      "n_elements": 4096,
       "name": "mtp.0.hnorm.weight",
       "next_rel_offset": 3807583808,
+      "payload_bytes": 16384,
+      "payload_end_abs": 3807586016,
       "rel_offset": 3807567424,
       "span_bytes": 16384,
       "type": "F32",
@@ -587,10 +681,13 @@
       "dims": [
         4096
       ],
+      "n_elements": 4096,
       "name": "mtp.0.norm.weight",
       "next_rel_offset": null,
+      "payload_bytes": 16384,
+      "payload_end_abs": 3807602400,
       "rel_offset": 3807583808,
-      "span_bytes": null,
+      "span_bytes": 16384,
       "type": "F32",
       "type_code": 0
     }

@@ -82,6 +82,7 @@ MTP (multi-token prediction) oracle requirements:
     - For the upstream reference semantics (tensor binding, MTP raw cache, draft/verify/rollback), see `docs/mtp-ds4-reference.md` (pinned `antirez/ds4`).
     - Local file: `python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --expect-deepseek-v4-flash`
     - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json --expect-deepseek-v4-flash`
+    - The sidecar probe also computes `payload_bytes` per tensor (ggml row-size math for `F32`, `Q8_0`, `Q4_K`) and validates that tensor payload spans do not overlap and do not run past `file_size` when available.
     - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`
     - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`
