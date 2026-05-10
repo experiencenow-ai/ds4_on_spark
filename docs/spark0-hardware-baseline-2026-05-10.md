@@ -86,6 +86,12 @@ Refreshed again (12:13Z, toolchain paths + glibc banner):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T121337Z_loop_toolpaths_git9ee0e27.txt
 ```
 
+Refreshed again (12:43Z, `nvidia-smi -q` C2C summary):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -108,6 +114,7 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - GPU SM count (cuda runtime probe): 48
 - NVMe root disk: ~3.7 TiB, model `SAMSUNG MZALC4T0HBL1-00B07`
 - PCIe link negotiation (GPU): Gen1 x1 (`nvidia-smi -q` + sysfs)
+- `nvidia-smi -q` also reports `Peer Type: Direct Connected` and `GPU C2C Mode: Enabled` (treat the PCIe link fields as best-effort/legacy reporting rather than the actual GPU<->CPU fabric)
 - `nvidia-smi -q` also reports `Device Max`/`Host Max` Gen5 + x16, suggesting downtraining/training rather than a true capability limit
 - When supported, the probe also prints `nvidia-smi` optional CSV fields `pcie.link.gen.gpumax` / `pcie.link.gen.hostmax`, which match the `nvidia-smi -q` `Device Max`/`Host Max` Gen5 report (while the legacy `pcie.link.gen.max` field remains `1` on this host)
 - Sysfs path-chain shows the upstream bridge reporting `max_link_speed: 32.0 GT/s`, while the GPU endpoint reports `max_link_speed: 2.5 GT/s`; keep treating link reporting as potentially inconsistent and rely on multiple sources until the PCIe story is resolved

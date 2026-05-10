@@ -80,6 +80,7 @@ Notes:
 - `nvidia-smi` driver + CUDA version.
 - `nvidia-smi` version banner (`nvidia-smi --version` / `nvidia-smi -V`) for NVML/driver/CUDA summary.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
+- `nvidia-smi -q` fabric/c2c hints when present (`Peer Type`, `GPU C2C Mode`), since these help interpret the GB10 "Gen1 x1" PCIe link fields.
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
 - When available, also capture the optional `nvidia-smi --query-gpu=pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,...` output printed by the probe; these fields tend to line up with `nvidia-smi -q` `GPU Link Info` (`Device Max`/`Host Max`) and help interpret surprising `pcie.link.gen.max` values.
 - PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/{current,max}_link_{speed,width}` + PCI IDs via `{vendor,device,subsystem_*}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.

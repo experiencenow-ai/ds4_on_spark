@@ -71,6 +71,12 @@ Additional probe run (12:13Z refresh, toolchain paths + glibc banner):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T121337Z_loop_toolpaths_git9ee0e27.txt
 ```
 
+Additional probe run (12:43Z refresh, `nvidia-smi -q` C2C summary):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -95,6 +101,15 @@ cmake version 3.28.3
 GNU Make 4.3
 Python 3.12.3
 ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39
+```
+
+### nvidia-smi fabric/c2c summary (Spark0, 12:43Z)
+
+```text
+== nvidia-smi -q fabric/c2c (summary) ==
+Product Architecture: Blackwell
+Peer Type: Direct Connected
+GPU C2C Mode: Enabled
 ```
 
 ### Single-target probe (Spark0, 01:38Z)
