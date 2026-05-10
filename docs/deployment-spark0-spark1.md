@@ -54,6 +54,13 @@ This copies systemd templates + config examples to `/tmp/` on each Spark and pri
 
 It also stages safe ops scripts (preflight + env sanity checks) under `/tmp/ds4-scripts/`.
 
+If you prefer a single command to stage both hosts (recommended to avoid instance-name mistakes):
+
+```bash
+./scripts/ops_stage_spark0_spark1.sh spark0@<spark0-host> spark1@<spark1-host>
+# optional: add --mesh-check and/or --tcp <port>
+```
+
 ### Optional: Validate Staged Assets (Spark Side)
 
 On each Spark, you can validate the staged `/tmp/ds4-*` directories before installing anything:

@@ -61,6 +61,12 @@ SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 ./scripts/ops_spark01_mesh_check.sh spark0@<spark0-host> spark1@<spark1-host>
 ```
 
+If you want to run a mesh check *and* stage deploy assets in one flow, use:
+
+```bash
+./scripts/ops_stage_spark0_spark1.sh --mesh-check spark0@<spark0-host> spark1@<spark1-host>
+```
+
 Optional: add a best-effort TCP probe to the peer (only meaningful if something is listening):
 
 ```bash
