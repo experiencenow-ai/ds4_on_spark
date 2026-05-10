@@ -1026,7 +1026,12 @@ def load_trace_jsonl(
                 continue
             if line.startswith("#"):
                 continue
-            obj_raw = json.loads(line)
+            try:
+                obj_raw = json.loads(line)
+            except json.JSONDecodeError:
+                if non_route_policy == "skip":
+                    continue
+                raise ValueError(f"{display_path}:{lineno}: invalid JSON")
             if not isinstance(obj_raw, dict):
                 if non_route_policy == "skip":
                     continue
@@ -3379,7 +3384,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=str,
         default="error",
         choices=("error", "skip"),
-        help="JSONL trace replay: what to do with non-route JSON objects. 'skip' ignores objects with a non-meta 'type' that do not include route fields (useful for mixed runtime logs).",
+        help="JSONL trace replay: what to do with non-route input. 'skip' ignores non-route JSON objects (non-meta 'type' without route fields) and non-JSON lines (useful for mixed runtime stdout/stderr logs).",
     )
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")

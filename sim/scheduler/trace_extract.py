@@ -253,7 +253,12 @@ def extract_jsonl_lines(lines: Iterable[str], route_type: str = "", non_route_po
         line = line.strip()
         if line == "":
             continue
-        obj = json.loads(line)
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            if non_route_policy == "error":
+                raise ValueError(f"line {lineno}: invalid JSON")
+            continue
         rec = extract_route_record(obj, route_type=route_type)
         if rec is None:
             if non_route_policy == "error":
@@ -264,11 +269,11 @@ def extract_jsonl_lines(lines: Iterable[str], route_type: str = "", non_route_po
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    p = argparse.ArgumentParser(description="Extract scheduler-simulator route records from loosely shaped/mixed JSONL logs.")
+    p = argparse.ArgumentParser(description="Extract scheduler-simulator route records from loosely shaped/mixed JSONL logs (optionally skipping non-JSON lines).")
     p.add_argument("--in-jsonl", type=str, default="-", help="Input JSONL path ('-' for stdin).")
     p.add_argument("--out-jsonl", type=str, default="-", help="Output JSONL path ('-' for stdout).")
     p.add_argument("--route-type", type=str, default="", help="Only extract records with obj.type == route-type (empty = auto).")
-    p.add_argument("--non-route", type=str, default="skip", help="What to do for non-route records: skip (default) or error.")
+    p.add_argument("--non-route", type=str, default="skip", help="What to do for non-route input: skip (default; also skips non-JSON lines) or error.")
     args = p.parse_args(argv)
 
     f_in = sys.stdin if args.in_jsonl == "-" else open(args.in_jsonl, "r", encoding="utf-8")
