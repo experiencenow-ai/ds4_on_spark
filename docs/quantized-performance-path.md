@@ -68,6 +68,8 @@ demand fixed while varying MTP accept rates.
 
 Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
 
+Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
+
 ## Phase 1: Real Router Trace Replay
 
 Once the baseline quantized runtime can emit per-token routing, capture a trace
