@@ -198,6 +198,7 @@ Initial scope:
   - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
 - expose draft logits/tokens from the runtime or a sidecar path
 - when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
+  - Spark-only runner (local sidecar file already staged; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh`
 - recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
