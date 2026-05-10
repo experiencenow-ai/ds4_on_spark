@@ -166,6 +166,30 @@ if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"s
 fi
 
 echo
+echo \"== nvcc: __cluster_dims__ attribute compile (best-effort) ==\"
+cat > \"$REMOTE_DIR\"/cuda_cluster_dims_attr_compile.cu <<'EOF'
+#include <stdint.h>
+
+#include <cuda_runtime.h>
+
+__global__ void __cluster_dims__(2,1,1) cluster_dims_attr_probe(uint32_t *out)
+{
+	if ( ((int32_t)threadIdx.x) == 0 )
+		out[(int32_t)blockIdx.x] = 0;
+}
+EOF
+set +e
+\$NVCC -O2 -std=c++17 -arch=sm_121 -c -o \"$REMOTE_DIR\"/cluster_dims_attr_compile.o \"$REMOTE_DIR\"/cuda_cluster_dims_attr_compile.cu >\"$REMOTE_DIR\"/cluster_dims_attr_compile.out 2>\"$REMOTE_DIR\"/cluster_dims_attr_compile.err
+rc=\$?
+set -e
+if [ \$rc -eq 0 ]; then
+	echo \"cluster_dims_attr_compile: OK\"
+else
+	echo \"cluster_dims_attr_compile: FAILED rc=\$rc\"
+	head -n 40 \"$REMOTE_DIR\"/cluster_dims_attr_compile.err || true
+fi
+
+echo
 echo \"== nvcc: -gencode PTX embed behavior (best-effort) ==\"
 CUOBJDUMP=\"\"
 if [ -x /usr/local/cuda/bin/cuobjdump ]; then

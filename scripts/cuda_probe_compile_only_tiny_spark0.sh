@@ -151,6 +151,19 @@ else
 fi
 
 echo
+echo \"== nvcc: cluster_dims attribute compile (best-effort) ==\"
+set +e
+\$NVCC -O2 -std=c++17 -arch=sm_121 -c -o bin/cuda_sm121_cluster_dims_attr_compile.o src/cuda_sm121_cluster_dims_attr_compile.cu 2>bin/cuda_sm121_cluster_dims_attr_compile.err
+rc=\$?
+set -e
+if [ \$rc -eq 0 ]; then
+	echo \"cluster_dims_attr_compile: OK\"
+else
+	echo \"cluster_dims_attr_compile: FAILED rc=\$rc\"
+	head -n 40 bin/cuda_sm121_cluster_dims_attr_compile.err || true
+fi
+
+echo
 echo \"== compile-only (tiny) ==\"
 make clean
 make bin/cuda_sm121_compile_probe.o

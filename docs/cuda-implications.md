@@ -80,7 +80,7 @@ Next probe step:
 - Confirm that tensor core matmul plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_wmma_smoke`.
 - Confirm that BF16 conversion/data plumbing works on GB10; see `tools/cuda_probe/bin/cuda_sm121_bf16_conv`.
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
-- If using cluster annotations (`__cluster_dims__`) in any CUTLASS-style code, verify whether `nvcc -arch=sm_121` accepts it on Spark0; `./scripts/cuda_probe_compile_only_spark0.sh` prints a `cluster_dims_attr_compile` result (observed `OK` on 2026-05-09 with CUDA 13.0 `V13.0.88`).
+- If using cluster annotations (`__cluster_dims__`) in any CUTLASS-style code, verify whether `nvcc -arch=sm_121` accepts it on Spark0; `./scripts/cuda_probe_compile_only_spark0.sh`, `./scripts/cuda_probe_compile_only_tiny_spark0.sh`, and `./scripts/cuda_probe_nvcc_minimal_spark0.sh` print a `cluster_dims_attr_compile` result (observed `OK` on 2026-05-09 with CUDA 13.0 `V13.0.88`).
 - Note: this repo’s pinned DeepGEMM upstream uses a CUTLASS submodule; we intentionally do not auto-init submodules in the probe loop (see `docs/upstream-deepgemm.md`), so a CUTLASS compile/run probe requires an explicit submodule init (extra downloads).
 
 ## CUTLASS

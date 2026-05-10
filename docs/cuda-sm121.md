@@ -285,7 +285,7 @@ CUDA also exposes a kernel-annotation syntax for clusters via `__cluster_dims__(
 
 On some toolkit/architecture combinations, `nvcc -arch=sm_121` may reject `__cluster_dims__` at compile time even when runtime cluster launch via `cudaLaunchKernelExC` works.
 
-The compile-only script `./scripts/cuda_probe_compile_only_spark0.sh` includes a standalone compile of `tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu` and prints either `cluster_dims_attr_compile: OK` or the first lines of the compilation error.
+The compile-only scripts `./scripts/cuda_probe_compile_only_spark0.sh` and `./scripts/cuda_probe_compile_only_tiny_spark0.sh`, plus the no-transfer `./scripts/cuda_probe_nvcc_minimal_spark0.sh`, include a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and print either `cluster_dims_attr_compile: OK` or the first lines of the compilation error.
 
 Observed on Spark0 (2026-05-09): `cluster_dims_attr_compile: OK` (CUDA 13.0 `V13.0.88`).
 

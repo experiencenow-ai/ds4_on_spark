@@ -58,6 +58,7 @@ This also performs best-effort toolchain-only checks when supported:
 - If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt compile-only `-gencode` builds for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` (multi-target build plumbing gate).
+- Attempt a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and print `cluster_dims_attr_compile: OK` or the first lines of the compile error (some toolkits reject the annotation for `sm_121` even when runtime cluster launch works).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
 - If `cuobjdump` is available and `compute_121` is advertised, emit `-fatbin` artifacts with explicit `-gencode` (`code=sm_121` only, `code=compute_121` only, and `sm_121+compute_121`) and report whether embedded PTX is present (expected: SM-only missing; PTX-only present; SM+PTX present).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
@@ -74,6 +75,7 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
 - Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
 - Runs a best-effort compile-only probe with `-std=c++20 --extended-lambda --expt-relaxed-constexpr` for `-arch=sm_121` (and `compute_121` when advertised) as a CUTLASS/DeepGEMM-style toolchain gate (no repo transfer)
+- Attempts a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and prints `cluster_dims_attr_compile: OK` or the first lines of the compile error
 - Runs best-effort compile-only `-gencode` probes for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` when `compute_121` is advertised (multi-target build plumbing gate)
 - If `cuobjdump` is available and `compute_121` is advertised, emits `-fatbin` artifacts with explicit `-gencode` (`code=sm_121` only, `code=compute_121` only, and `sm_121+compute_121`) and reports whether embedded PTX is present (expected: SM-only missing; PTX-only present; SM+PTX present).
 - Compiles and runs it with `-arch=sm_121` and `-arch=native`
@@ -214,6 +216,7 @@ Observed:
 - `nvcc --list-gpu-arch` includes `compute_121` when supported
 - `nvcc --list-gpu-code` includes `sm_121` when supported
 - `nvcc -arch=compute_121 -c` compile-only probe succeeds when `compute_121` is advertised (toolchain PTX-target gate)
+- `cluster_dims_attr_compile: OK` for a kernel annotated with `__cluster_dims__(2,1,1)` (toolchain accepts cluster annotations for `sm_121`)
 - `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
