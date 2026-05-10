@@ -329,12 +329,134 @@ def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 12000 if quick else 60000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=16,
+        num_candidates=4,
+        interactive_arrival_rate_tps=2000.0,
+        batch_arrival_rate_tps=20000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="global",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("k_signal_candidates", {"k_signal": "candidates"}),
+        ("k_signal_class", {"k_signal": "class"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "k_signal_policy",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "k_signal_default": "global",
+                "reason": "Synthetic overload: class-local pending signals can over-admit interactive work and amplify SLA violations under heavy batch congestion; keep global/candidates signals as the default until real-trace calibration says otherwise.",
+            },
+        }
+    )
+
+
+def _batch_starvation_knobs_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 12000 if quick else 60000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=5000.0,
+        batch_arrival_rate_tps=2000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=0.2,
+        seed=123,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=10_000,
+        service_ms=1.0,
+        starvation_ms=50.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        ),
+        k_signal="global",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("hi_burst_8", {"hi_burst": 8}),
+        ("promote_20ms", {"promote_ms": 20.0}),
+        ("hi_burst_8_promote_20ms", {"hi_burst": 8, "promote_ms": 20.0}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "batch_starvation_knobs",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "hi_burst_default": 8,
+                "reason": "Synthetic mixed load: hi_burst reduces batch starvation with modest interactive p95 cost; promote_ms can reduce starvation further but may substantially inflate interactive tail latency. Treat promote as an opt-in.",
+            },
+        }
+    )
+
+
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
         "expert_queue_reserve": _expert_queue_reserve_scenario(quick),
         "mtp_efficiency_sweep": _mtp_efficiency_sweep(quick),
         "adaptive_k_batch": _adaptive_k_batch_scenario(quick),
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
+        "k_signal_policy": _k_signal_policy_scenario(quick),
+        "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
     }
     return({"scenarios": scenarios})
 
