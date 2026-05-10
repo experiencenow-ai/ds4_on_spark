@@ -40,6 +40,10 @@ if [ "${#}" -eq 1 ]; then
 fi
 
 if [ "${want_fetch}" -eq 1 ]; then
+	"${ROOT_DIR}/scripts/fetch_upstreams.sh" ds4
+	"${ROOT_DIR}/scripts/fetch_upstreams.sh" deepgemm
+	"${ROOT_DIR}/scripts/fetch_upstreams.sh" deepseek_v4_flash_hf
+	"${ROOT_DIR}/scripts/fetch_upstreams.sh" deepseek_v4_flash_base_hf
 	"${ROOT_DIR}/scripts/fetch_upstreams.sh" transformers
 	"${ROOT_DIR}/scripts/fetch_upstreams.sh" vllm
 fi
@@ -56,6 +60,39 @@ miss()
 {
 	echo "MISS $*" >&2
 	fail=1
+}
+
+need_pat()
+{
+	local path="$1"
+	local pat="$2"
+	local label="$3"
+	if [ ! -f "${path}" ]; then
+		miss "${label} (${path})"
+		return 1
+	fi
+	if rg -n "${pat}" "${path}" >/dev/null 2>&1; then
+		ok "${label}"
+		return 0
+	fi
+	miss "${label} (${path})"
+	return 1
+}
+
+need_lfs_pointer()
+{
+	local path="$1"
+	local label="$2"
+	if [ ! -f "${path}" ]; then
+		miss "${label} (${path})"
+		return 1
+	fi
+	if head -n 1 "${path}" | rg -n "^version https://git-lfs.github.com/spec/v1$" >/dev/null 2>&1; then
+		ok "${label}"
+		return 0
+	fi
+	miss "${label} (expected git-lfs pointer stub; possible weight download?)"
+	return 1
 }
 
 need_file()
@@ -87,6 +124,38 @@ skip()
 	echo "SKIP $*" >&2
 	skipped=1
 }
+
+echo "== ds4 (DeepSeek-V4-Flash reference engine) =="
+if [ -d "${UPSTREAM_DIR}/ds4" ]; then
+	need_file "${UPSTREAM_DIR}/ds4/ds4.c" "ds4 ds4.c present" || true
+	need_file "${UPSTREAM_DIR}/ds4/ds4.h" "ds4 ds4.h present" || true
+	need_file "${UPSTREAM_DIR}/ds4/ds4_server.c" "ds4 ds4_server.c present" || true
+	need_file "${UPSTREAM_DIR}/ds4/download_model.sh" "ds4 download_model.sh present (do not run from intake)" || true
+else
+	skip "ds4 checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
+fi
+
+echo "== DeepSeek-V4-Flash (HF official configs) =="
+if [ -d "${UPSTREAM_DIR}/deepseek_v4_flash_hf" ]; then
+	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_hf/config.json" "DeepSeek-V4-Flash config.json present" || true
+	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_hf/tokenizer.json" "DeepSeek-V4-Flash tokenizer.json present" || true
+	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_hf/LICENSE" "DeepSeek-V4-Flash LICENSE present" || true
+	need_pat "${UPSTREAM_DIR}/deepseek_v4_flash_hf/config.json" "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp4\"" "DeepSeek-V4-Flash config expert_dtype=fp4" || true
+	need_lfs_pointer "${UPSTREAM_DIR}/deepseek_v4_flash_hf/model-00002-of-00046.safetensors" "DeepSeek-V4-Flash weights are LFS pointers (no download)" || true
+else
+	skip "DeepSeek-V4-Flash HF checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
+fi
+
+echo "== DeepSeek-V4-Flash-Base (HF official configs) =="
+if [ -d "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf" ]; then
+	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/config.json" "DeepSeek-V4-Flash-Base config.json present" || true
+	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/tokenizer.json" "DeepSeek-V4-Flash-Base tokenizer.json present" || true
+	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/LICENSE" "DeepSeek-V4-Flash-Base LICENSE present" || true
+	need_pat "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/config.json" "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp8\"" "DeepSeek-V4-Flash-Base config expert_dtype=fp8" || true
+	need_lfs_pointer "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/model-00002-of-00046.safetensors" "DeepSeek-V4-Flash-Base weights are LFS pointers (no download)" || true
+else
+	skip "DeepSeek-V4-Flash-Base HF checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
+fi
 
 echo "== transformers (DeepSeek-V4 support) =="
 if [ -d "${UPSTREAM_DIR}/transformers" ]; then
