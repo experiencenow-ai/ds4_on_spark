@@ -11,6 +11,27 @@ REMOTE_SIDE_CAR_PROBE_JSON="${REMOTE_SIDE_CAR_PROBE_JSON:-}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
+sh_quote()
+{
+	# Single-quote a string for safe embedding in the ssh command line.
+	# Note: this quotes for the *local* shell; the remote command still runs under `sh -lc`.
+	printf "'%s'" "$(printf "%s" "${1:-}" | sed "s/'/'\\\\''/g")"
+}
+
+remote_env="$REMOTE_MTP_ONE_TOKEN_ENV"
+if [ "$REMOTE_MTP_ONE_TOKEN_CMD" != "" ]; then
+	case " $remote_env " in
+		*" MTP_ONE_TOKEN_CMD="*) ;;
+		*) remote_env="$remote_env MTP_ONE_TOKEN_CMD=$(sh_quote "$REMOTE_MTP_ONE_TOKEN_CMD")" ;;
+	esac
+fi
+if [ "$REMOTE_SIDE_CAR_PROBE_JSON" != "" ]; then
+	case " $remote_env " in
+		*" SIDE_CAR_PROBE_JSON="*) ;;
+		*) remote_env="$remote_env SIDE_CAR_PROBE_JSON=$(sh_quote "$REMOTE_SIDE_CAR_PROBE_JSON")" ;;
+	esac
+fi
+
 mkdir -p "$OUT_DIR"
 echo "writing report to: $OUT_DIR"
 
@@ -43,7 +64,7 @@ REPORT_MD="$OUT_DIR/mtp_one_token_draft_probe_spark.md"
 	echo "Do not put secrets in REMOTE_* env values; this report records them."
 	echo
 	echo '```'
-	echo "$REMOTE_MTP_ONE_TOKEN_ENV"
+	echo "$remote_env"
 	echo '```'
 	echo
 	echo "Remote MTP one-token command:"
@@ -70,7 +91,7 @@ REPORT_MD="$OUT_DIR/mtp_one_token_draft_probe_spark.md"
 } >"$REPORT_MD"
 
 echo "== running one-token MTP draft probe on spark (may be gated) =="
-ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_validate_mtp_one_token_draft_probe.py && chmod +x /tmp/model_contract_validate_mtp_one_token_draft_probe.py && $REMOTE_MTP_ONE_TOKEN_ENV sh -lc '
+ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_validate_mtp_one_token_draft_probe.py && chmod +x /tmp/model_contract_validate_mtp_one_token_draft_probe.py && $remote_env sh -lc '
 set -eu
 if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
   echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
@@ -116,4 +137,3 @@ cat \"$out_json\"
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
-
