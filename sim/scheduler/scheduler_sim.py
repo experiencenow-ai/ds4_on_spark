@@ -2158,6 +2158,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     layer_cand_lens: List[float] = []
     k_vals: List[float] = []
     accept_lens: List[float] = []
+    dflash_accept_lens: List[float] = []
     decode_ms: List[float] = []
     kv_tokens: List[float] = []
     expert_batch_size: List[float] = []
@@ -2173,6 +2174,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     present_accept_len = 0
     present_accepted_mtp = 0
     present_rejected_mtp = 0
+    present_dflash_accept_len = 0
+    present_accepted_dflash = 0
+    present_rejected_dflash = 0
     present_cost_scale = 0
     present_decode_ms = 0
     present_kv_tokens = 0
@@ -2219,6 +2223,14 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             present_rejected_mtp += 1
             if mtp_draft_len > 0:
                 accept_lens.append(float((mtp_draft_len - int(r.rejected_mtp)) + 1))
+        if r.dflash_accept_len is not None:
+            present_dflash_accept_len += 1
+            dflash_accept_lens.append(float(r.dflash_accept_len))
+        elif r.accepted_dflash is not None:
+            present_accepted_dflash += 1
+            dflash_accept_lens.append(float(int(r.accepted_dflash) + 1))
+        elif r.rejected_dflash is not None:
+            present_rejected_dflash += 1
         if r.cost_scale is not None:
             present_cost_scale += 1
         if r.decode_ms is not None:
@@ -2247,6 +2259,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             "mtp_accept_len": present_accept_len,
             "accepted_mtp": present_accepted_mtp,
             "rejected_mtp": present_rejected_mtp,
+            "dflash_accept_len": present_dflash_accept_len,
+            "accepted_dflash": present_accepted_dflash,
+            "rejected_dflash": present_rejected_dflash,
             "cost_scale": present_cost_scale,
             "decode_ms": present_decode_ms,
             "kv_tokens": present_kv_tokens,
@@ -2261,6 +2276,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["k"] = summarize(k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
+    if len(dflash_accept_lens) != 0:
+        out["dflash_accept_len_derived"] = summarize(dflash_accept_lens)
     if len(decode_ms) != 0:
         out["decode_ms"] = summarize(decode_ms)
     if len(token_index_vals) != 0:

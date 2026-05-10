@@ -523,16 +523,17 @@ if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"c
 	try_gencode_build_run gencode_sm_plus_ptx_list \"arch=compute_121,code=[sm_121,compute_121]\"
 fi
 
-try_variant_build_run() {
-	tag=\"\$1\"
-	arch=\"\$2\"
-	echo
-	echo \"-- build+run (best-effort): \${tag} (-arch=\${arch})\"
-	set +e
-	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
-	rc=\$?
-	if [ \$rc -ne 0 ]; then
-		echo \"\${tag}: build FAILED rc=\${rc}\"
+	try_variant_build_run() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		advertised=\"\${3:-unknown}\"
+		echo
+		echo \"-- build+run (best-effort): \${tag} (-arch=\${arch}; advertised=\${advertised})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
+		rc=\$?
+		if [ \$rc -ne 0 ]; then
+			echo \"\${tag}: build FAILED rc=\${rc}\"
 		head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\" || true
 		set -e
 		return 0
@@ -543,19 +544,29 @@ try_variant_build_run() {
 		echo \"\${tag}: run FAILED rc=\${rc}\"
 	fi
 	set -e
-	return 0
-}
+		return 0
+	}
 
-if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
-	try_variant_build_run sm_121a sm_121a
-fi
-if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121f\"; then
-	try_variant_build_run sm_121f sm_121f
-fi
+	adv_sm121a=\"unknown\"
+	adv_sm121f=\"unknown\"
+	if [ \"\${list_gpu_code}\" != \"\" ]; then
+		if echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
+			adv_sm121a=\"yes\"
+		else
+			adv_sm121a=\"no\"
+		fi
+		if echo \"\${list_gpu_code}\" | grep -q \"sm_121f\"; then
+			adv_sm121f=\"yes\"
+		else
+			adv_sm121f=\"no\"
+		fi
+	fi
+	try_variant_build_run sm_121a sm_121a \"\${adv_sm121a}\"
+	try_variant_build_run sm_121f sm_121f \"\${adv_sm121f}\"
 
-echo
-echo \"== cuobjdump: embedded PTX (best-effort) ==\"
-CUOBJDUMP=\"\"
+	echo
+	echo \"== cuobjdump: embedded PTX (best-effort) ==\"
+	CUOBJDUMP=\"\"
 if [ -x /usr/local/cuda/bin/cuobjdump ]; then
 	CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
 elif command -v cuobjdump >/dev/null 2>&1; then
