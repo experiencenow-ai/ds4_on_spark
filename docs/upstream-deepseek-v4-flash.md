@@ -86,6 +86,11 @@ git ls-remote https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash refs/heads/ma
 
 Quantized community artifacts are useful for the intermediate "one Spark produces tokens" milestone, but they are not canonical sources of model semantics. Track them as runtime fixtures, not upstream truth.
 
+Related notes:
+
+- GGUF candidates: [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md)
+- Quantized safetensors candidate(s): [`docs/upstream-quantized-v4-flash-safetensors.md`](upstream-quantized-v4-flash-safetensors.md)
+
 Before using any quantized artifact, record:
 
 - HF repo and exact revision

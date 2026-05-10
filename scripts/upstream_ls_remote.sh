@@ -173,6 +173,7 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
 	print_ref "DeepSeek-V4-Flash-Base (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base"
 	print_ref "DeepSeek-V4-Flash-FP8 (HF)" "https://huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8"
+	print_ref "DeepSeek-V4-Flash (quantized safetensors, bleysg, HF)" "https://huggingface.co/bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target"
 	print_ref "DeepSeek-V4-Flash GGUF (antirez, HF)" "https://huggingface.co/antirez/deepseek-v4-gguf"
 	print_ref "DeepSeek-V4-Flash GGUF (ssweens, HF)" "https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV"
 	print_ref "DeepSeek-V4-Flash GGUF (Preyazz, HF)" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"

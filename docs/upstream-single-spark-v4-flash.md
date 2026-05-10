@@ -58,6 +58,14 @@ Reproduce:
 | G | `Mockingjay1316/deepseek-v4-flash-spark` (`08045f89d9716d3249ce834be1a1b1d91fd40859`) | Official checkpoint + prune pipeline | MIT | Plausible only after pruning | Upstream README claims unpruned FP4 checkpoint does not fit on 128 GB unified memory; pruning to fewer experts can reduce size (~85 GB claimed). |
 | H | `bigs/deepseek-v4-flash-dgx-spark` (`4410e814a76a1a9d662576e2a35fa4a8965d2edc`) | Official checkpoint | **UNKNOWN** | Unknown (license blocker) | Treat as blocked until licensing is clarified; also out-of-scope for non-hardware automation. |
 
+## Candidates (quantized safetensors snapshots)
+
+These are community conversions distributed as `*.safetensors` shards. This repo treats them as **fixtures only** (no downloads by automation).
+
+| Candidate | Artifact (pinned) | License | Size (GiB) | Single-Spark plausibility | Runtime status |
+| --- | --- | --- | ---: | --- | --- |
+| L | `bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target` (`4ce0d4ac6bd35b63b68dfc813d0ae07497c4bf49`) | MIT | 82.34 | Plausible | Blocked: runtime/loader support not yet pinned; see `docs/upstream-quantized-v4-flash-safetensors.md`. |
+
 ## What this repo should do next (intake posture)
 
 - Keep the manifest pins current and reproducible (`./scripts/upstream_verify_pins.sh`).

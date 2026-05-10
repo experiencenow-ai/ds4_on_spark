@@ -24,6 +24,7 @@ Targets:
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_fp8_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_flash_quant_bleysg  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -195,6 +196,11 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_flash_fp8_hf" "https://huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8" "${ref}" "${expected}"
+			;;
+		deepseek_v4_flash_quant_bleysg)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "deepseek_v4_flash_quant_bleysg" "https://huggingface.co/bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target" "${ref}" "${expected}"
 			;;
 		deepseek_v4_gguf_antirez)
 			upstream="huggingface.co/antirez/deepseek-v4-gguf"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
