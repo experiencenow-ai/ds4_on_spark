@@ -413,6 +413,40 @@ class SchedulerSimTest(unittest.TestCase):
             if dump_path != "" and os.path.exists(dump_path):
                 os.unlink(dump_path)
 
+    def test_dump_sim_jsonl_with_compare_writes_one_file_per_label(self) -> None:
+        out_buf = io.StringIO()
+        with tempfile.TemporaryDirectory() as td:
+            dump_tmpl = os.path.join(td, "sim_{label}.jsonl")
+            with contextlib.redirect_stdout(out_buf):
+                rc = scheduler_sim.main(
+                    [
+                        "--num-tokens",
+                        "20",
+                        "--num-experts",
+                        "8",
+                        "--num-candidates",
+                        "4",
+                        "--summary-json",
+                        "--dump-sim-jsonl",
+                        dump_tmpl,
+                        "--compare",
+                        'v1:{"expert_queue_max":64}',
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            summary_out = json.loads(out_buf.getvalue())
+            self.assertIn("baseline", summary_out)
+            self.assertIn("variants", summary_out)
+
+            for label in ("baseline", "v1"):
+                dump_path = os.path.join(td, f"sim_{label}.jsonl")
+                with open(dump_path, "r", encoding="utf-8") as f:
+                    lines = [ln for ln in f.read().splitlines() if ln.strip() != ""]
+                self.assertEqual(len(lines), 21)
+                meta = json.loads(lines[0])
+                self.assertEqual(meta.get("type"), "meta")
+                self.assertTrue(bool(meta.get("meta", {}).get("sim_token_dump")))
+
     def test_summary_json_outputs_concise_metrics(self) -> None:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
