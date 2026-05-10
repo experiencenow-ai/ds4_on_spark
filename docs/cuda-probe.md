@@ -13,7 +13,7 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 This builds and runs only:
 
 - `cuda_device_props_tiny`
-- `cuda_sm121_compile_probe.o` (compile-only gate)
+- `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_probe`
 
 It also prints `nvcc --version` plus `--list-gpu-arch` / `--list-gpu-code` when supported (toolchain sanity gate for CUDA 13).
