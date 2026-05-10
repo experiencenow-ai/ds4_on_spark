@@ -57,6 +57,7 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
 - MTP draft/accepted/rejected counters
 - CUDA fallback / graph placement (best-effort): run `scripts/benchmark_llamacpp_server_sweep.py` and inspect `fattn_reservation_probe.json` + the `node_kind_*` / `sched_reserve_*` fields (see `docs/baseline-fattn-reservation.md`).
   - To include this sweep in the standard baseline report (Mac → Spark), set `LLAMA_SERVER_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
+  - If the runtime exposes a Prometheus `/metrics` endpoint (for example when started with `--metrics`), set `LLAMA_SERVER_SWEEP_SCRAPE_METRICS=1` to snapshot `metrics_start.prom` and `metrics_end.prom` alongside the sweep (read-only).
 - Patch presence (optional, read-only): set `LLAMA_FATTN_PATCH_PROBE=1` to run `scripts/benchmark_llamacpp_fattn_patch_probe.py` on Spark and fetch `fattn_patch_probe.json` (heuristic source scan; see `docs/baseline-fattn-reservation.md`).
 - CUDA fallback / placement (one-shot, best-effort): when the runtime prints `sched_reserve:` / `__fattn__-*` placement lines during a normal `llama-cli` run, `scripts/benchmark_llamacpp_spark.sh` writes `fattn_cli_probe.json` into the fetched artifacts directory and mirrors key fields into the baseline summary (`fattn_*`, `node_kind_*`, `sched_reserve_*`). This is opportunistic and may be `NA` on forks that do not emit those lines.
 

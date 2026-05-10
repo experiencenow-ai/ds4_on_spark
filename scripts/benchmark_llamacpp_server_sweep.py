@@ -63,6 +63,18 @@ def http_json(method, url, payload=None, timeout=60.0):
     return json.loads(body.decode("utf-8", errors="replace"))
 
 
+def http_text(method, url, payload=None, timeout=60.0):
+    data = None
+    headers = {}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = resp.read()
+    return body.decode("utf-8", errors="replace")
+
+
 def wait_health(base_url, timeout_s, poll_s):
     start = time.monotonic()
     last_err = ""
@@ -304,6 +316,8 @@ def main():
     start_server = env_int("START_SERVER", 1)
     keep_server = env_int("KEEP_SERVER", 0)
     cache_prompt = env_int("CACHE_PROMPT", 0)
+    scrape_metrics = env_int("SCRAPE_METRICS", 0)
+    metrics_timeout_s = env_float("METRICS_TIMEOUT_S", 20.0)
     wait_timeout_s = env_float("WAIT_TIMEOUT_S", 1200.0)
     poll_s = env_float("POLL_S", 5.0)
     prompt_sizes = split_ints(os.environ.get("PROMPT_WORDS", "256 1024 4096"))
@@ -316,6 +330,8 @@ def main():
     proc = None
     log_fp = None
     fattn_probe_path = os.path.join(out_dir, "fattn_reservation_probe.json")
+    metrics_start_path = os.path.join(out_dir, "metrics_start.prom")
+    metrics_end_path = os.path.join(out_dir, "metrics_end.prom")
     if start_server != 0:
         if not llama_server or not model:
             raise SystemExit("LLAMA_SERVER and MODEL_GGUF are required when START_SERVER=1")
@@ -348,6 +364,7 @@ def main():
         "n_predict": n_predict,
         "repeats": repeats,
         "cache_prompt": cache_prompt,
+        "scrape_metrics": scrape_metrics,
         "prompt_words": " ".join(str(x) for x in prompt_sizes),
         "started_server": start_server,
         "keep_server": keep_server,
@@ -357,6 +374,14 @@ def main():
         load_s, health = wait_health(base_url, wait_timeout_s, poll_s)
         meta["health_wait_s"] = "%.6f" % load_s
         meta["health"] = json.dumps(health, sort_keys=True)
+        if scrape_metrics != 0:
+            try:
+                txt = http_text("GET", base_url + "/metrics", None, timeout=metrics_timeout_s)
+                with open(metrics_start_path, "w", encoding="utf-8") as f:
+                    f.write(txt)
+                meta["metrics_start_prom"] = metrics_start_path
+            except Exception as e:
+                meta["metrics_start_prom"] = "error:" + str(e)
         with open(results_path, "w", encoding="utf-8") as rf:
             for target_words in prompt_sizes:
                 prompt = make_prompt(target_words)
@@ -393,6 +418,14 @@ def main():
                     rf.write(json.dumps(row, sort_keys=True) + "\n")
                     rf.flush()
                     print(json.dumps(row, sort_keys=True), flush=True)
+        if scrape_metrics != 0:
+            try:
+                txt = http_text("GET", base_url + "/metrics", None, timeout=metrics_timeout_s)
+                with open(metrics_end_path, "w", encoding="utf-8") as f:
+                    f.write(txt)
+                meta["metrics_end_prom"] = metrics_end_path
+            except Exception as e:
+                meta["metrics_end_prom"] = "error:" + str(e)
         if log_fp is not None:
             try:
                 log_fp.flush()

@@ -290,8 +290,9 @@ that implementation is currently Metal-first.
    and add a regression check that `__fattn__` nodes stay on CUDA for DS4
    reservation and long-prompt graphs (see `docs/baseline-fattn-reservation.md`).
 2. Profile the remaining DS4 CUDA graph bottlenecks now that Flash Attention
-   schedules on GPU: expert routing/dispatch, quantized matmuls, compressed
-   cache/indexer work, and scheduler overhead.
+   schedules on GPU:
+   - Prefer read-only signals first: per-token latency (when token JSON is available), routed expert IDs/top-k scores, expert batch sizes/queue depth, GPU memory/KV growth, CUDA fallback nodes / placement, and MTP draft/accepted/rejected counters when the runtime exposes them.
+   - For resident runs, add a `/metrics` snapshot when available (for example: run the server with `--metrics` and set `LLAMA_SERVER_SWEEP_SCRAPE_METRICS=1` so the sweep captures `metrics_start.prom` / `metrics_end.prom`).
 3. Port or implement `deepseek4_mtp_support` loading for the CUDA Spark path,
    using `antirez/ds4` as the tensor-contract reference.
 4. Add larger context probes only after deciding whether the memory and time

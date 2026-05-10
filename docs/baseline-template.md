@@ -61,6 +61,8 @@ Token trace / routing (best-effort; when the runtime emits JSON token events):
 - CUDA placement / fallback (best-effort):
   - `fattn_reservation_probe.json` (server sweep) and/or `fattn_cli_probe.json` (one-shot run)
   - `fattn_seen_disabled`, `fattn_seen_sched_reserve_cpu`, `fattn_id_min/max/missing_count`, `node_kind_cpu_top`
+- Metrics snapshots (optional, read-only; when the server exposes `/metrics`):
+  - `metrics_start.prom`, `metrics_end.prom`
 - Patch presence (optional, read-only):
   - `fattn_patch_probe.json` (source scan; `pad256_found`, `patch_artifact_sha256`)
 
