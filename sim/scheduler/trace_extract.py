@@ -103,6 +103,51 @@ def _extract_float_list(value: object) -> Optional[List[float]]:
     return(out)
 
 
+def _extract_layer_record(obj_in: object) -> Optional[Dict[str, object]]:
+    obj = _as_dict(obj_in)
+    if obj is None:
+        return(None)
+
+    container = _deep_candidates_container(obj) or obj
+    cand_raw = _get_any(container, ("candidates", "experts", "expert_ids", "top_experts"))
+    candidates = _extract_int_list(cand_raw)
+    if candidates is None:
+        return(None)
+
+    out: Dict[str, object] = {"candidates": candidates}
+
+    scores_raw = _get_any(container, ("scores", "router_scores", "probs"))
+    scores = _extract_float_list(scores_raw)
+    if scores is not None:
+        if len(scores) == len(candidates):
+            out["scores"] = scores
+
+    k = _get_any(container, ("k", "chosen_k"))
+    if isinstance(k, int) and k > 0:
+        out["k"] = int(k)
+
+    cost_scale = _get_any(container, ("cost_scale", "cost", "work_scale"))
+    if isinstance(cost_scale, (int, float)) and float(cost_scale) > 0.0:
+        out["cost_scale"] = float(cost_scale)
+
+    return(out)
+
+
+def _extract_layers(obj: Dict[str, object]) -> Optional[List[Dict[str, object]]]:
+    layers_raw = _get_any(obj, ("layers", "moe_layers", "router_layers", "route_layers"))
+    if not isinstance(layers_raw, list):
+        return(None)
+    out: List[Dict[str, object]] = []
+    for layer in layers_raw:
+        rec = _extract_layer_record(layer)
+        if rec is None:
+            return(None)
+        out.append(rec)
+    if len(out) == 0:
+        return(None)
+    return(out)
+
+
 def extract_route_record(obj_in: object, route_type: str = "") -> Optional[Dict[str, object]]:
     obj = _as_dict(obj_in)
     if obj is None:
@@ -133,21 +178,41 @@ def extract_route_record(obj_in: object, route_type: str = "") -> Optional[Dict[
     out["cls"] = cls
 
     container = _deep_candidates_container(obj) or obj
-    cand_raw = _get_any(container, ("candidates", "experts", "expert_ids", "top_experts"))
-    candidates = _extract_int_list(cand_raw)
-    if candidates is None:
-        return(None)
-    out["candidates"] = candidates
+    layers = _extract_layers(container)
+    if layers is not None:
+        out["layers"] = layers
+        seen = set()
+        union_candidates: List[int] = []
+        for layer in layers:
+            layer_cands = layer.get("candidates")
+            if not isinstance(layer_cands, list):
+                return(None)
+            for e in layer_cands:
+                if not isinstance(e, int) or e < 0:
+                    return(None)
+                if e in seen:
+                    continue
+                seen.add(e)
+                union_candidates.append(int(e))
+        if len(union_candidates) == 0:
+            return(None)
+        out["candidates"] = union_candidates
+    else:
+        cand_raw = _get_any(container, ("candidates", "experts", "expert_ids", "top_experts"))
+        candidates = _extract_int_list(cand_raw)
+        if candidates is None:
+            return(None)
+        out["candidates"] = candidates
 
-    scores_raw = _get_any(container, ("scores", "router_scores", "probs"))
-    scores = _extract_float_list(scores_raw)
-    if scores is not None:
-        if len(scores) == len(candidates):
-            out["scores"] = scores
+        scores_raw = _get_any(container, ("scores", "router_scores", "probs"))
+        scores = _extract_float_list(scores_raw)
+        if scores is not None:
+            if len(scores) == len(candidates):
+                out["scores"] = scores
 
-    k = _get_any(container, ("k", "chosen_k"))
-    if isinstance(k, int) and k > 0:
-        out["k"] = int(k)
+        k = _get_any(container, ("k", "chosen_k"))
+        if isinstance(k, int) and k > 0:
+            out["k"] = int(k)
 
     mtp_accept_len = _get_any(obj, ("mtp_accept_len", "accept_len", "mtp_len"))
     if isinstance(mtp_accept_len, int) and mtp_accept_len > 0:
@@ -231,4 +296,3 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -21,6 +21,15 @@ After staging deploy assets to a Spark (they land under `/tmp/ds4-*` by default)
 /tmp/ds4-scripts/ops_validate_staged_assets.sh
 ```
 
+Optional: install the staged assets (human-run; review first). This is a convenience wrapper around the manual `install` + `systemctl daemon-reload` steps documented in the deployment runbooks:
+
+```bash
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight
+# optional: add --install-timers, --install-spark-units, and/or --strict
+# dry-run preview:
+# /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --dry-run
+```
+
 After installing systemd templates under `/etc/systemd/system/`, configs under `/etc/ds4/`, and scripts under `/opt/ds4/scripts/`:
 
 ```bash
