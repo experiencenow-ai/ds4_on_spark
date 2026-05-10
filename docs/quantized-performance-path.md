@@ -215,6 +215,9 @@ Initial scope:
   does not
   - As of 2026-05-10, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
   - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
+  - When `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, also record `mtp_namespace`, `mtp_contract`, and `mtp_trust` from `scripts/model_contract_inspect_quantized_artifact.py --json`.
+    - `mtp_trust.status=absent|namespace_missing_mtp0|namespace_incomplete|incomplete|structural_complete_untrusted` is the expected progression for artifact sets that lack upstream-complete `mtp.0.*`.
+    - Treat `structural_complete_untrusted` as “MTP weights appear complete, but still requires an MTP logits oracle (`--include-mtp`) before enabling speculative decoding.”
 - expose draft logits/tokens from the runtime or a sidecar path
 - when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
   - Spark-only runner (local sidecar file already staged; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh`
