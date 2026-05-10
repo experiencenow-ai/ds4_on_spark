@@ -316,6 +316,14 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+If the runtime log stream is mixed *and/or* uses different field names (for example `latency_class` instead of `cls`, or `experts` instead of `candidates`), use the lightweight extractor first to map common aliases into the strict simulator contract:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
 If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:
 
 ```bash
