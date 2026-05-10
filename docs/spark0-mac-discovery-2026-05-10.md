@@ -47,12 +47,131 @@ Refreshed again (09:13Z, loop-filtered storage output, temporary gitdir):
 REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T0919Z_loop.txt
 ```
 
+Refreshed again (10:42Z, matches Spark0 probe refresh):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T104227Z_loop_gitacad7c2.txt
+```
+
+Refreshed again (11:43Z, matches Spark0 probe refresh, runtime PCI bus id cross-check):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
+```
+
+Refreshed again (13:13Z, matches Spark0 probe refresh, runtime cc max sanity-check):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1313Z_loop_git_0cd918d.txt
+```
+
+Refreshed again (12:13Z, matches Spark0 probe refresh, toolchain paths + glibc banner):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T121337Z_loop_toolpaths_git9ee0e27.txt
+```
+
+Refreshed again (12:44Z, matches Spark0 probe refresh, `nvidia-smi -q` C2C summary):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
+```
+
+Refreshed again (13:43Z, matches Spark0 probe refresh):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1344Z_loop_refresh.txt
+```
+
+Refreshed again (14:11Z, matches Spark0 probe refresh):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local > /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1411Z_loop_access.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
 - `spark1.local` is still not reachable (likely not provisioned / not on the same mDNS domain yet).
 
 ## Excerpts (Redacted)
+
+```text
+== meta ==
+Sun May 10 12:44:00 UTC 2026
+git: e8b0486
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 13:13:06 UTC 2026
+git: 0cd918d
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 13:43:23 UTC 2026
+git: 393ae50
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 14:11:29 UTC 2026
+git: a083307
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 12:13:39 UTC 2026
+git: 9ee0e27
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 11:43:50 UTC 2026
+git: 1ea8f17
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 10:42:27 UTC 2026
+git: acad7c2
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
 
 ```text
 == meta ==
