@@ -12,7 +12,7 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 
 This builds and runs only:
 
-- `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits)
+- `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers)
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_probe`
 - `cuda_sm121_arch_report` (prints runtime device CC plus compiled `__CUDA_ARCH__` from an `sm_121` build; expected `1210`)
