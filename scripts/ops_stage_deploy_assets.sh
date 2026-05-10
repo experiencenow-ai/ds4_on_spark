@@ -24,8 +24,10 @@ root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 echo "== staging deploy assets to $target (instance=$instance) =="
 
-if [ -x "$root/scripts/ops_validate_deploy_assets.sh" ]; then
-    "$root/scripts/ops_validate_deploy_assets.sh"
+if [ "${DS4_SKIP_VALIDATE:-}" = "" ]; then
+    if [ -x "$root/scripts/ops_validate_deploy_assets.sh" ]; then
+        "$root/scripts/ops_validate_deploy_assets.sh"
+    fi
 fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
