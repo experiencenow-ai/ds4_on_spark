@@ -898,3 +898,52 @@ current_link_width: 1
 max_link_speed: 2.5 GT/s PCIe
 max_link_width: 16
 ```
+
+### Single-target probe (Spark0, 18:20Z summary mode, `git: e8e2099`)
+
+```text
+== local meta ==
+Sun May 10 18:20:34 UTC 2026
+git: e8e2099
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+ssh opts: -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+nvcc supports gpu code: sm_121
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+cuda driver api version: 13000 (13.0)
+cuda runtime api version: 13000 (13.0)
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 pci bus id: 000F:01:00.0
+runtime max cc: 12.1
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== pci link (sysfs, gpu endpoints, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
+```

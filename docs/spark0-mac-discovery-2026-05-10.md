@@ -145,6 +145,31 @@ spark1.local: not reachable
 
 ```text
 == meta ==
+Sun May 10 18:20:14 UTC 2026
+git: e8e2099
+targets: aitopatom-9ab9.local spark1.local
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sun 10 May 2026---
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+18:20:14.115  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+DATE: ---Sun 10 May 2026---
+Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
+18:20:19.128  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+18:20:19.128  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+-- spark1.local --
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
 Sun May 10 16:45:11 UTC 2026
 git: e526d4c
 targets: aitopatom-9ab9.local spark1.local

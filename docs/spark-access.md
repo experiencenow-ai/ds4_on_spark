@@ -121,6 +121,8 @@ SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh sp
 
 In summary mode, the Spark probe suppresses larger/diagnostic-only sections (for example, `nvcc --list-gpu-*` lists and the full `/usr/local/cuda/version.json` dump). It still records the key CUDA/toolchain facts (including `selected compute_cap`, the `nvcc` release banner when present, and `cuda version.json` `cuda: <version>` when available) so Spark1 bring-up checks stay readable.
 
+Summary mode also prints `nvcc supports gpu code: sm_...` (when `nvcc --list-gpu-code` is available) as a one-line sanity check that the selected `NVCC_ARCH` is supported without dumping the full list.
+
 Summary mode also includes a compact sysfs PCIe cross-check for the GPU endpoint bus id(s) (link `current/max` speed/width) to help diagnose PCIe link downtraining without the full path-chain dump.
 
 ## Spark1 Ready Checklist
