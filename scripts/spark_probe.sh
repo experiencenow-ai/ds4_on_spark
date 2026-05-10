@@ -26,6 +26,10 @@ Examples:
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
   SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local
+
+Notes:
+  - When probing multiple targets, the script continues past SSH failures and prints a `== probe summary ==`.
+  - Exit status is non-zero if any target failed; use `|| true` when saving partial output.
 USAGE
 }
 
@@ -124,10 +128,11 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
 	echo
+	ssh_fail="0"
 	for target in $targets; do
 		kh="$(known_hosts_for_target "$target")"
 		echo "== target: $target =="
-		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu
+		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
@@ -731,9 +736,20 @@ fi
 echo
 echo "== /dev nvidia nodes =="
 ls -l /dev/nvidia* 2>/dev/null | head -n 80 || true
-	'
+	' 2>&1
+		then
+			:
+		else
+			rc="$?"
+			echo "ssh: failed rc=$rc"
+			ssh_fail=$((ssh_fail + 1))
+		fi
 		echo
 	done
+	if [ "$ssh_fail" != "0" ]; then
+		echo "== probe summary =="
+		echo "ssh failures: $ssh_fail"
+	fi
 } >"$tmp"
 
 if [ "${REDACT:-0}" = "1" ]; then
@@ -747,4 +763,8 @@ if [ "${REDACT:-0}" = "1" ]; then
 		"$tmp"
 else
 	cat "$tmp"
+fi
+
+if [ "${ssh_fail:-0}" != "0" ]; then
+	exit 1
 fi
