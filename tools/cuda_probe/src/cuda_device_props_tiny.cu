@@ -21,9 +21,10 @@ static int32_t get_attr_i32(int32_t *out,int32_t dev,cudaDeviceAttr attr)
 
 int main(int argc,char **argv)
 {
-	int32_t count = 0,rc = 0,driver_v = 0,runtime_v = 0,clock_khz = 0;
+	int32_t count = 0,rc = 0,driver_v = 0,runtime_v = 0,clock_khz = 0,mem_clock_khz = 0;
+	int32_t smem_optin = 0,l2_bytes = 0,max_threads_sm = 0,regs_sm = 0;
 	cudaDeviceProp prop;
-	uint64_t mem_bytes = 0;
+	uint64_t mem_bytes = 0,smem_block_bytes = 0;
 	(void)argc;
 	(void)argv;
 	cudaDriverGetVersion(&driver_v);
@@ -40,7 +41,13 @@ int main(int argc,char **argv)
 	if ( rc != 0 )
 		return(rc);
 	(void)get_attr_i32(&clock_khz,0,cudaDevAttrClockRate);
+	(void)get_attr_i32(&mem_clock_khz,0,cudaDevAttrMemoryClockRate);
+	(void)get_attr_i32(&smem_optin,0,cudaDevAttrMaxSharedMemoryPerBlockOptin);
+	(void)get_attr_i32(&l2_bytes,0,cudaDevAttrL2CacheSize);
+	(void)get_attr_i32(&max_threads_sm,0,cudaDevAttrMaxThreadsPerMultiProcessor);
+	(void)get_attr_i32(&regs_sm,0,cudaDevAttrMaxRegistersPerMultiprocessor);
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
-	printf("cuda drv=%d rt=%d count=%d dev0=\"%s\" cc=%d.%d mp=%d clock_khz=%d mem=%" PRIu64 "\n",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,clock_khz,mem_bytes);
+	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
+	printf("cuda drv=%d rt=%d count=%d dev0=\"%s\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%" PRIu64 " smem_block=%" PRIu64 " smem_optin=%d l2=%d maxthr_sm=%d regs_sm=%d\n",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_optin,l2_bytes,max_threads_sm,regs_sm);
 	return(0);
 }
