@@ -35,6 +35,7 @@ Sanity-check for false positives:
 
 - Many search hits are *not* the 284B MoE DeepSeek-V4-Flash model (e.g., smaller distill/fine-tune repos that include “V4-Flash” in the name).
 - Prefer candidates whose HF metadata indicates `base_model: deepseek-ai/DeepSeek-V4-Flash` (or equivalent) and whose GGUF sizes are in the expected ~60–110 GiB “single Spark plausible” range.
+- Watch for repos that claim “DeepSeek-V4-Flash” but use clearly non-canonical parameter counts (e.g. “158B”); treat those as separate models and do not mix them into the 284B single-Spark candidate set unless provenance is verified.
 
 Reproduce (no downloads):
 
