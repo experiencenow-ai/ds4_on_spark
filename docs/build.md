@@ -11,6 +11,7 @@ See also:
 - `docs/build-style.md`
 - `docs/build-memory.md`
 - `docs/build-config.md`
+- `docs/build-cuda.md`
 - `docs/build-cli.md`
 - `docs/build-logging.md`
 - `docs/build-context.md`

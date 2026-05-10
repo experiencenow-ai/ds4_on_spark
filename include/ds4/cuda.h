@@ -48,6 +48,7 @@ ds4_cuda_status_t ds4_cuda_set_device(int32_t dev);
 const char *ds4_cuda_errstr(ds4_cuda_status_t st);
 ds4_cuda_status_t ds4_cuda_last_error(void);
 ds4_cuda_status_t ds4_cuda_peek_last_error(void);
+ds4_cuda_status_t ds4_cuda_check_peek_last_error_ex(const char *expr,const char *file,int32_t line);
 ds4_cuda_status_t ds4_cuda_device_synchronize(void);
 ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const char *file,int32_t line);
 ds4_cuda_status_t ds4_cuda_check_last_error(const char *file,int32_t line);
@@ -74,3 +75,7 @@ DS4_EXTERN_C_END
 #define DS4_CUDA_CALL(expr) ds4_cuda_check_i32((int32_t)(expr),#expr,__FILE__,(int32_t)__LINE__)
 #define DS4_CUDA_CHECK_LAST_ERROR() ds4_cuda_check_last_error(__FILE__,(int32_t)__LINE__)
 #define DS4_CUDA_CHECK_PEEK_LAST_ERROR() ds4_cuda_check_peek_last_error(__FILE__,(int32_t)__LINE__)
+
+#if defined(DS4_HAS_CUDA) && defined(__CUDACC__)
+#define DS4_CUDA_KERNEL_LAUNCH(call) ((call),ds4_cuda_check_peek_last_error_ex(#call,__FILE__,(int32_t)__LINE__))
+#endif
