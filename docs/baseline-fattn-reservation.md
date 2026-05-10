@@ -38,6 +38,9 @@ The script writes these fields into `server_sweep.md` metadata:
 - `fattn_seen_disabled`: should be `False` on a healthy runtime
 - `fattn_seen_sched_reserve_cpu`: should be `False` on a healthy runtime
 - `fattn_line_count` / `fattn_node_unique`: should be non-zero when the runtime logs `__fattn__` scheduling placement
+- `fattn_id_min` / `fattn_id_max` / `fattn_id_missing_count`: best-effort `__fattn__-{id}` range check (helps confirm the expected reservation graph shape, e.g. `0..42` with no gaps)
+- `fattn_backend0_only` / `fattn_backend_counts`: best-effort parse of a `backend 0` / `cuda backend 0` tag from `__fattn__` lines (not all forks include it)
+- `fattn_cuda_device0_only` / `fattn_cuda_device_counts`: best-effort parse of `CUDA0` tags from `__fattn__` lines (not all forks include it)
 - `sched_reserve_graph_nodes` / `sched_reserve_graph_splits` / `sched_reserve_took_ms`: best-effort parse of reservation summary lines (helps compare graph size / split count)
 - `node_kind_unique`: unique `__op__` kinds seen in the log (best-effort)
 - `node_kind_cpu_top` / `node_kind_cuda_top`: best-effort top-k counts by `__op__` kind, based on whether each matching log line mentions `cpu` / `cuda`
@@ -46,5 +49,11 @@ Interpretation:
 
 - `fattn_seen_disabled=True` means Flash Attention was disabled globally during reservation and the run is not a clean baseline.
 - `fattn_seen_sched_reserve_cpu=True` usually indicates a CPU placement fallback on the Flash Attention tensor during reservation.
+- If the fork logs `__fattn__-{id}` placement, a clean patched run should typically show `fattn_id_min=0`, `fattn_id_max>=42`, and `fattn_id_missing_count=0` (exact max may vary by build).
+- If the fork logs backend/device tags, a clean patched run should typically show `fattn_backend0_only=True` and/or `fattn_cuda_device0_only=True` (Spark0 backend/device 0).
 
 This probe is designed to be **read-only**: it parses the server log emitted by the sweep and records a bounded sample of matching lines for later debugging.
+
+## Non-goals / Next Bottleneck
+
+This patch/probe restores Flash Attention scheduling during reservation, but it does not explain the remaining throughput gap. For the current observed post-fix ceiling (about ~293 prompt tok/s at ~4k and ~12–15 gen tok/s), see `docs/quantized-spark0-results-2026-05-09.md` and prioritize the read-only instrumentation checklist in `docs/quantized-performance-path.md`.

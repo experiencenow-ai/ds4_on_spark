@@ -411,6 +411,8 @@ with open(log_raw, "w", encoding="utf-8") as f:
         "queue_depth": [],
         "batch_size": [],
         "expert_batch_size": [],
+        "router_top1_score": [],
+        "router_topk_n": [],
         "mtp_draft": None,
         "mtp_accepted": None,
         "mtp_rejected": None,
@@ -459,6 +461,19 @@ with open(log_raw, "w", encoding="utf-8") as f:
             if isinstance(v, list):
                 for e in v[:64]:
                     _count_expert(e)
+
+        # Router top-k scores (best-effort): record only summary-compatible scalars.
+        for k in ("scores", "router_scores", "router_topk_scores", "topk_scores"):
+            v = evt.get(k)
+            if isinstance(v, list) and v:
+                xs = []
+                for s in v[:64]:
+                    if isinstance(s, (int, float)):
+                        xs.append(float(s))
+                if xs:
+                    _append_cap(token_trace["router_top1_score"], max(xs))
+                    _append_cap(token_trace["router_topk_n"], float(len(xs)))
+                    break
 
         # MTP counters: record the last seen values if present.
         for k, outk in (
@@ -707,6 +722,8 @@ def _agg_stats(xs, prefix):
 _agg_stats(token_trace.get("queue_depth") or [], "queue_depth")
 _agg_stats(token_trace.get("batch_size") or [], "batch_size")
 _agg_stats(token_trace.get("expert_batch_size") or [], "expert_batch_size")
+_agg_stats(token_trace.get("router_top1_score") or [], "router_top1_score")
+_agg_stats(token_trace.get("router_topk_n") or [], "router_topk_n")
 
 for k in ("mtp_draft", "mtp_accepted", "mtp_rejected"):
     v = token_trace.get(k)

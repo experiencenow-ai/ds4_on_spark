@@ -64,6 +64,7 @@ When token JSON is present, the llama.cpp Spark baseline script also computes **
 
 - per-token latency percentiles (ms, from local monotonic timestamps between token events)
 - routed expert ID frequencies (best-effort: only if the runtime includes expert IDs in token JSON)
+- routed expert top-k score summaries (best-effort: `router_top1_score_*` and `router_topk_n_*` only when token JSON includes a compatible `scores` list)
 - queue depth / batch size / expert batch size summaries (best-effort: only if present in token JSON)
 - MTP draft/accepted/rejected counters (best-effort: only if present in token JSON)
 
