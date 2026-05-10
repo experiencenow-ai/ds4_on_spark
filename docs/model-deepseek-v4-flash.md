@@ -458,6 +458,9 @@ Per-layer keys (for `layers.{i}.*`, `i ∈ [0,42]`):
 - MoE gate conditional:
   - Hash layers (`i < 3`): `layers.{i}.ffn.gate.tid2eid` present and `layers.{i}.ffn.gate.bias` absent
   - Score layers (`i >= 3`): `layers.{i}.ffn.gate.bias` present and `layers.{i}.ffn.gate.tid2eid` absent
+  - Gate parameter semantics (from upstream `Gate` in `inference/model.py`):
+    - `ffn.gate.tid2eid`: `int32` lookup table shaped `[vocab_size,n_activated_experts]` that deterministically chooses the top‑k expert IDs per token ID (hash routing).
+    - `ffn.gate.bias`: `float32` vector shaped `[n_routed_experts]` that shifts expert *selection* scores (top‑k) without changing the final routing weights (score routing).
 - Cache compression conditional:
   - `compress_ratio == 0`: no `layers.{i}.attn.compressor.*` and no `layers.{i}.attn.indexer.*`
   - `compress_ratio == 4` (CSA): must include:
@@ -466,6 +469,64 @@ Per-layer keys (for `layers.{i}.*`, `i ∈ [0,42]`):
     - `layers.{i}.attn.indexer.weights_proj.weight`
     - `layers.{i}.attn.indexer.compressor.{ape,norm.weight,wgate.weight,wkv.weight}`
   - `compress_ratio == 128` (HCA): must include `layers.{i}.attn.compressor.{...}` and must **not** include `layers.{i}.attn.indexer.*`
+
+#### Machine-readable required suffix sets (exact tensor names)
+
+The checkpoint key set is large, but the contract includes an **exact** machine-readable “minimum required suffix set” for each namespace in:
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_keys.*`
+
+Top-level required keys (`tensor_keys.required_top_level`):
+
+- `embed.weight`
+- `norm.weight`
+- `head.weight`
+- `hc_head_fn`
+- `hc_head_base`
+- `hc_head_scale`
+
+Per-layer required suffixes (`tensor_keys.required_layer_suffixes`, appended under `layers.{i}.` for all `i ∈ [0,42]`):
+
+- `attn.attn_sink`
+- `attn.wq_a.weight`, `attn.wq_a.scale`
+- `attn.q_norm.weight`
+- `attn.wq_b.weight`, `attn.wq_b.scale`
+- `attn.wkv.weight`, `attn.wkv.scale`
+- `attn.kv_norm.weight`
+- `attn.wo_a.weight`, `attn.wo_a.scale`
+- `attn.wo_b.weight`, `attn.wo_b.scale`
+- `attn_norm.weight`
+- `ffn.gate.weight`
+- `ffn.shared_experts.w1.weight`, `ffn.shared_experts.w1.scale`
+- `ffn.shared_experts.w2.weight`, `ffn.shared_experts.w2.scale`
+- `ffn.shared_experts.w3.weight`, `ffn.shared_experts.w3.scale`
+- `ffn_norm.weight`
+- `hc_attn_fn`, `hc_attn_base`, `hc_attn_scale`
+- `hc_ffn_fn`, `hc_ffn_base`, `hc_ffn_scale`
+
+Expert-key completeness expectation (`contract_summary.json` `tensor_keys.expected_expert_key_count_per_layer`):
+
+- For each layer, there must be `256 experts × 3 linears × 2 tensors (weight+scale) = 1536` expert keys of the form `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` with `eid ∈ [0,255]`.
+
+Cache-compression required suffixes:
+
+- For any compressed layer (`compress_ratio != 0`), the layer must include (`tensor_keys.required_layer_suffixes_compress_ratio_nonzero`):
+  - `attn.compressor.ape`
+  - `attn.compressor.norm.weight`
+  - `attn.compressor.wgate.weight`
+  - `attn.compressor.wkv.weight`
+- For CSA layers (`compress_ratio == 4`), the layer must additionally include (`tensor_keys.required_layer_suffixes_compress_ratio_4`):
+  - `attn.indexer.wq_b.weight`, `attn.indexer.wq_b.scale`
+  - `attn.indexer.weights_proj.weight`
+  - `attn.indexer.compressor.ape`
+  - `attn.indexer.compressor.norm.weight`
+  - `attn.indexer.compressor.wgate.weight`
+  - `attn.indexer.compressor.wkv.weight`
+
+MoE gate conditional keys:
+
+- Hash layers: require `ffn.gate.tid2eid` and forbid `ffn.gate.bias` (`tensor_keys.layer_gate.tid2eid_layer_ids == [0,1,2]`).
+- Score layers: require `ffn.gate.bias` and forbid `ffn.gate.tid2eid` (`tensor_keys.layer_gate.gate_bias_layer_ids == [3..42]`).
 
 MTP block (`mtp.0.*`):
 

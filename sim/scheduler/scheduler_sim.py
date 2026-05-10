@@ -328,6 +328,11 @@ class SimMetrics:
     skipped_stages_backpressure_batch: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    stages_total: int = 0
+    stages_total_interactive: int = 0
+    stages_total_batch: int = 0
+    stages_total_verify: int = 0
+    stages_total_draft: int = 0
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -575,6 +580,11 @@ class SimMetrics:
                     "partial_admit_any_layer_batch": self.partial_admit_any_layer_tokens_batch,
                 },
                 "stages": {
+                    "total": int(self.stages_total),
+                    "total_interactive": int(self.stages_total_interactive),
+                    "total_batch": int(self.stages_total_batch),
+                    "total_verify": int(self.stages_total_verify),
+                    "total_draft": int(self.stages_total_draft),
                     "skipped_backpressure": self.skipped_stages_backpressure,
                     "skipped_backpressure_interactive": self.skipped_stages_backpressure_interactive,
                     "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
@@ -2959,6 +2969,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
             stage = ts.stages[ts.stage_idx]
             desired_stage = min(stage.k, len(stage.candidates))
+            if desired_stage > 0:
+                metrics.stages_total += 1
+                if ts.cls == LatencyClass.INTERACTIVE:
+                    metrics.stages_total_interactive += 1
+                else:
+                    metrics.stages_total_batch += 1
+                if stage.is_verify:
+                    metrics.stages_total_verify += 1
+                else:
+                    metrics.stages_total_draft += 1
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
                 metrics.skipped_stages_backpressure += 1
@@ -3326,6 +3346,17 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     drop_frac_batch = (dropped_batch / denom_batch) if denom_batch > 0.0 else 0.0
     sla_violation_frac_interactive = (float(metrics.token_sla_violations_interactive) / float(len(metrics.token_lat_ms_interactive))) if len(metrics.token_lat_ms_interactive) != 0 else 0.0
     sla_violation_frac_batch = (float(metrics.token_sla_violations_batch) / float(len(metrics.token_lat_ms_batch))) if len(metrics.token_lat_ms_batch) != 0 else 0.0
+    stages_total = float(metrics.stages_total)
+    stages_total_interactive = float(metrics.stages_total_interactive)
+    stages_total_batch = float(metrics.stages_total_batch)
+    stages_total_verify = float(metrics.stages_total_verify)
+    stages_total_draft = float(metrics.stages_total_draft)
+    skipped_stages = float(metrics.skipped_stages_backpressure)
+    skipped_stage_frac = (skipped_stages / stages_total) if stages_total > 0.0 else 0.0
+    skipped_stage_frac_interactive = (float(metrics.skipped_stages_backpressure_interactive) / stages_total_interactive) if stages_total_interactive > 0.0 else 0.0
+    skipped_stage_frac_batch = (float(metrics.skipped_stages_backpressure_batch) / stages_total_batch) if stages_total_batch > 0.0 else 0.0
+    skipped_stage_frac_verify = (float(metrics.skipped_stages_backpressure_verify) / stages_total_verify) if stages_total_verify > 0.0 else 0.0
+    skipped_stage_frac_draft = (float(metrics.skipped_stages_backpressure_draft) / stages_total_draft) if stages_total_draft > 0.0 else 0.0
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -3392,6 +3423,13 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
+            "stages_total": float(stages_total),
+            "skipped_stages_backpressure": float(skipped_stages),
+            "skipped_stage_frac": float(skipped_stage_frac),
+            "skipped_stage_frac_interactive": float(skipped_stage_frac_interactive),
+            "skipped_stage_frac_batch": float(skipped_stage_frac_batch),
+            "skipped_stage_frac_verify": float(skipped_stage_frac_verify),
+            "skipped_stage_frac_draft": float(skipped_stage_frac_draft),
         }
     )
 

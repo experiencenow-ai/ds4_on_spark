@@ -223,6 +223,47 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_stage_skip_totals_count_attempts(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                layers=(scheduler_sim.LayerRoute(candidates=(0,)), scheduler_sim.LayerRoute(candidates=(0,))),
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                layers=(scheduler_sim.LayerRoute(candidates=(0,)), scheduler_sim.LayerRoute(candidates=(0,))),
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.stages_total, 4)
+        self.assertEqual(m.stages_total_batch, 4)
+        self.assertEqual(m.stages_total_verify, 4)
+        self.assertEqual(m.skipped_stages_backpressure, 2)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(float(s["skipped_stage_frac"]), 0.5, places=6)
+        self.assertAlmostEqual(float(s["skipped_stage_frac_verify"]), 0.5, places=6)
+
     def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
@@ -2645,6 +2686,16 @@ class SchedulerSimTest(unittest.TestCase):
         fixed_hi_drop = float(fixed_hi["drop_frac_tokens"])
         self.assertLess(base_drop, fixed_hi_drop)
         self.assertGreaterEqual(fixed_hi_drop, (base_drop + 0.05))
+
+    def test_recommendations_quick_mtp_congestion_sweep_stop_at_reject_reduces_overhead_at_zero_accept(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        sweep = out["scenarios"]["mtp_congestion_sweep"]["sweep"]
+        row0 = next(r for r in sweep if float(r["accept_prob"]) == 0.0)
+        full = row0["mtp_full"]
+        stop = row0["mtp_stop_at_reject"]
+        self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
 
 
 if __name__ == "__main__":
