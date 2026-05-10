@@ -54,6 +54,14 @@ def _trace_is_multi_layer(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
             return(True)
     return(False)
 
+def _trace_has_any_mtp_accept(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
+    for r in trace:
+        if r.mtp_accept_len is not None:
+            return(True)
+        if r.accepted_mtp is not None or r.rejected_mtp is not None:
+            return(True)
+    return(False)
+
 
 def _maybe_slice_trace(trace: Sequence[scheduler_sim.TokenRoute], max_tokens: int) -> List[scheduler_sim.TokenRoute]:
     if max_tokens <= 0:
@@ -228,6 +236,21 @@ def run_trace_sweeps(
     }
 
     if int(base_cfg.mtp_draft_len) > 0:
+        if not _trace_has_any_mtp_accept(trace_in):
+            variants_accept_prob: List[Tuple[str, Dict[str, object]]] = []
+            for ap in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
+                if float(ap) == float(base_cfg.mtp_accept_prob):
+                    continue
+                variants_accept_prob.append((f"accept_prob_{int(round(float(ap) * 100.0))}", {"mtp_accept_prob": float(ap)}))
+            if len(variants_accept_prob) != 0:
+                scenarios["mtp_accept_prob_sweep"] = {
+                    "name": "mtp_accept_prob_sweep",
+                    "base_cfg": dataclasses.asdict(base_cfg),
+                    "variants": variants_accept_prob,
+                    "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_accept_prob, arrival_units=arrival_units),
+                    "note": "Only included when the replay trace omits mtp_accept_len / accepted_mtp / rejected_mtp; used to explore synthetic acceptance sensitivity on real routing traces that have not been instrumented for MTP yet.",
+                }
+
         variants_mtp: List[Tuple[str, Dict[str, object]]] = [
             ("mtp_full", {"mtp_draft_attempt_policy": "full"}),
             ("mtp_stop_at_reject", {"mtp_draft_attempt_policy": "stop_at_reject"}),

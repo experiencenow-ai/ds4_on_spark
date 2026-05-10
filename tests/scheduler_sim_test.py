@@ -3040,6 +3040,100 @@ class SchedulerSimTest(unittest.TestCase):
         out = trace_sweep.run_trace_sweeps(trace, base_cfg)
         self.assertIn("mtp_attempt_policy", out.get("scenarios", {}))
 
+    def test_trace_sweep_includes_mtp_accept_prob_sweep_when_trace_omits_accept_len(self) -> None:
+        from sim.scheduler import scheduler_sim
+        from sim.scheduler import trace_sweep
+
+        trace_cfg = scheduler_sim.TraceConfig(
+            num_tokens=250,
+            num_experts=8,
+            num_candidates=8,
+            interactive_prob=0.5,
+            arrival_rate_tps=200.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        trace = scheduler_sim.generate_synthetic_trace(trace_cfg)
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=trace_cfg.num_experts,
+            expert_parallelism=1,
+            expert_queue_max=64,
+            service_ms=1.0,
+            starvation_ms=100.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=0.4,
+            mtp_accept_decay=0.8,
+            mtp_draft_cost_scale=0.25,
+        )
+        out = trace_sweep.run_trace_sweeps(trace, base_cfg)
+        scenarios = out.get("scenarios", {})
+        self.assertIn("mtp_accept_prob_sweep", scenarios)
+        variants = scenarios["mtp_accept_prob_sweep"]["results"]["variants"]
+        self.assertIn("accept_prob_0", variants)
+        self.assertIn("accept_prob_20", variants)
+        self.assertNotIn("accept_prob_40", variants)
+        self.assertIn("accept_prob_100", variants)
+
+    def test_trace_sweep_omits_mtp_accept_prob_sweep_when_trace_has_accept_len(self) -> None:
+        import dataclasses
+
+        from sim.scheduler import scheduler_sim
+        from sim.scheduler import trace_sweep
+
+        trace_cfg = scheduler_sim.TraceConfig(
+            num_tokens=120,
+            num_experts=8,
+            num_candidates=8,
+            interactive_prob=0.5,
+            arrival_rate_tps=200.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        trace0 = scheduler_sim.generate_synthetic_trace(trace_cfg)
+        trace = list(trace0)
+        trace[0] = dataclasses.replace(trace[0], mtp_accept_len=1)
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=trace_cfg.num_experts,
+            expert_parallelism=1,
+            expert_queue_max=64,
+            service_ms=1.0,
+            starvation_ms=100.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=0.4,
+            mtp_accept_decay=0.8,
+            mtp_draft_cost_scale=0.25,
+        )
+        out = trace_sweep.run_trace_sweeps(trace, base_cfg)
+        scenarios = out.get("scenarios", {})
+        self.assertIn("mtp_attempt_policy", scenarios)
+        self.assertNotIn("mtp_accept_prob_sweep", scenarios)
+
     def test_recommendations_quick_expert_batching_reduces_service_per_output_token(self) -> None:
         from sim.scheduler import recommendations
 
