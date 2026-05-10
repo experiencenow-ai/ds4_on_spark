@@ -4,7 +4,7 @@ SGLang is a high-performance serving framework that includes explicit DeepSeek-V
 
 - Repo: `https://github.com/sgl-project/sglang`
 - Ref: `refs/heads/main`
-- Commit: `c7f674e427b066e54927af8fb95931f3a5f8c176`
+- Commit: `8cc16c99748b8c92097d6094aad694448fb8fb0e`
 - License: Apache-2.0 (see upstream `LICENSE`)
 
 ## Why we track it
