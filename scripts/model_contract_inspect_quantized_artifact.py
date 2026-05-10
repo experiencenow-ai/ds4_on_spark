@@ -734,13 +734,21 @@ def inspect_gguf(path: Path) -> InspectResult:
 		34: "TQ1_0",
 		35: "TQ2_0",
 		39: "MXFP4",
+		40: "NVFP4",
+		41: "Q1_0",
 	}
-
-	def ggml_type_name(code: int) -> str:
-		return ggml_type_names.get(code, f"TYPE_{code}")
 
 	with path.open("rb") as f:
 		vers, metadata, weight_keys, weight_types = parse_gguf_stream(f, str(path))
+
+	def ggml_type_name(code: int) -> str:
+		# Some DeepSeek-V4-capable forks extend ggml_type beyond upstream gguf spec.
+		# Example: nsparks' DeepSeek-V4-Flash native FP4/FP8 GGUF uses type code 42 for F8_E4M3_B128.
+		if code == 42:
+			arch = metadata.get("general.architecture", None)
+			if arch == "deepseek4":
+				return "F8_E4M3_B128"
+		return ggml_type_names.get(code, f"TYPE_{code}")
 
 	type_counts = Counter(ggml_type_name(t) for t in weight_types)
 	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
@@ -798,12 +806,20 @@ def inspect_gguf_url(url: str, max_bytes: int, timeout_s: int) -> InspectResult:
 		34: "TQ1_0",
 		35: "TQ2_0",
 		39: "MXFP4",
+		40: "NVFP4",
+		41: "Q1_0",
 	}
 
+	vers, metadata, weight_keys, weight_types, prefix_bytes = parse_gguf_url_prefix(url, max_bytes=max_bytes, timeout_s=timeout_s)
+
 	def ggml_type_name(code: int) -> str:
+		# See inspect_gguf note: DeepSeek-V4-capable forks may extend ggml_type beyond upstream gguf spec.
+		if code == 42:
+			arch = metadata.get("general.architecture", None)
+			if arch == "deepseek4":
+				return "F8_E4M3_B128"
 		return ggml_type_names.get(code, f"TYPE_{code}")
 
-	vers, metadata, weight_keys, weight_types, prefix_bytes = parse_gguf_url_prefix(url, max_bytes=max_bytes, timeout_s=timeout_s)
 	type_counts = Counter(ggml_type_name(t) for t in weight_types)
 	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
 	res = inspect_weight_keys(weight_keys, url, "gguf.url")
