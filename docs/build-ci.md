@@ -20,6 +20,24 @@ cmake --build build_ci
 ctest --test-dir build_ci --output-on-failure
 ```
 
+## CPU-only (Release)
+
+Some bugs only reproduce with optimizations enabled. For an optimized CPU-only run:
+
+Makefile wrapper:
+
+```bash
+make ci-release BUILD_DIR=build_ci_release
+```
+
+Equivalent CMake commands:
+
+```bash
+cmake -S . -B build_ci_release -DDS4_ENABLE_TESTS=ON -DDS4_ENABLE_CLI=ON -DDS4_ENABLE_CUDA=OFF -DDS4_WERROR=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build_ci_release
+ctest --test-dir build_ci_release --output-on-failure
+```
+
 ## CPU-only (sanitizers)
 
 Sanitizers are CPU-only (configuration fails if `DS4_ENABLE_CUDA=ON`).
