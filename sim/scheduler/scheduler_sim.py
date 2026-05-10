@@ -46,6 +46,9 @@ class TokenRoute:
     mtp_accept_len: Optional[int] = None
     accepted_mtp: Optional[int] = None
     rejected_mtp: Optional[int] = None
+    dflash_accept_len: Optional[int] = None
+    accepted_dflash: Optional[int] = None
+    rejected_dflash: Optional[int] = None
     cost_scale: Optional[float] = None
     decode_ms: Optional[float] = None
     kv_tokens: Optional[int] = None
@@ -403,6 +406,10 @@ class SimMetrics:
     mtp_pos_accepted: List[int] = dataclasses.field(default_factory=list)
     mtp_verify_layer0_skipped_backpressure: int = 0
     mtp_accept_len_clamped_backpressure: int = 0
+    dflash_steps: int = 0
+    dflash_accept_len_per_step: List[int] = dataclasses.field(default_factory=list)
+    dflash_accepted_per_step: List[int] = dataclasses.field(default_factory=list)
+    dflash_rejected_per_step: List[int] = dataclasses.field(default_factory=list)
 
     def to_jsonable(self) -> Dict[str, object]:
         def percentile(xs_sorted: Sequence[float], p: float) -> float:
@@ -586,6 +593,13 @@ class SimMetrics:
                         (float(a) / float(t)) if t != 0 else 0.0
                         for t, a in zip(self.mtp_pos_attempted, self.mtp_pos_accepted)
                     ],
+                },
+                "dflash": {
+                    "present": self.dflash_steps > 0,
+                    "steps": self.dflash_steps,
+                    "accept_len": summarize_ints([al for al in self.dflash_accept_len_per_step if al > 0]),
+                    "accepted": summarize_ints([a for a in self.dflash_accepted_per_step if a >= 0]),
+                    "rejected": summarize_ints([r for r in self.dflash_rejected_per_step if r >= 0]),
                 },
                 "token_latency_ms": {
                     "interactive": summarize(self.token_lat_ms_interactive),
@@ -1438,6 +1452,33 @@ def load_trace_jsonl(
                     raise ValueError(f"{display_path}:{lineno}: rejected_mtp must be >= 0")
                 rejected_mtp = int(rm_raw)
 
+            dflash_accept_len: Optional[int] = None
+            if "dflash_accept_len" in obj and obj["dflash_accept_len"] is not None:
+                dal_raw = obj["dflash_accept_len"]
+                if not isinstance(dal_raw, int):
+                    raise ValueError(f"{display_path}:{lineno}: dflash_accept_len must be an integer")
+                if dal_raw < 1:
+                    raise ValueError(f"{display_path}:{lineno}: dflash_accept_len must be >= 1")
+                dflash_accept_len = int(dal_raw)
+
+            accepted_dflash: Optional[int] = None
+            if "accepted_dflash" in obj and obj["accepted_dflash"] is not None:
+                ad_raw = obj["accepted_dflash"]
+                if not isinstance(ad_raw, int):
+                    raise ValueError(f"{display_path}:{lineno}: accepted_dflash must be an integer")
+                if ad_raw < 0:
+                    raise ValueError(f"{display_path}:{lineno}: accepted_dflash must be >= 0")
+                accepted_dflash = int(ad_raw)
+
+            rejected_dflash: Optional[int] = None
+            if "rejected_dflash" in obj and obj["rejected_dflash"] is not None:
+                rd_raw = obj["rejected_dflash"]
+                if not isinstance(rd_raw, int):
+                    raise ValueError(f"{display_path}:{lineno}: rejected_dflash must be an integer")
+                if rd_raw < 0:
+                    raise ValueError(f"{display_path}:{lineno}: rejected_dflash must be >= 0")
+                rejected_dflash = int(rd_raw)
+
             cost_scale: Optional[float] = None
             if "cost_scale" in obj and obj["cost_scale"] is not None:
                 cs_raw = obj["cost_scale"]
@@ -1485,6 +1526,9 @@ def load_trace_jsonl(
                     mtp_accept_len=mtp_accept_len,
                     accepted_mtp=accepted_mtp,
                     rejected_mtp=rejected_mtp,
+                    dflash_accept_len=dflash_accept_len,
+                    accepted_dflash=accepted_dflash,
+                    rejected_dflash=rejected_dflash,
                     cost_scale=cost_scale,
                     decode_ms=decode_ms,
                     kv_tokens=kv_tokens,
@@ -1754,6 +1798,16 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
             if rejected_mtp is not None and rejected_mtp < 0:
                 raise ValueError(f"{path}:{lineno0}: rejected_mtp must be >= 0")
 
+            dflash_accept_len = parse_optional_int(row.get("dflash_accept_len", "") or "", "dflash_accept_len", lineno0)
+            if dflash_accept_len is not None and dflash_accept_len < 1:
+                raise ValueError(f"{path}:{lineno0}: dflash_accept_len must be >= 1")
+            accepted_dflash = parse_optional_int(row.get("accepted_dflash", "") or "", "accepted_dflash", lineno0)
+            if accepted_dflash is not None and accepted_dflash < 0:
+                raise ValueError(f"{path}:{lineno0}: accepted_dflash must be >= 0")
+            rejected_dflash = parse_optional_int(row.get("rejected_dflash", "") or "", "rejected_dflash", lineno0)
+            if rejected_dflash is not None and rejected_dflash < 0:
+                raise ValueError(f"{path}:{lineno0}: rejected_dflash must be >= 0")
+
             cost_scale = parse_optional_float(row.get("cost_scale", "") or "", "cost_scale", lineno0)
             if cost_scale is not None and cost_scale <= 0.0:
                 raise ValueError(f"{path}:{lineno0}: cost_scale must be > 0")
@@ -1778,6 +1832,9 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                     mtp_accept_len=mtp_accept_len,
                     accepted_mtp=accepted_mtp,
                     rejected_mtp=rejected_mtp,
+                    dflash_accept_len=dflash_accept_len,
+                    accepted_dflash=accepted_dflash,
+                    rejected_dflash=rejected_dflash,
                     cost_scale=cost_scale,
                     decode_ms=decode_ms,
                     kv_tokens=kv_tokens,
@@ -1805,6 +1862,9 @@ def write_trace_csv(path: str, trace: Sequence[TokenRoute]) -> None:
             "mtp_accept_len",
             "accepted_mtp",
             "rejected_mtp",
+            "dflash_accept_len",
+            "accepted_dflash",
+            "rejected_dflash",
             "cost_scale",
             "decode_ms",
             "kv_tokens",
@@ -1837,6 +1897,9 @@ def write_trace_csv(path: str, trace: Sequence[TokenRoute]) -> None:
                 "mtp_accept_len": "" if r.mtp_accept_len is None else str(int(r.mtp_accept_len)),
                 "accepted_mtp": "" if r.accepted_mtp is None else str(int(r.accepted_mtp)),
                 "rejected_mtp": "" if r.rejected_mtp is None else str(int(r.rejected_mtp)),
+                "dflash_accept_len": "" if r.dflash_accept_len is None else str(int(r.dflash_accept_len)),
+                "accepted_dflash": "" if r.accepted_dflash is None else str(int(r.accepted_dflash)),
+                "rejected_dflash": "" if r.rejected_dflash is None else str(int(r.rejected_dflash)),
                 "cost_scale": "" if r.cost_scale is None else str(float(r.cost_scale)),
                 "decode_ms": "" if r.decode_ms is None else str(float(r.decode_ms)),
                 "kv_tokens": "" if r.kv_tokens is None else str(int(r.kv_tokens)),
@@ -1880,6 +1943,12 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
                 obj["accepted_mtp"] = int(r.accepted_mtp)
             if r.rejected_mtp is not None:
                 obj["rejected_mtp"] = int(r.rejected_mtp)
+            if r.dflash_accept_len is not None:
+                obj["dflash_accept_len"] = int(r.dflash_accept_len)
+            if r.accepted_dflash is not None:
+                obj["accepted_dflash"] = int(r.accepted_dflash)
+            if r.rejected_dflash is not None:
+                obj["rejected_dflash"] = int(r.rejected_dflash)
             if r.cost_scale is not None:
                 obj["cost_scale"] = float(r.cost_scale)
             if r.decode_ms is not None:
@@ -1963,6 +2032,17 @@ def _derive_mtp_accept_len(route: TokenRoute, mtp_draft_len: int) -> Optional[in
     return(None)
 
 
+def _derive_dflash_accept_len(route: TokenRoute) -> Optional[int]:
+    if route.dflash_accept_len is not None:
+        return(int(route.dflash_accept_len))
+    if route.accepted_dflash is not None:
+        al = (int(route.accepted_dflash) + 1)
+        if al < 1:
+            return(None)
+        return(int(al))
+    return(None)
+
+
 def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> None:
     if path.strip() == "":
         raise ValueError("path must be non-empty")
@@ -2015,6 +2095,13 @@ def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Op
                 obj["accepted_mtp"] = int(r.accepted_mtp)
             if r.rejected_mtp is not None:
                 obj["rejected_mtp"] = int(r.rejected_mtp)
+            dflash_accept_len = _derive_dflash_accept_len(r)
+            if dflash_accept_len is not None:
+                obj["dflash_accept_len"] = int(dflash_accept_len)
+            if r.accepted_dflash is not None:
+                obj["accepted_dflash"] = int(r.accepted_dflash)
+            if r.rejected_dflash is not None:
+                obj["rejected_dflash"] = int(r.rejected_dflash)
             if r.cost_scale is not None:
                 obj["cost_scale"] = float(r.cost_scale)
             if r.decode_ms is not None:
@@ -2897,6 +2984,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     if cfg.mtp_draft_len > 0:
         metrics.mtp_accept_len_per_step = [0 for _ in range(len(trace))]
         metrics.mtp_draft_attempt_len_per_step = [0 for _ in range(len(trace))]
+    metrics.dflash_steps = 0
+    metrics.dflash_accept_len_per_step = [-1 for _ in range(len(trace))]
+    metrics.dflash_accepted_per_step = [-1 for _ in range(len(trace))]
+    metrics.dflash_rejected_per_step = [-1 for _ in range(len(trace))]
 
     def _token_first_admit(tid: int) -> None:
         ts = tokens[tid]
@@ -2958,6 +3049,21 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
             _record_mtp_accept_len(cfg, metrics, ts.mtp_accept_len, mtp_draft_attempt_policy)
         ts.mtp_accounted = True
 
+    def _maybe_account_token_dflash(tid: int) -> None:
+        route = trace[tid]
+        if route.dflash_accept_len is None and route.accepted_dflash is None and route.rejected_dflash is None:
+            return
+        if metrics.dflash_accept_len_per_step[tid] != -1 or metrics.dflash_accepted_per_step[tid] != -1 or metrics.dflash_rejected_per_step[tid] != -1:
+            return
+        metrics.dflash_steps += 1
+        dal = _derive_dflash_accept_len(route)
+        if dal is not None:
+            metrics.dflash_accept_len_per_step[tid] = int(dal)
+        if route.accepted_dflash is not None:
+            metrics.dflash_accepted_per_step[tid] = int(route.accepted_dflash)
+        if route.rejected_dflash is not None:
+            metrics.dflash_rejected_per_step[tid] = int(route.rejected_dflash)
+
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
         route = trace[tid]
         admitted = 0
@@ -3008,11 +3114,13 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
                 metrics.dropped_tokens_backpressure_batch += 1
             ts.output_len = 0
             _maybe_account_token_mtp(tid)
+            _maybe_account_token_dflash(tid)
             ts.done_ms = now_ms
             return
 
         _account_token_effective_k(tid)
         _maybe_account_token_mtp(tid)
+        _maybe_account_token_dflash(tid)
         ts.done_ms = now_ms
         lat_ms = (now_ms - ts.submit_ms)
         if ts.cls == LatencyClass.INTERACTIVE:
@@ -3850,7 +3958,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--trace-jsonl",
         type=str,
         default="",
-        help="Replay routing trace from JSONL file (use '-' for stdin). Required fields: t_ms/dt_ms, cls, candidates (or layers). Optional: token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size.",
+        help="Replay routing trace from JSONL file (use '-' for stdin). Required fields: t_ms/dt_ms, cls, candidates (or layers). Optional: token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, dflash_accept_len, accepted_dflash, rejected_dflash, cost_scale, decode_ms, kv_tokens, expert_batch_size.",
     )
     p.add_argument(
         "--trace-input-format",
@@ -3889,7 +3997,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Print a concise JSON summary of the simulation metrics (and exit). When used with --compare, prints only summaries + deltas (no full metrics).",
     )
-    p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len) and exit. Requires --trace-jsonl/--trace-csv. Use '-' for stdout.")
+    p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len / dflash_accept_len) and exit. Requires --trace-jsonl/--trace-csv. Use '-' for stdout.")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument(
