@@ -52,7 +52,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 
 - Repo: `https://github.com/ssweens/llama.cpp-deepseek-v4`
 - Ref: `refs/heads/main`
-- Commit: `9f19428fc7bd2a0ac05a083c1430235174aaf811`
+- Commit: `bb648b31e137a44b1ee72907e20ad8fb1f21d644`
 - License: MIT
 - Notes: Fork required by `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` (IQ1_M + IQ2_XXS GGUFs); upstream README claims it is tested on CPU/CUDA/ROCm/Vulkan and supports pipeline-parallel runs.
 
