@@ -490,6 +490,37 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(m_no_reserve.dropped_tokens_backpressure_interactive, 0)
         self.assertEqual(m_reserve.dropped_tokens_backpressure_interactive, 0)
 
+    def test_k_signal_class_tasks_ignores_lo_inflight_for_interactive_queue(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=0.001, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(1,)),
+        ]
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            k_signal="class",
+            pending_units="tasks",
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(len(m.pending_signal_interactive), 1)
+        self.assertEqual(m.pending_signal_interactive[0], 0.0)
+        self.assertEqual(len(m.chosen_k_interactive), 1)
+        self.assertEqual(m.chosen_k_interactive[0], 4)
+
     def test_k_signal_candidates_ignores_unrelated_congestion(self) -> None:
         trace = []
         for i in range(50):
