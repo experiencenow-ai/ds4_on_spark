@@ -56,6 +56,7 @@ Additional probe run (10:13Z refresh, committed `nvcc --list-gpu-code` output):
 
 ```bash
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T101326Z_loop_spark_access_nvcc_code_commit.txt
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T104220Z_loop_nvcc_archcheck.txt
 ```
 
 Notes:
@@ -152,6 +153,30 @@ sm_110
 sm_103
 sm_120
 sm_121
+```
+
+### Single-target probe (Spark0, 10:42Z, nvcc arch sanity-check)
+
+```text
+== local meta ==
+Sun May 10 10:42:20 UTC 2026
+git: acad7c2
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== pci link (sysfs, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 current_link_speed: Unknown
+path 000f:00:00.0 current_link_width: 0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
 ```
 
 ### Single-target probe (Spark0, 02:21Z, PCIe query mismatch warning)
