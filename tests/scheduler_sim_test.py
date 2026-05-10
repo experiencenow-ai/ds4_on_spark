@@ -2598,6 +2598,50 @@ class SchedulerSimTest(unittest.TestCase):
         mtp_tps = float(out["variants"]["mtp_on"]["summary"]["output_token_throughput_tps"])  # type: ignore[index]
         self.assertAlmostEqual(base_tps, mtp_tps, delta=2.0)
 
+    def test_compare_allows_mtp_off_variant_on_mtp_trace(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                k=1,
+                mtp_accept_len=3,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=1.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                k=1,
+                mtp_accept_len=1,
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=16,
+            expert_queue_max=10_000,
+            service_ms=0.01,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+            mtp_draft_len=2,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+        )
+        out = scheduler_sim.compare_simulation_summaries(cfg, trace, [("mtp_off", {"mtp_draft_len": 0})])
+        base_out = float(out["baseline"]["summary"]["output_tokens"])  # type: ignore[index]
+        off_out = float(out["variants"]["mtp_off"]["summary"]["output_tokens"])  # type: ignore[index]
+        self.assertGreater(base_out, off_out)
+        self.assertEqual(float(out["variants"]["mtp_off"]["summary"]["mtp_accept_rate"]), 0.0)  # type: ignore[index]
+
     def test_work_units_and_service_slot_ms_track_mtp_efficiency(self) -> None:
         trace_mtp = [
             scheduler_sim.TokenRoute(

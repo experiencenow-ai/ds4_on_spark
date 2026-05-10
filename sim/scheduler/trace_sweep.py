@@ -236,6 +236,17 @@ def run_trace_sweeps(
     }
 
     if int(base_cfg.mtp_draft_len) > 0:
+        variants_mtp_toggle: List[Tuple[str, Dict[str, object]]] = [
+            ("mtp_off", {"mtp_draft_len": 0}),
+        ]
+        scenarios["mtp_toggle"] = {
+            "name": "mtp_toggle",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": variants_mtp_toggle,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_mtp_toggle, arrival_units=arrival_units),
+            "note": "mtp_off strips trace mtp_accept_len / accepted_mtp / rejected_mtp for that variant to allow a single-run on/off comparison.",
+        }
+
         if not _trace_has_any_mtp_accept(trace_in):
             variants_accept_prob: List[Tuple[str, Dict[str, object]]] = []
             for ap in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):

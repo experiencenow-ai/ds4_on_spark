@@ -3454,6 +3454,23 @@ def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> S
     return(cfg)
 
 
+def strip_trace_mtp_fields(trace: Sequence[TokenRoute]) -> List[TokenRoute]:
+    out: List[TokenRoute] = []
+    any_mtp = False
+    for r in trace:
+        if r.mtp_accept_len is not None or r.accepted_mtp is not None or r.rejected_mtp is not None:
+            any_mtp = True
+            break
+    if any_mtp == False:
+        return(list(trace))
+    for r in trace:
+        if r.mtp_accept_len is None and r.accepted_mtp is None and r.rejected_mtp is None:
+            out.append(r)
+            continue
+        out.append(dataclasses.replace(r, mtp_accept_len=None, accepted_mtp=None, rejected_mtp=None))
+    return(out)
+
+
 def compare_simulation_variants(
     base_cfg: SimConfig,
     trace: Sequence[TokenRoute],
@@ -3498,7 +3515,10 @@ def compare_simulation_variants_with_dumps(
     for label, overrides in variants:
         cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
         token_states: List[TokenState] = []
-        v_trace = scale_trace_arrival_units(trace, arrival_units, cfg)
+        trace_in = trace
+        if int(base_cfg.mtp_draft_len) > 0 and int(cfg.mtp_draft_len) <= 0:
+            trace_in = strip_trace_mtp_fields(trace)
+        v_trace = scale_trace_arrival_units(trace_in, arrival_units, cfg)
         m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None)
         if dump_enabled:
             write_sim_jsonl(dump_tmpl.replace("{label}", label), v_trace, token_states, cfg, meta=trace_meta)
@@ -3560,7 +3580,10 @@ def compare_simulation_summaries_with_dumps(
     for label, overrides in variants:
         cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
         token_states: List[TokenState] = []
-        v_trace = scale_trace_arrival_units(trace, arrival_units, cfg)
+        trace_in = trace
+        if int(base_cfg.mtp_draft_len) > 0 and int(cfg.mtp_draft_len) <= 0:
+            trace_in = strip_trace_mtp_fields(trace)
+        v_trace = scale_trace_arrival_units(trace_in, arrival_units, cfg)
         m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None)
         if dump_enabled:
             write_sim_jsonl(dump_tmpl.replace("{label}", label), v_trace, token_states, cfg, meta=trace_meta)
