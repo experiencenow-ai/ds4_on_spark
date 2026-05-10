@@ -637,6 +637,16 @@ if [ "$nvcc_bin" != "" ]; then
 		else
 			echo "nvcc --list-gpu-code not supported"
 		fi
+	else
+		if [ "${nvcc_arch:-}" != "" ]; then
+			if "$nvcc_bin" --list-gpu-code >/dev/null 2>&1; then
+				if "$nvcc_bin" --list-gpu-code 2>/dev/null | tr -d "\r" | grep -qx "$nvcc_arch"; then
+					echo "nvcc supports gpu code: $nvcc_arch"
+				else
+					echo "warning: selected nvcc arch $nvcc_arch not listed in nvcc --list-gpu-code"
+				fi
+			fi
+		fi
 	fi
 fi
 ptxas_bin=""
@@ -700,7 +710,7 @@ echo "== cuda/toolchain facts (summary) =="
 [ "$nvcc_release" != "" ] && echo "nvcc release: $nvcc_release" || echo "nvcc release: (none)"
 [ "$cuda_json_ver" != "" ] && echo "cuda version.json: $cuda_json_ver"
 [ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
-[ "$compute_cap" != "" ] && echo "compute_cap: $compute_cap"
+[ "$compute_cap" != "" ] && echo "compute_cap: $compute_cap" || echo "compute_cap: (unknown)"
 [ "$nvcc_arch" != "" ] && echo "nvcc arch: $nvcc_arch" || echo "nvcc arch: default"
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
