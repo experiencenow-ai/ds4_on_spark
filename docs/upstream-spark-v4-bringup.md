@@ -53,7 +53,7 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - Ref: `refs/heads/main`
 - Commit: `c2eac5a9b2b457881d69b1164d909e8beab9286e`
 - License: Apache-2.0 (upstream; README also calls out CUTLASS submodule licensing)
-- Base runtime: `sgl-project/sglang` pinned at `8087e07d52eede91414d7c1b9b323c98b1cf2dbf` (see [`docs/upstream-sglang.md`](upstream-sglang.md))
+- Base runtime: `sgl-project/sglang` (see [`docs/upstream-sglang.md`](upstream-sglang.md) for the current pinned commit); upstream README targets `lmsysorg/sglang:deepseek-v4-blackwell` Docker image
 - What it is (from upstream README, summarized):
   - A small CUDA extension + runtime patch for SGLang to provide FlashMLA sparse-decode kernels on Blackwell SM120 GPUs (the upstream image targets SM90/SM100).
 - Why we track it:
