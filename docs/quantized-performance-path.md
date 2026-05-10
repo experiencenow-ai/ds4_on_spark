@@ -122,6 +122,8 @@ Trace JSONL fields:
 
 If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts.
 
+If the runtime can log `kv_tokens` or `decode_ms` but cannot easily log `cost_scale`, the scheduler simulator can derive a simple `cost_scale` proxy during replay/canonicalization via `--trace-derive-cost-scale {kv_tokens_p50,decode_ms_p50}`.
+
 ## Expert Queueing
 
 Expert queueing is worth attempting against the quantized runtime if decode

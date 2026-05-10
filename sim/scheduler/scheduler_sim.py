@@ -3094,6 +3094,66 @@ def scale_trace_speedup(trace: Sequence[TokenRoute], speedup: float) -> List[Tok
     return([dataclasses.replace(r, t_ms=(float(r.t_ms) * scale)) for r in trace])
 
 
+def _p50(xs: Sequence[float]) -> float:
+    if len(xs) == 0:
+        raise ValueError("xs must be non-empty")
+    xs_sorted = sorted(xs)
+    idx50 = int(math.floor(0.50 * float(len(xs_sorted) - 1)))
+    return(float(xs_sorted[idx50]))
+
+
+def derive_trace_cost_scale(trace: Sequence[TokenRoute], mode: str, meta_out: Optional[Dict[str, object]] = None) -> List[TokenRoute]:
+    mode_n = mode.strip().lower()
+    if mode_n in ("", "none"):
+        return(list(trace))
+
+    ref = 0.0
+    derived_field = ""
+    if mode_n == "kv_tokens_p50":
+        xs = [float(r.kv_tokens) for r in trace if r.kv_tokens is not None and int(r.kv_tokens) > 0]
+        if len(xs) == 0:
+            raise ValueError("trace_derive_cost_scale=kv_tokens_p50 requires kv_tokens in the trace")
+        ref = _p50(xs)
+        derived_field = "kv_tokens"
+    elif mode_n == "decode_ms_p50":
+        xs = [float(r.decode_ms) for r in trace if r.decode_ms is not None and float(r.decode_ms) > 0.0]
+        if len(xs) == 0:
+            raise ValueError("trace_derive_cost_scale=decode_ms_p50 requires decode_ms in the trace")
+        ref = _p50(xs)
+        derived_field = "decode_ms"
+    else:
+        raise ValueError("trace_derive_cost_scale must be one of: none, kv_tokens_p50, decode_ms_p50")
+
+    if ref <= 0.0:
+        raise ValueError("trace_derive_cost_scale reference must be > 0")
+
+    eps = 1e-6
+    out: List[TokenRoute] = []
+    filled = 0
+    for r in trace:
+        if r.cost_scale is not None:
+            out.append(r)
+            continue
+        if mode_n == "kv_tokens_p50":
+            if r.kv_tokens is None:
+                out.append(r)
+                continue
+            s = (float(int(r.kv_tokens)) / float(ref))
+        else:
+            if r.decode_ms is None:
+                out.append(r)
+                continue
+            s = (float(r.decode_ms) / float(ref))
+        if s <= 0.0:
+            s = eps
+        out.append(dataclasses.replace(r, cost_scale=float(s)))
+        filled += 1
+
+    if meta_out is not None:
+        meta_out["derived_cost_scale"] = {"mode": str(mode_n), "field": str(derived_field), "p50_ref": float(ref), "filled": int(filled)}
+    return(out)
+
+
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
     p.add_argument(
@@ -3105,6 +3165,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
+    p.add_argument(
+        "--trace-derive-cost-scale",
+        type=str,
+        default="none",
+        help="Trace replay/canonicalization helper: fill missing cost_scale using a simple per-token proxy (none, kv_tokens_p50, decode_ms_p50).",
+    )
     p.add_argument(
         "--trace-non-route",
         type=str,
@@ -3250,6 +3316,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if inferred is None:
                 raise SystemExit("--mtp-draft-len=-1 requires meta.mtp_draft_len or consistent accepted_mtp+rejected_mtp in the trace")
             args.mtp_draft_len = int(inferred)
+
+        if args.trace_derive_cost_scale.strip().lower() != "none":
+            try:
+                trace = derive_trace_cost_scale(trace, args.trace_derive_cost_scale, meta_out=trace_meta)
+            except ValueError as e:
+                raise SystemExit(str(e))
 
         if args.trace_summary:
             out = trace_summary_jsonable(trace, mtp_draft_len=args.mtp_draft_len, meta=trace_meta)

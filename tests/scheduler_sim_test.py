@@ -334,6 +334,56 @@ class SchedulerSimTest(unittest.TestCase):
                 if p != "" and os.path.exists(p):
                     os.unlink(p)
 
+    def test_trace_derive_cost_scale_kv_tokens_p50_fills_missing_and_records_meta(self) -> None:
+        in_path = ""
+        out_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f_in:
+            in_path = f_in.name
+            f_in.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "kv_tokens": 10}))
+            f_in.write("\n")
+            f_in.write(json.dumps({"t_ms": 1.0, "cls": "batch", "candidates": [0], "kv_tokens": 20}))
+            f_in.write("\n")
+        with tempfile.NamedTemporaryFile("w", delete=False) as f_out:
+            out_path = f_out.name
+
+        try:
+            rc = scheduler_sim.main(
+                [
+                    "--trace-jsonl",
+                    in_path,
+                    "--trace-time-mode",
+                    "t_ms",
+                    "--num-experts",
+                    "0",
+                    "--mtp-draft-len",
+                    "0",
+                    "--trace-derive-cost-scale",
+                    "kv_tokens_p50",
+                    "--canonicalize-trace-jsonl",
+                    out_path,
+                ]
+            )
+            self.assertEqual(rc, 0)
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                lines = [ln.strip() for ln in f.readlines() if ln.strip() != ""]
+            self.assertGreaterEqual(len(lines), 3)
+            meta_obj = json.loads(lines[0])
+            meta = meta_obj.get("meta") or {}
+            derived = meta.get("derived_cost_scale") or {}
+            self.assertEqual(derived.get("mode"), "kv_tokens_p50")
+            self.assertEqual(derived.get("field"), "kv_tokens")
+            self.assertEqual(int(derived.get("filled") or 0), 2)
+
+            r0 = json.loads(lines[1])
+            r1 = json.loads(lines[2])
+            self.assertAlmostEqual(float(r0.get("cost_scale")), 1.0, places=9)
+            self.assertAlmostEqual(float(r1.get("cost_scale")), 2.0, places=9)
+        finally:
+            for p in (in_path, out_path):
+                if p != "" and os.path.exists(p):
+                    os.unlink(p)
+
     def test_adaptive_k_hits_min_and_max(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
