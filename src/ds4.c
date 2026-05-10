@@ -21,6 +21,27 @@ int32_t ds4_ctx_log_ring_init(ds4_ctx_t *ctx,ds4_log_entry_t *entries,int32_t en
 	return(0);
 }
 
+int32_t ds4_ctx_log_ring_init_arena(ds4_ctx_t *ctx,int32_t entry_count)
+{
+	ds4_log_entry_t *entries;
+	int64_t bytes64;
+	int32_t bytes;
+	if ( ctx == 0 )
+		return(-1);
+	if ( entry_count <= 0 )
+		return(-2);
+	bytes64 = ((int64_t)entry_count * (int64_t)sizeof(ds4_log_entry_t));
+	if ( bytes64 > (int64_t)INT32_MAX )
+		return(-3);
+	bytes = (int32_t)bytes64;
+	entries = 0;
+	if ( ds4_arena_alloc(&ctx->arena,bytes,16,(void **)&entries) < 0 )
+		return(-4);
+	if ( entries == 0 )
+		return(-5);
+	return(ds4_ctx_log_ring_init(ctx,entries,entry_count));
+}
+
 int32_t ds4_ctx_log_ring_detach(ds4_ctx_t *ctx)
 {
 	if ( ctx == 0 )
@@ -110,6 +131,32 @@ int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 			}
 		}
 	}
+	return(0);
+}
+
+int32_t ds4_ctx_init_auto(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_mem,int32_t arena_size)
+{
+	ds4_config_t tmp;
+	if ( ctx == 0 )
+		return(-1);
+	if ( cfg == 0 )
+		return(-2);
+	if ( arena_mem == 0 )
+		return(-3);
+	if ( arena_size <= 0 )
+		return(-4);
+	ctx->log_ring_ready = 0;
+	ctx->log_ring_attached = 0;
+	if ( ds4_arena_init(&ctx->arena,arena_mem,arena_size) < 0 )
+		return(-5);
+	tmp = *cfg;
+	if ( tmp.log_ring_entries > 0 )
+	{
+		if ( ds4_ctx_log_ring_init_arena(ctx,tmp.log_ring_entries) < 0 )
+			return(-6);
+	}
+	if ( ds4_ctx_apply_config(ctx,&tmp) < 0 )
+		return(-7);
 	return(0);
 }
 

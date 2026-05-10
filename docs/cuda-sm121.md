@@ -34,6 +34,8 @@ The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pat
 
 If your toolkit supports it, `nvcc --list-gpu-arch` and `nvcc --list-gpu-code` should include `compute_121` / `sm_121`.
 
+The Spark0 tiny scripts treat missing `compute_121` / `sm_121` entries as errors when those `nvcc --list-*` commands are supported.
+
 The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and runs `cuda_sm121_arch_report` as part of the fast-path validation.
 
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.

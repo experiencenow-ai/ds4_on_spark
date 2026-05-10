@@ -80,6 +80,18 @@ To discover new community Hugging Face GGUF candidates (metadata only; no downlo
 ./scripts/upstream_hf_search.sh "DeepSeek-V4-Flash GGUF" --sort downloads --limit 50
 ```
 
+To inspect the smallest GGUF files in a repo (metadata only; no downloads), run:
+
+```bash
+./scripts/upstream_hf_smallest_gguf.sh <org>/<repo> --limit 20
+```
+
+For sharded GGUF repos, use the grouped report to sum shard sizes:
+
+```bash
+./scripts/upstream_hf_smallest_gguf.sh <org>/<repo> --group-shards --limit 20
+```
+
 ## Per-Upstream Notes
 
 - [`docs/upstream-ds4.md`](upstream-ds4.md)

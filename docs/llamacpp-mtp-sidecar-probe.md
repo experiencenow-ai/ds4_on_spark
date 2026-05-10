@@ -60,4 +60,10 @@ For the canonical repo-side, no-download validation (HTTP range-read of header/t
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
 ```
 
+Pinned reference runner:
+
+```bash
+./scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh
+```
+
 Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-ef3b960.json`.

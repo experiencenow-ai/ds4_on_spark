@@ -19,7 +19,9 @@ This builds and runs only:
 
 It also prints `nvcc --version` plus `--list-gpu-arch` / `--list-gpu-code` when supported (toolchain sanity gate for CUDA 13).
 
-If `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` are supported, the scripts treat missing `compute_121` / `sm_121` as errors (fast “toolchain cannot target GB10” signal).
+If `nvcc --list-gpu-arch` is supported, the script treats a missing `compute_121` entry as an error.
+
+If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
 
 Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
 

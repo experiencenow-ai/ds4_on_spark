@@ -8,6 +8,7 @@ import json
 import sys
 
 from sim.scheduler import scheduler_sim
+from sim.scheduler import trace_extract
 
 
 class SchedulerSimTest(unittest.TestCase):
@@ -59,6 +60,65 @@ class SchedulerSimTest(unittest.TestCase):
                         union.append(c)
                         seen.add(c)
             self.assertEqual(r.candidates, tuple(union))
+
+    def test_synthetic_trace_score_mode_random_emits_scores(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=6,
+            num_experts=8,
+            num_candidates=4,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            synthetic_score_mode="random",
+        )
+        t0 = scheduler_sim.generate_synthetic_trace(cfg)
+        t1 = scheduler_sim.generate_synthetic_trace(cfg)
+        self.assertEqual(t0, t1)
+        for r in t0:
+            self.assertIsNotNone(r.scores)
+            self.assertEqual(len(r.scores or ()), 4)
+
+    def test_synthetic_trace_multi_layer_score_mode_emits_layer_scores_only(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=5,
+            num_experts=8,
+            num_candidates=3,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            num_layers=3,
+            synthetic_score_mode="random",
+        )
+        trace = scheduler_sim.generate_synthetic_trace(cfg)
+        for r in trace:
+            self.assertIsNone(r.scores)
+            self.assertIsNotNone(r.layers)
+            for lr in r.layers or ():
+                self.assertIsNotNone(lr.scores)
+                self.assertEqual(len(lr.scores or ()), 3)
+
+    def test_synthetic_trace_cost_scale_lognormal_emits_positive(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=8,
+            num_experts=8,
+            num_candidates=4,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            synthetic_cost_scale_mode="lognormal",
+            synthetic_cost_scale_log_sigma=0.2,
+        )
+        trace = scheduler_sim.generate_synthetic_trace(cfg)
+        self.assertTrue(all(r.cost_scale is not None and float(r.cost_scale) > 0.0 for r in trace))
 
     def test_hotset_trace_deterministic_and_rotates(self) -> None:
         cfg = scheduler_sim.HotsetTraceConfig(
@@ -219,6 +279,19 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_synthetic_score_mode_rejected_in_trace_replay(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0, 1]}))
+            f.write("\n")
+        try:
+            with self.assertRaises(SystemExit):
+                scheduler_sim.main(["--trace-jsonl", tmp_path, "--synthetic-score-mode", "random", "--json"])
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_trace_canonicalize_jsonl_stdout_dash_reads_stdin(self) -> None:
         payload = json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "accepted_mtp": 1}) + "\n"
         buf = io.StringIO()
@@ -238,6 +311,32 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(meta.get("type"), "meta")
         first_route = json.loads(lines[1])
         self.assertEqual(first_route.get("mtp_accept_len"), 2)
+
+    def test_summary_json_outputs_concise_metrics(self) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = scheduler_sim.main(["--num-tokens", "2000", "--summary-json"])
+        self.assertEqual(rc, 0)
+        out = json.loads(buf.getvalue())
+        self.assertIn("summary", out)
+        summary = out["summary"]
+        self.assertIsInstance(summary, dict)
+        for k in ("makespan_ms", "token_throughput_tps", "task_throughput_tps", "drop_frac_tokens"):
+            self.assertIn(k, summary)
+
+    def test_summary_json_compare_omits_full_metrics(self) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = scheduler_sim.main(["--num-tokens", "2000", "--summary-json", "--compare", "mtp_off:{\"mtp_draft_len\":0}"])
+        self.assertEqual(rc, 0)
+        out = json.loads(buf.getvalue())
+        self.assertIn("baseline", out)
+        self.assertIn("variants", out)
+        self.assertNotIn("metrics", out["baseline"])
+        self.assertIn("summary", out["baseline"])
+        self.assertIn("mtp_off", out["variants"])
+        self.assertNotIn("metrics", out["variants"]["mtp_off"])
+        self.assertIn("delta_vs_baseline", out["variants"]["mtp_off"])
 
     def test_infer_num_experts_from_trace_uses_meta(self) -> None:
         trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 7))]
@@ -329,6 +428,56 @@ class SchedulerSimTest(unittest.TestCase):
             r1 = json.loads(lines[2])
             self.assertAlmostEqual(float(r1.get("t_ms")), 0.3, places=9)
             self.assertEqual(r1.get("mtp_accept_len"), 1)
+        finally:
+            for p in (in_path, out_path):
+                if p != "" and os.path.exists(p):
+                    os.unlink(p)
+
+    def test_trace_derive_cost_scale_kv_tokens_p50_fills_missing_and_records_meta(self) -> None:
+        in_path = ""
+        out_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f_in:
+            in_path = f_in.name
+            f_in.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "kv_tokens": 10}))
+            f_in.write("\n")
+            f_in.write(json.dumps({"t_ms": 1.0, "cls": "batch", "candidates": [0], "kv_tokens": 20}))
+            f_in.write("\n")
+        with tempfile.NamedTemporaryFile("w", delete=False) as f_out:
+            out_path = f_out.name
+
+        try:
+            rc = scheduler_sim.main(
+                [
+                    "--trace-jsonl",
+                    in_path,
+                    "--trace-time-mode",
+                    "t_ms",
+                    "--num-experts",
+                    "0",
+                    "--mtp-draft-len",
+                    "0",
+                    "--trace-derive-cost-scale",
+                    "kv_tokens_p50",
+                    "--canonicalize-trace-jsonl",
+                    out_path,
+                ]
+            )
+            self.assertEqual(rc, 0)
+
+            with open(out_path, "r", encoding="utf-8") as f:
+                lines = [ln.strip() for ln in f.readlines() if ln.strip() != ""]
+            self.assertGreaterEqual(len(lines), 3)
+            meta_obj = json.loads(lines[0])
+            meta = meta_obj.get("meta") or {}
+            derived = meta.get("derived_cost_scale") or {}
+            self.assertEqual(derived.get("mode"), "kv_tokens_p50")
+            self.assertEqual(derived.get("field"), "kv_tokens")
+            self.assertEqual(int(derived.get("filled") or 0), 2)
+
+            r0 = json.loads(lines[1])
+            r1 = json.loads(lines[2])
+            self.assertAlmostEqual(float(r0.get("cost_scale")), 1.0, places=9)
+            self.assertAlmostEqual(float(r1.get("cost_scale")), 2.0, places=9)
         finally:
             for p in (in_path, out_path):
                 if p != "" and os.path.exists(p):
@@ -2158,6 +2307,52 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(m_on.service_slot_ms_total, 1.5, places=6)
         self.assertEqual(m_on.mtp_output_tokens, 3)
         self.assertLess((m_on.service_slot_ms_total / float(m_on.mtp_output_tokens)), (m_off.service_slot_ms_total / float(m_off.admitted_tokens)))
+
+    def test_trace_extract_maps_common_aliases(self) -> None:
+        obj = {
+            "ts_us": 5000,
+            "latency_class": "interactive",
+            "experts": [7, 3, 19],
+            "router_scores": [0.9, 0.7, 0.4],
+            "token_idx": 12,
+            "accepted_mtp": 1,
+            "rejected_mtp": 1,
+            "decode_ms": 2.5,
+            "kv_tokens": 2048,
+            "expert_batch_size": 8,
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertAlmostEqual(float(rec["t_ms"]), 5.0)
+        self.assertEqual(rec["cls"], "interactive")
+        self.assertEqual(rec["token_index"], 12)
+        self.assertEqual(rec["candidates"], [7, 3, 19])
+        self.assertEqual(rec["scores"], [0.9, 0.7, 0.4])
+        self.assertEqual(rec["accepted_mtp"], 1)
+        self.assertEqual(rec["rejected_mtp"], 1)
+        self.assertAlmostEqual(float(rec["decode_ms"]), 2.5)
+        self.assertEqual(rec["kv_tokens"], 2048)
+        self.assertEqual(rec["expert_batch_size"], 8)
+
+    def test_trace_extract_filters_route_type(self) -> None:
+        route = {"type": "moe_route", "t_ms": 0.0, "cls": "batch", "candidates": [0]}
+        other = {"type": "log", "t_ms": 0.0, "msg": "hello"}
+        out = trace_extract.extract_jsonl_lines(
+            [json.dumps(route), json.dumps(other)],
+            route_type="moe_route",
+            non_route_policy="skip",
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["candidates"], [0])
+
+    def test_trace_extract_non_route_error_mode_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            trace_extract.extract_jsonl_lines(
+                [json.dumps({"type": "log", "t_ms": 0.0, "msg": "hello"})],
+                route_type="moe_route",
+                non_route_policy="error",
+            )
 
 
 if __name__ == "__main__":

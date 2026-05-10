@@ -33,6 +33,15 @@ Emit a single JSON object (stdout or file) containing at least:
 
 Keep this probe *fast*: it should stop after the first verify step and draft computation.
 
+## Validation
+
+After capturing the JSON, validate its shape (and optionally cross-check `mtp_params` against the sidecar’s derived params):
+
+```bash
+python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json
+python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json --sidecar-probe-json /path/to/mtp_sidecar_probe.json
+```
+
 ## Semantics (reference)
 
 For DeepSeek V4, the MTP module uses separate `e_proj` / `h_proj` projections and applies the `hc_head_*` head in `compute_logits` for draft token selection. Reference: vLLM API docs `vllm.model_executor.models.deepseek_v4_mtp` (DeepSeek V4 MTP draft model).

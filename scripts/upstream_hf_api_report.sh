@@ -98,6 +98,20 @@ sha="$(echo "${json}" | jq -r '.sha // "UNKNOWN"')"
 last_modified="$(echo "${json}" | jq -r '.lastModified // "UNKNOWN"')"
 used_storage="$(echo "${json}" | jq -r '.usedStorage // 0')"
 total_bytes="$(echo "${json}" | jq -r '[.siblings[].size] | add // 0')"
+base_model="$(echo "${json}" | jq -r '
+	(.cardData.base_model? // "") as $bm
+	| if $bm != "" then
+		$bm
+	  else
+		(.cardData.base_models? // []) as $bms
+		| if ($bms | length) > 0 then
+			($bms | join(", "))
+		  else
+			""
+		  end
+	  end
+	' | head -n 1)"
+library_name="$(echo "${json}" | jq -r '.cardData.library_name? // ""' | head -n 1)"
 large_nolfs="$(echo "${json}" | jq -r '
 	.siblings[]
 	| select((.size // 0) >= (256*1024*1024) and (.lfs? == null))
@@ -151,7 +165,7 @@ case "${mode}" in
 	files_oids)
 		echo "${json}" | jq -r '
 			.siblings[]
-			| "\(.size // 0)\t\(.lfs.sha256 // \"\")\t\(.rfilename)\t" + (if (.lfs? != null) then "lfs" else "nolfs" end)
+			| "\(.size // 0)\t\(.lfs.sha256 // "")\t\(.rfilename)\t" + (if (.lfs? != null) then "lfs" else "nolfs" end)
 		'
 		;;
 	top)
@@ -172,6 +186,12 @@ case "${mode}" in
 		printf "repo:          %s\n" "${repo}"
 		printf "sha:           %s\n" "${sha}"
 		printf "license:       %s\n" "${license}"
+		if [ -n "${library_name}" ]; then
+			printf "library_name:  %s\n" "${library_name}"
+		fi
+		if [ -n "${base_model}" ]; then
+			printf "base_model:    %s\n" "${base_model}"
+		fi
 		printf "last_modified: %s\n" "${last_modified}"
 		printf "used_storage:  %s bytes (%.2f GiB)\n" "${used_storage}" "$(bytes_to_gib "${used_storage}")"
 		printf "total_files:   %s bytes (%.2f GiB)\n" "${total_bytes}" "$(bytes_to_gib "${total_bytes}")"

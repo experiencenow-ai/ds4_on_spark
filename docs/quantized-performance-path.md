@@ -68,6 +68,8 @@ demand fixed while varying MTP accept rates.
 
 Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
 
+Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
+
 ## Phase 1: Real Router Trace Replay
 
 Once the baseline quantized runtime can emit per-token routing, capture a trace
@@ -76,6 +78,12 @@ and replay it:
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-summary --json
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --json   # 0 = infer from trace/meta
+```
+
+For concise loop output, use `--summary-json`:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
 ```
 
 If the runtime emits `dt_ms` deltas (or only emits `accepted_mtp` / `rejected_mtp`), canonicalize it first so replay can infer `num_experts` / `mtp_draft_len` cleanly:
@@ -89,6 +97,14 @@ If the runtime produces a mixed JSONL log stream (multiple record types), use `-
 
 ```bash
 cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-non-route skip --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+If the runtime log stream is mixed and/or cannot easily emit the simulator’s strict trace field names, normalize it first with the extractor (maps common aliases like `latency_class`→`cls`, `experts`→`candidates`):
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
@@ -121,6 +137,8 @@ Trace JSONL fields:
 - (optional) metadata: JSONL meta records like `{"type":"meta","meta":{...}}` are accepted and ignored by replay; you can also supply a sidecar metadata JSON via `--trace-meta-json`
 
 If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts.
+
+If the runtime can log `kv_tokens` or `decode_ms` but cannot easily log `cost_scale`, the scheduler simulator can derive a simple `cost_scale` proxy during replay/canonicalization via `--trace-derive-cost-scale {kv_tokens_p50,decode_ms_p50}`.
 
 ## Expert Queueing
 

@@ -12,7 +12,7 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
 
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
 - `upstream_commit.txt` (pinned upstream git commit hash)
-- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, plus sha256 fingerprints for the pinned encoding oracle vectors and oracle prompt set)
+- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
@@ -81,14 +81,14 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 
 ## Logical parameter shapes (from `inference/model.py` + configs)
 
-These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below).
+These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below). The machine-readable shape contract is recorded under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_shapes`.
 
 Top-level:
 
 - `embed.weight`: `[vocab_size, hidden_size]`
 - `norm.weight`: `[hidden_size]`
 - `head.weight`: `[vocab_size, hidden_size]`
-- `hc_head_{fn,base,scale}`: `[mix_hc,hc_mult*hidden_size]`, `[mix_hc]`, `[3]` where `mix_hc=(2+hc_mult)*hc_mult`
+- `hc_head_{fn,base,scale}`: `[hc_mult,hc_mult*hidden_size]`, `[hc_mult]`, `[1]` (Transformer HC head; per-layer HC uses `mix_hc=(2+hc_mult)*hc_mult` and `*.scale` length `3`)
 
 Per-layer attention (`layers.{i}.attn.*`):
 
@@ -134,6 +134,11 @@ Activation quantization in the reference runtime:
 - The compressed KV path (`Compressor.rotate == true`) applies a Hadamard rotation then uses FP4 act quantization with `fp4_block_size=32`.
 
 DS4 must treat `*.scale` tensors and the block-size rules above as part of the execution contract; skipping them can preserve shapes but still diverge numerically.
+
+Flash vs Flash-Base compatibility note:
+
+- DeepSeek’s official HF ecosystem also publishes `deepseek-ai/DeepSeek-V4-Flash-Base` which differs in **expert quantization** (`expert_dtype="fp8"` vs Flash `expert_dtype="fp4"`). External runtimes (and conversion pipelines) must not mix these variants: expert dtype changes both the correct expert kernel family and the expected linear scale dtype/format behavior.
+- For DS4 contract purposes, treat `quantization.inference_config.expert_dtype` as the canonical “Flash vs Base” switch (source-derived from upstream `inference/config.json`). If an external artifact/runtime cannot expose or preserve this field, treat MoE expert execution as **high risk** until validated by an oracle.
 
 ## Attention schedule (sliding vs CSA vs HCA)
 
@@ -206,6 +211,15 @@ Important indexing details (from `Attention.forward`):
 
 - Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
 - Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
+
+### Sparse attention masking rule (sentinel indices)
+
+Reference implementation: `inference/kernel.py` (`sparse_attn`).
+
+- Sparse top-k index buffers use `topk_mask_value == -1` as a sentinel.
+- When an index is masked (`idx == -1`), the kernel must behave as if `score=-inf` and `kv=0` (i.e. it contributes nothing to the softmax numerator and cannot introduce NaNs via invalid gathers).
+
+These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value` and `cache.sparse_attn_mask_rule`.
 
 ### MLA positional semantics (partial RoPE + inverse on output)
 

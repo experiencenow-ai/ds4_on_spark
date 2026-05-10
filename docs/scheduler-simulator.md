@@ -178,6 +178,13 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+For concise, loop-friendly output, use `--summary-json` (prints the same summary block as `--compare`, without the full metrics payload):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --summary-json
+python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_draft_len":0}'
+```
+
 ### Compare Variants (Ablations)
 
 Use `--compare label:JSON` to run one or more config variants against the
@@ -249,6 +256,26 @@ Markov mode creates temporal locality by reusing the previous token's primary ex
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
+### Synthetic Scores and Cost Scaling
+
+To exercise score-aware admission (`--admit-policy score_desc`) before real runtime traces are available, synthetic traces can emit per-candidate `scores`:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode zipf --synthetic-score-mode random --admit-policy score_desc --json
+```
+
+Notes:
+
+- `--synthetic-score-mode random` assigns independent `U[0,1)` scores per candidate while keeping the candidate order unchanged.
+- `--synthetic-score-mode router_desc` also reorders candidates by descending score (router-like), which makes `--admit-policy ordered` and `score_desc` equivalent.
+- When `--num-layers > 1`, scores are emitted under `layers[].scores` (top-level `scores` is omitted).
+
+To explore work-weighted congestion (and `--pending-units work`) on synthetic traces, you can also emit per-token `cost_scale`:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --synthetic-cost-scale-mode lognormal --pending-units work --json
+```
+
 ### Synthetic Multi-Layer Routes
 
 To approximate multi-MoE-layer models before real quantized-runtime traces are available, synthetic traces can emit per-layer routing:
@@ -287,6 +314,21 @@ If the runtime emits a *mixed* JSONL log stream (multiple record types), canonic
 ```bash
 cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-non-route skip --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+If the runtime log stream is mixed *and/or* uses different field names (for example `latency_class` instead of `cls`, or `experts` instead of `candidates`), use the lightweight extractor first to map common aliases into the strict simulator contract:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --trace-non-route skip --trace-derive-cost-scale kv_tokens_p50 --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --pending-units work --json
 ```
 - `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
   - `candidates` (list[int]): ordered expert candidates for that layer (required)
