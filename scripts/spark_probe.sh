@@ -277,6 +277,10 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 else
 	echo "nvidia-smi not found"
 fi
+driver_version=""
+if [ "$q" != "" ]; then
+	driver_version="$(printf "%s\n" "$q" | head -n 1 | awk -F"," "{ v=\$4; gsub(/^[ \\t]+|[ \\t]+$/, \"\", v); print v; }" || true)"
+fi
 compute_cap=""
 if [ "$q" != "" ]; then
 	compute_cap="$(printf "%s\n" "$q" | awk -F"," "{ c=\$5; gsub(/^[ \\t]+|[ \\t]+$/, \"\", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,\".\"); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != \"\" ) print bestc; }")"
@@ -611,13 +615,14 @@ fi
 [ -e /usr/local/cuda ] && ls -ld /usr/local/cuda || true
 command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null || true
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
+cuda_json_ver=""
 if [ -r /usr/local/cuda/version.json ]; then
+	cuda_json_ver="$(sed -nE "s/^[[:space:]]*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9.]+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
 	if [ "$spark_probe_summary" != "1" ]; then
 		echo
 		echo "== cuda version.json (capped) =="
 		cat /usr/local/cuda/version.json 2>/dev/null | head -n 80 || true
 	else
-		cuda_json_ver="$(sed -nE "s/^[[:space:]]*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9.]+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
 		if [ "$cuda_json_ver" != "" ]; then
 			echo
 			echo "== cuda version.json (summary) =="
@@ -651,6 +656,15 @@ if [ "$smi_cuda_ver" != "" ] && [ "$nvcc_release" != "" ]; then
 		echo "note: nvidia-smi CUDA $smi_cuda_ver differs from nvcc release $nvcc_release (driver vs toolkit)"
 	fi
 fi
+echo
+echo "== cuda/toolchain facts (summary) =="
+[ "$driver_version" != "" ] && echo "driver: $driver_version"
+[ "$smi_cuda_ver" != "" ] && echo "smi CUDA: $smi_cuda_ver"
+[ "$nvcc_release" != "" ] && echo "nvcc release: $nvcc_release" || echo "nvcc release: (none)"
+[ "$cuda_json_ver" != "" ] && echo "cuda version.json: $cuda_json_ver"
+[ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
+[ "$compute_cap" != "" ] && echo "compute_cap: $compute_cap"
+[ "$nvcc_arch" != "" ] && echo "nvcc arch: $nvcc_arch" || echo "nvcc arch: default"
 echo
 echo "== cuda libraries (ldconfig, first hits) =="
 ldconfig -p 2>/dev/null | grep -E "libcuda\\.so\\.1|libcudart\\.so" | head -n 20 || true

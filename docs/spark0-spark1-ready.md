@@ -72,6 +72,7 @@ Notes:
 - When `SPARK_SSH_USER` is set, host-only args (like `spark1.local`) are rewritten into `user@host` targets and printed in `resolved targets:` so the actual SSH targets are visible in committed excerpts.
 - The probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - The probe prints `selected compute_cap:` and `selected nvcc arch:` before the CUDA runtime probe section so the derived `-arch` choice is visible in committed excerpts.
+- The probe prints `== cuda/toolchain facts (summary) ==` to consolidate the key version/arch facts into a single paste-friendly stanza.
 - The probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 - The probe includes a small `nvcc` compile + run under `/tmp` and then deletes the temporary files.
 - After the CUDA runtime probe runs, the probe prints a `post-load` PCIe link snapshot (both `nvidia-smi` query + sysfs cross-check) so we can see whether link speed/width changes under GPU activity.

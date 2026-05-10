@@ -119,6 +119,12 @@ Additional probe run (15:47Z refresh, smaller summary-mode output):
 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T154719Z_loop_git_2dea79c.txt
 ```
 
+Additional probe run (16:17Z refresh, toolchain facts summary block):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T161731Z_loop_toolchain_facts.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -192,6 +198,25 @@ cuda: 13.0.3
 == cuda runtime probe (nvcc, no deps) ==
 device0 cc: 12.1
 runtime max cc: 12.1
+```
+
+### CUDA/toolchain facts summary block (Spark0, 16:17Z)
+
+```text
+== local meta ==
+Sun May 10 16:17:31 UTC 2026
+git: b5afccb
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
 ```
 
 ### Compute capability + open kernel module metadata (Spark0, 14:11Z)

@@ -82,6 +82,7 @@ Notes:
 - The Spark probe also emits a capped `nvidia-smi -q` PCI section (`nvidia-smi -q pci link`) so the output includes `GPU Link Info` fields like `Device Max` / `Host Max` alongside the negotiated `Current` link state (useful when `nvidia-smi --query-gpu=pcie.link.*` reports surprising `max` values).
 - The Spark probe also prints a small `nvidia-smi -q fabric/c2c (summary)` section (`Product Architecture`, `Peer Type`, `GPU C2C Mode`) to help interpret misleading PCIe link fields on GB10-class platforms.
 - The Spark probe prints both `selected compute_cap:` and `selected nvcc arch:` so `NVCC_ARCH` selection is explicit in committed excerpts.
+- The Spark probe also prints a `== cuda/toolchain facts (summary) ==` block that consolidates the key version/arch facts (`driver`, `smi CUDA`, `nvcc release`, `cuda version.json`, `cuda.h CUDA_VERSION`, `compute_cap`, `nvcc arch`) into a single paste-friendly stanza.
 - The Spark probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 
 ### Mac-side Discovery (mDNS + reachability)
