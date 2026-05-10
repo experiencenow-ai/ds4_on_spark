@@ -37,6 +37,20 @@ def run_trace_sweeps(
     trace_in = _maybe_slice_trace(trace, int(max_tokens))
     scenarios: Dict[str, Any] = {}
 
+    base_batch_max = int(base_cfg.batch_max_batch)
+    batch_variants: List[Tuple[str, Dict[str, object]]] = []
+    for b in (1, 4, 8):
+        if int(b) == base_batch_max:
+            continue
+        batch_variants.append((f"batch_max_batch_{int(b)}", {"batch_max_batch": int(b)}))
+    if len(batch_variants) != 0:
+        scenarios["expert_batching_sweep"] = {
+            "name": "expert_batching_sweep",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": batch_variants,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, batch_variants),
+        }
+
     reserve_n = _reserve_default(int(base_cfg.expert_queue_max))
     if reserve_n > 0:
         variants_reserve: List[Tuple[str, Dict[str, object]]] = [

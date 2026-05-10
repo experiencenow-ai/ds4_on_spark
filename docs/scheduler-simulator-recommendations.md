@@ -2,10 +2,12 @@
 
 Date: 2026-05-10
 
-This note records *synthetic* go/no-go guidance for two early performance layers:
+This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
 - expert queue reservation (protect interactive under batch load)
-- MTP draft/accept (speculative decode efficiency threshold)
+- expert batching (microbatch batch-class work to amortize per-batch overhead)
+- adaptive K (throttle batch admission under congestion)
+- MTP draft/accept (speculative decode efficiency threshold + safety under overload)
 
 All numbers below come from the committed JSON report:
 
@@ -35,6 +37,36 @@ Recommendation (synthetic): keep a **reservation-style mechanism** available in 
 Notes:
 
 - Tail latency comparisons are not meaningful when one variant drops a large fraction of interactive work; use drop/starvation and depth metrics first.
+
+## Expert Batching (Per-Expert Microbatching)
+
+Scenario: two-stream overload with reservation enabled (`expert_queue_reserve_interactive=16`) and a simple service model with per-batch overhead:
+
+- `service_base_ms=0.25` (fixed cost per started expert batch)
+- `service_per_task_ms=1.0` (incremental cost per task/work-unit inside the batch)
+
+Compare `batch_max_batch`:
+
+- baseline `batch_max_batch=1` (no batching)
+- `batch_max_batch=4`
+- `batch_max_batch=8`
+
+Key signals (from the report JSON):
+
+- `service_slot_ms_per_output_token` (lower is better):
+  - no batching: `1.262110980622431`
+  - batch 4: `1.08307777493824`
+  - batch 8: `1.0529988370161156`
+- `drop_frac_tokens` (lower is better):
+  - no batching: `0.6594`
+  - batch 4: `0.6087`
+  - batch 8: `0.5987333333333333`
+- `token_p95_interactive_ms` (interactive tail cost):
+  - no batching: `2.9098653334482805`
+  - batch 4: `5.379310308471679`
+  - batch 8: `9.234806787588198`
+
+Recommendation (synthetic): keep an **expert batching** knob available (at least for batch-class work). Start with `batch_max_batch≈4` as a conservative default when per-batch overhead is non-trivial, but validate the interactive tail-cost tradeoff on real quantized-runtime traces before enabling.
 
 ## MTP (Draft/Accept) Efficiency Threshold
 
