@@ -12,16 +12,36 @@ downloaded while preparing this document.
 
 ## Candidate Matrix
 
-| Priority | Target | Target ref | Target commit / SHA | Target safetensors | Draft / accelerator | Draft commit / SHA | Draft safetensors | Why test |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | `refs/heads/main` | `dcaee4d4dfc5ee71ad501f01f530e5652438fde0` | 29.03 GiB | `z-lab/Qwen3-Coder-30B-A3B-DFlash` | `98ca0e3e2e6a372f2789d3a5e146566194084317` | 0.88 GiB | Smallest strong coding target with an official DFlash drafter. Good first Qwen smoke test. |
-| 2 | `Qwen/Qwen3.6-35B-A3B-FP8` | `refs/heads/main` | `95a723d08a9490559dae23d0cff1d9466213d989` | 34.89 GiB | `z-lab/Qwen3.6-35B-A3B-DFlash` | `42d3b34d588423cdae7ba8f53a8cf7789346a719` | 0.88 GiB | Spark-sized FP8 target, 3B active params, and DFlash pair. Best near-term latency/throughput comparison. |
-| 3 | `Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | 51.75 GiB | `z-lab/Qwen3.6-27B-DFlash` | `0919688658996800f86b895034249700e9481106` | 3.22 GiB | Dense-ish 27B reference with a larger drafter; useful if FP8 MoE behavior hides bottlenecks. |
-| 4 | `Qwen/Qwen3-Coder-Next-FP8` | `refs/heads/main` | `da6e2ed27304dd39abadd9c82ef50e8de67bdd4c` | 74.86 GiB | `z-lab/Qwen3-Coder-Next-DFlash` | `6d741db11b89d7ea80a423b109f0424817ce8f1b` | 0.88 GiB | Larger 80B/3B-active coding-agent target; plausible on Spark0, but should run after the smaller candidates. |
-| 5 | `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | `refs/heads/main` | `003f183a92fbe5b9a8325aaa8b2ae797c91dd90f` | not measured here | none selected | n/a | n/a | Dual-Spark or future reference only unless a smaller local quantized artifact appears. |
+| Priority | Target | Target ref | Target commit / SHA | Target license | Target safetensors | Draft / accelerator | Draft commit / SHA | Draft license | Draft safetensors | Single Spark? | Why test |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | `refs/heads/main` | `dcaee4d4dfc5ee71ad501f01f530e5652438fde0` | `apache-2.0` | 29.03 GiB | `z-lab/Qwen3-Coder-30B-A3B-DFlash` | `98ca0e3e2e6a372f2789d3a5e146566194084317` | `mit` | 0.88 GiB | likely | Smallest strong coding target with an official DFlash drafter. Good first Qwen smoke test. |
+| 2 | `Qwen/Qwen3.6-35B-A3B-FP8` | `refs/heads/main` | `95a723d08a9490559dae23d0cff1d9466213d989` | `apache-2.0` | 34.89 GiB | `z-lab/Qwen3.6-35B-A3B-DFlash` | `42d3b34d588423cdae7ba8f53a8cf7789346a719` | `mit` | 0.88 GiB | likely | Spark-sized FP8 target, 3B active params, and DFlash pair. Best near-term latency/throughput comparison. |
+| 3 | `Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.6-27B-DFlash` | `0919688658996800f86b895034249700e9481106` | `mit` | 3.22 GiB | likely | Dense-ish 27B reference with a larger drafter; useful if FP8 MoE behavior hides bottlenecks. |
+| 4 | `Qwen/Qwen3-Coder-Next-FP8` | `refs/heads/main` | `da6e2ed27304dd39abadd9c82ef50e8de67bdd4c` | `apache-2.0` | 74.86 GiB | `z-lab/Qwen3-Coder-Next-DFlash` | `6d741db11b89d7ea80a423b109f0424817ce8f1b` | `mit` | 0.88 GiB | maybe | Larger 80B/3B-active coding-agent target; plausible on Spark0, but should run after the smaller candidates. |
+| 5 | `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | `refs/heads/main` | `003f183a92fbe5b9a8325aaa8b2ae797c91dd90f` | `apache-2.0` | 449.04 GiB | none selected | n/a | n/a | n/a | no | Dual-Spark or future reference only unless a smaller local quantized artifact appears. |
 
 The DFlash implementation reference is `z-lab/dflash`
-`94e4abc5e0c31b67bc1a9d30f1cc34ece28a8756` on `refs/heads/main`.
+`94e4abc5e0c31b67bc1a9d30f1cc34ece28a8756` on `refs/heads/main` (`MIT`).
+
+Draft model cards (at the pinned draft commits) reference:
+
+- vLLM: `vllm-project/vllm` at `refs/pull/40898/head`
+- SGLang: `sgl-project/sglang` at `refs/pull/20547/head`
+
+## Model-card Requirements (DFlash)
+
+- Each DFlash draft checkpoint must be paired with the **exact** named target checkpoint.
+- Treat DFlash drafts as `trust_remote_code` until proven otherwise; do not enable this in a shared runtime without review.
+- Do not compare DFlash speedup against a target run that falls back to CPU or uses a mismatched quantization/stack.
+
+## Metadata Commands (No Downloads)
+
+The table above is derived from Hugging Face API metadata:
+
+```sh
+./scripts/upstream_hf_api_report.sh Qwen/Qwen3.6-35B-A3B-FP8
+./scripts/upstream_hf_api_report.sh Qwen/Qwen3.6-35B-A3B-FP8 --sum-safetensors
+```
 
 ## Measurement Order
 
