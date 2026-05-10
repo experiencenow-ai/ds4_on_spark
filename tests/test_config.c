@@ -199,6 +199,64 @@ int32_t test_config(void)
 	unsetenv("DS4_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-165);
+	if ( setenv("DS4_LOG_LEVEL"," \t ",1) != 0 )
+		return(-166);
+	if ( setenv("DS4_ENABLE_CUDA"," \t ",1) != 0 )
+		return(-167);
+	if ( setenv("DS4_CUDA_DEVICE"," \t ",1) != 0 )
+		return(-168);
+	if ( setenv("DS4_ARENA_SIZE"," \t ",1) != 0 )
+		return(-169);
+	if ( setenv("DS4_LOG_RING_ENTRIES"," \t ",1) != 0 )
+		return(-170);
+	if ( ds4_config_parse_env(&cfg) < 0 )
+		return(-171);
+	if ( cfg.log_level != 2 )
+		return(-172);
+	if ( cfg.enable_cuda != 0 )
+		return(-173);
+	if ( cfg.cuda_device != DS4_CUDA_DEVICE_AUTO )
+		return(-174);
+	if ( cfg.arena_size != 0 )
+		return(-175);
+	if ( cfg.log_ring_entries != 0 )
+		return(-176);
+	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
+	unsetenv("DS4_CUDA_DEVICE");
+	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_LOG_RING_ENTRIES");
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-177);
+	if ( setenv("DS4_LOG_LEVEL","  warning  ",1) != 0 )
+		return(-178);
+	if ( setenv("DS4_ENABLE_CUDA","  yes  ",1) != 0 )
+		return(-179);
+	if ( setenv("DS4_CUDA_DEVICE"," 3 ",1) != 0 )
+		return(-180);
+	if ( setenv("DS4_ARENA_SIZE"," 512 ",1) != 0 )
+		return(-181);
+	if ( setenv("DS4_LOG_RING_ENTRIES"," 7 ",1) != 0 )
+		return(-182);
+	if ( ds4_config_parse_env(&cfg) < 0 )
+		return(-183);
+	if ( cfg.log_level != 1 )
+		return(-184);
+	if ( cfg.enable_cuda != 1 )
+		return(-185);
+	if ( cfg.cuda_device != 3 )
+		return(-186);
+	if ( cfg.arena_size != 512 )
+		return(-187);
+	if ( cfg.log_ring_entries != 7 )
+		return(-188);
+	unsetenv("DS4_LOG_LEVEL");
+	unsetenv("DS4_ENABLE_CUDA");
+	unsetenv("DS4_CUDA_DEVICE");
+	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_LOG_RING_ENTRIES");
+	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-107);
 	if ( setenv("DS4_ENABLE_CUDA","2147483648",1) != 0 )
 		return(-108);

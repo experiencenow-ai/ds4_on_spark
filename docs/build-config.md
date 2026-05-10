@@ -53,7 +53,7 @@ You can also override config fields from the environment with `ds4_config_parse_
 - `DS4_ARENA_SIZE`
 - `DS4_LOG_RING_ENTRIES`
 
-Empty values (e.g. `DS4_LOG_LEVEL=""`) are treated as unset and ignored.
+Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "`) are treated as unset and ignored; surrounding whitespace is trimmed before parsing.
 
 `ds4_config_load_auto` also consults:
 
