@@ -26,7 +26,7 @@ new file mode 100644
 index 0000000..1c12591
 --- /dev/null
 +++ b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
-@@ -0,0 +1,553 @@
+@@ -0,0 +1,584 @@
 +#include "gguf.h"
 +#include "ggml.h"
 +
@@ -539,6 +539,37 @@ index 0000000..1c12591
 +        std::printf("\"n_expert\":%" PRId64 ",", (n_expert > 0 ? n_expert : 0));
 +        std::printf("\"n_ff_exp\":%" PRId64 "", (n_ff_exp > 0 ? n_ff_exp : 0));
 +        std::printf("},\n");
++
++        std::printf("  \"tensors\": [");
++        const auto & want = expected_tensor_names();
++        for (size_t i = 0; i < want.size(); i++) {
++            if (i) std::printf(", ");
++            const std::string & name = want[i];
++            const int64_t tid = gguf_find_tensor(ctx_gguf, name.c_str());
++            const ggml_tensor * t = (ctx_meta != nullptr) ? ggml_get_tensor(ctx_meta, name.c_str()) : nullptr;
++
++            std::printf("{\"name\":\"%s\"", json_escape(name).c_str());
++            std::printf(",\"present\":%s", (tid >= 0 && t != nullptr) ? "true" : "false");
++
++            if (tid >= 0 && t != nullptr) {
++                const size_t offs = gguf_get_data_offset(ctx_gguf) + gguf_get_tensor_offset(ctx_gguf, tid);
++
++                std::printf(",\"type\":%d", (int) t->type);
++                std::printf(",\"n_dims\":%d", t->n_dims);
++                std::printf(",\"dims\":[");
++                for (int d = 0; d < t->n_dims; d++) {
++                    if (d) std::printf(",");
++                    std::printf("%" PRId64, t->ne[d]);
++                }
++                std::printf("]");
++                std::printf(",\"nbytes\":%zu", (size_t) ggml_nbytes(t));
++                std::printf(",\"offset\":%zu", offs);
++                std::printf(",\"has_data\":%s", t->data != nullptr ? "true" : "false");
++            }
++
++            std::printf("}");
++        }
++        std::printf("],\n");
 +
 +        std::printf("  \"missing\": [");
 +        for (size_t i = 0; i < missing.size(); i++) {
