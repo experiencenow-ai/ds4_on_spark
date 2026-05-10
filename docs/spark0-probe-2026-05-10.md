@@ -819,3 +819,44 @@ Filesystem      Size  Used Avail Use% Mounted on
 == disks (summary) ==
 nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
+
+### Single-target probe (Spark0, 17:48Z summary mode, `git: 55b71fa`)
+
+```text
+== local meta ==
+Sun May 10 17:48:47 UTC 2026
+git: 55b71fa
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 50, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== nvidia-smi pcie link (gpu/host max, optional) ==
+columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
+0, 0000000F:01:00.0, 1, 5, 5, 1, 16
+
+== pci link (sysfs, gpu endpoints, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
+```
