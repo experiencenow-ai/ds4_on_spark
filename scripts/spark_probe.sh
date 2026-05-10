@@ -717,19 +717,22 @@ CU
 	if [ "$nvcc_arch" != "" ]; then
 		nvcc_extra="-arch=$nvcc_arch"
 	fi
-	if "$nvcc_bin" $nvcc_extra -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
-		out="$("$cu_bin" 2>/dev/null || true)"
-		[ "$out" != "" ] && printf "%s\n" "$out"
-		if [ "$compute_cap" != "" ] && [ "$out" != "" ]; then
-			cc0="$(printf "%s\n" "$out" | sed -nE "s/^device0 cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | head -n 1)"
-			if [ "$cc0" != "" ] && [ "$cc0" != "$compute_cap" ]; then
-				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
+		if "$nvcc_bin" $nvcc_extra -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
+			out="$("$cu_bin" 2>/dev/null || true)"
+			[ "$out" != "" ] && printf "%s\n" "$out"
+			if [ "$compute_cap" != "" ] && [ "$out" != "" ]; then
+				cc_max="$(printf "%s\n" "$out" | sed -nE "s/^device[0-9]+ cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }")"
+				if [ "$cc_max" != "" ]; then
+					echo "runtime max cc: $cc_max"
+					if [ "$cc_max" != "$compute_cap" ]; then
+						echo "warning: compute_cap $compute_cap != runtime max cc $cc_max"
+					fi
+				fi
 			fi
-		fi
-		echo
-		emit_pcie_link ", post-load"
-		echo
-		emit_sysfs_pcie_link ", post-load"
+			echo
+			emit_pcie_link ", post-load"
+			echo
+			emit_sysfs_pcie_link ", post-load"
 	else
 		echo "nvcc compile failed:"
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
