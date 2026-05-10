@@ -167,6 +167,11 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 set(DS4_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/ds4")
+if(DS4_ENABLE_CUDA)
+	set(DS4_PACKAGE_HAS_CUDA 1)
+else()
+	set(DS4_PACKAGE_HAS_CUDA 0)
+endif()
 
 install(TARGETS ds4
 	EXPORT ds4Targets

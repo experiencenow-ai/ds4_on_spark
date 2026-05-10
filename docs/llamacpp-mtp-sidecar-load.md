@@ -47,6 +47,8 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Fl
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
+By default this Spark-only runner also samples 64 bytes from each tensor payload (`--payload-sample-bytes 64`) to catch truncated/corrupt uploads without loading full weights. Override with `REMOTE_MTP_SIDECAR_ARGS='--json --expect-deepseek-v4-flash --payload-sample-bytes 0'` if you need a strictly header-only check.
+
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
 
 Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh` now defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`), still avoiding full weight downloads. The recorded output is `docs/mtp-sidecar-probe-antirez-ef3b960-payload64.json`.
@@ -61,6 +63,7 @@ Add a dedicated loader that:
 - exposes the `ggml_tensor *` handles for the 32 weights by name
 
 Status in this repo: the patch in `docs/llamacpp-mtp-sidecar-probe.md` now supports `--load-weights`, which loads the entire sidecar tensor blob into RAM and validates that all 32 `mtp.0.*` tensors have non-null `data` pointers. This is a Spark-safe “does the file actually load?” gate, but it does not yet provide a reusable `deepseek4_mtp_sidecar` binder for forward/kv work.
+It also emits a per-tensor `tensors[]` inventory in JSON mode (offsets, dims, and type codes), which is a useful input when turning the probe into an actual sidecar binder module.
 
 Design target: a `struct deepseek4_mtp_sidecar` holding pointers for:
 
