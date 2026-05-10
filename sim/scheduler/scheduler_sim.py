@@ -407,6 +407,11 @@ class SimMetrics:
     mtp_verify_layer0_skipped_backpressure: int = 0
     mtp_accept_len_clamped_backpressure: int = 0
     dflash_steps: int = 0
+    dflash_output_tokens: int = 0
+    dflash_draft_tokens_total: int = 0
+    dflash_draft_tokens_accepted: int = 0
+    dflash_draft_tokens_rejected: int = 0
+    dflash_bonus_tokens: int = 0
     dflash_accept_len_per_step: List[int] = dataclasses.field(default_factory=list)
     dflash_accepted_per_step: List[int] = dataclasses.field(default_factory=list)
     dflash_rejected_per_step: List[int] = dataclasses.field(default_factory=list)
@@ -597,6 +602,13 @@ class SimMetrics:
                 "dflash": {
                     "present": self.dflash_steps > 0,
                     "steps": self.dflash_steps,
+                    "output_tokens": self.dflash_output_tokens,
+                    "output_token_throughput_tps": (float(self.dflash_output_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
+                    "draft_tokens_total": self.dflash_draft_tokens_total,
+                    "draft_tokens_accepted": self.dflash_draft_tokens_accepted,
+                    "draft_tokens_rejected": self.dflash_draft_tokens_rejected,
+                    "bonus_tokens": self.dflash_bonus_tokens,
+                    "accept_rate": (float(self.dflash_draft_tokens_accepted) / float(self.dflash_draft_tokens_total)) if self.dflash_draft_tokens_total != 0 else 0.0,
                     "accept_len": summarize_ints([al for al in self.dflash_accept_len_per_step if al > 0]),
                     "accepted": summarize_ints([a for a in self.dflash_accepted_per_step if a >= 0]),
                     "rejected": summarize_ints([r for r in self.dflash_rejected_per_step if r >= 0]),
@@ -2985,6 +2997,11 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         metrics.mtp_accept_len_per_step = [0 for _ in range(len(trace))]
         metrics.mtp_draft_attempt_len_per_step = [0 for _ in range(len(trace))]
     metrics.dflash_steps = 0
+    metrics.dflash_output_tokens = 0
+    metrics.dflash_draft_tokens_total = 0
+    metrics.dflash_draft_tokens_accepted = 0
+    metrics.dflash_draft_tokens_rejected = 0
+    metrics.dflash_bonus_tokens = 0
     metrics.dflash_accept_len_per_step = [-1 for _ in range(len(trace))]
     metrics.dflash_accepted_per_step = [-1 for _ in range(len(trace))]
     metrics.dflash_rejected_per_step = [-1 for _ in range(len(trace))]
@@ -3053,16 +3070,25 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         route = trace[tid]
         if route.dflash_accept_len is None and route.accepted_dflash is None and route.rejected_dflash is None:
             return
+        ts = tokens[tid]
+        if not ts.admitted_any:
+            return
         if metrics.dflash_accept_len_per_step[tid] != -1 or metrics.dflash_accepted_per_step[tid] != -1 or metrics.dflash_rejected_per_step[tid] != -1:
             return
         metrics.dflash_steps += 1
         dal = _derive_dflash_accept_len(route)
         if dal is not None:
             metrics.dflash_accept_len_per_step[tid] = int(dal)
+            metrics.dflash_output_tokens += int(dal)
+            metrics.dflash_bonus_tokens += max(0, int(dal) - 1)
         if route.accepted_dflash is not None:
             metrics.dflash_accepted_per_step[tid] = int(route.accepted_dflash)
+            metrics.dflash_draft_tokens_accepted += int(route.accepted_dflash)
         if route.rejected_dflash is not None:
             metrics.dflash_rejected_per_step[tid] = int(route.rejected_dflash)
+            metrics.dflash_draft_tokens_rejected += int(route.rejected_dflash)
+        if route.accepted_dflash is not None and route.rejected_dflash is not None:
+            metrics.dflash_draft_tokens_total += (int(route.accepted_dflash) + int(route.rejected_dflash))
 
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
         route = trace[tid]
@@ -3562,6 +3588,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     task_tps = (float(metrics.admitted_tasks) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
     output_tokens = float(metrics.mtp_output_tokens) if metrics.mtp_draft_len > 0 else float(metrics.admitted_tokens)
     output_tps = (output_tokens * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
+    dflash_steps = float(metrics.dflash_steps)
+    dflash_output_tokens = float(metrics.dflash_output_tokens)
+    dflash_output_tps = (dflash_output_tokens * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
+    dflash_bonus_tokens = float(metrics.dflash_bonus_tokens)
+    dflash_accept_rate = (float(metrics.dflash_draft_tokens_accepted) / float(metrics.dflash_draft_tokens_total)) if metrics.dflash_draft_tokens_total > 0 else 0.0
     dropped = float(metrics.dropped_tokens_backpressure)
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
@@ -3605,6 +3636,12 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "task_throughput_tps": float(task_tps),
             "output_tokens": float(output_tokens),
             "output_token_throughput_tps": float(output_tps),
+            "dflash_steps": float(dflash_steps),
+            "dflash_output_tokens": float(dflash_output_tokens),
+            "dflash_output_token_throughput_tps": float(dflash_output_tps),
+            "dflash_bonus_tokens": float(dflash_bonus_tokens),
+            "dflash_mean_accept_len": float((dflash_output_tokens / dflash_steps) if dflash_steps > 0.0 else 0.0),
+            "dflash_accept_rate": float(dflash_accept_rate),
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
             "service_batch_size_p50_interactive": float(_p_or_zero(metrics.service_batch_size_interactive, 0.50)),

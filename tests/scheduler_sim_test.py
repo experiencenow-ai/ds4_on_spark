@@ -239,6 +239,42 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_summary_includes_dflash_comparator_metrics(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                dflash_accept_len=3,
+                accepted_dflash=2,
+                rejected_dflash=0,
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertEqual(int(s["dflash_steps"]), 1)
+        self.assertEqual(int(s["dflash_output_tokens"]), 3)
+        self.assertEqual(int(s["dflash_bonus_tokens"]), 2)
+        self.assertAlmostEqual(float(s["dflash_mean_accept_len"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["dflash_accept_rate"]), 1.0, places=6)
+
     def test_stage_skip_totals_count_attempts(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
