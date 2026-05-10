@@ -113,6 +113,9 @@ fi
 if [ -f "$systemd_dir/ds4-preflight-strict@.timer" ]; then
     need_file "$systemd_dir/ds4-preflight-strict@.timer"
 fi
+if [ -f "$systemd_dir/ds4-support-bundle@.timer" ]; then
+    need_file "$systemd_dir/ds4-support-bundle@.timer"
+fi
 echo "ok"
 echo
 
