@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/tags/b9093`
-- Commit: `1e5ad35d560b90a8ac447d149c8f8447ae1fcaa0`
+- Ref: `refs/tags/b9095`
+- Commit: `f3c3e0e9a087835639733485b8900b195ba4ca47`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -67,9 +67,9 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9093/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9093/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9093/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9095/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9095/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9095/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 
