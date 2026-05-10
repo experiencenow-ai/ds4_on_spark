@@ -19,7 +19,7 @@ This builds and runs only:
 
 It also prints `nvcc --version` plus `--list-gpu-arch` / `--list-gpu-code` when supported (toolchain sanity gate for CUDA 13).
 
-If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
+If `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` are supported, the scripts treat missing `compute_121` / `sm_121` as errors (fast “toolchain cannot target GB10” signal).
 
 Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
 
@@ -54,6 +54,8 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_sm121_nvcc_flags_probe` (`-std=c++20` + `--extended-lambda` + `--expt-relaxed-constexpr` gate)
 - `cuda_sm121_nvrtc_jit` / `cuda_sm121_nvrtc_cxx20_jit` (NVRTC → PTX → Driver API module load/launch gates)
 - `cuda_sm121_nvjitlink_jit` (NVRTC → PTX → nvJitLink → CUBIN → Driver API module load/launch gate)
+
+The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
 
 Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; NVRTC `supportedArchs` includes `121`.
 
