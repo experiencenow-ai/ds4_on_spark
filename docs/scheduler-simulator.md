@@ -187,6 +187,8 @@ python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_d
 
 The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, and `{pending,hi_queue,lo_queue}_depth_time_weighted_p95`).
 
+When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size percentiles for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) and `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed, when present).
+
 ### Compare Variants (Ablations)
 
 Use `--compare label:JSON` to run one or more config variants against the
