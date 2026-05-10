@@ -60,6 +60,13 @@ Notes:
 - The helper is now **truly gated**: it does not `git fetch` / `git checkout` unless `ALLOW_FETCH=1` or `ALLOW_PATCH=1` is set.
 - When `JSON_ONLY=1` is set, common preflight failures (missing `LLAMA_DIR`, missing probe binary, unreadable `MTP_SIDECAR_GGUF`, etc.) emit a small JSON object (`ok=false`, `errors[]`) so Spark runners can parse failures deterministically.
 
+To verify the expected 32-tensor list is still pinned to `antirez/ds4` (binder source of truth):
+
+```bash
+./scripts/fetch_upstreams.sh ds4
+python3 scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py
+```
+
 Expected success signal:
 
 - `ok=true`
