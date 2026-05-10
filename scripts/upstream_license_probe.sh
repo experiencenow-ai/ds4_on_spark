@@ -74,7 +74,9 @@ probe_one()
 hf_declared_license()
 {
 	local upstream="$1"
-	"${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}" | awk '/^license:/ {print $2; exit}'
+	local report
+	report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
+	awk '/^license:/ {print $2}' <<<"${report}"
 }
 
 LICENSE_PATHS=(
