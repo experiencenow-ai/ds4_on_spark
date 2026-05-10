@@ -68,6 +68,8 @@ Tasks:
 - If the runtime can expose hooks, collect per-token latency, routing traces,
   expert batch sizes, and MTP accept/reject counters for the quantized
   high-performance path.
+- Add Qwen target-only baselines and paired DFlash speculative probes from
+  `docs/upstream-qwen-dflash.md` after Ling-style smoke tests are reproducible.
 - Capture command line, context, quant, t/s, TTFT, memory use.
 - Record failures exactly.
 
