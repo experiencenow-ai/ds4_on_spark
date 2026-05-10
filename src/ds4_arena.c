@@ -34,6 +34,19 @@ static int32_t ds4_is_pow2_i32(int32_t x)
 	return(1);
 }
 
+static int32_t ds4_is_aligned_ptr(const void *p,int32_t align)
+{
+	uintptr_t v;
+	if ( p == 0 )
+		return(0);
+	if ( align <= 1 )
+		return(1);
+	v = (uintptr_t)p;
+	if ( (v & (uintptr_t)(align - 1)) != 0 )
+		return(0);
+	return(1);
+}
+
 int32_t ds4_arena_init(ds4_arena_t *a,uint8_t *mem,int32_t size)
 {
 	if ( a == 0 )
@@ -42,6 +55,26 @@ int32_t ds4_arena_init(ds4_arena_t *a,uint8_t *mem,int32_t size)
 		return(-2);
 	if ( size <= 0 )
 		return(-3);
+	a->base = mem;
+	a->size = size;
+	a->used = 0;
+	return(0);
+}
+
+int32_t ds4_arena_init_ex(ds4_arena_t *a,uint8_t *mem,int32_t size,int32_t align)
+{
+	if ( a == 0 )
+		return(-1);
+	if ( mem == 0 )
+		return(-2);
+	if ( size <= 0 )
+		return(-3);
+	if ( align <= 0 )
+		align = 1;
+	if ( ds4_is_pow2_i32(align) == 0 )
+		return(-4);
+	if ( ds4_is_aligned_ptr(mem,align) == 0 )
+		return(-5);
 	a->base = mem;
 	a->size = size;
 	a->used = 0;
