@@ -93,7 +93,7 @@ sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
 # if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
-sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.conf.example /etc/ds4/ds4-spark0.conf
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark0.service
 # optional strict variant (fails non-zero on missing/invalid TP=2 inputs):
@@ -117,7 +117,7 @@ sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
 # if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.env.example /etc/ds4/ds4-spark1.env
-sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.yaml.example /etc/ds4/ds4-spark1.yaml
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark1.conf.example /etc/ds4/ds4-spark1.conf
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@spark1.service
 # optional strict variant (fails non-zero on missing/invalid TP=2 inputs):
@@ -136,7 +136,7 @@ sudo systemctl start ds4-preflight@spark1.service
 
 Notes:
 
-- The YAML config examples are intentionally minimal until the DS4 config schema is defined in-tree.
+ - The DS4 config examples are `key=value` placeholders (see `src/ds4_config.c`).
 - `ds4@.service` is wired to *want* the preflight unit for the same instance; you can run preflight independently at any time.
 
 ## Optional: Validate Installed Assets (Spark Side)

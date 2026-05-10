@@ -19,7 +19,7 @@ edit host-specific values, then enable services with `systemctl`.
 - `ds4@.service` expects:
   - an optional shared env file at `/etc/ds4/ds4.env`
   - an env file at `/etc/ds4/ds4-%i.env` (loaded after `ds4.env`)
-  - a config file at `/etc/ds4/ds4-%i.yaml` (may be minimal `{}` until the schema is defined)
+  - a config file at `/etc/ds4/ds4-%i.conf` (key=value; see `src/ds4_config.c`)
   - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
   - `ExecStartPre` validates `ds4.env` (when present) and `ds4-%i.env`
 - Optional: `ds4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails).
@@ -52,7 +52,7 @@ sudo systemd-tmpfiles --create || true
 
 - `ds4.env.example` : base env keys (single-Spark and dual-Spark placeholders)
 - `ds4-spark0.env.example`, `ds4-spark1.env.example` : per-host starting points
-- `ds4-spark0.yaml.example`, `ds4-spark1.yaml.example` : runtime config placeholders (schema TBD)
+- `ds4-spark0.conf.example`, `ds4-spark1.conf.example` : runtime config placeholders (key=value)
 - `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
 - `logrotate.ds4.conf.example` : optional logrotate config for file logs (skip if journald-only)
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet

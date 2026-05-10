@@ -72,7 +72,7 @@ sudo install -m 0644 /tmp/ds4-systemd/ds4*.service /etc/systemd/system/
 # optional (shared defaults loaded before per-instance env; do not overwrite if already customized):
 # if [ ! -f /etc/ds4/ds4.env ]; then sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4.env.example /etc/ds4/ds4.env; fi
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.env.example /etc/ds4/ds4-spark0.env
-sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.yaml.example /etc/ds4/ds4-spark0.yaml
+sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.conf.example /etc/ds4/ds4-spark0.conf
 sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
@@ -86,7 +86,7 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - `/opt/ds4/bin/ds4_server`
 - optional shared env at `/etc/ds4/ds4.env`
 - `/etc/ds4/ds4-spark0.env`
-- a config file at `/etc/ds4/ds4-spark0.yaml` (may be minimal `{}` until the schema is defined)
+- a config file at `/etc/ds4/ds4-spark0.conf` (key=value; see `src/ds4_config.c`)
 
 ## Safety Notes
 
