@@ -12,6 +12,7 @@ See also:
 - `docs/build-config.md`
 - `docs/build-cli.md`
 - `docs/build-logging.md`
+- `docs/build-context.md`
 - `docs/build-install.md`
 - `docs/build-gguf.md`
 
