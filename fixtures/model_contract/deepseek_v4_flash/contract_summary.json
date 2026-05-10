@@ -154,6 +154,24 @@
     }
   },
   "cache": {
+    "compression_semantics": {
+      "attention_compressor": {
+        "kv_quant_rule": "act_quant(kv[..., :-rope_head_dim], group=64, inplace=True); rope dims stay bf16",
+        "rotate": false
+      },
+      "indexer_present_rule": "indexer exists iff compress_ratio == 4 (CSA only)",
+      "indexer_scoring_path": {
+        "compressor_rotate": true,
+        "kv_quant_rule": "rotate_activation(kv); fp4_act_quant(kv, fp4_block_size, inplace=True)",
+        "q_quant_rule": "rotate_activation(q); fp4_act_quant(q, fp4_block_size, inplace=True)"
+      },
+      "notes": [
+        "The attention KV compressor (used for actual attention) runs with rotate=false; only the CSA Indexer scoring path uses rotate=true + FP4 act quantization.",
+        "Both compressors apply RoPE to the trailing rope_head_dim slice before activation quantization; non-RoPE dims are quantized."
+      ],
+      "overlap_rule": "overlap = (compress_ratio == 4)",
+      "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)"
+    },
     "decode": {
       "compress_indices": {
         "csa": "Indexer(...,offset=window_size)",

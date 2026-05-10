@@ -1077,15 +1077,33 @@ def build_contract() -> dict:
 			"mtp_compress_ratios": [int(r) for r in mtp_ratios],
 			"transformers_mtp_layer_types": transformers_mtp_layer_types,
 		},
-		"cache": {
-			"window_size": window_size,
-			"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
-			"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
-			"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
-			"kv_cache_sizes_at_reference_defaults": {
-				"max_seq_len": ref_max_seq_len,
-				"max_batch_size": ref_max_batch_size,
-				"kv_cache_size_by_compress_ratio": kv_cache_sizes_by_ratio,
+			"cache": {
+				"window_size": window_size,
+				"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
+				"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
+				"compression_semantics": {
+					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)",
+					"overlap_rule": "overlap = (compress_ratio == 4)",
+					"indexer_present_rule": "indexer exists iff compress_ratio == 4 (CSA only)",
+					"attention_compressor": {
+						"rotate": False,
+						"kv_quant_rule": "act_quant(kv[..., :-rope_head_dim], group=64, inplace=True); rope dims stay bf16",
+					},
+					"indexer_scoring_path": {
+						"compressor_rotate": True,
+						"kv_quant_rule": "rotate_activation(kv); fp4_act_quant(kv, fp4_block_size, inplace=True)",
+						"q_quant_rule": "rotate_activation(q); fp4_act_quant(q, fp4_block_size, inplace=True)",
+					},
+					"notes": [
+						"The attention KV compressor (used for actual attention) runs with rotate=false; only the CSA Indexer scoring path uses rotate=true + FP4 act quantization.",
+						"Both compressors apply RoPE to the trailing rope_head_dim slice before activation quantization; non-RoPE dims are quantized.",
+					],
+				},
+				"kv_cache_sizes_at_reference_defaults": {
+					"max_seq_len": ref_max_seq_len,
+					"max_batch_size": ref_max_batch_size,
+					"kv_cache_size_by_compress_ratio": kv_cache_sizes_by_ratio,
 				"kv_cache_size_by_layer": kv_cache_sizes_by_layer,
 				"kv_cache_slots_total_main": kv_cache_slots_total,
 				"kv_cache_slots_total_mtp": kv_cache_slots_mtp_total,
