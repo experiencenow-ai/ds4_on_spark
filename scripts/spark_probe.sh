@@ -553,6 +553,11 @@ fi
 [ -e /usr/local/cuda ] && ls -ld /usr/local/cuda || true
 command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null || true
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
+if [ -r /usr/local/cuda/version.json ]; then
+	echo
+	echo "== cuda version.json (capped) =="
+	cat /usr/local/cuda/version.json 2>/dev/null | head -n 80 || true
+fi
 echo
 echo "== cuda headers (cuda.h) =="
 cuda_h="/usr/local/cuda/include/cuda.h"
