@@ -264,6 +264,38 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_consistency.py" 
 	echo
 } >>"$REPORT_MD"
 
+echo "== verifying expected tensor list against upstream ds4 binder (local) =="
+python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --json \
+	>"$OUT_DIR/local_ds4_tensor_contract_stdout.txt" 2>"$OUT_DIR/local_ds4_tensor_contract_stderr.txt" || true
+
+{
+	echo "## Tensor Contract vs ds4 binder (local)"
+	echo
+	echo "Command:"
+	echo
+	echo '```'
+	echo "python3 scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py --json"
+	echo '```'
+	echo
+	echo "Stdout (prefix):"
+	echo
+	echo '```'
+	sed -n '1,120p' "$OUT_DIR/local_ds4_tensor_contract_stdout.txt" || true
+	echo '```'
+	echo
+	echo "Stderr (prefix):"
+	echo
+	echo '```'
+	sed -n '1,120p' "$OUT_DIR/local_ds4_tensor_contract_stderr.txt" || true
+	echo '```'
+	echo
+	echo "Artifacts:"
+	echo
+	echo "- stdout: $OUT_DIR/local_ds4_tensor_contract_stdout.txt"
+	echo "- stderr: $OUT_DIR/local_ds4_tensor_contract_stderr.txt"
+	echo
+} >>"$REPORT_MD"
+
 echo "== running llama.cpp-side MTP sidecar loader probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe_patch.sh && chmod +x /tmp/llamacpp_mtp_sidecar_probe_patch.sh" \
 	<"$HELPER_LOCAL" \
