@@ -15,6 +15,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 ## DeepSeek V4 Flash
 
 - Contract doc: `docs/model-deepseek-v4-flash.md`
+- Upstream metadata source (HF configs only; no weights): `docs/upstream-deepseek-v4-flash.md`
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, and config-field compatibility mappings for interpreting external runtimes)
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
@@ -30,6 +31,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Contract verifier: `scripts/model_contract_verify_deepseek_v4_flash.py`
   - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).
   - Also gates `contract_summary.json` `mtp.semantics` (source-derived `MTPBlock.forward(...)` expressions) so MTP path drift is detected even when tensor keys remain stable.
+  - Enforces Flash-variant quantization semantics (`expert_dtype`, `scale_fmt`, and related config fields) so external-runtime results can be interpreted without silently mixing Flash vs Flash-Base.
 
 ## Correctness Oracles (requirements)
 
