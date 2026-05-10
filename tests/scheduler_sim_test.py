@@ -2738,6 +2738,7 @@ class SchedulerSimTest(unittest.TestCase):
         scenarios = out.get("scenarios", {})
         self.assertIn("k_signal_policy", scenarios)
         self.assertIn("starvation_knobs", scenarios)
+        self.assertIn("expert_queue_max_sweep", scenarios)
         self.assertIn("expert_queue_reserve_sweep", scenarios)
         self.assertIn("expert_batching_sweep", scenarios)
         self.assertNotIn("mtp_attempt_policy", scenarios)
@@ -2749,6 +2750,10 @@ class SchedulerSimTest(unittest.TestCase):
 
         reserve = scenarios["expert_queue_reserve_sweep"]["results"]["variants"]
         self.assertIn("reserve_0", reserve)
+
+        qmax = scenarios["expert_queue_max_sweep"]["results"]["variants"]
+        self.assertIn("queue_max_32", qmax)
+        self.assertIn("queue_max_128", qmax)
 
         summary = out.get("trace_summary")
         self.assertIsInstance(summary, dict)

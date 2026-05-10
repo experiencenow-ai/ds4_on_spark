@@ -91,7 +91,7 @@ For concise loop output, use `--summary-json`:
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
 ```
 
-To run a small set of trace-backed go/no-go sweeps (reservation, k-signal policy, starvation knobs, and optionally MTP attempt policy), use:
+To run a small set of trace-backed go/no-go sweeps (expert queue max, reservation, k-signal policy, starvation knobs, expert batching, and optionally MTP attempt policy), use:
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
