@@ -358,7 +358,18 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("summary", out)
         summary = out["summary"]
         self.assertIsInstance(summary, dict)
-        for k in ("makespan_ms", "token_throughput_tps", "task_throughput_tps", "drop_frac_tokens"):
+        for k in (
+            "makespan_ms",
+            "token_throughput_tps",
+            "task_throughput_tps",
+            "drop_frac_tokens",
+            "partial_admit_frac_tokens",
+            "starved_task_frac",
+            "expert_max_pending_tasks_max",
+            "expert_utilization_p50",
+            "expert_saturation_p95",
+            "mtp_accept_rate",
+        ):
             self.assertIn(k, summary)
 
     def test_summary_json_compare_omits_full_metrics(self) -> None:

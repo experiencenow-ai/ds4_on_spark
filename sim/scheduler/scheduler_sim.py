@@ -3105,6 +3105,10 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
+    tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
+    starved_task_frac = (float(metrics.starved_tasks) / tasks_started_total) if tasks_started_total > 0.0 else 0.0
+    partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
+    mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -3115,6 +3119,7 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
             "drop_frac_tokens": float(drop_frac),
+            "partial_admit_frac_tokens": float(partial_admit_frac),
             "token_p50_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.50)),
             "token_p95_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.95)),
             "token_p50_batch_ms": float(_p_or_zero(metrics.token_lat_ms_batch, 0.50)),
@@ -3124,7 +3129,21 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_p50_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.50)),
             "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
             "starved_tasks": float(metrics.starved_tasks),
+            "starved_task_frac": float(starved_task_frac),
             "dropped_tasks_backpressure": float(metrics.dropped_tasks_backpressure),
+            "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
+            "expert_max_pending_tasks_max": float(max(metrics.max_pending_per_expert)) if len(metrics.max_pending_per_expert) != 0 else 0.0,
+            "expert_mean_pending_tasks_p50": float(_p_or_zero(metrics.mean_pending_per_expert, 0.50)),
+            "expert_mean_pending_tasks_p95": float(_p_or_zero(metrics.mean_pending_per_expert, 0.95)),
+            "expert_max_pending_work_p50": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.50)),
+            "expert_max_pending_work_max": float(max(metrics.max_pending_work_per_expert)) if len(metrics.max_pending_work_per_expert) != 0 else 0.0,
+            "expert_mean_pending_work_p50": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.50)),
+            "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
+            "expert_utilization_p50": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.50)),
+            "expert_utilization_p95": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.95)),
+            "expert_saturation_p50": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.50)),
+            "expert_saturation_p95": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.95)),
+            "mtp_accept_rate": float(mtp_accept_rate),
         }
     )
 
