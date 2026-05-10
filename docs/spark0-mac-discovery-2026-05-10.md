@@ -77,6 +77,12 @@ Refreshed again (12:44Z, matches Spark0 probe refresh, `nvidia-smi -q` C2C summa
 REDACT=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
 ```
 
+Refreshed again (13:43Z, matches Spark0 probe refresh):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1344Z_loop_refresh.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
@@ -99,6 +105,17 @@ spark1.local: not reachable
 == meta ==
 Sun May 10 13:13:06 UTC 2026
 git: 0cd918d
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 13:43:23 UTC 2026
+git: 393ae50
 targets: aitopatom-9ab9.local spark1.local
 
 == known target checks ==

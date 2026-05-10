@@ -83,6 +83,12 @@ Additional probe run (13:13Z refresh, runtime max cc sanity-check):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1313Z_loop_runtime_ccmax_git_0cd918d.txt
 ```
 
+Additional probe run (13:43Z refresh, confirms cc + sysfs PCIe snapshot):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1339Z_loop_refresh.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -116,6 +122,26 @@ ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39
 Product Architecture: Blackwell
 Peer Type: Direct Connected
 GPU C2C Mode: Enabled
+```
+
+### Compute capability + sysfs PCIe snapshot (Spark0, 13:43Z)
+
+```text
+== local meta ==
+Sun May 10 13:43:17 UTC 2026
+git: 393ae50
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+runtime max cc: 12.1
+
+== pci link (sysfs, current/max, post-load) ==
+path 000f:00:00.0 current_link_speed: Unknown
+path 000f:00:00.0 current_link_width: 0
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
 ```
 
 ### Single-target probe (Spark0, 01:38Z)
