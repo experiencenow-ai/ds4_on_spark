@@ -40,7 +40,18 @@ fi
 \$NVCC --version
 echo
 echo \"== nvcc: --list-gpu-arch (if supported) ==\"
-\$NVCC --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
+list_gpu_arch=\$(\$NVCC --list-gpu-arch 2>/dev/null || true)
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported)\"
+else
+	printf \"%s\n\" \"\${list_gpu_arch}\"
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		:
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121)\" >&2
+		exit 4
+	fi
+fi
 echo
 echo \"== nvcc: --list-gpu-code (if supported) ==\"
 list_gpu_code=\$(\$NVCC --list-gpu-code 2>/dev/null || true)
@@ -52,7 +63,7 @@ else
 		:
 	else
 		echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
-		exit 4
+		exit 5
 	fi
 fi
 
