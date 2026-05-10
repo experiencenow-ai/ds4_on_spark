@@ -80,6 +80,6 @@ DS4_EXTERN_C_END
 #define DS4_CUDA_CHECK_LAST_ERROR() ds4_cuda_check_last_error(__FILE__,(int32_t)__LINE__)
 #define DS4_CUDA_CHECK_PEEK_LAST_ERROR() ds4_cuda_check_peek_last_error(__FILE__,(int32_t)__LINE__)
 
-#if defined(DS4_HAS_CUDA) && defined(__CUDACC__)
+#if DS4_HAS_CUDA && defined(__CUDACC__)
 #define DS4_CUDA_KERNEL_LAUNCH(call) ((call),ds4_cuda_check_peek_last_error_ex(#call,__FILE__,(int32_t)__LINE__))
 #endif
