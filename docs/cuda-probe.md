@@ -23,7 +23,12 @@ If `nvcc --list-gpu-arch` is supported, the script treats a missing `compute_121
 
 If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
 
-Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
+Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` includes `compute_121`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
+
+Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
+
+- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536`
+- `__CUDA_ARCH__=1210`
 
 ## Spark0: Capability Sweep (One Command)
 
@@ -217,13 +222,13 @@ Observed:
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
 - The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure
 
-## Full Suite Spark0 Results (2026-05-09)
+## Full Suite Spark0 Results (2026-05-10)
 
 Commands run:
 
 ```bash
-./scripts/cuda_probe_compile_only_spark0.sh
-./scripts/cuda_probe_spark0.sh
+./scripts/cuda_probe_compile_only_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_spark0.sh spark0@aitopatom-9ab9.local
 ```
 
 Observed:
