@@ -416,6 +416,25 @@ with open(log_raw, "w", encoding="utf-8") as f:
         "mtp_draft": None,
         "mtp_accepted": None,
         "mtp_rejected": None,
+        "fattn_probe": {
+            "seen_fattn_disabled": False,
+            "seen_sched_reserve_cpu_fattn": False,
+            "fattn_line_count": 0,
+            "fattn_cpu_line_count": 0,
+            "fattn_cuda_line_count": 0,
+            "sched_reserve_line_count": 0,
+            "sched_reserve_graph_nodes": None,
+            "sched_reserve_graph_splits": None,
+            "sched_reserve_took_ms": None,
+            "fattn_ids": set(),
+            "fattn_nodes": set(),
+            "fattn_backend_counts": {},
+            "fattn_cuda_device_counts": {},
+            "node_kind_nodes": set(),
+            "node_kind_cpu_counts": {},
+            "node_kind_cuda_counts": {},
+            "match_lines": [],
+        },
     }
 
     def _append_cap(xs, v, cap=200000):
@@ -488,6 +507,99 @@ with open(log_raw, "w", encoding="utf-8") as f:
             if isinstance(v, (int, float)):
                 token_trace[outk] = float(v)
 
+    def _fattn_probe_line(line: str):
+        fp = token_trace.get("fattn_probe") or {}
+        if not isinstance(fp, dict):
+            return
+        ln = line.rstrip("\n")
+        is_match = False
+
+        if ln.startswith("sched_reserve:"):
+            fp["sched_reserve_line_count"] = int(fp.get("sched_reserve_line_count") or 0) + 1
+            m = re.search(r"graph nodes\\s*=\\s*(\\d+)", ln)
+            if m is not None:
+                try:
+                    fp["sched_reserve_graph_nodes"] = int(m.group(1))
+                except Exception:
+                    pass
+            m = re.search(r"graph splits\\s*=\\s*(\\d+)", ln)
+            if m is not None:
+                try:
+                    fp["sched_reserve_graph_splits"] = int(m.group(1))
+                except Exception:
+                    pass
+            m = re.search(r"reserve took\\s*([0-9]+(?:\\.[0-9]+)?)\\s*ms", ln)
+            if m is not None:
+                try:
+                    fp["sched_reserve_took_ms"] = float(m.group(1))
+                except Exception:
+                    pass
+            is_match = True
+
+        if "Flash Attention was auto, set to disabled" in ln:
+            fp["seen_fattn_disabled"] = True
+            is_match = True
+        if "Flash Attention tensor is assigned to device CPU" in ln:
+            fp["seen_sched_reserve_cpu_fattn"] = True
+            is_match = True
+
+        if "__fattn__" in ln:
+            fp["fattn_line_count"] = int(fp.get("fattn_line_count") or 0) + 1
+            nodes = fp.get("fattn_nodes")
+            if isinstance(nodes, set):
+                for m in re.finditer(r"__fattn__-(\\d+)", ln):
+                    nodes.add("__fattn__-" + m.group(1))
+                    ids = fp.get("fattn_ids")
+                    if isinstance(ids, set):
+                        try:
+                            ids.add(int(m.group(1)))
+                        except Exception:
+                            pass
+            m = re.search(r"(?:cuda\\s+backend|backend)\\s*(?:=|:)?\\s*([0-9]+)", ln, flags=re.IGNORECASE)
+            if m is not None:
+                try:
+                    bid = int(m.group(1))
+                    d = fp.get("fattn_backend_counts")
+                    if isinstance(d, dict):
+                        d[bid] = int(d.get(bid, 0)) + 1
+                except Exception:
+                    pass
+            m = re.search(r"CUDA([0-9]+)", ln)
+            if m is not None:
+                try:
+                    did = int(m.group(1))
+                    d = fp.get("fattn_cuda_device_counts")
+                    if isinstance(d, dict):
+                        d[did] = int(d.get(did, 0)) + 1
+                except Exception:
+                    pass
+            low = ln.lower()
+            if "cpu" in low:
+                fp["fattn_cpu_line_count"] = int(fp.get("fattn_cpu_line_count") or 0) + 1
+            if "cuda" in low:
+                fp["fattn_cuda_line_count"] = int(fp.get("fattn_cuda_line_count") or 0) + 1
+            is_match = True
+
+        for m in re.finditer(r"(__[A-Za-z0-9_]+__)-\\d+", ln):
+            kinds = fp.get("node_kind_nodes")
+            if isinstance(kinds, set):
+                kinds.add(m.group(1))
+            low = ln.lower()
+            if "cpu" in low:
+                d = fp.get("node_kind_cpu_counts")
+                if isinstance(d, dict):
+                    d[m.group(1)] = int(d.get(m.group(1), 0)) + 1
+            if "cuda" in low:
+                d = fp.get("node_kind_cuda_counts")
+                if isinstance(d, dict):
+                    d[m.group(1)] = int(d.get(m.group(1), 0)) + 1
+            is_match = True
+
+        if is_match:
+            lines = fp.get("match_lines")
+            if isinstance(lines, list) and len(lines) < 50:
+                lines.append(ln[:4000])
+
     def _emit_text(s: str):
         f.write(s)
         f.flush()
@@ -513,6 +625,7 @@ with open(log_raw, "w", encoding="utf-8") as f:
                     _record_evt_metrics(evt)
             except Exception:
                 pass
+        _fattn_probe_line(line)
         if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line) or ("Prompt:" in line and "Generation:" in line):
             timings_lines.append(line.strip())
         _emit_text(line)
@@ -742,6 +855,99 @@ if gen_tps is not None:
     summary_lines.append("generation_tps=%.6f" % gen_tps)
 if gen_ms_per_tok is not None:
     summary_lines.append("generation_ms_per_token=%.6f" % gen_ms_per_tok)
+
+fp = token_trace.get("fattn_probe") or {}
+if isinstance(fp, dict):
+    ids = fp.get("fattn_ids")
+    if isinstance(ids, set) and ids:
+        id_min = min(ids)
+        id_max = max(ids)
+        span = (id_max - id_min) + 1
+        missing = 0
+        for x in range(id_min, id_max + 1):
+            if x not in ids:
+                missing += 1
+        summary_lines.append("fattn_id_min=%d" % int(id_min))
+        summary_lines.append("fattn_id_max=%d" % int(id_max))
+        summary_lines.append("fattn_id_span=%d" % int(span))
+        summary_lines.append("fattn_id_missing_count=%d" % int(missing))
+    else:
+        summary_lines.append("fattn_id_min=NA")
+        summary_lines.append("fattn_id_max=NA")
+        summary_lines.append("fattn_id_span=NA")
+        summary_lines.append("fattn_id_missing_count=NA")
+
+    summary_lines.append("fattn_seen_disabled=%s" % str(bool(fp.get("seen_fattn_disabled"))))
+    summary_lines.append("fattn_seen_sched_reserve_cpu=%s" % str(bool(fp.get("seen_sched_reserve_cpu_fattn"))))
+    summary_lines.append("fattn_line_count=%d" % int(fp.get("fattn_line_count") or 0))
+
+    nodes = fp.get("fattn_nodes")
+    summary_lines.append("fattn_node_unique=%s" % (str(len(nodes)) if isinstance(nodes, set) else "NA"))
+
+    bc = fp.get("fattn_backend_counts")
+    if isinstance(bc, dict) and bc:
+        summary_lines.append("fattn_backend_unique=%d" % len(bc))
+        summary_lines.append("fattn_backend0_only=%s" % str((len(bc) == 1 and 0 in bc)))
+        summary_lines.append("fattn_backend_counts=%s" % ",".join("%s:%s" % (k, bc[k]) for k in sorted(bc)))
+    else:
+        summary_lines.append("fattn_backend_unique=NA")
+        summary_lines.append("fattn_backend0_only=NA")
+        summary_lines.append("fattn_backend_counts=NA")
+
+    dc = fp.get("fattn_cuda_device_counts")
+    if isinstance(dc, dict) and dc:
+        summary_lines.append("fattn_cuda_device_unique=%d" % len(dc))
+        summary_lines.append("fattn_cuda_device0_only=%s" % str((len(dc) == 1 and 0 in dc)))
+        summary_lines.append("fattn_cuda_device_counts=%s" % ",".join("%s:%s" % (k, dc[k]) for k in sorted(dc)))
+    else:
+        summary_lines.append("fattn_cuda_device_unique=NA")
+        summary_lines.append("fattn_cuda_device0_only=NA")
+        summary_lines.append("fattn_cuda_device_counts=NA")
+
+    summary_lines.append("sched_reserve_line_count=%d" % int(fp.get("sched_reserve_line_count") or 0))
+    for k in ("sched_reserve_graph_nodes", "sched_reserve_graph_splits", "sched_reserve_took_ms"):
+        v = fp.get(k)
+        if v is None:
+            summary_lines.append(k + "=NA")
+        elif isinstance(v, float):
+            summary_lines.append(k + "=%.6f" % float(v))
+        else:
+            summary_lines.append(k + "=%s" % str(v))
+
+    kinds = fp.get("node_kind_nodes")
+    summary_lines.append("node_kind_unique=%s" % (str(len(kinds)) if isinstance(kinds, set) else "NA"))
+    for name, key in (("node_kind_cpu_top", "node_kind_cpu_counts"), ("node_kind_cuda_top", "node_kind_cuda_counts")):
+        d = fp.get(key)
+        if isinstance(d, dict) and d:
+            top = sorted(d.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+            summary_lines.append(name + "=%s" % ",".join("%s:%s" % (k, v) for (k, v) in top))
+        else:
+            summary_lines.append(name + "=NA")
+
+    try:
+        fp_out = {
+            "seen_fattn_disabled": bool(fp.get("seen_fattn_disabled")),
+            "seen_sched_reserve_cpu_fattn": bool(fp.get("seen_sched_reserve_cpu_fattn")),
+            "fattn_line_count": int(fp.get("fattn_line_count") or 0),
+            "fattn_cpu_line_count": int(fp.get("fattn_cpu_line_count") or 0),
+            "fattn_cuda_line_count": int(fp.get("fattn_cuda_line_count") or 0),
+            "fattn_nodes": sorted(list(fp.get("fattn_nodes") or []))[:2000],
+            "fattn_ids": sorted(list(fp.get("fattn_ids") or []))[:2000],
+            "fattn_backend_counts": fp.get("fattn_backend_counts") or {},
+            "fattn_cuda_device_counts": fp.get("fattn_cuda_device_counts") or {},
+            "sched_reserve_line_count": int(fp.get("sched_reserve_line_count") or 0),
+            "sched_reserve_graph_nodes": fp.get("sched_reserve_graph_nodes"),
+            "sched_reserve_graph_splits": fp.get("sched_reserve_graph_splits"),
+            "sched_reserve_took_ms": fp.get("sched_reserve_took_ms"),
+            "node_kind_unique": len(fp.get("node_kind_nodes") or []),
+            "node_kind_cpu_counts": fp.get("node_kind_cpu_counts") or {},
+            "node_kind_cuda_counts": fp.get("node_kind_cuda_counts") or {},
+            "match_lines": list(fp.get("match_lines") or [])[:50],
+        }
+        with open(os.path.join(os.path.dirname(log_raw), "fattn_cli_probe.json"), "w", encoding="utf-8") as pf:
+            json.dump(fp_out, pf, sort_keys=True, indent=2)
+    except Exception:
+        pass
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

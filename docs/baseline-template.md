@@ -57,6 +57,9 @@ Token trace / routing (best-effort; when the runtime emits JSON token events):
 - Routed experts (top5):
 - Expert/batch/queue stats:
 - MTP counters (draft/accepted/rejected):
+- CUDA placement / fallback (best-effort):
+  - `fattn_reservation_probe.json` (server sweep) and/or `fattn_cli_probe.json` (one-shot run)
+  - `fattn_seen_disabled`, `fattn_seen_sched_reserve_cpu`, `fattn_id_min/max/missing_count`, `node_kind_cpu_top`
 
 ## Raw Logs
 

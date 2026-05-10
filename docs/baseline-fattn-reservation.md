@@ -33,6 +33,8 @@ Run a resident `llama-server` sweep and inspect the emitted probe JSON:
 - Script: `scripts/benchmark_llamacpp_server_sweep.py`
 - Output: `fattn_reservation_probe.json` in `OUT_DIR`
 
+Optional (best-effort): the one-shot `llama-cli` baseline (`scripts/benchmark_llamacpp_spark.sh`) also emits `fattn_cli_probe.json` when the runtime prints `sched_reserve:` / `__fattn__-*` / `__op__-*` placement lines during the run. This is not guaranteed across forks, but it provides a low-friction check for CUDA/CPU fallback signals without running a resident server.
+
 ### Run From Mac (baseline wrapper)
 
 To attach the probe to the standard baseline entrypoint (so the artifacts get fetched and recorded in the same report), run from the Mac:
