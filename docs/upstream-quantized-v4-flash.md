@@ -116,7 +116,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS + IQ3_XXS)
 
-- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `4ad7e76f79d61c6d511dc5ed0cb3fb3d1286c25a` (`refs/heads/main`)
+- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `836cfa0faa2888e4a8ca91310d1adec9a66b66ca` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement:
   - Requires `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
@@ -128,8 +128,11 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
     - LFS sha256 shards:
       - `0e4356c7f2e3876bd5757bbaa4f2b7530370063939083048a320816a9d0ae99b` (`...IQ2_XXS-00001-of-00002...`, 49491736416 bytes)
       - `5dd29236696a4bec748c2d4e194dd4719473970873fc1f34422f92845da5c5e7` (`...IQ2_XXS-00002-of-00002...`, 28416100256 bytes)
-  - IQ3_XXS: `deepseek-ai__DeepSeek-V4-Flash-IQ3_XXS.gguf` (111834815936 bytes, 104.2 GiB)
-    - LFS sha256: `e2e075f47075025b595fe843cd624c1e821f751d2eae2661a55d9a2168dda5f2`
+  - IQ3_XXS (3 shards): total 111834816288 bytes (104.2 GiB)
+    - LFS sha256 shards:
+      - `8d1d6f79313ea2164f3b69177777b385e0729a62f30d9c6078712816a4492f3b` (`...IQ3_XXS-00001-of-00003...`, 49837684288 bytes)
+      - `86d6c4e04754a08f78a10916c768504015e6f3e436f3164eb4247d821c5eed31` (`...IQ3_XXS-00002-of-00003...`, 49979559168 bytes)
+      - `013b52f77bbf666f45fe396a2c02c244e437400003ddefa999ddeca53b4245d7` (`...IQ3_XXS-00003-of-00003...`, 12017572832 bytes)
   - BF16-ish (not single-Spark plausible): `deepseek-ai__DeepSeek-V4-Flash-bf16.gguf` (161799012416 bytes, 150.7 GiB)
     - LFS sha256: `0576a182aa80478733495f013fc7dd2ce71cbf9de8c4d59230a8c2724cad6614`
 - Single-Spark plausibility:
