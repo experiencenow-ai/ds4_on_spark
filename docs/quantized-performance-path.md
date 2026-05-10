@@ -45,6 +45,7 @@ After the first successful run, prioritize instrumentation that does **not** req
 - **Per-run GPU polling**: `nvidia-smi` CSV sampled during the run.
   - The baseline scripts already support `GPU_SAMPLE=1` (default) and emit `nvidia_smi_poll.csv`.
   - Adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) for higher/lower resolution.
+  - The llama.cpp baseline summary derives best-effort stats from the CSV (mem min/max/delta; plus util/power percentiles when present).
 - **CPU RSS**: captured by the wrapper (`max_rss_*` fields).
 - **KV / memory growth proxy**: inferred from GPU polling deltas during prefill vs decode.
 
@@ -55,6 +56,7 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
 - MTP draft/accepted/rejected counters
 - CUDA fallback / graph placement (best-effort): run `scripts/benchmark_llamacpp_server_sweep.py` and inspect `fattn_reservation_probe.json` + the `node_kind_*` / `sched_reserve_*` fields (see `docs/baseline-fattn-reservation.md`).
   - To include this sweep in the standard baseline report (Mac → Spark), set `LLAMA_SERVER_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
+- Patch presence (optional, read-only): set `LLAMA_FATTN_PATCH_PROBE=1` to run `scripts/benchmark_llamacpp_fattn_patch_probe.py` on Spark and fetch `fattn_patch_probe.json` (heuristic source scan; see `docs/baseline-fattn-reservation.md`).
 - CUDA fallback / placement (one-shot, best-effort): when the runtime prints `sched_reserve:` / `__fattn__-*` placement lines during a normal `llama-cli` run, `scripts/benchmark_llamacpp_spark.sh` writes `fattn_cli_probe.json` into the fetched artifacts directory and mirrors key fields into the baseline summary (`fattn_*`, `node_kind_*`, `sched_reserve_*`). This is opportunistic and may be `NA` on forks that do not emit those lines.
 
 The llama.cpp Spark baseline script also supports a **best-effort token trace** capture:

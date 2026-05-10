@@ -35,6 +35,27 @@ Run a resident `llama-server` sweep and inspect the emitted probe JSON:
 
 Optional (best-effort): the one-shot `llama-cli` baseline (`scripts/benchmark_llamacpp_spark.sh`) also emits `fattn_cli_probe.json` when the runtime prints `sched_reserve:` / `__fattn__-*` / `__op__-*` placement lines during the run. This is not guaranteed across forks, but it provides a low-friction check for CUDA/CPU fallback signals without running a resident server.
 
+### Cheap Source Probe (Patch Presence)
+
+To confirm the **pad-to-256** reservation fix is present in the external runtime tree without loading a model, run the baseline wrapper with:
+
+```sh
+LLAMA_FATTN_PATCH_PROBE=1 \
+LLAMA_DIR=/abs/path/on/spark/to/llama.cpp \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+This runs a read-only scan (`scripts/benchmark_llamacpp_fattn_patch_probe.py`) on Spark and fetches:
+
+- `fattn_patch_probe.json` (in the fetched probe artifacts dir)
+
+Key fields (heuristic):
+
+- `pad256_found=True` suggests the `GGML_PAD(n_tokens, 256)` + `n_embd_head_k == 512` logic is present in the runtime sources.
+- `patch_artifact_sha256` pins the expected patch artifact in this repo (`docs/patches/llama-cpp-kamnxt-ds4-fattn-reservation.patch`) for cross-run bookkeeping.
+
+This source probe does **not** guarantee `__fattn__` schedules on CUDA; use the resident server sweep probe for that.
+
 ### Run From Mac (baseline wrapper)
 
 To attach the probe to the standard baseline entrypoint (so the artifacts get fetched and recorded in the same report), run from the Mac:

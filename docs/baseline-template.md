@@ -49,6 +49,7 @@ Memory:
 - Max RSS:
 - GPU mem (before/after):
 - GPU poll mem used (min/max/delta):
+- GPU poll util/power (min/p50/p90/max/mean; best-effort):
 
 Token trace / routing (best-effort; when the runtime emits JSON token events):
 
@@ -60,6 +61,8 @@ Token trace / routing (best-effort; when the runtime emits JSON token events):
 - CUDA placement / fallback (best-effort):
   - `fattn_reservation_probe.json` (server sweep) and/or `fattn_cli_probe.json` (one-shot run)
   - `fattn_seen_disabled`, `fattn_seen_sched_reserve_cpu`, `fattn_id_min/max/missing_count`, `node_kind_cpu_top`
+- Patch presence (optional, read-only):
+  - `fattn_patch_probe.json` (source scan; `pad256_found`, `patch_artifact_sha256`)
 
 ## Raw Logs
 

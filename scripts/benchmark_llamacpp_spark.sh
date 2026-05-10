@@ -713,6 +713,14 @@ for tl in timings_lines:
             gen_tps = float(mg.group(1))
 
 gpu_used_mib = []
+gpu_used_mib_gpu0 = []
+gpu_util_gpu_pct = []
+gpu_util_gpu_pct_gpu0 = []
+gpu_util_mem_pct = []
+gpu_util_mem_pct_gpu0 = []
+gpu_power_w = []
+gpu_power_w_gpu0 = []
+gpu_indices = set()
 if gpu_poll_csv and os.path.exists(gpu_poll_csv):
     try:
         with open(gpu_poll_csv, "r", encoding="utf-8", errors="replace") as pf:
@@ -720,16 +728,57 @@ if gpu_poll_csv and os.path.exists(gpu_poll_csv):
                 if "memory.used" in ln and "timestamp" in ln:
                     continue
                 cols = [c.strip() for c in ln.split(",")]
-                if len(cols) < 3:
+                if len(cols) < 7:
                     continue
+                m_idx = re.search(r"(\\d+)", cols[1])
+                idx = None
+                if m_idx:
+                    try:
+                        idx = int(m_idx.group(1))
+                        gpu_indices.add(idx)
+                    except Exception:
+                        idx = None
+
                 m = re.search(r"(\\d+)", cols[2])
-                if not m:
-                    continue
-                gpu_used_mib.append(float(int(m.group(1))))
+                if m:
+                    v = float(int(m.group(1)))
+                    gpu_used_mib.append(v)
+                    if idx == 0:
+                        gpu_used_mib_gpu0.append(v)
+
+                m = re.search(r"([0-9]+(?:\\.[0-9]+)?)", cols[4])
+                if m:
+                    v = float(m.group(1))
+                    gpu_util_gpu_pct.append(v)
+                    if idx == 0:
+                        gpu_util_gpu_pct_gpu0.append(v)
+
+                m = re.search(r"([0-9]+(?:\\.[0-9]+)?)", cols[5])
+                if m:
+                    v = float(m.group(1))
+                    gpu_util_mem_pct.append(v)
+                    if idx == 0:
+                        gpu_util_mem_pct_gpu0.append(v)
+
+                m = re.search(r"([0-9]+(?:\\.[0-9]+)?)", cols[6])
+                if m:
+                    v = float(m.group(1))
+                    gpu_power_w.append(v)
+                    if idx == 0:
+                        gpu_power_w_gpu0.append(v)
+
                 if len(gpu_used_mib) >= 200000:
                     break
     except Exception:
         gpu_used_mib = []
+        gpu_used_mib_gpu0 = []
+        gpu_util_gpu_pct = []
+        gpu_util_gpu_pct_gpu0 = []
+        gpu_util_mem_pct = []
+        gpu_util_mem_pct_gpu0 = []
+        gpu_power_w = []
+        gpu_power_w_gpu0 = []
+        gpu_indices = set()
 
 token_latency_ms = []
 try:
@@ -810,6 +859,44 @@ else:
     summary_lines.append("gpu_poll_mem_used_min_mib=NA")
     summary_lines.append("gpu_poll_mem_used_max_mib=NA")
     summary_lines.append("gpu_poll_mem_used_delta_mib=NA")
+
+summary_lines.append("gpu_poll_gpu_index_unique_count=%d" % int(len(gpu_indices)))
+if gpu_indices:
+    summary_lines.append("gpu_poll_gpu_indices=%s" % ",".join(str(x) for x in sorted(gpu_indices)))
+else:
+    summary_lines.append("gpu_poll_gpu_indices=NA")
+
+if gpu_used_mib_gpu0:
+    summary_lines.append("gpu_poll_gpu0_mem_used_min_mib=%.3f" % min(gpu_used_mib_gpu0))
+    summary_lines.append("gpu_poll_gpu0_mem_used_max_mib=%.3f" % max(gpu_used_mib_gpu0))
+    summary_lines.append("gpu_poll_gpu0_mem_used_delta_mib=%.3f" % (max(gpu_used_mib_gpu0) - min(gpu_used_mib_gpu0)))
+else:
+    summary_lines.append("gpu_poll_gpu0_mem_used_min_mib=NA")
+    summary_lines.append("gpu_poll_gpu0_mem_used_max_mib=NA")
+    summary_lines.append("gpu_poll_gpu0_mem_used_delta_mib=NA")
+
+def _agg_stats_pct(xs, prefix):
+    if not xs:
+        summary_lines.append(prefix + "_samples=0")
+        summary_lines.append(prefix + "_min=NA")
+        summary_lines.append(prefix + "_p50=NA")
+        summary_lines.append(prefix + "_p90=NA")
+        summary_lines.append(prefix + "_max=NA")
+        summary_lines.append(prefix + "_mean=NA")
+        return
+    summary_lines.append(prefix + "_samples=%d" % len(xs))
+    summary_lines.append(prefix + "_min=%.6f" % min(xs))
+    summary_lines.append(prefix + "_p50=%.6f" % (_pct(xs, 0.50) or 0.0))
+    summary_lines.append(prefix + "_p90=%.6f" % (_pct(xs, 0.90) or 0.0))
+    summary_lines.append(prefix + "_max=%.6f" % max(xs))
+    summary_lines.append(prefix + "_mean=%.6f" % (sum(xs) / max(1, len(xs))))
+
+_agg_stats_pct(gpu_util_gpu_pct, "gpu_poll_util_gpu_pct")
+_agg_stats_pct(gpu_util_mem_pct, "gpu_poll_util_mem_pct")
+_agg_stats_pct(gpu_power_w, "gpu_poll_power_w")
+_agg_stats_pct(gpu_util_gpu_pct_gpu0, "gpu_poll_gpu0_util_gpu_pct")
+_agg_stats_pct(gpu_util_mem_pct_gpu0, "gpu_poll_gpu0_util_mem_pct")
+_agg_stats_pct(gpu_power_w_gpu0, "gpu_poll_gpu0_power_w")
 
 summary_lines.append("expert_events=%d" % int(token_trace.get("expert_events") or 0))
 if token_trace.get("expert_counts"):
