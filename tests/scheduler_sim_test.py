@@ -279,6 +279,43 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_jsonl_runtime_input_format_maps_aliases_and_filters_by_type(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "meta", "meta": {"runtime_commit": "abc123"}}))
+            f.write("\n")
+            f.write(json.dumps({"type": "decode", "dt_ms": 0.0, "decode_ms": 0.01}))
+            f.write("\n")
+            f.write(
+                json.dumps(
+                    {
+                        "type": "route",
+                        "dt_ms": 0.0,
+                        "latency_class": "interactive",
+                        "routing": {"expert_ids": [3, 7, 1]},
+                    }
+                )
+            )
+            f.write("\n")
+        try:
+            meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(
+                tmp_path,
+                time_mode="dt_ms",
+                meta_out=meta,
+                non_route_policy="skip",
+                input_format="runtime",
+                route_type="route",
+            )
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(meta.get("runtime_commit"), "abc123")
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+            self.assertEqual(trace[0].candidates, (3, 7, 1))
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_synthetic_score_mode_rejected_in_trace_replay(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
