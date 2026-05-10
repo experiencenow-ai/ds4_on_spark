@@ -5,10 +5,15 @@ OUT_DIR="${OUT_DIR:-/tmp/baseline_vllm}"
 mkdir -p "$OUT_DIR"
 
 ALLOW_RUN="${ALLOW_RUN:-0}"
+ALLOW_FETCH="${ALLOW_FETCH:-0}"
 VLLM_MODEL="${VLLM_MODEL:-}"
 PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 MAX_TOKENS="${MAX_TOKENS:-256}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
+VLLM_TRUST_REMOTE_CODE="${VLLM_TRUST_REMOTE_CODE:-0}"
+VLLM_SPECULATIVE_CONFIG_JSON="${VLLM_SPECULATIVE_CONFIG_JSON:-}"
+VLLM_EXTRA_LLM_KWARGS_JSON="${VLLM_EXTRA_LLM_KWARGS_JSON:-{}}"
+VLLM_EXTRA_SAMPLING_KWARGS_JSON="${VLLM_EXTRA_SAMPLING_KWARGS_JSON:-{}}"
 
 echo "== vLLM probe (Spark) =="
 date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
@@ -52,6 +57,7 @@ cat "$OUT_DIR/torch_cuda_probe.txt"
 echo
 echo "== baseline notes =="
 echo "- This script does not install vLLM or download weights."
+echo "- If VLLM_MODEL is not a readable local path, set ALLOW_FETCH=1 explicitly."
 echo "- TTFT is not measured (Python API returns after generation completes)."
 
 if [ "$ALLOW_RUN" != "1" ]; then
@@ -66,20 +72,31 @@ if [ "$VLLM_MODEL" = "" ]; then
     exit 2
 fi
 
+if [ ! -e "$VLLM_MODEL" ] && [ "$ALLOW_FETCH" != "1" ]; then
+    echo "VLLM_MODEL is not a local path: $VLLM_MODEL" >&2
+    echo "set ALLOW_FETCH=1 to allow vLLM/Hugging Face to fetch model artifacts" >&2
+    exit 5
+fi
+
 echo
 echo "== vLLM generate probe (approx; no streaming TTFT) =="
 echo "model=$VLLM_MODEL"
 echo "tp=$TENSOR_PARALLEL_SIZE"
 echo "max_tokens=$MAX_TOKENS"
+echo "allow_fetch=$ALLOW_FETCH"
+echo "trust_remote_code=$VLLM_TRUST_REMOTE_CODE"
+echo "speculative_config_json=$VLLM_SPECULATIVE_CONFIG_JSON"
+echo "llm_kwargs_json=$VLLM_EXTRA_LLM_KWARGS_JSON"
+echo "sampling_kwargs_json=$VLLM_EXTRA_SAMPLING_KWARGS_JSON"
 echo
 
 LOG_RAW="$OUT_DIR/vllm_generate_probe.txt"
 LOG_SUMMARY="$OUT_DIR/vllm_generate_probe.summary.txt"
 
-python3 - <<'PY' "$VLLM_MODEL" "$PROMPT" "$MAX_TOKENS" "$TENSOR_PARALLEL_SIZE" "$LOG_RAW" "$LOG_SUMMARY"
-import resource, sys, time
+python3 - <<'PY' "$VLLM_MODEL" "$PROMPT" "$MAX_TOKENS" "$TENSOR_PARALLEL_SIZE" "$LOG_RAW" "$LOG_SUMMARY" "$VLLM_TRUST_REMOTE_CODE" "$VLLM_SPECULATIVE_CONFIG_JSON" "$VLLM_EXTRA_LLM_KWARGS_JSON" "$VLLM_EXTRA_SAMPLING_KWARGS_JSON"
+import json, resource, sys, time
 
-model, prompt, max_tokens_s, tp_s, log_raw, log_summary = sys.argv[1:]
+model, prompt, max_tokens_s, tp_s, log_raw, log_summary, trust_remote_code_s, speculative_config_json, llm_kwargs_json, sampling_kwargs_json = sys.argv[1:]
 max_tokens = int(max_tokens_s)
 tp = int(tp_s)
 
@@ -96,12 +113,31 @@ raw_lines.append("utc_start=" + utc_start)
 raw_lines.append("model=" + model)
 raw_lines.append("tp=%d" % tp)
 raw_lines.append("max_tokens=%d" % max_tokens)
+raw_lines.append("trust_remote_code=" + trust_remote_code_s)
+raw_lines.append("speculative_config_json=" + speculative_config_json)
+raw_lines.append("llm_kwargs_json=" + llm_kwargs_json)
+raw_lines.append("sampling_kwargs_json=" + sampling_kwargs_json)
 
 try:
     from vllm import LLM, SamplingParams
-    sampling = SamplingParams(max_tokens=max_tokens, temperature=0.0)
+    llm_kwargs = json.loads(llm_kwargs_json)
+    sampling_kwargs = json.loads(sampling_kwargs_json)
+    if not isinstance(llm_kwargs, dict):
+        raise TypeError("VLLM_EXTRA_LLM_KWARGS_JSON must decode to an object")
+    if not isinstance(sampling_kwargs, dict):
+        raise TypeError("VLLM_EXTRA_SAMPLING_KWARGS_JSON must decode to an object")
+    if trust_remote_code_s == "1":
+        llm_kwargs.setdefault("trust_remote_code", True)
+    if speculative_config_json.strip():
+        speculative_config = json.loads(speculative_config_json)
+        if not isinstance(speculative_config, dict):
+            raise TypeError("VLLM_SPECULATIVE_CONFIG_JSON must decode to an object")
+        llm_kwargs["speculative_config"] = speculative_config
+    sampling_args = {"max_tokens": max_tokens, "temperature": 0.0}
+    sampling_args.update(sampling_kwargs)
+    sampling = SamplingParams(**sampling_args)
 
-    llm = LLM(model=model, tensor_parallel_size=tp)
+    llm = LLM(model=model, tensor_parallel_size=tp, **llm_kwargs)
     loaded = time.monotonic()
     load_s = loaded - start
 

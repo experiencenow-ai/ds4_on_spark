@@ -13,6 +13,7 @@ Environment:
   SSH_OPTS            Optional ssh options override.
   DS4_PEER_HOST       Optional default peer hostname/IP (used if --peer omitted; required with --strict when DS4_WORLD_SIZE > 1).
   DS4_PEER_SSH        Optional default peer SSH target (used if --peer-ssh omitted).
+  DS4_EXPECT_IFACE    Optional expected route interface (e.g. wired NIC). When set, checks the `ip route get` dev for master/peer; mismatch is fatal with --strict.
   DS4_WORLD_SIZE      Optional; printed when present.
   DS4_RANK            Optional; printed when present.
   DS4_MASTER_ADDR     Optional; printed when present.
@@ -483,6 +484,60 @@ print_host_resolution()
     return 0
 }
 
+route_dev_for_host_best_effort()
+{
+    host="${1:-}"
+    if [ "$host" = "" ]; then
+        return 1
+    fi
+    ip="$(resolve_ipv4_best_effort "$host" 2>/dev/null || true)"
+    route_ip="$host"
+    if [ "$ip" != "" ]; then
+        route_ip="$ip"
+    fi
+    if command -v ip >/dev/null 2>&1; then
+        if is_ipv4 "$route_ip"; then
+            route="$(ip -4 route get "$route_ip" 2>/dev/null | sed -n '1p' || true)"
+            if [ "${route:-}" != "" ]; then
+                dev="$(printf '%s\n' "$route" | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}' 2>/dev/null || true)"
+                if [ "${dev:-}" != "" ]; then
+                    echo "$dev"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+    return 1
+}
+
+check_expected_iface()
+{
+    label="$1"
+    host="${2:-}"
+    expected="${DS4_EXPECT_IFACE:-}"
+    if [ "$expected" = "" ] || [ "$host" = "" ]; then
+        return 0
+    fi
+
+    dev="$(route_dev_for_host_best_effort "$host" 2>/dev/null || true)"
+    if [ "$dev" = "" ]; then
+        echo "iface: skip ($label; route dev unknown for $host)"
+        return 0
+    fi
+
+    if [ "$dev" = "$expected" ]; then
+        echo "iface: ok ($label; dev=$dev)"
+        return 0
+    fi
+
+    if [ "$strict" -ne 0 ]; then
+        echo "iface: mismatch ($label; expected=$expected got=$dev host=$host)" >&2
+        return 1
+    fi
+    echo "iface: mismatch ($label; expected=$expected got=$dev host=$host)"
+    return 0
+}
+
 peer_backcheck_via_ssh()
 {
     target="$1"
@@ -589,6 +644,7 @@ print_if_set DS4_METRICS_PORT
 print_if_set DS4_CONFIG_PATH
 print_if_set DS4_PEER_HOST
 print_if_set DS4_PEER_SSH
+print_if_set DS4_EXPECT_IFACE
 echo
 
 echo "== host resolution + routes (best effort) =="
@@ -597,6 +653,19 @@ if [ "$peer" != "" ]; then
     print_host_resolution "peer" "$peer"
 else
     print_host_resolution "peer" "${DS4_PEER_HOST:-}"
+fi
+echo
+
+echo "== route iface check (optional) =="
+if [ "${DS4_EXPECT_IFACE:-}" = "" ]; then
+    echo "iface: skip (DS4_EXPECT_IFACE unset)"
+else
+    check_expected_iface "master" "${DS4_MASTER_ADDR:-}" || exit 1
+    if [ "$peer" != "" ]; then
+        check_expected_iface "peer" "$peer" || exit 1
+    else
+        check_expected_iface "peer" "${DS4_PEER_HOST:-}" || exit 1
+    fi
 fi
 echo
 

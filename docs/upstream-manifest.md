@@ -112,3 +112,4 @@ For sharded GGUF repos, use the grouped report to sum shard sizes:
 - [`docs/upstream-quantized-v4-flash-safetensors.md`](upstream-quantized-v4-flash-safetensors.md)
 - [`docs/upstream-single-spark-v4-flash.md`](upstream-single-spark-v4-flash.md)
 - [`docs/upstream-spark-v4-bringup.md`](upstream-spark-v4-bringup.md)
+- [`docs/upstream-qwen-dflash.md`](upstream-qwen-dflash.md)

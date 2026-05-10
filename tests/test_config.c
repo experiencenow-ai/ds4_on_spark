@@ -45,8 +45,9 @@ int32_t test_config(void)
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
 	static const uint8_t capbuf[] = "log_level=1\n";
 	char path[64];
+	char env_path[96];
 	char out[128];
-	int32_t fd,fdin,fd_save,plen,n,out_len;
+	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
 	int32_t unknown;
@@ -552,6 +553,44 @@ int32_t test_config(void)
 	{
 		unlink(path);
 		return(-48);
+	}
+	env_len = ds4_cstr_len_i32(path);
+	if ( env_len <= 0 )
+	{
+		unlink(path);
+		return(-189);
+	}
+	if ( (env_len + 5) >= (int32_t)sizeof(env_path) )
+	{
+		unlink(path);
+		return(-190);
+	}
+	env_path[0] = ' ';
+	env_path[1] = ' ';
+	for (n=0; n<env_len; n++)
+		env_path[2 + n] = path[n];
+	env_path[2 + env_len] = ' ';
+	env_path[3 + env_len] = '\t';
+	env_path[4 + env_len] = 0;
+	if ( setenv("DS4_CONFIG_PATH",env_path,1) != 0 )
+	{
+		unlink(path);
+		return(-191);
+	}
+	if ( ds4_config_load_auto(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
+	{
+		unlink(path);
+		return(-192);
+	}
+	if ( cfg.log_level != 3 )
+	{
+		unlink(path);
+		return(-193);
+	}
+	if ( cfg.enable_cuda != 1 )
+	{
+		unlink(path);
+		return(-194);
 	}
 	unknown = -1;
 	if ( ds4_config_load_auto_ex(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0,0,&unknown) < 0 )

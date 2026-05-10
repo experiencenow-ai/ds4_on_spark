@@ -441,6 +441,12 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	kv_decode_ring = find_first_line_containing(text, "start_pos % win")
 	kv_decode_compress = find_first_line_containing(text, "start_pos // ratio")
 	kv_prefill_wrap = find_first_line_containing(text, "cutoff = seqlen % win")
+	compress_prefill_gate = find_first_line_containing(text, "should_compress = seqlen >= ratio")
+	compress_decode_gate = find_first_line_containing(text, "should_compress = (start_pos + 1) % self.compress_ratio == 0")
+	compress_prefill_write = find_first_line_containing(text, "self.kv_cache[:bsz, :seqlen // ratio] = kv")
+	compress_decode_write = find_first_line_containing(text, "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)")
+	compress_freqs_prefill = find_first_line_containing(text, "freqs_cis = self.freqs_cis[:cutoff:ratio]")
+	compress_freqs_decode = find_first_line_containing(text, "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)")
 
 	return {
 		"mla": {
@@ -456,6 +462,12 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"decode_sliding_ring_update_expr": kv_decode_ring,
 			"decode_compressed_update_expr": kv_decode_compress,
 			"prefill_sliding_wrap_expr": kv_prefill_wrap,
+			"compressor_prefill_should_compress_expr": compress_prefill_gate,
+			"compressor_decode_should_compress_expr": compress_decode_gate,
+			"compressor_prefill_write_expr": compress_prefill_write,
+			"compressor_decode_write_expr": compress_decode_write,
+			"compressor_freqs_cis_prefill_expr": compress_freqs_prefill,
+			"compressor_freqs_cis_decode_expr": compress_freqs_decode,
 		},
 	}
 
@@ -1148,6 +1160,8 @@ def build_contract() -> dict:
 					"trust_gates": {
 						"artifact_requires_mtp_contract_complete": True,
 						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"artifact_requires_mtp_namespace_expected_complete": True,
+						"artifact_requires_mtp_namespace_has_mtp0": True,
 						"oracle_requires_include_mtp": True,
 						"oracle_requires_mtp_trace": True,
 						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",

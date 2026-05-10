@@ -249,6 +249,12 @@
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_mask_value": -1,
     "update_semantics": {
+      "compressor_decode_should_compress_expr": "should_compress = (start_pos + 1) % self.compress_ratio == 0",
+      "compressor_decode_write_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
+      "compressor_freqs_cis_decode_expr": "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)",
+      "compressor_freqs_cis_prefill_expr": "freqs_cis = self.freqs_cis[:cutoff:ratio]",
+      "compressor_prefill_should_compress_expr": "should_compress = seqlen >= ratio",
+      "compressor_prefill_write_expr": "self.kv_cache[:bsz, :seqlen // ratio] = kv",
       "decode_compressed_update_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
       "decode_sliding_ring_update_expr": "self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
       "prefill_sliding_wrap_expr": "cutoff = seqlen % win"
@@ -726,6 +732,8 @@
       "acceptance_requires_prefill_and_decode": true,
       "acceptance_topk_ids_exact": true,
       "artifact_requires_mtp_contract_complete": true,
+      "artifact_requires_mtp_namespace_expected_complete": true,
+      "artifact_requires_mtp_namespace_has_mtp0": true,
       "artifact_requires_namespace_prefix": "mtp.{j}.",
       "oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
       "oracle_requires_include_mtp": true,

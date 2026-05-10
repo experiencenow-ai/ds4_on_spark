@@ -158,6 +158,7 @@ Notes:
 - Acceptance sampling is controlled by `--sim-seed` for determinism.
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
 - Queueing effects are broken down by phase in the metrics JSON under `mtp.task_queue_wait_ms.{draft,verify}` and `mtp.starved_task_frac.{draft,verify}` (useful for spotting draft-induced verify starvation).
+- Phase-specific queue pressure is summarized under `mtp.pending_depth_time_weighted.{draft,verify}` (time-weighted per-expert pending depth while draft/verify tasks are queued or in flight).
 - If the verify **layer0** stage admits `0` tasks due to backpressure (all candidates full), the simulator conservatively clamps `mtp_accept_len` to `1` (treat as “no drafts accepted”) and reports `mtp.verify_layer0_skipped_backpressure` / `mtp.accept_len_clamped_backpressure` (also surfaced in `--summary-json`).
 
 ### Arrival Rate Units (MTP Comparisons)
@@ -206,7 +207,7 @@ If early runtime traces do not tag latency class (`cls`), force a default class 
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
 ```
 
-The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, and `{pending,hi_queue,lo_queue}_depth_time_weighted_p95`). For multi-layer traces, it also reports layer-local drop/skip signals via `skipped_stage_frac*` and `skipped_stages_backpressure`.
+The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, `{pending,hi_queue,lo_queue}_depth_time_weighted_p95`, and when MTP is enabled `pending_depth_time_weighted_p95_mtp_{draft,verify}`). For multi-layer traces, it also reports layer-local drop/skip signals via `skipped_stage_frac*` and `skipped_stages_backpressure`.
 
 When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size percentiles for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) and `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed, when present).
 
@@ -382,6 +383,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --nu
 
 If your runtime logs prefix/suffix JSON objects with plain text (for example `INFO route={...}`), keep `--extract-substrings 1` (default) so `trace_extract.py` scans each line for embedded JSON objects.
 
+When using `--trace-input-format runtime` (or `trace_extract.py`), timestamps may be emitted as `t_ms` / `t_us` / `t_ns` (absolute) or `dt_ms` / `dt_us` / `dt_ns` (delta). The extractor normalizes them into millisecond `t_ms` / `dt_ms` fields in the strict simulator trace contract.
+
 `trace_extract.py` also preserves multi-layer routing when the runtime logs `layers[]` (or `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` (first-seen order) to satisfy the simulator trace contract.
 
 If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:
@@ -405,6 +408,7 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --nu
   - `(mtp_draft_len - rejected_mtp) + 1` when only `rejected_mtp` is provided
   - if both are provided, `accepted_mtp + rejected_mtp` must equal `mtp_draft_len`
   - note: when any of `mtp_accept_len` / `accepted_mtp` / `rejected_mtp` is present, replay uses it to populate the simulator’s MTP accept-rate metrics (not just output-token counts)
+  - runtime-format notes: when using `--trace-input-format runtime` (or `trace_extract.py`), these fields may also appear under a nested `mtp` object (for example `mtp.accept_len`, `mtp.accepted`, `mtp.rejected`) or under the nested route container (for example `route.accept_len`, `route.mtp_accepted`, `route.mtp_rejected`).
 - `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (useful for shape-dependent service modeling in replay traces)
 - `decode_ms` (optional number): observed per-token decode latency from a runtime trace; the simulator records `trace.decode_ms` and `trace.decode_error_ms` to compare the model to the trace
 - `kv_tokens` (optional int): KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens`)
@@ -499,6 +503,7 @@ The simulator prints a JSON object with:
 - `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
 - `tokens.partial_admit_any_layer*`: like `tokens.partial_admit*`, but triggers when *any* routing layer under-admits during the verify step
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
+  - also includes `expert_queue.tasks_started_gini` / `expert_queue.tasks_started_top1_frac` and `expert_queue.utilization_gini` to quantify routing skew (hot experts) from trace replay or synthetic traces
   - also includes `expert_queue.work` (per-expert max/mean pending work units, time-weighted) so `--pending-units work` has observable queue depth
   - also includes `expert_queue.starvation_task_frac` (median/p95/max across experts) for the fraction of started tasks that waited at least `--starvation-ms` before service
   - also includes `expert_queue.max_task_queue_wait_ms` (median/p95/max across experts) for per-expert worst-case queue wait before service

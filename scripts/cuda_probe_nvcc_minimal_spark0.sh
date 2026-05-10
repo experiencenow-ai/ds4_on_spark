@@ -16,7 +16,26 @@ else
 	echo \"nvcc not found\" >&2
 	exit 3
 fi
+NVCC_PATH=\"\$NVCC\"
+if [ \"\$NVCC\" = \"nvcc\" ]; then
+	NVCC_PATH=\"\$(command -v nvcc)\"
+fi
+CUDA_BIN_DIR=\"\$(dirname \"\$NVCC_PATH\")\"
+PTXAS=\"\$CUDA_BIN_DIR/ptxas\"
+NVLINK=\"\$CUDA_BIN_DIR/nvlink\"
 \$NVCC --version
+echo
+echo \"== ptxas / nvlink (best-effort) ==\"
+if [ -x \"\$PTXAS\" ]; then
+	\"\$PTXAS\" --version 2>&1 || true
+else
+	echo \"(ptxas not found)\"
+fi
+if [ -x \"\$NVLINK\" ]; then
+	\"\$NVLINK\" --version 2>&1 || true
+else
+	echo \"(nvlink not found)\"
+fi
 echo
 echo \"== nvcc: --list-gpu-arch (if supported) ==\"
 list_gpu_arch=\$(\$NVCC --list-gpu-arch 2>/dev/null || true)
@@ -170,6 +189,22 @@ try_gencode_only() {
 	try_compile_only arch_sm_121 sm_121
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
+	echo
+	echo \"== nvcc: ptxas -v (sm_121 compile-only, best-effort) ==\"
+	if [ -x \"\$PTXAS\" ]; then
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -Xptxas=-v -c -o \"$REMOTE_DIR\"/ptxas_verbose_sm_121.o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/ptxas_verbose_sm_121.out 2>\"$REMOTE_DIR\"/ptxas_verbose_sm_121.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			grep -E \"ptxas info\" \"$REMOTE_DIR\"/ptxas_verbose_sm_121.err | head -n 20 || true
+		else
+			echo \"ptxas_verbose_sm_121: FAILED rc=\${rc}\"
+			head -n 60 \"$REMOTE_DIR\"/ptxas_verbose_sm_121.err || true
+		fi
+	else
+		echo \"(ptxas not found; skipping)\"
+	fi
 	if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		try_compile_only arch_compute_121 compute_121
 		try_compile_only_cxx20_flags arch_compute_121_cxx20_flags compute_121
@@ -269,7 +304,7 @@ else
 fi
 
 echo
-echo \"== nvcc: minimal compile/run (sm_121 + --gpu-architecture=sm_121 + native) ==\"
+echo \"== nvcc: minimal compile/run (sm_121 + --gpu-architecture=sm_121 + native + compute_121/variants best-effort) ==\"
 rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
 cat > \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu <<'EOF'
@@ -394,6 +429,44 @@ echo \"-- build: -arch=native\"
 echo \"-- run: nvcc_native_minimal\"
 \"$REMOTE_DIR\"/nvcc_native_minimal
 
+if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+	echo
+	echo \"-- build: -arch=compute_121 (PTX; JIT at runtime)\"
+	\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/nvcc_compute121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu
+	echo \"-- run: nvcc_compute121_minimal\"
+	\"$REMOTE_DIR\"/nvcc_compute121_minimal
+fi
+
+try_variant_build_run() {
+	tag=\"\$1\"
+	arch=\"\$2\"
+	echo
+	echo \"-- build+run (best-effort): \${tag} (-arch=\${arch})\"
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
+	rc=\$?
+	if [ \$rc -ne 0 ]; then
+		echo \"\${tag}: build FAILED rc=\${rc}\"
+		head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\" || true
+		set -e
+		return 0
+	fi
+	\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\"
+	rc=\$?
+	if [ \$rc -ne 0 ]; then
+		echo \"\${tag}: run FAILED rc=\${rc}\"
+	fi
+	set -e
+	return 0
+}
+
+if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
+	try_variant_build_run sm_121a sm_121a
+fi
+if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121f\"; then
+	try_variant_build_run sm_121f sm_121f
+fi
+
 echo
 echo \"== cuobjdump: embedded PTX (best-effort) ==\"
 CUOBJDUMP=\"\"
@@ -419,5 +492,14 @@ else
 	check_ptx sm_121 \"$REMOTE_DIR\"/nvcc_sm121_minimal
 	check_ptx gpuarch_sm_121 \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal
 	check_ptx native \"$REMOTE_DIR\"/nvcc_native_minimal
+	if [ -x \"$REMOTE_DIR\"/nvcc_compute121_minimal ]; then
+		check_ptx compute_121 \"$REMOTE_DIR\"/nvcc_compute121_minimal
+	fi
+	if [ -x \"$REMOTE_DIR\"/nvcc_sm_121a_minimal ]; then
+		check_ptx sm_121a \"$REMOTE_DIR\"/nvcc_sm_121a_minimal
+	fi
+	if [ -x \"$REMOTE_DIR\"/nvcc_sm_121f_minimal ]; then
+		check_ptx sm_121f \"$REMOTE_DIR\"/nvcc_sm_121f_minimal
+	fi
 fi
 "

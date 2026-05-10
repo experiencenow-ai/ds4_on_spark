@@ -137,6 +137,24 @@ Additional probe run (17:48Z refresh, summary-mode toolchain + storage snapshot)
 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1748Z_loop_accessprobe.txt
 ```
 
+Additional probe run (18:49Z refresh, Spark0 + Spark1 multi-target summary mode, `origin/main` at `git: 9c90287`):
+
+```bash
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark1.local || true) | tee /private/tmp/ds4_spark01_probe_summary_redacted_2026-05-10T1849Z_loop_accessprobe.txt
+```
+
+Additional probe run (18:51Z refresh, single-target summary mode, `origin/main` at `git: 9c90287`):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1851Z_loop_accessprobe.txt
+```
+
+Additional probe run (19:21Z refresh, single-target summary mode, `origin/main` at `git: 10e5b7b`):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1921Z_loop_accessprobe.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -289,6 +307,32 @@ runtime max cc: 12.1
 == disks (summary) ==
 NAME     SIZE MODEL                      ROTA TYPE
 nvme0n1  3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
+```
+
+### Multi-target summary mode (Spark0 + Spark1, 18:49Z)
+
+```text
+== local meta ==
+Sun May 10 18:49:35 UTC 2026
+git: 9c90287
+probe args: spark0@aitopatom-9ab9.local spark1.local
+resolved targets: spark0@aitopatom-9ab9.local spark0@spark1.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== target: spark0@spark1.local ==
+ssh: Could not resolve hostname spark1.local: nodename nor servname provided, or not known
+ssh: failed rc=255
+
+== probe summary ==
+ssh failures: 1
 ```
 
 ### Compute capability + open kernel module metadata (Spark0, 14:11Z)

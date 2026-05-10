@@ -222,6 +222,12 @@ Runtime update rules:
 - **Decode** (`start_pos > 0`):
   - Sliding KV window updates at position `(start_pos % window_size)`.
   - If `compress_ratio != 0`, the layer’s `Compressor` updates the compressed KV cache segment in-place.
+    - The compressed segment is updated only when the upstream `should_compress` gate fires: `should_compress = (start_pos + 1) % compress_ratio == 0` (decode-phase incremental compression pools exactly `compress_ratio` tokens per compressed KV vector).
+    - Between compression steps, the `Compressor` updates its internal decode-state buffers (`kv_state` + `score_state`) but does not write a new compressed KV vector.
+    - In prefill, only `seqlen // compress_ratio` compressed vectors are written; any remainder tokens are staged in `kv_state/score_state` so decode continues the partial block correctly.
+    - RoPE is applied to the compressed KV using `freqs_cis` slices derived from the upstream expressions (recorded in the contract summary; see below).
+
+These compressor/update semantics are extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.update_semantics.*` so DS4 can enforce them without re-parsing upstream Python.
 
 Sparse attention index selection:
 
@@ -657,7 +663,7 @@ As of 2026-05-10, metadata-only inspection of the pinned antirez sidecar (`scrip
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
-- When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make the “structural complete but still needs an oracle” status explicit in JSON.
+- When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make trust gates explicit in JSON (including namespace failures like `namespace_incomplete` / `namespace_missing_mtp0`).
 - Also record and review:
   - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
   - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)

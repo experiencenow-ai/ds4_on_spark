@@ -21,6 +21,14 @@ def _deep_candidates_container(obj: Dict[str, object]) -> Optional[Dict[str, obj
     return(None)
 
 
+def _deep_mtp_container(obj: Dict[str, object]) -> Optional[Dict[str, object]]:
+    for k in ("mtp", "mtp_stats", "spec_decode", "speculative", "speculative_decode", "spec"):
+        inner = _as_dict(obj.get(k))
+        if inner is not None:
+            return(inner)
+    return(None)
+
+
 def _get_any(obj: Dict[str, object], keys: Iterable[str]) -> Optional[object]:
     for k in keys:
         if k in obj:
@@ -77,6 +85,12 @@ def _extract_time(obj: Dict[str, object]) -> Tuple[Optional[float], Optional[flo
             raise ValueError("time_us field must be a number")
         return(float(t_us_raw) / 1000.0, None)
 
+    t_ns_raw = _get_any(obj, ("t_ns", "ts_ns", "timestamp_ns", "time_ns"))
+    if t_ns_raw is not None:
+        if not isinstance(t_ns_raw, (int, float)):
+            raise ValueError("time_ns field must be a number")
+        return(float(t_ns_raw) / 1_000_000.0, None)
+
     dt_raw = _get_any(obj, ("dt_ms", "delta_ms"))
     if dt_raw is not None:
         if not isinstance(dt_raw, (int, float)):
@@ -88,6 +102,12 @@ def _extract_time(obj: Dict[str, object]) -> Tuple[Optional[float], Optional[flo
         if not isinstance(dt_us_raw, (int, float)):
             raise ValueError("dt_us field must be a number")
         return(None, float(dt_us_raw) / 1000.0)
+
+    dt_ns_raw = _get_any(obj, ("dt_ns", "delta_ns"))
+    if dt_ns_raw is not None:
+        if not isinstance(dt_ns_raw, (int, float)):
+            raise ValueError("dt_ns field must be a number")
+        return(None, float(dt_ns_raw) / 1_000_000.0)
 
     return(None, None)
 
@@ -256,14 +276,38 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
             out["k"] = int(k)
 
     mtp_accept_len = _get_any(obj, ("mtp_accept_len", "accept_len", "mtp_len"))
+    if mtp_accept_len is None and container is not obj:
+        mtp_accept_len = _get_any(container, ("mtp_accept_len", "accept_len", "mtp_len"))
+    if mtp_accept_len is None:
+        mtp = _deep_mtp_container(obj)
+        if mtp is None and container is not obj:
+            mtp = _deep_mtp_container(container)
+        if mtp is not None:
+            mtp_accept_len = _get_any(mtp, ("mtp_accept_len", "accept_len", "mtp_len"))
     if isinstance(mtp_accept_len, int) and mtp_accept_len > 0:
         out["mtp_accept_len"] = int(mtp_accept_len)
 
     accepted_mtp = _get_any(obj, ("accepted_mtp", "mtp_accepted"))
+    if accepted_mtp is None and container is not obj:
+        accepted_mtp = _get_any(container, ("accepted_mtp", "mtp_accepted"))
+    if accepted_mtp is None:
+        mtp = _deep_mtp_container(obj)
+        if mtp is None and container is not obj:
+            mtp = _deep_mtp_container(container)
+        if mtp is not None:
+            accepted_mtp = _get_any(mtp, ("accepted_mtp", "mtp_accepted", "accepted"))
     if isinstance(accepted_mtp, int) and accepted_mtp >= 0:
         out["accepted_mtp"] = int(accepted_mtp)
 
     rejected_mtp = _get_any(obj, ("rejected_mtp", "mtp_rejected"))
+    if rejected_mtp is None and container is not obj:
+        rejected_mtp = _get_any(container, ("rejected_mtp", "mtp_rejected"))
+    if rejected_mtp is None:
+        mtp = _deep_mtp_container(obj)
+        if mtp is None and container is not obj:
+            mtp = _deep_mtp_container(container)
+        if mtp is not None:
+            rejected_mtp = _get_any(mtp, ("rejected_mtp", "mtp_rejected", "rejected"))
     if isinstance(rejected_mtp, int) and rejected_mtp >= 0:
         out["rejected_mtp"] = int(rejected_mtp)
 

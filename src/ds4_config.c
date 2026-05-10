@@ -168,6 +168,30 @@ static int32_t ds4_trim_env_value(const char *v,const char **out_v,int32_t *out_
 	return(1);
 }
 
+static int32_t ds4_copy_trimmed_env_path(const char *env_path,char *out,int32_t cap)
+{
+	const char *tv;
+	int32_t tvlen,i,rv;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	out[0] = 0;
+	if ( env_path == 0 )
+		return(0);
+	rv = ds4_trim_env_value(env_path,&tv,&tvlen);
+	if ( rv < 0 )
+		return(-3);
+	if ( rv == 0 )
+		return(0);
+	if ( tvlen >= cap )
+		return(-4);
+	for (i=0; i<tvlen; i++)
+		out[i] = tv[i];
+	out[tvlen] = 0;
+	return(1);
+}
+
 int32_t ds4_config_parse_env(ds4_config_t *cfg)
 {
 	const char *v;
@@ -607,6 +631,8 @@ int32_t ds4_config_load(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t 
 int32_t ds4_config_load_auto_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len,int32_t flags,int32_t *out_unknown)
 {
 	const char *env_path;
+	char path_buf[512];
+	int32_t rv;
 	if ( cfg == 0 )
 		return(-1);
 	if ( (flags & ~DS4_CONFIG_PARSE_STRICT_UNKNOWN) != 0 )
@@ -617,17 +643,19 @@ int32_t ds4_config_load_auto_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,
 			return(ds4_config_load_ex(cfg,path,buf,cap,out_len,flags,out_unknown));
 	}
 	env_path = getenv("DS4_CONFIG_PATH");
-	if ( env_path != 0 )
-	{
-		if ( env_path[0] != 0 )
-			return(ds4_config_load_ex(cfg,env_path,buf,cap,out_len,flags,out_unknown));
-	}
+	rv = ds4_copy_trimmed_env_path(env_path,path_buf,(int32_t)sizeof(path_buf));
+	if ( rv < 0 )
+		return(-3);
+	if ( rv != 0 )
+		return(ds4_config_load_ex(cfg,path_buf,buf,cap,out_len,flags,out_unknown));
 	return(ds4_config_load_ex(cfg,0,buf,cap,out_len,flags,out_unknown));
 }
 
 int32_t ds4_config_load_auto(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len)
 {
 	const char *env_path;
+	char path_buf[512];
+	int32_t rv;
 	if ( cfg == 0 )
 		return(-1);
 	if ( path != 0 )
@@ -636,11 +664,11 @@ int32_t ds4_config_load_auto(ds4_config_t *cfg,const char *path,uint8_t *buf,int
 			return(ds4_config_load(cfg,path,buf,cap,out_len));
 	}
 	env_path = getenv("DS4_CONFIG_PATH");
-	if ( env_path != 0 )
-	{
-		if ( env_path[0] != 0 )
-			return(ds4_config_load(cfg,env_path,buf,cap,out_len));
-	}
+	rv = ds4_copy_trimmed_env_path(env_path,path_buf,(int32_t)sizeof(path_buf));
+	if ( rv < 0 )
+		return(-2);
+	if ( rv != 0 )
+		return(ds4_config_load(cfg,path_buf,buf,cap,out_len));
 	return(ds4_config_load(cfg,0,buf,cap,out_len));
 }
 

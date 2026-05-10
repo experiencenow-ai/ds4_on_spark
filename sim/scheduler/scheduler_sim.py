@@ -235,6 +235,10 @@ class ExpertQueue:
     in_flight_tasks: int = 0
     in_flight_tasks_hi: int = 0
     in_flight_tasks_lo: int = 0
+    queued_tasks_mtp_draft: int = 0
+    queued_tasks_mtp_verify: int = 0
+    in_flight_tasks_mtp_draft: int = 0
+    in_flight_tasks_mtp_verify: int = 0
     pending_work_hi: float = 0.0
     pending_work_lo: float = 0.0
     in_flight_work_hi: float = 0.0
@@ -253,6 +257,12 @@ class ExpertQueue:
         if cls == LatencyClass.INTERACTIVE:
             return(self.pending_work_hi + self.in_flight_work_hi)
         return(self.pending_work_lo + self.in_flight_work_lo)
+
+    def pending_mtp_draft(self) -> int:
+        return(self.queued_tasks_mtp_draft + self.in_flight_tasks_mtp_draft)
+
+    def pending_mtp_verify(self) -> int:
+        return(self.queued_tasks_mtp_verify + self.in_flight_tasks_mtp_verify)
 
 
 class EventKind(enum.IntEnum):
@@ -362,6 +372,10 @@ class SimMetrics:
     hi_queue_depth_hist_overflow: float = 0.0
     lo_queue_depth_hist: List[float] = dataclasses.field(default_factory=list)
     lo_queue_depth_hist_overflow: float = 0.0
+    pending_depth_hist_mtp_draft: List[float] = dataclasses.field(default_factory=list)
+    pending_depth_hist_mtp_draft_overflow: float = 0.0
+    pending_depth_hist_mtp_verify: List[float] = dataclasses.field(default_factory=list)
+    pending_depth_hist_mtp_verify_overflow: float = 0.0
     work_units_total: float = 0.0
     work_units_interactive: float = 0.0
     work_units_batch: float = 0.0
@@ -549,6 +563,22 @@ class SimMetrics:
                         "draft": (float(self.starved_tasks_mtp_draft) / float(self.tasks_started_mtp_draft)) if self.tasks_started_mtp_draft != 0 else 0.0,
                         "verify": (float(self.starved_tasks_mtp_verify) / float(self.tasks_started_mtp_verify)) if self.tasks_started_mtp_verify != 0 else 0.0,
                     },
+                    "pending_depth_time_weighted": {
+                        "draft": {
+                            "max_depth": (len(self.pending_depth_hist_mtp_draft) - 1) if len(self.pending_depth_hist_mtp_draft) != 0 else 0,
+                            "overflow_time_ms": self.pending_depth_hist_mtp_draft_overflow,
+                            "p50": hist_int_percentile(self.pending_depth_hist_mtp_draft, self.pending_depth_hist_mtp_draft_overflow, 0.50),
+                            "p95": hist_int_percentile(self.pending_depth_hist_mtp_draft, self.pending_depth_hist_mtp_draft_overflow, 0.95),
+                            "p99": hist_int_percentile(self.pending_depth_hist_mtp_draft, self.pending_depth_hist_mtp_draft_overflow, 0.99),
+                        },
+                        "verify": {
+                            "max_depth": (len(self.pending_depth_hist_mtp_verify) - 1) if len(self.pending_depth_hist_mtp_verify) != 0 else 0,
+                            "overflow_time_ms": self.pending_depth_hist_mtp_verify_overflow,
+                            "p50": hist_int_percentile(self.pending_depth_hist_mtp_verify, self.pending_depth_hist_mtp_verify_overflow, 0.50),
+                            "p95": hist_int_percentile(self.pending_depth_hist_mtp_verify, self.pending_depth_hist_mtp_verify_overflow, 0.95),
+                            "p99": hist_int_percentile(self.pending_depth_hist_mtp_verify, self.pending_depth_hist_mtp_verify_overflow, 0.99),
+                        },
+                    },
                     "accept_len": summarize_ints(self.mtp_accept_len_per_step),
                     "draft_attempt_len": summarize_ints(self.mtp_draft_attempt_len_per_step),
                     "accept_rate": (float(self.mtp_draft_tokens_accepted) / float(self.mtp_draft_tokens_total)) if self.mtp_draft_tokens_total != 0 else 0.0,
@@ -654,6 +684,14 @@ class SimMetrics:
                     "max_pending_max": max(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
+                    "tasks_started_total": int(sum(self.tasks_started_per_expert)) if len(self.tasks_started_per_expert) != 0 else 0,
+                    "tasks_started_top1_frac": (
+                        (float(max(self.tasks_started_per_expert)) / float(sum(self.tasks_started_per_expert)))
+                        if len(self.tasks_started_per_expert) != 0 and sum(self.tasks_started_per_expert) != 0
+                        else 0.0
+                    ),
+                    "tasks_started_gini": _gini_nonneg([float(v) for v in self.tasks_started_per_expert]),
+                    "utilization_gini": _gini_nonneg([float(v) for v in self.mean_utilization_per_expert]),
                     "starvation_task_frac": summarize_experts(
                         [
                             (float(self.starved_tasks_started_per_expert[i]) / float(self.tasks_started_per_expert[i])) if self.tasks_started_per_expert[i] != 0 else 0.0
@@ -2371,6 +2409,14 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
         for _i in range(n):
             t = q.popleft()
             tasks.append(t)
+            if t.mtp_phase == MtpPhase.DRAFT:
+                if eq.queued_tasks_mtp_draft <= 0:
+                    raise RuntimeError("queued_tasks_mtp_draft underflow")
+                eq.queued_tasks_mtp_draft -= 1
+            elif t.mtp_phase == MtpPhase.VERIFY:
+                if eq.queued_tasks_mtp_verify <= 0:
+                    raise RuntimeError("queued_tasks_mtp_verify underflow")
+                eq.queued_tasks_mtp_verify -= 1
             if serving_hi:
                 eq.pending_work_hi -= float(t.cost_scale)
             else:
@@ -2458,6 +2504,15 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
         else:
             eq.in_flight_tasks_lo += len(tasks)
             eq.in_flight_work_lo += work_units_total
+        n_draft = 0
+        n_verify = 0
+        for t in tasks:
+            if t.mtp_phase == MtpPhase.DRAFT:
+                n_draft += 1
+            elif t.mtp_phase == MtpPhase.VERIFY:
+                n_verify += 1
+        eq.in_flight_tasks_mtp_draft += n_draft
+        eq.in_flight_tasks_mtp_verify += n_verify
         seq_ref[0] += 1
         heapq.heappush(evq, Event(t_ms=(now_ms + dt_ms), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
 
@@ -2724,6 +2779,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         hi_queue_depth_hist_overflow=0.0,
         lo_queue_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         lo_queue_depth_hist_overflow=0.0,
+        pending_depth_hist_mtp_draft=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        pending_depth_hist_mtp_draft_overflow=0.0,
+        pending_depth_hist_mtp_verify=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        pending_depth_hist_mtp_verify_overflow=0.0,
     )
     rng = random.Random(cfg.sim_seed)
     if cfg.mtp_draft_len > 0:
@@ -2750,6 +2809,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     last_lo_queue: List[int] = [0 for _ in range(cfg.num_experts)]
     last_inflight: List[int] = [0 for _ in range(cfg.num_experts)]
     last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_mtp_draft: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_mtp_verify: List[int] = [0 for _ in range(cfg.num_experts)]
 
     def integrate_areas(now_ms: float) -> None:
         nonlocal last_t_ms
@@ -2778,6 +2839,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
                         metrics.lo_queue_depth_hist_overflow += dt
                     else:
                         metrics.lo_queue_depth_hist[lo_depth] += dt
+                    d_draft = last_pending_mtp_draft[e]
+                    if d_draft >= hist_len:
+                        metrics.pending_depth_hist_mtp_draft_overflow += dt
+                    else:
+                        metrics.pending_depth_hist_mtp_draft[d_draft] += dt
+                    d_verify = last_pending_mtp_verify[e]
+                    if d_verify >= hist_len:
+                        metrics.pending_depth_hist_mtp_verify_overflow += dt
+                    else:
+                        metrics.pending_depth_hist_mtp_verify[d_verify] += dt
         last_t_ms = now_ms
 
     def snapshot_state() -> None:
@@ -2788,6 +2859,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
             last_lo_queue[e] = len(experts[e].lo)
             last_inflight[e] = experts[e].in_flight
             last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
+            last_pending_mtp_draft[e] = experts[e].pending_mtp_draft()
+            last_pending_mtp_verify[e] = experts[e].pending_mtp_verify()
             if last_pending[e] > metrics.max_pending_per_expert[e]:
                 metrics.max_pending_per_expert[e] = last_pending[e]
             if last_pending_work[e] > metrics.max_pending_work_per_expert[e]:
@@ -2908,6 +2981,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
             else:
                 eq.lo.append(task)
                 eq.pending_work_lo += float(task.cost_scale)
+            if task.mtp_phase == MtpPhase.DRAFT:
+                eq.queued_tasks_mtp_draft += 1
+            elif task.mtp_phase == MtpPhase.VERIFY:
+                eq.queued_tasks_mtp_verify += 1
             tokens[tid].remaining += 1
             tokens[tid].admitted_tasks_total += 1
             metrics.admitted_tasks += 1
@@ -3258,6 +3335,19 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
                 raise RuntimeError("in_flight_work_lo underflow")
             eq.in_flight_work_hi -= done_work_hi
             eq.in_flight_work_lo -= done_work_lo
+            done_draft = 0
+            done_verify = 0
+            for task in ev.tasks:
+                if task.mtp_phase == MtpPhase.DRAFT:
+                    done_draft += 1
+                elif task.mtp_phase == MtpPhase.VERIFY:
+                    done_verify += 1
+            if eq.in_flight_tasks_mtp_draft < done_draft:
+                raise RuntimeError("in_flight_tasks_mtp_draft underflow")
+            if eq.in_flight_tasks_mtp_verify < done_verify:
+                raise RuntimeError("in_flight_tasks_mtp_verify underflow")
+            eq.in_flight_tasks_mtp_draft -= done_draft
+            eq.in_flight_tasks_mtp_verify -= done_verify
 
             for task in ev.tasks:
                 tid = task.token_id
@@ -3297,6 +3387,29 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     if token_states_out is not None:
         token_states_out.extend([tokens[i] for i in range(len(trace))])
     return(metrics)
+
+
+def _gini_nonneg(xs: Sequence[float]) -> float:
+    if len(xs) == 0:
+        return(0.0)
+    vals: List[float] = []
+    for x in xs:
+        v = float(x)
+        vals.append(v if v > 0.0 else 0.0)
+    vals.sort()
+    s = float(sum(vals))
+    if s <= 0.0:
+        return(0.0)
+    n = float(len(vals))
+    cum = 0.0
+    for i, x in enumerate(vals, 1):
+        cum += (float(i) * float(x))
+    g = ((2.0 * cum) / (n * s)) - ((n + 1.0) / n)
+    if g < 0.0:
+        return(0.0)
+    if g > 1.0:
+        return(1.0)
+    return(float(g))
 
 
 def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
@@ -3346,6 +3459,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
     tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
+    expert_tasks_started_gini = _gini_nonneg([float(v) for v in metrics.tasks_started_per_expert])
+    expert_utilization_gini = _gini_nonneg([float(v) for v in metrics.mean_utilization_per_expert])
+    expert_tasks_started_top1_frac = (
+        (float(max(metrics.tasks_started_per_expert)) / tasks_started_total) if tasks_started_total > 0.0 and len(metrics.tasks_started_per_expert) != 0 else 0.0
+    )
     starved_task_frac = (float(metrics.starved_tasks) / tasks_started_total) if tasks_started_total > 0.0 else 0.0
     starved_task_frac_interactive = (float(metrics.starved_tasks_interactive) / float(len(metrics.task_queue_wait_ms_interactive))) if len(metrics.task_queue_wait_ms_interactive) != 0 else 0.0
     starved_task_frac_batch = (float(metrics.starved_tasks_batch) / float(len(metrics.task_queue_wait_ms_batch))) if len(metrics.task_queue_wait_ms_batch) != 0 else 0.0
@@ -3432,11 +3550,16 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
             "expert_utilization_p50": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.50)),
             "expert_utilization_p95": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.95)),
+            "expert_utilization_gini": float(expert_utilization_gini),
             "expert_saturation_p50": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.50)),
             "expert_saturation_p95": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.95)),
+            "expert_tasks_started_gini": float(expert_tasks_started_gini),
+            "expert_tasks_started_top1_frac": float(expert_tasks_started_top1_frac),
             "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
+            "pending_depth_time_weighted_p95_mtp_draft": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_draft, metrics.pending_depth_hist_mtp_draft_overflow, 0.95)),
+            "pending_depth_time_weighted_p95_mtp_verify": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_verify, metrics.pending_depth_hist_mtp_verify_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
             "mtp_verify_layer0_skipped_backpressure": float(metrics.mtp_verify_layer0_skipped_backpressure),
             "mtp_verify_layer0_skipped_backpressure_frac": float(float(metrics.mtp_verify_layer0_skipped_backpressure) / float(metrics.mtp_verify_steps)) if metrics.mtp_verify_steps > 0 else 0.0,

@@ -125,6 +125,18 @@ Refreshed again (17:48Z refresh, matches Spark0 summary-mode probe + storage sna
 REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1749Z_loop_accessprobe.txt
 ```
 
+Refreshed again (18:49Z refresh, `origin/main` at `git: 9c90287`):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1849Z_loop_accessprobe.txt
+```
+
+Refreshed again (19:22Z refresh, `origin/main` at `git: 10e5b7b`):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1922Z_loop_accessprobe.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
@@ -137,6 +149,23 @@ Notes:
 Sun May 10 17:48:35 UTC 2026
 git: f907bab
 targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 18:49:14 UTC 2026
+git: 9c90287
+targets: aitopatom-9ab9.local spark1.local
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sun 10 May 2026---
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+18:49:14.851  Add        3  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
 
 == known target checks ==
 aitopatom-9ab9.local: ssh reachable

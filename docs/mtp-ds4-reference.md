@@ -18,6 +18,13 @@ Upstream repo + pin:
 
 For the repo-side MTP sidecar validator (range-read / metadata-only), see `scripts/model_contract_probe_mtp_sidecar.py`.
 
+To verify ds4_on_spark’s expected 32-tensor list stays synced to the pinned `antirez/ds4` binder:
+
+```bash
+./scripts/fetch_upstreams.sh ds4
+python3 scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py --ds4-c upstreams/ds4/ds4.c --python-probe scripts/model_contract_probe_mtp_sidecar.py
+```
+
 ## Separate MTP raw cache + speculative state
 
 `ds4` treats MTP as a **draft model** whose KV/cache state is **not** the same as the trunk’s KV/cache state.
