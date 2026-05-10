@@ -312,6 +312,18 @@ if [ "$have_smi" = "1" ]; then
 else
 	echo "nvidia-smi not found"
 fi
+echo
+echo "== nvidia-smi -q fabric/c2c (summary) =="
+if [ "$have_smi" = "1" ] && [ "$smi_q" != "" ]; then
+	smi_arch="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Product Architecture[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+	smi_peer_type="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Peer Type[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+	smi_c2c_mode="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*GPU C2C Mode[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+	[ "$smi_arch" != "" ] && echo "Product Architecture: $smi_arch"
+	[ "$smi_peer_type" != "" ] && echo "Peer Type: $smi_peer_type"
+	[ "$smi_c2c_mode" != "" ] && echo "GPU C2C Mode: $smi_c2c_mode"
+else
+	echo "nvidia-smi -q not available"
+fi
 	echo
 	pcie_link_query()
 	{
