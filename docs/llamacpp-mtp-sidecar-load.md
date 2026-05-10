@@ -74,6 +74,13 @@ Add a dedicated loader that:
 Status in this repo: the patch in `docs/llamacpp-mtp-sidecar-probe.md` now supports `--load-weights`, which loads the entire sidecar tensor blob into RAM and validates that all 32 `mtp.0.*` tensors have non-null `data` pointers. This is a Spark-safe “does the file actually load?” gate, but it does not yet provide a reusable `deepseek4_mtp_sidecar` binder for forward/kv work.
 It also emits a per-tensor `tensors[]` inventory in JSON mode (offsets, dims, and type codes), which is a useful input when turning the probe into an actual sidecar binder module.
 
+Optional helper: generate a C++ “binder skeleton” directly from the repo-side contract probe JSON (avoids guessy dims/types when wiring a `deepseek4_mtp_sidecar` struct in a Spark/CUDA llama.cpp fork):
+
+```bash
+python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --expect-deepseek-v4-flash > /tmp/mtp_sidecar_probe.json
+python3 scripts/model_contract_generate_llamacpp_mtp_sidecar_binder.py --sidecar-probe-json /tmp/mtp_sidecar_probe.json > /tmp/deepseek4_mtp_sidecar.hpp
+```
+
 Design target: a `struct deepseek4_mtp_sidecar` holding pointers for:
 
 - head: `hc_head_{base,fn,scale}`
