@@ -25,6 +25,20 @@ If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` ent
 
 Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
 
+## Spark0: Capability Sweep (One Command)
+
+When you want to run the key “is `sm_121` supported end-to-end?” checks in one shot:
+
+```bash
+./scripts/cuda_probe_capability_spark0.sh
+```
+
+This runs, in order:
+
+- `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
+- `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
+- `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
+
 ## Spark0: Tiny Compile-Only `sm_121`
 
 When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
