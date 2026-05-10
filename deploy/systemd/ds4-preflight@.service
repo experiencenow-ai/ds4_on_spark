@@ -38,7 +38,7 @@ LockPersonality=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
 
-StateDirectory=ds4 ds4/ssh
+StateDirectory=ds4 ds4/ssh ds4/models ds4/cache
 
 [Install]
 WantedBy=multi-user.target

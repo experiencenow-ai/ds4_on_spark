@@ -9,7 +9,7 @@ edit host-specific values, then enable services with `systemctl`.
 
 - `/opt/ds4/` : DS4 code + binaries (owned by root, read-only at runtime)
 - `/etc/ds4/` : instance configs + environment files (owned by root; readable by `ds4`, e.g. `root:ds4 0750` + `root:ds4 0640`)
-- `/var/lib/ds4/` : state (model cache, checkpoints, etc.)
+- `/var/lib/ds4/` : state (e.g. `models/` + `cache/`, checkpoints, etc.)
 - `/var/log/ds4/` : optional file logs (journald is preferred)
 
 ## Systemd Units

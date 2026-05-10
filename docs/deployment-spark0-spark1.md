@@ -145,7 +145,7 @@ sudo systemctl start ds4-preflight@spark1.service
 
 Notes:
 
- - The DS4 config examples are `key=value` placeholders (see `src/ds4_config.c`).
+- The DS4 config examples are `key=value` placeholders (see `src/ds4_config.c`).
 - `ds4@.service` is wired to *want* the preflight unit for the same instance; you can run preflight independently at any time.
 
 ## Optional: Validate Installed Assets (Spark Side)
