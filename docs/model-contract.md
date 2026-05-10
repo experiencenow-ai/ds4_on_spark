@@ -115,3 +115,11 @@ Machine-readable MTP gating:
 
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
 - `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).
+
+## Comparator models (Ling / Qwen-family)
+
+When Ling 2.6 Flash or Qwen-family models are used as baseline comparators, keep their notes **lightweight** and separate from DeepSeek V4 Flash MTP claims:
+
+- Comparator doc: `docs/model-comparators.md`
+- Metadata-only fixture fetcher (no weights): `scripts/model_contract_fetch_comparator_metadata.sh`
+- Comparator fixtures live under: `fixtures/model_contract/comparators/`
