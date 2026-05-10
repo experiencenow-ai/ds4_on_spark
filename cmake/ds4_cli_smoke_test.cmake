@@ -40,6 +40,23 @@ if(DS4_MODE STREQUAL "dump_config_overrides")
 	return()
 endif()
 
+if(DS4_MODE STREQUAL "ctx_smoke")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --no-cuda --arena-size 16384 --log-ring-entries 4 --smoke-ctx
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli ctx smoke failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_ring: ds4_cli smoke ctx" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli ctx smoke stdout missing expected log line\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
 if(DS4_MODE STREQUAL "config_file_dump")
 	set(_ds4_cfg "${DS4_TMP_DIR}/ds4_cli_smoke.conf")
 	file(WRITE "${_ds4_cfg}" "log_level=debug\nunknown_key=1\nenable_cuda=0\n")

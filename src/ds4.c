@@ -54,6 +54,18 @@ int32_t ds4_ctx_log_ring_detach(ds4_ctx_t *ctx)
 	return(0);
 }
 
+int32_t ds4_ctx_deinit(ds4_ctx_t *ctx)
+{
+	if ( ctx == 0 )
+		return(-1);
+	if ( ds4_ctx_log_ring_detach(ctx) < 0 )
+		return(-2);
+	ctx->log_ring_ready = 0;
+	ctx->log_ring_attached = 0;
+	ctx->log_ring = (ds4_log_ring_t){0};
+	return(0);
+}
+
 int32_t ds4_ctx_log_ring_count(ds4_ctx_t *ctx,int32_t *out_count)
 {
 	if ( ctx == 0 )

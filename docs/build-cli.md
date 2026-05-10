@@ -49,6 +49,18 @@ Override config fields from the command line:
 ./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --arena-size 4096 --log-ring-entries 64 --dump-config
 ```
 
+Smoke-test ctx init and log-ring capture (static arena, one log line):
+
+```bash
+./build_cli/ds4_cli --no-cuda --arena-size 16384 --log-ring-entries 4 --smoke-ctx
+```
+
+Expected stdout includes:
+
+```
+log_ring: ds4_cli smoke ctx
+```
+
 You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
 
 ```bash
