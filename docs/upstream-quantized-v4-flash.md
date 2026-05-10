@@ -107,7 +107,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS + IQ3_XXS)
 
-- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `4e4b871229437d9e56aef57c7fa4977425a8dc2b` (`refs/heads/main`)
+- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `4ad7e76f79d61c6d511dc5ed0cb3fb3d1286c25a` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement:
   - Requires `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
