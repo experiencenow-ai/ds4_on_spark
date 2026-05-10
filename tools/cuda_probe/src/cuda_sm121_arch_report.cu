@@ -65,6 +65,7 @@ int main(int argc,char **argv)
 		return(-7);
 	if ( h_out[1] == 0 )
 		return(-8);
+	if ( h_out[1] != 1210U )
+		return(-9);
 	return(0);
 }
-
