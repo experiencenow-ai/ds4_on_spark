@@ -32,7 +32,7 @@ Net: even after solving the “unknown architecture” error, the fork still nee
 
 Before touching llama.cpp code, validate the sidecar file you intend to use:
 
-- Repo-side (Hugging Face URL, metadata-only range reads): `scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh`
+- Repo-side (Hugging Face URL, metadata-only range reads + optional payload sampling): `scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh`
 - Spark-side (local file already staged on Spark; no downloads): run the baseline runner with:
 
 ```bash
@@ -41,6 +41,8 @@ scripts/run_baseline_existing_runtime.sh spark0@<spark-host>
 ```
 
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
+
+Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh` now defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`), still avoiding full weight downloads. The recorded output is `docs/mtp-sidecar-probe-antirez-ef3b960-payload64.json`.
 
 ### Step 1: sidecar weight loader (not a model loader)
 

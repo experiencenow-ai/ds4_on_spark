@@ -19,6 +19,7 @@ class TensorDesc:
 	dims: list[int]
 	ggml_type: int
 	rel_offset: int
+	file_index: int
 
 
 def read_bytes(f: BinaryIO, n: int) -> bytes:
@@ -137,7 +138,11 @@ def read_gguf_value(f: BinaryIO, value_type: int) -> Any:
 	raise ValueError(f"unsupported gguf value_type={value_type}")
 
 
-def parse_gguf_stream(f: BinaryIO, label: str) -> tuple[int, dict[str, Any], list[TensorDesc]]:
+def align_up(n: int, alignment: int) -> int:
+	return int(n + ((alignment - (n % alignment)) % alignment))
+
+
+def parse_gguf_stream(f: BinaryIO, label: str) -> tuple[int, dict[str, Any], list[TensorDesc], int, int]:
 	magic = read_bytes(f, 4)
 	if magic != b"GGUF":
 		raise ValueError(f"{label} does not look like a GGUF file (bad magic {magic!r})")
@@ -152,23 +157,28 @@ def parse_gguf_stream(f: BinaryIO, label: str) -> tuple[int, dict[str, Any], lis
 		if vtype == 9:
 			skip_gguf_value(f, int(vtype))
 			continue
-		if key == "general.architecture" or key.startswith("deepseek4."):
+		if key in ("general.architecture", "general.alignment") or key.startswith("deepseek4."):
 			metadata[key] = read_gguf_value(f, int(vtype))
 		else:
 			skip_gguf_value(f, int(vtype))
 
 	tensors: list[TensorDesc] = []
-	for _ in range(int(n_tensors)):
+	for i in range(int(n_tensors)):
 		name = read_gguf_string(f)
 		ndim = int(read_u32_le(f))
 		dims = [int(read_u64_le(f)) for _ in range(ndim)]
 		ggml_type = int(read_u32_le(f))
 		rel_offset = int(read_u64_le(f))
-		tensors.append(TensorDesc(name=name, ndim=ndim, dims=dims, ggml_type=ggml_type, rel_offset=rel_offset))
-	return (int(version), metadata, tensors)
+		tensors.append(TensorDesc(name=name, ndim=ndim, dims=dims, ggml_type=ggml_type, rel_offset=rel_offset, file_index=i))
+
+	alignment = int(metadata.get("general.alignment", 32))
+	if alignment <= 0 or (alignment & (alignment - 1)) != 0:
+		raise ValueError(f"{label} has invalid general.alignment={alignment}")
+	data_off = align_up(int(f.tell()), alignment)
+	return (int(version), metadata, tensors, int(data_off), int(alignment))
 
 
-def parse_gguf(path: Path) -> tuple[int, dict[str, Any], list[TensorDesc]]:
+def parse_gguf(path: Path) -> tuple[int, dict[str, Any], list[TensorDesc], int, int]:
 	with path.open("rb") as f:
 		return parse_gguf_stream(f, str(path))
 
@@ -187,14 +197,14 @@ def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int = 20) -> bytes:
 		return resp.read(want_bytes)
 
 
-def parse_gguf_url_prefix(url: str, max_bytes: int, timeout_s: int = 20) -> tuple[int, dict[str, Any], list[TensorDesc], int]:
+def parse_gguf_url_prefix(url: str, max_bytes: int, timeout_s: int = 20) -> tuple[int, dict[str, Any], list[TensorDesc], int, int, int]:
 	want = 256 * 1024
 	while want <= max_bytes:
 		try:
 			prefix = fetch_url_prefix(url, want, timeout_s=timeout_s)
 			f = io.BytesIO(prefix)
-			version, meta, tensors = parse_gguf_stream(f, url)
-			return (version, meta, tensors, len(prefix))
+			version, meta, tensors, data_off, alignment = parse_gguf_stream(f, url)
+			return (version, meta, tensors, len(prefix), data_off, alignment)
 		except EOFError:
 			want *= 2
 			continue
@@ -203,6 +213,23 @@ def parse_gguf_url_prefix(url: str, max_bytes: int, timeout_s: int = 20) -> tupl
 		except URLError as e:
 			raise RuntimeError(f"URL error fetching {url}: {e}") from e
 	raise RuntimeError(f"unable to parse gguf header/tensor table from {url} within max_bytes={max_bytes}")
+
+
+def fetch_url_range(url: str, offset: int, n: int, timeout_s: int) -> bytes:
+	req = Request(url, headers={"Range": f"bytes={offset}-{offset + n - 1}"})
+	with urlopen(req, timeout=timeout_s) as resp:
+		status = getattr(resp, "status", None)
+		if status is not None and int(status) != 206:
+			raise RuntimeError(f"server did not honor Range request for {url} (status={status})")
+		return resp.read(n)
+
+
+def sample_hash_fnv1a64(b: bytes) -> str:
+	h = 1469598103934665603
+	for x in b:
+		h ^= int(x)
+		h = ((h * 1099511628211) & 0xFFFFFFFFFFFFFFFF)
+	return f"{h:016x}"
 
 
 GGML_TYPE_NAMES: dict[int, str] = {
@@ -359,19 +386,29 @@ def main() -> int:
 		action="store_true",
 		help="Require the sidecar-derived params to match DeepSeek-V4-Flash (n_embd=4096,n_head=64,n_head_dim=512,n_hc=4,n_lora_q=1024,n_out_group=8,n_lora_o=1024,n_expert=256,n_ff_exp=2048).",
 	)
+	parser.add_argument(
+		"--payload-sample-bytes",
+		type=int,
+		default=0,
+		help="When >0, attempt to range-read/sample this many bytes from the start of each tensor payload (never downloads full weights).",
+	)
 	parser.add_argument("--max-bytes", type=int, default=(16 * 1024 * 1024), help="Max bytes to fetch when using --url (default: 16777216).")
 	parser.add_argument("--timeout-s", type=int, default=20, help="HTTP timeout seconds for --url (default: 20).")
 	args = parser.parse_args()
 
 	label = ""
 	fetched_bytes: Optional[int] = None
+	data_off = 0
+	alignment = 0
 	if args.path is not None:
 		path = Path(args.path)
 		label = str(path)
-		version, meta, tensors = parse_gguf(path)
+		version, meta, tensors, data_off, alignment = parse_gguf(path)
 	else:
 		label = str(args.url)
-		version, meta, tensors, fetched_bytes = parse_gguf_url_prefix(str(args.url), int(args.max_bytes), timeout_s=int(args.timeout_s))
+		version, meta, tensors, fetched_bytes, data_off, alignment = parse_gguf_url_prefix(
+			str(args.url), int(args.max_bytes), timeout_s=int(args.timeout_s)
+		)
 
 	out: dict[str, Any] = {
 		"path": label,
@@ -379,6 +416,8 @@ def main() -> int:
 		"metadata": {k: meta[k] for k in sorted(meta.keys()) if not k.startswith("_")},
 		"tensor_count": len(tensors),
 		"architecture": meta.get("general.architecture", None),
+		"data_offset": int(data_off),
+		"alignment": int(alignment),
 	}
 	if fetched_bytes is not None:
 		out["url_prefix_bytes"] = int(fetched_bytes)
@@ -442,6 +481,9 @@ def main() -> int:
 		errors.append(f"found {len(extra)} unexpected tensor(s)")
 	if any(not n.startswith("mtp.0.") for n in got_names):
 		errors.append("found tensor names outside mtp.0.* namespace")
+
+	if int(args.payload_sample_bytes) < 0:
+		errors.append("--payload-sample-bytes must be >= 0")
 
 	tmap = {t.name: t for t in tensors}
 	derived = derive_sidecar_params(errors, tmap)
@@ -551,6 +593,53 @@ def main() -> int:
 		expect_tensor(errors, "mtp.0.ffn_gate_shexp.weight", tmap.get("mtp.0.ffn_gate_shexp.weight"), Q8_0, 2, [n_embd, n_ff_exp])
 		expect_tensor(errors, "mtp.0.ffn_up_shexp.weight", tmap.get("mtp.0.ffn_up_shexp.weight"), Q8_0, 2, [n_embd, n_ff_exp])
 		expect_tensor(errors, "mtp.0.ffn_down_shexp.weight", tmap.get("mtp.0.ffn_down_shexp.weight"), Q8_0, 2, [n_ff_exp, n_embd])
+
+	if args.payload_sample_bytes and errors == []:
+		sample_n = int(args.payload_sample_bytes)
+		out["payload_sample_bytes"] = int(sample_n)
+		out["payload_samples"] = {}
+
+		tensors_by_offset = sorted(tensors, key=lambda t: int(t.rel_offset))
+		spans: dict[str, int] = {}
+		for i, t in enumerate(tensors_by_offset):
+			if i + 1 < len(tensors_by_offset):
+				nxt = tensors_by_offset[i + 1]
+				delta = int(nxt.rel_offset) - int(t.rel_offset)
+				if delta > 0:
+					spans[t.name] = int(delta)
+
+		if args.path is not None:
+			with Path(args.path).open("rb") as f:
+				for t in tensors_by_offset:
+					abs_off = int(data_off + int(t.rel_offset))
+					want = int(sample_n)
+					span = spans.get(t.name, 0)
+					if span > 0 and span < want:
+						want = int(span)
+					f.seek(abs_off)
+					b = f.read(want)
+					if len(b) != want:
+						errors.append(f"payload sample short read for {t.name}: got {len(b)} bytes, expected {want}")
+						continue
+					out["payload_samples"][t.name] = {"offset": abs_off, "n": want, "fnv1a64": sample_hash_fnv1a64(b)}
+		else:
+			url = str(args.url)
+			timeout_s = int(args.timeout_s)
+			for t in tensors_by_offset:
+				abs_off = int(data_off + int(t.rel_offset))
+				want = int(sample_n)
+				span = spans.get(t.name, 0)
+				if span > 0 and span < want:
+					want = int(span)
+				try:
+					b = fetch_url_range(url, abs_off, want, timeout_s=timeout_s)
+				except Exception as e:
+					errors.append(f"payload sample fetch failed for {t.name}: {e}")
+					continue
+				if len(b) != want:
+					errors.append(f"payload sample short fetch for {t.name}: got {len(b)} bytes, expected {want}")
+					continue
+				out["payload_samples"][t.name] = {"offset": abs_off, "n": want, "fnv1a64": sample_hash_fnv1a64(b)}
 
 	out["ok"] = (len(errors) == 0)
 	out["errors"] = errors

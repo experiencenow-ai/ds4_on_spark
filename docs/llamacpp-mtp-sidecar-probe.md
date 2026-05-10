@@ -60,6 +60,12 @@ For the canonical repo-side, no-download validation (HTTP range-read of header/t
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
 ```
 
+Optional stronger check (still no full download): sample a small prefix from each tensor payload:
+
+```bash
+python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json --payload-sample-bytes 64
+```
+
 Pinned reference runner:
 
 ```bash
@@ -67,3 +73,5 @@ Pinned reference runner:
 ```
 
 Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
+
+Stronger pinned output (includes `--payload-sample-bytes 64`) is in `docs/mtp-sidecar-probe-antirez-ef3b960-payload64.json`.
