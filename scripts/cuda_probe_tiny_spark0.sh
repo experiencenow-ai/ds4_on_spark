@@ -60,7 +60,7 @@ echo
 echo \"== build (tiny) ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_device_props_tiny bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe
+make bin/cuda_device_props_tiny bin/cuda_sm121_compile_probe.o bin/cuda_sm121_probe bin/cuda_sm121_arch_report
 
 echo
 run_retry() {
@@ -80,4 +80,5 @@ run_retry() {
 
 run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
 run_retry cuda_sm121_probe \"$REMOTE_DIR\"/bin/cuda_sm121_probe
+run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 "
