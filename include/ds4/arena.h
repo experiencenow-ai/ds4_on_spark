@@ -10,6 +10,7 @@ typedef struct
 
 DS4_EXTERN_C_BEGIN
 int32_t ds4_arena_init(ds4_arena_t *a,uint8_t *mem,int32_t size);
+int32_t ds4_arena_init_ex(ds4_arena_t *a,uint8_t *mem,int32_t size,int32_t align);
 int32_t ds4_arena_reset(ds4_arena_t *a);
 int32_t ds4_arena_mark(ds4_arena_t *a,int32_t *out_mark);
 int32_t ds4_arena_release(ds4_arena_t *a,int32_t mark);

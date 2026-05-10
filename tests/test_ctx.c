@@ -10,7 +10,7 @@ int32_t test_ctx(void)
 	ds4_ctx_t ctx;
 	ds4_config_t cfg;
 	ds4_cuda_status_t st;
-	uint8_t mem[4096];
+	_Alignas(16) uint8_t mem[4096];
 	ds4_log_entry_t e;
 	int32_t c;
 	int32_t err;
