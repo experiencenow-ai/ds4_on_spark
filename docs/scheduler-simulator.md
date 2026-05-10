@@ -406,6 +406,7 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --nu
   - `(mtp_draft_len - rejected_mtp) + 1` when only `rejected_mtp` is provided
   - if both are provided, `accepted_mtp + rejected_mtp` must equal `mtp_draft_len`
   - note: when any of `mtp_accept_len` / `accepted_mtp` / `rejected_mtp` is present, replay uses it to populate the simulator’s MTP accept-rate metrics (not just output-token counts)
+  - runtime-format notes: when using `--trace-input-format runtime` (or `trace_extract.py`), these fields may also appear under a nested `mtp` object (for example `mtp.accept_len`, `mtp.accepted`, `mtp.rejected`) or under the nested route container (for example `route.accept_len`, `route.mtp_accepted`, `route.mtp_rejected`).
 - `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (useful for shape-dependent service modeling in replay traces)
 - `decode_ms` (optional number): observed per-token decode latency from a runtime trace; the simulator records `trace.decode_ms` and `trace.decode_error_ms` to compare the model to the trace
 - `kv_tokens` (optional int): KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens`)

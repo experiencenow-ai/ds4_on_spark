@@ -2791,6 +2791,34 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_maps_nested_mtp_fields(self) -> None:
+        obj = {
+            "ts_us": 5000,
+            "latency_class": "interactive",
+            "route": {"experts": [7, 3, 19]},
+            "mtp": {"accept_len": 2, "accepted": 1, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [7, 3, 19])
+        self.assertEqual(rec["mtp_accept_len"], 2)
+        self.assertEqual(rec["accepted_mtp"], 1)
+        self.assertEqual(rec["rejected_mtp"], 0)
+
+        obj2 = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0], "accept_len": 3, "mtp_accepted": 2, "mtp_rejected": 0},
+        }
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2["candidates"], [0])
+        self.assertEqual(rec2["mtp_accept_len"], 3)
+        self.assertEqual(rec2["accepted_mtp"], 2)
+        self.assertEqual(rec2["rejected_mtp"], 0)
+
     def test_trace_extract_preserves_layers_and_unions_candidates(self) -> None:
         obj = {
             "t_ms": 1.0,
