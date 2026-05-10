@@ -197,6 +197,8 @@ class ExpertQueue:
     lo: Deque[Task] = dataclasses.field(default_factory=deque)
     in_flight: int = 0
     in_flight_tasks: int = 0
+    in_flight_tasks_hi: int = 0
+    in_flight_tasks_lo: int = 0
     pending_work_hi: float = 0.0
     pending_work_lo: float = 0.0
     in_flight_work_hi: float = 0.0
@@ -1910,8 +1912,8 @@ def arrival_rate_steps_tps(arrival_rate_tps: float, arrival_units: str, mtp_draf
 
 def expert_pending_for_class(eq: ExpertQueue, cls: LatencyClass) -> int:
     if cls == LatencyClass.INTERACTIVE:
-        return(eq.in_flight_tasks + len(eq.hi))
-    return(eq.in_flight_tasks + len(eq.lo))
+        return(eq.in_flight_tasks_hi + len(eq.hi))
+    return(eq.in_flight_tasks_lo + len(eq.lo))
 
 
 def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
@@ -2135,8 +2137,10 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
         eq.in_flight += 1
         eq.in_flight_tasks += len(tasks)
         if serving_hi:
+            eq.in_flight_tasks_hi += len(tasks)
             eq.in_flight_work_hi += work_units_total
         else:
+            eq.in_flight_tasks_lo += len(tasks)
             eq.in_flight_work_lo += work_units_total
         seq_ref[0] += 1
         heapq.heappush(evq, Event(t_ms=(now_ms + dt_ms), kind=EventKind.TASK_DONE, seq=seq_ref[0], expert_id=expert_id, tasks=tuple(tasks)))
@@ -2893,14 +2897,24 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 raise RuntimeError("in_flight_tasks underflow")
             eq.in_flight_tasks -= len(ev.tasks)
 
+            done_tasks_hi = 0
+            done_tasks_lo = 0
             done_work_hi = 0.0
             done_work_lo = 0.0
             for task in ev.tasks:
                 u = float(task.cost_scale)
                 if task.served_hi:
+                    done_tasks_hi += 1
                     done_work_hi += u
                 else:
+                    done_tasks_lo += 1
                     done_work_lo += u
+            if eq.in_flight_tasks_hi < done_tasks_hi:
+                raise RuntimeError("in_flight_tasks_hi underflow")
+            if eq.in_flight_tasks_lo < done_tasks_lo:
+                raise RuntimeError("in_flight_tasks_lo underflow")
+            eq.in_flight_tasks_hi -= done_tasks_hi
+            eq.in_flight_tasks_lo -= done_tasks_lo
             if eq.in_flight_work_hi < (done_work_hi - 1e-12):
                 raise RuntimeError("in_flight_work_hi underflow")
             if eq.in_flight_work_lo < (done_work_lo - 1e-12):
