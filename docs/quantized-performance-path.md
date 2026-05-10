@@ -66,6 +66,8 @@ offset draft overhead for realistic accept rates.
 Tip: for synthetic traces, `--arrival-units output_tokens` keeps output-token
 demand fixed while varying MTP accept rates.
 
+Tip: for trace replay, `--arrival-units output_tokens` scales trace arrival deltas by the expected/observed MTP accept length per run, so MTP comparisons hold output-token demand roughly constant (use this for non-MTP traces where each record is one output token).
+
 Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
 
 Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.

@@ -164,12 +164,12 @@ Notes:
 By default `--arrival-rate-tps` is interpreted as **verify steps per second** (one trace entry per step).
 When exploring MTP, it is often more useful to hold **output tokens per second** constant instead.
 
-For synthetic traces only, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from `--mtp-accept-prob/--mtp-accept-decay`.
+For synthetic traces, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from `--mtp-accept-prob/--mtp-accept-decay`.
 
 Notes:
 
 - `--num-tokens` still controls the number of verify steps (trace entries). Use `mtp.output_tokens` in the metrics JSON to see the realized output-token volume.
-- Trace replay (`--trace-jsonl`) uses the `t_ms` values as-is (verify-step timestamps), so `--arrival-units` is rejected in replay mode.
+- Trace replay can also use `--arrival-units output_tokens`: it scales trace arrival *deltas* by the expected/observed MTP accept length per run, so MTP on/off comparisons hold output-token demand roughly constant. Use this only when each trace entry represents one output token (non-MTP traces).
 
 ## Running
 
@@ -189,6 +189,12 @@ For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sw
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
+```
+
+To hold output-token demand roughly constant when comparing MTP variants on a replay trace, set `--trace-arrival-units output_tokens`:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-arrival-units output_tokens --mtp-draft-len 2 --mtp-accept-prob 0.7 --mtp-accept-decay 0.6 --num-experts 0 --max-tokens 5000
 ```
 
 If early runtime traces do not tag latency class (`cls`), force a default class for replay:

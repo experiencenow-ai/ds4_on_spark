@@ -33,6 +33,7 @@ def run_trace_sweeps(
     *,
     trace_meta: Optional[Dict[str, object]] = None,
     max_tokens: int = 0,
+    arrival_units: str = "steps",
 ) -> Dict[str, Any]:
     trace_in = _maybe_slice_trace(trace, int(max_tokens))
     scenarios: Dict[str, Any] = {}
@@ -48,7 +49,7 @@ def run_trace_sweeps(
             "name": "expert_batching_sweep",
             "base_cfg": dataclasses.asdict(base_cfg),
             "variants": batch_variants,
-            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, batch_variants),
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, batch_variants, arrival_units=arrival_units),
         }
 
     base_queue_max = int(base_cfg.expert_queue_max)
@@ -63,7 +64,7 @@ def run_trace_sweeps(
             "name": "expert_queue_max_sweep",
             "base_cfg": dataclasses.asdict(base_cfg),
             "variants": queue_variants,
-            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, queue_variants),
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, queue_variants, arrival_units=arrival_units),
         }
 
     reserve_n = _reserve_default(int(base_cfg.expert_queue_max))
@@ -76,7 +77,7 @@ def run_trace_sweeps(
             "name": "expert_queue_reserve_sweep",
             "base_cfg": dataclasses.asdict(base_cfg),
             "variants": variants_reserve,
-            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_reserve),
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_reserve, arrival_units=arrival_units),
         }
 
     variants_k_signal: List[Tuple[str, Dict[str, object]]] = [
@@ -88,7 +89,7 @@ def run_trace_sweeps(
         "name": "k_signal_policy",
         "base_cfg": dataclasses.asdict(base_cfg),
         "variants": variants_k_signal,
-        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_k_signal),
+        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_k_signal, arrival_units=arrival_units),
     }
 
     ak = base_cfg.adaptive_k
@@ -135,7 +136,7 @@ def run_trace_sweeps(
         "name": "adaptive_k_policy",
         "base_cfg": dataclasses.asdict(base_cfg),
         "variants": variants_adaptive_k,
-        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_adaptive_k),
+        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_adaptive_k, arrival_units=arrival_units),
     }
 
     variants_starvation: List[Tuple[str, Dict[str, object]]] = [
@@ -148,7 +149,7 @@ def run_trace_sweeps(
         "name": "starvation_knobs",
         "base_cfg": dataclasses.asdict(base_cfg),
         "variants": variants_starvation,
-        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_starvation),
+        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_starvation, arrival_units=arrival_units),
     }
 
     if int(base_cfg.mtp_draft_len) > 0:
@@ -160,7 +161,7 @@ def run_trace_sweeps(
             "name": "mtp_attempt_policy",
             "base_cfg": dataclasses.asdict(base_cfg),
             "variants": variants_mtp,
-            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_mtp),
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_mtp, arrival_units=arrival_units),
         }
 
     out: Dict[str, Any] = {
@@ -186,6 +187,13 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file merged into trace_meta.")
     p.add_argument("--trace-derive-cost-scale", type=str, default="none", choices=("none", "kv_tokens_p50", "decode_ms_p50"))
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace time by 1/speedup (>= 1 makes arrivals faster).")
+    p.add_argument(
+        "--trace-arrival-units",
+        type=str,
+        default="steps",
+        choices=("steps", "output_tokens"),
+        help="Interpret trace arrivals as steps or output token demand. output_tokens scales arrival deltas by expected/observed MTP accept length per run so MTP comparisons hold output-token demand roughly constant.",
+    )
     p.add_argument("--max-tokens", type=int, default=0, help="If > 0, slice the trace to the first N entries before sweeping.")
 
     p.add_argument("--num-experts", type=int, default=0, help="0 = infer from trace/meta.")
@@ -305,7 +313,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         service_per_task_ms=float(args.service_per_task_ms),
     )
 
-    out = run_trace_sweeps(trace, base_cfg, trace_meta=trace_meta, max_tokens=int(args.max_tokens))
+    out = run_trace_sweeps(
+        trace,
+        base_cfg,
+        trace_meta=trace_meta,
+        max_tokens=int(args.max_tokens),
+        arrival_units=str(args.trace_arrival_units),
+    )
     print(json.dumps(out, sort_keys=True))
     return(0)
 

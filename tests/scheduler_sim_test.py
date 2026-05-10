@@ -2212,9 +2212,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2295,9 +2295,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2445,9 +2445,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2480,9 +2480,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2516,6 +2516,40 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(steps_out, (1000.0 / 3.0))
         with self.assertRaises(ValueError):
             scheduler_sim.arrival_rate_steps_tps(1000.0, "bad_units", 2, 1.0, 1.0)
+
+    def test_trace_arrival_units_output_tokens_scales_trace_for_mtp_variants(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i),
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                k=1,
+            )
+            for i in range(10)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=16,
+            expert_queue_max=10_000,
+            service_ms=0.01,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+        variants = [("mtp_on", {"mtp_draft_len": 2, "mtp_accept_prob": 1.0, "mtp_accept_decay": 1.0})]
+        out = scheduler_sim.compare_simulation_summaries(cfg, trace, variants, arrival_units="output_tokens")
+        base_tps = float(out["baseline"]["summary"]["output_token_throughput_tps"])  # type: ignore[index]
+        mtp_tps = float(out["variants"]["mtp_on"]["summary"]["output_token_throughput_tps"])  # type: ignore[index]
+        self.assertAlmostEqual(base_tps, mtp_tps, delta=2.0)
 
     def test_work_units_and_service_slot_ms_track_mtp_efficiency(self) -> None:
         trace_mtp = [
