@@ -40,6 +40,8 @@ Build notes (Spark / GPU nodes, high level):
 DeepSeek-V4 landing notes:
 
 - vLLM release notes for `v0.20.0` explicitly call out “DeepSeek V4: initial DeepSeek V4 support landed” (`#40860`): `https://github.com/vllm-project/vllm/releases`
+- vLLM release notes for `v0.20.1` describe “DeepSeek V4 stabilization and performance improvements” (base model support, multi-stream pre-attn GEMM, etc.): `https://github.com/vllm-project/vllm/releases`
+- vLLM blog (DeepSeek-V4 attention + deployment notes): `https://vllm.ai/blog/deepseek-v4`
 - Community reports indicate some DeepSeek-V4 local deployments may require vLLM nightly wheels + a newer Transformers snapshot than the latest stable wheels; treat this as a compatibility watch item (not a guarantee): `https://discuss.vllm.ai/t/the-latest-version-of-vllm-is-not-compatible-with-local-deployment-of-deepseek-v4-0-20/2599`
 
 ## Transformers

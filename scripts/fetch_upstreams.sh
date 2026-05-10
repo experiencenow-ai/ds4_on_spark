@@ -245,7 +245,7 @@ fetch_one()
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
 			;;
 		sglang)
-			upstream="sgl-project/sglang"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="sgl-project/sglang"; ref="refs/tags/v0.5.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
 		llama_cpp)
