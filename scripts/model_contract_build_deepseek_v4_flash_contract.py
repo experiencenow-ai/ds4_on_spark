@@ -293,6 +293,10 @@ def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int)
 	added_special_tokens_count: Optional[int] = None
 	added_id_min: Optional[int] = None
 	added_id_max: Optional[int] = None
+	added_tokens_count_ge_base_vocab: Optional[int] = None
+	added_special_tokens_count_ge_base_vocab: Optional[int] = None
+	added_id_min_ge_base_vocab: Optional[int] = None
+	added_id_max_ge_base_vocab: Optional[int] = None
 	if isinstance(added_tokens, list):
 		added_tokens_count = int(len(added_tokens))
 		added_special_tokens_count = int(sum(1 for t in added_tokens if isinstance(t, dict) and t.get("special") is True))
@@ -300,6 +304,13 @@ def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int)
 		if ids:
 			added_id_min = int(min(ids))
 			added_id_max = int(max(ids))
+		if isinstance(base_vocab_size, int):
+			ids_ge_base = [i for i in ids if i >= base_vocab_size]
+			added_tokens_count_ge_base_vocab = int(len(ids_ge_base))
+			added_special_tokens_count_ge_base_vocab = int(sum(1 for t in added_tokens if isinstance(t, dict) and isinstance(t.get("id"), int) and int(t.get("id")) >= base_vocab_size and t.get("special") is True))
+			if ids_ge_base:
+				added_id_min_ge_base_vocab = int(min(ids_ge_base))
+				added_id_max_ge_base_vocab = int(max(ids_ge_base))
 
 	effective_vocab_size: Optional[int] = None
 	if isinstance(base_vocab_size, int):
@@ -344,6 +355,10 @@ def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int)
 			"added_special_tokens_count": added_special_tokens_count,
 			"added_token_id_min": added_id_min,
 			"added_token_id_max": added_id_max,
+			"added_tokens_count_ge_base_vocab": added_tokens_count_ge_base_vocab,
+			"added_special_tokens_count_ge_base_vocab": added_special_tokens_count_ge_base_vocab,
+			"added_token_id_min_ge_base_vocab": added_id_min_ge_base_vocab,
+			"added_token_id_max_ge_base_vocab": added_id_max_ge_base_vocab,
 			"effective_vocab_size": effective_vocab_size,
 			"effective_vocab_size_matches_config": (effective_vocab_size == int(expected_vocab_size)) if isinstance(effective_vocab_size, int) else None,
 			"normalizer": summarize_tok_component(tok.get("normalizer")),
@@ -833,7 +848,14 @@ def build_compat_mappings() -> dict:
 		{"concept": "beta_fast", "transformers_key": "rope_scaling.beta_fast", "inference_key": "beta_fast", "canonical_path": "yarn_rope.beta_fast"},
 		{"concept": "beta_slow", "transformers_key": "rope_scaling.beta_slow", "inference_key": "beta_slow", "canonical_path": "yarn_rope.beta_slow"},
 		{"concept": "dtype", "transformers_key": None, "inference_key": "dtype", "canonical_path": "quantization.inference_config.dtype"},
-		{"concept": "expert_dtype", "transformers_key": "expert_dtype", "inference_key": "expert_dtype", "canonical_path": "quantization.inference_config.expert_dtype"},
+		{
+			"concept": "expert_dtype",
+			"transformers_key": "expert_dtype",
+			"inference_key": "expert_dtype",
+			"canonical_path": "quantization.inference_config.expert_dtype",
+			"transformers_key_optional": True,
+			"note": "HF refs/pr/14 removes config.json expert_dtype; treat inference/config.json expert_dtype as canonical.",
+		},
 		{"concept": "scale_fmt", "transformers_key": None, "inference_key": "scale_fmt", "canonical_path": "quantization.inference_config.scale_fmt"},
 		{"concept": "quant_method", "transformers_key": "quantization_config.quant_method", "inference_key": None, "canonical_path": "quantization.config_quantization_config.quant_method"},
 		{"concept": "quant_fmt", "transformers_key": "quantization_config.fmt", "inference_key": None, "canonical_path": "quantization.config_quantization_config.fmt"},

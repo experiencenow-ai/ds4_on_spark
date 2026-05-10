@@ -60,6 +60,7 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | --- | --- | ---: | ---: | --- | --- |
 | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ1_M.gguf` | 67505962560 | 62.9 | `a7c64ba7...3c58a22c` | Plausible (more headroom than IQ2 quants; requires V4-capable llama.cpp fork) |
 | `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ2_XXS...(2 shards)` | 77907836672 | 72.6 | `0e4356c7...9d0ae99b` + `5dd29236...45da5c5e7` | Plausible (sharded; requires V4-capable llama.cpp fork) |
+| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ3_XXS.gguf` | 111834815936 | 104.2 | `e2e075f4...68dda5f2` | Plausible but tight (limited KV/cache headroom) |
 | `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | `31598c67...e86fd8c` | Plausible (headroom for KV/cache still required) |
 | `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | `3edea7ba...6528c993` | Plausible but tight (limited KV/cache headroom) |
 | `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | `1d494194...a9d7ec6b` | Plausible but tight (limited KV/cache headroom) |
@@ -67,6 +68,15 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_S-XL (2 shards)` | 61540800288 | 57.3 | `4f99d953...a3d13b` + `b15ce531...1495b5` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_M (2 shards)` | 64508041632 | 60.1 | `c0d4aac8...f2856` + `812b1367...d2d81f` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | `a2472110...a04fdce` + `aedfb2c7...ea9bf92` | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) |
+
+## Not single-Spark plausible (still DeepSeek-V4-Flash)
+
+The HF search results often include “native” conversions that are **correctly based on** `deepseek-ai/DeepSeek-V4-Flash`, but are too large for a single Spark0-class node. Track them as provenance references only.
+
+| Source | Pinned commit | Artifact | Size (GiB) | LFS sha256 (content) | License | Notes |
+| --- | --- | --- | ---: | --- | --- | --- |
+| `asidaddy/Deepseek-V4-Flash-GGUF` | `2c3a2233ec6492024ee1c90aa6a06ec22173d909` | `DeepSeek-V4-Flash-native.gguf` | 145.42 | `e16f070a...738babcd` | MIT | Repo also contains large LFS `model-*.safetensors`; treat as metadata-only. |
+| `Volko76/DeepSeek-V4-Flash-GGUF` | `5f45ca7217f7b4e46e230e7c8bce3d3ff705555a` | `DeepSeek-V4-Flash-Q2_K.gguf` | 142.47 | `b807d57e...27dc013` | MIT | Q2_K is still too large for Spark0-class memory headroom. |
 
 ## Reproducing the size numbers (no downloads)
 
@@ -104,12 +114,12 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - Single-Spark plausibility:
   - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the 80.8 GiB (~86.7 GB) footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
 
-### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS shards)
+### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS + IQ3_XXS)
 
-- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `cd14d4663786e5fa368e560324b10e92110f39c2` (`refs/heads/main`)
+- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `836cfa0faa2888e4a8ca91310d1adec9a66b66ca` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement:
-  - Requires `ssweens/llama.cpp-deepseek-v4` (`9f19428fc7bd2a0ac05a083c1430235174aaf811`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
+  - Requires `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
   - Upstream README also claims compatibility with `antirez/deepseek-v4-gguf`.
 - Artifacts (not fetched here; sizes are from HF API / git-lfs pointer metadata):
   - IQ1_M: `deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf` (67505962560 bytes, 62.9 GiB)
@@ -118,11 +128,18 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
     - LFS sha256 shards:
       - `0e4356c7f2e3876bd5757bbaa4f2b7530370063939083048a320816a9d0ae99b` (`...IQ2_XXS-00001-of-00002...`, 49491736416 bytes)
       - `5dd29236696a4bec748c2d4e194dd4719473970873fc1f34422f92845da5c5e7` (`...IQ2_XXS-00002-of-00002...`, 28416100256 bytes)
+  - IQ3_XXS (3 shards): total 111834816288 bytes (104.2 GiB)
+    - LFS sha256 shards:
+      - `8d1d6f79313ea2164f3b69177777b385e0729a62f30d9c6078712816a4492f3b` (`...IQ3_XXS-00001-of-00003...`, 49837684288 bytes)
+      - `86d6c4e04754a08f78a10916c768504015e6f3e436f3164eb4247d821c5eed31` (`...IQ3_XXS-00002-of-00003...`, 49979559168 bytes)
+      - `013b52f77bbf666f45fe396a2c02c244e437400003ddefa999ddeca53b4245d7` (`...IQ3_XXS-00003-of-00003...`, 12017572832 bytes)
   - BF16-ish (not single-Spark plausible): `deepseek-ai__DeepSeek-V4-Flash-bf16.gguf` (161799012416 bytes, 150.7 GiB)
     - LFS sha256: `0576a182aa80478733495f013fc7dd2ce71cbf9de8c4d59230a8c2724cad6614`
 - Single-Spark plausibility:
   - **IQ1_M plausible** on Spark0-class memory (more headroom for KV/cache than ~70–90 GiB IQ2/Q2_K candidates).
   - **IQ2_XXS plausible** on Spark0-class memory; still needs KV/cache sizing validation; note it is sharded.
+  - **IQ3_XXS plausible but tight** on Spark0-class memory (104.2 GiB leaves limited KV/cache headroom).
+  - **BF16-ish not plausible** on Spark0-class memory (150.7 GiB > ~119 GiB host RAM / ~119.7 GiB VRAM).
 
 ### Preyazz/DeepSeek-V4-Flash-GGUF (community Q2_K/Q3_K_M/Q4_K_M)
 

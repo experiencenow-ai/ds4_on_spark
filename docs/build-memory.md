@@ -12,6 +12,8 @@ The build skeleton aims for predictable, static allocation. Most call sites shou
 
 Typical usage: allocate per-request scratch memory, or build fixed-size graphs without per-node `malloc`.
 
+Alignment note: `ds4_arena_alloc` aligns relative to the arena base pointer, so callers should provide aligned arena storage (e.g. `_Alignas(16) uint8_t arena_mem[...]`). For defensive checks, `ds4_arena_init_ex(...,16)` rejects misaligned bases.
+
 ## Fixed Pool (`ds4_pool_t`)
 
 `ds4_pool_t` is a fixed-block allocator backed by a caller-provided memory region:

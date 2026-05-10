@@ -21,6 +21,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
   - Compat mappings also cover MTP (`num_nextn_predict_layers`) and `config.json` quantization knobs (`quantization_config.*`) so external runtime configs can be normalized without guessing.
   - Tokenizer section also records a `tokenizer.tokenizer_json_summary` snapshot (BPE backend + exact pre-tokenizer `Split` regex patterns + `ByteLevel` flags) so external runtimes can reproduce tokenization without guessing.
+    - Note: `tokenizer.json`’s `added_tokens[]` list can include tokens whose IDs are *within* the base BPE vocab range. Use `tokenizer.tokenizer_json_summary.*_ge_base_vocab` fields for the contiguous “extra token IDs above base vocab” range.
   - `scripts/model_contract_verify_deepseek_v4_flash.py` also cross-checks tokenizer invariants against the pinned fixtures (BOS/EOS token IDs, `add_bos_token/add_eos_token`, `model_max_length`, and “PAD is EOS”) so contract consumers can treat these as enforced facts, not just documentation.
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
@@ -32,6 +33,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).
   - Also gates `contract_summary.json` `mtp.semantics` (source-derived `MTPBlock.forward(...)` expressions) so MTP path drift is detected even when tensor keys remain stable.
   - Enforces Flash-variant quantization semantics (`expert_dtype`, `scale_fmt`, and related config fields) so external-runtime results can be interpreted without silently mixing Flash vs Flash-Base.
+    - Note: `expert_dtype` may be omitted from upstream `config.json` in some revisions; the contract treats `fixtures/.../inference/config.json` `expert_dtype` as canonical and marks the Transformers key as optional in `contract_summary.json` `compat.fields`.
 
 ## Correctness Oracles (requirements)
 
@@ -54,9 +56,10 @@ DeepSeek V4 Flash specifics:
 MTP (multi-token prediction) oracle requirements:
 
 - If DS4 enables speculative decoding via `mtp.0.*`, treat MTP as a **separate execution path** with its own acceptance gate.
-- Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
+  - Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
   - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py` and record:
     - `tensor_type_counts` + `mtp_tensor_type_counts` (GGUF quant types present)
+    - Note: some DeepSeek-V4-capable GGUF forks extend `ggml_type` beyond the upstream GGUF spec. For example, nsparks’ native FP4/FP8 DeepSeek4 GGUF uses `F8_E4M3_B128` (type code `42`) for dense weights; the inspector maps this when `metadata["general.architecture"] == "deepseek4"` (see the pinned `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` example output).
     - `tensor_key_namespace_guess` (whether the artifact appears to preserve upstream `layers.{i}.*` / `mtp.0.*` key namespaces; many GGUF conversions are `llama.cpp`)
     - `mtp_namespace.has_mtp0` + `mtp_namespace.expected_complete` (whether the artifact set appears to preserve the expected `mtp.{id}.*` namespace prefixes)
     - `metadata.general.*` (provenance)

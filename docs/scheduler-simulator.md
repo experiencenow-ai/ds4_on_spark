@@ -185,6 +185,12 @@ python3 sim/scheduler/scheduler_sim.py --summary-json
 python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_draft_len":0}'
 ```
 
+The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, and `{pending,hi_queue,lo_queue}_depth_time_weighted_p95`).
+
+When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size percentiles for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) and `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed, when present).
+
+When replay traces include `decode_ms` and/or `kv_tokens`, the summary also reports trace percentiles and model-vs-trace decode error percentiles (for quick sanity checks that queueing/backpressure behavior is in the right ballpark): `trace_decode_ms_p{50,95}_{interactive,batch}`, `trace_decode_error_ms_p{50,95}_{interactive,batch}`, and `trace_kv_tokens_p{50,95}_{interactive,batch}`.
+
 ### Compare Variants (Ablations)
 
 Use `--compare label:JSON` to run one or more config variants against the
@@ -316,13 +322,22 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
-If the runtime log stream is mixed *and/or* uses different field names (for example `latency_class` instead of `cls`, or `experts` instead of `candidates`), use the lightweight extractor first to map common aliases into the strict simulator contract:
+If the runtime log stream is mixed *and/or* uses different field names (for example `latency_class` instead of `cls`, or `experts` instead of `candidates`), you can run replay/canonicalization in `runtime` input format (which applies the same alias mapping as `trace_extract.py` inline):
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+Or, use the lightweight extractor explicitly to map common aliases into the strict simulator contract:
 
 ```bash
 cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
+
+`trace_extract.py` also preserves multi-layer routing when the runtime logs `layers[]` (or `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` (first-seen order) to satisfy the simulator trace contract.
 
 If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:
 

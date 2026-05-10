@@ -13,6 +13,23 @@ For reproducible builds targeting GB10:
 For convenience on single-GPU bring-up:
 
 - `-arch=native` will compile for the visible GPU(s) detected by `nvcc` at build time.
+  - `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort `-fatbin` + `cuobjdump --dump-ptx` check for `-arch=native` and reports whether PTX is embedded (expected missing; treat as a portability signal, not a functional failure).
+
+### `sm_121a` / `sm_121f` Variant Targets (Toolchain Probe)
+
+CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121f` in `nvcc --list-gpu-code`.
+
+When those targets are present, `scripts/cuda_probe_compile_only_tiny_spark0.sh` does a best-effort compile of `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` for each variant and prints `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure).
+
+### `compute_121` Virtual-Arch Compile (Toolchain Probe)
+
+When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
+
+### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
+
+For simple builds, `nvcc` accepts a real-arch `-arch=sm_121` shorthand and can embed both `sm_121` SASS and a PTX fallback for JIT.
+
+`scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort check by emitting a `-fatbin` with `-arch=sm_121` and using `cuobjdump --dump-ptx` to confirm an embedded PTX section exists.
 
 ## CUDA 13 `cudaDeviceProp` Layout Change
 

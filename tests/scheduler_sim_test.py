@@ -279,6 +279,43 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_jsonl_runtime_input_format_maps_aliases_and_filters_by_type(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "meta", "meta": {"runtime_commit": "abc123"}}))
+            f.write("\n")
+            f.write(json.dumps({"type": "decode", "dt_ms": 0.0, "decode_ms": 0.01}))
+            f.write("\n")
+            f.write(
+                json.dumps(
+                    {
+                        "type": "route",
+                        "dt_ms": 0.0,
+                        "latency_class": "interactive",
+                        "routing": {"expert_ids": [3, 7, 1]},
+                    }
+                )
+            )
+            f.write("\n")
+        try:
+            meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(
+                tmp_path,
+                time_mode="dt_ms",
+                meta_out=meta,
+                non_route_policy="skip",
+                input_format="runtime",
+                route_type="route",
+            )
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(meta.get("runtime_commit"), "abc123")
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+            self.assertEqual(trace[0].candidates, (3, 7, 1))
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_synthetic_score_mode_rejected_in_trace_replay(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
@@ -321,7 +358,42 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("summary", out)
         summary = out["summary"]
         self.assertIsInstance(summary, dict)
-        for k in ("makespan_ms", "token_throughput_tps", "task_throughput_tps", "drop_frac_tokens"):
+        for k in (
+            "makespan_ms",
+            "token_throughput_tps",
+            "task_throughput_tps",
+            "drop_frac_tokens",
+            "drop_frac_tokens_interactive",
+            "drop_frac_tokens_batch",
+            "partial_admit_frac_tokens",
+            "starved_task_frac",
+            "starved_task_frac_interactive",
+            "service_batch_size_p50_interactive",
+            "service_batch_size_p95_interactive",
+            "service_batch_size_p50_batch",
+            "service_batch_size_p95_batch",
+            "trace_expert_batch_size_p50_interactive",
+            "trace_expert_batch_size_p95_interactive",
+            "trace_expert_batch_size_p50_batch",
+            "trace_expert_batch_size_p95_batch",
+            "trace_decode_ms_p50_interactive",
+            "trace_decode_ms_p95_interactive",
+            "trace_decode_ms_p50_batch",
+            "trace_decode_ms_p95_batch",
+            "trace_decode_error_ms_p50_interactive",
+            "trace_decode_error_ms_p95_interactive",
+            "trace_decode_error_ms_p50_batch",
+            "trace_decode_error_ms_p95_batch",
+            "trace_kv_tokens_p50_interactive",
+            "trace_kv_tokens_p95_interactive",
+            "trace_kv_tokens_p50_batch",
+            "trace_kv_tokens_p95_batch",
+            "expert_max_pending_tasks_max",
+            "expert_utilization_p50",
+            "expert_saturation_p95",
+            "pending_depth_time_weighted_p95",
+            "mtp_accept_rate",
+        ):
             self.assertIn(k, summary)
 
     def test_summary_json_compare_omits_full_metrics(self) -> None:
@@ -2334,6 +2406,33 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(rec["decode_ms"]), 2.5)
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
+
+    def test_trace_extract_preserves_layers_and_unions_candidates(self) -> None:
+        obj = {
+            "t_ms": 1.0,
+            "cls": "batch",
+            "layers": [
+                {"experts": [1, 2], "router_scores": [0.2, 0.1], "chosen_k": 1},
+                {"route": {"experts": [2, 3], "router_scores": [0.5, 0.4], "k": 2, "cost_scale": 0.5}},
+            ],
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [1, 2, 3])
+        self.assertNotIn("scores", rec)
+        self.assertNotIn("k", rec)
+        layers = rec.get("layers")
+        self.assertIsInstance(layers, list)
+        assert isinstance(layers, list)
+        self.assertEqual(len(layers), 2)
+        self.assertEqual(layers[0].get("candidates"), [1, 2])
+        self.assertEqual(layers[0].get("scores"), [0.2, 0.1])
+        self.assertEqual(layers[0].get("k"), 1)
+        self.assertEqual(layers[1].get("candidates"), [2, 3])
+        self.assertEqual(layers[1].get("scores"), [0.5, 0.4])
+        self.assertEqual(layers[1].get("k"), 2)
+        self.assertAlmostEqual(float(layers[1].get("cost_scale", 0.0)), 0.5, places=6)
 
     def test_trace_extract_filters_route_type(self) -> None:
         route = {"type": "moe_route", "t_ms": 0.0, "cls": "batch", "candidates": [0]}

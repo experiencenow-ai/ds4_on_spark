@@ -8,7 +8,9 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0; observed `V13.0.88` on 2026-05-10)
+- `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/registers)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
+- For a small “kernel plumbing” bring-up gate set (no cuBLASLt), run `./scripts/cuda_probe_kernel_tiny_spark0.sh` from the Mac; it validates C++20 + template flags, inline PTX (`ldmatrix`), pipeline/bulk async copy plumbing, TMA tensor-map encode + `cp.async.bulk.tensor`, and NVRTC/nvJitLink JIT paths for `sm_121`.
 - CUDA 13 developer tooling (`cuobjdump --dump-sass`, `nvdisasm`) can decode `sm_121` binaries on Spark0 (validated via `scripts/cuda_probe_disasm_spark0.sh`: 2026-05-09)
 - `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe` shows that an `sm_120`-compiled kernel runs successfully on GB10 (`sm_121`) (observed `__CUDA_ARCH__=1200` on device `cc=12.1`)
@@ -83,6 +85,8 @@ Next probe step:
 Implication:
 
 - `-arch=native` is convenient for single-host bring-up, but `nvcc` generates SASS for the visible GPU(s) and (per CUDA 13 `nvcc` docs) does not embed PTX; this is not ideal for “ship one binary and run anywhere”.
+- `scripts/cuda_probe_compile_only_tiny_spark0.sh` and `scripts/cuda_probe_nvcc_minimal_spark0.sh` both include best-effort `cuobjdump --dump-ptx` checks to make the “PTX present vs missing” behavior observable on Spark0.
+- Those same scripts also attempt best-effort compile-only `-gencode` builds for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` (when `compute_121` is advertised) to validate multi-target build plumbing on the installed `nvcc`.
 - For artifacts expected to run across multiple GPU variants, prefer explicit `-gencode` with both SASS and PTX (for example: `arch=compute_121,code=sm_121,compute_121`) and add additional `sm_*` entries as needed for your fleet.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is a tiny “fatbin portability” gate that builds via `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX) and runs the same sanity kernel as the `-arch=sm_121` probe.
 

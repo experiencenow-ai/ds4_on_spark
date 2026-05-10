@@ -12,7 +12,7 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 
 This builds and runs only:
 
-- `cuda_device_props_tiny`
+- `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits)
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_probe`
 - `cuda_sm121_arch_report` (prints runtime device CC plus compiled `__CUDA_ARCH__` from an `sm_121` build; expected `1210`)
@@ -25,6 +25,20 @@ If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` ent
 
 Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
 
+## Spark0: Capability Sweep (One Command)
+
+When you want to run the key “is `sm_121` supported end-to-end?” checks in one shot:
+
+```bash
+./scripts/cuda_probe_capability_spark0.sh
+```
+
+This runs, in order:
+
+- `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
+- `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
+- `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
+
 ## Spark0: Tiny Compile-Only `sm_121`
 
 When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
@@ -32,6 +46,58 @@ When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
 ```bash
 ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 ```
+
+This also performs best-effort toolchain-only checks when supported:
+
+- If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
+- If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
+- If `nvcc --list-gpu-arch` advertises `compute_121`, attempt compile-only `-gencode` builds for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` (multi-target build plumbing gate).
+- If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
+- If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
+
+## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)
+
+When you want a completely self-contained check that does not ship `tools/cuda_probe/`:
+
+```bash
+./scripts/cuda_probe_nvcc_minimal_spark0.sh
+```
+
+This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
+
+- Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
+- Runs best-effort compile-only `-gencode` probes for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` when `compute_121` is advertised (multi-target build plumbing gate)
+- Compiles and runs it with `-arch=sm_121` and `-arch=native`
+- Prints runtime device info + the device-observed `__CUDA_ARCH__`
+- If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `native` missing)
+
+## Spark0: Kernel Bring-up Tiny (CUTLASS/DeepGEMM Gates)
+
+When you want a small, focused “kernel plumbing” gate set (no cuBLASLt) that is still representative for CUTLASS/DeepGEMM-style kernels:
+
+```bash
+./scripts/cuda_probe_kernel_tiny_spark0.sh
+```
+
+This builds and runs a curated subset of probes (all `sm_121` unless noted):
+
+- `cuda_device_props_tiny`
+- `cuda_sm121_compile_probe.o` (compile-only gate)
+- `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)
+- `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
+- `cuda_sm121_pipeline_memcpy_async` (cp.async-style global->shared copy)
+- `cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` global->shared copy via CCCL)
+- `cuda_sm121_tma_bulk_tensor_1d` (TMA `cp.async.bulk.tensor.1d` load via `cuTensorMapEncodeTiled`)
+- `cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync` gate)
+- `cuda_sm121_wmma_smoke` (WMMA plumbing proxy)
+- `cuda_sm121_cxx20_probe` (C++20 toolchain gate)
+- `cuda_sm121_nvcc_flags_probe` (`-std=c++20` + `--extended-lambda` + `--expt-relaxed-constexpr` gate)
+- `cuda_sm121_nvrtc_jit` / `cuda_sm121_nvrtc_cxx20_jit` (NVRTC → PTX → Driver API module load/launch gates)
+- `cuda_sm121_nvjitlink_jit` (NVRTC → PTX → nvJitLink → CUBIN → Driver API module load/launch gate)
+
+The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
+
+Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; NVRTC `supportedArchs` includes `121`.
 
 ## Spark0: Compile + Run
 
@@ -119,7 +185,29 @@ Currently it disassembles:
 
 This is useful when bringing up CUTLASS/DeepGEMM-style kernels, because it validates that the developer tooling can inspect the generated kernels on Spark0.
 
-## Current Spark0 Results (2026-05-09)
+## Current Spark0 Results (2026-05-10)
+
+Commands run:
+
+```bash
+./scripts/cuda_probe_compile_only_tiny_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_nvcc_minimal_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_tiny_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_kernel_tiny_spark0.sh spark0@aitopatom-9ab9.local
+```
+
+Observed:
+
+- `nvcc` is CUDA 13.0 (`V13.0.88`)
+- `nvcc --list-gpu-arch` includes `compute_121` when supported
+- `nvcc --list-gpu-code` includes `sm_121` when supported
+- `nvcc -arch=compute_121 -c` compile-only probe succeeds when `compute_121` is advertised (toolchain PTX-target gate)
+- `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
+- Device is reported as `NVIDIA GB10` with `cc=12.1`
+- `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
+- The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure
+
+## Full Suite Spark0 Results (2026-05-09)
 
 Commands run:
 

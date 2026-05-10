@@ -995,11 +995,15 @@ def load_trace_jsonl(
     time_mode: str = "t_ms",
     meta_out: Optional[Dict[str, object]] = None,
     non_route_policy: str = "error",
+    input_format: str = "strict",
+    route_type: str = "",
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
     if non_route_policy not in ("error", "skip"):
         raise ValueError("non_route_policy must be 'error' or 'skip'")
+    if input_format not in ("strict", "runtime"):
+        raise ValueError("input_format must be 'strict' or 'runtime'")
     routes: List[TokenRoute] = []
     t_ms_accum = 0.0
     display_path = path if path != "-" else "<stdin>"
@@ -1022,9 +1026,12 @@ def load_trace_jsonl(
                 continue
             if line.startswith("#"):
                 continue
-            obj = json.loads(line)
-            if not isinstance(obj, dict):
+            obj_raw = json.loads(line)
+            if not isinstance(obj_raw, dict):
+                if non_route_policy == "skip":
+                    continue
                 raise ValueError(f"{display_path}:{lineno}: expected JSON object")
+            obj: Dict[str, object] = obj_raw
 
             if "type" in obj and obj["type"] in ("meta", "trace_meta"):
                 payload = obj.get("meta", {k: v for k, v in obj.items() if k != "type"})
@@ -1034,10 +1041,20 @@ def load_trace_jsonl(
                 merge_meta(obj["meta"], lineno)
                 continue
 
-            if non_route_policy == "skip":
-                if "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
-                    if "cls" not in obj or ("candidates" not in obj and "layers" not in obj):
+            if input_format == "runtime":
+                from sim.scheduler import trace_extract
+
+                rec = trace_extract.extract_route_record(obj, route_type=route_type)
+                if rec is None:
+                    if non_route_policy == "skip":
                         continue
+                    raise ValueError(f"{display_path}:{lineno}: could not extract route record (try --trace-non-route skip)")
+                obj = rec
+            else:
+                if non_route_policy == "skip":
+                    if "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                        if "cls" not in obj or ("candidates" not in obj and "layers" not in obj):
+                            continue
 
             if time_mode == "t_ms":
                 if "dt_ms" in obj and obj["dt_ms"] is not None:
@@ -3079,6 +3096,30 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
         frac = (x - float(i0))
         return(float(xs_sorted[i0]) * (1.0 - frac) + (float(xs_sorted[i1]) * frac))
 
+    def _hist_int_percentile(hist_time_ms: Sequence[float], overflow_time_ms: float, p: float) -> int:
+        if p <= 0.0:
+            return(0)
+        if p >= 1.0:
+            if overflow_time_ms > 0.0:
+                return(len(hist_time_ms))
+            if len(hist_time_ms) == 0:
+                return(0)
+            return(len(hist_time_ms) - 1)
+        total = float(sum(hist_time_ms)) + float(overflow_time_ms)
+        if total <= 0.0:
+            return(0)
+        target = (p * total)
+        acc = 0.0
+        for d, t in enumerate(hist_time_ms):
+            acc += float(t)
+            if acc >= target:
+                return(int(d))
+        if overflow_time_ms > 0.0:
+            return(len(hist_time_ms))
+        if len(hist_time_ms) == 0:
+            return(0)
+        return(len(hist_time_ms) - 1)
+
     makespan_ms = metrics.makespan_ms
     token_tps = (float(metrics.num_tokens) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
     task_tps = (float(metrics.admitted_tasks) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
@@ -3088,6 +3129,20 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
+    tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
+    starved_task_frac = (float(metrics.starved_tasks) / tasks_started_total) if tasks_started_total > 0.0 else 0.0
+    starved_task_frac_interactive = (float(metrics.starved_tasks_interactive) / float(len(metrics.task_queue_wait_ms_interactive))) if len(metrics.task_queue_wait_ms_interactive) != 0 else 0.0
+    starved_task_frac_batch = (float(metrics.starved_tasks_batch) / float(len(metrics.task_queue_wait_ms_batch))) if len(metrics.task_queue_wait_ms_batch) != 0 else 0.0
+    starved_task_frac_mtp_draft = (float(metrics.starved_tasks_mtp_draft) / float(metrics.tasks_started_mtp_draft)) if metrics.tasks_started_mtp_draft > 0 else 0.0
+    starved_task_frac_mtp_verify = (float(metrics.starved_tasks_mtp_verify) / float(metrics.tasks_started_mtp_verify)) if metrics.tasks_started_mtp_verify > 0 else 0.0
+    partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
+    mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
+    dropped_interactive = float(metrics.dropped_tokens_backpressure_interactive)
+    denom_interactive = float(metrics.admitted_tokens_interactive + metrics.dropped_tokens_backpressure_interactive)
+    drop_frac_interactive = (dropped_interactive / denom_interactive) if denom_interactive > 0.0 else 0.0
+    dropped_batch = float(metrics.dropped_tokens_backpressure_batch)
+    denom_batch = float(metrics.admitted_tokens_batch + metrics.dropped_tokens_backpressure_batch)
+    drop_frac_batch = (dropped_batch / denom_batch) if denom_batch > 0.0 else 0.0
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -3097,7 +3152,30 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_throughput_tps": float(output_tps),
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
+            "service_batch_size_p50_interactive": float(_p_or_zero(metrics.service_batch_size_interactive, 0.50)),
+            "service_batch_size_p95_interactive": float(_p_or_zero(metrics.service_batch_size_interactive, 0.95)),
+            "service_batch_size_p50_batch": float(_p_or_zero(metrics.service_batch_size_batch, 0.50)),
+            "service_batch_size_p95_batch": float(_p_or_zero(metrics.service_batch_size_batch, 0.95)),
+            "trace_expert_batch_size_p50_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.50)),
+            "trace_expert_batch_size_p95_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.95)),
+            "trace_expert_batch_size_p50_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.50)),
+            "trace_expert_batch_size_p95_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.95)),
+            "trace_decode_ms_p50_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.50)),
+            "trace_decode_ms_p95_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.95)),
+            "trace_decode_ms_p50_batch": float(_p_or_zero(metrics.trace_decode_ms_batch, 0.50)),
+            "trace_decode_ms_p95_batch": float(_p_or_zero(metrics.trace_decode_ms_batch, 0.95)),
+            "trace_decode_error_ms_p50_interactive": float(_p_or_zero(metrics.trace_decode_error_ms_interactive, 0.50)),
+            "trace_decode_error_ms_p95_interactive": float(_p_or_zero(metrics.trace_decode_error_ms_interactive, 0.95)),
+            "trace_decode_error_ms_p50_batch": float(_p_or_zero(metrics.trace_decode_error_ms_batch, 0.50)),
+            "trace_decode_error_ms_p95_batch": float(_p_or_zero(metrics.trace_decode_error_ms_batch, 0.95)),
+            "trace_kv_tokens_p50_interactive": float(_p_or_zero(metrics.trace_kv_tokens_interactive, 0.50)),
+            "trace_kv_tokens_p95_interactive": float(_p_or_zero(metrics.trace_kv_tokens_interactive, 0.95)),
+            "trace_kv_tokens_p50_batch": float(_p_or_zero(metrics.trace_kv_tokens_batch, 0.50)),
+            "trace_kv_tokens_p95_batch": float(_p_or_zero(metrics.trace_kv_tokens_batch, 0.95)),
             "drop_frac_tokens": float(drop_frac),
+            "drop_frac_tokens_interactive": float(drop_frac_interactive),
+            "drop_frac_tokens_batch": float(drop_frac_batch),
+            "partial_admit_frac_tokens": float(partial_admit_frac),
             "token_p50_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.50)),
             "token_p95_interactive_ms": float(_p_or_zero(metrics.token_lat_ms_interactive, 0.95)),
             "token_p50_batch_ms": float(_p_or_zero(metrics.token_lat_ms_batch, 0.50)),
@@ -3107,7 +3185,28 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_p50_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.50)),
             "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
             "starved_tasks": float(metrics.starved_tasks),
+            "starved_task_frac": float(starved_task_frac),
+            "starved_task_frac_interactive": float(starved_task_frac_interactive),
+            "starved_task_frac_batch": float(starved_task_frac_batch),
+            "starved_task_frac_mtp_draft": float(starved_task_frac_mtp_draft),
+            "starved_task_frac_mtp_verify": float(starved_task_frac_mtp_verify),
             "dropped_tasks_backpressure": float(metrics.dropped_tasks_backpressure),
+            "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
+            "expert_max_pending_tasks_max": float(max(metrics.max_pending_per_expert)) if len(metrics.max_pending_per_expert) != 0 else 0.0,
+            "expert_mean_pending_tasks_p50": float(_p_or_zero(metrics.mean_pending_per_expert, 0.50)),
+            "expert_mean_pending_tasks_p95": float(_p_or_zero(metrics.mean_pending_per_expert, 0.95)),
+            "expert_max_pending_work_p50": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.50)),
+            "expert_max_pending_work_max": float(max(metrics.max_pending_work_per_expert)) if len(metrics.max_pending_work_per_expert) != 0 else 0.0,
+            "expert_mean_pending_work_p50": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.50)),
+            "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
+            "expert_utilization_p50": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.50)),
+            "expert_utilization_p95": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.95)),
+            "expert_saturation_p50": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.50)),
+            "expert_saturation_p95": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.95)),
+            "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
+            "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
+            "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
+            "mtp_accept_rate": float(mtp_accept_rate),
         }
     )
 
@@ -3258,6 +3357,14 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="",
         help="Replay routing trace from JSONL file (use '-' for stdin). Required fields: t_ms/dt_ms, cls, candidates (or layers). Optional: token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size.",
     )
+    p.add_argument(
+        "--trace-input-format",
+        type=str,
+        default="strict",
+        choices=("strict", "runtime"),
+        help="JSONL trace input format: strict expects the simulator contract; runtime applies the trace extractor's alias mapping first (useful for mixed/alias-heavy runtime logs).",
+    )
+    p.add_argument("--trace-route-type", type=str, default="", help="JSONL runtime-format trace: only accept records with obj.type == trace-route-type (empty = accept all).")
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -3417,6 +3524,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 time_mode=args.trace_time_mode.strip().lower(),
                 meta_out=trace_meta,
                 non_route_policy=args.trace_non_route.strip().lower(),
+                input_format=args.trace_input_format.strip().lower(),
+                route_type=args.trace_route_type.strip(),
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())

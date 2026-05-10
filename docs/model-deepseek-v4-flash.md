@@ -112,7 +112,7 @@ Per-layer MoE (`layers.{i}.ffn.*`):
 
 ## Quantization + scale tensors (FP8 trunk, FP4 experts)
 
-Upstream sources: `config.json` (`quantization_config`, `expert_dtype`) and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
+Upstream sources: `config.json` (`quantization_config`; `expert_dtype` may be absent in some upstream revisions), `inference/config.json` (`expert_dtype`), and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
 
 Checkpoint formats:
 
@@ -121,7 +121,7 @@ Checkpoint formats:
   - `quantization_config.fmt`: `e4m3`
   - `quantization_config.scale_fmt`: `ue8m0` (power-of-2 scale rounding / MXFP style)
   - `quantization_config.weight_block_size`: `[128,128]`
-- Expert weights use FP4 (from `config.json` `expert_dtype: fp4`):
+- Expert weights use FP4 (Flash `inference/config.json` `expert_dtype: fp4`):
   - In the reference `Linear`, FP4 weights are stored packed as `float4_e2m1fn_x2` with shape `[out_features, in_features//2]` (logically `[out_features, in_features]`).
   - FP4 scale tensors are `float8_e8m0fnu` with shape `[out_features, in_features//32]` (1 scale per 32 FP4 K-elements).
 - Scale dtype default (source-derived): `inference/model.py` `ModelArgs.scale_dtype` defaults to `fp8`. When `scale_dtype == fp8`, `Transformer.__init__` forces `scale_fmt=ue8m0` and uses `float8_e8m0fnu` scale tensors; this is recorded in `contract_summary.json` under `quantization.inference_config.scale_dtype`.
@@ -354,6 +354,10 @@ Tokenizer backend (from `tokenizer.json`):
 
 These backend pipeline facts (including the exact `Split` regex patterns and `ByteLevel` flags) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tokenizer.tokenizer_json_summary` so external runtimes can reproduce tokenization without guessing.
 
+Tokenizer added-token ID range note:
+
+- The raw `tokenizer.json` `added_tokens[]` list can include tokens whose IDs are within the base BPE vocab range (e.g. BOS/EOS). For the contiguous “extra IDs above base vocab” range, use `tokenizer.tokenizer_json_summary.{added_token_id_min_ge_base_vocab,added_token_id_max_ge_base_vocab,added_tokens_count_ge_base_vocab}` from `contract_summary.json`.
+
 Message rendering:
 
 - Upstream provides `encoding/encoding_dsv4.py` with templates for:
@@ -505,6 +509,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
 - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
 - `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
+- The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this under `tensor_type_counts`.
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 
 For external/quantized artifacts:

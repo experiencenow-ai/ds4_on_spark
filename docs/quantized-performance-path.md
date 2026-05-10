@@ -100,13 +100,24 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
-If the runtime log stream is mixed and/or cannot easily emit the simulator’s strict trace field names, normalize it first with the extractor (maps common aliases like `latency_class`→`cls`, `experts`→`candidates`):
+If the runtime log stream is mixed and/or cannot easily emit the simulator’s strict trace field names, you can run replay/canonicalization in `runtime` input format (inline alias mapping), or normalize it explicitly with the extractor.
+
+Inline alias mapping:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+Extractor (maps common aliases like `latency_class`→`cls`, `experts`→`candidates`):
 
 ```bash
 cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
+
+`trace_extract.py` preserves multi-layer routing when present (`layers[]` / `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` so the simulator can replay the trace without additional massaging.
 
 If the runtime trace includes per-token chosen `K`, replay it directly:
 
