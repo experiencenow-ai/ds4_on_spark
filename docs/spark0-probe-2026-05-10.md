@@ -113,6 +113,12 @@ REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-cod
 (REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true) | tee /private/tmp/ds4_spark1_probe_summary_redacted_2026-05-10T151929Z_loop_spark1summary_fix.txt
 ```
 
+Additional probe run (15:47Z refresh, smaller summary-mode output):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T154719Z_loop_git_2dea79c.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -166,6 +172,26 @@ path 000f:00:00.0 current_link_speed: Unknown
 path 000f:00:00.0 current_link_width: 0
 path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
 path 000f:01:00.0 current_link_width: 1
+```
+
+### Spark1-friendly CUDA/toolchain summary mode (Spark0, 15:47Z)
+
+```text
+== local meta ==
+Sun May 10 15:47:19 UTC 2026
+git: 2dea79c
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda version.json (summary) ==
+cuda: 13.0.3
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+runtime max cc: 12.1
 ```
 
 ### Compute capability + open kernel module metadata (Spark0, 14:11Z)
