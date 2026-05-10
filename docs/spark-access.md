@@ -17,6 +17,41 @@ Current observed Spark identity:
 
 From the Mac repo root, use the scripts in `scripts/` to keep probes consistent and safe-to-commit.
 
+### Git Shim For Read-Only Checkouts (`.git-codex`)
+
+Some automation-provided macOS checkouts have a `.git` worktree that is readable but not writable (macOS provenance / sandbox restrictions). In that case:
+
+- You may not be able to `git fetch`, create branches, or commit using the checkout’s default `.git` metadata.
+- The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir).
+
+Create a local shim repo at `.git-codex/` (not committed) and use it for git operations:
+
+```bash
+# One-time setup (from repo root)
+git init .git-codex
+git --git-dir=.git-codex/.git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+git --git-dir=.git-codex/.git --work-tree=. fetch origin main --depth=50
+git --git-dir=.git-codex/.git --work-tree=. checkout -f origin/main
+```
+
+Then create a protocol-compliant branch (example) and commit using the shim gitdir:
+
+```bash
+branch="codex/loop-spark-access-YYYYMMDD-short-suffix"
+git --git-dir=.git-codex/.git --work-tree=. checkout -b "$branch" origin/main
+git --git-dir=.git-codex/.git --work-tree=. status --short
+git --git-dir=.git-codex/.git --work-tree=. add docs/spark-access.md scripts/spark_probe.sh
+git --git-dir=.git-codex/.git --work-tree=. commit -m "Docs: Spark probe shim notes"
+git --git-dir=.git-codex/.git --work-tree=. push -u origin "$branch"
+```
+
+When saving committed probe excerpts, prefer:
+
+```bash
+DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh
+DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+```
+
 Notes:
 
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.

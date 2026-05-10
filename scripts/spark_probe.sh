@@ -22,6 +22,7 @@ Environment:
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
+  DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
