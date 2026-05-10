@@ -46,11 +46,12 @@ This runs, in order:
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
 - `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
+- `scripts/cuda_probe_kernel_tiny_spark0.sh` (kernel plumbing gates; no cuBLASLt)
 
-To also include the “kernel plumbing” bring-up gates (no cuBLASLt), run:
+To skip the “kernel plumbing” bring-up gates (faster), run:
 
 ```bash
-WITH_KERNEL_TINY=1 ./scripts/cuda_probe_capability_spark0.sh
+WITH_KERNEL_TINY=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
 ## Spark0: Tiny Compile-Only `sm_121`
