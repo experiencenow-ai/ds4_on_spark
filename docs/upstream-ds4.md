@@ -19,6 +19,8 @@ We track `ds4` as a compact reference point for:
 - KV-cache design choices (including disk-oriented cache ideas), and
 - end-to-end ergonomics (CLI/server flags, test vectors, validation posture).
 
+For the specific DeepSeek V4 Flash MTP draft/verify/rollback semantics and the `mtp.0.*` binding contract, see `docs/mtp-ds4-reference.md`.
+
 This repo must not vendor large third-party trees or model weights: treat `ds4` as read-only reference material.
 
 ## Build notes (upstream)

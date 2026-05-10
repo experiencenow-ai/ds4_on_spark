@@ -57,6 +57,18 @@ Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 triage. These env strings are recorded in the generated report, so do not put
 tokens or other secrets in them.
 
+To validate a DS4-tuned MTP sidecar GGUF that already exists on Spark (no trunk
+model load, and no tensor payload reads), set `REMOTE_MTP_SIDECAR_ENV` on the
+Mac and `MTP_SIDECAR_GGUF` on Spark:
+
+```sh
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+The report includes a `## MTP sidecar contract probe (Spark)` section with the
+JSON output from `scripts/model_contract_probe_mtp_sidecar.py`.
+
 After the first successful quantized run, prefer instrumentation over immediate
 optimization. The next useful report should say whether the runtime can expose:
 
@@ -93,7 +105,7 @@ All baseline scripts share the same safety gates:
 Per-script useful env vars:
 
 - `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`
-- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`
+- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
