@@ -87,9 +87,29 @@ try_compile_only() {
 	fi
 }
 
+try_gencode_only() {
+	tag=\"\$1\"
+	gencode_arch=\"\$2\"
+	gencode_code=\"\$3\"
+	echo \"-- compile-only: \${tag} (-gencode arch=\${gencode_arch},code=\${gencode_code})\"
+	err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=\${gencode_arch},code=\${gencode_code}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		echo \"\${tag}: OK\"
+	else
+		echo \"\${tag}: FAILED rc=\${rc}\"
+		head -n 40 \"\${err_path}\" || true
+	fi
+}
+
 try_compile_only arch_sm_121 sm_121
 if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 	try_compile_only arch_compute_121 compute_121
+	try_gencode_only gencode_sm_121 compute_121 sm_121
+	try_gencode_only gencode_compute_121 compute_121 compute_121
 fi
 if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
 	try_compile_only variant_sm_121a sm_121a

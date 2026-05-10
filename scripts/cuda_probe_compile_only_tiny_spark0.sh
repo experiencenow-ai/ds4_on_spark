@@ -119,6 +119,38 @@ else
 fi
 
 echo
+echo \"== nvcc: gencode compile (best-effort) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping gencode)\"
+else
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -c -o bin/cuda_gencode_sm_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_gencode_sm_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_sm_121: OK\"
+		else
+			echo \"gencode_sm_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_gencode_sm_121_compile_probe.err || true
+		fi
+
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=compute_121\" -c -o bin/cuda_gencode_compute_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_gencode_compute_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_compute_121: OK\"
+		else
+			echo \"gencode_compute_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_gencode_compute_121_compile_probe.err || true
+		fi
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121; skipping gencode)\"
+	fi
+fi
+
+echo
 echo \"== compile-only (tiny) ==\"
 make clean
 make bin/cuda_sm121_compile_probe.o
