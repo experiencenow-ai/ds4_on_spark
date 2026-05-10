@@ -33,6 +33,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).
   - Also gates `contract_summary.json` `mtp.semantics` (source-derived `MTPBlock.forward(...)` expressions) so MTP path drift is detected even when tensor keys remain stable.
   - Enforces Flash-variant quantization semantics (`expert_dtype`, `scale_fmt`, and related config fields) so external-runtime results can be interpreted without silently mixing Flash vs Flash-Base.
+    - Note: `expert_dtype` may be omitted from upstream `config.json` in some revisions; the contract treats `fixtures/.../inference/config.json` `expert_dtype` as canonical and marks the Transformers key as optional in `contract_summary.json` `compat.fields`.
 
 ## Correctness Oracles (requirements)
 

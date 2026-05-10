@@ -112,7 +112,7 @@ Per-layer MoE (`layers.{i}.ffn.*`):
 
 ## Quantization + scale tensors (FP8 trunk, FP4 experts)
 
-Upstream sources: `config.json` (`quantization_config`, `expert_dtype`) and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
+Upstream sources: `config.json` (`quantization_config`; `expert_dtype` may be absent in some upstream revisions), `inference/config.json` (`expert_dtype`), and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
 
 Checkpoint formats:
 
@@ -121,7 +121,7 @@ Checkpoint formats:
   - `quantization_config.fmt`: `e4m3`
   - `quantization_config.scale_fmt`: `ue8m0` (power-of-2 scale rounding / MXFP style)
   - `quantization_config.weight_block_size`: `[128,128]`
-- Expert weights use FP4 (from `config.json` `expert_dtype: fp4`):
+- Expert weights use FP4 (Flash `inference/config.json` `expert_dtype: fp4`):
   - In the reference `Linear`, FP4 weights are stored packed as `float4_e2m1fn_x2` with shape `[out_features, in_features//2]` (logically `[out_features, in_features]`).
   - FP4 scale tensors are `float8_e8m0fnu` with shape `[out_features, in_features//32]` (1 scale per 32 FP4 K-elements).
 - Scale dtype default (source-derived): `inference/model.py` `ModelArgs.scale_dtype` defaults to `fp8`. When `scale_dtype == fp8`, `Transformer.__init__` forces `scale_fmt=ue8m0` and uses `float8_e8m0fnu` scale tensors; this is recorded in `contract_summary.json` under `quantization.inference_config.scale_dtype`.

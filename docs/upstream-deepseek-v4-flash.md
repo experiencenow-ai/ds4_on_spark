@@ -102,7 +102,11 @@ Flash vs Flash-Base (important runtime semantic):
 
 ## Config field stability (watch)
 
-The official HF repos are actively edited. As of 2026-05-10, there is a draft HF PR (`refs/pr/14`) that removes `expert_dtype` from `config.json`. vLLM (and our docs) currently treat `expert_dtype` as the canonical Flash vs Flash-Base switch, so pin updates must re-validate this assumption.
+The official HF repos are actively edited. As of 2026-05-10, there is a draft HF PR (`refs/pr/14`, commit `6c858e71890b508e4f3fd6491f45b325580ba934`) that removes `expert_dtype` from `config.json` while keeping `inference/config.json` `expert_dtype="fp4"`. vLLM (and our docs) currently treat `expert_dtype` as the canonical Flash vs Flash-Base switch, so pin updates must re-validate this assumption.
+
+Practical contract rule:
+
+- Treat `fixtures/.../inference/config.json` `expert_dtype` as canonical; `config.json` `expert_dtype` may be absent in some upstream revisions.
 
 Re-check quickly (metadata-only fetch; no weights):
 
