@@ -127,7 +127,7 @@ int32_t test_config(void)
 	if ( ds4_config_parse_mem_ex(&cfg,buf_unknown0,(int32_t)(sizeof(buf_unknown0) - 1),DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown) >= 0 )
 		return(-124);
 	if ( unknown != 1 )
-		return(-1241);
+		return(-152);
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-101);
 	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )
@@ -301,6 +301,42 @@ int32_t test_config(void)
 	{
 		unlink(path);
 		return(-49);
+	}
+	unlink(path);
+	for (n=0; n<(int32_t)sizeof(path); n++)
+		path[n] = 0;
+	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_unknown_XXXXXX");
+	if ( plen <= 0 )
+		return(-160);
+	for (n=0; n<plen && n<((int32_t)sizeof(path) - 1); n++)
+		path[n] = "/tmp/ds4_cfg_unknown_XXXXXX"[n];
+	path[n] = 0;
+	fd = mkstemp(path);
+	if ( fd < 0 )
+		return(-161);
+	if ( ds4_write_all(fd,buf_unknown0,(int32_t)(sizeof(buf_unknown0) - 1)) < 0 )
+	{
+		close(fd);
+		unlink(path);
+		return(-162);
+	}
+	close(fd);
+	if ( ds4_config_defaults(&cfg) < 0 )
+	{
+		unlink(path);
+		return(-163);
+	}
+	out_len = 0;
+	unknown = -1;
+	if ( ds4_config_parse_file_ex(&cfg,path,io_buf,(int32_t)sizeof(io_buf),&out_len,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown) >= 0 )
+	{
+		unlink(path);
+		return(-164);
+	}
+	if ( unknown != 1 )
+	{
+		unlink(path);
+		return(-165);
 	}
 	unlink(path);
 	unsetenv("DS4_LOG_LEVEL");
