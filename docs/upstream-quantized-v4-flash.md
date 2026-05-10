@@ -19,6 +19,18 @@ Then inspect a promising repo’s GGUF footprint and LFS sha256 via the per-repo
 ./scripts/upstream_hf_api_report.sh <org>/<repo> --top-oids 50 | rg '\\.gguf$'
 ```
 
+To quickly find the smallest GGUF files in a repo (useful for a “could this fit on one Spark?” first pass), use:
+
+```bash
+./scripts/upstream_hf_smallest_gguf.sh <org>/<repo> --limit 20
+```
+
+If the repo stores sharded GGUFs (e.g. `...-00001-of-00002.gguf`), prefer the grouped report so you can reason about total artifact size:
+
+```bash
+./scripts/upstream_hf_smallest_gguf.sh <org>/<repo> --group-shards --limit 20
+```
+
 Sanity-check for false positives:
 
 - Many search hits are *not* the 284B MoE DeepSeek-V4-Flash model (e.g., smaller distill/fine-tune repos that include “V4-Flash” in the name).
@@ -52,6 +64,8 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | `3edea7ba...6528c993` | Plausible but tight (limited KV/cache headroom) |
 | `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | `1d494194...a9d7ec6b` | Plausible but tight (limited KV/cache headroom) |
 | `lovedheart/DeepSeek-V4-Flash-GGUF` | `Q2_K (23 shards)` | 100451521792 | 93.6 | (see shard list below) | Plausible but tight (license UNKNOWN; sharded; requires V4-capable llama.cpp) |
+| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_S-XL (2 shards)` | 61540800288 | 57.3 | `4f99d953...a3d13b` + `b15ce531...1495b5` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
+| `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_M (2 shards)` | 64508041632 | 60.1 | `c0d4aac8...f2856` + `812b1367...d2d81f` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | `a2472110...a04fdce` + `aedfb2c7...ea9bf92` | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) |
 
 ## Reproducing the size numbers (no downloads)
@@ -208,6 +222,14 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - Runtime requirement (per upstream README):
   - Requires a DeepSeek-V4-capable llama.cpp fork; upstream recommends `cchuter/llama.cpp` branch `feat/v4-port`.
 - Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
+  - IQ1_S-XL (2 shards): total 61540800288 bytes (57.3 GiB)
+    - LFS sha256 shards:
+      - `4f99d953761b3a0478593fb2bbd1bf0c9de3e9eb3bd061ff6b8bde3db5a3d13b` (`...00001-of-00002...`, 49952653312 bytes)
+      - `b15ce53183f61b8f29a9ccfd5b132a2577b3db82191cac49ebf3ca7e541495b5` (`...00002-of-00002...`, 11588146976 bytes)
+  - IQ1_M (2 shards): total 64508041632 bytes (60.1 GiB)
+    - LFS sha256 shards:
+      - `c0d4aac8f92764fa896df593761e2255b37b107dd3f54b43e0ec8f9730ef2856` (`...00001-of-00002...`, 49882720352 bytes)
+      - `812b13677c9466068711d1fe77aac46ca0012159697542e170e8cd7ba8d2d81f` (`...00002-of-00002...`, 14625321280 bytes)
   - IQ2_XXS-XL (2 shards): total 78518818624 bytes (73.1 GiB)
     - LFS sha256 shards:
       - `a2472110107d2ede08518340412482afffd09ce0101b187d3b8c6b1f4a04fdce` (`...00001-of-00002...`, 49859753888 bytes)
@@ -218,7 +240,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
       - `5eed6f63c7aa5b66985254dee52a152ee2689ca905a1b2ceaa47cacdbec7d84d` (`...00002-of-00002...`, 37275281120 bytes)
   - Q2_K-XL (3 shards): total 107034192768 bytes (99.7 GiB)
 - Single-Spark plausibility:
-  - **IQ2_XXS-XL / IQ2_XS-XL plausible** on Spark0-class memory (leave more KV/cache headroom than ~90–100 GiB candidates).
+  - **IQ1_S-XL / IQ1_M / IQ2_XXS-XL / IQ2_XS-XL plausible** on Spark0-class memory (IQ1 variants leave the most KV/cache headroom).
   - **Q2_K-XL plausible but tight** on Spark0-class memory (99.7 GiB leaves limited KV/cache headroom).
 
 ## Related runtime forks (pinned)
