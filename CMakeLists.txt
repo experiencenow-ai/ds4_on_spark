@@ -113,6 +113,12 @@ if(DS4_ENABLE_TESTS)
 				-DDS4_MODE=dump_config_overrides
 				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
 		)
+		add_test(NAME ds4_cli_smoke_ctx
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=ctx_smoke
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
 		add_test(NAME ds4_cli_smoke_config_file_dump
 			COMMAND "${CMAKE_COMMAND}"
 				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>

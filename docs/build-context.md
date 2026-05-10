@@ -70,3 +70,12 @@ After you attach a log ring, you can retrieve entries via:
 - `ds4_ctx_log_ring_pop`
 
 To disable ctx-managed capture, set `cfg.log_ring_entries = 0` and call `ds4_ctx_apply_config` (it detaches the sink only if the context previously attached it).
+
+## Teardown
+
+Logging is currently process-global (`ds4_log_set_sink`), so if a context attached a log ring you should detach before the ring storage goes out of scope.
+
+Use either:
+
+- `ds4_ctx_log_ring_detach` (detach only)
+- `ds4_ctx_deinit` (detach and clear ctx log-ring state)

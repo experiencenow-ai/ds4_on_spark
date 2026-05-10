@@ -75,8 +75,13 @@ int32_t test_ctx(void)
 		return(-13);
 	if ( strcmp(e.msg,"ctx log ring") != 0 )
 		return(-14);
-	cfg.log_ring_entries = 0;
-	if ( ds4_ctx_apply_config(&ctx,&cfg) < 0 )
-		return(-15);
+	if ( ds4_ctx_deinit(&ctx) < 0 )
+		return(-23);
+	if ( ctx.log_ring_ready != 0 )
+		return(-24);
+	if ( ctx.log_ring_attached != 0 )
+		return(-25);
+	if ( ds4_ctx_deinit(&ctx) < 0 )
+		return(-26);
 	return(0);
 }

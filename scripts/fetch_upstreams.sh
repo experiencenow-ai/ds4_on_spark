@@ -26,6 +26,7 @@ Targets:
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_preyazz_q8_0  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_batiai    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_lovedheart  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_nsparks   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -200,6 +201,10 @@ fetch_one()
 		deepseek_v4_gguf_preyazz)
 			upstream="huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_gguf_preyazz" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF" "${ref}" "${expected}"
+			;;
+		deepseek_v4_gguf_preyazz_q8_0)
+			upstream="huggingface.co/Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "deepseek_v4_gguf_preyazz_q8_0" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF" "${ref}" "${expected}"
 			;;
 		deepseek_v4_gguf_batiai)
 			upstream="huggingface.co/batiai/DeepSeek-V4-Flash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"

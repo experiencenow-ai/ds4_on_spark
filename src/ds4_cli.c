@@ -4,13 +4,58 @@
 #include <stdio.h>
 #include <string.h>
 
+#define DS4_CLI_ARENA_CAP (256*1024)
+
+static int32_t ds4_cli_smoke_ctx(const ds4_config_t *cfg)
+{
+	ds4_ctx_t ctx;
+	_Alignas(16) uint8_t arena_mem[DS4_CLI_ARENA_CAP];
+	ds4_log_entry_t e;
+	int32_t arena_size,c;
+	if ( cfg == 0 )
+		return(-1);
+	arena_size = cfg->arena_size;
+	if ( arena_size <= 0 )
+		arena_size = (int32_t)sizeof(arena_mem);
+	if ( arena_size > (int32_t)sizeof(arena_mem) )
+		return(-2);
+	if ( ds4_ctx_init_auto(&ctx,cfg,arena_mem,arena_size) < 0 )
+		return(-3);
+	if ( DS4_LOGI("ds4_cli smoke ctx") < 0 )
+	{
+		ds4_ctx_deinit(&ctx);
+		return(-4);
+	}
+	if ( cfg->log_ring_entries > 0 )
+	{
+		if ( ds4_ctx_log_ring_count(&ctx,&c) < 0 )
+		{
+			ds4_ctx_deinit(&ctx);
+			return(-5);
+		}
+		if ( c <= 0 )
+		{
+			ds4_ctx_deinit(&ctx);
+			return(-6);
+		}
+		if ( ds4_ctx_log_ring_pop(&ctx,&e) < 0 )
+		{
+			ds4_ctx_deinit(&ctx);
+			return(-7);
+		}
+		printf("log_ring: %s\n",e.msg);
+	}
+	ds4_ctx_deinit(&ctx);
+	return(0);
+}
+
 static void ds4_cli_usage(FILE *fp,const char *argv0)
 {
 	if ( fp == 0 )
 		return;
 	if ( argv0 == 0 )
 		argv0 = "ds4_cli";
-	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--log-ring-entries N] [--dump-config] [--version]\n",argv0);
+	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--log-ring-entries N] [--dump-config] [--version] [--smoke-ctx]\n",argv0);
 	fprintf(fp,"  --config PATH     Load key=value config file (PATH or '-')\n");
 	fprintf(fp,"  --strict-config   Reject unknown keys in config file\n");
 	fprintf(fp,"  --log-level LVL   Override log_level (0..3 or error/warn/info/debug)\n");
@@ -22,10 +67,11 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --log-ring-entries N Override log_ring_entries (entries)\n");
 	fprintf(fp,"  --dump-config     Print effective config to stdout\n");
 	fprintf(fp,"  --version         Print ds4 version\n");
+	fprintf(fp,"  --smoke-ctx       Init a ctx (static arena), log one line, print one log-ring entry\n");
 	fprintf(fp,"  --help            Show this help\n");
 }
 
-static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *print_ver)
+static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *print_ver,int32_t *smoke_ctx)
 {
 	int32_t i;
 	const char *a;
@@ -47,6 +93,8 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		return(-8);
 	if ( print_ver == 0 )
 		return(-9);
+	if ( smoke_ctx == 0 )
+		return(-18);
 	*cfg_path = 0;
 	*strict_cfg = 0;
 	*log_level = 0;
@@ -56,6 +104,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 	*log_ring_entries = 0;
 	*dump_cfg = 0;
 	*print_ver = 0;
+	*smoke_ctx = 0;
 	for (i=1; i<argc; i++)
 	{
 		a = argv[i];
@@ -136,6 +185,11 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 			*enable_cuda = "0";
 			continue;
 		}
+		if ( strcmp(a,"--smoke-ctx") == 0 )
+		{
+			*smoke_ctx = 1;
+			continue;
+		}
 		return(-17);
 	}
 	return(0);
@@ -159,10 +213,11 @@ int main(int argc,char **argv)
 	ds4_config_t cfg;
 	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
-	int32_t dump_cfg,print_ver,strict_cfg,err,unknown;
+	int32_t dump_cfg,print_ver,strict_cfg,smoke_ctx,err,unknown;
 	dump_cfg = 0;
 	print_ver = 0;
 	strict_cfg = 0;
+	smoke_ctx = 0;
 	unknown = -1;
 	cfg_path = 0;
 	log_level = 0;
@@ -170,7 +225,7 @@ int main(int argc,char **argv)
 	cuda_device = 0;
 	arena_size = 0;
 	log_ring_entries = 0;
-	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&log_ring_entries,&dump_cfg,&print_ver);
+	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&log_ring_entries,&dump_cfg,&print_ver,&smoke_ctx);
 	if ( err != 0 )
 	{
 		if ( err > 0 )
@@ -227,6 +282,15 @@ int main(int argc,char **argv)
 		err = ds4_config_parse_kv_cstr(&cfg,"log_ring_entries",log_ring_entries);
 		if ( err != 0 )
 			return(1);
+	}
+	if ( smoke_ctx != 0 )
+	{
+		err = ds4_cli_smoke_ctx(&cfg);
+		if ( err < 0 )
+		{
+			fprintf(stderr,"ds4_cli: smoke ctx failed (%d)\n",err);
+			return(1);
+		}
 	}
 	if ( print_ver != 0 )
 	{
