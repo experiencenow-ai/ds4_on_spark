@@ -732,6 +732,8 @@
       "acceptance_requires_prefill_and_decode": true,
       "acceptance_topk_ids_exact": true,
       "artifact_requires_mtp_contract_complete": true,
+      "artifact_requires_mtp_namespace_expected_complete": true,
+      "artifact_requires_mtp_namespace_has_mtp0": true,
       "artifact_requires_namespace_prefix": "mtp.{j}.",
       "oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
       "oracle_requires_include_mtp": true,

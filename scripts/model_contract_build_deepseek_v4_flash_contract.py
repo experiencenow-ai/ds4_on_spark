@@ -1160,6 +1160,8 @@ def build_contract() -> dict:
 					"trust_gates": {
 						"artifact_requires_mtp_contract_complete": True,
 						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"artifact_requires_mtp_namespace_expected_complete": True,
+						"artifact_requires_mtp_namespace_has_mtp0": True,
 						"oracle_requires_include_mtp": True,
 						"oracle_requires_mtp_trace": True,
 						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
