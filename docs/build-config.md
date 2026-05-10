@@ -25,6 +25,8 @@ Supported keys:
 - `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`) or a case-insensitive name (`error`, `warn`/`warning`, `info`, `debug`)
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
 - `cuda_device`: integer `-1` (auto / leave default device) or `>= 0` (force device index)
+- `arena_size`: integer bytes (advisory; for callers that want to size arena allocations)
+- `log_ring_entries`: integer entries (advisory; for callers that size log capture rings)
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 
@@ -47,6 +49,8 @@ You can also override config fields from the environment with `ds4_config_parse_
 - `DS4_LOG_LEVEL`
 - `DS4_ENABLE_CUDA`
 - `DS4_CUDA_DEVICE`
+- `DS4_ARENA_SIZE`
+- `DS4_LOG_RING_ENTRIES`
 
 `ds4_config_load_auto` also consults:
 
