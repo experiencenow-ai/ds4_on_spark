@@ -26,7 +26,7 @@ new file mode 100644
 index 0000000..1c12591
 --- /dev/null
 +++ b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
-@@ -0,0 +1,483 @@
+@@ -0,0 +1,553 @@
 +#include "gguf.h"
 +#include "ggml.h"
 +
