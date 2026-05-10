@@ -59,6 +59,7 @@ LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO="${LLAMA_SERVER_THROUGHPUT_SWEEP
 LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S="${LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S:-1}"
 LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS="${LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS:-}"
 LLAMA_FATTN_PATCH_PROBE="${LLAMA_FATTN_PATCH_PROBE:-0}"
+LLAMA_MULTISLOT_PATCH_PROBE="${LLAMA_MULTISLOT_PATCH_PROBE:-0}"
 VLLM_MODEL="${VLLM_MODEL:-}"
 VLLM_PROMPT="${VLLM_PROMPT:-${PROMPT:-}}"
 MAX_TOKENS="${MAX_TOKENS:-}"
@@ -251,6 +252,8 @@ apply_overrides()
             llama:LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO) LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO="$v" ;;
             llama:LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S) LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S="$v" ;;
             llama:LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS) LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS="$v" ;;
+            llama:LLAMA_FATTN_PATCH_PROBE) LLAMA_FATTN_PATCH_PROBE="$v" ;;
+            llama:LLAMA_MULTISLOT_PATCH_PROBE) LLAMA_MULTISLOT_PATCH_PROBE="$v" ;;
 
             vllm:VLLM_MODEL) VLLM_MODEL="$v" ;;
             vllm:VLLM_PROMPT) VLLM_PROMPT="$v" ;;
@@ -293,6 +296,7 @@ REMOTE_LLAMA_OUT_DIR="/tmp/baseline_llamacpp_${ts}"
 REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR="/tmp/baseline_llamacpp_server_sweep_${ts}"
 REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR="/tmp/baseline_llamacpp_server_throughput_sweep_${ts}"
 REMOTE_LLAMA_FATTN_PATCH_PROBE_OUT_DIR="/tmp/baseline_llamacpp_fattn_patch_probe_${ts}"
+REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_OUT_DIR="/tmp/baseline_llamacpp_multislot_patch_probe_${ts}"
 REMOTE_VLLM_OUT_DIR="/tmp/baseline_vllm_${ts}"
 REMOTE_INV_OUT_DIR="/tmp/baseline_spark_inventory_${ts}"
 
@@ -301,6 +305,9 @@ REMOTE_LLAMA_CMD_PRINT="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/
 
 REMOTE_LLAMA_FATTN_PATCH_PROBE_CMD="cat > /tmp/benchmark_llamacpp_fattn_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_fattn_patch_probe.py && LLAMA_DIR='' LLAMA_DIR_B64='${LLAMA_DIR_B64}' OUT_DIR='${REMOTE_LLAMA_FATTN_PATCH_PROBE_OUT_DIR}' /tmp/benchmark_llamacpp_fattn_patch_probe.py"
 REMOTE_LLAMA_FATTN_PATCH_PROBE_CMD_PRINT="cat > /tmp/benchmark_llamacpp_fattn_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_fattn_patch_probe.py && LLAMA_DIR_B64='${LLAMA_DIR_B64}' OUT_DIR='${REMOTE_LLAMA_FATTN_PATCH_PROBE_OUT_DIR}' /tmp/benchmark_llamacpp_fattn_patch_probe.py"
+
+REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_CMD="cat > /tmp/benchmark_llamacpp_multislot_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_multislot_patch_probe.py && LLAMA_DIR='' LLAMA_DIR_B64='${LLAMA_DIR_B64}' OUT_DIR='${REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_OUT_DIR}' /tmp/benchmark_llamacpp_multislot_patch_probe.py"
+REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_CMD_PRINT="cat > /tmp/benchmark_llamacpp_multislot_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_multislot_patch_probe.py && LLAMA_DIR_B64='${LLAMA_DIR_B64}' OUT_DIR='${REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_OUT_DIR}' /tmp/benchmark_llamacpp_multislot_patch_probe.py"
 
 REMOTE_LLAMA_SERVER_SWEEP_CMD="cat > /tmp/benchmark_llamacpp_server_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_sweep.py && MODEL_GGUF='' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_SERVER='' LLAMA_SERVER_B64='${LLAMA_SERVER_B64}' SERVER_ARGS='' SERVER_ARGS_B64='${LLAMA_SERVER_SWEEP_SERVER_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR}' START_SERVER=1 KEEP_SERVER='${LLAMA_SERVER_SWEEP_KEEP_SERVER}' CACHE_PROMPT='${LLAMA_SERVER_SWEEP_CACHE_PROMPT}' WAIT_TIMEOUT_S='${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S}' POLL_S='${LLAMA_SERVER_SWEEP_POLL_S}' SCRAPE_METRICS='${LLAMA_SERVER_SWEEP_SCRAPE_METRICS}' METRICS_TIMEOUT_S='${LLAMA_SERVER_SWEEP_METRICS_TIMEOUT_S}' PROMPT_WORDS='${LLAMA_SERVER_SWEEP_PROMPT_WORDS}' N_PREDICT='${LLAMA_SERVER_SWEEP_N_PREDICT}' REPEATS='${LLAMA_SERVER_SWEEP_REPEATS}' PORT='${LLAMA_SERVER_SWEEP_PORT}' CTX='${LLAMA_SERVER_SWEEP_CTX:-$CTX}' N_GPU_LAYERS='${N_GPU_LAYERS}' /tmp/benchmark_llamacpp_server_sweep.py"
 REMOTE_LLAMA_SERVER_SWEEP_CMD_PRINT="cat > /tmp/benchmark_llamacpp_server_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_sweep.py && MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_SERVER_B64='${LLAMA_SERVER_B64}' SERVER_ARGS_B64='${LLAMA_SERVER_SWEEP_SERVER_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR}' START_SERVER=1 KEEP_SERVER='${LLAMA_SERVER_SWEEP_KEEP_SERVER}' CACHE_PROMPT='${LLAMA_SERVER_SWEEP_CACHE_PROMPT}' WAIT_TIMEOUT_S='${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S}' POLL_S='${LLAMA_SERVER_SWEEP_POLL_S}' SCRAPE_METRICS='${LLAMA_SERVER_SWEEP_SCRAPE_METRICS}' METRICS_TIMEOUT_S='${LLAMA_SERVER_SWEEP_METRICS_TIMEOUT_S}' PROMPT_WORDS='${LLAMA_SERVER_SWEEP_PROMPT_WORDS}' N_PREDICT='${LLAMA_SERVER_SWEEP_N_PREDICT}' REPEATS='${LLAMA_SERVER_SWEEP_REPEATS}' PORT='${LLAMA_SERVER_SWEEP_PORT}' CTX='${LLAMA_SERVER_SWEEP_CTX:-$CTX}' N_GPU_LAYERS='${N_GPU_LAYERS}' /tmp/benchmark_llamacpp_server_sweep.py"
@@ -410,6 +417,7 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo "- LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO: ${LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO:-<default>}"
     echo "- LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S: ${LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S:-<default>}"
     echo "- LLAMA_FATTN_PATCH_PROBE (source scan): ${LLAMA_FATTN_PATCH_PROBE:-<default>}"
+    echo "- LLAMA_MULTISLOT_PATCH_PROBE (source scan): ${LLAMA_MULTISLOT_PATCH_PROBE:-<default>}"
     echo "- VLLM_MODEL (hf dir): ${VLLM_MODEL:-<unset>}"
     echo "- VLLM_PROMPT (vLLM): $(prompt_meta_line "$VLLM_PROMPT")"
     echo "- MAX_TOKENS (vLLM): ${MAX_TOKENS:-<default>}"
@@ -431,6 +439,18 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo
     echo '```sh'
     echo "ssh $SSH_OPTS $target \"$REMOTE_LLAMA_CMD_PRINT\" < scripts/benchmark_llamacpp_spark.sh"
+    echo '```'
+    echo
+    echo "llama.cpp multislot patch probe (optional; LLAMA_MULTISLOT_PATCH_PROBE=1):"
+    echo
+    echo '```sh'
+    echo "ssh $SSH_OPTS $target \"$REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_CMD_PRINT\" < scripts/benchmark_llamacpp_multislot_patch_probe.py"
+    echo '```'
+    echo
+    echo "llama.cpp fattn patch probe (optional; LLAMA_FATTN_PATCH_PROBE=1):"
+    echo
+    echo '```sh'
+    echo "ssh $SSH_OPTS $target \"$REMOTE_LLAMA_FATTN_PATCH_PROBE_CMD_PRINT\" < scripts/benchmark_llamacpp_fattn_patch_probe.py"
     echo '```'
     echo
     echo "llama-server sweep (optional; LLAMA_SERVER_SWEEP=1):"
@@ -555,6 +575,42 @@ if [ "$SPARK_INVENTORY" = "1" ]; then
         echo
         echo '```'
         sed -n '1,200p' "$OUT_DIR/remote_inventory_stderr.txt" || true
+        echo '```'
+        echo
+    } >>"$REPORT_MD"
+fi
+
+if [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
+    echo "== running llama.cpp multislot patch probe (read-only) =="
+    rc_llama_multislot_patch_probe=0
+    ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_CMD" <"$repo_root/scripts/benchmark_llamacpp_multislot_patch_probe.py" \
+        >"$OUT_DIR/remote_llamacpp_multislot_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_multislot_patch_probe_stderr.txt" || rc_llama_multislot_patch_probe=$?
+
+    LLAMA_MULTISLOT_PATCH_PROBE_ARTIFACT_DIR="$OUT_DIR/spark_llamacpp_multislot_patch_probe_artifacts"
+    fetch_remote_artifacts "$target" "$REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_OUT_DIR" "$LLAMA_MULTISLOT_PATCH_PROBE_ARTIFACT_DIR" "llamacpp_multislot_patch_probe" || true
+
+    {
+        echo "## llama.cpp multislot patch probe (Spark)"
+        echo
+        echo "- ssh_exit_code: $rc_llama_multislot_patch_probe"
+        echo "- spark_out_dir: $REMOTE_LLAMA_MULTISLOT_PATCH_PROBE_OUT_DIR"
+        echo "- spark_artifacts_local: $LLAMA_MULTISLOT_PATCH_PROBE_ARTIFACT_DIR"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_llamacpp_multislot_patch_probe_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_llamacpp_multislot_patch_probe_stderr.txt"
+        echo
+        echo "Stdout (head):"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_llamacpp_multislot_patch_probe_stdout.txt" || true
+        echo '```'
+        echo
+        echo "Stderr (head):"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_llamacpp_multislot_patch_probe_stderr.txt" || true
         echo '```'
         echo
     } >>"$REPORT_MD"

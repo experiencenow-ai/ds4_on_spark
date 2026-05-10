@@ -62,6 +62,7 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
   - To include this sweep in the standard baseline report, set `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
   - See `docs/baseline-batching-throughput.md` and `docs/baseline-multislot-parallel2.md` (multi-slot failure probe).
 - Patch presence (optional, read-only): set `LLAMA_FATTN_PATCH_PROBE=1` to run `scripts/benchmark_llamacpp_fattn_patch_probe.py` on Spark and fetch `fattn_patch_probe.json` (heuristic source scan; see `docs/baseline-fattn-reservation.md`).
+- Patch presence (optional, read-only): set `LLAMA_MULTISLOT_PATCH_PROBE=1` to run `scripts/benchmark_llamacpp_multislot_patch_probe.py` on Spark and fetch `multislot_patch_probe.json` (heuristic source scan; see `docs/baseline-multislot-parallel2.md`).
 - CUDA fallback / placement (one-shot, best-effort): when the runtime prints `sched_reserve:` / `__fattn__-*` placement lines during a normal `llama-cli` run, `scripts/benchmark_llamacpp_spark.sh` writes `fattn_cli_probe.json` into the fetched artifacts directory and mirrors key fields into the baseline summary (`fattn_*`, `node_kind_*`, `sched_reserve_*`). This is opportunistic and may be `NA` on forks that do not emit those lines.
 
 The llama.cpp Spark baseline script also supports a **best-effort token trace** capture:

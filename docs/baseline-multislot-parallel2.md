@@ -20,6 +20,15 @@ Two narrow fixes have been observed as necessary on some forks:
 
 These are external-runtime patches (llama.cpp fork), not changes to `ds4_on_spark`.
 
+### Narrow Patch Artifacts
+
+Patch artifacts (apply to the external runtime tree, not this repo):
+
+- `docs/patches/llama-cpp-dsv4-multislot-swa-stream-view.patch`
+  - Slices SWA KV cache views down to a single stream before reshaping, so multi-stream reservation contexts do not trigger `ggml_reshape_3d` shape asserts.
+- `docs/patches/llama-cpp-dsv4-multislot-reserve-nctxseq.patch`
+  - Caps the DeepSeek V4 “resumed prompt” reservation position by `n_ctx_seq` instead of total `n_ctx`, avoiding `n_comp_visible <= n_comp_cache` asserts during `sched_reserve()`.
+
 ## Probe: Throughput Sweep Log Scan (Recommended)
 
 The batching throughput sweep script emits a best-effort probe per combo:
@@ -55,3 +64,21 @@ For any `--parallel 2` failure, capture:
 
 This makes the “parallel-2 stable” requirement measurable and prevents regressions when iterating on DSv4 Flash kernels.
 
+## Cheap Source Probe (Patch Presence)
+
+To confirm the multi-slot reservation fixes are present in an external runtime tree without loading a model, run:
+
+```sh
+LLAMA_MULTISLOT_PATCH_PROBE=1 \
+LLAMA_DIR=/abs/path/on/spark/to/llama.cpp \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+This runs a read-only scan (`scripts/benchmark_llamacpp_multislot_patch_probe.py`) on Spark and fetches:
+
+- `multislot_patch_probe.json`
+
+Heuristic booleans:
+
+- `swa_stream_view_found`
+- `reserve_cap_n_ctx_seq_found`
