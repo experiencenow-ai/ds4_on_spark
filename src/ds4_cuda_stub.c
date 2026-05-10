@@ -251,6 +251,15 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes)
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }
 
+ds4_cuda_status_t ds4_cuda_fill_u8(void *dst,uint8_t value,int64_t bytes,ds4_cuda_stream_t s)
+{
+	DS4_UNUSED(dst);
+	DS4_UNUSED(value);
+	DS4_UNUSED(bytes);
+	DS4_UNUSED(s);
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}
+
 ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds4_cuda_stream_t s)
 {
 	DS4_UNUSED(dst);

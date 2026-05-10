@@ -25,6 +25,12 @@ For kernel launches (or any void-returning CUDA statements compiled by NVCC), us
 
 `DS4_CUDA_KERNEL_LAUNCH` returns a `ds4_cuda_status_t` and logs failures with the full callsite text.
 
+## Minimal kernel helper
+
+For a concrete example of `DS4_CUDA_KERNEL_LAUNCH` usage, DS4 provides a tiny wrapper that fills a device buffer with a constant byte:
+
+- `ds4_cuda_fill_u8(dst,value,bytes,stream)`
+
 ## Async helpers
 
 When sequencing copies or memset with a stream, use:

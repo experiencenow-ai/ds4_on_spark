@@ -456,6 +456,38 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes)
 	return(ds4_cuda_ok());
 }
 
+static __global__ void ds4_fill_u8_kernel(uint8_t *dst,uint8_t value,int32_t n)
+{
+	int64_t idx64;
+	idx64 = ((int64_t)((int32_t)blockIdx.x) * (int64_t)((int32_t)blockDim.x));
+	idx64 += (int64_t)((int32_t)threadIdx.x);
+	if ( idx64 >= (int64_t)n )
+		return;
+	dst[(int32_t)idx64] = value;
+}
+
+ds4_cuda_status_t ds4_cuda_fill_u8(void *dst,uint8_t value,int64_t bytes,ds4_cuda_stream_t s)
+{
+	dim3 grid,block;
+	cudaStream_t stream;
+	int32_t n,threads,blocks;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)INT32_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	n = (int32_t)bytes;
+	threads = 256;
+	blocks = ((n + threads - 1) / threads);
+	block = dim3((unsigned int)threads,1,1);
+	grid = dim3((unsigned int)blocks,1,1);
+	stream = (cudaStream_t)s.h;
+	return(DS4_CUDA_KERNEL_LAUNCH(ds4_fill_u8_kernel<<<grid,block,0,stream>>>((uint8_t *)dst,value,n)));
+}
+
 ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds4_cuda_stream_t s)
 {
 	cudaError_t err;
