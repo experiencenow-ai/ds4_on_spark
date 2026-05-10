@@ -418,12 +418,25 @@ def run_wave(base_url, prompt_words, n_predict, cache_prompt, concurrency, repea
     return out_rows
 
 
-def write_summary(path, combos, meta):
+def write_summary(path, combos, meta, best=None, best_by_concurrency=None):
     with open(path, "w", encoding="utf-8") as f:
         f.write("# llama-server Throughput Sweep\n\n")
         for k in sorted(meta):
             f.write("- %s: `%s`\n" % (k, meta[k]))
         f.write("\n")
+        f.write("Scoring: maximize `agg_prompt_tok_s`, break ties with `agg_generated_tok_s`.\n\n")
+        if best is not None:
+            f.write("## Best (overall)\n\n")
+            f.write("```json\n")
+            f.write(json.dumps(best, indent=2, sort_keys=True))
+            f.write("\n```\n\n")
+        if best_by_concurrency:
+            f.write("## Best By Concurrency\n\n")
+            for conc in sorted(best_by_concurrency.keys()):
+                f.write("### concurrency=%s\n\n" % str(conc))
+                f.write("```json\n")
+                f.write(json.dumps(best_by_concurrency[conc], indent=2, sort_keys=True))
+                f.write("\n```\n\n")
         f.write("| parallel | batch | ubatch | prompt_words | concurrency | repeats | ok | errors | wall_s | agg_prompt_tok_s | agg_gen_tok_s |\n")
         f.write("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
         for c in combos:
@@ -484,6 +497,7 @@ def main():
     results_path = os.path.join(out_dir, "throughput_sweep.jsonl")
     summary_path = os.path.join(out_dir, "throughput_sweep.md")
     best_path = os.path.join(out_dir, "throughput_best.json")
+    best_by_conc_path = os.path.join(out_dir, "throughput_best_by_concurrency.json")
     metrics_start_path = os.path.join(out_dir, "metrics_start.prom")
     metrics_end_path = os.path.join(out_dir, "metrics_end.prom")
 
@@ -519,6 +533,7 @@ def main():
 
     combos_out = []
     best = None
+    best_by_concurrency = {}
 
     def stop_server(proc, log_fp):
         if log_fp is not None:
@@ -662,6 +677,14 @@ def main():
                                         combos_out.append(row)
                                         if best is None or score_row(row) > score_row(best):
                                             best = row
+                                        try:
+                                            conc_key = int(row.get("concurrency"))
+                                        except Exception:
+                                            conc_key = None
+                                        if conc_key is not None:
+                                            prev = best_by_concurrency.get(conc_key)
+                                            if prev is None or score_row(row) > score_row(prev):
+                                                best_by_concurrency[conc_key] = row
                                         print(json.dumps(row, sort_keys=True), flush=True)
                             if scrape_metrics != 0 and os.path.exists(combo_dir):
                                 try:
@@ -713,11 +736,25 @@ def main():
                 meta["best_json"] = best_path
             except Exception:
                 pass
-        write_summary(summary_path, combos_out, meta)
+        if best_by_concurrency:
+            try:
+                with open(best_by_conc_path, "w", encoding="utf-8") as bf:
+                    json.dump(
+                        {str(k): v for (k, v) in sorted(best_by_concurrency.items(), key=lambda kv: kv[0])},
+                        bf,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                meta["best_by_concurrency_json"] = best_by_conc_path
+            except Exception:
+                pass
+        write_summary(summary_path, combos_out, meta, best=best, best_by_concurrency=best_by_concurrency)
         print("summary=" + summary_path)
         print("results=" + results_path)
         if best is not None:
             print("best=" + best_path)
+        if best_by_concurrency:
+            print("best_by_concurrency=" + best_by_conc_path)
         return 0
     finally:
         if start_server != 0:

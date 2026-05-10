@@ -66,7 +66,7 @@ Token trace / routing (best-effort; when the runtime emits JSON token events):
 - Patch presence (optional, read-only):
   - `fattn_patch_probe.json` (source scan; `pad256_found`, `patch_artifact_sha256`)
 - Batching throughput sweep (optional, expensive):
-  - `throughput_sweep.md`, `throughput_sweep.jsonl`, `throughput_best.json`
+  - `throughput_sweep.md`, `throughput_sweep.jsonl`, `throughput_best.json`, `throughput_best_by_concurrency.json`
   - Record best `(parallel,batch,ubatch)` and the chosen concurrency; confirm `fattn_seen_disabled=False`
 
 ## Raw Logs

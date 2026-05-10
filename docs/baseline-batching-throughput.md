@@ -19,6 +19,7 @@ When run via `scripts/run_baseline_existing_runtime.sh`, the fetched artifacts d
 - `throughput_sweep.jsonl`: one JSON row per concurrency “wave”
 - `throughput_sweep.md`: Markdown table summary
 - `throughput_best.json`: best-performing row (by aggregate prompt tok/s, then gen tok/s)
+- `throughput_best_by_concurrency.json`: best row per `concurrency` (same scoring)
 - per-combo directories like `p2_b1024_ub256/` containing:
   - `llama_server.log`, `server.cmd.json`, `server.pid`
   - `fattn_reservation_probe.json` (best-effort; see `docs/baseline-fattn-reservation.md`)
@@ -68,4 +69,3 @@ Always cross-check:
 
 - `fattn_reservation_probe.json` indicates whether Flash Attention was globally disabled during reservation (invalidates the run as a clean DS4 Flash baseline).
 - `multislot_reservation_probe.json` indicates whether `--parallel 2` triggered known reservation/assert failure signatures.
-
