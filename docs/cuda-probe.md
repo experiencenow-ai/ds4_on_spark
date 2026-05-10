@@ -51,6 +51,7 @@ This also performs best-effort toolchain-only checks when supported:
 
 - If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
+- If `nvcc --list-gpu-arch` advertises `compute_121`, attempt compile-only `-gencode` builds for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` (multi-target build plumbing gate).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
 
@@ -64,6 +65,8 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
+- Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
+- Runs best-effort compile-only `-gencode` probes for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` when `compute_121` is advertised (multi-target build plumbing gate)
 - Compiles and runs it with `-arch=sm_121` and `-arch=native`
 - Prints runtime device info + the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `native` missing)
@@ -198,6 +201,7 @@ Observed:
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `nvcc --list-gpu-arch` includes `compute_121` when supported
 - `nvcc --list-gpu-code` includes `sm_121` when supported
+- `nvcc -arch=compute_121 -c` compile-only probe succeeds when `compute_121` is advertised (toolchain PTX-target gate)
 - `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`

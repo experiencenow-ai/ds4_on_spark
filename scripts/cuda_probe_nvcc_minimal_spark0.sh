@@ -47,6 +47,78 @@ else
 fi
 
 echo
+echo \"== nvcc: compile-only probes (best-effort) ==\"
+rm -rf \"$REMOTE_DIR\"
+mkdir -p \"$REMOTE_DIR\"
+cat > \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu <<'EOF'
+#include <stdint.h>
+
+#if defined(__CUDA_ARCH__)
+#if (__CUDA_ARCH__ != 1210)
+#error nvcc_compile_only_expected___CUDA_ARCH___1210
+#endif
+#endif
+
+__global__ void cuda_compile_only(uint32_t *out)
+{
+#if defined(__CUDA_ARCH__)
+	if ( out != 0 )
+		out[0] = (uint32_t)__CUDA_ARCH__;
+#else
+	(void)out;
+#endif
+}
+EOF
+
+try_compile_only() {
+	tag=\"\$1\"
+	arch=\"\$2\"
+	echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+	err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		echo \"\${tag}: OK\"
+	else
+		echo \"\${tag}: FAILED rc=\${rc}\"
+		head -n 40 \"\${err_path}\" || true
+	fi
+}
+
+try_gencode_only() {
+	tag=\"\$1\"
+	gencode_arch=\"\$2\"
+	gencode_code=\"\$3\"
+	echo \"-- compile-only: \${tag} (-gencode arch=\${gencode_arch},code=\${gencode_code})\"
+	err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=\${gencode_arch},code=\${gencode_code}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		echo \"\${tag}: OK\"
+	else
+		echo \"\${tag}: FAILED rc=\${rc}\"
+		head -n 40 \"\${err_path}\" || true
+	fi
+}
+
+try_compile_only arch_sm_121 sm_121
+if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+	try_compile_only arch_compute_121 compute_121
+	try_gencode_only gencode_sm_121 compute_121 sm_121
+	try_gencode_only gencode_compute_121 compute_121 compute_121
+fi
+if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
+	try_compile_only variant_sm_121a sm_121a
+fi
+if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121f\"; then
+	try_compile_only variant_sm_121f sm_121f
+fi
+
+echo
 echo \"== nvcc: minimal compile/run (sm_121 + native) ==\"
 rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
