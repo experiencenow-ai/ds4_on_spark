@@ -23,10 +23,10 @@ index 0000000..0e749fd
 +target_compile_features(${TARGET} PRIVATE cxx_std_17)
 diff --git a/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
 new file mode 100644
-index 0000000..ee2fc8b
+index 0000000..1c12591
 --- /dev/null
 +++ b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
-@@ -0,0 +1,385 @@
+@@ -0,0 +1,483 @@
 +#include "gguf.h"
 +#include "ggml.h"
 +
@@ -35,12 +35,13 @@ index 0000000..ee2fc8b
 +#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
++#include <cstdint>
 +#include <string>
 +#include <unordered_set>
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json]\n", prog);
++    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -57,6 +58,25 @@ index 0000000..ee2fc8b
 +        }
 +    }
 +    return out;
++}
++
++static uint64_t fnv1a64(const uint8_t * data, size_t len) {
++    uint64_t h = 1469598103934665603ULL;
++    for (size_t i = 0; i < len; i++) {
++        h ^= (uint64_t) data[i];
++        h *= 1099511628211ULL;
++    }
++    return h;
++}
++
++static bool read_file_bytes(FILE * fp, size_t offs, uint8_t * dst, size_t len) {
++    if (fp == nullptr || dst == nullptr) {
++        return false;
++    }
++    if (std::fseek(fp, (long) offs, SEEK_SET) != 0) {
++        return false;
++    }
++    return std::fread(dst, 1, len, fp) == len;
 +}
 +
 +static bool tensor_dims_eq(const ggml_tensor * t, const std::vector<int64_t> & want) {
@@ -128,6 +148,7 @@ index 0000000..ee2fc8b
 +int main(int argc, char ** argv) {
 +    std::string path;
 +    bool json = false;
++    int payload_sample_bytes = 0;
 +
 +    for (int i = 1; i < argc; i++) {
 +        const char * arg = argv[i];
@@ -139,6 +160,15 @@ index 0000000..ee2fc8b
 +
 +        if (std::strcmp(arg, "--json") == 0) {
 +            json = true;
++            continue;
++        }
++
++        if (std::strcmp(arg, "--payload-sample-bytes") == 0 && i + 1 < argc) {
++            payload_sample_bytes = std::atoi(argv[++i]);
++            if (payload_sample_bytes < 0) {
++                std::fprintf(stderr, "payload-sample-bytes must be >= 0\n");
++                return 2;
++            }
 +            continue;
 +        }
 +
@@ -350,6 +380,57 @@ index 0000000..ee2fc8b
 +        }
 +    }
 +
++    struct payload_sample_entry {
++        std::string name;
++        uint64_t hash = 0;
++        size_t n = 0;
++    };
++
++    std::vector<payload_sample_entry> payload_samples;
++    if (payload_sample_bytes > 0) {
++        FILE * fp = std::fopen(path.c_str(), "rb");
++        if (fp == nullptr) {
++            errors.push_back("failed to open file for payload sampling");
++        } else if (ctx_meta == nullptr) {
++            errors.push_back("internal error: missing ggml metadata context");
++        } else {
++            payload_samples.reserve(expected_tensor_names().size());
++            std::vector<uint8_t> buf((size_t) payload_sample_bytes);
++
++            for (const auto & name : expected_tensor_names()) {
++                const int64_t tid = gguf_find_tensor(ctx_gguf, name.c_str());
++                if (tid < 0) {
++                    continue;
++                }
++
++                const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
++                if (t == nullptr) {
++                    errors.push_back("payload sample: missing tensor meta for '" + name + "'");
++                    continue;
++                }
++
++                const size_t nbytes = (size_t) ggml_nbytes(t);
++                const size_t nread = std::min(nbytes, (size_t) payload_sample_bytes);
++                const size_t offs = gguf_get_data_offset(ctx_gguf) + gguf_get_tensor_offset(ctx_gguf, tid);
++
++                if (!read_file_bytes(fp, offs, buf.data(), nread)) {
++                    errors.push_back("payload sample: failed to read '" + name + "'");
++                    continue;
++                }
++
++                payload_sample_entry e;
++                e.name = name;
++                e.n = nread;
++                e.hash = fnv1a64(buf.data(), nread);
++                payload_samples.push_back(std::move(e));
++            }
++        }
++
++        if (fp != nullptr) {
++            std::fclose(fp);
++        }
++    }
++
 +    const bool ok = errors.empty() && missing.empty() && extra.empty();
 +
 +    if (!json) {
@@ -357,6 +438,12 @@ index 0000000..ee2fc8b
 +            std::printf("ok=true\n");
 +            std::printf("architecture=%s\n", arch.empty() ? "(missing)" : arch.c_str());
 +            std::printf("tensor_count=%" PRId64 "\n", n_tensors);
++            if (payload_sample_bytes > 0) {
++                std::printf("payload_sample_bytes=%d\n", payload_sample_bytes);
++                for (const auto & e : payload_samples) {
++                    std::printf("payload_sample=%s:%016" PRIx64 ":%zu\n", e.name.c_str(), e.hash, e.n);
++                }
++            }
 +        } else {
 +            std::printf("ok=false\n");
 +            for (const auto & e : errors) {
@@ -381,6 +468,7 @@ index 0000000..ee2fc8b
 +        std::printf("  \"path\": \"%s\",\n", json_escape(path).c_str());
 +        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
 +        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
++        std::printf("  \"payload_sample_bytes\": %d,\n", payload_sample_bytes);
 +
 +        std::printf("  \"missing\": [");
 +        for (size_t i = 0; i < missing.size(); i++) {
@@ -400,6 +488,16 @@ index 0000000..ee2fc8b
 +        for (size_t i = 0; i < errors.size(); i++) {
 +            if (i) std::printf(", ");
 +            std::printf("\"%s\"", json_escape(errors[i]).c_str());
++        }
++        std::printf("],\n");
++
++        std::printf("  \"payload_samples\": [");
++        for (size_t i = 0; i < payload_samples.size(); i++) {
++            if (i) std::printf(", ");
++            std::printf("{\"name\":\"%s\",\"fnv1a64\":\"%016" PRIx64 "\",\"n\":%zu}",
++                json_escape(payload_samples[i].name).c_str(),
++                payload_samples[i].hash,
++                payload_samples[i].n);
 +        }
 +        std::printf("]\n");
 +        std::printf("}\n");
