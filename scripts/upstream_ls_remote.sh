@@ -175,6 +175,7 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash GGUF (antirez, HF)" "https://huggingface.co/antirez/deepseek-v4-gguf"
 	print_ref "DeepSeek-V4-Flash GGUF (ssweens, HF)" "https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV"
 	print_ref "DeepSeek-V4-Flash GGUF (Preyazz, HF)" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"
+	print_ref "DeepSeek-V4-Flash GGUF (Preyazz Q8_0, HF)" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (BatiAI, HF)" "https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (lovedheart, HF)" "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (nsparks, HF)" "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF"

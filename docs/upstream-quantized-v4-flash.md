@@ -78,6 +78,7 @@ The HF search results often include “native” conversions that are **correctl
 | `asidaddy/Deepseek-V4-Flash-GGUF` | `2c3a2233ec6492024ee1c90aa6a06ec22173d909` | `DeepSeek-V4-Flash-native.gguf` | 145.42 | `e16f070a...738babcd` | MIT | Repo also contains large LFS `model-*.safetensors`; treat as metadata-only. |
 | `Volko76/DeepSeek-V4-Flash-GGUF` | `5f45ca7217f7b4e46e230e7c8bce3d3ff705555a` | `DeepSeek-V4-Flash-Q2_K.gguf` | 142.47 | `b807d57e...27dc013` | MIT | Q2_K is still too large for Spark0-class memory headroom. |
 | `setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF` | `3f779b75664c2a50a8d5f8ed31d17ed1efe2fe52` | `DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf (11 shards)` | 184.74 | `7cf4773f...2ed802eb` + ... (11 shards) | MIT | Too large for single Spark0-class memory; keep as provenance reference only. |
+| `Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF` | `066a35fd187293796317f61775b954bd1e5730dd` | `DeepSeek-V4-Flash-Q8_0.gguf` | 281.59 | `b34cbe6e...f1b3df03` | MIT | Q8_0 is far too large for single Spark0-class memory; keep as provenance reference only. |
 
 ## Reproducing the size numbers (no downloads)
 
@@ -158,6 +159,16 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 - Single-Spark plausibility:
   - **Q2_K plausible but tight** on Spark0-class hardware (96.2 GiB leaves limited KV/cache headroom).
   - **Q3_K_M/Q4_K_M not plausible** on Spark0-class memory (artifact alone exceeds ~119 GiB host RAM / ~119.7 GiB VRAM).
+
+### Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF (oversized Q8_0)
+
+- Source: `https://huggingface.co/Preyazz/DeepSeek-V4-Flash-Q8_0-GGUF` @ `066a35fd187293796317f61775b954bd1e5730dd` (`refs/heads/main`)
+- License: MIT (model card)
+- Artifacts (not fetched here; sizes are from HF API / git-lfs pointer metadata):
+  - Q8_0: `DeepSeek-V4-Flash-Q8_0.gguf` (302355139168 bytes, 281.6 GiB)
+    - LFS sha256: `b34cbe6eb2ce78a5c0b6824c3e554a9fe2ec85953fbfd6f832fabee4f1b3df03`
+- Single-Spark plausibility:
+  - **Not plausible** on Spark0-class hardware (artifact alone exceeds ~119 GiB host RAM / ~119.7 GiB VRAM).
 
 ### batiai/DeepSeek-V4-Flash-GGUF (early-access shards; requires bati.cpp)
 
