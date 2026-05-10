@@ -51,6 +51,21 @@ def run_trace_sweeps(
             "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, batch_variants),
         }
 
+    base_queue_max = int(base_cfg.expert_queue_max)
+    queue_variants: List[Tuple[str, Dict[str, object]]] = []
+    if base_queue_max > 0:
+        for qmax in (max(1, (base_queue_max // 2)), (base_queue_max * 2)):
+            if int(qmax) == base_queue_max:
+                continue
+            queue_variants.append((f"queue_max_{int(qmax)}", {"expert_queue_max": int(qmax)}))
+    if len(queue_variants) != 0:
+        scenarios["expert_queue_max_sweep"] = {
+            "name": "expert_queue_max_sweep",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": queue_variants,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, queue_variants),
+        }
+
     reserve_n = _reserve_default(int(base_cfg.expert_queue_max))
     if reserve_n > 0:
         variants_reserve: List[Tuple[str, Dict[str, object]]] = [

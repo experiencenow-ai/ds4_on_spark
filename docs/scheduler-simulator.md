@@ -185,7 +185,7 @@ python3 sim/scheduler/scheduler_sim.py --summary-json
 python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_draft_len":0}'
 ```
 
-For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sweeps (reservation, `k_signal`, starvation knobs, and optionally MTP attempt policy) and returns a JSON bundle with per-variant summaries:
+For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sweeps (expert queue max, reservation, `k_signal`, starvation knobs, expert batching, and optionally MTP attempt policy) and returns a JSON bundle with per-variant summaries:
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
