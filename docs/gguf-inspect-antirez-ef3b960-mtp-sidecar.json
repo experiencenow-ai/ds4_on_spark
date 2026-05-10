@@ -104,6 +104,24 @@
     "trusted": false
   },
   "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+  "quantization_contract": {
+    "checked": true,
+    "dense_fp8_like": false,
+    "expected": {
+      "dense_dtype": "fp8",
+      "expert_dtype": "fp4",
+      "scale_fmt": "ue8m0"
+    },
+    "expert_fp4_like": null,
+    "notes": [
+      "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+      "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+    ],
+    "observed": {
+      "dense_primary_type": "F32",
+      "expert_primary_type": null
+    }
+  },
   "tensor_count": 32,
   "tensor_key_namespace_evidence": [
     "found mtp.* tensor namespace"
