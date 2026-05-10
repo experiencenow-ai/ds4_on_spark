@@ -115,6 +115,23 @@ EOF
 		fi
 	}
 
+	try_compile_only_gpuarch() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		echo \"-- compile-only: \${tag} (--gpu-architecture=\${arch})\"
+		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+		set +e
+		\$NVCC -O2 -std=c++17 --gpu-architecture=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"\${tag}: OK\"
+		else
+			echo \"\${tag}: FAILED rc=\${rc}\"
+			head -n 40 \"\${err_path}\" || true
+		fi
+	}
+
 	try_compile_only_cxx20_flags() {
 		tag=\"\$1\"
 		arch=\"\$2\"
@@ -151,6 +168,7 @@ try_gencode_only() {
 }
 
 	try_compile_only arch_sm_121 sm_121
+	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
 	if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		try_compile_only arch_compute_121 compute_121
