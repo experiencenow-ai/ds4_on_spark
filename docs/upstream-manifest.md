@@ -2,7 +2,7 @@
 
 Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 
-- Pinned-at: 2026-05-09 (UTC)
+- Pinned-at: 2026-05-10 (UTC)
 - Policy: do **not** vendor large third-party trees or model weights; fetch on-demand and pin exact commits.
 
 ## Canonical Upstreams (Pinned)
@@ -22,7 +22,7 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | llama.cpp (DeepSeek V4 Flash fork) | `antirez/llama.cpp-deepseek-v4-flash` | `refs/heads/main` | `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` | MIT | Flash-specific fork widely referenced by community GGUFs; not in upstream `ggml-org/llama.cpp` yet. |
 | llama.cpp (DeepSeek V4 support WIP) | `nisparks/llama.cpp` | `refs/heads/wip/deepseek-v4-support` | `9d364087024da141510267e6b269ee495ca45176` | MIT | WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter; required by some “native FP4/FP8” GGUF artifacts. |
 | llama.cpp (DeepSeek V4 port fork) | `cchuter/llama.cpp` | `refs/heads/feat/v4-port` | `19b63dc368dfef6db6783e5ba3143927b7ed1c96` | MIT | V4-capable fork referenced by `teamblobfish/DeepSeek-V4-Flash-GGUF`; includes V4 loader + kernels not merged upstream. |
-| llama.cpp (ssweens DeepSeek V4 fork) | `ssweens/llama.cpp-deepseek-v4` | `refs/heads/main` | `443fbfc1eff9ad0e89490bbf5697bfb15c1281e8` | MIT | CUDA/ROCm/Vulkan fork used by `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` (IQ1_M + IQ2_XXS); validate Spark compatibility (CC/SM121 + memory/KV behavior). |
+| llama.cpp (ssweens DeepSeek V4 fork) | `ssweens/llama.cpp-deepseek-v4` | `refs/heads/main` | `9f19428fc7bd2a0ac05a083c1430235174aaf811` | MIT | CUDA/ROCm/Vulkan fork used by `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` (IQ1_M + IQ2_XXS); validate Spark compatibility (CC/SM121 + memory/KV behavior). |
 | llama.cpp (CUDA Spark fork) | `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` | `refs/heads/master` | `9222e55c13c965ccb7e9104fda58796edd84a732` | MIT | CUDA fork reported running on a single DGX Spark/GB10; provenance (report, 2026-05-05): `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`; validate perf + memory headroom on target Spark. |
 | DeepSeek-V4-Flash GGUF (antirez) | `huggingface.co/antirez/deepseek-v4-gguf` | `refs/heads/main` | `ef3b960827870d69ed0b225c095a617c12d7e80d` | MIT | Single-file GGUF (~87 GB) tuned for `ds4` and used as single-Spark candidate; do not download without human approval. |
 | DeepSeek-V4-Flash GGUF (ssweens) | `huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `refs/heads/main` | `cd14d4663786e5fa368e560324b10e92110f39c2` | MIT | GGUF pack includes `IQ1_M` (~62.9 GiB) + `IQ2_XXS` shards (~72.6 GiB); requires V4-capable llama.cpp fork; do not download without human approval. |
