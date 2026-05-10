@@ -65,7 +65,7 @@ Notes on config sources:
   - `beta_fast`: 32
 - `beta_slow`: 1
 
-## Attention schedule (sliding vs CSA vs HCA)
+## Attention schedule summary (sliding vs CSA vs HCA)
 
 Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 
@@ -503,7 +503,7 @@ Official-source safetensors **do** include the MTP namespace:
 
 - `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json` contains `mtp.0.*` (1,575 tensor keys as of the pinned upstream commit).
 
-As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
+As of 2026-05-10, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
 
 Recorded probe outputs (range-read header + tensor table only; no full downloads):
 
@@ -513,6 +513,15 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this under `tensor_type_counts`.
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
+
+Pinned GGUF MTP status snapshot (as of 2026-05-10; derived from the JSON probe outputs above):
+
+| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_contract.complete` | `mtp_trust.status` |
+|---|---|---:|---:|---:|---|
+| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
+| nsparks trunk (native `F8_E4M3_B128` + `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
+| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json` | false | false | — | absent |
+| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json` | true | true | false | incomplete |
 
 For external/quantized artifacts:
 
@@ -555,7 +564,7 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co
 Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
 Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`.
 
-As of 2026-05-09, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
+As of 2026-05-10, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
 - The same inspection reports `mtp_namespace.has_mtp0=true` and `mtp_trust.status=incomplete` (the `mtp.0.*` prefix exists, but the tensor set does not satisfy the upstream MTP contract).
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
@@ -565,6 +574,11 @@ As of 2026-05-09, metadata-only inspection of the pinned antirez sidecar (`scrip
   - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
   - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
   - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
+
+MTP acceptance gates (high-performance / quantized path):
+
+- Structural gate: `mtp_contract.complete == true` (and `mtp_namespace.has_mtp0 == true`) is necessary to claim the artifact preserves upstream `mtp.0.*`.
+- Oracle gate: even if structurally complete, treat MTP as **untrusted** until a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`; compare both prefill + decode; top-k IDs must match exactly; see `contract_summary.json` `mtp.trust_gates`).
 
 ## Next steps (oracle + remaining unknowns)
 
