@@ -34,6 +34,12 @@ Additional probe run (07:43Z refresh, optional GPU/host PCIe query):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0743Z_loop.txt
 ```
 
+Additional probe run (08:13Z refresh, `origin/main` at `git: 3728f20`, temporary gitdir):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitdir_c87c955/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0817Z_loop.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -191,6 +197,66 @@ warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (b
 == nvidia-smi pcie link (gpu/host max, optional) ==
 columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
 0, 0000000F:01:00.0, 1, 5, 5, 1, 16
+```
+
+### Single-target probe (Spark0, 08:13Z refresh, `origin/main` `git: 3728f20`)
+
+```text
+== local meta ==
+Sun May 10 08:13:33 UTC 2026
+git: 3728f20
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+NVML version        : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 49, P0, [N/A]
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+```
+
+```text
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== nvidia-smi pcie link (gpu/host max, optional) ==
+columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
+0, 0000000F:01:00.0, 1, 5, 5, 1, 16
+
+== pci link (sysfs, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+sysfs: /sys/devices/pci000f:00/000f:00:00.0/000f:01:00.0
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda version.json (capped) ==
+{
+   "cuda" : {
+      "name" : "CUDA SDK",
+      "version" : "13.0.3"
+   },
 ```
 
 ### Multi-target probe (Spark0 ok, Spark1 unreachable)
