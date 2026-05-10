@@ -74,6 +74,12 @@ Refreshed again (10:42Z, `nvcc` arch sanity-check):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T104220Z_loop_nvcc_archcheck.txt
 ```
 
+Refreshed again (11:44Z, runtime PCI bus id cross-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -85,6 +91,7 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - Driver (nvidia-smi): `580.142`
 - CUDA version reported by nvidia-smi: `13.0`
 - CUDA compute capability: `12.1` (nvidia-smi + nvcc runtime probe)
+- CUDA runtime probe prints `device0 pci bus id: 000F:01:00.0`, matching `nvidia-smi` `pci.bus_id` (`0000000F:01:00.0`)
 - CUDA toolkit (nvcc): 13.0 (V13.0.88), `nvcc` at `/usr/local/cuda/bin/nvcc` (not on default `PATH`)
 - `nvcc --list-gpu-code` includes `sm_121`, matching the observed compute capability (`12.1`) and `NVCC_ARCH=sm_121` probe default
 - CUDA toolkit component versions (`/usr/local/cuda/version.json`): CUDA SDK 13.0.3, cuDART 13.0.96, CCCL 13.0.85

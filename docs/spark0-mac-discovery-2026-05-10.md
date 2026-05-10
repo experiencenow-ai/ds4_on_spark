@@ -53,12 +53,29 @@ Refreshed again (10:42Z, matches Spark0 probe refresh):
 REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T104227Z_loop_gitacad7c2.txt
 ```
 
+Refreshed again (11:43Z, matches Spark0 probe refresh, runtime PCI bus id cross-check):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
 - `spark1.local` is still not reachable (likely not provisioned / not on the same mDNS domain yet).
 
 ## Excerpts (Redacted)
+
+```text
+== meta ==
+Sun May 10 11:43:50 UTC 2026
+git: 1ea8f17
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
 
 ```text
 == meta ==

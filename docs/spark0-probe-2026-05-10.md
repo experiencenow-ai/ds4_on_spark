@@ -59,6 +59,12 @@ REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=.
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T104220Z_loop_nvcc_archcheck.txt
 ```
 
+Additional probe run (11:44Z refresh, runtime PCI bus id cross-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -177,6 +183,27 @@ path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
 path 000f:01:00.0 current_link_width: 1
 path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
 path 000f:01:00.0 max_link_width: 16
+```
+
+### Single-target probe (Spark0, 11:44Z, runtime PCI bus id cross-check)
+
+```text
+== local meta ==
+Sun May 10 11:44:10 UTC 2026
+git: 1ea8f17
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000 (13.0)
+cuda runtime api version: 13000 (13.0)
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 pci bus id: 000F:01:00.0
 ```
 
 ### Single-target probe (Spark0, 02:21Z, PCIe query mismatch warning)
