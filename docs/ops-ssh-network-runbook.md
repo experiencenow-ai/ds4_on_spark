@@ -61,6 +61,13 @@ SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 ./scripts/ops_spark01_mesh_check.sh spark0@<spark0-host> spark1@<spark1-host>
 ```
 
+Optional: add a best-effort TCP probe to the peer (only meaningful if something is listening):
+
+```bash
+SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts' \
+./scripts/ops_spark01_mesh_check.sh --tcp 29500 --tcp 9090 spark0@<spark0-host> spark1@<spark1-host>
+```
+
 ## Peer SSH From DS4 Preflight (Optional)
 
 `deploy/systemd/ds4-preflight@.service` runs `scripts/ops_tp2_readiness.sh` as the
