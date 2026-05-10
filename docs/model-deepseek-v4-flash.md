@@ -340,6 +340,7 @@ Tokenizer (from `tokenizer_config.json`):
 
 - `tokenizer_class`: `PreTrainedTokenizerFast`
 - `model_max_length`: 1048576
+- Note: `model_max_length` is a permissive tokenizer cap. Upstream runtime defaults are `max_seq_len=4096` and `window_size=128` (see `fixtures/model_contract/deepseek_v4_flash/inference/config.json` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `runtime.reference_defaults`); KV/cache sizing must use runtime settings, not `model_max_length`.
 - `add_bos_token`: false
 - `add_eos_token`: false
 - BOS token string: `<｜begin▁of▁sentence｜>` (`bos_token_id: 0` in `config.json`)
