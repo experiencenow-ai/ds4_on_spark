@@ -100,6 +100,8 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+When `--trace-non-route skip` is set, the loader also ignores non-JSON lines (plain text logs), which makes it safe to pipe raw mixed stdout/stderr streams.
+
 If the runtime log stream is mixed and/or cannot easily emit the simulator’s strict trace field names, you can run replay/canonicalization in `runtime` input format (inline alias mapping), or normalize it explicitly with the extractor.
 
 Inline alias mapping:

@@ -279,6 +279,35 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_jsonl_non_json_line_skip_ignores(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write("not-json\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0]}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, non_route_policy="skip")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].candidates, (0,))
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_jsonl_non_json_line_error_raises(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write("not-json\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0]}))
+            f.write("\n")
+        try:
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(tmp_path, non_route_policy="error")
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_trace_jsonl_runtime_input_format_maps_aliases_and_filters_by_type(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
@@ -2444,6 +2473,27 @@ class SchedulerSimTest(unittest.TestCase):
         )
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["candidates"], [0])
+
+    def test_trace_extract_non_json_line_skip_ignores(self) -> None:
+        out = trace_extract.extract_jsonl_lines(
+            [
+                "not-json",
+                json.dumps({"t_ms": 0.0, "cls": "interactive", "candidates": [0]}),
+            ],
+            non_route_policy="skip",
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["candidates"], [0])
+
+    def test_trace_extract_non_json_line_error_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            trace_extract.extract_jsonl_lines(
+                [
+                    "not-json",
+                    json.dumps({"t_ms": 0.0, "cls": "interactive", "candidates": [0]}),
+                ],
+                non_route_policy="error",
+            )
 
     def test_trace_extract_non_route_error_mode_raises(self) -> None:
         with self.assertRaises(ValueError):
