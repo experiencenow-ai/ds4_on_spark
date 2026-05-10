@@ -16,7 +16,26 @@ else
 	echo \"nvcc not found\" >&2
 	exit 3
 fi
+NVCC_PATH=\"\$NVCC\"
+if [ \"\$NVCC\" = \"nvcc\" ]; then
+	NVCC_PATH=\"\$(command -v nvcc)\"
+fi
+CUDA_BIN_DIR=\"\$(dirname \"\$NVCC_PATH\")\"
+PTXAS=\"\$CUDA_BIN_DIR/ptxas\"
+NVLINK=\"\$CUDA_BIN_DIR/nvlink\"
 \$NVCC --version
+echo
+echo \"== ptxas / nvlink (best-effort) ==\"
+if [ -x \"\$PTXAS\" ]; then
+	\"\$PTXAS\" --version 2>&1 || true
+else
+	echo \"(ptxas not found)\"
+fi
+if [ -x \"\$NVLINK\" ]; then
+	\"\$NVLINK\" --version 2>&1 || true
+else
+	echo \"(nvlink not found)\"
+fi
 echo
 echo \"== nvcc: --list-gpu-arch (if supported) ==\"
 list_gpu_arch=\$(\$NVCC --list-gpu-arch 2>/dev/null || true)
@@ -170,6 +189,22 @@ try_gencode_only() {
 	try_compile_only arch_sm_121 sm_121
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
+	echo
+	echo \"== nvcc: ptxas -v (sm_121 compile-only, best-effort) ==\"
+	if [ -x \"\$PTXAS\" ]; then
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -Xptxas=-v -c -o \"$REMOTE_DIR\"/ptxas_verbose_sm_121.o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/ptxas_verbose_sm_121.out 2>\"$REMOTE_DIR\"/ptxas_verbose_sm_121.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			grep -E \"ptxas info\" \"$REMOTE_DIR\"/ptxas_verbose_sm_121.err | head -n 20 || true
+		else
+			echo \"ptxas_verbose_sm_121: FAILED rc=\${rc}\"
+			head -n 60 \"$REMOTE_DIR\"/ptxas_verbose_sm_121.err || true
+		fi
+	else
+		echo \"(ptxas not found; skipping)\"
+	fi
 	if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		try_compile_only arch_compute_121 compute_121
 		try_compile_only_cxx20_flags arch_compute_121_cxx20_flags compute_121
