@@ -70,6 +70,11 @@ Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realist
 
 Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
 
+Synthetic recommendations (reservation + MTP breakeven) are tracked in:
+
+- `docs/scheduler-simulator-recommendations.md`
+- `docs/scheduler-simulator-recommendations-2026-05-10.json`
+
 ## Phase 1: Real Router Trace Replay
 
 Once the baseline quantized runtime can emit per-token routing, capture a trace
