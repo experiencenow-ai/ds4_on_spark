@@ -153,6 +153,12 @@ def main() -> int:
 
 	if probe.get("temperature", None) not in (None, 0.0):
 		warnings.append("temperature is not 0.0 (probe is intended to be deterministic)")
+	top_k = probe.get("top_k", None)
+	if isinstance(top_k, int) and top_k != 1:
+		warnings.append(f"top_k is {top_k}, expected 1 for deterministic probe")
+	top_p = probe.get("top_p", None)
+	if isinstance(top_p, (int, float)) and float(top_p) != 1.0:
+		warnings.append(f"top_p is {top_p}, expected 1.0 for deterministic probe")
 
 	if args.sidecar_probe_json is not None and mtp_params is not None:
 		sidecar = load_json(Path(args.sidecar_probe_json))
