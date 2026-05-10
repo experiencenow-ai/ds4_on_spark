@@ -28,6 +28,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Upstream section records sha256 of the pinned upstream commit (`upstream_commit.txt`), encoding oracle vectors (`encoding/tests/*`), and oracle prompt set (`oracle/prompts.json`) to keep drift machine-detectable.
 - Contract summary also records small but correctness-critical reference expressions (e.g. attention scaling and activation-QAT group sizes) from `inference/model.py` so DS4 can validate external runtime assumptions without guessing.
 - Fetch/refresh script: `scripts/model_contract_fetch_deepseek_v4_flash.sh`
+- One-shot refresh + verify: `scripts/model_contract_refresh_deepseek_v4_flash.sh`
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`
 - Contract verifier: `scripts/model_contract_verify_deepseek_v4_flash.py`
   - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).

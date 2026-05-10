@@ -77,6 +77,7 @@ The HF search results often include “native” conversions that are **correctl
 | --- | --- | --- | ---: | --- | --- | --- |
 | `asidaddy/Deepseek-V4-Flash-GGUF` | `2c3a2233ec6492024ee1c90aa6a06ec22173d909` | `DeepSeek-V4-Flash-native.gguf` | 145.42 | `e16f070a...738babcd` | MIT | Repo also contains large LFS `model-*.safetensors`; treat as metadata-only. |
 | `Volko76/DeepSeek-V4-Flash-GGUF` | `5f45ca7217f7b4e46e230e7c8bce3d3ff705555a` | `DeepSeek-V4-Flash-Q2_K.gguf` | 142.47 | `b807d57e...27dc013` | MIT | Q2_K is still too large for Spark0-class memory headroom. |
+| `setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF` | `3f779b75664c2a50a8d5f8ed31d17ed1efe2fe52` | `DeepSeek-V4-Flash-Instruct-Q8xQ5.gguf (11 shards)` | 184.74 | `7cf4773f...2ed802eb` + ... (11 shards) | MIT | Too large for single Spark0-class memory; keep as provenance reference only. |
 
 ## Reproducing the size numbers (no downloads)
 
