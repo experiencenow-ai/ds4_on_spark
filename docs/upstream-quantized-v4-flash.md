@@ -19,6 +19,18 @@ Then inspect a promising repo’s GGUF footprint and LFS sha256 via the per-repo
 ./scripts/upstream_hf_api_report.sh <org>/<repo> --top-oids 50 | rg '\\.gguf$'
 ```
 
+Sanity-check for false positives:
+
+- Many search hits are *not* the 284B MoE DeepSeek-V4-Flash model (e.g., smaller distill/fine-tune repos that include “V4-Flash” in the name).
+- Prefer candidates whose HF metadata indicates `base_model: deepseek-ai/DeepSeek-V4-Flash` (or equivalent) and whose GGUF sizes are in the expected ~60–110 GiB “single Spark plausible” range.
+
+Reproduce (no downloads):
+
+```bash
+./scripts/upstream_hf_api_report.sh <org>/<repo> | rg -n '^(base_model|license|sha):'
+./scripts/upstream_hf_api_report.sh <org>/<repo> --sum-gguf
+```
+
 ## Single-Spark memory baseline (Spark0)
 
 Based on [`docs/spark0-hardware-baseline-2026-05-09.md`](spark0-hardware-baseline-2026-05-09.md), Spark0 has:
