@@ -79,6 +79,22 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 - Starting at `layer_id == 2`, the upstream schedule alternates `CSA, HCA, CSA, HCA, ...` and ends on CSA at `layer_id == 42`.
 - MTP blocks are always sliding-only: `compress_ratios[n_layers + mtp_id] == 0`.
 
+### Transformers schedule compatibility (layer_types / mlp_layer_types)
+
+Transformers’ `DeepseekV4Config` exposes a per-layer schedule via string arrays:
+
+- `config.layer_types[i] ∈ {"sliding_attention","compressed_sparse_attention","heavily_compressed_attention"}`
+- `config.mlp_layer_types[i] ∈ {"hash_moe","moe"}`
+
+The official `deepseek-ai/DeepSeek-V4-Flash` `config.json` shipped on HF does not currently include these arrays directly. DS4 therefore treats them as **derived compatibility views** of the pinned upstream contract:
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_main_layer_types` derives `layer_types[]` from `compress_ratios[]` (`0→sliding_attention`, `4→compressed_sparse_attention`, `128→heavily_compressed_attention`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_mtp_layer_types` derives MTP `layer_types[]` from the trailing `compress_ratios[n_layers + mtp_id]` entries (V4 Flash requires these to be `0` → `sliding_attention`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_compress_rates` records the canonical compression-rate mapping used by the Transformers nomenclature (`CSA→4`, `HCA→128`, `sliding→0`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `moe.transformers_mlp_layer_types` derives `mlp_layer_types[]` from `num_hash_layers` (`0..num_hash_layers-1 → hash_moe`, remainder → moe).
+
+Cache note (Transformers naming): non-sliding layers map to cache layer types (`DeepseekV4CSACache` for CSA and `DeepseekV4HCACache` for HCA), while sliding-only layers use sliding KV only.
+
 ## Logical parameter shapes (from `inference/model.py` + configs)
 
 These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below). The machine-readable shape contract is recorded under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_shapes`.
