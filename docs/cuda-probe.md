@@ -23,7 +23,12 @@ If `nvcc --list-gpu-arch` is supported, the script treats a missing `compute_121
 
 If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
 
-Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
+Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` includes `compute_121`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`.
+
+Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
+
+- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536`
+- `__CUDA_ARCH__=1210`
 
 ## Spark0: Capability Sweep (One Command)
 

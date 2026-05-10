@@ -8,6 +8,10 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0; observed `V13.0.88` on 2026-05-10)
+- Spark0 snapshot (2026-05-10, via `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
+  - `cuda drv=13000 rt=13000` (CUDA 13.0 driver/runtime ABI)
+  - `mp=48`, `l2=25165824` (24 MiB), `mem=128518373376` (~119.7 GiB), `clock_khz=2418000`, `mem_clock_khz=8533000`
+  - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`
 - `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers)
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints the same one-line limits schema without shipping `tools/cuda_probe/` (useful when repo transfer is blocked)
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` also includes a best-effort compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr` (CUTLASS/DeepGEMM-style nvcc flags) for `sm_121` (and `compute_121` when advertised)
