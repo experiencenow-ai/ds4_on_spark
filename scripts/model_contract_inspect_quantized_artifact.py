@@ -8,7 +8,7 @@ import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO, Optional
+from typing import Any, BinaryIO, Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -29,6 +29,7 @@ class InspectResult:
 	mtp_layer_ids: list[int]
 	first_mtp_keys: list[str]
 	mtp_keys_all: list[str]
+	tensor_type_profile: Optional[dict[str, Any]] = None
 
 
 def load_json(path: Path) -> Any:
@@ -330,6 +331,113 @@ def guess_tensor_key_namespace(weight_keys: list[str]) -> tuple[str, list[str]]:
 
 	evidence.append("no known key namespace patterns matched")
 	return ("unknown", evidence)
+
+
+def compute_tensor_type_profile(
+	weight_keys: list[str],
+	weight_types: list[int],
+	metadata: dict[str, Any],
+	type_name: Callable[[int], str],
+) -> Optional[dict[str, Any]]:
+	if not weight_keys or not weight_types:
+		return None
+	if len(weight_keys) != len(weight_types):
+		return None
+
+	namespace_guess, _ = guess_tensor_key_namespace(weight_keys)
+	arch = None
+	if isinstance(metadata, dict):
+		arch = metadata.get("general.architecture", None)
+
+	def categorize_upstream(k: str) -> str:
+		if k.startswith("mtp."):
+			return "mtp"
+		if k.startswith("layers."):
+			if ".ffn.experts." in k:
+				return "experts"
+			if ".ffn.shared_experts." in k:
+				return "shared_experts"
+			if ".attn." in k:
+				return "attn"
+			if ".ffn.gate." in k:
+				return "gate"
+			if ".ffn." in k:
+				return "ffn_other"
+			if ".hc_" in k:
+				return "hc"
+			return "layers_other"
+		if k.startswith("embed.") or k.startswith("head.") or k.startswith("norm.") or k.startswith("hc_head_"):
+			return "top_level"
+		return "other"
+
+	def categorize_llamacpp(k: str) -> str:
+		if k == "token_embd.weight":
+			return "embed"
+		if k == "output.weight":
+			return "head"
+		if k.endswith("_exps.weight"):
+			return "experts_packed"
+		if k.endswith("_shexp.weight"):
+			return "shared_expert_packed"
+		if ".ffn_gate_" in k:
+			return "ffn_gate"
+		if ".ffn_" in k:
+			return "ffn_other"
+		if ".attn_" in k:
+			return "attn"
+		if ".hc_" in k:
+			return "hc"
+		if k.endswith("norm.weight") or k.endswith("_norm.weight"):
+			return "norm"
+		return "other"
+
+	if namespace_guess in ("deepseek-upstream", "deepseek-upstream-mtp-only"):
+		categorize = categorize_upstream
+	elif namespace_guess == "llama.cpp":
+		categorize = categorize_llamacpp
+	else:
+		return {"checked": False, "namespace_guess": namespace_guess, "reason": "unsupported tensor-key namespace for type profiling"}
+
+	category_counts: dict[str, Counter[str]] = {}
+	for k, t in zip(weight_keys, weight_types):
+		cat = categorize(str(k))
+		c = category_counts.get(cat, None)
+		if c is None:
+			c = Counter()
+			category_counts[cat] = c
+		c[type_name(int(t))] += 1
+
+	def summarize_primary(counter: Counter[str]) -> Optional[dict[str, Any]]:
+		if not counter:
+			return None
+		t, n = counter.most_common(1)[0]
+		return {"type": t, "count": int(n)}
+
+	expert_primary = summarize_primary(category_counts.get("experts_packed", Counter()) or category_counts.get("experts", Counter()))
+	shared_expert_primary = summarize_primary(category_counts.get("shared_expert_packed", Counter()) or category_counts.get("shared_experts", Counter()))
+
+	non_expert = Counter()
+	for cat, cnt in category_counts.items():
+		if cat in ("experts_packed", "experts", "shared_expert_packed", "shared_experts"):
+			continue
+		non_expert.update(cnt)
+	dense_primary = summarize_primary(non_expert)
+
+	hints: dict[str, Any] = {
+		"expert_primary": expert_primary,
+		"shared_expert_primary": shared_expert_primary,
+		"dense_primary": dense_primary,
+	}
+	if expert_primary and expert_primary.get("type") == "MXFP4":
+		hints["flash_variant_hint"] = {"flash_like": True, "reason": "expert weights appear primarily MXFP4 (matches Flash expert_dtype=fp4)"}
+
+	return {
+		"checked": True,
+		"namespace_guess": namespace_guess,
+		"general_architecture": arch,
+		"category_type_counts": {k: dict(sorted(v.items())) for k, v in sorted(category_counts.items())},
+		"hints": hints,
+	}
 
 
 def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
@@ -765,6 +873,7 @@ def inspect_gguf(path: Path) -> InspectResult:
 
 	type_counts = Counter(ggml_type_name(t) for t in weight_types)
 	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
+	profile = compute_tensor_type_profile(weight_keys, weight_types, metadata, ggml_type_name)
 	res = inspect_weight_keys(weight_keys, str(path), "gguf")
 	return InspectResult(
 		path=res.path,
@@ -774,6 +883,7 @@ def inspect_gguf(path: Path) -> InspectResult:
 		metadata=metadata,
 		tensor_count=res.tensor_count,
 		tensor_type_counts=dict(sorted(type_counts.items())),
+		tensor_type_profile=profile,
 		weight_keys_all=res.weight_keys_all,
 		mtp_present=res.mtp_present,
 		mtp_tensor_count=res.mtp_tensor_count,
@@ -835,6 +945,7 @@ def inspect_gguf_url(url: str, max_bytes: int, timeout_s: int) -> InspectResult:
 
 	type_counts = Counter(ggml_type_name(t) for t in weight_types)
 	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
+	profile = compute_tensor_type_profile(weight_keys, weight_types, metadata, ggml_type_name)
 	res = inspect_weight_keys(weight_keys, url, "gguf.url")
 	return InspectResult(
 		path=res.path,
@@ -844,6 +955,7 @@ def inspect_gguf_url(url: str, max_bytes: int, timeout_s: int) -> InspectResult:
 		metadata=metadata,
 		tensor_count=res.tensor_count,
 		tensor_type_counts=dict(sorted(type_counts.items())),
+		tensor_type_profile=profile,
 		weight_keys_all=res.weight_keys_all,
 		mtp_present=res.mtp_present,
 		mtp_tensor_count=res.mtp_tensor_count,
@@ -925,7 +1037,7 @@ def main() -> int:
 
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
-		return {
+		out = {
 			"path": res.path,
 			"artifact_type": res.artifact_type,
 			"gguf_version": res.gguf_version,
@@ -943,6 +1055,9 @@ def main() -> int:
 			"mtp_namespace": compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary),
 			"first_mtp_keys": res.first_mtp_keys,
 		}
+		if res.tensor_type_profile is not None:
+			out["tensor_type_profile"] = res.tensor_type_profile
+		return out
 
 	def combine(results: list[InspectResult]) -> dict[str, Any]:
 		type_counts: Counter[str] = Counter()

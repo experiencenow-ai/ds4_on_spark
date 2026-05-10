@@ -485,13 +485,16 @@ the source-derived contract above remains authoritative.
 
 For each quantized artifact tested, record:
 
-- artifact format (`GGUF`, HF safetensors, or other)
+- artifact format (`GGUF`, HF safetensors, or other) and the inspector `artifact_type` (`gguf.url`, `gguf`, etc.)
 - declared quant (`Q2_K`, `Q3_K_M`, native `F8_E4M3 + MXFP4`, etc.)
 - declared base model and conversion path
 - runtime repo, branch, and commit required to load it
 - whether the runtime claims to preserve native FP8/FP4 scales or has
   re-quantized through another representation
 - tokenizer/chat-template behavior used for the prompt
+- captured quantization metadata from `scripts/model_contract_inspect_quantized_artifact.py`:
+  - `tensor_type_counts` (overall GGUF tensor types present)
+  - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
 
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
@@ -510,7 +513,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
 - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
 - `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
-- The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this under `tensor_type_counts`.
+- The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this in `tensor_type_counts`, and splits expert vs dense types in `tensor_type_profile` (notably `category_type_counts.experts_packed` vs `hints.dense_primary`).
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
 

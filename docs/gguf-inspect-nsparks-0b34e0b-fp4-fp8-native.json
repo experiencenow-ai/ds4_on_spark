@@ -87,6 +87,65 @@
     "I32": 3,
     "MXFP4": 129
   },
+  "tensor_type_profile": {
+    "category_type_counts": {
+      "attn": {
+        "BF16": 82,
+        "F32": 254,
+        "F8_E4M3_B128": 236
+      },
+      "embed": {
+        "BF16": 1
+      },
+      "experts_packed": {
+        "MXFP4": 129
+      },
+      "ffn_gate": {
+        "F32": 43,
+        "I32": 3
+      },
+      "ffn_other": {
+        "F32": 43
+      },
+      "hc": {
+        "F32": 258
+      },
+      "head": {
+        "BF16": 1
+      },
+      "norm": {
+        "F32": 22
+      },
+      "other": {
+        "BF16": 63,
+        "F32": 64
+      },
+      "shared_expert_packed": {
+        "F8_E4M3_B128": 129
+      }
+    },
+    "checked": true,
+    "general_architecture": "deepseek4",
+    "hints": {
+      "dense_primary": {
+        "count": 684,
+        "type": "F32"
+      },
+      "expert_primary": {
+        "count": 129,
+        "type": "MXFP4"
+      },
+      "flash_variant_hint": {
+        "flash_like": true,
+        "reason": "expert weights appear primarily MXFP4 (matches Flash expert_dtype=fp4)"
+      },
+      "shared_expert_primary": {
+        "count": 129,
+        "type": "F8_E4M3_B128"
+      }
+    },
+    "namespace_guess": "llama.cpp"
+  },
   "topology_contract": {
     "block_count": 43,
     "block_count_ok": true,
