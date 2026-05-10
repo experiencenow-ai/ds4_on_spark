@@ -382,8 +382,10 @@ else
 	check_ptx() {
 		name=\"\$1\"
 		path=\"\$2\"
-		if \$CUOBJDUMP --dump-ptx \"\${path}\" 2>/dev/null | grep -q \"^\\\\.target\"; then
+		ptx_target_line=\$(\$CUOBJDUMP --dump-ptx \"\${path}\" 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+		if [ \"\${ptx_target_line}\" != \"\" ]; then
 			echo \"ptx_embed(\${name}): PRESENT\"
+			echo \"ptx_target(\${name}): \${ptx_target_line}\"
 		else
 			echo \"ptx_embed(\${name}): MISSING\"
 		fi

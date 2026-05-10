@@ -62,6 +62,7 @@ This also performs best-effort toolchain-only checks when supported:
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
 - If `cuobjdump` is available and `compute_121` is advertised, emit `-fatbin` artifacts with explicit `-gencode` (`code=sm_121` only, `code=compute_121` only, and `sm_121+compute_121`) and report whether embedded PTX is present (expected: SM-only missing; PTX-only present; SM+PTX present).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
+- When PTX is present, the script also prints the first PTX `.target` line (`ptx_target_*`) so the embedded PTX arch is explicit in logs.
 
 ## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)
 
@@ -218,6 +219,7 @@ Observed:
 - `nvcc -arch=compute_121 -c` compile-only probe succeeds when `compute_121` is advertised (toolchain PTX-target gate)
 - `cluster_dims_attr_compile: OK` for a kernel annotated with `__cluster_dims__(2,1,1)` (toolchain accepts cluster annotations for `sm_121`)
 - `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
+- When PTX is present, scripts also print the first PTX `.target` line (`ptx_target_*`) for quick arch verification.
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
 - The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure

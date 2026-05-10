@@ -14,6 +14,7 @@ For convenience on single-GPU bring-up:
 
 - `-arch=native` will compile for the visible GPU(s) detected by `nvcc` at build time.
   - `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort `-fatbin` + `cuobjdump --dump-ptx` check for `-arch=native` and reports whether PTX is embedded (expected missing; treat as a portability signal, not a functional failure).
+  - When PTX is present in any of these checks, the scripts print the first PTX `.target` line (`ptx_target_*`) to make the embedded PTX arch explicit in logs.
 
 ### `sm_121a` / `sm_121f` Variant Targets (Toolchain Probe)
 
@@ -32,6 +33,7 @@ When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cu
 For simple builds, `nvcc` accepts a real-arch `-arch=sm_121` shorthand and can embed both `sm_121` SASS and a PTX fallback for JIT.
 
 `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort check by emitting a `-fatbin` with `-arch=sm_121` and using `cuobjdump --dump-ptx` to confirm an embedded PTX section exists.
+When PTX is present, it also prints the first PTX `.target` line (`ptx_target_sm_121`) for quick arch verification.
 
 ## CUDA 13 `cudaDeviceProp` Layout Change
 
