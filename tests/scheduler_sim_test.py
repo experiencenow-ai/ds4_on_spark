@@ -570,7 +570,10 @@ class SchedulerSimTest(unittest.TestCase):
             "trace_kv_tokens_p95_batch",
             "expert_max_pending_tasks_max",
             "expert_utilization_p50",
+            "expert_utilization_gini",
             "expert_saturation_p95",
+            "expert_tasks_started_gini",
+            "expert_tasks_started_top1_frac",
             "pending_depth_time_weighted_p95",
             "pending_depth_time_weighted_p95_mtp_draft",
             "pending_depth_time_weighted_p95_mtp_verify",
@@ -605,6 +608,31 @@ class SchedulerSimTest(unittest.TestCase):
         m = scheduler_sim.run_simulation(cfg, trace)
         self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_draft[1:] if len(m.pending_depth_hist_mtp_draft) > 1 else [])) or m.pending_depth_hist_mtp_draft_overflow > 0.0)
         self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_verify[1:] if len(m.pending_depth_hist_mtp_verify) > 1 else [])) or m.pending_depth_hist_mtp_verify_overflow > 0.0)
+
+    def test_expert_load_skew_summary_peaks_when_single_expert_used(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=float(i), cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)) for i in range(60)]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=4,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertGreater(float(s.get("expert_tasks_started_gini", 0.0)), 0.70)
+        self.assertGreater(float(s.get("expert_utilization_gini", 0.0)), 0.60)
+        self.assertAlmostEqual(float(s.get("expert_tasks_started_top1_frac", 0.0)), 1.0, places=6)
 
     def test_summary_json_compare_omits_full_metrics(self) -> None:
         buf = io.StringIO()
