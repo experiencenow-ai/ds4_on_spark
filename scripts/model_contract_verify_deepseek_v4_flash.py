@@ -200,6 +200,24 @@ def main() -> int:
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
 					failures.append(Failure(17, f"contract summary missing decode sliding-ring update expression containing 'start_pos % win': {contract_summary}"))
+				compress_gate_prefill = cache_update.get("compressor_prefill_should_compress_expr")
+				if not (isinstance(compress_gate_prefill, str) and "should_compress = seqlen >= ratio" in compress_gate_prefill):
+					failures.append(Failure(19, f"contract summary missing compressor prefill gate expression 'should_compress = seqlen >= ratio': {contract_summary}"))
+				compress_gate_decode = cache_update.get("compressor_decode_should_compress_expr")
+				if not (isinstance(compress_gate_decode, str) and "% self.compress_ratio == 0" in compress_gate_decode):
+					failures.append(Failure(20, f"contract summary missing compressor decode gate expression containing '% self.compress_ratio == 0': {contract_summary}"))
+				compress_prefill_write = cache_update.get("compressor_prefill_write_expr")
+				if not (isinstance(compress_prefill_write, str) and ":seqlen // ratio" in compress_prefill_write):
+					failures.append(Failure(21, f"contract summary missing compressor prefill kv_cache write expression containing ':seqlen // ratio': {contract_summary}"))
+				compress_decode_write = cache_update.get("compressor_decode_write_expr")
+				if not (isinstance(compress_decode_write, str) and "start_pos // ratio" in compress_decode_write):
+					failures.append(Failure(22, f"contract summary missing compressor decode kv_cache write expression containing 'start_pos // ratio': {contract_summary}"))
+				compress_freqs_prefill = cache_update.get("compressor_freqs_cis_prefill_expr")
+				if not (isinstance(compress_freqs_prefill, str) and "[:cutoff:ratio]" in compress_freqs_prefill):
+					failures.append(Failure(23, f"contract summary missing compressor freqs_cis prefill expression containing '[:cutoff:ratio]': {contract_summary}"))
+				compress_freqs_decode = cache_update.get("compressor_freqs_cis_decode_expr")
+				if not (isinstance(compress_freqs_decode, str) and "start_pos + 1 - self.compress_ratio" in compress_freqs_decode):
+					failures.append(Failure(24, f"contract summary missing compressor freqs_cis decode expression containing 'start_pos + 1 - self.compress_ratio': {contract_summary}"))
 				comp = summary.get("cache", {}).get("compression_semantics", None)
 				if not isinstance(comp, dict):
 					failures.append(Failure(83, f"contract summary missing cache.compression_semantics object: {contract_summary}"))
