@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/tags/b9093`
-- Commit: `1e5ad35d560b90a8ac447d149c8f8447ae1fcaa0`
+- Ref: `refs/tags/b9095`
+- Commit: `f3c3e0e9a087835639733485b8900b195ba4ca47`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -65,11 +65,23 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - Notes: Community fork reportedly running DeepSeek-V4-Flash IQ2XXS GGUF on a single DGX Spark/GB10; validate performance and memory headroom on the actual Spark target.
   - Provenance (report, 2026-05-05): `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`
 
+## DeepSeek V4 Flash MTP sidecar (Spark forks)
+
+Some DeepSeek V4 Flash GGUF distributions (notably `antirez/deepseek-v4-gguf`) publish an optional **MTP sidecar** GGUF (≈3.5 GiB) that is **not** a full trunk model; it is a compact 32‑tensor `mtp.0.*` table used by DS4’s MTP path (see `docs/mtp-ds4-reference.md`).
+
+Spark/CUDA llama.cpp forks may reject the sidecar if treated as a normal model (e.g. `unknown model architecture: deepseek4_mtp_support`). To validate a sidecar file without loading the trunk GGUF, use the repo-maintained patch + probe binary described in:
+
+- `docs/llamacpp-mtp-sidecar-probe.md`
+
+Patch asset (for the pinned Spark fork):
+
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
+
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9093/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9093/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9093/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9095/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9095/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9095/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 

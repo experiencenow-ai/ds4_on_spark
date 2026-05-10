@@ -23,10 +23,10 @@ index 0000000..0e749fd
 +target_compile_features(${TARGET} PRIVATE cxx_std_17)
 diff --git a/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
 new file mode 100644
-index 0000000..ee2fc8b
+index 0000000..1c12591
 --- /dev/null
 +++ b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
-@@ -0,0 +1,385 @@
+@@ -0,0 +1,584 @@
 +#include "gguf.h"
 +#include "ggml.h"
 +
@@ -35,12 +35,13 @@ index 0000000..ee2fc8b
 +#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
++#include <cstdint>
 +#include <string>
 +#include <unordered_set>
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json]\n", prog);
++    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N] [--load-weights]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -57,6 +58,25 @@ index 0000000..ee2fc8b
 +        }
 +    }
 +    return out;
++}
++
++static uint64_t fnv1a64(const uint8_t * data, size_t len) {
++    uint64_t h = 1469598103934665603ULL;
++    for (size_t i = 0; i < len; i++) {
++        h ^= (uint64_t) data[i];
++        h *= 1099511628211ULL;
++    }
++    return h;
++}
++
++static bool read_file_bytes(FILE * fp, size_t offs, uint8_t * dst, size_t len) {
++    if (fp == nullptr || dst == nullptr) {
++        return false;
++    }
++    if (std::fseek(fp, (long) offs, SEEK_SET) != 0) {
++        return false;
++    }
++    return std::fread(dst, 1, len, fp) == len;
 +}
 +
 +static bool tensor_dims_eq(const ggml_tensor * t, const std::vector<int64_t> & want) {
@@ -128,6 +148,8 @@ index 0000000..ee2fc8b
 +int main(int argc, char ** argv) {
 +    std::string path;
 +    bool json = false;
++    bool load_weights = false;
++    int payload_sample_bytes = 0;
 +
 +    for (int i = 1; i < argc; i++) {
 +        const char * arg = argv[i];
@@ -139,6 +161,20 @@ index 0000000..ee2fc8b
 +
 +        if (std::strcmp(arg, "--json") == 0) {
 +            json = true;
++            continue;
++        }
++
++        if (std::strcmp(arg, "--payload-sample-bytes") == 0 && i + 1 < argc) {
++            payload_sample_bytes = std::atoi(argv[++i]);
++            if (payload_sample_bytes < 0) {
++                std::fprintf(stderr, "payload-sample-bytes must be >= 0\n");
++                return 2;
++            }
++            continue;
++        }
++
++        if (std::strcmp(arg, "--load-weights") == 0) {
++            load_weights = true;
 +            continue;
 +        }
 +
@@ -161,7 +197,7 @@ index 0000000..ee2fc8b
 +
 +    ggml_context * ctx_meta = nullptr;
 +    gguf_init_params params = {
-+        /*.no_alloc =*/ true,
++        /*.no_alloc =*/ !load_weights,
 +        /*.ctx      =*/ &ctx_meta,
 +    };
 +
@@ -220,12 +256,29 @@ index 0000000..ee2fc8b
 +        errors.push_back("unexpected extra tensors present (see extra[])");
 +    }
 +
++    if (load_weights) {
++        if (ctx_meta == nullptr) {
++            errors.push_back("internal error: missing ggml weights context");
++        } else {
++            for (const auto & name : expected_tensor_names()) {
++                const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
++                if (t == nullptr) {
++                    errors.push_back("load weights: missing tensor '" + name + "'");
++                    continue;
++                }
++                if (t->data == nullptr) {
++                    errors.push_back("load weights: tensor has null data pointer '" + name + "'");
++                }
++            }
++        }
++    }
++
 +    // light self-consistency checks (derived only from the 32 tensor shapes)
 +    int64_t n_embd = -1;
 +    int64_t n_head = -1;
 +    int64_t n_head_dim = -1;
 +    int64_t n_lora_q = -1;
-+    int64_t n_lora_o = -1;
++    int64_t q_dim = -1;
 +    int64_t n_expert = -1;
 +    int64_t n_ff_exp = -1;
 +    int64_t n_hc = -1;
@@ -253,7 +306,7 @@ index 0000000..ee2fc8b
 +
 +        const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
 +        if (t_q_b != nullptr && t_q_b->n_dims == 2) {
-+            n_lora_o = t_q_b->ne[0];
++            q_dim = t_q_b->ne[1];
 +        }
 +
 +        const ggml_tensor * t_exp_bias = ggml_get_tensor(ctx_meta, "mtp.0.exp_probs_b.bias");
@@ -297,6 +350,9 @@ index 0000000..ee2fc8b
 +            if (t_attn_out_b && t_attn_out_b->n_dims == 2) {
 +                if (t_attn_out_b->ne[1] != n_embd) errors.push_back("shape mismatch: mtp.0.attn_output_b.weight");
 +            }
++            if (t_attn_out_a && t_attn_out_a->n_dims == 2 && t_attn_out_b && t_attn_out_b->n_dims == 2) {
++                if (t_attn_out_a->ne[1] != t_attn_out_b->ne[0]) errors.push_back("shape mismatch: mtp.0.attn_output_{a,b}.weight");
++            }
 +        }
 +
 +        if (n_lora_q > 0) {
@@ -314,11 +370,16 @@ index 0000000..ee2fc8b
 +            if (!tensor_is_2d(t_kv, n_embd, n_head_dim)) errors.push_back("shape mismatch: mtp.0.attn_kv.weight");
 +        }
 +
-+        if (n_head > 0 && n_head_dim > 0 && n_lora_o > 0) {
++        if (n_head_dim > 0) {
++            const ggml_tensor * t_kv_a_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_kv_a_norm.weight");
++            if (!tensor_is_1d_len(t_kv_a_norm, n_head_dim)) errors.push_back("shape mismatch: mtp.0.attn_kv_a_norm.weight");
++        }
++
++        if (n_head > 0 && n_head_dim > 0 && n_lora_q > 0) {
 +            const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
 +            const int64_t want_out = n_head * n_head_dim;
 +            if (t_q_b && t_q_b->n_dims == 2) {
-+                if (t_q_b->ne[0] != n_lora_o || t_q_b->ne[1] != want_out) {
++                if (t_q_b->ne[0] != n_lora_q || t_q_b->ne[1] != want_out) {
 +                    errors.push_back("shape mismatch: mtp.0.attn_q_b.weight");
 +                }
 +            }
@@ -332,9 +393,22 @@ index 0000000..ee2fc8b
 +            if (!tensor_is_3d(t_gate_exps, n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_exps.weight");
 +            if (!tensor_is_3d(t_up_exps,   n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_up_exps.weight");
 +            if (!tensor_is_3d(t_down_exps, n_ff_exp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_down_exps.weight");
++
++            const ggml_tensor * t_gate_inp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_inp.weight");
++            if (!tensor_is_2d(t_gate_inp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_inp.weight");
++
++            const ggml_tensor * t_gate_shexp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_shexp.weight");
++            const ggml_tensor * t_up_shexp   = ggml_get_tensor(ctx_meta, "mtp.0.ffn_up_shexp.weight");
++            const ggml_tensor * t_down_shexp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_down_shexp.weight");
++            if (!tensor_is_2d(t_gate_shexp, n_embd, n_ff_exp)) errors.push_back("shape mismatch: mtp.0.ffn_gate_shexp.weight");
++            if (!tensor_is_2d(t_up_shexp,   n_embd, n_ff_exp)) errors.push_back("shape mismatch: mtp.0.ffn_up_shexp.weight");
++            if (!tensor_is_2d(t_down_shexp, n_ff_exp, n_embd)) errors.push_back("shape mismatch: mtp.0.ffn_down_shexp.weight");
 +        }
 +
 +        if (n_hc > 0) {
++            const int64_t hc_dim = (n_embd > 0 ? n_embd * n_hc : -1);
++            const int64_t hc_mix_dim = (2 * n_hc) + (n_hc * n_hc);
++
 +            const ggml_tensor * t_hc_attn_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_scale.weight");
 +            const ggml_tensor * t_hc_ffn_scale  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_scale.weight");
 +            const ggml_tensor * t_hc_head_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_scale.weight");
@@ -346,7 +420,72 @@ index 0000000..ee2fc8b
 +            const ggml_tensor * t_hc_head_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_base.weight");
 +            const ggml_tensor * t_hc_head_fn   = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_fn.weight");
 +            if (!tensor_is_1d_len(t_hc_head_base, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_base.weight");
-+            if (!tensor_is_2d(t_hc_head_fn, 16384, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_fn.weight");
++            if (hc_dim > 0) {
++                if (!tensor_is_2d(t_hc_head_fn, hc_dim, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_fn.weight");
++            }
++
++            if (hc_dim > 0) {
++                const ggml_tensor * t_hc_attn_fn   = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_fn.weight");
++                const ggml_tensor * t_hc_attn_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_base.weight");
++                const ggml_tensor * t_hc_ffn_fn    = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_fn.weight");
++                const ggml_tensor * t_hc_ffn_base  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_base.weight");
++
++                if (!tensor_is_2d(t_hc_attn_fn, hc_dim, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_attn_fn.weight");
++                if (!tensor_is_1d_len(t_hc_attn_base, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_attn_base.weight");
++                if (!tensor_is_2d(t_hc_ffn_fn, hc_dim, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_ffn_fn.weight");
++                if (!tensor_is_1d_len(t_hc_ffn_base, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_ffn_base.weight");
++            }
++        }
++    }
++
++    struct payload_sample_entry {
++        std::string name;
++        uint64_t hash = 0;
++        size_t n = 0;
++    };
++
++    std::vector<payload_sample_entry> payload_samples;
++    if (payload_sample_bytes > 0) {
++        FILE * fp = std::fopen(path.c_str(), "rb");
++        if (fp == nullptr) {
++            errors.push_back("failed to open file for payload sampling");
++        } else if (ctx_meta == nullptr) {
++            errors.push_back("internal error: missing ggml metadata context");
++        } else {
++            payload_samples.reserve(expected_tensor_names().size());
++            std::vector<uint8_t> buf((size_t) payload_sample_bytes);
++
++            for (const auto & name : expected_tensor_names()) {
++                const int64_t tid = gguf_find_tensor(ctx_gguf, name.c_str());
++                if (tid < 0) {
++                    continue;
++                }
++
++                const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
++                if (t == nullptr) {
++                    errors.push_back("payload sample: missing tensor meta for '" + name + "'");
++                    continue;
++                }
++
++                const size_t nbytes = (size_t) ggml_nbytes(t);
++                const size_t nread = std::min(nbytes, (size_t) payload_sample_bytes);
++                const size_t offs = gguf_get_data_offset(ctx_gguf) + gguf_get_tensor_offset(ctx_gguf, tid);
++
++                if (!read_file_bytes(fp, offs, buf.data(), nread)) {
++                    errors.push_back("payload sample: failed to read '" + name + "'");
++                    continue;
++                }
++
++                payload_sample_entry e;
++                e.name = name;
++                e.n = nread;
++                e.hash = fnv1a64(buf.data(), nread);
++                payload_samples.push_back(std::move(e));
++            }
++        }
++
++        if (fp != nullptr) {
++            std::fclose(fp);
 +        }
 +    }
 +
@@ -357,6 +496,12 @@ index 0000000..ee2fc8b
 +            std::printf("ok=true\n");
 +            std::printf("architecture=%s\n", arch.empty() ? "(missing)" : arch.c_str());
 +            std::printf("tensor_count=%" PRId64 "\n", n_tensors);
++            if (payload_sample_bytes > 0) {
++                std::printf("payload_sample_bytes=%d\n", payload_sample_bytes);
++                for (const auto & e : payload_samples) {
++                    std::printf("payload_sample=%s:%016" PRIx64 ":%zu\n", e.name.c_str(), e.hash, e.n);
++                }
++            }
 +        } else {
 +            std::printf("ok=false\n");
 +            for (const auto & e : errors) {
@@ -381,6 +526,50 @@ index 0000000..ee2fc8b
 +        std::printf("  \"path\": \"%s\",\n", json_escape(path).c_str());
 +        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
 +        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
++        std::printf("  \"payload_sample_bytes\": %d,\n", payload_sample_bytes);
++        std::printf("  \"load_weights\": %s,\n", load_weights ? "true" : "false");
++
++        std::printf("  \"derived_params\": {");
++        std::printf("\"n_embd\":%" PRId64 ",", (n_embd > 0 ? n_embd : 0));
++        std::printf("\"n_head\":%" PRId64 ",", (n_head > 0 ? n_head : 0));
++        std::printf("\"n_head_dim\":%" PRId64 ",", (n_head_dim > 0 ? n_head_dim : 0));
++        std::printf("\"n_hc\":%" PRId64 ",", (n_hc > 0 ? n_hc : 0));
++        std::printf("\"n_lora_q\":%" PRId64 ",", (n_lora_q > 0 ? n_lora_q : 0));
++        std::printf("\"q_dim\":%" PRId64 ",", (q_dim > 0 ? q_dim : 0));
++        std::printf("\"n_expert\":%" PRId64 ",", (n_expert > 0 ? n_expert : 0));
++        std::printf("\"n_ff_exp\":%" PRId64 "", (n_ff_exp > 0 ? n_ff_exp : 0));
++        std::printf("},\n");
++
++        std::printf("  \"tensors\": [");
++        const auto & want = expected_tensor_names();
++        for (size_t i = 0; i < want.size(); i++) {
++            if (i) std::printf(", ");
++            const std::string & name = want[i];
++            const int64_t tid = gguf_find_tensor(ctx_gguf, name.c_str());
++            const ggml_tensor * t = (ctx_meta != nullptr) ? ggml_get_tensor(ctx_meta, name.c_str()) : nullptr;
++
++            std::printf("{\"name\":\"%s\"", json_escape(name).c_str());
++            std::printf(",\"present\":%s", (tid >= 0 && t != nullptr) ? "true" : "false");
++
++            if (tid >= 0 && t != nullptr) {
++                const size_t offs = gguf_get_data_offset(ctx_gguf) + gguf_get_tensor_offset(ctx_gguf, tid);
++
++                std::printf(",\"type\":%d", (int) t->type);
++                std::printf(",\"n_dims\":%d", t->n_dims);
++                std::printf(",\"dims\":[");
++                for (int d = 0; d < t->n_dims; d++) {
++                    if (d) std::printf(",");
++                    std::printf("%" PRId64, t->ne[d]);
++                }
++                std::printf("]");
++                std::printf(",\"nbytes\":%zu", (size_t) ggml_nbytes(t));
++                std::printf(",\"offset\":%zu", offs);
++                std::printf(",\"has_data\":%s", t->data != nullptr ? "true" : "false");
++            }
++
++            std::printf("}");
++        }
++        std::printf("],\n");
 +
 +        std::printf("  \"missing\": [");
 +        for (size_t i = 0; i < missing.size(); i++) {
@@ -400,6 +589,16 @@ index 0000000..ee2fc8b
 +        for (size_t i = 0; i < errors.size(); i++) {
 +            if (i) std::printf(", ");
 +            std::printf("\"%s\"", json_escape(errors[i]).c_str());
++        }
++        std::printf("],\n");
++
++        std::printf("  \"payload_samples\": [");
++        for (size_t i = 0; i < payload_samples.size(); i++) {
++            if (i) std::printf(", ");
++            std::printf("{\"name\":\"%s\",\"fnv1a64\":\"%016" PRIx64 "\",\"n\":%zu}",
++                json_escape(payload_samples[i].name).c_str(),
++                payload_samples[i].hash,
++                payload_samples[i].n);
 +        }
 +        std::printf("]\n");
 +        std::printf("}\n");

@@ -23,6 +23,7 @@ Targets:
   deepseek_v3
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_flash_fp8_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -190,6 +191,11 @@ fetch_one()
 			upstream="huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_flash_base_hf" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base" "${ref}" "${expected}"
 			;;
+		deepseek_v4_flash_fp8_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "deepseek_v4_flash_fp8_hf" "https://huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8" "${ref}" "${expected}"
+			;;
 		deepseek_v4_gguf_antirez)
 			upstream="huggingface.co/antirez/deepseek-v4-gguf"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_gguf_antirez" "https://huggingface.co/antirez/deepseek-v4-gguf" "${ref}" "${expected}"
@@ -243,7 +249,7 @@ fetch_one()
 			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
 		llama_cpp)
-			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9093"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9095"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
 			;;
 		llama_cpp_deepseek_v4_flash)
@@ -275,7 +281,7 @@ fetch_one()
 			clone_or_update "spark_v4_bringup_bigs" "https://github.com/bigs/deepseek-v4-flash-dgx-spark.git" "${ref}" "${expected}"
 			;;
 		spark_v4_gb10_runtime_devid791)
-			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/tags/v0.1.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_gb10_runtime_devid791" "https://github.com/devid791/dsv4-flash-gb10-runtime.git" "${ref}" "${expected}"
 			;;
 		deepseek_v4_flash_sm120_patch)

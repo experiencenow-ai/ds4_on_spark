@@ -167,6 +167,11 @@ echo "== memory =="
 free -h || true
 echo
 echo "== toolchain =="
+for tool in gcc g++ clang cmake ninja make python3 ldd; do
+	if command -v "$tool" >/dev/null 2>&1; then
+		echo "$tool path: $(command -v "$tool")"
+	fi
+done
 command -v gcc >/dev/null 2>&1 && gcc --version | head -n 1 || true
 command -v g++ >/dev/null 2>&1 && g++ --version | head -n 1 || true
 command -v clang >/dev/null 2>&1 && clang --version | head -n 1 || true
@@ -174,6 +179,7 @@ command -v cmake >/dev/null 2>&1 && cmake --version | head -n 1 || true
 command -v ninja >/dev/null 2>&1 && ninja --version || true
 command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
 command -v python3 >/dev/null 2>&1 && python3 --version || true
+command -v ldd >/dev/null 2>&1 && ldd --version 2>/dev/null | head -n 1 || true
 echo
 echo "== packages (cuda/nvidia, dpkg, capped) =="
 if command -v dpkg-query >/dev/null 2>&1; then
@@ -306,6 +312,18 @@ if [ "$have_smi" = "1" ]; then
 	[ "$smi_cuda_ver" != "" ] && echo "CUDA Version: $smi_cuda_ver" || echo "CUDA Version: unknown"
 else
 	echo "nvidia-smi not found"
+fi
+echo
+echo "== nvidia-smi -q fabric/c2c (summary) =="
+if [ "$have_smi" = "1" ] && [ "$smi_q" != "" ]; then
+	smi_arch="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Product Architecture[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+	smi_peer_type="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Peer Type[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+	smi_c2c_mode="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*GPU C2C Mode[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+	[ "$smi_arch" != "" ] && echo "Product Architecture: $smi_arch"
+	[ "$smi_peer_type" != "" ] && echo "Peer Type: $smi_peer_type"
+	[ "$smi_c2c_mode" != "" ] && echo "GPU C2C Mode: $smi_c2c_mode"
+else
+	echo "nvidia-smi -q not available"
 fi
 	echo
 	pcie_link_query()
@@ -546,9 +564,25 @@ if [ "$nvcc_bin" != "" ]; then
 	echo
 	echo "== nvcc supported gpu arch (capped) =="
 	if "$nvcc_bin" --list-gpu-arch >/dev/null 2>&1; then
-		"$nvcc_bin" --list-gpu-arch 2>/dev/null | head -n 200 || true
+		nvcc_list_arch="$("$nvcc_bin" --list-gpu-arch 2>/dev/null | head -n 200 || true)"
+		[ "$nvcc_list_arch" != "" ] && printf "%s\n" "$nvcc_list_arch"
 	else
 		echo "nvcc --list-gpu-arch not supported"
+	fi
+	echo
+	echo "== nvcc supported gpu code (capped) =="
+	if "$nvcc_bin" --list-gpu-code >/dev/null 2>&1; then
+		nvcc_list_code="$("$nvcc_bin" --list-gpu-code 2>/dev/null | head -n 200 || true)"
+		[ "$nvcc_list_code" != "" ] && printf "%s\n" "$nvcc_list_code"
+		if [ "${nvcc_arch:-}" != "" ] && [ "$nvcc_list_code" != "" ]; then
+			if printf "%s\n" "$nvcc_list_code" | grep -qx "$nvcc_arch"; then
+				:
+			else
+				echo "warning: selected nvcc arch $nvcc_arch not listed in nvcc --list-gpu-code"
+			fi
+		fi
+	else
+		echo "nvcc --list-gpu-code not supported"
 	fi
 fi
 ptxas_bin=""
@@ -644,6 +678,7 @@ int main()
 	int cc = 0,max_cc = -1,max_cc_major = 0,max_cc_minor = 0;
 	int runtime_v = 0,driver_v = 0;
 	int drv_major = 0,drv_minor = 0,rt_major = 0,rt_minor = 0;
+	char pci_bus_id[64];
 	if ( cudaGetDeviceCount(&device_count) != cudaSuccess )
 	{
 		std::printf("cudaGetDeviceCount failed\n");
@@ -678,6 +713,11 @@ int main()
 		std::printf("device%d cc: %d.%d\n",dev,prop.major,prop.minor);
 		std::printf("device%d global mem (bytes): %llu\n",dev,(unsigned long long)prop.totalGlobalMem);
 		std::printf("device%d sms: %d\n",dev,prop.multiProcessorCount);
+		pci_bus_id[0] = 0;
+		if ( cudaDeviceGetPCIBusId(pci_bus_id,(int)sizeof(pci_bus_id),dev) == cudaSuccess )
+			std::printf("device%d pci bus id: %s\n",dev,pci_bus_id);
+		else
+			std::printf("device%d pci bus id: (unavailable)\n",dev);
 	}
 	if ( max_cc >= 0 )
 		std::printf("runtime max cc: %d.%d\n",max_cc_major,max_cc_minor);
@@ -693,6 +733,9 @@ CU
 		[ "$out" != "" ] && printf "%s\n" "$out"
 		if [ "$compute_cap" != "" ] && [ "$out" != "" ]; then
 			rtmax="$(printf "%s\n" "$out" | sed -nE "s/^runtime max cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | head -n 1)"
+			if [ "$rtmax" = "" ]; then
+				rtmax="$(printf "%s\n" "$out" | sed -nE "s/^device[0-9]+ cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }")"
+			fi
 			cc0="$(printf "%s\n" "$out" | sed -nE "s/^device0 cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | head -n 1)"
 			if [ "$rtmax" != "" ] && [ "$rtmax" != "$compute_cap" ]; then
 				echo "warning: compute_cap $compute_cap != runtime max cc $rtmax"
@@ -700,6 +743,7 @@ CU
 			if [ "$cc0" != "" ] && [ "$cc0" != "$compute_cap" ]; then
 				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
 			fi
+		fi
 		fi
 		echo
 		emit_pcie_link ", post-load"

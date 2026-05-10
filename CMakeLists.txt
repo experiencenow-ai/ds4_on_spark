@@ -119,6 +119,12 @@ if(DS4_ENABLE_TESTS)
 				-DDS4_MODE=ctx_smoke
 				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
 		)
+		add_test(NAME ds4_cli_smoke_cuda_disabled
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=cuda_smoke_disabled
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
 		add_test(NAME ds4_cli_smoke_config_file_dump
 			COMMAND "${CMAKE_COMMAND}"
 				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
@@ -161,6 +167,11 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 set(DS4_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/ds4")
+if(DS4_ENABLE_CUDA)
+	set(DS4_PACKAGE_HAS_CUDA 1)
+else()
+	set(DS4_PACKAGE_HAS_CUDA 0)
+endif()
 
 install(TARGETS ds4
 	EXPORT ds4Targets

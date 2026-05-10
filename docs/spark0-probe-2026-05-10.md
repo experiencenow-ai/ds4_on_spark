@@ -52,6 +52,54 @@ Additional probe run (09:13Z refresh, loop-filtered storage output, temporary gi
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0918Z_loop.txt
 ```
 
+Additional probe run (10:13Z refresh, committed `nvcc --list-gpu-code` output):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T101326Z_loop_spark_access_nvcc_code_commit.txt
+```
+
+Additional probe run (10:42Z refresh, `nvcc` arch sanity-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T104220Z_loop_nvcc_archcheck.txt
+```
+
+Additional probe run (11:44Z refresh, runtime PCI bus id cross-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
+```
+
+Additional probe run (12:13Z refresh, toolchain paths + glibc banner):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T121337Z_loop_toolpaths_git9ee0e27.txt
+```
+
+Additional probe run (12:43Z refresh, `nvidia-smi -q` C2C summary):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
+```
+
+Additional probe run (13:13Z refresh, runtime max cc sanity-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1313Z_loop_runtime_ccmax_git_0cd918d.txt
+```
+
+Additional probe run (13:43Z refresh, confirms cc + sysfs PCIe snapshot):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1339Z_loop_refresh.txt
+```
+
+Additional probe run (14:11Z refresh, kernel module metadata snapshot):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1411Z_loop_access.txt
+```
+
 Additional probe run (14:47Z refresh, runtime max cc line):
 
 ```bash
@@ -65,6 +113,78 @@ Notes:
 - PCIe link state is captured from `nvidia-smi -q` and sysfs (`/sys/bus/pci/devices/*/current_link_*`) because `lspci -vv` capability fields may be restricted without elevated privileges.
 
 ## Probe Excerpts (Redacted)
+
+### Toolchain paths (Spark0, 12:13Z)
+
+```text
+== toolchain ==
+gcc path: /usr/bin/gcc
+g++ path: /usr/bin/g++
+cmake path: /usr/bin/cmake
+make path: /usr/bin/make
+python3 path: /usr/bin/python3
+ldd path: /usr/bin/ldd
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+GNU Make 4.3
+Python 3.12.3
+ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39
+```
+
+### nvidia-smi fabric/c2c summary (Spark0, 12:43Z)
+
+```text
+== nvidia-smi -q fabric/c2c (summary) ==
+Product Architecture: Blackwell
+Peer Type: Direct Connected
+GPU C2C Mode: Enabled
+```
+
+### Compute capability + sysfs PCIe snapshot (Spark0, 13:43Z)
+
+```text
+== local meta ==
+Sun May 10 13:43:17 UTC 2026
+git: 393ae50
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+runtime max cc: 12.1
+
+== pci link (sysfs, current/max, post-load) ==
+path 000f:00:00.0 current_link_speed: Unknown
+path 000f:00:00.0 current_link_width: 0
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+```
+
+### Compute capability + open kernel module metadata (Spark0, 14:11Z)
+
+```text
+== local meta ==
+Sun May 10 14:11:26 UTC 2026
+git: a083307
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+runtime max cc: 12.1
+
+== nvidia driver (proc) ==
+NVRM version: NVIDIA UNIX Open Kernel Module for aarch64  580.142  Release Build  (dvs-builder@U22-I3-H10-02-1)  Tue Mar  3 19:08:06 UTC 2026
+
+== modinfo nvidia (summary) ==
+filename:       /lib/modules/6.17.0-1014-nvidia/kernel/nvidia-580-open/nvidia.ko
+version:        580.142
+vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
+```
 
 ### Single-target probe (Spark0, 01:38Z)
 
@@ -112,6 +232,91 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+```
+
+### Single-target probe (Spark0, 10:13Z, `nvcc --list-gpu-code`)
+
+```text
+== local meta ==
+Sun May 10 10:13:26 UTC 2026
+git: 0874be4
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvcc supported gpu arch (capped) ==
+compute_75
+compute_80
+compute_86
+compute_87
+compute_88
+compute_89
+compute_90
+compute_100
+compute_110
+compute_103
+compute_120
+compute_121
+
+== nvcc supported gpu code (capped) ==
+sm_75
+sm_80
+sm_86
+sm_87
+sm_88
+sm_89
+sm_90
+sm_100
+sm_110
+sm_103
+sm_120
+sm_121
+```
+
+### Single-target probe (Spark0, 10:42Z, nvcc arch sanity-check)
+
+```text
+== local meta ==
+Sun May 10 10:42:20 UTC 2026
+git: acad7c2
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== pci link (sysfs, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+path: 000f:00:00.0 000f:01:00.0
+path 000f:00:00.0 current_link_speed: Unknown
+path 000f:00:00.0 current_link_width: 0
+path 000f:00:00.0 max_link_speed: 32.0 GT/s PCIe
+path 000f:00:00.0 max_link_width: 16
+path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 current_link_width: 1
+path 000f:01:00.0 max_link_speed: 2.5 GT/s PCIe
+path 000f:01:00.0 max_link_width: 16
+```
+
+### Single-target probe (Spark0, 11:44Z, runtime PCI bus id cross-check)
+
+```text
+== local meta ==
+Sun May 10 11:44:10 UTC 2026
+git: 1ea8f17
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+cuda driver api version: 13000 (13.0)
+cuda runtime api version: 13000 (13.0)
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 pci bus id: 000F:01:00.0
 ```
 
 ### Single-target probe (Spark0, 14:47Z, runtime max cc + PCIe max warning)
@@ -471,6 +676,14 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+device0 cc: 12.1
+runtime max cc: 12.1
 ```
 
 ```text

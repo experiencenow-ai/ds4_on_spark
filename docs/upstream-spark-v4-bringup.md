@@ -35,13 +35,14 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 ## devid791/dsv4-flash-gb10-runtime (MXFP4 proof-of-life on GB10/GX10)
 
 - Repo: `https://github.com/devid791/dsv4-flash-gb10-runtime`
-- Ref: `refs/heads/main`
+- Ref: `refs/tags/v0.1.0`
 - Commit: `244cb11d3ee3adfd96bd0f95d6a91649af7af45d`
 - License: Apache-2.0 (see upstream `LICENSE`)
 - What it is (from upstream README, summarized):
   - A proof-of-life runtime targeting a single GB10/GX10-class node (sm_121a, 128 GB unified memory) running DeepSeek-V4-Flash end-to-end without sharding/TP/PP.
   - Loads the official **BF16** Hugging Face snapshot and quantizes **routed experts** to **MXFP4** on the fly, then runs a custom C++/CUDA engine via a thin Python wrapper.
   - Focus is staged correctness (forced-token gates + per-layer tensor comparisons) rather than throughput optimization.
+  - Provenance thread (2026-05-05): `https://forums.developer.nvidia.com/t/deepseek-v4-flash-mxfp4-proof-of-life-on-a-single-gb10-gx10/369131`
 - Why we track it:
   - It is the most directly Spark/GB10-targeted “native checkpoint format” bring-up reference with a concrete build + correctness harness.
 - Risk notes:
@@ -53,7 +54,7 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - Ref: `refs/heads/main`
 - Commit: `c2eac5a9b2b457881d69b1164d909e8beab9286e`
 - License: Apache-2.0 (upstream; README also calls out CUTLASS submodule licensing)
-- Base runtime: `sgl-project/sglang` pinned at `8087e07d52eede91414d7c1b9b323c98b1cf2dbf` (see [`docs/upstream-sglang.md`](upstream-sglang.md))
+- Base runtime: `sgl-project/sglang` (see [`docs/upstream-sglang.md`](upstream-sglang.md) for the current pinned commit); upstream README targets `lmsysorg/sglang:deepseek-v4-blackwell` Docker image
 - What it is (from upstream README, summarized):
   - A small CUDA extension + runtime patch for SGLang to provide FlashMLA sparse-decode kernels on Blackwell SM120 GPUs (the upstream image targets SM90/SM100).
 - Why we track it:

@@ -79,6 +79,22 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 - Starting at `layer_id == 2`, the upstream schedule alternates `CSA, HCA, CSA, HCA, ...` and ends on CSA at `layer_id == 42`.
 - MTP blocks are always sliding-only: `compress_ratios[n_layers + mtp_id] == 0`.
 
+### Transformers schedule compatibility (layer_types / mlp_layer_types)
+
+Transformers’ `DeepseekV4Config` exposes a per-layer schedule via string arrays:
+
+- `config.layer_types[i] ∈ {"sliding_attention","compressed_sparse_attention","heavily_compressed_attention"}`
+- `config.mlp_layer_types[i] ∈ {"hash_moe","moe"}`
+
+The official `deepseek-ai/DeepSeek-V4-Flash` `config.json` shipped on HF does not currently include these arrays directly. DS4 therefore treats them as **derived compatibility views** of the pinned upstream contract:
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_main_layer_types` derives `layer_types[]` from `compress_ratios[]` (`0→sliding_attention`, `4→compressed_sparse_attention`, `128→heavily_compressed_attention`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_mtp_layer_types` derives MTP `layer_types[]` from the trailing `compress_ratios[n_layers + mtp_id]` entries (V4 Flash requires these to be `0` → `sliding_attention`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_compress_rates` records the canonical compression-rate mapping used by the Transformers nomenclature (`CSA→4`, `HCA→128`, `sliding→0`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `moe.transformers_mlp_layer_types` derives `mlp_layer_types[]` from `num_hash_layers` (`0..num_hash_layers-1 → hash_moe`, remainder → moe).
+
+Cache note (Transformers naming): non-sliding layers map to cache layer types (`DeepseekV4CSACache` for CSA and `DeepseekV4HCACache` for HCA), while sliding-only layers use sliding KV only.
+
 ## Logical parameter shapes (from `inference/model.py` + configs)
 
 These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below). The machine-readable shape contract is recorded under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_shapes`.
@@ -109,6 +125,11 @@ Per-layer MoE (`layers.{i}.ffn.*`):
   - `w1`: `[moe_inter_dim, hidden_size]`
   - `w2`: `[hidden_size, moe_inter_dim]`
   - `w3`: `[moe_inter_dim, hidden_size]`
+
+MTP (`mtp.{j}.*`):
+
+- MTP blocks are implemented as `MTPBlock(Block)` in `fixtures/model_contract/deepseek_v4_flash/inference/model.py`, so the per-layer tensor shapes under `mtp.{j}.layers.{i}.*` match the trunk `layers.{i}.*` shapes above (machine-recorded in `contract_summary.json` under `tensor_shapes.mtp_per_layer`).
+- MTP adds a small set of extra weights (notably `{e,h}_proj.*` and extra norms / HC head parameters) recorded in `contract_summary.json` under `tensor_shapes.mtp`.
 
 ## Quantization + scale tensors (FP8 trunk, FP4 experts)
 
@@ -458,6 +479,9 @@ Per-layer keys (for `layers.{i}.*`, `i ∈ [0,42]`):
 - MoE gate conditional:
   - Hash layers (`i < 3`): `layers.{i}.ffn.gate.tid2eid` present and `layers.{i}.ffn.gate.bias` absent
   - Score layers (`i >= 3`): `layers.{i}.ffn.gate.bias` present and `layers.{i}.ffn.gate.tid2eid` absent
+  - Gate parameter semantics (from upstream `Gate` in `inference/model.py`):
+    - `ffn.gate.tid2eid`: `int32` lookup table shaped `[vocab_size,n_activated_experts]` that deterministically chooses the top‑k expert IDs per token ID (hash routing).
+    - `ffn.gate.bias`: `float32` vector shaped `[n_routed_experts]` that shifts expert *selection* scores (top‑k) without changing the final routing weights (score routing).
 - Cache compression conditional:
   - `compress_ratio == 0`: no `layers.{i}.attn.compressor.*` and no `layers.{i}.attn.indexer.*`
   - `compress_ratio == 4` (CSA): must include:
@@ -466,6 +490,64 @@ Per-layer keys (for `layers.{i}.*`, `i ∈ [0,42]`):
     - `layers.{i}.attn.indexer.weights_proj.weight`
     - `layers.{i}.attn.indexer.compressor.{ape,norm.weight,wgate.weight,wkv.weight}`
   - `compress_ratio == 128` (HCA): must include `layers.{i}.attn.compressor.{...}` and must **not** include `layers.{i}.attn.indexer.*`
+
+#### Machine-readable required suffix sets (exact tensor names)
+
+The checkpoint key set is large, but the contract includes an **exact** machine-readable “minimum required suffix set” for each namespace in:
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_keys.*`
+
+Top-level required keys (`tensor_keys.required_top_level`):
+
+- `embed.weight`
+- `norm.weight`
+- `head.weight`
+- `hc_head_fn`
+- `hc_head_base`
+- `hc_head_scale`
+
+Per-layer required suffixes (`tensor_keys.required_layer_suffixes`, appended under `layers.{i}.` for all `i ∈ [0,42]`):
+
+- `attn.attn_sink`
+- `attn.wq_a.weight`, `attn.wq_a.scale`
+- `attn.q_norm.weight`
+- `attn.wq_b.weight`, `attn.wq_b.scale`
+- `attn.wkv.weight`, `attn.wkv.scale`
+- `attn.kv_norm.weight`
+- `attn.wo_a.weight`, `attn.wo_a.scale`
+- `attn.wo_b.weight`, `attn.wo_b.scale`
+- `attn_norm.weight`
+- `ffn.gate.weight`
+- `ffn.shared_experts.w1.weight`, `ffn.shared_experts.w1.scale`
+- `ffn.shared_experts.w2.weight`, `ffn.shared_experts.w2.scale`
+- `ffn.shared_experts.w3.weight`, `ffn.shared_experts.w3.scale`
+- `ffn_norm.weight`
+- `hc_attn_fn`, `hc_attn_base`, `hc_attn_scale`
+- `hc_ffn_fn`, `hc_ffn_base`, `hc_ffn_scale`
+
+Expert-key completeness expectation (`contract_summary.json` `tensor_keys.expected_expert_key_count_per_layer`):
+
+- For each layer, there must be `256 experts × 3 linears × 2 tensors (weight+scale) = 1536` expert keys of the form `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` with `eid ∈ [0,255]`.
+
+Cache-compression required suffixes:
+
+- For any compressed layer (`compress_ratio != 0`), the layer must include (`tensor_keys.required_layer_suffixes_compress_ratio_nonzero`):
+  - `attn.compressor.ape`
+  - `attn.compressor.norm.weight`
+  - `attn.compressor.wgate.weight`
+  - `attn.compressor.wkv.weight`
+- For CSA layers (`compress_ratio == 4`), the layer must additionally include (`tensor_keys.required_layer_suffixes_compress_ratio_4`):
+  - `attn.indexer.wq_b.weight`, `attn.indexer.wq_b.scale`
+  - `attn.indexer.weights_proj.weight`
+  - `attn.indexer.compressor.ape`
+  - `attn.indexer.compressor.norm.weight`
+  - `attn.indexer.compressor.wgate.weight`
+  - `attn.indexer.compressor.wkv.weight`
+
+MoE gate conditional keys:
+
+- Hash layers: require `ffn.gate.tid2eid` and forbid `ffn.gate.bias` (`tensor_keys.layer_gate.tid2eid_layer_ids == [0,1,2]`).
+- Score layers: require `ffn.gate.bias` and forbid `ffn.gate.tid2eid` (`tensor_keys.layer_gate.gate_bias_layer_ids == [3..42]`).
 
 MTP block (`mtp.0.*`):
 
@@ -485,13 +567,16 @@ the source-derived contract above remains authoritative.
 
 For each quantized artifact tested, record:
 
-- artifact format (`GGUF`, HF safetensors, or other)
+- artifact format (`GGUF`, HF safetensors, or other) and the inspector `artifact_type` (`gguf.url`, `gguf`, etc.)
 - declared quant (`Q2_K`, `Q3_K_M`, native `F8_E4M3 + MXFP4`, etc.)
 - declared base model and conversion path
 - runtime repo, branch, and commit required to load it
 - whether the runtime claims to preserve native FP8/FP4 scales or has
   re-quantized through another representation
 - tokenizer/chat-template behavior used for the prompt
+- captured quantization metadata from `scripts/model_contract_inspect_quantized_artifact.py`:
+  - `tensor_type_counts` (overall GGUF tensor types present)
+  - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
 
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
@@ -510,7 +595,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
 - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
 - `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
-- The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this under `tensor_type_counts`.
+- The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this in `tensor_type_counts`, and splits expert vs dense types in `tensor_type_profile` (notably `category_type_counts.experts_packed` vs `hints.dense_primary`).
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
 

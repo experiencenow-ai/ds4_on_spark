@@ -15,6 +15,7 @@ This is intentionally narrow:
 - MTP sidecar GGUF (DS4-tuned 32‑tensor table): e.g. `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`.
   - Use `scripts/model_contract_probe_mtp_sidecar.py` first; it must return `ok=true`.
   - Optional llama.cpp-side sanity check (local file): apply `docs/llamacpp-mtp-sidecar-probe.md` and run `llama-ds4-mtp-sidecar-probe --json` (must also return `ok=true`).
+    - Optional stronger loader gate: add `--load-weights` to ensure the sidecar tensor blob actually loads and all 32 tensors have non-null payload pointers.
 
 ## Required probe output
 
@@ -43,6 +44,40 @@ After capturing the JSON, validate its shape (and optionally cross-check `mtp_pa
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json --sidecar-probe-json /path/to/mtp_sidecar_probe.json
 ```
+
+## Spark runner (once available)
+
+When the Spark/CUDA llama.cpp fork has a one-token probe command available, run it on Spark and record artifacts using:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Optional convenience: instead of embedding the command string inside `REMOTE_MTP_ONE_TOKEN_ENV`, you can set it as a separate local env var and the runner will forward it as `MTP_ONE_TOKEN_CMD=...` unless already present in `REMOTE_MTP_ONE_TOKEN_ENV`:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1" \
+REMOTE_MTP_ONE_TOKEN_CMD="..." \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Optional cross-check against a previously captured sidecar probe JSON (remote path on Spark):
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...' SIDE_CAR_PROBE_JSON=/abs/path/to/mtp_sidecar_probe.json" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Optional convenience: set the remote sidecar-probe JSON path separately; the runner forwards it as `SIDE_CAR_PROBE_JSON=...` unless already present in `REMOTE_MTP_ONE_TOKEN_ENV`:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
+REMOTE_SIDE_CAR_PROBE_JSON="/abs/path/to/mtp_sidecar_probe.json" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+This runner does not fetch/build. It only runs the provided command, validates the emitted JSON, and saves the report under `/private/tmp`.
 
 ## Semantics (reference)
 

@@ -16,7 +16,9 @@ It validates:
 - the exact expected 32 tensor names under `mtp.0.*` (same list as the pinned `antirez/ds4` binder; see `docs/mtp-ds4-reference.md`)
 - light self-consistency checks derived only from the tensor shapes
 
-It does **not** require loading the trunk GGUF and does **not** read tensor payloads into RAM (uses `gguf_init_from_file(..., no_alloc=true)` with a meta-only ggml context).
+When `--json` is used, the probe also emits a per-tensor `tensors[]` table (name, presence, ggml type code, dims, byte size, payload offset, and `has_data` when `--load-weights` is enabled). This is intended as a stable “binder inventory” for downstream loader work.
+
+It does **not** require loading the trunk GGUF. By default it does **not** read tensor payloads into RAM (uses `gguf_init_from_file(..., no_alloc=true)` with a meta-only ggml context). When `--payload-sample-bytes N` is set, it reads only `N` bytes per tensor payload (via file seeks) and emits `fnv1a64` sample hashes.
 
 ## Patch
 
@@ -41,7 +43,17 @@ cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
 
 ```bash
 ./build/bin/llama-ds4-mtp-sidecar-probe --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json
+
+# optional stronger check: sample 64 bytes per tensor payload
+./build/bin/llama-ds4-mtp-sidecar-probe --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --payload-sample-bytes 64
+
+# optional stronger check: load full sidecar weights blob and validate all 32 tensors have non-null data pointers
+./build/bin/llama-ds4-mtp-sidecar-probe --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --load-weights
+
+If `--load-weights` is reported as an unknown argument, update the ds4_on_spark patch file (`docs/llamacpp-patches/...-mtp-sidecar-probe.patch`) and rebuild the probe.
 ```
+
+Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1` and `PAYLOAD_SAMPLE_BYTES=N`.
 
 Expected success signal:
 

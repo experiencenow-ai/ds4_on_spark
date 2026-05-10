@@ -10,8 +10,10 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0; observed `V13.0.88` on 2026-05-10)
 - `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers)
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints the same one-line limits schema without shipping `tools/cuda_probe/` (useful when repo transfer is blocked)
+- `scripts/cuda_probe_nvcc_minimal_spark0.sh` also includes a best-effort compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr` (CUTLASS/DeepGEMM-style nvcc flags) for `sm_121` (and `compute_121` when advertised)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
 - For a small “kernel plumbing” bring-up gate set (no cuBLASLt), run `./scripts/cuda_probe_kernel_tiny_spark0.sh` from the Mac; it validates C++20 + template flags, inline PTX (`ldmatrix`), pipeline/bulk async copy plumbing, TMA tensor-map encode + `cp.async.bulk.tensor`, and NVRTC/nvJitLink JIT paths for `sm_121`.
+- `./scripts/cuda_probe_capability_spark0.sh` accepts `WITH_KERNEL_TINY=1` to include the same kernel-plumbing gates as part of the one-command capability sweep.
 - CUDA 13 developer tooling (`cuobjdump --dump-sass`, `nvdisasm`) can decode `sm_121` binaries on Spark0 (validated via `scripts/cuda_probe_disasm_spark0.sh`: 2026-05-09)
 - `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe` shows that an `sm_120`-compiled kernel runs successfully on GB10 (`sm_121`) (observed `__CUDA_ARCH__=1200` on device `cc=12.1`)
@@ -80,6 +82,31 @@ Next probe step:
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
 - If using cluster annotations (`__cluster_dims__`) in any CUTLASS-style code, verify whether `nvcc -arch=sm_121` accepts it on Spark0; `./scripts/cuda_probe_compile_only_spark0.sh` prints a `cluster_dims_attr_compile` result (observed `OK` on 2026-05-09 with CUDA 13.0 `V13.0.88`).
 - Note: this repo’s pinned DeepGEMM upstream uses a CUTLASS submodule; we intentionally do not auto-init submodules in the probe loop (see `docs/upstream-deepgemm.md`), so a CUTLASS compile/run probe requires an explicit submodule init (extra downloads).
+
+## CUTLASS
+
+Implication:
+
+- The “kernel plumbing” probe set (`./scripts/cuda_probe_kernel_tiny_spark0.sh`) already covers many CUTLASS prerequisites on GB10: C++20 compilation, common nvcc template flags, inline PTX (`ldmatrix.sync`), async copy plumbing (pipeline + CCCL `cp.async.bulk`), and TMA tensor-map encode + `cp.async.bulk.tensor`.
+- When repo transfer is blocked (or you want a faster gate), `./scripts/cuda_probe_nvcc_minimal_spark0.sh` now includes a compile-only `-std=c++20 --extended-lambda --expt-relaxed-constexpr` check for `sm_121` to catch “toolchain can’t compile CUTLASS-style code” failures early.
+- A real CUTLASS bring-up still needs a minimal CUTLASS compile+run probe, because CUTLASS may hard-gate unknown arch tags (`sm_121`) or require a small arch mapping patch even when the toolchain is otherwise healthy.
+
+Next probe step:
+
+- Build and run the smallest CUTLASS example on Spark0, capture the exact failure mode (arch mapping vs. missing intrinsics vs. build system assumptions), then decide whether to patch arch detection or temporarily target `sm_120` as a compatibility bridge (see `tools/cuda_probe/bin/cuda_sm120_compat_probe`).
+
+## cuBLASLt
+
+Implication:
+
+- cuBLASLt is the “fast path” fallback when DeepGEMM/CUTLASS kernels are blocked on arch gating, but early probe results suggest that not all low-precision modes are ready on GB10 yet.
+- Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88`): `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke` returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection (treat as informative; likely needs toolkit/driver maturity or different API surface).
+- Observed on Spark0 (2026-05-09 / `cublasLtGetVersion=130101`): `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke` fails to find any supported algo even after trying small square problems and multiple workspace sizes.
+- Observed on Spark0 (2026-05-09): `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` (E4M3) does find a supported path and returns sensible results (`max_abs_err_vs_one=0`).
+
+Next probe step:
+
+- Re-run the cuBLASLt smoke probes on Spark0 after any driver/toolkit updates to track whether FP4 / FP8 E5M2 support changes, and treat “support matrix drift” as an input into whether DeepGEMM should prioritize custom kernels vs. cuBLASLt fallbacks.
 
 ## Build Portability Notes (CUDA 13)
 

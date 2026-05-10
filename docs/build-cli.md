@@ -61,6 +61,18 @@ Expected stdout includes:
 log_ring: ds4_cli smoke ctx
 ```
 
+Smoke-test CUDA wrapper status (prints build support and config state):
+
+```bash
+./build_cli/ds4_cli --smoke-cuda
+```
+
+On Linux builds with CUDA enabled, you can also probe a device by setting `enable_cuda=1`:
+
+```bash
+./build_cli/ds4_cli --cuda --smoke-cuda
+```
+
 You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
 
 ```bash
@@ -73,5 +85,6 @@ When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests t
 
 - `ds4_cli --version`
 - `ds4_cli --dump-config`
+- `ds4_cli --smoke-cuda`
 - `ds4_cli --config <tmpfile> --dump-config`
 - `ds4_cli --config - --dump-config` (stdin)

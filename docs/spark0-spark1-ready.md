@@ -81,13 +81,15 @@ Notes:
 - `nvidia-smi` driver + CUDA version.
 - `nvidia-smi` version banner (`nvidia-smi --version` / `nvidia-smi -V`) for NVML/driver/CUDA summary.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
+- `nvidia-smi -q` fabric/c2c hints when present (`Peer Type`, `GPU C2C Mode`), since these help interpret the GB10 "Gen1 x1" PCIe link fields.
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
 - When available, also capture the optional `nvidia-smi --query-gpu=pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,...` output printed by the probe; these fields tend to line up with `nvidia-smi -q` `GPU Link Info` (`Device Max`/`Host Max`) and help interpret surprising `pcie.link.gen.max` values.
 - PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/{current,max}_link_{speed,width}` + PCI IDs via `{vendor,device,subsystem_*}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
-- CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available).
+- CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available). The runtime probe also prints `runtime max cc: ...` as a quick cross-check on multi-GPU hosts.
 - `nvcc` path and version (toolkit version).
 - `/usr/local/cuda/version.json` (when present) to capture toolkit component versions.
 - `nvcc --list-gpu-arch` output (capped) to confirm supported SM targets (useful when `NVCC_ARCH=...` overrides fail).
+- `nvcc --list-gpu-code` output (capped) to confirm supported `sm_###` code targets (useful when mapping `compute_cap` -> `NVCC_ARCH=sm_...`).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - Any `warning:` line emitted by the probe when `nvcc release` and `cuda.h` disagree.
 - Any `note:` line emitted by the probe when `nvidia-smi` CUDA major differs from the `nvcc` toolkit major (driver vs toolkit).

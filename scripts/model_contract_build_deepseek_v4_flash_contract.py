@@ -157,6 +157,47 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"hc_ffn_scale": [3],
 			},
 		},
+		"mtp_per_layer": {
+			"note": "MTP blocks are implemented as MTPBlock(Block) in inference/model.py; mtp.{j}.layers.{i}.* tensors follow the same logical shapes as trunk layers.{i}.*.",
+			"per_layer": {
+				"attn": {
+					"attn_sink": [n_heads],
+					"wq_a.weight": [q_lora_rank, dim],
+					"q_norm.weight": [q_lora_rank],
+					"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+					"wkv.weight": [head_dim, dim],
+					"kv_norm.weight": [head_dim],
+					"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+					"wo_b.weight": [dim, o_groups * o_lora_rank],
+					"attn_norm.weight": [dim],
+				},
+				"compressor": {
+					"note": "MTP compress_ratios are required to be 0 (sliding-only), so compressor/indexer tensors should be absent under mtp.{j}.layers.{i}.attn.*.",
+				},
+				"moe": {
+					"gate.weight": [n_routed_experts, dim],
+					"gate.tid2eid": [vocab_size, n_activated_experts],
+					"gate.bias": [n_routed_experts],
+					"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+					"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+					"shared_experts.w1.weight": [moe_inter_dim, dim],
+					"shared_experts.w2.weight": [dim, moe_inter_dim],
+					"shared_experts.w3.weight": [moe_inter_dim, dim],
+				},
+				"hyper_connections": {
+					"hc_mult": hc_mult,
+					"hc_dim": hc_dim,
+					"mix_hc": mix_hc,
+					"hc_attn_fn": [mix_hc, hc_dim],
+					"hc_attn_base": [mix_hc],
+					"hc_attn_scale": [3],
+					"hc_ffn_fn": [mix_hc, hc_dim],
+					"hc_ffn_base": [mix_hc],
+					"hc_ffn_scale": [3],
+				},
+			},
+		},
 		"mla": {
 			"rope_head_dim": rope_head_dim,
 			"nope_head_dim": nope_head_dim,
@@ -375,6 +416,14 @@ def layer_type_from_ratio(ratio: int) -> str:
 	if ratio == 4:
 		return "csa"
 	return "hca"
+
+def transformers_layer_type_from_ratio(ratio: int) -> str:
+	# Official Transformers deepseek_v4 naming for `config.layer_types[i]`.
+	if ratio == 0:
+		return "sliding_attention"
+	if ratio == 4:
+		return "compressed_sparse_attention"
+	return "heavily_compressed_attention"
 
 def find_first_line_containing(text: str, needle: str) -> Optional[str]:
 	for raw in text.splitlines():
@@ -897,7 +946,10 @@ def build_contract() -> dict:
 	n_mtp_layers = int(cfg.get("num_nextn_predict_layers", 0))
 	mtp_ratios = compress_ratios[n_layers:]
 	layer_types = [layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
+	transformers_layer_types = [transformers_layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
+	transformers_mtp_layer_types = [transformers_layer_type_from_ratio(int(r)) for r in mtp_ratios]
 	type_counts = {t: layer_types.count(t) for t in ("sliding", "csa", "hca")}
+	transformers_mlp_layer_types = [("hash_moe" if i < int(cfg["num_hash_layers"]) else "moe") for i in range(n_layers)]
 
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
@@ -1015,8 +1067,15 @@ def build_contract() -> dict:
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
 			"main_layer_types": layer_types,
+			"transformers_main_layer_types": transformers_layer_types,
+			"transformers_compress_rates": {
+				"compressed_sparse_attention": 4,
+				"heavily_compressed_attention": 128,
+				"sliding_attention": 0,
+			},
 			"type_counts": type_counts,
 			"mtp_compress_ratios": [int(r) for r in mtp_ratios],
+			"transformers_mtp_layer_types": transformers_mtp_layer_types,
 		},
 		"cache": {
 			"window_size": window_size,
@@ -1044,7 +1103,7 @@ def build_contract() -> dict:
 				"compress_indices": {"csa": "Indexer(...,offset=window_size)", "hca": "get_compress_topk_idxs(...,offset=window_size)"},
 			},
 		},
-			"moe": {
+		"moe": {
 			"n_routed_experts": int(cfg["n_routed_experts"]),
 			"n_shared_experts": int(cfg["n_shared_experts"]),
 			"n_activated_experts": int(cfg["num_experts_per_tok"]),
@@ -1052,6 +1111,7 @@ def build_contract() -> dict:
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
 			"n_hash_layers": int(cfg["num_hash_layers"]),
+			"transformers_mlp_layer_types": transformers_mlp_layer_types,
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
 			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
 			"semantics": moe_sem,
@@ -1154,6 +1214,10 @@ def main() -> int:
 
 	contract = build_contract()
 	out_path: Path = args.out
+	if not out_path.is_absolute():
+		out_path = (ROOT / out_path).resolve()
+	else:
+		out_path = out_path.resolve()
 
 	if args.check and out_path.exists():
 		prev = json.loads(out_path.read_text(encoding="utf-8"))
@@ -1164,7 +1228,11 @@ def main() -> int:
 		return 0
 
 	dump_json(out_path, contract)
-	print(f"OK: wrote {out_path.relative_to(ROOT)}")
+	try:
+		display = str(out_path.relative_to(ROOT))
+	except ValueError:
+		display = str(out_path)
+	print(f"OK: wrote {display}")
 	return 0
 
 

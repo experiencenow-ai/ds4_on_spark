@@ -223,6 +223,47 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_stage_skip_totals_count_attempts(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                layers=(scheduler_sim.LayerRoute(candidates=(0,)), scheduler_sim.LayerRoute(candidates=(0,))),
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                layers=(scheduler_sim.LayerRoute(candidates=(0,)), scheduler_sim.LayerRoute(candidates=(0,))),
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.stages_total, 4)
+        self.assertEqual(m.stages_total_batch, 4)
+        self.assertEqual(m.stages_total_verify, 4)
+        self.assertEqual(m.skipped_stages_backpressure, 2)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(float(s["skipped_stage_frac"]), 0.5, places=6)
+        self.assertAlmostEqual(float(s["skipped_stage_frac_verify"]), 0.5, places=6)
+
     def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
@@ -2171,9 +2212,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2254,9 +2295,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2393,6 +2434,53 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLessEqual(m.starved_tasks_mtp_draft, m.tasks_started_mtp_draft)
         self.assertLessEqual(m.starved_tasks_mtp_verify, m.tasks_started_mtp_verify)
 
+    def test_mtp_accounting_does_not_require_verify_layer0_admission(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                layers=(
+                    scheduler_sim.LayerRoute(candidates=(0,), cost_scale=1.0),
+                    scheduler_sim.LayerRoute(candidates=(1,), cost_scale=1e-9),
+                ),
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                layers=(
+                    scheduler_sim.LayerRoute(candidates=(0,), cost_scale=1.0),
+                    scheduler_sim.LayerRoute(candidates=(1,), cost_scale=1e-9),
+                ),
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1000.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=1,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=1.0,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.mtp_accept_len_per_step, [1, 1])
+        self.assertEqual(m.mtp_output_tokens, 2)
+
     def test_output_token_latency_matches_token_latency_when_mtp_disabled(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
@@ -2404,9 +2492,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2439,9 +2527,9 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         cfg = scheduler_sim.SimConfig(
             num_experts=1,
-            expert_parallelism=1,
+            expert_parallelism=16,
             expert_queue_max=10_000,
-            service_ms=1.0,
+            service_ms=0.01,
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
@@ -2475,6 +2563,40 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(steps_out, (1000.0 / 3.0))
         with self.assertRaises(ValueError):
             scheduler_sim.arrival_rate_steps_tps(1000.0, "bad_units", 2, 1.0, 1.0)
+
+    def test_trace_arrival_units_output_tokens_scales_trace_for_mtp_variants(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i),
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                k=1,
+            )
+            for i in range(10)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=16,
+            expert_queue_max=10_000,
+            service_ms=0.01,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+        variants = [("mtp_on", {"mtp_draft_len": 2, "mtp_accept_prob": 1.0, "mtp_accept_decay": 1.0})]
+        out = scheduler_sim.compare_simulation_summaries(cfg, trace, variants, arrival_units="output_tokens")
+        base_tps = float(out["baseline"]["summary"]["output_token_throughput_tps"])  # type: ignore[index]
+        mtp_tps = float(out["variants"]["mtp_on"]["summary"]["output_token_throughput_tps"])  # type: ignore[index]
+        self.assertAlmostEqual(base_tps, mtp_tps, delta=2.0)
 
     def test_work_units_and_service_slot_ms_track_mtp_efficiency(self) -> None:
         trace_mtp = [
@@ -2584,6 +2706,28 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["candidates"], [0])
 
+    def test_trace_extract_default_cls_fills_missing_cls(self) -> None:
+        obj = {"t_ms": 0.0, "candidates": [0]}
+        self.assertIsNone(trace_extract.extract_route_record(obj))
+        rec = trace_extract.extract_route_record(obj, default_cls="batch")
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["cls"], "batch")
+
+    def test_trace_load_jsonl_runtime_default_cls_allows_missing_cls(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "candidates": [0]}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, input_format="runtime", non_route_policy="error", default_cls="interactive")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_trace_extract_non_json_line_skip_ignores(self) -> None:
         out = trace_extract.extract_jsonl_lines(
             [
@@ -2612,6 +2756,167 @@ class SchedulerSimTest(unittest.TestCase):
                 route_type="moe_route",
                 non_route_policy="error",
             )
+
+    def test_recommendations_quick_expert_queue_reserve_prevents_interactive_drops(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["expert_queue_reserve"]
+        base = scenario["results"]["baseline"]["summary"]
+        no_reserve = scenario["results"]["variants"]["no_reserve"]["summary"]
+        self.assertLessEqual(float(base["drop_frac_tokens_interactive"]), 1e-9)
+        self.assertGreater(float(no_reserve["drop_frac_tokens_interactive"]), 0.0)
+
+    def test_recommendations_quick_mtp_sweep_has_breakeven(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        sweep = out["scenarios"]["mtp_efficiency_sweep"]["sweep"]
+        self.assertGreaterEqual(len(sweep), 3)
+        worst = float(sweep[0]["service_slot_ms_per_output_token_ratio_vs_no_mtp"])
+        best = float(sweep[-1]["service_slot_ms_per_output_token_ratio_vs_no_mtp"])
+        self.assertGreaterEqual(worst, 1.0)
+        self.assertLess(best, 1.0)
+
+    def test_recommendations_quick_adaptive_k_batch_avoids_fixed_batch_k2_drop_spike(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["adaptive_k_batch"]
+        base = scenario["results"]["baseline"]["summary"]
+        fixed_hi = scenario["results"]["variants"]["batch_k_fixed_2"]["summary"]
+        base_drop = float(base["drop_frac_tokens"])
+        fixed_hi_drop = float(fixed_hi["drop_frac_tokens"])
+        self.assertLess(base_drop, fixed_hi_drop)
+        self.assertGreaterEqual(fixed_hi_drop, (base_drop + 0.05))
+
+    def test_recommendations_quick_mtp_congestion_sweep_stop_at_reject_reduces_overhead_at_zero_accept(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        sweep = out["scenarios"]["mtp_congestion_sweep"]["sweep"]
+        row0 = next(r for r in sweep if float(r["accept_prob"]) == 0.0)
+        full = row0["mtp_full"]
+        stop = row0["mtp_stop_at_reject"]
+        self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
+
+    def test_trace_sweep_runs_on_synthetic_trace(self) -> None:
+        from sim.scheduler import scheduler_sim
+        from sim.scheduler import trace_sweep
+
+        trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+            num_tokens=400,
+            num_experts=8,
+            num_candidates=8,
+            interactive_arrival_rate_tps=200.0,
+            batch_arrival_rate_tps=200.0,
+            interactive_burst_prob=0.0,
+            interactive_burst_scale=1.0,
+            batch_burst_prob=0.0,
+            batch_burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=trace_cfg.num_experts,
+            expert_parallelism=1,
+            expert_queue_max=64,
+            service_ms=1.0,
+            starvation_ms=100.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=4,
+                k_min_batch=1,
+                k_max_batch=2,
+                q_low=8,
+                q_high=48,
+            ),
+            sim_seed=123,
+        )
+
+        out = trace_sweep.run_trace_sweeps(trace, base_cfg, trace_meta={"note": "unit_test"}, max_tokens=200)
+        scenarios = out.get("scenarios", {})
+        self.assertIn("k_signal_policy", scenarios)
+        self.assertIn("adaptive_k_policy", scenarios)
+        self.assertIn("starvation_knobs", scenarios)
+        self.assertIn("expert_queue_max_sweep", scenarios)
+        self.assertIn("expert_queue_reserve_sweep", scenarios)
+        self.assertIn("expert_batching_sweep", scenarios)
+        self.assertNotIn("mtp_attempt_policy", scenarios)
+
+        ksig = scenarios["k_signal_policy"]["results"]
+        self.assertIn("baseline", ksig)
+        self.assertIn("variants", ksig)
+        self.assertIn("k_signal_global", ksig["variants"])
+
+        adaptive = scenarios["adaptive_k_policy"]["results"]["variants"]
+        self.assertIn("k_fixed_min", adaptive)
+        self.assertIn("k_fixed_max", adaptive)
+
+        reserve = scenarios["expert_queue_reserve_sweep"]["results"]["variants"]
+        self.assertIn("reserve_0", reserve)
+
+        qmax = scenarios["expert_queue_max_sweep"]["results"]["variants"]
+        self.assertIn("queue_max_32", qmax)
+        self.assertIn("queue_max_128", qmax)
+
+        summary = out.get("trace_summary")
+        self.assertIsInstance(summary, dict)
+        self.assertIn("tokens", summary)
+
+    def test_trace_sweep_includes_mtp_attempt_policy_when_enabled(self) -> None:
+        from sim.scheduler import scheduler_sim
+        from sim.scheduler import trace_sweep
+
+        trace_cfg = scheduler_sim.TraceConfig(
+            num_tokens=250,
+            num_experts=8,
+            num_candidates=8,
+            interactive_prob=0.5,
+            arrival_rate_tps=200.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        trace = scheduler_sim.generate_synthetic_trace(trace_cfg)
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=trace_cfg.num_experts,
+            expert_parallelism=1,
+            expert_queue_max=64,
+            service_ms=1.0,
+            starvation_ms=100.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=0.4,
+            mtp_accept_decay=0.8,
+            mtp_draft_cost_scale=0.25,
+        )
+        out = trace_sweep.run_trace_sweeps(trace, base_cfg)
+        self.assertIn("mtp_attempt_policy", out.get("scenarios", {}))
+
+    def test_recommendations_quick_expert_batching_reduces_service_per_output_token(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["expert_batching"]
+        base = scenario["results"]["baseline"]["summary"]
+        b4 = scenario["results"]["variants"]["batch_max_batch_4"]["summary"]
+        self.assertLess(float(b4["service_slot_ms_per_output_token"]), float(base["service_slot_ms_per_output_token"]))
+        self.assertLess(float(b4["drop_frac_tokens"]), float(base["drop_frac_tokens"]))
 
 
 if __name__ == "__main__":

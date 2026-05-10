@@ -14,3 +14,7 @@ echo "== cuda probe capability: tiny build+run =="
 echo "== cuda probe capability: tiny compile-only (variants + PTX embed probes) =="
 "$repo_root/scripts/cuda_probe_compile_only_tiny_spark0.sh" "$target"
 
+if [ "${WITH_KERNEL_TINY:-0}" = "1" ]; then
+	echo "== cuda probe capability: kernel-tiny gates (CUTLASS/DeepGEMM plumbing) =="
+	"$repo_root/scripts/cuda_probe_kernel_tiny_spark0.sh" "$target"
+fi

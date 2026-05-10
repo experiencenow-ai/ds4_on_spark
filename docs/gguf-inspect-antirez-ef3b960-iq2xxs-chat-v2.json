@@ -88,6 +88,63 @@
     "Q2_K": 43,
     "Q8_0": 345
   },
+  "tensor_type_profile": {
+    "category_type_counts": {
+      "attn": {
+        "F16": 144,
+        "F32": 213,
+        "Q8_0": 215
+      },
+      "embed": {
+        "F16": 1
+      },
+      "experts_packed": {
+        "IQ2_XXS": 86,
+        "Q2_K": 43
+      },
+      "ffn_gate": {
+        "F16": 43,
+        "I32": 3
+      },
+      "ffn_other": {
+        "F32": 43
+      },
+      "hc": {
+        "F16": 86,
+        "F32": 172
+      },
+      "head": {
+        "Q8_0": 1
+      },
+      "norm": {
+        "F32": 22
+      },
+      "other": {
+        "F16": 85,
+        "F32": 42
+      },
+      "shared_expert_packed": {
+        "Q8_0": 129
+      }
+    },
+    "checked": true,
+    "general_architecture": "deepseek4",
+    "hints": {
+      "dense_primary": {
+        "count": 492,
+        "type": "F32"
+      },
+      "expert_primary": {
+        "count": 86,
+        "type": "IQ2_XXS"
+      },
+      "shared_expert_primary": {
+        "count": 129,
+        "type": "Q8_0"
+      }
+    },
+    "namespace_guess": "llama.cpp"
+  },
   "topology_contract": {
     "block_count": 43,
     "block_count_ok": true,

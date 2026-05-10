@@ -66,9 +66,16 @@ offset draft overhead for realistic accept rates.
 Tip: for synthetic traces, `--arrival-units output_tokens` keeps output-token
 demand fixed while varying MTP accept rates.
 
+Tip: for trace replay, `--arrival-units output_tokens` scales trace arrival deltas by the expected/observed MTP accept length per run, so MTP comparisons hold output-token demand roughly constant (use this for non-MTP traces where each record is one output token).
+
 Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
 
 Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
+
+Synthetic recommendations (reservation + MTP breakeven) are tracked in:
+
+- `docs/scheduler-simulator-recommendations.md`
+- `docs/scheduler-simulator-recommendations-2026-05-10.json`
 
 ## Phase 1: Real Router Trace Replay
 
@@ -84,6 +91,18 @@ For concise loop output, use `--summary-json`:
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
+```
+
+To run a small set of trace-backed go/no-go sweeps (expert queue max, reservation, k-signal policy, starvation knobs, expert batching, and optionally MTP attempt policy), use:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
+```
+
+If the runtime trace does not tag `cls`, force a default for replay:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
 ```
 
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
@@ -189,9 +208,11 @@ Initial scope:
 
 - confirm the quantized artifact includes usable MTP weights or document why it
   does not
-  - As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
+  - As of 2026-05-10, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
+  - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
 - expose draft logits/tokens from the runtime or a sidecar path
 - when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
+  - Spark-only runner (local sidecar file already staged; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh`
 - recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing

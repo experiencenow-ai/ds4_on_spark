@@ -140,7 +140,13 @@ if [ -d "${UPSTREAM_DIR}/deepseek_v4_flash_hf" ]; then
 	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_hf/config.json" "DeepSeek-V4-Flash config.json present" || true
 	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_hf/tokenizer.json" "DeepSeek-V4-Flash tokenizer.json present" || true
 	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_hf/LICENSE" "DeepSeek-V4-Flash LICENSE present" || true
-	need_pat "${UPSTREAM_DIR}/deepseek_v4_flash_hf/config.json" "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp4\"" "DeepSeek-V4-Flash config expert_dtype=fp4" || true
+	if rg -n "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp4\"" "${UPSTREAM_DIR}/deepseek_v4_flash_hf/config.json" >/dev/null 2>&1; then
+		ok "DeepSeek-V4-Flash config expert_dtype=fp4 (config.json)"
+	elif [ -f "${UPSTREAM_DIR}/deepseek_v4_flash_hf/inference/config.json" ] && rg -n "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp4\"" "${UPSTREAM_DIR}/deepseek_v4_flash_hf/inference/config.json" >/dev/null 2>&1; then
+		ok "DeepSeek-V4-Flash config expert_dtype=fp4 (inference/config.json)"
+	else
+		miss "DeepSeek-V4-Flash config expert_dtype=fp4 (config.json or inference/config.json)"
+	fi
 	need_lfs_pointer "${UPSTREAM_DIR}/deepseek_v4_flash_hf/model-00002-of-00046.safetensors" "DeepSeek-V4-Flash weights are LFS pointers (no download)" || true
 else
 	skip "DeepSeek-V4-Flash HF checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
@@ -151,7 +157,13 @@ if [ -d "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf" ]; then
 	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/config.json" "DeepSeek-V4-Flash-Base config.json present" || true
 	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/tokenizer.json" "DeepSeek-V4-Flash-Base tokenizer.json present" || true
 	need_file "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/LICENSE" "DeepSeek-V4-Flash-Base LICENSE present" || true
-	need_pat "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/config.json" "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp8\"" "DeepSeek-V4-Flash-Base config expert_dtype=fp8" || true
+	if rg -n "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp8\"" "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/config.json" >/dev/null 2>&1; then
+		ok "DeepSeek-V4-Flash-Base config expert_dtype=fp8 (config.json)"
+	elif [ -f "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/inference/config.json" ] && rg -n "\"expert_dtype\"[[:space:]]*:[[:space:]]*\"fp8\"" "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/inference/config.json" >/dev/null 2>&1; then
+		ok "DeepSeek-V4-Flash-Base config expert_dtype=fp8 (inference/config.json)"
+	else
+		miss "DeepSeek-V4-Flash-Base config expert_dtype=fp8 (config.json or inference/config.json)"
+	fi
 	need_lfs_pointer "${UPSTREAM_DIR}/deepseek_v4_flash_base_hf/model-00002-of-00046.safetensors" "DeepSeek-V4-Flash-Base weights are LFS pointers (no download)" || true
 else
 	skip "DeepSeek-V4-Flash-Base HF checkout missing; run: ./scripts/upstream_feature_probe.sh --fetch"
