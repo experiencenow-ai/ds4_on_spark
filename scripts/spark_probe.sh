@@ -617,7 +617,7 @@ if [ -r /usr/local/cuda/version.json ]; then
 		echo "== cuda version.json (capped) =="
 		cat /usr/local/cuda/version.json 2>/dev/null | head -n 80 || true
 	else
-		cuda_json_ver="$(sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([0-9.]+)".*/\\1/p' /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
+		cuda_json_ver="$(sed -nE "s/^[[:space:]]*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9.]+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
 		if [ "$cuda_json_ver" != "" ]; then
 			echo
 			echo "== cuda version.json (summary) =="
