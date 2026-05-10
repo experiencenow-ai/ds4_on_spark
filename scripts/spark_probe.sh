@@ -166,6 +166,11 @@ echo "== memory =="
 free -h || true
 echo
 echo "== toolchain =="
+for tool in gcc g++ clang cmake ninja make python3 ldd; do
+	if command -v "$tool" >/dev/null 2>&1; then
+		echo "$tool path: $(command -v "$tool")"
+	fi
+done
 command -v gcc >/dev/null 2>&1 && gcc --version | head -n 1 || true
 command -v g++ >/dev/null 2>&1 && g++ --version | head -n 1 || true
 command -v clang >/dev/null 2>&1 && clang --version | head -n 1 || true
@@ -173,6 +178,7 @@ command -v cmake >/dev/null 2>&1 && cmake --version | head -n 1 || true
 command -v ninja >/dev/null 2>&1 && ninja --version || true
 command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
 command -v python3 >/dev/null 2>&1 && python3 --version || true
+command -v ldd >/dev/null 2>&1 && ldd --version 2>/dev/null | head -n 1 || true
 echo
 echo "== packages (cuda/nvidia, dpkg, capped) =="
 if command -v dpkg-query >/dev/null 2>&1; then
