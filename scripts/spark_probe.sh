@@ -545,14 +545,23 @@ if [ "$nvcc_bin" != "" ]; then
 	echo
 	echo "== nvcc supported gpu arch (capped) =="
 	if "$nvcc_bin" --list-gpu-arch >/dev/null 2>&1; then
-		"$nvcc_bin" --list-gpu-arch 2>/dev/null | head -n 200 || true
+		nvcc_list_arch="$("$nvcc_bin" --list-gpu-arch 2>/dev/null | head -n 200 || true)"
+		[ "$nvcc_list_arch" != "" ] && printf "%s\n" "$nvcc_list_arch"
 	else
 		echo "nvcc --list-gpu-arch not supported"
 	fi
 	echo
 	echo "== nvcc supported gpu code (capped) =="
 	if "$nvcc_bin" --list-gpu-code >/dev/null 2>&1; then
-		"$nvcc_bin" --list-gpu-code 2>/dev/null | head -n 200 || true
+		nvcc_list_code="$("$nvcc_bin" --list-gpu-code 2>/dev/null | head -n 200 || true)"
+		[ "$nvcc_list_code" != "" ] && printf "%s\n" "$nvcc_list_code"
+		if [ "${nvcc_arch:-}" != "" ] && [ "$nvcc_list_code" != "" ]; then
+			if printf "%s\n" "$nvcc_list_code" | grep -qx "$nvcc_arch"; then
+				:
+			else
+				echo "warning: selected nvcc arch $nvcc_arch not listed in nvcc --list-gpu-code"
+			fi
+		fi
 	else
 		echo "nvcc --list-gpu-code not supported"
 	fi
