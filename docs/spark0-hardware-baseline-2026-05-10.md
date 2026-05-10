@@ -80,11 +80,19 @@ Refreshed again (11:44Z, runtime PCI bus id cross-check):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
 ```
 
+Refreshed again (12:13Z, toolchain paths + glibc banner):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T121337Z_loop_toolpaths_git9ee0e27.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
 - Kernel: `6.17.0-1014-nvidia`
 - Architecture: `aarch64` (little-endian)
+- Toolchain: gcc/g++ 13.3.0, cmake 3.28.3, make 4.3, python 3.12.3
+- glibc (ldd): 2.39
 - CPU: 20 cores total (10x Cortex-X925 + 10x Cortex-A725)
 - Memory: ~119 GiB total RAM (per `free -h`)
 - GPU: `NVIDIA GB10`

@@ -65,6 +65,12 @@ Additional probe run (11:44Z refresh, runtime PCI bus id cross-check):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
 ```
 
+Additional probe run (12:13Z refresh, toolchain paths + glibc banner):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T121337Z_loop_toolpaths_git9ee0e27.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -72,6 +78,24 @@ Notes:
 - PCIe link state is captured from `nvidia-smi -q` and sysfs (`/sys/bus/pci/devices/*/current_link_*`) because `lspci -vv` capability fields may be restricted without elevated privileges.
 
 ## Probe Excerpts (Redacted)
+
+### Toolchain paths (Spark0, 12:13Z)
+
+```text
+== toolchain ==
+gcc path: /usr/bin/gcc
+g++ path: /usr/bin/g++
+cmake path: /usr/bin/cmake
+make path: /usr/bin/make
+python3 path: /usr/bin/python3
+ldd path: /usr/bin/ldd
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+GNU Make 4.3
+Python 3.12.3
+ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39
+```
 
 ### Single-target probe (Spark0, 01:38Z)
 
