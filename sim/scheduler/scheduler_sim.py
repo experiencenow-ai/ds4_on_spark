@@ -995,11 +995,15 @@ def load_trace_jsonl(
     time_mode: str = "t_ms",
     meta_out: Optional[Dict[str, object]] = None,
     non_route_policy: str = "error",
+    input_format: str = "strict",
+    route_type: str = "",
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
     if non_route_policy not in ("error", "skip"):
         raise ValueError("non_route_policy must be 'error' or 'skip'")
+    if input_format not in ("strict", "runtime"):
+        raise ValueError("input_format must be 'strict' or 'runtime'")
     routes: List[TokenRoute] = []
     t_ms_accum = 0.0
     display_path = path if path != "-" else "<stdin>"
@@ -1022,9 +1026,12 @@ def load_trace_jsonl(
                 continue
             if line.startswith("#"):
                 continue
-            obj = json.loads(line)
-            if not isinstance(obj, dict):
+            obj_raw = json.loads(line)
+            if not isinstance(obj_raw, dict):
+                if non_route_policy == "skip":
+                    continue
                 raise ValueError(f"{display_path}:{lineno}: expected JSON object")
+            obj: Dict[str, object] = obj_raw
 
             if "type" in obj and obj["type"] in ("meta", "trace_meta"):
                 payload = obj.get("meta", {k: v for k, v in obj.items() if k != "type"})
@@ -1034,10 +1041,20 @@ def load_trace_jsonl(
                 merge_meta(obj["meta"], lineno)
                 continue
 
-            if non_route_policy == "skip":
-                if "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
-                    if "cls" not in obj or ("candidates" not in obj and "layers" not in obj):
+            if input_format == "runtime":
+                from sim.scheduler import trace_extract
+
+                rec = trace_extract.extract_route_record(obj, route_type=route_type)
+                if rec is None:
+                    if non_route_policy == "skip":
                         continue
+                    raise ValueError(f"{display_path}:{lineno}: could not extract route record (try --trace-non-route skip)")
+                obj = rec
+            else:
+                if non_route_policy == "skip":
+                    if "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                        if "cls" not in obj or ("candidates" not in obj and "layers" not in obj):
+                            continue
 
             if time_mode == "t_ms":
                 if "dt_ms" in obj and obj["dt_ms"] is not None:
@@ -3258,6 +3275,14 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="",
         help="Replay routing trace from JSONL file (use '-' for stdin). Required fields: t_ms/dt_ms, cls, candidates (or layers). Optional: token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size.",
     )
+    p.add_argument(
+        "--trace-input-format",
+        type=str,
+        default="strict",
+        choices=("strict", "runtime"),
+        help="JSONL trace input format: strict expects the simulator contract; runtime applies the trace extractor's alias mapping first (useful for mixed/alias-heavy runtime logs).",
+    )
+    p.add_argument("--trace-route-type", type=str, default="", help="JSONL runtime-format trace: only accept records with obj.type == trace-route-type (empty = accept all).")
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -3417,6 +3442,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 time_mode=args.trace_time_mode.strip().lower(),
                 meta_out=trace_meta,
                 non_route_policy=args.trace_non_route.strip().lower(),
+                input_format=args.trace_input_format.strip().lower(),
+                route_type=args.trace_route_type.strip(),
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
