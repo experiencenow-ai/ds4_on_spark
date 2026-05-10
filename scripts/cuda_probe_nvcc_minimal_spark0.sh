@@ -74,10 +74,16 @@ try_compile_only() {
 	tag=\"\$1\"
 	arch=\"\$2\"
 	echo \"-- compile-only: \${tag} (-arch=\${arch})\"
-	if \$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >/dev/null 2>&1; then
+	err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
 		echo \"\${tag}: OK\"
 	else
-		echo \"\${tag}: FAILED\"
+		echo \"\${tag}: FAILED rc=\${rc}\"
+		head -n 40 \"\${err_path}\" || true
 	fi
 }
 

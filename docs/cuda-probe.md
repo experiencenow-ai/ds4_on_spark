@@ -64,7 +64,7 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
-- Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required)
+- Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
 - Compiles and runs it with `-arch=sm_121` and `-arch=native`
 - Prints runtime device info + the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `native` missing)
