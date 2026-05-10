@@ -1005,6 +1005,110 @@
         4096
       ]
     },
+    "mtp_per_layer": {
+      "note": "MTP blocks are implemented as MTPBlock(Block) in inference/model.py; mtp.{j}.layers.{i}.* tensors follow the same logical shapes as trunk layers.{i}.*.",
+      "per_layer": {
+        "attn": {
+          "attn_norm.weight": [
+            4096
+          ],
+          "attn_sink": [
+            64
+          ],
+          "kv_norm.weight": [
+            512
+          ],
+          "q_norm.weight": [
+            1024
+          ],
+          "wkv.weight": [
+            512,
+            4096
+          ],
+          "wo_a.weight": [
+            8192,
+            4096
+          ],
+          "wo_b.weight": [
+            4096,
+            8192
+          ],
+          "wq_a.weight": [
+            1024,
+            4096
+          ],
+          "wq_b.weight": [
+            32768,
+            1024
+          ]
+        },
+        "compressor": {
+          "note": "MTP compress_ratios are required to be 0 (sliding-only), so compressor/indexer tensors should be absent under mtp.{j}.layers.{i}.attn.*."
+        },
+        "hyper_connections": {
+          "hc_attn_base": [
+            24
+          ],
+          "hc_attn_fn": [
+            24,
+            16384
+          ],
+          "hc_attn_scale": [
+            3
+          ],
+          "hc_dim": 16384,
+          "hc_ffn_base": [
+            24
+          ],
+          "hc_ffn_fn": [
+            24,
+            16384
+          ],
+          "hc_ffn_scale": [
+            3
+          ],
+          "hc_mult": 4,
+          "mix_hc": 24
+        },
+        "moe": {
+          "experts.{eid}.w1.weight": [
+            2048,
+            4096
+          ],
+          "experts.{eid}.w2.weight": [
+            4096,
+            2048
+          ],
+          "experts.{eid}.w3.weight": [
+            2048,
+            4096
+          ],
+          "gate.bias": [
+            256
+          ],
+          "gate.tid2eid": [
+            129280,
+            6
+          ],
+          "gate.weight": [
+            256,
+            4096
+          ],
+          "shared_experts.w1.weight": [
+            2048,
+            4096
+          ],
+          "shared_experts.w2.weight": [
+            4096,
+            2048
+          ],
+          "shared_experts.w3.weight": [
+            2048,
+            4096
+          ]
+        }
+      }
+    },
     "per_layer": {
       "attn": {
         "attn_norm.weight": [
