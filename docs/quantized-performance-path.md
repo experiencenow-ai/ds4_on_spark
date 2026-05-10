@@ -173,7 +173,7 @@ Trace JSONL fields:
 - `scores`: optional per-candidate router scores (when `layers` is present, use `layers[].scores`; top-level `scores` are not valid when `layers` is present)
 - `mtp_accept_len`: optional accept length for MTP replay
 - `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
-- `dflash_accept_len`: optional accept length for a Qwen+DFlash speculative-decoding comparator trace (kept separate from DeepSeek MTP; reported under `dflash.*` in `--summary-json`)
+- `dflash_accept_len`: optional accept length for a Qwen+DFlash speculative-decoding comparator trace (kept separate from DeepSeek MTP). The simulator reports separate comparator metrics (for example: `dflash_output_tokens`, `dflash_mean_accept_len`, `dflash_accept_rate`, `dflash_bonus_tokens`) in `--summary-json` without mixing them into DS4 MTP assumptions.
 - `accepted_dflash` / `rejected_dflash`: optional comparator counters (kept separate from MTP). When `dflash_accept_len` is omitted but `accepted_dflash` is present, canonicalization derives `dflash_accept_len = accepted_dflash + 1`.
 - `cost_scale`: optional per-token cost multiplier
 - `decode_ms`: optional observed per-token decode latency (the simulator reports `trace.decode_ms` and `trace.decode_error_ms` vs modeled latency when present)
