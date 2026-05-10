@@ -191,278 +191,406 @@
   "tensor_count": 32,
   "tensors": [
     {
+      "abs_offset": 79174368,
       "dims": [
         4096,
         512
       ],
       "name": "mtp.0.attn_kv.weight",
+      "next_rel_offset": 81400384,
+      "rel_offset": 79172160,
+      "span_bytes": 2228224,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 81402592,
       "dims": [
         512
       ],
       "name": "mtp.0.attn_kv_a_norm.weight",
+      "next_rel_offset": 81402432,
+      "rel_offset": 81400384,
+      "span_bytes": 2048,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 117056224,
       "dims": [
         4096
       ],
       "name": "mtp.0.attn_norm.weight",
+      "next_rel_offset": 117070400,
+      "rel_offset": 117054016,
+      "span_bytes": 16384,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 43522784,
       "dims": [
         4096,
         8192
       ],
       "name": "mtp.0.attn_output_a.weight",
+      "next_rel_offset": 79172160,
+      "rel_offset": 43520576,
+      "span_bytes": 35651584,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 81404640,
       "dims": [
         8192,
         4096
       ],
       "name": "mtp.0.attn_output_b.weight",
+      "next_rel_offset": 117054016,
+      "rel_offset": 81402432,
+      "span_bytes": 35651584,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 3410656,
       "dims": [
         4096,
         1024
       ],
       "name": "mtp.0.attn_q_a.weight",
+      "next_rel_offset": 7864896,
+      "rel_offset": 3408448,
+      "span_bytes": 4456448,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 43518688,
       "dims": [
         1024
       ],
       "name": "mtp.0.attn_q_a_norm.weight",
+      "next_rel_offset": 43520576,
+      "rel_offset": 43516480,
+      "span_bytes": 4096,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 7867104,
       "dims": [
         1024,
         32768
       ],
       "name": "mtp.0.attn_q_b.weight",
+      "next_rel_offset": 43516480,
+      "rel_offset": 7864896,
+      "span_bytes": 35651584,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 3410400,
       "dims": [
         64
       ],
       "name": "mtp.0.attn_sinks.weight",
+      "next_rel_offset": 3408448,
+      "rel_offset": 3408192,
+      "span_bytes": 256,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 3771901664,
       "dims": [
         4096,
         4096
       ],
       "name": "mtp.0.e_proj.weight",
+      "next_rel_offset": 3789725248,
+      "rel_offset": 3771899456,
+      "span_bytes": 17825792,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 3807553248,
       "dims": [
         4096
       ],
       "name": "mtp.0.enorm.weight",
+      "next_rel_offset": 3807567424,
+      "rel_offset": 3807551040,
+      "span_bytes": 16384,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 3771900640,
       "dims": [
         256
       ],
       "name": "mtp.0.exp_probs_b.bias",
+      "next_rel_offset": 3771899456,
+      "rel_offset": 3771898432,
+      "span_bytes": 1024,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 2559746784,
       "dims": [
         2048,
         4096,
         256
       ],
       "name": "mtp.0.ffn_down_exps.weight",
+      "next_rel_offset": 3767704128,
+      "rel_offset": 2559744576,
+      "span_bytes": 1207959552,
       "type": "Q4_K",
       "type_code": 12
     },
     {
+      "abs_offset": 134914784,
       "dims": [
         2048,
         4096
       ],
       "name": "mtp.0.ffn_down_shexp.weight",
+      "next_rel_offset": 143825472,
+      "rel_offset": 134912576,
+      "span_bytes": 8912896,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 143827680,
       "dims": [
         4096,
         2048,
         256
       ],
       "name": "mtp.0.ffn_gate_exps.weight",
+      "next_rel_offset": 1351785024,
+      "rel_offset": 143825472,
+      "span_bytes": 1207959552,
       "type": "Q4_K",
       "type_code": 12
     },
     {
+      "abs_offset": 3767706336,
       "dims": [
         4096,
         256
       ],
       "name": "mtp.0.ffn_gate_inp.weight",
+      "next_rel_offset": 3771898432,
+      "rel_offset": 3767704128,
+      "span_bytes": 4194304,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 117088992,
       "dims": [
         4096,
         2048
       ],
       "name": "mtp.0.ffn_gate_shexp.weight",
+      "next_rel_offset": 125999680,
+      "rel_offset": 117086784,
+      "span_bytes": 8912896,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 117072608,
       "dims": [
         4096
       ],
       "name": "mtp.0.ffn_norm.weight",
+      "next_rel_offset": 117086784,
+      "rel_offset": 117070400,
+      "span_bytes": 16384,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 1351787232,
       "dims": [
         4096,
         2048,
         256
       ],
       "name": "mtp.0.ffn_up_exps.weight",
+      "next_rel_offset": 2559744576,
+      "rel_offset": 1351785024,
+      "span_bytes": 1207959552,
       "type": "Q4_K",
       "type_code": 12
     },
     {
+      "abs_offset": 126001888,
       "dims": [
         4096,
         2048
       ],
       "name": "mtp.0.ffn_up_shexp.weight",
+      "next_rel_offset": 134912576,
+      "rel_offset": 125999680,
+      "span_bytes": 8912896,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 3789727456,
       "dims": [
         4096,
         4096
       ],
       "name": "mtp.0.h_proj.weight",
+      "next_rel_offset": 3807551040,
+      "rel_offset": 3789725248,
+      "span_bytes": 17825792,
       "type": "Q8_0",
       "type_code": 8
     },
     {
+      "abs_offset": 264416,
       "dims": [
         24
       ],
       "name": "mtp.0.hc_attn_base.weight",
+      "next_rel_offset": 262304,
+      "rel_offset": 262208,
+      "span_bytes": 96,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 264608,
       "dims": [
         16384,
         24
       ],
       "name": "mtp.0.hc_attn_fn.weight",
+      "next_rel_offset": 1835264,
+      "rel_offset": 262400,
+      "span_bytes": 1572864,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 1837472,
       "dims": [
         3
       ],
       "name": "mtp.0.hc_attn_scale.weight",
+      "next_rel_offset": 1835296,
+      "rel_offset": 1835264,
+      "span_bytes": 32,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 264512,
       "dims": [
         24
       ],
       "name": "mtp.0.hc_ffn_base.weight",
+      "next_rel_offset": 262400,
+      "rel_offset": 262304,
+      "span_bytes": 96,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 1837504,
       "dims": [
         16384,
         24
       ],
       "name": "mtp.0.hc_ffn_fn.weight",
+      "next_rel_offset": 3408160,
+      "rel_offset": 1835296,
+      "span_bytes": 1572864,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 3410368,
       "dims": [
         3
       ],
       "name": "mtp.0.hc_ffn_scale.weight",
+      "next_rel_offset": 3408192,
+      "rel_offset": 3408160,
+      "span_bytes": 32,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 2208,
       "dims": [
         4
       ],
       "name": "mtp.0.hc_head_base.weight",
+      "next_rel_offset": 32,
+      "rel_offset": 0,
+      "span_bytes": 32,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 2240,
       "dims": [
         16384,
         4
       ],
       "name": "mtp.0.hc_head_fn.weight",
+      "next_rel_offset": 262176,
+      "rel_offset": 32,
+      "span_bytes": 262144,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 264384,
       "dims": [
         1
       ],
       "name": "mtp.0.hc_head_scale.weight",
+      "next_rel_offset": 262208,
+      "rel_offset": 262176,
+      "span_bytes": 32,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 3807569632,
       "dims": [
         4096
       ],
       "name": "mtp.0.hnorm.weight",
+      "next_rel_offset": 3807583808,
+      "rel_offset": 3807567424,
+      "span_bytes": 16384,
       "type": "F32",
       "type_code": 0
     },
     {
+      "abs_offset": 3807586016,
       "dims": [
         4096
       ],
       "name": "mtp.0.norm.weight",
+      "next_rel_offset": null,
+      "rel_offset": 3807583808,
+      "span_bytes": null,
       "type": "F32",
       "type_code": 0
     }
