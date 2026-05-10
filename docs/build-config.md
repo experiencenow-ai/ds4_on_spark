@@ -26,7 +26,7 @@ Supported keys:
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
 - `cuda_device`: integer `-1` (auto / leave default device) or `>= 0` (force device index)
 - `arena_size`: integer bytes (advisory; for callers that want to size arena allocations)
-- `log_ring_entries`: integer entries (advisory; for callers that size log capture rings)
+- `log_ring_entries`: integer entries (advisory; for callers that size log capture rings; when a `ds4_ctx_t` has a log ring initialized, `ds4_ctx_apply_config` attaches it when this value is > 0)
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 

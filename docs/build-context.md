@@ -1,0 +1,49 @@
+# Build (Context)
+
+The build skeleton includes a conservative context handle, `ds4_ctx_t`, intended to group:
+
+- A copy of the effective config (`ds4_config_t`)
+- A caller-provided arena (`ds4_arena_t`)
+- An optional caller-provided log capture ring (`ds4_log_ring_t`)
+
+## Static allocation
+
+`ds4_ctx_t` does not allocate. Callers supply fixed buffers up front:
+
+```c
+#include "ds4/ds4.h"
+
+static uint8_t g_arena_mem[1<<20];
+static ds4_log_entry_t g_log_entries[256];
+
+int32_t example(void)
+{
+	ds4_ctx_t ctx;
+	ds4_config_t cfg;
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-1);
+	if ( ds4_ctx_init(&ctx,&cfg,g_arena_mem,(int32_t)sizeof(g_arena_mem)) < 0 )
+		return(-2);
+	if ( ds4_ctx_log_ring_init(&ctx,g_log_entries,(int32_t)(sizeof(g_log_entries) / sizeof(g_log_entries[0]))) < 0 )
+		return(-3);
+	cfg.log_ring_entries = (int32_t)(sizeof(g_log_entries) / sizeof(g_log_entries[0]));
+	if ( ds4_ctx_apply_config(&ctx,&cfg) < 0 )
+		return(-4);
+	DS4_LOGI("hello from ctx");
+	return(0);
+}
+```
+
+Notes:
+
+- `ds4_ctx_init` applies config immediately, so to enable log capture you typically initialize the ring and then call `ds4_ctx_apply_config` once more with `log_ring_entries > 0`.
+- Logging is currently process-global (`ds4_log_set_sink`); wiring a ring into one context affects all `DS4_LOG*` calls in the process.
+
+## Reading captured logs
+
+After you attach a log ring, you can retrieve entries via:
+
+- `ds4_ctx_log_ring_count`
+- `ds4_ctx_log_ring_pop`
+
+To disable ctx-managed capture, set `cfg.log_ring_entries = 0` and call `ds4_ctx_apply_config` (it detaches the sink only if the context previously attached it).
