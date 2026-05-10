@@ -28,6 +28,42 @@ def _get_any(obj: Dict[str, object], keys: Iterable[str]) -> Optional[object]:
     return(None)
 
 
+def _iter_json_values_from_line(line: str, allow_substrings: bool) -> Iterable[object]:
+    line = line.strip()
+    if line == "":
+        return
+
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        obj = None
+
+    if obj is not None:
+        if isinstance(obj, list):
+            for item in obj:
+                yield(item)
+            return
+        yield(obj)
+        return
+
+    if allow_substrings is False:
+        return
+
+    decoder = json.JSONDecoder()
+    i = 0
+    while True:
+        start = line.find("{", i)
+        if start < 0:
+            return
+        try:
+            obj, end = decoder.raw_decode(line[start:])
+        except json.JSONDecodeError:
+            i = start + 1
+            continue
+        yield(obj)
+        i = start + max(1, int(end))
+
+
 def _extract_time(obj: Dict[str, object]) -> Tuple[Optional[float], Optional[float]]:
     t_raw = _get_any(obj, ("t_ms", "ts_ms", "timestamp_ms", "time_ms"))
     if t_raw is not None:
@@ -255,6 +291,7 @@ def extract_jsonl_lines(
     route_type: str = "",
     non_route_policy: str = "skip",
     default_cls: str = "",
+    allow_substrings: bool = True,
 ) -> List[Dict[str, object]]:
     if non_route_policy not in ("skip", "error"):
         raise ValueError("non_route_policy must be one of: skip, error")
@@ -263,18 +300,15 @@ def extract_jsonl_lines(
         line = line.strip()
         if line == "":
             continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            if non_route_policy == "error":
-                raise ValueError(f"line {lineno}: invalid JSON")
-            continue
-        rec = extract_route_record(obj, route_type=route_type, default_cls=default_cls)
-        if rec is None:
-            if non_route_policy == "error":
-                raise ValueError(f"line {lineno}: could not extract route record")
-            continue
-        out.append(rec)
+        found = False
+        for obj in _iter_json_values_from_line(line, bool(allow_substrings)):
+            rec = extract_route_record(obj, route_type=route_type, default_cls=default_cls)
+            if rec is None:
+                continue
+            out.append(rec)
+            found = True
+        if found is False and non_route_policy == "error":
+            raise ValueError(f"line {lineno}: could not extract route record")
     return(out)
 
 
@@ -285,6 +319,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--route-type", type=str, default="", help="Only extract records with obj.type == route-type (empty = auto).")
     p.add_argument("--non-route", type=str, default="skip", help="What to do for non-route input: skip (default; also skips non-JSON lines) or error.")
     p.add_argument("--default-cls", type=str, default="", help="Optional: when records omit cls/latency class, force all extracted records to this value (interactive or batch).")
+    p.add_argument("--extract-substrings", type=int, default=1, help="When set, scan non-JSON log lines for embedded JSON objects and try extracting route records from them (default: 1).")
     args = p.parse_args(argv)
 
     f_in = sys.stdin if args.in_jsonl == "-" else open(args.in_jsonl, "r", encoding="utf-8")
@@ -294,6 +329,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             route_type=args.route_type.strip(),
             non_route_policy=args.non_route.strip().lower(),
             default_cls=args.default_cls,
+            allow_substrings=(int(args.extract_substrings) != 0),
         )
     finally:
         if f_in is not sys.stdin:

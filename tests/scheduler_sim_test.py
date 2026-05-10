@@ -2801,6 +2801,29 @@ class SchedulerSimTest(unittest.TestCase):
                 non_route_policy="error",
             )
 
+    def test_trace_extract_embedded_json_extracts_route_record(self) -> None:
+        route = {"type": "moe_route", "t_ms": 0.0, "cls": "interactive", "candidates": [0, 1, 2]}
+        line = f"INFO scheduler route={json.dumps(route)} done"
+        out = trace_extract.extract_jsonl_lines([line], non_route_policy="skip")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["candidates"], [0, 1, 2])
+
+    def test_trace_extract_embedded_json_disabled_skips(self) -> None:
+        route = {"type": "moe_route", "t_ms": 0.0, "cls": "interactive", "candidates": [0]}
+        line = f"INFO scheduler route={json.dumps(route)} done"
+        out = trace_extract.extract_jsonl_lines([line], non_route_policy="skip", allow_substrings=False)
+        self.assertEqual(len(out), 0)
+
+    def test_trace_extract_json_array_line_extracts_records(self) -> None:
+        routes = [
+            {"t_ms": 0.0, "cls": "interactive", "candidates": [0]},
+            {"t_ms": 1.0, "cls": "batch", "candidates": [1]},
+        ]
+        out = trace_extract.extract_jsonl_lines([json.dumps(routes)], non_route_policy="skip")
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0]["candidates"], [0])
+        self.assertEqual(out[1]["candidates"], [1])
+
     def test_recommendations_quick_expert_queue_reserve_prevents_interactive_drops(self) -> None:
         from sim.scheduler import recommendations
 
