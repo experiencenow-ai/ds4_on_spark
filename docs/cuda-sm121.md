@@ -28,6 +28,8 @@ Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` i
 
 When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
 
+For an end-to-end “PTX → driver/runtime JIT → run” gate, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also builds and runs the same minimal probe via `-arch=compute_121` when `compute_121` is advertised.
+
 ### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
 
 For simple builds, `nvcc` accepts a real-arch `-arch=sm_121` shorthand and can embed both `sm_121` SASS and a PTX fallback for JIT.
