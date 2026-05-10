@@ -31,9 +31,18 @@ Targets:
   qwen3_6_35b_a3b_dflash_hf            (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_5_27b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_5_27b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_next_fp8_hf              (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_next_dflash_hf           (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_480b_a35b_instruct_fp8_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  ling_2_6_flash_hf                    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  ling_2_6_flash_fp8_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  ling_2_6_flash_int4_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gemma_4_26b_a4b_it_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gemma_4_26b_a4b_it_dflash_hf         (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gemma_4_31b_it_hf                    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gemma_4_31b_it_dflash_hf             (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_quant_bleysg  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -294,6 +303,16 @@ fetch_one()
 			upstream="huggingface.co/z-lab/Qwen3.6-27B-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_6_27b_dflash_hf" "https://huggingface.co/z-lab/Qwen3.6-27B-DFlash" "${ref}" "${expected}"
 			;;
+		qwen3_5_27b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/Qwen/Qwen3.5-27B"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_5_27b_hf" "https://huggingface.co/Qwen/Qwen3.5-27B" "${ref}" "${expected}"
+			;;
+		qwen3_5_27b_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/Qwen3.5-27B-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_5_27b_dflash_hf" "https://huggingface.co/z-lab/Qwen3.5-27B-DFlash" "${ref}" "${expected}"
+			;;
 		qwen3_coder_next_fp8_hf)
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/Qwen/Qwen3-Coder-Next-FP8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
@@ -308,6 +327,41 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_coder_480b_a35b_instruct_fp8_hf" "https://huggingface.co/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8" "${ref}" "${expected}"
+			;;
+		ling_2_6_flash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/inclusionAI/Ling-2.6-flash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "ling_2_6_flash_hf" "https://huggingface.co/inclusionAI/Ling-2.6-flash" "${ref}" "${expected}"
+			;;
+		ling_2_6_flash_fp8_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/inclusionAI/Ling-2.6-flash-fp8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "ling_2_6_flash_fp8_hf" "https://huggingface.co/inclusionAI/Ling-2.6-flash-fp8" "${ref}" "${expected}"
+			;;
+		ling_2_6_flash_int4_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/inclusionAI/Ling-2.6-flash-int4"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "ling_2_6_flash_int4_hf" "https://huggingface.co/inclusionAI/Ling-2.6-flash-int4" "${ref}" "${expected}"
+			;;
+		gemma_4_26b_a4b_it_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/google/gemma-4-26B-A4B-it"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gemma_4_26b_a4b_it_hf" "https://huggingface.co/google/gemma-4-26B-A4B-it" "${ref}" "${expected}"
+			;;
+		gemma_4_26b_a4b_it_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/gemma-4-26B-A4B-it-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gemma_4_26b_a4b_it_dflash_hf" "https://huggingface.co/z-lab/gemma-4-26B-A4B-it-DFlash" "${ref}" "${expected}"
+			;;
+		gemma_4_31b_it_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/google/gemma-4-31B-it"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gemma_4_31b_it_hf" "https://huggingface.co/google/gemma-4-31B-it" "${ref}" "${expected}"
+			;;
+		gemma_4_31b_it_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/gemma-4-31B-it-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gemma_4_31b_it_dflash_hf" "https://huggingface.co/z-lab/gemma-4-31B-it-DFlash" "${ref}" "${expected}"
 			;;
 		sglang)
 			upstream="sgl-project/sglang"; ref="refs/tags/v0.5.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
