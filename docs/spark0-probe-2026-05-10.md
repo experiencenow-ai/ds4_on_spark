@@ -52,6 +52,12 @@ Additional probe run (09:13Z refresh, loop-filtered storage output, temporary gi
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T090811Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0918Z_loop.txt
 ```
 
+Additional probe run (14:47Z refresh, runtime max cc line):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1446Z_loop_runtime_maxcc.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -106,6 +112,29 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+```
+
+### Single-target probe (Spark0, 14:47Z, runtime max cc + PCIe max warning)
+
+```text
+== local meta ==
+Sun May 10 14:47:01 UTC 2026
+git: 5312aef
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+runtime max cc: 12.1
+
+== nvidia-smi pcie link (max/current, post-load) ==
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
 ```
 
 ### Single-target probe (Spark0, 02:21Z, PCIe query mismatch warning)

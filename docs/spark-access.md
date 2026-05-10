@@ -27,29 +27,36 @@ Some automation-provided macOS checkouts have a `.git` worktree that is readable
 Create a local shim repo at `.git-codex/` (not committed) and use it for git operations:
 
 ```bash
-# One-time setup (from repo root)
-git init .git-codex
-git --git-dir=.git-codex/.git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
-git --git-dir=.git-codex/.git --work-tree=. fetch origin main --depth=50
-git --git-dir=.git-codex/.git --work-tree=. checkout -f origin/main
+# One-time setup (from repo root, preferred bare gitdir)
+git init --bare .git-codex
+git --git-dir=.git-codex --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+git --git-dir=.git-codex --work-tree=. fetch origin main --depth=50
+git --git-dir=.git-codex --work-tree=. checkout -f origin/main
+
+# Alternative: non-bare layout (creates `.git-codex/.git/`)
+# git init .git-codex
+# git --git-dir=.git-codex/.git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+# git --git-dir=.git-codex/.git --work-tree=. fetch origin main --depth=50
+# git --git-dir=.git-codex/.git --work-tree=. checkout -f origin/main
 ```
 
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
 
 ```bash
 branch="codex/loop-spark-access-YYYYMMDD-short-suffix"
-git --git-dir=.git-codex/.git --work-tree=. checkout -b "$branch" origin/main
-git --git-dir=.git-codex/.git --work-tree=. status --short
-git --git-dir=.git-codex/.git --work-tree=. add docs/spark-access.md scripts/spark_probe.sh
-git --git-dir=.git-codex/.git --work-tree=. commit -m "Docs: Spark probe shim notes"
-git --git-dir=.git-codex/.git --work-tree=. push -u origin "$branch"
+gitdir=".git-codex" # if you used the non-bare layout, set: gitdir=".git-codex/.git"
+git --git-dir="$gitdir" --work-tree=. checkout -b "$branch" origin/main
+git --git-dir="$gitdir" --work-tree=. status --short
+git --git-dir="$gitdir" --work-tree=. add docs/spark-access.md scripts/spark_probe.sh
+git --git-dir="$gitdir" --work-tree=. commit -m "Docs: Spark probe shim notes"
+git --git-dir="$gitdir" --work-tree=. push -u origin "$branch"
 ```
 
 When saving committed probe excerpts, prefer:
 
 ```bash
-DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh
-DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh
+DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
 ```
 
 Notes:
@@ -100,7 +107,7 @@ SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh aitopatom-9ab9.local | t
 ```
 
 The probe is designed to capture non-secret OS/CPU/GPU/network/storage data without emitting host keys. Use `REDACT=1` when saving output for commit; the redacted snapshot is suitable to paste into `docs/spark0-*.md`.
-If the driver-side `nvidia-smi` compute capability query is unavailable, the `nvcc` runtime probe is the fallback source for compute capability (`device0 cc:`).
+If the driver-side `nvidia-smi` compute capability query is unavailable, the `nvcc` runtime probe is the fallback source for compute capability (`device0 cc:`). The runtime probe also prints `runtime max cc: ...` as a quick sanity-check for multi-GPU hosts.
 When `REDACT=1`, the probe also scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 The `nvidia-smi` inventory section includes per-GPU `index` and `pci.bus_id` to make multi-GPU hosts easier to compare across reboots.
 
