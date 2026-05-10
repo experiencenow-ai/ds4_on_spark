@@ -2613,6 +2613,27 @@ class SchedulerSimTest(unittest.TestCase):
                 non_route_policy="error",
             )
 
+    def test_recommendations_quick_expert_queue_reserve_prevents_interactive_drops(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["expert_queue_reserve"]
+        base = scenario["results"]["baseline"]["summary"]
+        no_reserve = scenario["results"]["variants"]["no_reserve"]["summary"]
+        self.assertLessEqual(float(base["drop_frac_tokens_interactive"]), 1e-9)
+        self.assertGreater(float(no_reserve["drop_frac_tokens_interactive"]), 0.0)
+
+    def test_recommendations_quick_mtp_sweep_has_breakeven(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        sweep = out["scenarios"]["mtp_efficiency_sweep"]["sweep"]
+        self.assertGreaterEqual(len(sweep), 3)
+        worst = float(sweep[0]["service_slot_ms_per_output_token_ratio_vs_no_mtp"])
+        best = float(sweep[-1]["service_slot_ms_per_output_token_ratio_vs_no_mtp"])
+        self.assertGreaterEqual(worst, 1.0)
+        self.assertLess(best, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
