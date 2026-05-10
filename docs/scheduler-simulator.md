@@ -383,6 +383,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --nu
 
 If your runtime logs prefix/suffix JSON objects with plain text (for example `INFO route={...}`), keep `--extract-substrings 1` (default) so `trace_extract.py` scans each line for embedded JSON objects.
 
+When using `--trace-input-format runtime` (or `trace_extract.py`), timestamps may be emitted as `t_ms` / `t_us` / `t_ns` (absolute) or `dt_ms` / `dt_us` / `dt_ns` (delta). The extractor normalizes them into millisecond `t_ms` / `dt_ms` fields in the strict simulator trace contract.
+
 `trace_extract.py` also preserves multi-layer routing when the runtime logs `layers[]` (or `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` (first-seen order) to satisfy the simulator trace contract.
 
 If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:

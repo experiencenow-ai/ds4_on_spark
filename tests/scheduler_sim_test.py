@@ -2819,6 +2819,26 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_maps_ns_timestamps(self) -> None:
+        obj = {
+            "ts_ns": 5_000_000,
+            "latency_class": "interactive",
+            "experts": [7, 3, 19],
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertAlmostEqual(float(rec["t_ms"]), 5.0)
+        self.assertEqual(rec["cls"], "interactive")
+        self.assertEqual(rec["candidates"], [7, 3, 19])
+
+        obj2 = {"dt_ns": 200_000, "cls": "batch", "candidates": [0]}
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertAlmostEqual(float(rec2["dt_ms"]), 0.2, places=6)
+        self.assertEqual(rec2["cls"], "batch")
+
     def test_trace_extract_maps_nested_mtp_fields(self) -> None:
         obj = {
             "ts_us": 5000,
