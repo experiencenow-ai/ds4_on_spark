@@ -7,13 +7,14 @@ Spark0 reports compute capability `12.1`, which corresponds to `sm_121` in `nvcc
 For reproducible builds targeting GB10:
 
 - Prefer `-arch=sm_121`, or
-- Use explicit `-gencode arch=compute_121,code=sm_121` (and optionally add PTX).
+- Use explicit `-gencode` (for example: `-gencode arch=compute_121,code=sm_121` for SASS, and add `-gencode arch=compute_121,code=compute_121` when you want embedded PTX for JIT portability).
 - The probe `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is built via explicit `-gencode` and includes both `sm_120` + `sm_121` SASS plus `compute_121` PTX as a “portable fatbin” reference.
 
 For convenience on single-GPU bring-up:
 
 - `-arch=native` will compile for the visible GPU(s) detected by `nvcc` at build time.
   - `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort `-fatbin` + `cuobjdump --dump-ptx` check for `-arch=native` and reports whether PTX is embedded (expected missing; treat as a portability signal, not a functional failure).
+  - When PTX is present in any of these checks, the scripts print the first PTX `.target` line (`ptx_target_*`) to make the embedded PTX arch explicit in logs.
 
 ### `sm_121a` / `sm_121f` Variant Targets (Toolchain Probe)
 
@@ -32,6 +33,7 @@ When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cu
 For simple builds, `nvcc` accepts a real-arch `-arch=sm_121` shorthand and can embed both `sm_121` SASS and a PTX fallback for JIT.
 
 `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort check by emitting a `-fatbin` with `-arch=sm_121` and using `cuobjdump --dump-ptx` to confirm an embedded PTX section exists.
+When PTX is present, it also prints the first PTX `.target` line (`ptx_target_sm_121`) for quick arch verification.
 
 ## CUDA 13 `cudaDeviceProp` Layout Change
 
@@ -285,7 +287,7 @@ CUDA also exposes a kernel-annotation syntax for clusters via `__cluster_dims__(
 
 On some toolkit/architecture combinations, `nvcc -arch=sm_121` may reject `__cluster_dims__` at compile time even when runtime cluster launch via `cudaLaunchKernelExC` works.
 
-The compile-only script `./scripts/cuda_probe_compile_only_spark0.sh` includes a standalone compile of `tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu` and prints either `cluster_dims_attr_compile: OK` or the first lines of the compilation error.
+The compile-only scripts `./scripts/cuda_probe_compile_only_spark0.sh` and `./scripts/cuda_probe_compile_only_tiny_spark0.sh`, plus the no-transfer `./scripts/cuda_probe_nvcc_minimal_spark0.sh`, include a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and print either `cluster_dims_attr_compile: OK` or the first lines of the compilation error.
 
 Observed on Spark0 (2026-05-09): `cluster_dims_attr_compile: OK` (CUDA 13.0 `V13.0.88`).
 

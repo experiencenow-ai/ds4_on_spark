@@ -24,6 +24,7 @@ int main(int argc,char **argv)
 	int32_t count = 0,rc = 0,driver_v = 0,runtime_v = 0,clock_khz = 0,mem_clock_khz = 0;
 	int32_t smem_optin = 0,l2_bytes = 0,max_threads_sm = 0,regs_sm = 0;
 	int32_t max_threads_block = 0,max_blocks_sm = 0,smem_sm = 0,regs_block = 0,smem_block_max = 0;
+	int32_t coop_launch = 0,cluster_launch = 0;
 	cudaDeviceProp prop;
 	uint64_t mem_bytes = 0,smem_block_bytes = 0;
 	(void)argc;
@@ -52,8 +53,10 @@ int main(int argc,char **argv)
 	(void)get_attr_i32(&smem_sm,0,cudaDevAttrMaxSharedMemoryPerMultiprocessor);
 	(void)get_attr_i32(&regs_block,0,cudaDevAttrMaxRegistersPerBlock);
 	(void)get_attr_i32(&smem_block_max,0,cudaDevAttrMaxSharedMemoryPerBlock);
+	(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
+	(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-	printf("cuda drv=%d rt=%d count=%d dev0=\"%s\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%" PRIu64 " smem_block=%" PRIu64 " smem_block_max=%d smem_optin=%d smem_sm=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d\n",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm);
+	printf("cuda drv=%d rt=%d count=%d dev0=\"%s\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%" PRIu64 " smem_block=%" PRIu64 " smem_block_max=%d smem_optin=%d smem_sm=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d coop_launch=%d cluster_launch=%d\n",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,coop_launch,cluster_launch);
 	return(0);
 }

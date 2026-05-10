@@ -151,31 +151,46 @@ else
 fi
 
 echo
+echo \"== nvcc: cluster_dims attribute compile (best-effort) ==\"
+set +e
+\$NVCC -O2 -std=c++17 -arch=sm_121 -c -o bin/cuda_sm121_cluster_dims_attr_compile.o src/cuda_sm121_cluster_dims_attr_compile.cu 2>bin/cuda_sm121_cluster_dims_attr_compile.err
+rc=\$?
+set -e
+if [ \$rc -eq 0 ]; then
+	echo \"cluster_dims_attr_compile: OK\"
+else
+	echo \"cluster_dims_attr_compile: FAILED rc=\$rc\"
+	head -n 40 bin/cuda_sm121_cluster_dims_attr_compile.err || true
+fi
+
+echo
 echo \"== compile-only (tiny) ==\"
 make clean
 make bin/cuda_sm121_compile_probe.o
 
-echo
-echo \"== nvcc: -arch=sm_121 emits embedded PTX (best-effort) ==\"
-CUOBJDUMP=\"\"
-if [ -x /usr/local/cuda/bin/cuobjdump ]; then
-	CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
+	echo
+	echo \"== nvcc: -arch=sm_121 emits embedded PTX (best-effort) ==\"
+	CUOBJDUMP=\"\"
+	if [ -x /usr/local/cuda/bin/cuobjdump ]; then
+		CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
 elif command -v cuobjdump >/dev/null 2>&1; then
 	CUOBJDUMP=\"cuobjdump\"
 fi
-if [ \"\${CUOBJDUMP}\" = \"\" ]; then
-	echo \"(cuobjdump not found; skipping)\"
-else
-	set +e
-	\$NVCC -O2 -std=c++17 -arch=sm_121 -fatbin -o bin/cuda_sm121_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_sm121_arch_shorthand.err
+	if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+		echo \"(cuobjdump not found; skipping)\"
+	else
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -fatbin -o bin/cuda_sm121_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_sm121_arch_shorthand.err
 	rc=\$?
 	set -e
 	if [ \$rc -ne 0 ]; then
 		echo \"(nvcc -fatbin -arch=sm_121 failed rc=\$rc)\" >&2
 		head -n 40 bin/cuda_sm121_arch_shorthand.err || true
 		else
-			if \$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			ptx_target_line=\$(\$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+			if [ \"\${ptx_target_line}\" != \"\" ]; then
 				echo \"ptx_embed: OK\"
+				echo \"ptx_target_sm_121: \${ptx_target_line}\"
 			else
 				echo \"ptx_embed: MISSING\" >&2
 				\$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | head -n 40 || true
@@ -183,10 +198,71 @@ else
 		fi
 	fi
 
-echo
-echo \"== nvcc: -arch=native emits embedded PTX (best-effort; expected missing) ==\"
-if [ \"\${CUOBJDUMP}\" = \"\" ]; then
-	echo \"(cuobjdump not found; skipping)\"
+	echo
+	echo \"== nvcc: -gencode PTX embed behavior (best-effort) ==\"
+	if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+		echo \"(cuobjdump not found; skipping)\"
+	elif [ \"\${list_gpu_arch}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-arch not supported; skipping)\"
+	elif echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -fatbin -o bin/cuda_gencode_sm_121_only.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_gencode_sm_121_only.err
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"(nvcc -fatbin -gencode code=sm_121 failed rc=\$rc)\" >&2
+			head -n 40 bin/cuda_gencode_sm_121_only.err || true
+		else
+			ptx_target_line=\$(\$CUOBJDUMP --dump-ptx bin/cuda_gencode_sm_121_only.fatbin 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+			if [ \"\${ptx_target_line}\" != \"\" ]; then
+				echo \"ptx_embed_gencode_sm_only: PRESENT (unexpected)\"
+				echo \"ptx_target_gencode_sm_only: \${ptx_target_line}\"
+			else
+				echo \"ptx_embed_gencode_sm_only: MISSING (expected)\"
+			fi
+		fi
+
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=compute_121\" -fatbin -o bin/cuda_gencode_compute_121_only.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_gencode_compute_121_only.err
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"(nvcc -fatbin -gencode code=compute_121 failed rc=\$rc)\" >&2
+			head -n 40 bin/cuda_gencode_compute_121_only.err || true
+		else
+			ptx_target_line=\$(\$CUOBJDUMP --dump-ptx bin/cuda_gencode_compute_121_only.fatbin 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+			if [ \"\${ptx_target_line}\" != \"\" ]; then
+				echo \"ptx_embed_gencode_ptx_only: PRESENT (expected)\"
+				echo \"ptx_target_gencode_ptx_only: \${ptx_target_line}\"
+			else
+				echo \"ptx_embed_gencode_ptx_only: MISSING\" >&2
+			fi
+		fi
+
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -gencode \"arch=compute_121,code=compute_121\" -fatbin -o bin/cuda_gencode_sm_plus_ptx.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_gencode_sm_plus_ptx.err
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"(nvcc -fatbin -gencode sm_121+compute_121 failed rc=\$rc)\" >&2
+			head -n 40 bin/cuda_gencode_sm_plus_ptx.err || true
+		else
+			ptx_target_line=\$(\$CUOBJDUMP --dump-ptx bin/cuda_gencode_sm_plus_ptx.fatbin 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+			if [ \"\${ptx_target_line}\" != \"\" ]; then
+				echo \"ptx_embed_gencode_sm_plus_ptx: PRESENT (expected)\"
+				echo \"ptx_target_gencode_sm_plus_ptx: \${ptx_target_line}\"
+			else
+				echo \"ptx_embed_gencode_sm_plus_ptx: MISSING\" >&2
+			fi
+		fi
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\"
+	fi
+
+	echo
+	echo \"== nvcc: -arch=native emits embedded PTX (best-effort; expected missing) ==\"
+	if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+		echo \"(cuobjdump not found; skipping)\"
 else
 	set +e
 	\$NVCC -O2 -std=c++17 -arch=native -fatbin -o bin/cuda_native_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_native_arch_shorthand.err
@@ -198,6 +274,10 @@ else
 	else
 		if \$CUOBJDUMP --dump-ptx bin/cuda_native_arch_shorthand.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
 			echo \"ptx_embed_native: PRESENT\"
+			ptx_target_line=\$(\$CUOBJDUMP --dump-ptx bin/cuda_native_arch_shorthand.fatbin 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+			if [ \"\${ptx_target_line}\" != \"\" ]; then
+				echo \"ptx_target_native: \${ptx_target_line}\"
+			fi
 		else
 			echo \"ptx_embed_native: MISSING (expected)\"
 		fi

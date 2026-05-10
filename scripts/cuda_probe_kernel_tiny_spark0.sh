@@ -71,7 +71,7 @@ echo
 	echo \"== build (kernel-tiny) ==\"
 	cd \"$REMOTE_DIR\"
 	make clean
-	make bin/cuda_device_props_tiny bin/cuda_sm121_compile_probe.o bin/cuda_sm121_arch_report bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm121_cp_async_bulk_tx bin/cuda_sm121_tma_bulk_tensor_1d bin/cuda_sm121_tma_bulk_tensor_2d bin/cuda_sm121_ldmatrix_smoke bin/cuda_sm121_wmma_smoke bin/cuda_sm121_cxx20_probe bin/cuda_sm121_nvcc_flags_probe bin/cuda_sm121_nvrtc_jit bin/cuda_sm121_nvrtc_cxx20_jit bin/cuda_sm121_nvjitlink_jit
+	make bin/cuda_device_props_tiny bin/cuda_sm121_compile_probe.o bin/cuda_sm121_arch_report bin/cuda_sm121_smem_optin bin/cuda_sm121_devattrs bin/cuda_sm121_fp8_conv bin/cuda_sm121_bf16_conv bin/cuda_sm121_fp4_conv bin/cuda_sm121_pipeline_memcpy_async bin/cuda_sm121_barrier_memcpy_async bin/cuda_sm121_cp_async_bulk_tx bin/cuda_sm121_tma_bulk_tensor_1d bin/cuda_sm121_tma_bulk_tensor_2d bin/cuda_sm121_cccl_atomic_ref bin/cuda_sm121_cuda_graph_smoke bin/cuda_sm121_nvrtc_jit bin/cuda_sm121_nvrtc_cxx20_jit bin/cuda_sm121_nvjitlink_jit bin/cuda_sm121_nvcc_flags_probe bin/cuda_sm121_cxx20_probe bin/cuda_sm121_ldmatrix_smoke bin/cuda_sm121_wmma_smoke bin/cuda_sm121_cluster_launch
 
 echo
 run_retry() {
@@ -94,15 +94,22 @@ run_retry() {
 	run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 	run_retry cuda_sm121_smem_optin \"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin
 	run_retry cuda_sm121_devattrs \"$REMOTE_DIR\"/bin/cuda_sm121_devattrs
+	run_retry cuda_sm121_fp8_conv \"$REMOTE_DIR\"/bin/cuda_sm121_fp8_conv
+	run_retry cuda_sm121_bf16_conv \"$REMOTE_DIR\"/bin/cuda_sm121_bf16_conv
+	run_retry cuda_sm121_fp4_conv \"$REMOTE_DIR\"/bin/cuda_sm121_fp4_conv
 	run_retry cuda_sm121_pipeline_memcpy_async \"$REMOTE_DIR\"/bin/cuda_sm121_pipeline_memcpy_async
+	run_retry cuda_sm121_barrier_memcpy_async \"$REMOTE_DIR\"/bin/cuda_sm121_barrier_memcpy_async
 	run_retry cuda_sm121_cp_async_bulk_tx \"$REMOTE_DIR\"/bin/cuda_sm121_cp_async_bulk_tx
 	run_retry cuda_sm121_tma_bulk_tensor_1d \"$REMOTE_DIR\"/bin/cuda_sm121_tma_bulk_tensor_1d
 	run_retry cuda_sm121_tma_bulk_tensor_2d \"$REMOTE_DIR\"/bin/cuda_sm121_tma_bulk_tensor_2d
+	run_retry cuda_sm121_cccl_atomic_ref \"$REMOTE_DIR\"/bin/cuda_sm121_cccl_atomic_ref
+	run_retry cuda_sm121_cuda_graph_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_cuda_graph_smoke
 	run_retry cuda_sm121_ldmatrix_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_ldmatrix_smoke
-run_retry cuda_sm121_wmma_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_wmma_smoke
-run_retry cuda_sm121_cxx20_probe \"$REMOTE_DIR\"/bin/cuda_sm121_cxx20_probe
-run_retry cuda_sm121_nvcc_flags_probe \"$REMOTE_DIR\"/bin/cuda_sm121_nvcc_flags_probe
-run_retry cuda_sm121_nvrtc_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_jit
-run_retry cuda_sm121_nvrtc_cxx20_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_cxx20_jit
-run_retry cuda_sm121_nvjitlink_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvjitlink_jit
+	run_retry cuda_sm121_wmma_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_wmma_smoke
+	run_retry cuda_sm121_cxx20_probe \"$REMOTE_DIR\"/bin/cuda_sm121_cxx20_probe
+	run_retry cuda_sm121_nvcc_flags_probe \"$REMOTE_DIR\"/bin/cuda_sm121_nvcc_flags_probe
+	run_retry cuda_sm121_nvrtc_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_jit
+	run_retry cuda_sm121_nvrtc_cxx20_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_cxx20_jit
+	run_retry cuda_sm121_nvjitlink_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvjitlink_jit
+	run_retry cuda_sm121_cluster_launch \"$REMOTE_DIR\"/bin/cuda_sm121_cluster_launch
 "

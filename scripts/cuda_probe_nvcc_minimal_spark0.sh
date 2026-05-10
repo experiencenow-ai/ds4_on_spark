@@ -166,6 +166,91 @@ if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"s
 fi
 
 echo
+echo \"== nvcc: __cluster_dims__ attribute compile (best-effort) ==\"
+cat > \"$REMOTE_DIR\"/cuda_cluster_dims_attr_compile.cu <<'EOF'
+#include <stdint.h>
+
+#include <cuda_runtime.h>
+
+__global__ void __cluster_dims__(2,1,1) cluster_dims_attr_probe(uint32_t *out)
+{
+	if ( ((int32_t)threadIdx.x) == 0 )
+		out[(int32_t)blockIdx.x] = 0;
+}
+EOF
+set +e
+\$NVCC -O2 -std=c++17 -arch=sm_121 -c -o \"$REMOTE_DIR\"/cluster_dims_attr_compile.o \"$REMOTE_DIR\"/cuda_cluster_dims_attr_compile.cu >\"$REMOTE_DIR\"/cluster_dims_attr_compile.out 2>\"$REMOTE_DIR\"/cluster_dims_attr_compile.err
+rc=\$?
+set -e
+if [ \$rc -eq 0 ]; then
+	echo \"cluster_dims_attr_compile: OK\"
+else
+	echo \"cluster_dims_attr_compile: FAILED rc=\$rc\"
+	head -n 40 \"$REMOTE_DIR\"/cluster_dims_attr_compile.err || true
+fi
+
+echo
+echo \"== nvcc: -gencode PTX embed behavior (best-effort) ==\"
+CUOBJDUMP=\"\"
+if [ -x /usr/local/cuda/bin/cuobjdump ]; then
+	CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
+elif command -v cuobjdump >/dev/null 2>&1; then
+	CUOBJDUMP=\"cuobjdump\"
+fi
+if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+	echo \"(cuobjdump not found; skipping)\"
+elif [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping)\"
+elif echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -fatbin -o \"$REMOTE_DIR\"/cuda_gencode_sm_121_only.fatbin \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_gencode_sm_121_only.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -gencode code=sm_121 failed rc=\$rc)\" >&2
+		head -n 40 \"$REMOTE_DIR\"/cuda_gencode_sm_121_only.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx \"$REMOTE_DIR\"/cuda_gencode_sm_121_only.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_gencode_sm_only: PRESENT (unexpected)\"
+		else
+			echo \"ptx_embed_gencode_sm_only: MISSING (expected)\"
+		fi
+	fi
+
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=compute_121\" -fatbin -o \"$REMOTE_DIR\"/cuda_gencode_compute_121_only.fatbin \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_gencode_compute_121_only.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -gencode code=compute_121 failed rc=\$rc)\" >&2
+		head -n 40 \"$REMOTE_DIR\"/cuda_gencode_compute_121_only.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx \"$REMOTE_DIR\"/cuda_gencode_compute_121_only.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_gencode_ptx_only: PRESENT (expected)\"
+		else
+			echo \"ptx_embed_gencode_ptx_only: MISSING\" >&2
+		fi
+	fi
+
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -gencode \"arch=compute_121,code=compute_121\" -fatbin -o \"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.fatbin \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -gencode sm_121+compute_121 failed rc=\$rc)\" >&2
+		head -n 40 \"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx \"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_gencode_sm_plus_ptx: PRESENT (expected)\"
+		else
+			echo \"ptx_embed_gencode_sm_plus_ptx: MISSING\" >&2
+		fi
+	fi
+else
+	echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\"
+fi
+
+echo
 echo \"== nvcc: minimal compile/run (sm_121 + native) ==\"
 rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
@@ -219,6 +304,7 @@ int main(int argc,char **argv)
 	int32_t count = 0,driver_v = 0,runtime_v = 0,rc = 0,clock_khz = 0,mem_clock_khz = 0;
 	int32_t smem_optin = 0,l2_bytes = 0,max_threads_sm = 0,regs_sm = 0;
 	int32_t max_threads_block = 0,max_blocks_sm = 0,smem_sm = 0,regs_block = 0,smem_block_max = 0;
+	int32_t coop_launch = 0,cluster_launch = 0;
 	cudaDeviceProp prop;
 	uint32_t out = 0;
 	uint32_t *dout = 0;
@@ -250,9 +336,11 @@ int main(int argc,char **argv)
 	(void)get_attr_i32(&smem_sm,0,cudaDevAttrMaxSharedMemoryPerMultiprocessor);
 	(void)get_attr_i32(&regs_block,0,cudaDevAttrMaxRegistersPerBlock);
 	(void)get_attr_i32(&smem_block_max,0,cudaDevAttrMaxSharedMemoryPerBlock);
+	(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
+	(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-	printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm);
+	printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d coop_launch=%d cluster_launch=%d\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,coop_launch,cluster_launch);
 
 	rc = ck(cudaMalloc((void **)&dout,sizeof(out)),-4,\"cudaMalloc\");
 	if ( rc != 0 )
@@ -294,8 +382,10 @@ else
 	check_ptx() {
 		name=\"\$1\"
 		path=\"\$2\"
-		if \$CUOBJDUMP --dump-ptx \"\${path}\" 2>/dev/null | grep -q \"^\\\\.target\"; then
+		ptx_target_line=\$(\$CUOBJDUMP --dump-ptx \"\${path}\" 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+		if [ \"\${ptx_target_line}\" != \"\" ]; then
 			echo \"ptx_embed(\${name}): PRESENT\"
+			echo \"ptx_target(\${name}): \${ptx_target_line}\"
 		else
 			echo \"ptx_embed(\${name}): MISSING\"
 		fi
