@@ -120,6 +120,7 @@ class SimConfig:
     hi_burst: int
     promote_ms: float
     adaptive_k: AdaptiveKConfig
+    expert_queue_reserve_interactive: int = 0
     k_mode: str = "controller"
     k_signal: str = "global"
     pending_units: str = "tasks"
@@ -1959,6 +1960,15 @@ def _validate_trace_expert_ids(trace: Sequence[TokenRoute], num_experts: int) ->
                     raise ValueError(f"{token_tag}: candidates expert_id={int(e)} out of range for num_experts={int(num_experts)}")
 
 
+def _expert_queue_pending_limit(cfg: SimConfig, cls: LatencyClass) -> int:
+    if cls == LatencyClass.INTERACTIVE:
+        return(int(cfg.expert_queue_max))
+    limit = (int(cfg.expert_queue_max) - int(cfg.expert_queue_reserve_interactive))
+    if limit < 0:
+        return(0)
+    return(limit)
+
+
 def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
     if admit_policy == "ordered":
         return(candidates)
@@ -2233,6 +2243,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         raise ValueError("expert_parallelism must be > 0")
     if cfg.expert_queue_max <= 0:
         raise ValueError("expert_queue_max must be > 0")
+    if cfg.expert_queue_reserve_interactive < 0:
+        raise ValueError("expert_queue_reserve_interactive must be >= 0")
+    if cfg.expert_queue_reserve_interactive > cfg.expert_queue_max:
+        raise ValueError("expert_queue_reserve_interactive must be <= expert_queue_max")
     if cfg.service_ms <= 0.0 and cfg.service_per_task_ms < 0.0:
         raise ValueError("service_ms must be > 0")
     if cfg.service_base_ms < 0.0:
@@ -2560,11 +2574,12 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
         route = trace[tid]
         admitted = 0
+        pending_limit = _expert_queue_pending_limit(cfg, route.cls)
         for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores):
             if admitted >= stage.k:
                 break
             eq = experts[expert_id]
-            if eq.pending() >= cfg.expert_queue_max:
+            if eq.pending() >= pending_limit:
                 metrics.dropped_tasks_backpressure += 1
                 if route.cls == LatencyClass.INTERACTIVE:
                     metrics.dropped_tasks_backpressure_interactive += 1
@@ -3065,6 +3080,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
     p.add_argument("--expert-parallelism", type=int, default=2)
     p.add_argument("--expert-queue-max", type=int, default=256)
+    p.add_argument(
+        "--expert-queue-reserve-interactive",
+        type=int,
+        default=0,
+        help="Reserve per-expert queue capacity for interactive tasks by reducing the effective pending limit for batch admissions (batch_limit = expert_queue_max - reserve).",
+    )
     p.add_argument("--service-ms", type=float, default=0.15)
     p.add_argument("--service-base-ms", type=float, default=0.0, help="Batch service model: fixed overhead per started expert batch.")
     p.add_argument("--service-per-task-ms", type=float, default=-1.0, help="Batch service model: incremental cost per task in a started expert batch (-1 = use --service-ms).")
@@ -3277,6 +3298,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         num_experts=args.num_experts,
         expert_parallelism=args.expert_parallelism,
         expert_queue_max=args.expert_queue_max,
+        expert_queue_reserve_interactive=args.expert_queue_reserve_interactive,
         service_ms=args.service_ms,
         service_base_ms=args.service_base_ms,
         service_per_task_ms=args.service_per_task_ms,

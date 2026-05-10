@@ -38,6 +38,14 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
+To prevent batch traffic from fully consuming that queue capacity, you can reserve
+per-expert headroom for interactive tasks:
+
+- `--expert-queue-reserve-interactive N`: reduces the effective pending limit for **batch**
+  admissions to `expert_queue_max - N` while leaving interactive admissions capped by
+  `expert_queue_max`. This models a simple reservation mechanism that keeps slots available
+  for interactive work under heavy batch load.
+
 ### Multi-Layer Routes
 
 When a trace record includes `layers[]` (multi-MoE-layer routes), the simulator treats the token’s work as a sequence of **stages**:
