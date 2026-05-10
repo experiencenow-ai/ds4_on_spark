@@ -47,6 +47,15 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Fl
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
+If you also want the llama.cpp-side probe (optionally with `LOAD_WEIGHTS=1`) in
+the same report, use:
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 LOAD_WEIGHTS=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
+```
+
 By default this Spark-only runner also samples 64 bytes from each tensor payload (`--payload-sample-bytes 64`) to catch truncated/corrupt uploads without loading full weights. Override with `REMOTE_MTP_SIDECAR_ARGS='--json --expect-deepseek-v4-flash --payload-sample-bytes 0'` if you need a strictly header-only check.
 
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
