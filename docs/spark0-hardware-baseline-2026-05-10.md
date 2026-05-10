@@ -104,6 +104,12 @@ Refreshed again (13:43Z, branch refresh):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1339Z_loop_refresh.txt
 ```
 
+Refreshed again (14:11Z, kernel module metadata snapshot):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1411Z_loop_access.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -133,3 +139,4 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - As of the 09:13Z refresh (`git: afbc122`), the sysfs path-chain also showed the upstream bridge reporting `current_link_speed: Unknown` and `current_link_width: 0` even while the endpoint continued to report Gen1 x1; treat upstream `current_link_*` as best-effort until corroborated
 - RDMA/ROCE devices present (`/sys/class/infiniband`, Mellanox `MT4129`), but ports were `DOWN`/`Disabled` during the probe
 - cuDNN: not detected by the probe (no headers/libs found)
+- NVIDIA kernel module appears to be the open variant (`NVIDIA UNIX Open Kernel Module for aarch64`, `nvidia-580-open`), with `modinfo nvidia` reporting `filename: .../kernel/nvidia-580-open/nvidia.ko`

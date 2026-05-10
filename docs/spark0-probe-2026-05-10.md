@@ -89,6 +89,12 @@ Additional probe run (13:43Z refresh, confirms cc + sysfs PCIe snapshot):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1339Z_loop_refresh.txt
 ```
 
+Additional probe run (14:11Z refresh, kernel module metadata snapshot):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1411Z_loop_access.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -142,6 +148,31 @@ path 000f:00:00.0 current_link_speed: Unknown
 path 000f:00:00.0 current_link_width: 0
 path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
 path 000f:01:00.0 current_link_width: 1
+```
+
+### Compute capability + open kernel module metadata (Spark0, 14:11Z)
+
+```text
+== local meta ==
+Sun May 10 14:11:26 UTC 2026
+git: a083307
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+runtime max cc: 12.1
+
+== nvidia driver (proc) ==
+NVRM version: NVIDIA UNIX Open Kernel Module for aarch64  580.142  Release Build  (dvs-builder@U22-I3-H10-02-1)  Tue Mar  3 19:08:06 UTC 2026
+
+== modinfo nvidia (summary) ==
+filename:       /lib/modules/6.17.0-1014-nvidia/kernel/nvidia-580-open/nvidia.ko
+version:        580.142
+vermagic:       6.17.0-1014-nvidia SMP preempt mod_unload modversions aarch64
 ```
 
 ### Single-target probe (Spark0, 01:38Z)
