@@ -70,22 +70,67 @@ __global__ void cuda_compile_only(uint32_t *out)
 }
 EOF
 
-try_compile_only() {
-	tag=\"\$1\"
-	arch=\"\$2\"
-	echo \"-- compile-only: \${tag} (-arch=\${arch})\"
-	err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
-	set +e
-	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
-	rc=\$?
-	set -e
-	if [ \$rc -eq 0 ]; then
-		echo \"\${tag}: OK\"
-	else
-		echo \"\${tag}: FAILED rc=\${rc}\"
-		head -n 40 \"\${err_path}\" || true
-	fi
+cat > \"$REMOTE_DIR\"/cuda_nvcc_compile_only_cxx20_flags.cu <<'EOF'
+#include <stdint.h>
+
+#if defined(__CUDA_ARCH__)
+#if (__CUDA_ARCH__ != 1210)
+#error nvcc_compile_only_cxx20_flags_expected___CUDA_ARCH___1210
+#endif
+#endif
+
+template <typename T>
+__host__ __device__ constexpr T add_constexpr(T a,T b)
+{
+	return((T)(a + b));
 }
+
+__global__ void cuda_compile_only_cxx20_flags(uint32_t *out)
+{
+#if defined(__CUDA_ARCH__)
+	auto lam = [] __host__ __device__ (uint32_t v) { return((uint32_t)(v + 1U)); };
+	constexpr uint32_t k = add_constexpr<uint32_t>(7U,9U);
+	if ( out != 0 )
+		out[0] = (uint32_t)(lam((uint32_t)__CUDA_ARCH__) + k);
+#else
+	(void)out;
+#endif
+}
+EOF
+
+	try_compile_only() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"\${tag}: OK\"
+		else
+			echo \"\${tag}: FAILED rc=\${rc}\"
+			head -n 40 \"\${err_path}\" || true
+		fi
+	}
+
+	try_compile_only_cxx20_flags() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		echo \"-- compile-only: \${tag} (-arch=\${arch} -std=c++20 --extended-lambda --expt-relaxed-constexpr)\"
+		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+		set +e
+		\$NVCC -O2 -std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only_cxx20_flags.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"\${tag}: OK\"
+		else
+			echo \"\${tag}: FAILED rc=\${rc}\"
+			head -n 40 \"\${err_path}\" || true
+		fi
+	}
 
 try_gencode_only() {
 	tag=\"\$1\"
@@ -105,12 +150,14 @@ try_gencode_only() {
 	fi
 }
 
-try_compile_only arch_sm_121 sm_121
-if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
-	try_compile_only arch_compute_121 compute_121
-	try_gencode_only gencode_sm_121 compute_121 sm_121
-	try_gencode_only gencode_compute_121 compute_121 compute_121
-fi
+	try_compile_only arch_sm_121 sm_121
+	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
+	if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		try_compile_only arch_compute_121 compute_121
+		try_compile_only_cxx20_flags arch_compute_121_cxx20_flags compute_121
+		try_gencode_only gencode_sm_121 compute_121 sm_121
+		try_gencode_only gencode_compute_121 compute_121 compute_121
+	fi
 if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
 	try_compile_only variant_sm_121a sm_121a
 fi
