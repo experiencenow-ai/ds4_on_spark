@@ -126,6 +126,8 @@ For the smallest/stablest output (good for Spark1 bring-up), use facts-only mode
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 ./scripts/spark_probe.sh spark1.local || true
 ```
 
+Facts-only mode implies summary mode and trims variable runtime sections (GPU temperature/pstate, power draw/utilization, IP addr/routes, and disk usage) while keeping the stable identity + CUDA/toolchain + GPU inventory + disk model/size facts needed for bring-up.
+
 In summary mode, the Spark probe suppresses larger/diagnostic-only sections (for example, `nvcc --list-gpu-*` lists and the full `/usr/local/cuda/version.json` dump). It still records the key CUDA/toolchain facts (including `selected compute_cap`, the `nvcc` release banner when present, and `cuda version.json` `cuda: <version>` when available) so Spark1 bring-up checks stay readable.
 
 Summary mode also prints `nvcc supports gpu code: sm_...` (when `nvcc --list-gpu-code` is available) as a one-line sanity check that the selected `NVCC_ARCH` is supported without dumping the full list.

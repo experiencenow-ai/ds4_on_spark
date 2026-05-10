@@ -45,6 +45,8 @@ Optional toggles:
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
 ```
 
+Facts-only mode implies summary mode and trims variable runtime sections (GPU temperature/pstate, power draw/utilization, IP addr/routes, and disk usage) while keeping stable identity + CUDA/toolchain + GPU inventory + disk model/size facts.
+
 - Summary mode (smaller output; useful for Spark1 smoke checks when it may be unreachable):
 
 ```bash
