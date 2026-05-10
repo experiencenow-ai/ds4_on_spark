@@ -268,6 +268,20 @@ Markov mode creates temporal locality by reusing the previous token's primary ex
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
+Two-stream mode generates **independent arrival processes** for interactive and batch traffic (useful for stressing
+interactive priority, reservation, and starvation behaviors under heavy batch load):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode twostream --interactive-arrival-rate-tps 500 --batch-arrival-rate-tps 8000 --json
+```
+
+Notes:
+
+- If `--interactive-arrival-rate-tps` / `--batch-arrival-rate-tps` are not set, the simulator derives them from
+  `--arrival-rate-tps` and `--interactive-prob`.
+- You can also set per-class burst knobs (`--interactive-burst-prob/--interactive-burst-scale` and
+  `--batch-burst-prob/--batch-burst-scale`) to make batch traffic spikier than interactive.
+
 ### Synthetic Scores and Cost Scaling
 
 To exercise score-aware admission (`--admit-policy score_desc`) before real runtime traces are available, synthetic traces can emit per-candidate `scores`:

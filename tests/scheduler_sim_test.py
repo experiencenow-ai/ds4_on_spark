@@ -120,6 +120,47 @@ class SchedulerSimTest(unittest.TestCase):
         trace = scheduler_sim.generate_synthetic_trace(cfg)
         self.assertTrue(all(r.cost_scale is not None and float(r.cost_scale) > 0.0 for r in trace))
 
+    def test_twostream_trace_deterministic_and_splits_by_rate(self) -> None:
+        cfg = scheduler_sim.TwoStreamTraceConfig(
+            num_tokens=40,
+            num_experts=8,
+            num_candidates=4,
+            interactive_arrival_rate_tps=1000.0,
+            batch_arrival_rate_tps=3000.0,
+            interactive_burst_prob=0.0,
+            interactive_burst_scale=1.0,
+            batch_burst_prob=0.0,
+            batch_burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        t0 = scheduler_sim.generate_twostream_trace(cfg)
+        t1 = scheduler_sim.generate_twostream_trace(cfg)
+        self.assertEqual(t0, t1)
+        self.assertEqual(len(t0), 40)
+        self.assertTrue(all(r.t_ms >= 0.0 for r in t0))
+        self.assertTrue(all(len(r.candidates) == 4 for r in t0))
+        num_hi = sum(1 for r in t0 if r.cls == scheduler_sim.LatencyClass.INTERACTIVE)
+        self.assertEqual(num_hi, 10)
+
+    def test_twostream_trace_all_batch_when_interactive_rate_zero(self) -> None:
+        cfg = scheduler_sim.TwoStreamTraceConfig(
+            num_tokens=12,
+            num_experts=8,
+            num_candidates=3,
+            interactive_arrival_rate_tps=0.0,
+            batch_arrival_rate_tps=1000.0,
+            interactive_burst_prob=0.0,
+            interactive_burst_scale=1.0,
+            batch_burst_prob=0.0,
+            batch_burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        trace = scheduler_sim.generate_twostream_trace(cfg)
+        self.assertEqual(len(trace), 12)
+        self.assertTrue(all(r.cls == scheduler_sim.LatencyClass.BATCH for r in trace))
+
     def test_hotset_trace_deterministic_and_rotates(self) -> None:
         cfg = scheduler_sim.HotsetTraceConfig(
             num_tokens=4,
