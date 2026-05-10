@@ -31,6 +31,7 @@ static int32_t ds4_write_all(int32_t fd,const uint8_t *buf,int32_t len)
 int32_t test_config(void)
 {
 	ds4_config_t cfg;
+	ds4_config_diag_t diag;
 	static const uint8_t buf0[] = "log_level=3\nenable_cuda=false\n";
 	static const uint8_t buf1[] = "enable_cuda=ON\n";
 	static const uint8_t buf2[] = "log_level=0 # comment\n# full line comment\n enable_cuda = yes\t# trailing\n";
@@ -129,6 +130,21 @@ int32_t test_config(void)
 		return(-124);
 	if ( unknown != 1 )
 		return(-152);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-201);
+	unknown = -1;
+	if ( ds4_config_parse_mem_ex_diag(&cfg,buf_unknown0,(int32_t)(sizeof(buf_unknown0) - 1),DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown,&diag) >= 0 )
+		return(-202);
+	if ( unknown != 1 )
+		return(-203);
+	if ( diag.stage != DS4_CONFIG_DIAG_STAGE_MEM )
+		return(-204);
+	if ( diag.line != 2 )
+		return(-205);
+	if ( diag.err != -11 )
+		return(-206);
+	if ( diag.unknown != 1 )
+		return(-207);
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-101);
 	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )
@@ -416,7 +432,8 @@ int32_t test_config(void)
 	}
 	out_len = 0;
 	unknown = -1;
-	if ( ds4_config_parse_file_ex(&cfg,path,io_buf,(int32_t)sizeof(io_buf),&out_len,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown) >= 0 )
+	ds4_config_diag_init(&diag);
+	if ( ds4_config_parse_file_ex_diag(&cfg,path,io_buf,(int32_t)sizeof(io_buf),&out_len,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown,&diag) >= 0 )
 	{
 		unlink(path);
 		return(-164);
@@ -425,6 +442,26 @@ int32_t test_config(void)
 	{
 		unlink(path);
 		return(-165);
+	}
+	if ( diag.stage != DS4_CONFIG_DIAG_STAGE_FILE )
+	{
+		unlink(path);
+		return(-208);
+	}
+	if ( diag.line != 2 )
+	{
+		unlink(path);
+		return(-209);
+	}
+	if ( diag.err != -11 )
+	{
+		unlink(path);
+		return(-210);
+	}
+	if ( diag.unknown != 1 )
+	{
+		unlink(path);
+		return(-211);
 	}
 	unlink(path);
 	unsetenv("DS4_LOG_LEVEL");
