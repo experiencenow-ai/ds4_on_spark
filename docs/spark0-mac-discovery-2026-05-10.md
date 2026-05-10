@@ -113,12 +113,42 @@ Refreshed again (16:17Z refresh, toolchain facts loop):
 REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T161738Z_loop_toolchain_facts.txt
 ```
 
+Refreshed again (16:45Z refresh, matches Spark0 summary-mode probe with PCIe query warning):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1645Z_loop_next.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
 - `spark1.local` is still not reachable (likely not provisioned / not on the same mDNS domain yet).
 
 ## Excerpts (Redacted)
+
+```text
+== meta ==
+Sun May 10 16:45:11 UTC 2026
+git: e526d4c
+targets: aitopatom-9ab9.local spark1.local
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sun 10 May 2026---
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+16:45:11.335  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
+16:45:16.349  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+16:45:16.349  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+-- spark1.local --
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
 
 ```text
 == meta ==

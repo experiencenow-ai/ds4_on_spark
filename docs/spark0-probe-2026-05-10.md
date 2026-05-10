@@ -125,6 +125,12 @@ Additional probe run (16:17Z refresh, toolchain facts summary block):
 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T161731Z_loop_toolchain_facts.txt
 ```
 
+Additional probe run (16:45Z refresh, summary-mode output with PCIe query warning):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1644Z_loop_next.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -217,6 +223,34 @@ cuda version.json: 13.0.3
 cuda.h CUDA_VERSION: 13000
 compute_cap: 12.1
 nvcc arch: sm_121
+```
+
+### PCIe link query warning + host/GPU max fields (Spark0, 16:45Z)
+
+```text
+== local meta ==
+Sun May 10 16:45:03 UTC 2026
+git: e526d4c
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== nvidia-smi pcie link (gpu/host max, optional, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
+0, 0000000F:01:00.0, 1, 5, 5, 1, 16
 ```
 
 ### Compute capability + open kernel module metadata (Spark0, 14:11Z)
