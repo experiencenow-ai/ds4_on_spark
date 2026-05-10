@@ -64,8 +64,9 @@ When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
 
 This also performs best-effort toolchain-only checks when supported:
 
-- If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
+- Always attempt best-effort compile-only builds for `sm_121a` / `sm_121f`, and report whether each target was advertised by `nvcc --list-gpu-code` (informational; the hard failure remains missing `sm_121` support).
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
+- Attempt best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted by the toolchain).
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt compile-only `-gencode` builds for `arch=compute_121,code=sm_121`, `arch=compute_121,code=compute_121`, and `arch=compute_121,code=[sm_121,compute_121]` (multi-target build plumbing gate + bracket-list syntax probe).
 - Attempt a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and print `cluster_dims_attr_compile: OK` or the first lines of the compile error (some toolkits reject the annotation for `sm_121` even when runtime cluster launch works).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
@@ -83,7 +84,8 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
-- Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
+- Runs best-effort compile-only probes for `-arch=sm_121` plus `sm_121a` / `sm_121f` (variant targets) and `compute_121` (when advertised) (fast toolchain signal; no kernel run required; prints first error lines on failure)
+- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted)
 - Runs a best-effort compile-only probe using `nvcc --gpu-architecture=sm_121` (long-form flag used by some build systems)
 - Runs a best-effort compile-only probe with `-std=c++20 --extended-lambda --expt-relaxed-constexpr` for `-arch=sm_121` (and `compute_121` when advertised) as a CUTLASS/DeepGEMM-style toolchain gate (no repo transfer)
 - Prints `ptxas --version` and `nvlink --version` when present, and emits a `-Xptxas=-v` compile-only snippet for `-arch=sm_121` (useful when diagnosing toolchain mismatches)
@@ -147,7 +149,7 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 
 The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
 
-Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed); `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
+Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed, but best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed); feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
 
 ## Spark0: Compile + Run
 

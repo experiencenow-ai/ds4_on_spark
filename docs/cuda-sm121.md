@@ -21,15 +21,28 @@ For convenience on single-GPU bring-up:
 
 CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121f` in `nvcc --list-gpu-code`.
 
-When those targets are present, `scripts/cuda_probe_compile_only_tiny_spark0.sh` does a best-effort compile of `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` for each variant and prints `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure).
+`scripts/cuda_probe_compile_only_tiny_spark0.sh` always attempts best-effort compile-only builds for `sm_121a` and `sm_121f`, and reports whether each target was advertised by `nvcc --list-gpu-code` (`advertised=yes/no/unknown`) plus `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure).
 
-Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`.
+Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed.
 
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
 When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
 
 For an end-to-end “PTX → driver/runtime JIT → run” gate, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also builds and runs the same minimal probe via `-arch=compute_121` when `compute_121` is advertised.
+
+### `compute_121a` / `compute_121f` Feature-Set Macro Probe (Toolchain Probe)
+
+CUDA 13 adds architecture-specific (`a`) and family-specific (`f`) feature-set targets, which are intended to define `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` for device code.
+
+`scripts/cuda_probe_compile_only_tiny_spark0.sh` includes best-effort compile-only probes:
+
+- `featureset_compute_121a` (expects `__CUDA_ARCH__==1210` and both `__CUDA_ARCH_SPECIFIC__` and `__CUDA_ARCH_FAMILY_SPECIFIC__` defined)
+- `featureset_compute_121f` (expects `__CUDA_ARCH__==1210` and only `__CUDA_ARCH_FAMILY_SPECIFIC__` defined)
+
+These probes are informational; the hard failure for GB10 targeting remains “missing `sm_121` support”.
+
+Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 
 ### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
 

@@ -67,18 +67,21 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 		fi
 	fi
 
-echo
-echo \"== nvcc: sm_121 variant compile (best-effort) ==\"
-cd \"$REMOTE_DIR\"
-mkdir -p bin
-try_variant() {
-	arch=\"\$1\"
-	if [ \"\${list_gpu_code}\" = \"\" ]; then
-		echo \"(nvcc --list-gpu-code not supported; skipping \${arch})\"
-		return 0
-	fi
-	if echo \"\${list_gpu_code}\" | grep -q \"\${arch}\"; then
-		echo \"-- \${arch}\"
+	echo
+	echo \"== nvcc: sm_121 variant compile (best-effort) ==\"
+	cd \"$REMOTE_DIR\"
+	mkdir -p bin
+	try_variant() {
+		arch=\"\$1\"
+		advertised=\"unknown\"
+		if [ \"\${list_gpu_code}\" != \"\" ]; then
+			if echo \"\${list_gpu_code}\" | grep -q \"\${arch}\"; then
+				advertised=\"yes\"
+			else
+				advertised=\"no\"
+			fi
+		fi
+		echo \"-- \${arch} (best-effort; advertised=\${advertised})\"
 		set +e
 		\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/cuda_\${arch}_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_\${arch}_compile_probe.err
 		rc=\$?
@@ -89,17 +92,77 @@ try_variant() {
 			echo \"variant_\${arch}: FAILED rc=\$rc\"
 			head -n 40 bin/cuda_\${arch}_compile_probe.err || true
 		fi
-	else
-		echo \"(nvcc --list-gpu-code missing \${arch}; skipping)\"
-	fi
-}
-try_variant sm_121a
-try_variant sm_121f
+	}
+	try_variant sm_121a
+	try_variant sm_121f
 
-echo
-echo \"== nvcc: compute_121 compile (best-effort) ==\"
-if [ \"\${list_gpu_arch}\" = \"\" ]; then
-	echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
+	echo
+	echo \"== nvcc: feature-set macro compile (best-effort) ==\"
+	cat > bin/cuda_sm121_featureset_macros_compile_probe.cu <<'EOF'
+#include <stdint.h>
+
+	#if defined(__CUDA_ARCH__)
+	#if (__CUDA_ARCH__ != 1210)
+	#error featureset_macros_expected___CUDA_ARCH___1210
+		#endif
+
+		#if defined(EXPECT_SPECIFIC)
+	#if !defined(__CUDA_ARCH_SPECIFIC__)
+	#error featureset_macros_expected___CUDA_ARCH_SPECIFIC___defined
+	#endif
+	#if (__CUDA_ARCH_SPECIFIC__ != 1210)
+	#error featureset_macros_expected___CUDA_ARCH_SPECIFIC___1210
+	#endif
+	#else
+	#if defined(__CUDA_ARCH_SPECIFIC__)
+	#error featureset_macros_unexpected___CUDA_ARCH_SPECIFIC___defined
+	#endif
+		#endif
+
+		#if defined(EXPECT_FAMILY)
+	#if !defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+	#error featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___defined
+	#endif
+	#if (__CUDA_ARCH_FAMILY_SPECIFIC__ != 1210)
+	#error featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___1210
+	#endif
+	#else
+	#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+	#error featureset_macros_unexpected___CUDA_ARCH_FAMILY_SPECIFIC___defined
+	#endif
+	#endif
+	#endif
+
+__global__ void featureset_macros_compile_probe(uint32_t *out)
+{
+	(void)out;
+}
+EOF
+
+	try_featureset_macros() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		defs=\"\$3\"
+		echo \"-- \${tag} (-arch=\${arch})\"
+		set +e
+		\$NVCC -O2 -std=c++17 \${defs} -arch=\${arch} -c -o bin/\${tag}.o bin/cuda_sm121_featureset_macros_compile_probe.cu 2>bin/\${tag}.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"\${tag}: OK\"
+		else
+			echo \"\${tag}: FAILED rc=\$rc\"
+			head -n 40 bin/\${tag}.err || true
+		fi
+	}
+
+	try_featureset_macros featureset_compute_121a compute_121a \"-DEXPECT_SPECIFIC=1 -DEXPECT_FAMILY=1\"
+	try_featureset_macros featureset_compute_121f compute_121f \"-DEXPECT_FAMILY=1\"
+
+	echo
+	echo \"== nvcc: compute_121 compile (best-effort) ==\"
+	if [ \"\${list_gpu_arch}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
 else
 	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		echo \"-- compute_121\"
