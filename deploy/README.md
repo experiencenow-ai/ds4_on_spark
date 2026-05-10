@@ -70,6 +70,13 @@ If you want shared defaults across instances, copy `ds4.env.example` to `/etc/ds
 `scripts/ops_stage_deploy_assets.sh` rsyncs templates to `/tmp` on a Spark and
 prints the next `sudo` commands to apply them. By default it only installs `ds4*.service` units; Spark units are staged but optional.
 
+Optional: on the Spark, use the staged installer wrapper to apply the staged assets in one command (human-run; review first):
+
+```bash
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight
+# optional: add --install-timers, --install-spark-units, and/or --strict
+```
+
 Before staging, you can sanity-check that deploy assets and ops scripts are internally consistent:
 
 ```bash

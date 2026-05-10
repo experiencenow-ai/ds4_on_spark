@@ -28,26 +28,70 @@ LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
 
 ssh $SSH_OPTS "$target" "set -eu
 echo \"== nvcc ==\"
-if [ -x /usr/local/cuda/bin/nvcc ]; then
-	/usr/local/cuda/bin/nvcc --version
-	echo
-	echo \"== nvcc: --list-gpu-arch (if supported) ==\"
-	/usr/local/cuda/bin/nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
-	echo
-	echo \"== nvcc: --list-gpu-code (if supported) ==\"
-	/usr/local/cuda/bin/nvcc --list-gpu-code 2>/dev/null || echo \"(nvcc --list-gpu-code not supported)\"
-elif command -v nvcc >/dev/null 2>&1; then
-	nvcc --version
-	echo
-	echo \"== nvcc: --list-gpu-arch (if supported) ==\"
-	nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
-	echo
-	echo \"== nvcc: --list-gpu-code (if supported) ==\"
-	nvcc --list-gpu-code 2>/dev/null || echo \"(nvcc --list-gpu-code not supported)\"
-else
-	echo \"nvcc not found\" >&2
-	exit 3
-fi
+	if [ -x /usr/local/cuda/bin/nvcc ]; then
+		/usr/local/cuda/bin/nvcc --version
+		echo
+		echo \"== nvcc: --list-gpu-arch (if supported) ==\"
+		/usr/local/cuda/bin/nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
+		list_gpu_arch=\$(/usr/local/cuda/bin/nvcc --list-gpu-arch 2>/dev/null || true)
+		if [ \"\${list_gpu_arch}\" = \"\" ]; then
+			:
+		else
+			if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+				:
+			else
+				echo \"(nvcc --list-gpu-arch missing compute_121)\" >&2
+				exit 4
+			fi
+		fi
+		echo
+		echo \"== nvcc: --list-gpu-code (if supported) ==\"
+		list_gpu_code=\$(/usr/local/cuda/bin/nvcc --list-gpu-code 2>/dev/null || true)
+		if [ \"\${list_gpu_code}\" = \"\" ]; then
+			echo \"(nvcc --list-gpu-code not supported)\"
+		else
+			printf \"%s\n\" \"\${list_gpu_code}\"
+			if echo \"\${list_gpu_code}\" | grep -q \"sm_121\"; then
+				:
+			else
+				echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
+				exit 5
+			fi
+		fi
+	elif command -v nvcc >/dev/null 2>&1; then
+		nvcc --version
+		echo
+		echo \"== nvcc: --list-gpu-arch (if supported) ==\"
+		nvcc --list-gpu-arch 2>/dev/null || echo \"(nvcc --list-gpu-arch not supported)\"
+		list_gpu_arch=\$(nvcc --list-gpu-arch 2>/dev/null || true)
+		if [ \"\${list_gpu_arch}\" = \"\" ]; then
+			:
+		else
+			if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+				:
+			else
+				echo \"(nvcc --list-gpu-arch missing compute_121)\" >&2
+				exit 4
+			fi
+		fi
+		echo
+		echo \"== nvcc: --list-gpu-code (if supported) ==\"
+		list_gpu_code=\$(nvcc --list-gpu-code 2>/dev/null || true)
+		if [ \"\${list_gpu_code}\" = \"\" ]; then
+			echo \"(nvcc --list-gpu-code not supported)\"
+		else
+			printf \"%s\n\" \"\${list_gpu_code}\"
+			if echo \"\${list_gpu_code}\" | grep -q \"sm_121\"; then
+				:
+			else
+				echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
+				exit 5
+			fi
+		fi
+	else
+		echo \"nvcc not found\" >&2
+		exit 3
+	fi
 	echo
 	echo \"== compile-only sm_121 probes ==\"
 	cd \"$REMOTE_DIR\"

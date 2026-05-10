@@ -6,6 +6,7 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 
 - Fast path: `./scripts/cuda_probe_tiny_spark0.sh`
 - Compile-only fast path: `./scripts/cuda_probe_compile_only_tiny_spark0.sh`
+- Kernel bring-up tiny (no cuBLASLt): `./scripts/cuda_probe_kernel_tiny_spark0.sh`
 - Full suite: `./scripts/cuda_probe_spark0.sh` and `./scripts/cuda_probe_compile_only_spark0.sh`
 
 ## Build (on Spark0)

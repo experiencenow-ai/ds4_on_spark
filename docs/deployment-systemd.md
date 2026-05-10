@@ -19,6 +19,7 @@ When staging assets to a Spark via `scripts/ops_stage_deploy_assets.sh`, the rep
 
 - `ops_validate_staged_assets.sh`: checks the `/tmp/ds4-*` staged directories (no sudo)
 - `ops_validate_installed_assets.sh`: checks installed assets under `/etc` + `/opt` then runs preflight (no sudo; use `--strict` for fail-fast gating)
+- Optional installer wrapper: `ops_install_staged_assets.sh` (human-run; installs staged assets into `/etc` + `/opt`, then reloads systemd)
 
 Timer templates (`ds4-preflight@.timer`, `ds4-preflight-strict@.timer`) are optional and are not required for `ops_validate_installed_assets.sh`.
 
