@@ -46,6 +46,10 @@ candidate `*.gguf` files + common runtime binaries) in the same report:
 SPARK_INVENTORY=1 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+When supported on the Spark host, the inventory lists GGUF candidates as
+`size_bytes<TAB>path` so it’s easier to pick the smallest credible artifact for
+Milestone 0 without guessing.
+
 Optionally include the local `antirez/ds4` Mac/Metal probe in the same report:
 
 ```sh

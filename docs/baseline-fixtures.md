@@ -39,6 +39,10 @@ Required local artifact:
   V4 Flash GGUF first and require a runtime that explicitly supports the
   DeepSeek V4 architecture and its GGUF quant types.
 
+Tip: run the baseline entrypoint with `SPARK_INVENTORY=1` first; on most Spark
+hosts the inventory lists GGUF candidates as `size_bytes<TAB>path` for quick
+artifact sizing.
+
 Record:
 
 - runtime repo + commit, especially when using a fork or early-access runtime

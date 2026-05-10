@@ -94,6 +94,7 @@ if command -v ds4 >/dev/null 2>&1; then
 fi
 
 echo "== models: candidate GGUFs (best-effort) =="
+echo "format=size_bytes<TAB>path (when supported)"
 IFS=":"
 set -- $INVENTORY_DIRS
 unset IFS
@@ -105,7 +106,14 @@ for d in "$@"; do
         continue
     fi
     echo "== scan_dir=$d =="
-    find "$d" -maxdepth "$MAX_DEPTH" -type f -name '*.gguf' -print 2>/dev/null | head -n "$MAX_FILES" || true
+    # Prefer size-aware output to help pick the smallest credible artifact quickly.
+    # Keep the scan bounded: do not recurse deeply or enumerate unbounded file sets.
+    if find "$d" -maxdepth 0 -printf '%p\n' >/dev/null 2>&1; then
+        find "$d" -maxdepth "$MAX_DEPTH" -type f -name '*.gguf' -printf '%s\t%p\n' 2>/dev/null | head -n "$MAX_FILES" || true
+    else
+        find "$d" -maxdepth "$MAX_DEPTH" -type f -name '*.gguf' -print 2>/dev/null | head -n "$MAX_FILES" || true
+        echo "note=find_no_printf_sizes_omitted"
+    fi
     echo
 done
 

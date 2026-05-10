@@ -75,7 +75,8 @@ If it loads and generates, rerun with:
 - Optional Spark inventory (read-only): set `SPARK_INVENTORY=1` when running the
   baseline entrypoint to record a best-effort scan for candidate `*.gguf` files
   and common runtime binaries. Keep scan depth small; do not run wide filesystem
-  searches.
+  searches. When supported on the Spark host, the inventory lists GGUFs as
+  `size_bytes<TAB>path` to make “smallest credible artifact” selection faster.
 - GPU polling during runs: set `GPU_SAMPLE=1` (default) and adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) to emit `nvidia_smi_poll.csv` alongside the normal `nvidia-smi` snapshots.
 - The baseline summary also derives best-effort GPU poll stats from `nvidia_smi_poll.csv` (memory min/max/delta; plus util/power percentiles when present).
 - llama.cpp token trace (best-effort): if the runtime emits per-token JSON log events (for example `process_token`), the Spark llama.cpp script writes them to `token_trace.jsonl` in the fetched artifacts directory. Do not guess flags; use the captured `llama_cli.help.txt` and only enable runtime-supported log options via `EXTRA_ARGS`.

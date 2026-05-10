@@ -6,6 +6,7 @@ Baseline type:
 
 - [ ] antirez/ds4 (Mac / Metal)
 - [ ] llama.cpp (Spark / CUDA)
+- [ ] quantized V4 Flash (single-Spark external runtime)
 - [ ] vLLM (Spark / reference)
 - [ ] ds4_on_spark (future)
 
