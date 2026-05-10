@@ -22,6 +22,7 @@ Notes:
 - These scripts write SSH host key state to `SPARK_KNOWN_HOSTS` (default: `/private/tmp/ds4_spark_known_hosts`, not `~/.ssh/known_hosts`) to avoid macOS permission/provenance issues and to keep probe runs reproducible.
 - When probing multiple Spark hosts (Spark0/Spark1), set `SPARK_KNOWN_HOSTS_PER_HOST=1` (or set `SPARK_KNOWN_HOSTS` explicitly) to keep host keys isolated per target.
 - When multiple targets are passed to `scripts/spark_probe.sh`, the probe prints `probe args:` plus `resolved targets:` and one `known_hosts:` line per target so runs can be reproduced exactly.
+- When multiple targets are passed to `scripts/spark_probe.sh`, the probe continues even if a target is unreachable; it prints `ssh: failed rc=...` plus a `== probe summary ==` with `ssh failures: N`. The script exits non-zero if any target fails, so append `|| true` when you want to save partial output (e.g. Spark0 ok, Spark1 offline).
 - The Spark probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - Use `REDACT=1` for any output you plan to commit.
 - `REDACT=1` redaction is delimiter-aware (it will redact actual IP addresses without clobbering non-secret version strings like `0ubuntu0.24.04.1`), and includes both expanded and compressed (`::`) IPv6 forms.
