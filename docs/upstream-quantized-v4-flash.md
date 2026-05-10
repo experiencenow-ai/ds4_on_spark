@@ -107,7 +107,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### antirez/deepseek-v4-gguf (DS4-tuned IQ2XXS)
 
-- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `ef3b960827870d69ed0b225c095a617c12d7e80d` (`refs/heads/main`)
+- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a` (`refs/heads/main`)
 - License: MIT (model card)
 - Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
   - IQ2XXS: `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` (86720111200 bytes, 80.8 GiB)
@@ -252,7 +252,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### teamblobfish/DeepSeek-V4-Flash-GGUF (multi-quant sharded GGUFs)
 
-- Source: `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF` @ `8224b059b3bd5f5846538a804298412cc971ace3` (`refs/heads/main`)
+- Source: `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF` @ `868488dd20bce1bdc023fc03c6a3107cbc65f92a` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement (per upstream README):
   - Requires a DeepSeek-V4-capable llama.cpp fork; upstream recommends `cchuter/llama.cpp` branch `feat/v4-port`.

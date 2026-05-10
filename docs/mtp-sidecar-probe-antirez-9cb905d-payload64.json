@@ -25,7 +25,7 @@
   },
   "missing_tensors": [],
   "ok": true,
-  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
   "payload_sample_bytes": 64,
   "payload_samples": {
     "mtp.0.attn_kv.weight": {
