@@ -37,3 +37,12 @@ target_link_libraries(my_target PRIVATE ds4::ds4)
 ```bash
 make install BUILD_DIR=build_install PREFIX=./_install
 ```
+
+## CI / Smoke Tests
+
+When `DS4_ENABLE_TESTS=ON`, `ctest` runs two install-consumer smoke tests:
+
+- `ds4_install_consumer`: installs the build and compiles a small C consumer.
+- `ds4_install_consumer_cxx`: installs the build and compiles a small C++ consumer.
+
+Both consumers include all public `ds4/*.h` headers to catch missing includes and C++ compatibility regressions early.
