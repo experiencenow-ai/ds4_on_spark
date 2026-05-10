@@ -256,8 +256,6 @@ This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
   should not be public, tokens, and private LAN details if needed.
 - Prefer narrow, measurable milestones over broad framework work.
 
---- project-doc ---
-
 # Project Instructions
 
 This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
