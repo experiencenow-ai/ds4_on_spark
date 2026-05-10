@@ -120,6 +120,12 @@ For quick smoke checks (especially when Spark1 is flaky/not-yet-provisioned), us
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh spark1.local || true
 ```
 
+For the smallest/stablest output (good for Spark1 bring-up), use facts-only mode:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 ./scripts/spark_probe.sh spark1.local || true
+```
+
 In summary mode, the Spark probe suppresses larger/diagnostic-only sections (for example, `nvcc --list-gpu-*` lists and the full `/usr/local/cuda/version.json` dump). It still records the key CUDA/toolchain facts (including `selected compute_cap`, the `nvcc` release banner when present, and `cuda version.json` `cuda: <version>` when available) so Spark1 bring-up checks stay readable.
 
 Summary mode also prints `nvcc supports gpu code: sm_...` (when `nvcc --list-gpu-code` is available) as a one-line sanity check that the selected `NVCC_ARCH` is supported without dumping the full list.

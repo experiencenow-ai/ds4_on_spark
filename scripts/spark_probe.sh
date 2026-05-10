@@ -14,6 +14,7 @@ Environment:
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE    Optional work tree override (defaults to $PWD)
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
+  SPARK_PROBE_FACTS=1  Facts-only mode (stable, compact; implies SPARK_PROBE_SUMMARY=1)
   SPARK_PROBE_SUMMARY=1  Print a smaller, Spark1-friendly subset of sections
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
   PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
@@ -44,11 +45,18 @@ esac
 
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
+SPARK_PROBE_FACTS="${SPARK_PROBE_FACTS:-0}"
 SPARK_PROBE_SUMMARY="${SPARK_PROBE_SUMMARY:-0}"
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
 NVCC_ARCH_OVERRIDE="${NVCC_ARCH:-}"
+
+if [ "$SPARK_PROBE_FACTS" = "1" ]; then
+	SPARK_PROBE_SUMMARY="1"
+	NVIDIA_SMI_FULL="0"
+	PYTORCH_PROBE="0"
+fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -150,6 +158,7 @@ export LANG=C LC_ALL=C
 export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
 spark_probe_summary='"$SPARK_PROBE_SUMMARY"'
+spark_probe_facts='"$SPARK_PROBE_FACTS"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
 nvcc_arch_override='"$NVCC_ARCH_OVERRIDE"'
@@ -171,10 +180,18 @@ if [ -r /etc/os-release ]; then
 fi
 echo
 echo "== cpu =="
-lscpu || true
+if [ "$spark_probe_facts" = "1" ]; then
+	lscpu 2>/dev/null | grep -E "^(Architecture:|Byte Order:|CPU\\(s\\):|Model name:|Thread\\(s\\) per core:|Core\\(s\\) per socket:|Socket\\(s\\):|NUMA node\\(s\\):)" || lscpu || true
+else
+	lscpu || true
+fi
 echo
 echo "== memory =="
-free -h || true
+if [ "$spark_probe_facts" = "1" ]; then
+	free -h 2>/dev/null | awk '"'"'NR==1 || $1=="Mem:" || $1=="Swap:" {print}'"'"' || free -h || true
+else
+	free -h || true
+fi
 echo
 echo "== toolchain =="
 for tool in gcc g++ clang cmake ninja make python3 ldd; do
@@ -191,7 +208,7 @@ command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
 command -v python3 >/dev/null 2>&1 && python3 --version || true
 command -v ldd >/dev/null 2>&1 && ldd --version 2>/dev/null | head -n 1 || true
 echo
-if [ "$spark_probe_summary" != "1" ]; then
+if [ "$spark_probe_summary" != "1" ] && [ "$spark_probe_facts" != "1" ]; then
 	echo "== packages (cuda/nvidia, dpkg, capped) =="
 	if command -v dpkg-query >/dev/null 2>&1; then
 		dpkg-query -W -f='"'"'${Package}\t${Version}\n'"'"' "cuda*" "nvidia*" "libcudnn*" 2>/dev/null | head -n 200 || true
@@ -342,6 +359,11 @@ if [ "$have_smi" = "1" ] && [ "$smi_q" != "" ]; then
 	[ "$smi_c2c_mode" != "" ] && echo "GPU C2C Mode: $smi_c2c_mode"
 else
 	echo "nvidia-smi -q not available"
+fi
+if [ "$spark_probe_facts" = "1" ]; then
+	echo
+	echo "== probe mode =="
+	echo "facts-only: 1"
 fi
 	echo
 	pcie_link_query()

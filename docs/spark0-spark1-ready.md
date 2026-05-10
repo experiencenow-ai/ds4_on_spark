@@ -39,6 +39,12 @@ SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-cod
 
 Optional toggles:
 
+- Facts-only mode (smallest/stablest output; good for Spark1 bring-up checks):
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
+```
+
 - Summary mode (smaller output; useful for Spark1 smoke checks when it may be unreachable):
 
 ```bash
