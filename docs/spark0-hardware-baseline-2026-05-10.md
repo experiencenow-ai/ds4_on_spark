@@ -116,6 +116,18 @@ Refreshed again (14:47Z refresh, runtime max cc line):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1446Z_loop_runtime_maxcc.txt
 ```
 
+Refreshed again (15:19Z refresh, Spark1-ready loop):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T151929Z_loop_spark1summary_fix.txt
+```
+
+Refreshed again (15:47Z refresh, Spark1-friendly summary mode):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T154719Z_loop_git_2dea79c.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)

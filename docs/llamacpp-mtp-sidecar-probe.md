@@ -55,6 +55,11 @@ If `--load-weights` is reported as an unknown argument, update the ds4_on_spark 
 
 Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1` and `PAYLOAD_SAMPLE_BYTES=N`.
 
+Notes:
+
+- The helper is now **truly gated**: it does not `git fetch` / `git checkout` unless `ALLOW_FETCH=1` or `ALLOW_PATCH=1` is set.
+- When `JSON_ONLY=1` is set, common preflight failures (missing `LLAMA_DIR`, missing probe binary, unreadable `MTP_SIDECAR_GGUF`, etc.) emit a small JSON object (`ok=false`, `errors[]`) so Spark runners can parse failures deterministically.
+
 Expected success signal:
 
 - `ok=true`
@@ -71,6 +76,8 @@ For the canonical repo-side, no-download validation (HTTP range-read of header/t
 ```bash
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
 ```
+
+The Python probe also computes a `payload_bytes` estimate per tensor (for the expected `F32`/`Q8_0`/`Q4_K` types) and validates that tensor payload spans do not overlap and do not exceed the reported `file_size` when available.
 
 Optional stronger check (still no full download): sample a small prefix from each tensor payload:
 

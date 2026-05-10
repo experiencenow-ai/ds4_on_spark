@@ -106,6 +106,37 @@ Additional probe run (14:47Z refresh, runtime max cc line):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1446Z_loop_runtime_maxcc.txt
 ```
 
+Additional probe run (15:19Z refresh, Spark1-ready summary mode):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T151941Z_loop_spark1summary_fix.txt
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true) | tee /private/tmp/ds4_spark1_probe_summary_redacted_2026-05-10T151929Z_loop_spark1summary_fix.txt
+```
+
+Additional probe run (15:47Z refresh, smaller summary-mode output):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T154719Z_loop_git_2dea79c.txt
+```
+
+Additional probe run (16:17Z refresh, toolchain facts summary block):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T161731Z_loop_toolchain_facts.txt
+```
+
+Additional probe run (16:45Z refresh, summary-mode output with PCIe query warning):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1644Z_loop_next.txt
+```
+
+Additional probe run (17:48Z refresh, summary-mode toolchain + storage snapshot):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1748Z_loop_accessprobe.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -159,6 +190,105 @@ path 000f:00:00.0 current_link_speed: Unknown
 path 000f:00:00.0 current_link_width: 0
 path 000f:01:00.0 current_link_speed: 2.5 GT/s PCIe
 path 000f:01:00.0 current_link_width: 1
+```
+
+### Spark1-friendly CUDA/toolchain summary mode (Spark0, 15:47Z)
+
+```text
+== local meta ==
+Sun May 10 15:47:19 UTC 2026
+git: 2dea79c
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda version.json (summary) ==
+cuda: 13.0.3
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+runtime max cc: 12.1
+```
+
+### CUDA/toolchain facts summary block (Spark0, 16:17Z)
+
+```text
+== local meta ==
+Sun May 10 16:17:31 UTC 2026
+git: b5afccb
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+```
+
+### PCIe link query warning + host/GPU max fields (Spark0, 16:45Z)
+
+```text
+== local meta ==
+Sun May 10 16:45:03 UTC 2026
+git: e526d4c
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== nvidia-smi pcie link (gpu/host max, optional, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
+0, 0000000F:01:00.0, 1, 5, 5, 1, 16
+```
+
+### Summary-mode snapshot (Spark0, 17:48Z)
+
+```text
+== local meta ==
+Sun May 10 17:48:29 UTC 2026
+git: f907bab
+probe args: spark0@aitopatom-9ab9.local
+
+== identity ==
+Linux aitopatom-9ab9 6.17.0-1014-nvidia #14-Ubuntu SMP PREEMPT_DYNAMIC Tue Mar 17 19:01:40 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 pci bus id: 000F:01:00.0
+runtime max cc: 12.1
+
+== disks (summary) ==
+NAME     SIZE MODEL                      ROTA TYPE
+nvme0n1  3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
 
 ### Compute capability + open kernel module metadata (Spark0, 14:11Z)
@@ -340,6 +470,36 @@ runtime max cc: 12.1
 == nvidia-smi pcie link (max/current, post-load) ==
 0, 0000000F:01:00.0, 1, 1, 16, 1
 warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+```
+
+### Summary-mode probe (Spark0, 15:19Z, Spark1-ready)
+
+```text
+== local meta ==
+Sun May 10 15:19:41 UTC 2026
+git: 0e4f936
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+runtime max cc: 12.1
 ```
 
 ### Single-target probe (Spark0, 02:21Z, PCIe query mismatch warning)
@@ -696,4 +856,94 @@ Filesystem      Size  Used Avail Use% Mounted on
 
 == disks (summary) ==
 nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
+```
+
+### Single-target probe (Spark0, 17:48Z summary mode, `git: 55b71fa`)
+
+```text
+== local meta ==
+Sun May 10 17:48:47 UTC 2026
+git: 55b71fa
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 50, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== nvidia-smi pcie link (gpu/host max, optional) ==
+columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
+0, 0000000F:01:00.0, 1, 5, 5, 1, 16
+
+== pci link (sysfs, gpu endpoints, current/max) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
+```
+
+### Single-target probe (Spark0, 18:20Z summary mode, `git: e8e2099`)
+
+```text
+== local meta ==
+Sun May 10 18:20:34 UTC 2026
+git: e8e2099
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+ssh opts: -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2
+known_hosts: spark0@aitopatom-9ab9.local -> /private/tmp/ds4_spark_known_hosts.aitopatom-9ab9.local
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+nvcc supports gpu code: sm_121
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+cuda driver api version: 13000 (13.0)
+cuda runtime api version: 13000 (13.0)
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 pci bus id: 000F:01:00.0
+runtime max cc: 12.1
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== pci link (sysfs, gpu endpoints, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
 ```

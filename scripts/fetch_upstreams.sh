@@ -255,7 +255,7 @@ fetch_one()
 			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
 		llama_cpp)
-			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9095"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9097"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
 			;;
 		llama_cpp_deepseek_v4_flash)

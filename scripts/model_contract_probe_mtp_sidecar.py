@@ -183,7 +183,18 @@ def parse_gguf(path: Path) -> tuple[int, dict[str, Any], list[TensorDesc], int, 
 		return parse_gguf_stream(f, str(path))
 
 
-def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int = 20) -> bytes:
+def parse_content_range_total_bytes(content_range: str) -> Optional[int]:
+	# Expected: "bytes <start>-<end>/<size>" or "bytes */<size>" or ".../*".
+	try:
+		tail = content_range.strip().split("/")[-1].strip()
+		if tail == "*" or tail == "":
+			return None
+		return int(tail)
+	except Exception:
+		return None
+
+
+def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int = 20) -> tuple[bytes, Optional[int]]:
 	req = Request(url, headers={"Range": f"bytes=0-{want_bytes - 1}"})
 	with urlopen(req, timeout=timeout_s) as resp:
 		status = getattr(resp, "status", None)
@@ -194,17 +205,20 @@ def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int = 20) -> bytes:
 			)
 		if content_range is None:
 			raise RuntimeError(f"server did not return Content-Range for {url}; refusing to risk a full download")
-		return resp.read(want_bytes)
+		total_bytes = parse_content_range_total_bytes(str(content_range))
+		return (resp.read(want_bytes), total_bytes)
 
 
-def parse_gguf_url_prefix(url: str, max_bytes: int, timeout_s: int = 20) -> tuple[int, dict[str, Any], list[TensorDesc], int, int, int]:
+def parse_gguf_url_prefix(
+	url: str, max_bytes: int, timeout_s: int = 20
+) -> tuple[int, dict[str, Any], list[TensorDesc], int, int, int, Optional[int]]:
 	want = 256 * 1024
 	while want <= max_bytes:
 		try:
-			prefix = fetch_url_prefix(url, want, timeout_s=timeout_s)
+			prefix, total_bytes = fetch_url_prefix(url, want, timeout_s=timeout_s)
 			f = io.BytesIO(prefix)
 			version, meta, tensors, data_off, alignment = parse_gguf_stream(f, url)
-			return (version, meta, tensors, len(prefix), data_off, alignment)
+			return (version, meta, tensors, len(prefix), data_off, alignment, total_bytes)
 		except EOFError:
 			want *= 2
 			continue
@@ -245,6 +259,52 @@ GGML_TYPE_NAMES: dict[int, str] = {
 
 def ggml_type_name(code: int) -> str:
 	return GGML_TYPE_NAMES.get(code, f"TYPE_{code}")
+
+
+def prod_i64(xs: list[int]) -> int:
+	out = 1
+	for x in xs:
+		out *= int(x)
+	return int(out)
+
+
+def ggml_row_size_bytes(type_code: int, n_per_row: int) -> int:
+	# Minimal ggml row-size calculator for the sidecar’s expected tensor types.
+	#
+	# Mirrors ggml’s row_size logic for the supported types:
+	# - F32: 4 bytes / element
+	# - I32: 4 bytes / element
+	# - Q8_0: blocks of 32 elems; sizeof(block_q8_0)=sizeof(ggml_half)+32=34 bytes
+	# - Q4_K: super-blocks of 256 elems; sizeof(block_q4_K)=2*sizeof(ggml_half)+K_SCALE_SIZE+256/2 = 4+12+128=144 bytes
+	n = int(n_per_row)
+	if n < 0:
+		raise ValueError(f"invalid n_per_row={n}")
+	if type_code in (0, 26):  # F32, I32
+		return int(n * 4)
+	if type_code == 1:  # F16
+		return int(n * 2)
+	if type_code == 8:  # Q8_0
+		qk = 32
+		block = 34
+		if (n % qk) != 0:
+			raise ValueError(f"Q8_0 row length {n} is not a multiple of {qk}")
+		return int((n // qk) * block)
+	if type_code == 12:  # Q4_K
+		qk = 256
+		block = 144
+		if (n % qk) != 0:
+			raise ValueError(f"Q4_K row length {n} is not a multiple of {qk}")
+		return int((n // qk) * block)
+	raise ValueError(f"unsupported ggml type for row sizing: {ggml_type_name(type_code)} ({type_code})")
+
+
+def ggml_tensor_nbytes(type_code: int, dims: list[int]) -> int:
+	if not dims:
+		raise ValueError("tensor has ndim=0")
+	n_per_row = int(dims[0])
+	n_rows = prod_i64([int(x) for x in dims[1:]]) if len(dims) > 1 else 1
+	row_bytes = ggml_row_size_bytes(int(type_code), int(n_per_row))
+	return int(row_bytes * int(n_rows))
 
 
 def must_u32(meta: dict[str, Any], key: str) -> int:
@@ -411,7 +471,7 @@ def main() -> int:
 			file_size = None
 	else:
 		label = str(args.url)
-		version, meta, tensors, fetched_bytes, data_off, alignment = parse_gguf_url_prefix(
+		version, meta, tensors, fetched_bytes, data_off, alignment, file_size = parse_gguf_url_prefix(
 			str(args.url), int(args.max_bytes), timeout_s=int(args.timeout_s)
 		)
 
@@ -444,21 +504,46 @@ def main() -> int:
 		else:
 			spans[t.name] = None
 			next_rel_off[t.name] = None
-	out["tensors"] = [
-		{
-			"name": t.name,
-			"type": ggml_type_name(int(t.ggml_type)),
-			"type_code": int(t.ggml_type),
-			"dims": [int(x) for x in t.dims],
-			"rel_offset": int(t.rel_offset),
-			"abs_offset": int(data_off + int(t.rel_offset)),
-			"span_bytes": spans.get(t.name, None),
-			"next_rel_offset": next_rel_off.get(t.name, None),
-		}
-		for t in sorted(tensors, key=lambda x: x.name)
-	]
 
 	errors: list[str] = []
+	payload_bytes: dict[str, Optional[int]] = {}
+	n_elements: dict[str, Optional[int]] = {}
+	for t in tensors:
+		dims = [int(x) for x in t.dims]
+		try:
+			n_elements[t.name] = int(prod_i64(dims))
+			payload_bytes[t.name] = int(ggml_tensor_nbytes(int(t.ggml_type), dims))
+		except Exception as e:
+			n_elements[t.name] = None
+			payload_bytes[t.name] = None
+			errors.append(f"tensor {t.name} payload sizing failed: {e}")
+
+	out_tensors = []
+	for t in sorted(tensors, key=lambda x: x.name):
+		dims = [int(x) for x in t.dims]
+		abs_off = int(data_off + int(t.rel_offset))
+		span = spans.get(t.name, None)
+		if span is None and file_size is not None:
+			span = int(int(file_size) - abs_off)
+		pbytes = payload_bytes.get(t.name, None)
+		p_end = (int(abs_off) + int(pbytes)) if pbytes is not None else None
+		out_tensors.append(
+			{
+				"name": t.name,
+				"type": ggml_type_name(int(t.ggml_type)),
+				"type_code": int(t.ggml_type),
+				"dims": dims,
+				"n_elements": n_elements.get(t.name, None),
+				"payload_bytes": pbytes,
+				"rel_offset": int(t.rel_offset),
+				"abs_offset": abs_off,
+				"payload_end_abs": p_end,
+				"span_bytes": span,
+				"next_rel_offset": next_rel_off.get(t.name, None),
+			}
+		)
+	out["tensors"] = out_tensors
+
 	if version != 3:
 		errors.append(f"gguf version is {version}, expected 3")
 	if meta.get("general.architecture", None) != "deepseek4_mtp_support":
@@ -474,6 +559,30 @@ def main() -> int:
 		if int(t.rel_offset) < last_rel:
 			errors.append(f"tensor offsets not sorted (saw {t.rel_offset} after {last_rel})")
 		last_rel = int(t.rel_offset)
+
+	prev_end: Optional[int] = None
+	for t in tensors_by_offset:
+		abs_off = int(data_off + int(t.rel_offset))
+		pbytes = payload_bytes.get(t.name, None)
+		if pbytes is None:
+			errors.append(f"tensor {t.name} has no computed payload_bytes (unsupported type/dims?)")
+			continue
+		end_off = int(abs_off + int(pbytes))
+		if prev_end is not None and abs_off < int(prev_end):
+			errors.append(f"tensor payload overlap: {t.name} abs_offset {abs_off} < prev_end {prev_end}")
+		prev_end = int(end_off) if prev_end is None else int(max(int(prev_end), int(end_off)))
+
+		span = spans.get(t.name, None)
+		if span is None and file_size is not None:
+			span = int(int(file_size) - abs_off)
+		if span is not None and int(span) < int(pbytes):
+			errors.append(f"tensor {t.name} span_bytes {span} < payload_bytes {pbytes}")
+
+		if file_size is not None:
+			if abs_off < 0 or abs_off >= int(file_size):
+				errors.append(f"tensor {t.name} abs_offset {abs_off} out of file bounds (file_size={file_size})")
+			if end_off > int(file_size):
+				errors.append(f"tensor {t.name} end_offset {end_off} exceeds file_size {file_size}")
 
 	expected_names = [
 		"mtp.0.hc_head_base.weight",
@@ -642,14 +751,23 @@ def main() -> int:
 		out["payload_sample_bytes"] = int(sample_n)
 		out["payload_samples"] = {}
 
+		def clamp_payload_sample_want(t: TensorDesc, abs_off: int) -> int:
+			want = int(sample_n)
+			pbytes = payload_bytes.get(t.name, None)
+			if pbytes is not None and pbytes > 0 and pbytes < want:
+				want = int(pbytes)
+			span = spans.get(t.name, None)
+			if span is None and file_size is not None:
+				span = int(int(file_size) - int(abs_off))
+			if span is not None and span > 0 and span < want:
+				want = int(span)
+			return int(want)
+
 		if args.path is not None:
 			with Path(args.path).open("rb") as f:
 				for t in tensors_by_offset:
 					abs_off = int(data_off + int(t.rel_offset))
-					want = int(sample_n)
-					span = spans.get(t.name, None)
-					if span is not None and span > 0 and span < want:
-						want = int(span)
+					want = clamp_payload_sample_want(t, abs_off)
 					f.seek(abs_off)
 					b = f.read(want)
 					if len(b) != want:
@@ -661,10 +779,7 @@ def main() -> int:
 			timeout_s = int(args.timeout_s)
 			for t in tensors_by_offset:
 				abs_off = int(data_off + int(t.rel_offset))
-				want = int(sample_n)
-				span = spans.get(t.name, None)
-				if span is not None and span > 0 and span < want:
-					want = int(span)
+				want = clamp_payload_sample_want(t, abs_off)
 				try:
 					b = fetch_url_range(url, abs_off, want, timeout_s=timeout_s)
 				except Exception as e:
