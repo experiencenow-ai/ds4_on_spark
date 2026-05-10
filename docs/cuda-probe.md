@@ -91,9 +91,11 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 - Runs best-effort compile-only `-gencode` probes for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` when `compute_121` is advertised (multi-target build plumbing gate)
 - If `cuobjdump` is available and `compute_121` is advertised, emits `-fatbin` artifacts with explicit `-gencode` (`code=sm_121` only, `code=compute_121` only, and `sm_121+compute_121`) and reports whether embedded PTX is present (expected: SM-only missing; PTX-only present; SM+PTX present).
 - Compiles and runs it with `-arch=sm_121`, `--gpu-architecture=sm_121`, and `-arch=native`
+- If `compute_121` is advertised, also compiles and runs a PTX-targeted build via `-arch=compute_121` (verifies that driver/runtime JIT can execute `compute_121` PTX on GB10)
+- If variant targets like `sm_121a` / `sm_121f` are advertised, does a best-effort compile+run for those as well (informational)
 - Prints a `cuda_device_props_tiny`-schema one-line driver/runtime + key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
 - Prints the device-observed `__CUDA_ARCH__`
-- If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `gpuarch_sm_121` present, `native` missing)
+- If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `gpuarch_sm_121` present, `native` missing; `compute_121` present when built)
 
 ## Spark0: Minimal CMake Configure + Build + Run (No Repo Transfer)
 
