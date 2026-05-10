@@ -11,5 +11,5 @@ function(ds4_target_cuda target)
 		target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
 	endif()
 
-	target_link_libraries(${target} PRIVATE CUDA::cudart)
+	target_link_libraries(${target} PUBLIC CUDA::cudart)
 endfunction()
