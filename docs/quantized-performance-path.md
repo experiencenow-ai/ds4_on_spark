@@ -214,6 +214,9 @@ Initial scope:
 - confirm the quantized artifact includes usable MTP weights or document why it
   does not
   - As of 2026-05-10, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
+  - Treat MTP presence as a property of the **artifact set**:
+    - trunk-only GGUFs commonly report `mtp_present=false` and `mtp_namespace.has_mtp0=false` (the upstream `mtp.0.*` namespace was dropped during conversion).
+    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars).
   - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
   - When `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, also record `mtp_namespace`, `mtp_contract`, and `mtp_trust` from `scripts/model_contract_inspect_quantized_artifact.py --json`.
     - `mtp_trust.status=absent|namespace_missing_mtp0|namespace_incomplete|incomplete|structural_complete_untrusted` is the expected progression for artifact sets that lack upstream-complete `mtp.0.*`.
@@ -226,6 +229,12 @@ Initial scope:
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length
+
+Trust gates (quantized high-performance path):
+
+- Structural gate (artifact validity): require `mtp_namespace.has_mtp0 == true` and `mtp_contract.complete == true` before claiming the artifact “preserves upstream MTP”.
+- Oracle gate (semantic correctness): even if structurally complete, keep MTP **untrusted** until an MTP logits oracle passes (generate with `scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp` and compare both prefill and decode cases).
+- Acceptance gate (runtime integration): before optimizing acceptance rate, run the one-verify-step wiring probe (`docs/mtp-one-token-draft-probe.md`) and require deterministic pass/fail behavior at `temperature=0.0`.
 
 Success criteria:
 
