@@ -82,6 +82,7 @@ If it loads and generates, rerun with:
 - When token JSON is present, the llama.cpp script also prints read-only derived fields into the baseline summary (per-token latency percentiles; best-effort expert/queue/router-score/MTP counters if present).
 - CUDA placement / fallback (best-effort): if the runtime prints `sched_reserve:` / `__fattn__-*` / `__op__-*` placement lines during a one-shot `llama-cli` run, the script writes `fattn_cli_probe.json` into the fetched artifacts directory and mirrors key fields into the baseline summary (`fattn_*`, `node_kind_*`, `sched_reserve_*`). This is opportunistic and may be `NA` on forks that do not emit those lines.
 - See `docs/quantized-performance-path.md` for the ordered instrumentation path after the first successful token stream.
+- After the first successful token stream, prioritize the batching/concurrency throughput sweep on Spark0 (expensive; requires a resident `llama-server`): see `docs/baseline-batching-throughput.md`.
 
 ## Failure Triage
 

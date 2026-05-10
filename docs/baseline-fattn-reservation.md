@@ -35,6 +35,8 @@ Run a resident `llama-server` sweep and inspect the emitted probe JSON:
 
 Optional (best-effort): the one-shot `llama-cli` baseline (`scripts/benchmark_llamacpp_spark.sh`) also emits `fattn_cli_probe.json` when the runtime prints `sched_reserve:` / `__fattn__-*` / `__op__-*` placement lines during the run. This is not guaranteed across forks, but it provides a low-friction check for CUDA/CPU fallback signals without running a resident server.
 
+The batching/concurrency throughput sweep (`scripts/benchmark_llamacpp_server_throughput_sweep.py`) also emits `fattn_reservation_probe.json` per `(parallel,batch,ubatch)` combo directory, which is useful when validating that Flash Attention stays enabled under `--parallel 2` and high batching. See `docs/baseline-batching-throughput.md`.
+
 ### Cheap Source Probe (Patch Presence)
 
 To confirm the **pad-to-256** reservation fix is present in the external runtime tree without loading a model, run the baseline wrapper with:
