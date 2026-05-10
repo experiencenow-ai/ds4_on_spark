@@ -466,6 +466,73 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes)
 	return(ds4_cuda_ok());
 }
 
+ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds4_cuda_stream_t s)
+{
+	cudaError_t err;
+	cudaStream_t stream;
+	size_t n;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	stream = (cudaStream_t)s.h;
+	n = (size_t)bytes;
+	err = cudaMemsetAsync(dst,value,n,stream);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_memcpy_h2d_async(void *dst,const void *src,int64_t bytes,ds4_cuda_stream_t s)
+{
+	cudaError_t err;
+	cudaStream_t stream;
+	size_t n;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( src == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	stream = (cudaStream_t)s.h;
+	n = (size_t)bytes;
+	err = cudaMemcpyAsync(dst,src,n,cudaMemcpyHostToDevice,stream);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+ds4_cuda_status_t ds4_cuda_memcpy_d2h_async(void *dst,const void *src,int64_t bytes,ds4_cuda_stream_t s)
+{
+	cudaError_t err;
+	cudaStream_t stream;
+	size_t n;
+	if ( bytes < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes == 0 )
+		return(ds4_cuda_ok());
+	if ( dst == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( src == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( bytes > (int64_t)SIZE_MAX )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	stream = (cudaStream_t)s.h;
+	n = (size_t)bytes;
+	err = cudaMemcpyAsync(dst,src,n,cudaMemcpyDeviceToHost,stream);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
 }
 #else
 #error "ds4_cuda.cu must only compile when DS4_HAS_CUDA is set"

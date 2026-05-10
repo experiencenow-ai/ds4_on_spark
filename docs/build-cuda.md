@@ -24,3 +24,11 @@ For kernel launches (or any void-returning CUDA statements compiled by NVCC), us
 - `DS4_CUDA_KERNEL_LAUNCH(kernel<<<grid,block,shared,stream>>>(...))`
 
 `DS4_CUDA_KERNEL_LAUNCH` returns a `ds4_cuda_status_t` and logs failures with the full callsite text.
+
+## Async helpers
+
+When sequencing copies or memset with a stream, use:
+
+- `ds4_cuda_memset_async(dst,value,bytes,stream)`
+- `ds4_cuda_memcpy_h2d_async(dst,src,bytes,stream)`
+- `ds4_cuda_memcpy_d2h_async(dst,src,bytes,stream)`
