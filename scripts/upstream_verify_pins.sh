@@ -33,7 +33,9 @@ check_ref()
 			echo "FAIL ${name}: unsupported HF ref: ${ref}" >&2
 			return 1
 		fi
-		got="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}" | awk '/^sha:/ {print $2; exit}')"
+		local report
+		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
+		got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
 		if [ -z "${got}" ] || [ "${got}" = "UNKNOWN" ]; then
 			echo "FAIL ${name}: HF API did not return sha" >&2
 			return 1
