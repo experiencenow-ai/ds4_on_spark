@@ -166,6 +166,67 @@ if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"s
 fi
 
 echo
+echo \"== nvcc: -gencode PTX embed behavior (best-effort) ==\"
+CUOBJDUMP=\"\"
+if [ -x /usr/local/cuda/bin/cuobjdump ]; then
+	CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
+elif command -v cuobjdump >/dev/null 2>&1; then
+	CUOBJDUMP=\"cuobjdump\"
+fi
+if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+	echo \"(cuobjdump not found; skipping)\"
+elif [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping)\"
+elif echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -fatbin -o \"$REMOTE_DIR\"/cuda_gencode_sm_121_only.fatbin \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_gencode_sm_121_only.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -gencode code=sm_121 failed rc=\$rc)\" >&2
+		head -n 40 \"$REMOTE_DIR\"/cuda_gencode_sm_121_only.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx \"$REMOTE_DIR\"/cuda_gencode_sm_121_only.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_gencode_sm_only: PRESENT (unexpected)\"
+		else
+			echo \"ptx_embed_gencode_sm_only: MISSING (expected)\"
+		fi
+	fi
+
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=compute_121\" -fatbin -o \"$REMOTE_DIR\"/cuda_gencode_compute_121_only.fatbin \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_gencode_compute_121_only.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -gencode code=compute_121 failed rc=\$rc)\" >&2
+		head -n 40 \"$REMOTE_DIR\"/cuda_gencode_compute_121_only.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx \"$REMOTE_DIR\"/cuda_gencode_compute_121_only.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_gencode_ptx_only: PRESENT (expected)\"
+		else
+			echo \"ptx_embed_gencode_ptx_only: MISSING\" >&2
+		fi
+	fi
+
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -gencode \"arch=compute_121,code=compute_121\" -fatbin -o \"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.fatbin \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -gencode sm_121+compute_121 failed rc=\$rc)\" >&2
+		head -n 40 \"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx \"$REMOTE_DIR\"/cuda_gencode_sm_plus_ptx.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_gencode_sm_plus_ptx: PRESENT (expected)\"
+		else
+			echo \"ptx_embed_gencode_sm_plus_ptx: MISSING\" >&2
+		fi
+	fi
+else
+	echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\"
+fi
+
+echo
 echo \"== nvcc: minimal compile/run (sm_121 + native) ==\"
 rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
