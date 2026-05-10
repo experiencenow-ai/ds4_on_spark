@@ -165,7 +165,7 @@ case "${mode}" in
 	files_oids)
 		echo "${json}" | jq -r '
 			.siblings[]
-			| "\(.size // 0)\t\(.lfs.sha256 // \"\")\t\(.rfilename)\t" + (if (.lfs? != null) then "lfs" else "nolfs" end)
+			| "\(.size // 0)\t\(.lfs.sha256 // "")\t\(.rfilename)\t" + (if (.lfs? != null) then "lfs" else "nolfs" end)
 		'
 		;;
 	top)
