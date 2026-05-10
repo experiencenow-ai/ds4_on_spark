@@ -18,6 +18,16 @@ ALLOW_PATCH="${ALLOW_PATCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
 
+json_err()
+{
+	msg="$1"
+	if [ "$JSON_ONLY" = "1" ]; then
+		printf '{\n  "ok": false,\n  "errors": [%s]\n}\n' "\"$msg\""
+	else
+		echo "$msg" 1>&2
+	fi
+}
+
 if [ "$JSON_ONLY" != "1" ]; then
 	echo "== $target_note =="
 	date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
@@ -32,18 +42,20 @@ if [ "$JSON_ONLY" != "1" ]; then
 fi
 
 if [ ! -d "$LLAMA_DIR" ]; then
-	echo "missing LLAMA_DIR=$LLAMA_DIR"
+	if [ "$JSON_ONLY" != "1" ]; then
+		echo "missing LLAMA_DIR=$LLAMA_DIR"
+	fi
 	if [ "$ALLOW_FETCH" = "1" ]; then
 		mkdir -p "$(dirname "$LLAMA_DIR")"
 		git clone "$LLAMA_REPO" "$LLAMA_DIR"
 	else
-		echo "set ALLOW_FETCH=1 to clone the llama.cpp fork"
+		json_err "missing LLAMA_DIR; set ALLOW_FETCH=1 to clone the llama.cpp fork"
 		exit 2
 	fi
 fi
 
 if [ ! -r "$PATCH_FILE" ]; then
-	echo "PATCH_FILE not readable: $PATCH_FILE"
+	json_err "PATCH_FILE not readable: $PATCH_FILE"
 	exit 3
 fi
 
@@ -52,8 +64,20 @@ if [ "$JSON_ONLY" != "1" ]; then
 	(cd "$LLAMA_DIR" && git rev-parse HEAD) || true
 fi
 
-(cd "$LLAMA_DIR" && git fetch --all --tags)
-(cd "$LLAMA_DIR" && git checkout "$LLAMA_COMMIT")
+need_git_prepare=0
+if [ "$ALLOW_FETCH" = "1" ] || [ "$ALLOW_PATCH" = "1" ]; then
+	need_git_prepare=1
+fi
+
+if [ "$need_git_prepare" = "1" ]; then
+	if [ "$ALLOW_FETCH" = "1" ]; then
+		(cd "$LLAMA_DIR" && git fetch --all --tags)
+	fi
+	if ! (cd "$LLAMA_DIR" && git checkout "$LLAMA_COMMIT"); then
+		json_err "unable to checkout LLAMA_COMMIT=$LLAMA_COMMIT (set ALLOW_FETCH=1 to fetch, or ensure the commit exists locally)"
+		exit 7
+	fi
+fi
 
 if [ "$JSON_ONLY" != "1" ]; then
 	echo
@@ -64,9 +88,19 @@ if [ "$ALLOW_PATCH" != "1" ]; then
 		echo "patch skipped (set ALLOW_PATCH=1 to apply): $PATCH_FILE"
 	fi
 else
-	(cd "$LLAMA_DIR" && git apply "$PATCH_FILE")
-	if [ "$JSON_ONLY" != "1" ]; then
-		echo "patch applied"
+	if (cd "$LLAMA_DIR" && git apply --reverse --check "$PATCH_FILE" >/dev/null 2>&1); then
+		if [ "$JSON_ONLY" != "1" ]; then
+			echo "patch already applied"
+		fi
+	else
+		if ! (cd "$LLAMA_DIR" && git apply --check "$PATCH_FILE" >/dev/null 2>&1); then
+			json_err "patch does not apply cleanly (clean tree or reset LLAMA_DIR; then set ALLOW_FETCH=1 ALLOW_PATCH=1)"
+			exit 8
+		fi
+		(cd "$LLAMA_DIR" && git apply "$PATCH_FILE")
+		if [ "$JSON_ONLY" != "1" ]; then
+			echo "patch applied"
+		fi
 	fi
 fi
 
@@ -95,20 +129,25 @@ if [ "$ALLOW_RUN" != "1" ]; then
 fi
 
 if [ "$MTP_SIDECAR_GGUF" = "" ]; then
-	echo "MTP_SIDECAR_GGUF is required for ALLOW_RUN=1"
+	json_err "MTP_SIDECAR_GGUF is required for ALLOW_RUN=1"
 	exit 4
 fi
 
 if [ ! -r "$MTP_SIDECAR_GGUF" ]; then
-	echo "MTP_SIDECAR_GGUF not readable: $MTP_SIDECAR_GGUF"
+	json_err "MTP_SIDECAR_GGUF not readable: $MTP_SIDECAR_GGUF"
 	exit 5
 fi
 
 PROBE_BIN="$LLAMA_DIR/build/bin/llama-ds4-mtp-sidecar-probe"
 if [ ! -x "$PROBE_BIN" ]; then
-	echo "probe binary not found: $PROBE_BIN"
+	if [ "$JSON_ONLY" != "1" ]; then
+		echo "probe binary not found: $PROBE_BIN"
+	fi
 	if [ "$JSON_ONLY" != "1" ]; then
 		echo "set ALLOW_BUILD=1 to build it"
+	fi
+	if [ "$JSON_ONLY" = "1" ]; then
+		json_err "probe binary not found (set ALLOW_BUILD=1 to build it)"
 	fi
 	exit 6
 fi

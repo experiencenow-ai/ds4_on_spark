@@ -208,6 +208,33 @@ if [ ! -r "$HELPER_LOCAL" ]; then
 	exit 3
 fi
 
+echo "== verifying llama.cpp probe patch (local) =="
+python3 "$repo_root/scripts/verify_llamacpp_mtp_sidecar_probe_patch.py" --patch "$PATCH_LOCAL" \
+	>"$OUT_DIR/local_patch_verify_stdout.txt" 2>"$OUT_DIR/local_patch_verify_stderr.txt" || true
+
+{
+	echo "## Patch Verification (local)"
+	echo
+	echo "Command:"
+	echo
+	echo '```'
+	echo "python3 scripts/verify_llamacpp_mtp_sidecar_probe_patch.py --patch $PATCH_LOCAL"
+	echo '```'
+	echo
+	echo "Stdout:"
+	echo
+	echo '```'
+	sed -n '1,60p' "$OUT_DIR/local_patch_verify_stdout.txt" || true
+	echo '```'
+	echo
+	echo "Stderr:"
+	echo
+	echo '```'
+	sed -n '1,60p' "$OUT_DIR/local_patch_verify_stderr.txt" || true
+	echo '```'
+	echo
+} >>"$REPORT_MD"
+
 echo "== running llama.cpp-side MTP sidecar loader probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe_patch.sh && chmod +x /tmp/llamacpp_mtp_sidecar_probe_patch.sh" \
 	<"$HELPER_LOCAL" \

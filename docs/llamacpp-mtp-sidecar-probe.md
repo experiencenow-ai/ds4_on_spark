@@ -55,6 +55,11 @@ If `--load-weights` is reported as an unknown argument, update the ds4_on_spark 
 
 Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1` and `PAYLOAD_SAMPLE_BYTES=N`.
 
+Notes:
+
+- The helper is now **truly gated**: it does not `git fetch` / `git checkout` unless `ALLOW_FETCH=1` or `ALLOW_PATCH=1` is set.
+- When `JSON_ONLY=1` is set, common preflight failures (missing `LLAMA_DIR`, missing probe binary, unreadable `MTP_SIDECAR_GGUF`, etc.) emit a small JSON object (`ok=false`, `errors[]`) so Spark runners can parse failures deterministically.
+
 Expected success signal:
 
 - `ok=true`
