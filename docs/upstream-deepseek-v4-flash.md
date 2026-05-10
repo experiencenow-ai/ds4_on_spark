@@ -17,6 +17,13 @@ Related checkpoint (same “official configs” approach):
   - Commit: `8855555deef230a27a21a8d6f294b7b7497759b6`
   - License: MIT (see HF `LICENSE`)
 
+Related FP8 checkpoint mirror (serving-oriented; weights are huge):
+
+- `https://huggingface.co/sgl-project/DeepSeek-V4-Flash-FP8`
+  - Ref: `refs/heads/main`
+  - Commit: `ae01d80c06cdfe30581edfd0e1c5449dc7ed7f17`
+  - License: MIT (see HF `LICENSE`)
+
 ## Related official kernel repos (reference)
 
 These are tracked as optional GPU-kernel reference points for Spark:
@@ -40,12 +47,14 @@ As of the pinned commits in [`docs/upstream-manifest.md`](upstream-manifest.md):
 
 - Flash (`6976c7ff1b30a1b2cb7805021b8ba4684041f136`): `*.safetensors` sum is **148.66 GiB**
 - Flash-Base (`8855555deef230a27a21a8d6f294b7b7497759b6`): `*.safetensors` sum is **274.44 GiB**
+- SGLang FP8 mirror (`ae01d80c06cdfe30581edfd0e1c5449dc7ed7f17`): `*.safetensors` sum is **273.85 GiB**
 
 Reproduce (no clone, no LFS):
 
 ```bash
 ./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash --sum-safetensors
 ./scripts/upstream_hf_api_report.sh deepseek-ai/DeepSeek-V4-Flash-Base --sum-safetensors
+./scripts/upstream_hf_api_report.sh sgl-project/DeepSeek-V4-Flash-FP8 --sum-safetensors
 ```
 
 ## Weight download risk (Git LFS)
