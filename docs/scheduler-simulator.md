@@ -189,6 +189,8 @@ The summary output is intentionally small but includes per-class backpressure/st
 
 When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size percentiles for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) and `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed, when present).
 
+When replay traces include `decode_ms` and/or `kv_tokens`, the summary also reports trace percentiles and model-vs-trace decode error percentiles (for quick sanity checks that queueing/backpressure behavior is in the right ballpark): `trace_decode_ms_p{50,95}_{interactive,batch}`, `trace_decode_error_ms_p{50,95}_{interactive,batch}`, and `trace_kv_tokens_p{50,95}_{interactive,batch}`.
+
 ### Compare Variants (Ablations)
 
 Use `--compare label:JSON` to run one or more config variants against the
