@@ -19,7 +19,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe` shows that an `sm_120`-compiled kernel runs successfully on GB10 (`sm_121`) (observed `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints `cudaDevAttrMaxSharedMemoryPerBlockOptin` and validates an opt-in dynamic shared-memory launch
   - Observed on Spark0 (2026-05-08): `MaxSharedMemoryPerBlockOptin=101376` bytes
-- `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2).
+- `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2, cooperative/cluster launch).
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_bf16_conv` validates that CUDA BF16 helpers (`cuda_bf16.h`) compile and run for `sm_121` (BF16 data plumbing gate for many CUTLASS-style kernels).
 - `tools/cuda_probe/bin/cuda_sm121_fp4_conv` validates that CUDA 13 FP4 conversion helpers (`cuda_fp4.h`, E2M1) compile and run for `sm_121`.

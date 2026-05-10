@@ -43,6 +43,7 @@ static int32_t print_device(int32_t dev)
 	print_attr_i32(dev,"cudaDevAttrL2CacheSize_bytes",cudaDevAttrL2CacheSize);
 	print_attr_i32(dev,"cudaDevAttrConcurrentKernels",cudaDevAttrConcurrentKernels);
 	print_attr_i32(dev,"cudaDevAttrCooperativeLaunch",cudaDevAttrCooperativeLaunch);
+	print_attr_i32(dev,"cudaDevAttrClusterLaunch",cudaDevAttrClusterLaunch);
 	return(0);
 }
 
