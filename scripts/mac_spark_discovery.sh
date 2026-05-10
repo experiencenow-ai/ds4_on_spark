@@ -58,10 +58,17 @@ date -u
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
 			git_dir="$git_worktree/.gitshim/repo/.git"
 		fi
+		git_hash=""
 		if [ "$git_dir" != "" ]; then
-			echo "git: $(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
-		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
+			git_hash="$(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
+		fi
+		if [ "$git_hash" = "" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+			git_hash="$(git rev-parse --short HEAD 2>/dev/null || true)"
+		fi
+		if [ "$git_hash" != "" ]; then
+			echo "git: $git_hash"
+		else
+			echo "git: (unknown)"
 		fi
 fi
 echo "targets: $targets"
