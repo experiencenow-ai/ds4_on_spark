@@ -17,6 +17,7 @@ Additional probe run (later the same day):
 
 ```bash
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0109Z_loop_v4.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0138Z_loop_v5.txt
 ```
 
 Notes:
@@ -26,6 +27,54 @@ Notes:
 - PCIe link state is captured from `nvidia-smi -q` and sysfs (`/sys/bus/pci/devices/*/current_link_*`) because `lspci -vv` capability fields may be restricted without elevated privileges.
 
 ## Probe Excerpts (Redacted)
+
+### Single-target probe (Spark0, 01:38Z)
+
+```text
+== local meta ==
+Sun May 10 01:38:24 UTC 2026
+git: fb13e5b
+probe args: aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+NVML version        : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 52, P0, [N/A]
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== nvcc supported gpu arch (capped) ==
+compute_120
+compute_121
+
+== cuda headers (cuda.h) ==
+/usr/local/cuda/include/cuda.h
+#define CUDA_VERSION 13000
+
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda driver api version: 13000 (13.0)
+cuda runtime api version: 13000 (13.0)
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 sms: 48
+```
 
 ### Multi-target probe (Spark0 ok, Spark1 unreachable)
 

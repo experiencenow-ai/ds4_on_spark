@@ -20,6 +20,12 @@ Refreshed later the same day:
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0109Z_loop_v4.txt
 ```
 
+Refreshed again later the same day:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0138Z_loop_v5.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
