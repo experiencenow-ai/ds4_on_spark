@@ -39,6 +39,12 @@ SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_prob
 
 Optional toggles:
 
+- Summary mode (smaller output; useful for Spark1 smoke checks when it may be unreachable):
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh spark1.local || true
+```
+
 - Include full `nvidia-smi` output (verbose; includes process list + timestamps):
 
 ```bash

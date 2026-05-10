@@ -112,6 +112,12 @@ If the driver-side `nvidia-smi` compute capability query is unavailable, the `nv
 When `REDACT=1`, the probe also scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 The `nvidia-smi` inventory section includes per-GPU `index` and `pci.bus_id` to make multi-GPU hosts easier to compare across reboots.
 
+For quick smoke checks (especially when Spark1 is flaky/not-yet-provisioned), use summary mode:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh spark1.local || true
+```
+
 ## Spark1 Ready Checklist
 
 When Spark1 exists (or a second Spark is provisioned), the same scripts should work with a new target:

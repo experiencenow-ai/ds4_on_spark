@@ -14,6 +14,7 @@ Environment:
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE    Optional work tree override (defaults to $PWD)
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
+  SPARK_PROBE_SUMMARY=1  Print a smaller, Spark1-friendly subset of sections
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
   PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
   CUDA_RUNTIME_PROBE=0 Skip the tiny `nvcc` runtime probe compile/run
@@ -43,6 +44,7 @@ esac
 
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
+SPARK_PROBE_SUMMARY="${SPARK_PROBE_SUMMARY:-0}"
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
@@ -140,6 +142,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 export LANG=C LC_ALL=C
 export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
+spark_probe_summary='"$SPARK_PROBE_SUMMARY"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
 nvcc_arch_override='"$NVCC_ARCH_OVERRIDE"'
@@ -181,13 +184,15 @@ command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
 command -v python3 >/dev/null 2>&1 && python3 --version || true
 command -v ldd >/dev/null 2>&1 && ldd --version 2>/dev/null | head -n 1 || true
 echo
-echo "== packages (cuda/nvidia, dpkg, capped) =="
-if command -v dpkg-query >/dev/null 2>&1; then
-	dpkg-query -W -f='"'"'${Package}\t${Version}\n'"'"' "cuda*" "nvidia*" "libcudnn*" 2>/dev/null | head -n 200 || true
-else
-	echo "dpkg-query not found"
+if [ "$spark_probe_summary" != "1" ]; then
+	echo "== packages (cuda/nvidia, dpkg, capped) =="
+	if command -v dpkg-query >/dev/null 2>&1; then
+		dpkg-query -W -f='"'"'${Package}\t${Version}\n'"'"' "cuda*" "nvidia*" "libcudnn*" 2>/dev/null | head -n 200 || true
+	else
+		echo "dpkg-query not found"
+	fi
+	echo
 fi
-echo
 echo "== pci nvidia =="
 lspci | grep -i nvidia || true
 if lspci -nn >/dev/null 2>&1; then
@@ -196,35 +201,37 @@ if lspci -nn >/dev/null 2>&1; then
 	lspci -nn | grep -i nvidia || true
 fi
 echo
-echo "== lspci gpu link state (capped) =="
-if command -v lspci >/dev/null 2>&1; then
-	gpu_buses="$(lspci -D -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
-	if [ "$gpu_buses" = "" ]; then
-		gpu_buses="$(lspci -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
-	fi
-	if [ "$gpu_buses" != "" ]; then
-		for bus in $gpu_buses; do
-			echo "-- $bus --"
-			vv="$(lspci -vv -s "$bus" 2>/dev/null || true)"
-			if [ "$vv" = "" ]; then
-				echo "lspci -vv produced no output (restricted?)"
-			else
-				link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
-				if [ "$link_lines" != "" ]; then
-					printf "%s\n" "$link_lines"
+if [ "$spark_probe_summary" != "1" ]; then
+	echo "== lspci gpu link state (capped) =="
+	if command -v lspci >/dev/null 2>&1; then
+		gpu_buses="$(lspci -D -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
+		if [ "$gpu_buses" = "" ]; then
+			gpu_buses="$(lspci -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
+		fi
+		if [ "$gpu_buses" != "" ]; then
+			for bus in $gpu_buses; do
+				echo "-- $bus --"
+				vv="$(lspci -vv -s "$bus" 2>/dev/null || true)"
+				if [ "$vv" = "" ]; then
+					echo "lspci -vv produced no output (restricted?)"
 				else
-					echo "no LnkCap/LnkSta fields found; header:"
-					printf "%s\n" "$vv" | head -n 3 || true
+					link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
+					if [ "$link_lines" != "" ]; then
+						printf "%s\n" "$link_lines"
+					else
+						echo "no LnkCap/LnkSta fields found; header:"
+						printf "%s\n" "$vv" | head -n 3 || true
+					fi
 				fi
-			fi
-		done
+			done
+		else
+			echo "no nvidia vga/3d controller buses found"
+		fi
 	else
-		echo "no nvidia vga/3d controller buses found"
+		echo "lspci not found"
 	fi
-else
-	echo "lspci not found"
+	echo
 fi
-echo
 have_smi="0"
 if command -v nvidia-smi >/dev/null 2>&1; then
 	have_smi="1"
@@ -496,10 +503,12 @@ emit_smi_q_pci_link()
 
 emit_pcie_link ""
 echo
-emit_sysfs_pcie_link ""
-echo
-emit_smi_q_pci_link ""
-echo
+if [ "$spark_probe_summary" != "1" ]; then
+	emit_sysfs_pcie_link ""
+	echo
+	emit_smi_q_pci_link ""
+	echo
+fi
 echo "== nvidia-smi power/clocks (summary) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
 	pwr_q="$(nvidia-smi --query-gpu=index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory --format=csv,noheader,nounits 2>/dev/null || true)"
@@ -518,20 +527,22 @@ else
 	echo "nvidia-smi not found"
 fi
 echo
-echo "== nvidia-smi gpu list =="
-if command -v nvidia-smi >/dev/null 2>&1; then
-	nvidia-smi -L 2>/dev/null || true
-else
-	echo "nvidia-smi not found"
+if [ "$spark_probe_summary" != "1" ]; then
+	echo "== nvidia-smi gpu list =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		nvidia-smi -L 2>/dev/null || true
+	else
+		echo "nvidia-smi not found"
+	fi
+	echo
+	echo "== nvidia-smi topo (capped) =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		nvidia-smi topo -m 2>/dev/null | sed -E "s/\\x1B\\[[0-9;]*[[:alpha:]]//g" | head -n 120 || true
+	else
+		echo "nvidia-smi not found"
+	fi
+	echo
 fi
-echo
-echo "== nvidia-smi topo (capped) =="
-if command -v nvidia-smi >/dev/null 2>&1; then
-	nvidia-smi topo -m 2>/dev/null | sed -E "s/\\x1B\\[[0-9;]*[[:alpha:]]//g" | head -n 120 || true
-else
-	echo "nvidia-smi not found"
-fi
-echo
 if [ "$nvidia_smi_full" = "1" ]; then
 	echo "== nvidia-smi full (verbose) =="
 	nvidia-smi || true
@@ -744,11 +755,12 @@ CU
 				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
 			fi
 		fi
-		fi
 		echo
 		emit_pcie_link ", post-load"
 		echo
-		emit_sysfs_pcie_link ", post-load"
+		if [ "$spark_probe_summary" != "1" ]; then
+			emit_sysfs_pcie_link ", post-load"
+		fi
 	else
 		echo "nvcc compile failed:"
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
@@ -800,33 +812,35 @@ if command -v ethtool >/dev/null 2>&1; then
 	done
 fi
 echo
-echo "== rdma (roce/infiniband, optional) =="
-if [ -d /sys/class/infiniband ]; then
-	ls -1 /sys/class/infiniband 2>/dev/null || true
-	for dev in /sys/class/infiniband/*; do
-		[ -d "$dev" ] || continue
-		echo "-- $(basename "$dev") --"
-		[ -r "$dev/fw_ver" ] && echo "fw_ver: $(cat "$dev/fw_ver" 2>/dev/null | head -n 1 || true)"
-		[ -r "$dev/hca_type" ] && echo "hca_type: $(cat "$dev/hca_type" 2>/dev/null | head -n 1 || true)"
-		for port in "$dev"/ports/*; do
-			[ -d "$port" ] || continue
-			pn="$(basename "$port")"
-			state="$(cat "$port/state" 2>/dev/null | head -n 1 || true)"
-			phys="$(cat "$port/phys_state" 2>/dev/null | head -n 1 || true)"
-			rate="$(cat "$port/rate" 2>/dev/null | head -n 1 || true)"
-			layer="$(cat "$port/link_layer" 2>/dev/null | head -n 1 || true)"
-			[ "$state$phys$rate$layer" != "" ] && echo "port$pn: state=${state:-?} phys=${phys:-?} rate=${rate:-?} layer=${layer:-?}"
+if [ "$spark_probe_summary" != "1" ]; then
+	echo "== rdma (roce/infiniband, optional) =="
+	if [ -d /sys/class/infiniband ]; then
+		ls -1 /sys/class/infiniband 2>/dev/null || true
+		for dev in /sys/class/infiniband/*; do
+			[ -d "$dev" ] || continue
+			echo "-- $(basename "$dev") --"
+			[ -r "$dev/fw_ver" ] && echo "fw_ver: $(cat "$dev/fw_ver" 2>/dev/null | head -n 1 || true)"
+			[ -r "$dev/hca_type" ] && echo "hca_type: $(cat "$dev/hca_type" 2>/dev/null | head -n 1 || true)"
+			for port in "$dev"/ports/*; do
+				[ -d "$port" ] || continue
+				pn="$(basename "$port")"
+				state="$(cat "$port/state" 2>/dev/null | head -n 1 || true)"
+				phys="$(cat "$port/phys_state" 2>/dev/null | head -n 1 || true)"
+				rate="$(cat "$port/rate" 2>/dev/null | head -n 1 || true)"
+				layer="$(cat "$port/link_layer" 2>/dev/null | head -n 1 || true)"
+				[ "$state$phys$rate$layer" != "" ] && echo "port$pn: state=${state:-?} phys=${phys:-?} rate=${rate:-?} layer=${layer:-?}"
+			done
 		done
-	done
-else
-	echo "no /sys/class/infiniband"
+	else
+		echo "no /sys/class/infiniband"
+	fi
+	if command -v rdma >/dev/null 2>&1; then
+		rdma link show 2>/dev/null | head -n 80 || true
+	else
+		echo "rdma tool not found"
+	fi
+	echo
 fi
-if command -v rdma >/dev/null 2>&1; then
-	rdma link show 2>/dev/null | head -n 80 || true
-else
-	echo "rdma tool not found"
-fi
-echo
 echo "== filesystems (type + opts) =="
 if command -v findmnt >/dev/null 2>&1; then
 	findmnt -no TARGET,FSTYPE,OPTIONS / /home 2>/dev/null || findmnt -no TARGET,FSTYPE,OPTIONS / 2>/dev/null || true
@@ -836,13 +850,15 @@ fi
 echo
 echo "== storage =="
 df -h / /home 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || df -h / || true
-lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
-if [ "$lsblk_out" != "" ]; then
-	printf "%s\n" "$lsblk_out"
-else
-	lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+if [ "$spark_probe_summary" != "1" ]; then
+	lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
+	if [ "$lsblk_out" != "" ]; then
+		printf "%s\n" "$lsblk_out"
+	else
+		lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+	fi
+	echo
 fi
-echo
 echo "== disks (summary) =="
 disks_out="$(lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE -e 7 2>/dev/null || true)"
 if [ "$disks_out" != "" ]; then

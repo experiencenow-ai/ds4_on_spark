@@ -106,6 +106,13 @@ Additional probe run (14:47Z refresh, runtime max cc line):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1446Z_loop_runtime_maxcc.txt
 ```
 
+Additional probe run (15:19Z refresh, Spark1-ready summary mode):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T151941Z_loop_spark1summary_fix.txt
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true) | tee /private/tmp/ds4_spark1_probe_summary_redacted_2026-05-10T151929Z_loop_spark1summary_fix.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -340,6 +347,36 @@ runtime max cc: 12.1
 == nvidia-smi pcie link (max/current, post-load) ==
 0, 0000000F:01:00.0, 1, 1, 16, 1
 warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+```
+
+### Summary-mode probe (Spark0, 15:19Z, Spark1-ready)
+
+```text
+== local meta ==
+Sun May 10 15:19:41 UTC 2026
+git: 0e4f936
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi version ==
+NVIDIA-SMI version  : 580.142
+DRIVER version      : 580.142
+CUDA Version        : 13.0
+
+== nvidia-smi inventory (index + pci bus) ==
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 48, P0, [N/A]
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 cc: 12.1
+runtime max cc: 12.1
 ```
 
 ### Single-target probe (Spark0, 02:21Z, PCIe query mismatch warning)
