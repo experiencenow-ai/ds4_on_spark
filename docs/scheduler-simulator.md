@@ -288,6 +288,13 @@ If the runtime emits a *mixed* JSONL log stream (multiple record types), canonic
 cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-non-route skip --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
+
+If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --trace-non-route skip --trace-derive-cost-scale kv_tokens_p50 --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --pending-units work --json
+```
 - `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
   - `candidates` (list[int]): ordered expert candidates for that layer (required)
   - `scores` (optional list[number]): per-candidate router scores (same length as that layer's `candidates`)
