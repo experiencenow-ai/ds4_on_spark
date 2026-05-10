@@ -41,7 +41,7 @@ index 0000000..1c12591
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N]\n", prog);
++    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N] [--load-weights]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -148,6 +148,7 @@ index 0000000..1c12591
 +int main(int argc, char ** argv) {
 +    std::string path;
 +    bool json = false;
++    bool load_weights = false;
 +    int payload_sample_bytes = 0;
 +
 +    for (int i = 1; i < argc; i++) {
@@ -172,6 +173,11 @@ index 0000000..1c12591
 +            continue;
 +        }
 +
++        if (std::strcmp(arg, "--load-weights") == 0) {
++            load_weights = true;
++            continue;
++        }
++
 +        if (std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0) {
 +            usage(argv[0]);
 +            return 0;
@@ -191,7 +197,7 @@ index 0000000..1c12591
 +
 +    ggml_context * ctx_meta = nullptr;
 +    gguf_init_params params = {
-+        /*.no_alloc =*/ true,
++        /*.no_alloc =*/ !load_weights,
 +        /*.ctx      =*/ &ctx_meta,
 +    };
 +
@@ -248,6 +254,23 @@ index 0000000..1c12591
 +
 +    if (!extra.empty()) {
 +        errors.push_back("unexpected extra tensors present (see extra[])");
++    }
++
++    if (load_weights) {
++        if (ctx_meta == nullptr) {
++            errors.push_back("internal error: missing ggml weights context");
++        } else {
++            for (const auto & name : expected_tensor_names()) {
++                const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
++                if (t == nullptr) {
++                    errors.push_back("load weights: missing tensor '" + name + "'");
++                    continue;
++                }
++                if (t->data == nullptr) {
++                    errors.push_back("load weights: tensor has null data pointer '" + name + "'");
++                }
++            }
++        }
 +    }
 +
 +    // light self-consistency checks (derived only from the 32 tensor shapes)
@@ -504,6 +527,7 @@ index 0000000..1c12591
 +        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
 +        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
 +        std::printf("  \"payload_sample_bytes\": %d,\n", payload_sample_bytes);
++        std::printf("  \"load_weights\": %s,\n", load_weights ? "true" : "false");
 +
 +        std::printf("  \"derived_params\": {");
 +        std::printf("\"n_embd\":%" PRId64 ",", (n_embd > 0 ? n_embd : 0));

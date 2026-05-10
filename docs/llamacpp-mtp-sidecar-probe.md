@@ -47,22 +47,11 @@ cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
 
 # optional stronger check: load full sidecar weights blob and validate all 32 tensors have non-null data pointers
 ./build/bin/llama-ds4-mtp-sidecar-probe --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --load-weights
+
+If `--load-weights` is reported as an unknown argument, update the ds4_on_spark patch file (`docs/llamacpp-patches/...-mtp-sidecar-probe.patch`) and rebuild the probe.
 ```
 
 Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1` and `PAYLOAD_SAMPLE_BYTES=N`.
-
-## Spark runner (optional)
-
-If you want to build/run the probe on Spark via SSH (still gated by `ALLOW_*` on Spark), use:
-
-```bash
-REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1' \
-scripts/run_llamacpp_mtp_sidecar_probe_spark.sh spark0@<spark-host>
-
-REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf PAYLOAD_SAMPLE_BYTES=64' \
-scripts/run_llamacpp_mtp_sidecar_probe_spark.sh spark0@<spark-host>
-```
-
 
 Expected success signal:
 
