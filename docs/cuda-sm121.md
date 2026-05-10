@@ -42,6 +42,8 @@ If you need clocks or other dynamic properties, use:
 
 The `tools/cuda_probe/bin/cuda_device_props` probe is written to follow this pattern.
 
+The no-repo-transfer probe script `scripts/cuda_probe_nvcc_minimal_spark0.sh` also uses `cudaDeviceGetAttribute` (not `cudaDeviceProp` fields) to print clocks and other key limits in a log-friendly one-line format.
+
 ## Verifying `nvcc` Arch Mapping
 
 `tools/cuda_probe/bin/cuda_sm121_arch_report` prints both:
