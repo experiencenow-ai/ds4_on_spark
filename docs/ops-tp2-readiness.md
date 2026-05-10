@@ -120,7 +120,7 @@ sudo -u ds4 /opt/ds4/scripts/ops_tp2_readiness.sh --env -/etc/ds4/ds4.env --env 
 To gate a TP=2 run on required inputs, add `--strict` (fails non-zero if required
 env/config is missing or invalid). In strict mode, the script also enforces:
 
-- `DS4_MASTER_ADDR` is not loopback when `DS4_WORLD_SIZE > 1`
+- `DS4_MASTER_ADDR` is not loopback or a wildcard bind address when `DS4_WORLD_SIZE > 1`
 - `DS4_PEER_HOST` is set when `DS4_WORLD_SIZE > 1`
 
 ```bash

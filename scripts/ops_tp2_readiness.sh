@@ -264,8 +264,8 @@ strict_validate()
         fi
         if [ "$DS4_WORLD_SIZE" -gt 1 ]; then
             case "${DS4_MASTER_ADDR:-}" in
-                127.0.0.1|localhost)
-                    echo "strict: DS4_MASTER_ADDR looks loopback for DS4_WORLD_SIZE=$DS4_WORLD_SIZE: ${DS4_MASTER_ADDR}" >&2
+                127.0.0.1|localhost|\:\:1|0.0.0.0|\:\:|\[\:\:\])
+                    echo "strict: DS4_MASTER_ADDR looks local/wildcard for DS4_WORLD_SIZE=$DS4_WORLD_SIZE: ${DS4_MASTER_ADDR}" >&2
                     fail=1
                     ;;
             esac
