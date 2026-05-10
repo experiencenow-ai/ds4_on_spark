@@ -7,6 +7,8 @@ typedef struct
 	int32_t log_level;
 	int32_t enable_cuda;
 	int32_t cuda_device;
+	int32_t arena_size;
+	int32_t log_ring_entries;
 } ds4_config_t;
 
 #define DS4_CONFIG_PARSE_STRICT_UNKNOWN 1

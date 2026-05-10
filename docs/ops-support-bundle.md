@@ -30,6 +30,18 @@ sudo systemctl start ds4-support-bundle@spark0.service
 
 `ds4-preflight@.service` and `ds4-preflight-strict@.service` are wired to trigger `ds4-support-bundle@%i.service` automatically on failure.
 
+### Optional: Periodic Systemd Timer (Human Run)
+
+If you want periodic bundles (for trend debugging), install + enable the timer template:
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-support-bundle@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-support-bundle@spark0.timer
+```
+
+The default timer schedule is **weekly** with a randomized delay. Bundles land under `/tmp/` by default; review disk/retention expectations before enabling.
+
 ## What It Captures
 
 Best-effort snapshots of:

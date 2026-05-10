@@ -53,6 +53,7 @@ need_file "deploy/systemd/ds4-preflight-strict@.service"
 need_file "deploy/systemd/ds4-support-bundle@.service"
 need_file "deploy/systemd/ds4-preflight@.timer"
 need_file "deploy/systemd/ds4-preflight-strict@.timer"
+need_file "deploy/systemd/ds4-support-bundle@.timer"
 
 need_file "deploy/config/ds4.env.example"
 need_file "deploy/config/ds4-spark0.env.example"

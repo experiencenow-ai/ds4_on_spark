@@ -34,6 +34,8 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 
 | Source | Artifact | Size (bytes) | Size (GiB) | LFS sha256 (content) | Single-Spark plausibility |
 | --- | --- | ---: | ---: | --- | --- |
+| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ1_M.gguf` | 67505962560 | 62.9 | `a7c64ba7...3c58a22c` | Plausible (more headroom than IQ2 quants; requires V4-capable llama.cpp fork) |
+| `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` | `...IQ2_XXS...(2 shards)` | 77907836672 | 72.6 | `0e4356c7...9d0ae99b` + `5dd29236...45da5c5e7` | Plausible (sharded; requires V4-capable llama.cpp fork) |
 | `antirez/deepseek-v4-gguf` | `...IQ2XXS...chat-v2.gguf` | 86720111200 | 80.8 | `31598c67...e86fd8c` | Plausible (headroom for KV/cache still required) |
 | `Preyazz/DeepSeek-V4-Flash-GGUF` | `DeepSeek-V4-Flash-Q2_K.gguf` | 103283751520 | 96.2 | `3edea7ba...6528c993` | Plausible but tight (limited KV/cache headroom) |
 | `cyberneurova/...-abliterated-GGUF` | `...-Q2_K.gguf` | 98810926400 | 92.0 | `1d494194...a9d7ec6b` | Plausible but tight (limited KV/cache headroom) |
@@ -75,6 +77,26 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
   - Single-GB10 report (2026-05-05): community run on `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` with `-hf antirez/deepseek-v4-gguf` (`https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`).
 - Single-Spark plausibility:
   - **Plausible** on Spark0-class hardware as a first “one Spark produces tokens” target given the 80.8 GiB (~86.7 GB) footprint and ~120 GiB host/GPU memory; still needs on-hardware validation and careful KV/cache sizing.
+
+### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS shards)
+
+- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `cd14d4663786e5fa368e560324b10e92110f39c2` (`refs/heads/main`)
+- License: MIT (model card)
+- Runtime requirement:
+  - Requires `ssweens/llama.cpp-deepseek-v4` (`443fbfc1eff9ad0e89490bbf5697bfb15c1281e8`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
+  - Upstream README also claims compatibility with `antirez/deepseek-v4-gguf`.
+- Artifacts (not fetched here; sizes are from HF API / git-lfs pointer metadata):
+  - IQ1_M: `deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf` (67505962560 bytes, 62.9 GiB)
+    - LFS sha256: `a7c64ba75a3b4ce42f0b51a69d05e7a37d2bbacc1f8e6017d6a0faca3c58a22c`
+  - IQ2_XXS (2 shards): total 77907836672 bytes (72.6 GiB)
+    - LFS sha256 shards:
+      - `0e4356c7f2e3876bd5757bbaa4f2b7530370063939083048a320816a9d0ae99b` (`...IQ2_XXS-00001-of-00002...`, 49491736416 bytes)
+      - `5dd29236696a4bec748c2d4e194dd4719473970873fc1f34422f92845da5c5e7` (`...IQ2_XXS-00002-of-00002...`, 28416100256 bytes)
+  - BF16-ish (not single-Spark plausible): `deepseek-ai__DeepSeek-V4-Flash-bf16.gguf` (161799012416 bytes, 150.7 GiB)
+    - LFS sha256: `0576a182aa80478733495f013fc7dd2ce71cbf9de8c4d59230a8c2724cad6614`
+- Single-Spark plausibility:
+  - **IQ1_M plausible** on Spark0-class memory (more headroom for KV/cache than ~70–90 GiB IQ2/Q2_K candidates).
+  - **IQ2_XXS plausible** on Spark0-class memory; still needs KV/cache sizing validation; note it is sharded.
 
 ### Preyazz/DeepSeek-V4-Flash-GGUF (community Q2_K/Q3_K_M/Q4_K_M)
 
