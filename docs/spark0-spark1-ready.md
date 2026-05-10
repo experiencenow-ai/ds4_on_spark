@@ -2,6 +2,11 @@
 
 This is a lightweight, reproducible probe flow for Spark hosts.
 
+## Current Status (2026-05-10)
+
+- `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
+- `spark1.local` is not reachable yet (likely not provisioned / not on the same mDNS domain).
+
 ## Goals
 
 - Capture non-secret hardware + toolchain facts (CPU/RAM/storage/GPU/CUDA toolchain).
