@@ -131,6 +131,12 @@ Additional probe run (16:45Z refresh, summary-mode output with PCIe query warnin
 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1644Z_loop_next.txt
 ```
 
+Additional probe run (17:48Z refresh, summary-mode toolchain + storage snapshot):
+
+```bash
+REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1748Z_loop_accessprobe.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -251,6 +257,38 @@ warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (b
 == nvidia-smi pcie link (gpu/host max, optional, post-load) ==
 columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
 0, 0000000F:01:00.0, 1, 5, 5, 1, 16
+```
+
+### Summary-mode snapshot (Spark0, 17:48Z)
+
+```text
+== local meta ==
+Sun May 10 17:48:29 UTC 2026
+git: f907bab
+probe args: spark0@aitopatom-9ab9.local
+
+== identity ==
+Linux aitopatom-9ab9 6.17.0-1014-nvidia #14-Ubuntu SMP PREEMPT_DYNAMIC Tue Mar 17 19:01:40 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 global mem (bytes): 128518373376
+device0 pci bus id: 000F:01:00.0
+runtime max cc: 12.1
+
+== disks (summary) ==
+NAME     SIZE MODEL                      ROTA TYPE
+nvme0n1  3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
 
 ### Compute capability + open kernel module metadata (Spark0, 14:11Z)
