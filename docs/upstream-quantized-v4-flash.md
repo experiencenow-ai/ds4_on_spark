@@ -252,7 +252,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### teamblobfish/DeepSeek-V4-Flash-GGUF (multi-quant sharded GGUFs)
 
-- Source: `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF` @ `868488dd20bce1bdc023fc03c6a3107cbc65f92a` (`refs/heads/main`)
+- Source: `https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF` @ `abd9404a4e3505080d888e070990fede02bef5c7` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement (per upstream README):
   - Requires a DeepSeek-V4-capable llama.cpp fork; upstream recommends `cchuter/llama.cpp` branch `feat/v4-port`.
