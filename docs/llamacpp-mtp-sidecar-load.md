@@ -40,6 +40,13 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Fl
 scripts/run_baseline_existing_runtime.sh spark0@<spark-host>
 ```
 
+If you want a narrower Spark-only probe (no llama.cpp/vLLM baselines), use:
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
+```
+
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
 
 Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh` now defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`), still avoiding full weight downloads. The recorded output is `docs/mtp-sidecar-probe-antirez-ef3b960-payload64.json`.

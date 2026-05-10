@@ -143,6 +143,55 @@ int32_t test_cuda(void)
 		st0 = ds4_cuda_stream_create(&stream,DS4_CUDA_STREAM_FLAGS_DEFAULT);
 		if ( ds4_cuda_is_ok(st0) == 0 || stream.h == 0 )
 			return(-38);
+		{
+			uint8_t ha0[16],ha1[16];
+			int32_t ai;
+			void *adev;
+			for (ai=0; ai<(int32_t)sizeof(ha0); ai++)
+			{
+				ha0[ai] = (uint8_t)(0xa0 + ai);
+				ha1[ai] = 0;
+			}
+			adev = 0;
+			st0 = ds4_cuda_malloc(&adev,(int64_t)sizeof(ha0));
+			if ( ds4_cuda_is_ok(st0) == 0 || adev == 0 )
+				return(-101);
+			st0 = ds4_cuda_memset_async(adev,0,(int64_t)sizeof(ha0),stream);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+			{
+				ds4_cuda_free(adev);
+				return(-102);
+			}
+			st0 = ds4_cuda_memcpy_h2d_async(adev,ha0,(int64_t)sizeof(ha0),stream);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+			{
+				ds4_cuda_free(adev);
+				return(-103);
+			}
+			st0 = ds4_cuda_memcpy_d2h_async(ha1,adev,(int64_t)sizeof(ha1),stream);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+			{
+				ds4_cuda_free(adev);
+				return(-104);
+			}
+			st0 = ds4_cuda_stream_synchronize(stream);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+			{
+				ds4_cuda_free(adev);
+				return(-105);
+			}
+			for (ai=0; ai<(int32_t)sizeof(ha0); ai++)
+			{
+				if ( ha0[ai] != ha1[ai] )
+				{
+					ds4_cuda_free(adev);
+					return(-106);
+				}
+			}
+			st0 = ds4_cuda_free(adev);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+				return(-107);
+		}
 		ev0.h = 0;
 		st0 = ds4_cuda_event_create(&ev0,DS4_CUDA_EVENT_FLAGS_DEFAULT);
 		if ( ds4_cuda_is_ok(st0) == 0 || ev0.h == 0 )
@@ -212,6 +261,15 @@ int32_t test_cuda(void)
 		return(-38);
 	if ( stream.h != 0 )
 		return(-39);
+	st0 = ds4_cuda_memset_async((void *)0x1,0,16,stream);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-201);
+	st0 = ds4_cuda_memcpy_h2d_async((void *)0x1,(void *)0x2,16,stream);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-202);
+	st0 = ds4_cuda_memcpy_d2h_async((void *)0x1,(void *)0x2,16,stream);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-203);
 	ev0.h = (void *)0x1;
 	st0 = ds4_cuda_event_create(&ev0,DS4_CUDA_EVENT_FLAGS_DEFAULT);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )

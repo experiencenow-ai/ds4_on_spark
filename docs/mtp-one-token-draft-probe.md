@@ -45,6 +45,24 @@ python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-jso
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json --sidecar-probe-json /path/to/mtp_sidecar_probe.json
 ```
 
+## Spark runner (once available)
+
+When the Spark/CUDA llama.cpp fork has a one-token probe command available, run it on Spark and record artifacts using:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Optional cross-check against a previously captured sidecar probe JSON (remote path on Spark):
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...' SIDE_CAR_PROBE_JSON=/abs/path/to/mtp_sidecar_probe.json" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+This runner does not fetch/build. It only runs the provided command, validates the emitted JSON, and saves the report under `/private/tmp`.
+
 ## Semantics (reference)
 
 For DeepSeek V4, the MTP module uses separate `e_proj` / `h_proj` projections and applies the `hc_head_*` head in `compute_logits` for draft token selection. Reference: vLLM API docs `vllm.model_executor.models.deepseek_v4_mtp` (DeepSeek V4 MTP draft model).

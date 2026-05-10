@@ -2,10 +2,12 @@
 
 Date: 2026-05-10
 
-This note records *synthetic* go/no-go guidance for two early performance layers:
+This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
 - expert queue reservation (protect interactive under batch load)
-- MTP draft/accept (speculative decode efficiency threshold)
+- expert batching (microbatch batch-class work to amortize per-batch overhead)
+- adaptive K (throttle batch admission under congestion)
+- MTP draft/accept (speculative decode efficiency threshold + safety under overload)
 
 All numbers below come from the committed JSON report:
 
@@ -36,6 +38,36 @@ Notes:
 
 - Tail latency comparisons are not meaningful when one variant drops a large fraction of interactive work; use drop/starvation and depth metrics first.
 
+## Expert Batching (Per-Expert Microbatching)
+
+Scenario: two-stream overload with reservation enabled (`expert_queue_reserve_interactive=16`) and a simple service model with per-batch overhead:
+
+- `service_base_ms=0.25` (fixed cost per started expert batch)
+- `service_per_task_ms=1.0` (incremental cost per task/work-unit inside the batch)
+
+Compare `batch_max_batch`:
+
+- baseline `batch_max_batch=1` (no batching)
+- `batch_max_batch=4`
+- `batch_max_batch=8`
+
+Key signals (from the report JSON):
+
+- `service_slot_ms_per_output_token` (lower is better):
+  - no batching: `1.262110980622431`
+  - batch 4: `1.08307777493824`
+  - batch 8: `1.0529988370161156`
+- `drop_frac_tokens` (lower is better):
+  - no batching: `0.6594`
+  - batch 4: `0.6087`
+  - batch 8: `0.5987333333333333`
+- `token_p95_interactive_ms` (interactive tail cost):
+  - no batching: `2.9098653334482805`
+  - batch 4: `5.379310308471679`
+  - batch 8: `9.234806787588198`
+
+Recommendation (synthetic): keep an **expert batching** knob available (at least for batch-class work). Start with `batch_max_batch≈4` as a conservative default when per-batch overhead is non-trivial, but validate the interactive tail-cost tradeoff on real quantized-runtime traces before enabling.
+
 ## MTP (Draft/Accept) Efficiency Threshold
 
 Scenario: hotset routing with low congestion (`expert_queue_max=10_000`, `service_ms=0.2`) to focus on compute efficiency rather than queueing artifacts. Sweep uses:
@@ -53,6 +85,21 @@ From the report JSON:
 - At `accept_rate≈0.44152`: ratio `0.7965842467506394`.
 
 Recommendation (synthetic): don’t enable MTP by default unless real traces show **measured** acceptance rate comfortably above ~`0.27` for the chosen `draft_len` and cost model; otherwise treat it as an opt-in experiment.
+
+## MTP (Congestion Safety + Draft Attempt Policy)
+
+Scenario: two-stream overload (interactive + saturated batch) with a small expert queue (`expert_queue_max=128`) and reservation enabled (`expert_queue_reserve_interactive=16`). This tests whether MTP draft work can amplify queue pressure and harm interactive SLA/starvation, even when MTP looks efficient in a low-congestion sweep.
+
+This scenario holds *output-token demand* approximately constant by scaling verify-step arrivals using the model-expected accept length (equivalent to `--arrival-units output_tokens` in the CLI, but implemented inside the harness).
+
+Key signals to inspect (from the report JSON, per accept probability):
+
+- `mtp_full` vs `mtp_stop_at_reject`:
+  - `service_slot_ms_per_output_token` (efficiency)
+  - `sla_violation_frac_tokens_interactive` (interactive SLA safety)
+  - `starved_task_frac_mtp_verify` (verify-phase starvation under draft pressure)
+
+Recommendation (synthetic): default MTP compute policy should behave like `stop_at_reject` (don’t always compute full `gamma` drafts). Even at accept_prob `0.0`, this reduces wasted draft work vs `full`, which is a safer baseline under unknown/low accept regimes. Validate the full queueing story on real quantized-runtime traces before enabling MTP.
 
 ## Adaptive K (Batch Throttling Under Congestion)
 
@@ -74,6 +121,40 @@ Key signals (from the report JSON):
   - fixed batch K=1: `0.0`
 
 Recommendation (synthetic): keep an **adaptive batch-K controller** available; fixed high batch K can sharply inflate backpressure drops under overload. Tune thresholds against real traces once available.
+
+## Adaptive K Signal Choice (Global vs Candidates vs Class)
+
+Scenario: two-stream overload with non-trivial interactive demand (`interactive_arrival_rate_tps=2000`) plus saturated batch demand (`batch_arrival_rate_tps=20000`), small expert queue (`expert_queue_max=128`), and adaptive K enabled.
+
+Compare `k_signal` policies:
+
+- `global`: congestion signal is max pending across all experts
+- `candidates`: congestion signal is max pending among this token’s candidate experts
+- `class`: congestion signal is max pending in this token’s latency-class queue only
+
+Key signals to inspect (from the report JSON):
+
+- `token_p95_interactive_ms` and `sla_violation_frac_tokens_interactive` (interactive safety)
+- `drop_frac_tokens_batch` and `pending_depth_time_weighted_p95` (congestion + backpressure pressure)
+
+Recommendation (synthetic): default to **`k_signal=global`** (or `candidates`) until real traces are replayed. In this overload regime, `k_signal=class` can over-admit interactive work and amplify interactive SLA violations even when a reservation is present.
+
+## Batch Starvation Knobs (hi_burst vs promote_ms)
+
+Scenario: mixed load with more uniform routing (low Zipf skew) to isolate service-discipline effects. Strict priority can starve batch tasks even when interactive latency is healthy.
+
+Compare:
+
+- strict priority (`hi_burst=0`, `promote_ms=0`)
+- bounded priority (`hi_burst=8`) to force periodic batch starts
+- aging (`promote_ms=20ms`) and combined (`hi_burst=8` + `promote_ms=20ms`)
+
+Key signals to inspect (from the report JSON):
+
+- `starved_task_frac_batch` (batch starvation)
+- `token_p95_interactive_ms` (interactive tail cost)
+
+Recommendation (synthetic): keep **`hi_burst`** as a default anti-starvation safety valve; treat `promote_ms` as an opt-in knob that can reduce starvation further but may inflate interactive tail latency.
 
 ## Next Step (Real Traces)
 
