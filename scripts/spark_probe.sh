@@ -505,12 +505,49 @@ emit_smi_q_pci_link()
 	return 0
 }
 
+emit_sysfs_pcie_link_summary()
+{
+	label="$1"
+	echo "== pci link (sysfs, gpu endpoints, current/max${label}) =="
+	if [ -d /sys/bus/pci/devices ]; then
+		bus_ids=""
+		if [ "$q" != "" ]; then
+			bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
+		fi
+		if [ "$bus_ids" != "" ]; then
+			for bus in $bus_ids; do
+				dom="$(printf "%s" "$bus" | cut -d: -f1 | sed -E "s/.*([0-9A-Fa-f]{4})$/\\1/" | tr ABCDEF abcdef)"
+				rest="$(printf "%s" "$bus" | cut -d: -f2-)"
+				short_bus="${dom}:${rest}"
+				sys="/sys/bus/pci/devices/$short_bus"
+				echo "-- $bus -> $short_bus --"
+				if [ -d "$sys" ]; then
+					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
+					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
+					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
+					[ -r "$sys/max_link_width" ] && echo "max_link_width: $(cat "$sys/max_link_width" 2>/dev/null || true)"
+				else
+					echo "sysfs device not found: $sys"
+				fi
+			done
+		else
+			echo "nvidia-smi inventory missing bus ids"
+		fi
+	else
+		echo "no /sys/bus/pci/devices"
+	fi
+	return 0
+}
+
 emit_pcie_link ""
 echo
 if [ "$spark_probe_summary" != "1" ]; then
 	emit_sysfs_pcie_link ""
 	echo
 	emit_smi_q_pci_link ""
+	echo
+else
+	emit_sysfs_pcie_link_summary ""
 	echo
 fi
 echo "== nvidia-smi power/clocks (summary) =="
@@ -780,17 +817,20 @@ CU
 				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
 			fi
 		fi
-		echo
-		emit_pcie_link ", post-load"
-		echo
-		if [ "$spark_probe_summary" != "1" ]; then
-			emit_sysfs_pcie_link ", post-load"
-		fi
-	else
-		echo "nvcc compile failed:"
-		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
-		if [ "$nvcc_extra" != "" ]; then
-			echo "retry: nvcc without -arch (fallback)"
+			echo
+			emit_pcie_link ", post-load"
+			echo
+			if [ "$spark_probe_summary" != "1" ]; then
+				emit_sysfs_pcie_link ", post-load"
+			else
+				emit_sysfs_pcie_link_summary ", post-load"
+			fi
+			echo
+		else
+			echo "nvcc compile failed:"
+			sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
+			if [ "$nvcc_extra" != "" ]; then
+				echo "retry: nvcc without -arch (fallback)"
 			if "$nvcc_bin" -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
 				"$cu_bin" 2>/dev/null || true
 			else
