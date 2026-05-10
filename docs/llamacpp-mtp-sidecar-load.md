@@ -26,6 +26,20 @@ Net: even after solving the “unknown architecture” error, the fork still nee
 
 ## Minimum plan to reach the one-token draft probe
 
+### Step 0: validate the sidecar contract (Spark-safe, no downloads)
+
+Before touching llama.cpp code, validate the sidecar file you intend to use:
+
+- Repo-side (Hugging Face URL, metadata-only range reads): `scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh`
+- Spark-side (local file already staged on Spark; no downloads): run the baseline runner with:
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+scripts/run_baseline_existing_runtime.sh spark0@<spark-host>
+```
+
+If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
+
 ### Step 1: sidecar weight loader (not a model loader)
 
 Add a dedicated loader that:
