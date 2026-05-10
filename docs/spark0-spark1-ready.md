@@ -25,6 +25,8 @@ REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 Omit args to use the same default targets.
 The discovery output prints `targets:` so the exact target list is visible in committed excerpts.
 
+If `spark1.local` does not resolve from the Mac yet, keep the probe flow the same but pass whatever Spark1 identifier you do have (a different mDNS name, a wired IPv4, or an IPv6 link-local) and let the scripts record the exact `resolved targets:` and reachability state in the redacted output.
+
 ## Spark Probe (Redacted)
 
 Always use `REDACT=1` when saving output for commit.
