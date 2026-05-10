@@ -57,7 +57,7 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
 - MTP draft/accepted/rejected counters
 - CUDA fallback / graph placement (best-effort): run `scripts/benchmark_llamacpp_server_sweep.py` and inspect `fattn_reservation_probe.json` + the `node_kind_*` / `sched_reserve_*` fields (see `docs/baseline-fattn-reservation.md`).
   - To include this sweep in the standard baseline report (Mac → Spark), set `LLAMA_SERVER_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
-  - If the runtime exposes a Prometheus `/metrics` endpoint (for example when started with `--metrics`), set `LLAMA_SERVER_SWEEP_SCRAPE_METRICS=1` to snapshot `metrics_start.prom` and `metrics_end.prom` alongside the sweep (read-only).
+  - If the runtime exposes a Prometheus `/metrics` endpoint (for example when started with `--metrics`), set `LLAMA_SERVER_SWEEP_SCRAPE_METRICS=1` to snapshot `metrics_start.prom` and `metrics_end.prom` alongside a best-effort delta (`metrics_delta.json`, `metrics_delta.md`).
 - Batching/concurrency throughput sweep (expensive): run `scripts/benchmark_llamacpp_server_throughput_sweep.py` and treat `--parallel`, `-b/--batch-size`, `-ub/--ubatch-size`, prompt size, and request concurrency as first-class variables.
   - To include this sweep in the standard baseline report, set `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
   - See `docs/baseline-batching-throughput.md` and `docs/baseline-multislot-parallel2.md` (multi-slot failure probe).

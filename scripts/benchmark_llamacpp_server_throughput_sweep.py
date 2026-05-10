@@ -62,6 +62,127 @@ def split_opt_ints(s):
     return split_ints(s)
 
 
+def parse_prom_text(txt):
+    # Minimal Prometheus text format parser.
+    # Returns: series dict(key -> float)
+    series = {}
+    if not isinstance(txt, str) or not txt:
+        return series
+
+    def parse_labels(s):
+        out = {}
+        i = 0
+        n = len(s)
+        while i < n:
+            while i < n and (s[i].isspace() or s[i] == ","):
+                i += 1
+            if i >= n:
+                break
+            k0 = i
+            while i < n and s[i] != "=":
+                i += 1
+            key = s[k0:i].strip()
+            if not key or i >= n or s[i] != "=":
+                break
+            i += 1
+            if i >= n or s[i] != '"':
+                break
+            i += 1
+            val = []
+            while i < n:
+                ch = s[i]
+                if ch == "\\":
+                    if i + 1 < n:
+                        val.append(s[i + 1])
+                        i += 2
+                        continue
+                if ch == '"':
+                    i += 1
+                    break
+                val.append(ch)
+                i += 1
+            out[key] = "".join(val)
+            while i < n and (not s[i].isspace()) and s[i] != ",":
+                i += 1
+            if i < n and s[i] == ",":
+                i += 1
+        return out
+
+    for raw in txt.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        name = ""
+        labels = {}
+        value_s = ""
+        if "{" in line and "}" in line:
+            try:
+                name, rest = line.split("{", 1)
+                labels_s, value_s = rest.split("}", 1)
+                name = name.strip()
+                labels = parse_labels(labels_s)
+                value_s = value_s.strip()
+            except ValueError:
+                continue
+        else:
+            parts = line.split(None, 1)
+            if len(parts) != 2:
+                continue
+            name, value_s = parts[0].strip(), parts[1].strip()
+        if not name:
+            continue
+        value_parts = value_s.split()
+        if not value_parts:
+            continue
+        try:
+            v = float(value_parts[0])
+        except ValueError:
+            continue
+        if v != v:
+            continue
+        if labels:
+            key = name + "{" + ",".join(
+                ["%s=\"%s\"" % (k, labels[k].replace("\\", "\\\\").replace('"', "\\\"")) for k in sorted(labels)]
+            ) + "}"
+        else:
+            key = name
+        series[key] = v
+    return series
+
+
+def metrics_delta_from_prom(start_txt, end_txt, top_n=25):
+    s0 = parse_prom_text(start_txt)
+    s1 = parse_prom_text(end_txt)
+    keys = set(s0.keys()) | set(s1.keys())
+    deltas = []
+    metric_sum = {}
+    metric_series = {}
+    for k in keys:
+        v0 = float(s0.get(k, 0.0) or 0.0)
+        v1 = float(s1.get(k, 0.0) or 0.0)
+        d = v1 - v0
+        if d == 0.0:
+            continue
+        name = k.split("{", 1)[0]
+        metric_sum[name] = metric_sum.get(name, 0.0) + d
+        metric_series[name] = metric_series.get(name, 0) + 1
+        deltas.append({"series": k, "name": name, "start": v0, "end": v1, "delta": d})
+    deltas.sort(key=lambda x: (-abs(float(x.get("delta") or 0.0)), x.get("series", "")))
+    top_series = deltas[: int(top_n)]
+    top_metrics = []
+    for name, dsum in metric_sum.items():
+        top_metrics.append({"name": name, "delta_sum": dsum, "series_count": metric_series.get(name, 0)})
+    top_metrics.sort(key=lambda x: (-abs(float(x.get("delta_sum") or 0.0)), x.get("name", "")))
+    return {
+        "start_series": len(s0),
+        "end_series": len(s1),
+        "nonzero_series": len(deltas),
+        "nonzero_metrics": len(metric_sum),
+        "top_series_by_abs_delta": top_series,
+        "top_metrics_by_abs_delta_sum": top_metrics[: int(top_n)],
+    }
+
+
 def http_json(method, url, payload=None, timeout=60.0):
     data = None
     headers = {}
@@ -694,6 +815,8 @@ def main():
                             "server_args": " ".join(shlex.quote(x) for x in server_args),
                         }
                         combo_rows = []
+                        metrics_start_txt = None
+                        metrics_end_txt = None
 
                         try:
                             load_s, health = wait_health(base_url, wait_timeout_s, poll_s)
@@ -702,6 +825,7 @@ def main():
                             if scrape_metrics != 0 and os.path.exists(combo_dir):
                                 try:
                                     txt = http_text("GET", base_url + "/metrics", None, timeout=metrics_timeout_s)
+                                    metrics_start_txt = txt
                                     with open(os.path.join(combo_dir, "metrics_start.prom"), "w", encoding="utf-8") as f:
                                         f.write(txt)
                                 except Exception:
@@ -728,8 +852,54 @@ def main():
                             if scrape_metrics != 0 and os.path.exists(combo_dir):
                                 try:
                                     txt = http_text("GET", base_url + "/metrics", None, timeout=metrics_timeout_s)
+                                    metrics_end_txt = txt
                                     with open(os.path.join(combo_dir, "metrics_end.prom"), "w", encoding="utf-8") as f:
                                         f.write(txt)
+                                except Exception:
+                                    pass
+                            if (
+                                scrape_metrics != 0
+                                and os.path.exists(combo_dir)
+                                and metrics_start_txt is not None
+                                and metrics_end_txt is not None
+                            ):
+                                try:
+                                    delta = metrics_delta_from_prom(metrics_start_txt, metrics_end_txt, top_n=25)
+                                    with open(os.path.join(combo_dir, "metrics_delta.json"), "w", encoding="utf-8") as f:
+                                        json.dump(delta, f, indent=2, sort_keys=True)
+                                    with open(os.path.join(combo_dir, "metrics_delta.md"), "w", encoding="utf-8") as f:
+                                        f.write("# llama-server /metrics Delta (best-effort)\n\n")
+                                        f.write("- start_series: `%s`\n" % str(delta.get("start_series", "NA")))
+                                        f.write("- end_series: `%s`\n" % str(delta.get("end_series", "NA")))
+                                        f.write("- nonzero_series: `%s`\n" % str(delta.get("nonzero_series", "NA")))
+                                        f.write("- nonzero_metrics: `%s`\n" % str(delta.get("nonzero_metrics", "NA")))
+                                        f.write("\n")
+                                        f.write("## Top metrics (by abs delta sum)\n\n")
+                                        f.write("| metric | delta_sum | series |\n")
+                                        f.write("| --- | ---: | ---: |\n")
+                                        for row in delta.get("top_metrics_by_abs_delta_sum") or []:
+                                            f.write(
+                                                "| %s | %.6g | %d |\n"
+                                                % (
+                                                    row.get("name", "NA"),
+                                                    float(row.get("delta_sum") or 0.0),
+                                                    int(row.get("series_count") or 0),
+                                                )
+                                            )
+                                        f.write("\n")
+                                        f.write("## Top series (by abs delta)\n\n")
+                                        f.write("| series | delta | start | end |\n")
+                                        f.write("| --- | ---: | ---: | ---: |\n")
+                                        for row in delta.get("top_series_by_abs_delta") or []:
+                                            f.write(
+                                                "| %s | %.6g | %.6g | %.6g |\n"
+                                                % (
+                                                    row.get("series", "NA").replace("|", "\\|"),
+                                                    float(row.get("delta") or 0.0),
+                                                    float(row.get("start") or 0.0),
+                                                    float(row.get("end") or 0.0),
+                                                )
+                                            )
                                 except Exception:
                                     pass
                         except Exception as e:

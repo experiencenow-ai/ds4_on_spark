@@ -27,7 +27,7 @@ When run via `scripts/run_baseline_existing_runtime.sh`, the fetched artifacts d
   - `llama_server.log`, `server.cmd.json`, `server.pid`
   - `fattn_reservation_probe.json` (best-effort; see `docs/baseline-fattn-reservation.md`)
   - `multislot_reservation_probe.json` (best-effort; see `docs/baseline-multislot-parallel2.md`)
-  - `metrics_start.prom` / `metrics_end.prom` when `/metrics` is enabled and scraping is requested
+  - `metrics_start.prom` / `metrics_end.prom` plus `metrics_delta.json` / `metrics_delta.md` when `/metrics` is enabled and scraping is requested
 
 ## Canonical Run Shape (Mac → Spark0)
 
