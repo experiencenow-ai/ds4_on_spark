@@ -19,12 +19,13 @@ edit host-specific values, then enable services with `systemctl`.
 - `ds4@.service` expects:
   - an optional shared env file at `/etc/ds4/ds4.env`
   - an env file at `/etc/ds4/ds4-%i.env` (loaded after `ds4.env`)
-  - an optional config at `/etc/ds4/ds4-%i.yaml`
+  - a config file at `/etc/ds4/ds4-%i.yaml` (may be minimal `{}` until the schema is defined)
   - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
   - `ExecStartPre` validates `ds4.env` (when present) and `ds4-%i.env`
-- Optional: `ds4-strict@.service` is like `ds4@.service` but *wants* `ds4-preflight-strict@%i.service` before start.
+- Optional: `ds4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails).
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional: `ds4-preflight-strict@.timer` runs strict preflight on boot and periodically after.
+- Optional: `ds4-support-bundle@.service` collects a non-destructive support bundle (triggered automatically when `ds4-preflight-strict@.service` fails; can also be started manually).
 - Optional Spark standalone examples:
   - `spark-master@.service`
   - `spark-worker@.service`
@@ -53,8 +54,11 @@ sudo systemd-tmpfiles --create || true
 - `ds4-spark0.env.example`, `ds4-spark1.env.example` : per-host starting points
 - `ds4-spark0.yaml.example`, `ds4-spark1.yaml.example` : runtime config placeholders (schema TBD)
 - `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
+- `logrotate.ds4.conf.example` : optional logrotate config for file logs (skip if journald-only)
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
 - `hosts.ds4.spark01.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1
+- `ssh_config.ds4.spark01.example` : optional Mac-side `ssh_config` convenience (stable SSH_OPTS)
+- `sysctl.ds4.conf.example` : optional sysctl network tuning drop-in (host-wide; review first)
 - `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.

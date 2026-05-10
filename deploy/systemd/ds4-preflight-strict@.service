@@ -2,6 +2,9 @@
 Description=DS4 strict preflight checks (%i)
 Wants=network-online.target
 After=network-online.target
+OnFailure=ds4-support-bundle@%i.service
+ConditionPathIsExecutable=/opt/ds4/scripts/ops_ds4_env_check.sh
+ConditionPathIsExecutable=/opt/ds4/scripts/ops_tp2_readiness.sh
 
 [Service]
 Type=oneshot
@@ -34,6 +37,8 @@ ProtectKernelTunables=true
 LockPersonality=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
+
+StateDirectory=ds4 ds4/ssh
 
 [Install]
 WantedBy=multi-user.target

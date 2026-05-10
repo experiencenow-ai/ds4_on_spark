@@ -4,13 +4,16 @@ This repo uses CMake and ships a thin `Makefile` wrapper.
 
 See also:
 
+- `docs/build-ci.md`
 - `docs/build-macos.md`
 - `docs/build-linux.md`
 - `docs/build-spark.md`
 - `docs/build-memory.md`
 - `docs/build-config.md`
 - `docs/build-cli.md`
+- `docs/build-logging.md`
 - `docs/build-install.md`
+- `docs/build-gguf.md`
 
 ## Mac (no CUDA)
 

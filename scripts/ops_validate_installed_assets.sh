@@ -20,6 +20,7 @@ Notes:
   - Validates installed unit templates + env/config readability, then runs:
       - ops_ds4_env_check.sh (env sanity)
       - ops_tp2_readiness.sh (preflight; add --strict to fail fast)
+  - systemd timer templates are optional; this script does not require them.
 EOF
 }
 
@@ -105,8 +106,16 @@ need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
 need_file "$systemd_dir/ds4-preflight-strict@.service"
-need_file "$systemd_dir/ds4-preflight@.timer"
-need_file "$systemd_dir/ds4-preflight-strict@.timer"
+need_file "$systemd_dir/ds4-support-bundle@.service"
+if [ -f "$systemd_dir/ds4-preflight@.timer" ]; then
+    need_file "$systemd_dir/ds4-preflight@.timer"
+fi
+if [ -f "$systemd_dir/ds4-preflight-strict@.timer" ]; then
+    need_file "$systemd_dir/ds4-preflight-strict@.timer"
+fi
+if [ -f "$systemd_dir/ds4-support-bundle@.timer" ]; then
+    need_file "$systemd_dir/ds4-support-bundle@.timer"
+fi
 echo "ok"
 echo
 
@@ -121,6 +130,7 @@ echo
 echo "== /opt/ds4 scripts =="
 need_exec "$scripts_dir/ops_ds4_env_check.sh"
 need_exec "$scripts_dir/ops_tp2_readiness.sh"
+need_exec "$scripts_dir/ops_collect_support_bundle.sh"
 echo "ok"
 echo
 

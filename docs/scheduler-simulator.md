@@ -38,6 +38,18 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
+### Multi-Layer Routes
+
+When a trace record includes `layers[]` (multi-MoE-layer routes), the simulator treats the token’s work as a sequence of **stages**:
+
+- for each micro-token (verify-only, or draft+verify when MTP is enabled), run layer 0, then layer 1, then layer 2, ...
+- tasks for later layers are not enqueued until the previous layer’s tasks complete
+- if a given layer cannot admit any tasks because all of that layer’s candidates are full, the simulator skips that layer (models layer-local token dropping via the residual path)
+
+This makes per-token latency approximately additive across layers, which better matches transformer execution than admitting all layers concurrently.
+
+Stage skips (layer-local residual-path drops) are summarized under `stages.skipped_backpressure*` in the simulator JSON output.
+
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.
@@ -65,6 +77,20 @@ congestion signal derived from expert pending depth:
 
 - `--k-signal global` (default): `max_pending` is max pending across all experts
 - `--k-signal candidates`: `max_pending` is max pending among this token's candidates
+- `--k-signal class`: `max_pending` is max pending in this token’s latency-class
+  queue (interactive or batch) plus in-flight work, across all experts (helps
+  decouple interactive K from batch backlog under strict priority)
+
+You can also choose whether pending depth is measured in **task counts** or **work units**:
+
+- `--pending-units tasks` (default): pending is outstanding task count (queued + in-flight)
+- `--pending-units work`: pending is sum of `cost_scale` for queued + in-flight work (draft micro-tokens with low `--mtp-draft-cost-scale` contribute less)
+
+When the trace contains multiple MoE layers (`layers[]`), you can choose whether the controller
+produces one `K` per trace entry or one `K` per layer:
+
+- `--k-scope token` (default): compute one `K` and apply it to every layer
+- `--k-scope layer`: compute `K` independently for each layer using that layer's `candidates`
 
 Then:
 
@@ -97,6 +123,12 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mo
 This is useful for validating the queueing/backpressure/MTP layers against a real schedule before
 tuning the controller.
 
+### `chosen_k_total` Metric
+
+For multi-layer traces, the metrics JSON includes `chosen_k_total.{interactive,batch}` summarizing the
+*total desired verify work per trace entry* (sum over layers of `min(k_layer, len(layer.candidates))`).
+This is helpful when comparing `--k-scope token` vs `--k-scope layer` on the same trace.
+
 ## MTP (Draft/Accept) Model
 
 This simulator includes a host-only approximation of **MTP draft/accept** behavior so we can explore
@@ -104,7 +136,9 @@ the tradeoffs *before* touching CUDA runtime code.
 
 When `--mtp-draft-len > 0`, each trace element is treated as one **verify step** which performs:
 
-- Draft compute: enqueue `--mtp-draft-len` draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
+- Draft compute: enqueue draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
+  - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
+  - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
@@ -115,6 +149,7 @@ Notes:
 
 - Acceptance sampling is controlled by `--sim-seed` for determinism.
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
+- Queueing effects are broken down by phase in the metrics JSON under `mtp.task_queue_wait_ms.{draft,verify}` and `mtp.starved_task_frac.{draft,verify}` (useful for spotting draft-induced verify starvation).
 
 ### Arrival Rate Units (MTP Comparisons)
 
@@ -206,6 +241,16 @@ Markov mode creates temporal locality by reusing the previous token's primary ex
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
+### Synthetic Multi-Layer Routes
+
+To approximate multi-MoE-layer models before real quantized-runtime traces are available, synthetic traces can emit per-layer routing:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-layers 4 --num-candidates 8 --json
+```
+
+When `--num-layers > 1`, each generated trace record includes a `layers` array with one candidate list per layer. The top-level `candidates` field is set to the union of all layer candidates (first-seen order) for compatibility with `--k-signal candidates` and trace replay tooling.
+
 ### Trace Replay (JSONL or CSV)
 
 Replay mode can read either JSONL (`--trace-jsonl`) or CSV (`--trace-csv`).
@@ -216,9 +261,27 @@ JSONL reads one JSON object per line with required fields:
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
+  - Replay requires `--num-experts > expert_id_range.max` (see `--trace-summary`); the simulator rejects out-of-range expert IDs with a clear error.
+- Inline metadata records are also accepted in JSONL and ignored by the simulator's event stream:
+  - `{"type":"meta","meta":{...}}` (preferred), or
+  - `{"meta":{...}}` when no other routing fields are present
+  - You can also pass a sidecar metadata JSON via `--trace-meta-json` (its keys are merged into the trace summary; inline records override it).
+
+If you have a raw runtime trace that uses `dt_ms` deltas (or emits `accepted_mtp` / `rejected_mtp` but not `mtp_accept_len`), you can canonicalize it into the simulator’s preferred strict JSONL form (writes a meta header plus derived `t_ms`/`mtp_accept_len`):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+- `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
+  - `candidates` (list[int]): ordered expert candidates for that layer (required)
+  - `scores` (optional list[number]): per-candidate router scores (same length as that layer's `candidates`)
+  - `k` (optional int): layer-specific chosen `K`. When using `--k-mode trace`, you may omit top-level `k` if every layer provides `k`.
+  - `cost_scale` (optional number): layer-specific cost multiplier (multiplied into the top-level `cost_scale` when both are present)
+  - When `layers` is present, the simulator expects `candidates` to either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); it uses the per-layer candidate lists for admission and runs the layers sequentially.
 - `token_index` (optional int): monotonically increasing token index from the runtime (debugging aid only)
-- `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace`)
-- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc`.
+- `k` (optional int): the chosen `K` for this token (required when using `--k-mode trace` unless every layer provides `layers[].k`)
+- `scores` (optional list[number]): per-candidate router scores (same length as `candidates`). Required when using `--admit-policy score_desc` (when `layers` is present, use `layers[].scores` instead).
 - `mtp_accept_len` (optional int): when `--mtp-draft-len > 0`, accept length for that verify step in the range `[1, mtp_draft_len+1]`
 - `accepted_mtp` / `rejected_mtp` (optional int): runtime-friendly MTP accounting fields; when present, the simulator derives `mtp_accept_len` as:
   - `accepted_mtp + 1` (preferred), or
@@ -273,6 +336,8 @@ Trace sanity-check (contract summary only):
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
 ```
 
+Tip: in replay mode you can set `--num-experts 0` to infer `num_experts` from the trace (or `meta.num_experts`), and `--mtp-draft-len -1` to infer `mtp_draft_len` from `meta.mtp_draft_len` or consistent `accepted_mtp+rejected_mtp` fields.
+
 Synthetic trace dump (generate, write JSONL, and exit after printing the trace summary):
 
 ```bash
@@ -290,7 +355,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --num-tokens 10000 --
 The simulator prints a JSON object with:
 
 - `sim`: makespan + token/task throughput
-- `work`: total service-slot time and work-units accounting (useful for comparing compute per output token, especially with MTP enabled)
+- `work`: service-slot time, work-units, and batch-size accounting (useful for comparing compute per output token, especially with MTP enabled)
+  - `work.batch_size.{interactive,batch}` summarizes the simulator’s started batch sizes per expert worker (queue served, not token class; promoted batch tasks count as interactive-queue batches)
 - `mtp`: MTP output-token throughput + accept-length / accept-rate metrics (enabled when `--mtp-draft-len > 0`)
 - `trace.decode_ms.{interactive,batch}` and `trace.decode_error_ms.{interactive,batch}`: when trace replay includes `decode_ms`, summarize observed decode latency and error vs simulated token latency (admitted tokens only)
 - `trace.kv_tokens.{interactive,batch}` and `trace.expert_batch_size.{interactive,batch}`: when trace replay includes `kv_tokens` / `expert_batch_size`, summarize observed values for admitted tokens
@@ -301,14 +367,22 @@ The simulator prints a JSON object with:
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
   - also includes controller update/change counts when `--k-update-ms` / `--k-slew` are used
-- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates}`); useful for choosing `--q-low/--q-high`
+- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates,class}`); useful for choosing `--q-low/--q-high`
 - `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
+- `effective_k_total.{interactive,batch}`: like `effective_k`, but summed across all routing layers when `layers` is present
 - `tasks`: total + per-latency-class admitted/dropped/starved counters
 - `tasks.promoted`: number of batch tasks promoted by `--promote-ms`
 - `tasks.forced_batch_starts`: number of times `--hi-burst` forced a batch start
 - `tokens.partial_admit*`: number of admitted tokens that received fewer than `min(K, len(candidates))` tasks due to backpressure
+- `tokens.partial_admit_any_layer*`: like `tokens.partial_admit*`, but triggers when *any* routing layer under-admits during the verify step
 - `expert_queue`: median/max of per-expert max-pending and mean-pending
-  - also includes time-weighted pending-depth percentiles across expert-time (`pending_depth_time_weighted.p{50,95,99}`)
+  - also includes `expert_queue.work` (per-expert max/mean pending work units, time-weighted) so `--pending-units work` has observable queue depth
+  - also includes `expert_queue.starvation_task_frac` (median/p95/max across experts) for the fraction of started tasks that waited at least `--starvation-ms` before service
+  - also includes `expert_queue.max_task_queue_wait_ms` (median/p95/max across experts) for per-expert worst-case queue wait before service
+  - also includes time-weighted depth percentiles across expert-time:
+    - `pending_depth_time_weighted.p{50,95,99}`: total outstanding tasks (queued + in-flight)
+    - `hi_queue_depth_time_weighted.p{50,95,99}`: interactive queue depth (queued only)
+    - `lo_queue_depth_time_weighted.p{50,95,99}`: batch queue depth (queued only)
 - `expert_utilization`: median/p95/max of per-expert mean utilization (time-weighted `in_flight / expert_parallelism`)
 - `expert_saturation`: median/p95/max of per-expert fraction of time pending at `--expert-queue-max`
 
@@ -333,6 +407,8 @@ The first useful runtime patch can be instrumentation-only. Expert queueing
 should be enabled only after replay shows a throughput win without unacceptable
 interactive p95, starvation, or partial-admit regressions.
 
+Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
+
 ## MTP Simulation
 
 MTP is modeled as a draft/accept layer on top of decode:
@@ -348,7 +424,7 @@ by default until deterministic acceptance tests pass.
 ## Next Steps
 
 - Start collecting real quantized-runtime router traces and feed them into `--trace-jsonl` (see `docs/quantized-performance-path.md`).
-- Add MTP draft/accept accounting once a runtime exposes draft tokens/logits.
+- Once real traces include `expert_batch_size`, calibrate service/batching knobs and decide whether expert queueing improves batch sizes without interactive p95 regressions.
 - Replace fixed `--service-ms` with a shape-dependent service model once DS4
   expert GEMM shapes are pinned down.
 - Use this harness to define production invariants (interactive p95 bounds,

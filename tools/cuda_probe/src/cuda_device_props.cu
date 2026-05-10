@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 
 #include <cuda_runtime.h>
@@ -21,13 +22,16 @@ static int32_t get_attr_i32(int32_t *out,int32_t dev,cudaDeviceAttr attr)
 static void print_device_props(const cudaDeviceProp *p,int32_t idx)
 {
 	int32_t clock_khz = 0,mem_clock_khz = 0,smem_per_sm = 0;
+	uint64_t mem_bytes = 0,smem_per_block_bytes = 0;
 	if ( p == 0 )
 		return;
 	get_attr_i32(&clock_khz,idx,cudaDevAttrClockRate);
 	get_attr_i32(&mem_clock_khz,idx,cudaDevAttrMemoryClockRate);
 	get_attr_i32(&smem_per_sm,idx,cudaDevAttrMaxSharedMemoryPerMultiprocessor);
-	printf("device[%d]=%s cc=%d.%d clock_khz=%d mem=%zu\n",idx,p->name,p->major,p->minor,clock_khz,(size_t)p->totalGlobalMem);
-	printf("  mp=%d warp=%d regsPerBlock=%d sharedPerBlock=%zu sharedPerSM=%d mem_clock_khz=%d\n",p->multiProcessorCount,p->warpSize,p->regsPerBlock,(size_t)p->sharedMemPerBlock,smem_per_sm,mem_clock_khz);
+	mem_bytes = (uint64_t)p->totalGlobalMem;
+	smem_per_block_bytes = (uint64_t)p->sharedMemPerBlock;
+	printf("device[%d]=%s cc=%d.%d clock_khz=%d mem=%" PRIu64 "\n",idx,p->name,p->major,p->minor,clock_khz,mem_bytes);
+	printf("  mp=%d warp=%d regsPerBlock=%d sharedPerBlock=%" PRIu64 " sharedPerSM=%d mem_clock_khz=%d\n",p->multiProcessorCount,p->warpSize,p->regsPerBlock,smem_per_block_bytes,smem_per_sm,mem_clock_khz);
 	printf("  maxThreadsPerBlock=%d maxThreadsDim=%d,%d,%d maxGridSize=%d,%d,%d\n",p->maxThreadsPerBlock,p->maxThreadsDim[0],p->maxThreadsDim[1],p->maxThreadsDim[2],p->maxGridSize[0],p->maxGridSize[1],p->maxGridSize[2]);
 }
 

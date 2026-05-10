@@ -16,6 +16,9 @@ SM121_DLTO_PROBE := $(BIN_DIR)/cuda_sm121_dlto_probe
 CUBLASLT_SMOKE := $(BIN_DIR)/cuda_cublaslt_smoke
 CUBLASLT_FP8_SMOKE := $(BIN_DIR)/cuda_cublaslt_fp8_smoke
 CUBLASLT_FP8_E5M2_SMOKE := $(BIN_DIR)/cuda_cublaslt_fp8_e5m2_smoke
+CUBLASLT_FP8_E5M2_SWEEP := $(BIN_DIR)/cuda_cublaslt_fp8_e5m2_sweep
+CUBLASLT_FP4_SMOKE := $(BIN_DIR)/cuda_cublaslt_fp4_smoke
+CUBLASLT_FP4_SWEEP := $(BIN_DIR)/cuda_cublaslt_fp4_sweep
 SM121_ARCH_REPORT := $(BIN_DIR)/cuda_sm121_arch_report
 SM121_SMEM_OPTIN := $(BIN_DIR)/cuda_sm121_smem_optin
 SM121_DEVATTRS := $(BIN_DIR)/cuda_sm121_devattrs
@@ -32,16 +35,20 @@ SM121_CCCL_ATOMIC_REF := $(BIN_DIR)/cuda_sm121_cccl_atomic_ref
 SM121_CUDA_GRAPH_SMOKE := $(BIN_DIR)/cuda_sm121_cuda_graph_smoke
 SM121_CXX20_PROBE := $(BIN_DIR)/cuda_sm121_cxx20_probe
 SM121_NVRTC_JIT := $(BIN_DIR)/cuda_sm121_nvrtc_jit
+SM121_NVRTC_CXX20_JIT := $(BIN_DIR)/cuda_sm121_nvrtc_cxx20_jit
 SM121_NVCC_FLAGS_PROBE := $(BIN_DIR)/cuda_sm121_nvcc_flags_probe
 SM121_NVJITLINK_JIT := $(BIN_DIR)/cuda_sm121_nvjitlink_jit
 SM121_RDC_PROBE := $(BIN_DIR)/cuda_sm121_rdc_probe
 SM121_RDC_PROBE_OBJ := $(BIN_DIR)/cuda_sm121_rdc_probe.o
 SM121_RDC_LIB_OBJ := $(BIN_DIR)/cuda_sm121_rdc_lib.o
 SM121_RDC_DLINK_OBJ := $(BIN_DIR)/cuda_sm121_rdc_dlink.o
+SM121_TMA_BULK_TENSOR_1D := $(BIN_DIR)/cuda_sm121_tma_bulk_tensor_1d
+SM121_TMA_BULK_TENSOR_2D := $(BIN_DIR)/cuda_sm121_tma_bulk_tensor_2d
+SM121_LDMATRIX_SMOKE := $(BIN_DIR)/cuda_sm121_ldmatrix_smoke
 
 .PHONY: all clean
 
-all: $(DEVICE_PROPS) $(DEVICE_PROPS_TINY) $(SM121_COMPILE_PROBE_OBJ) $(SM121_PROBE) $(SM121_FATBIN_PROBE) $(SM121_DLTO_PROBE) $(CUBLASLT_SMOKE) $(CUBLASLT_FP8_SMOKE) $(CUBLASLT_FP8_E5M2_SMOKE) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_BF16_CONV) $(SM121_FP4_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC) $(SM121_CP_ASYNC_BULK_TX) $(SM121_WMMA_SMOKE) $(SM121_CLUSTER_LAUNCH) $(SM121_CCCL_ATOMIC_REF) $(SM121_CUDA_GRAPH_SMOKE) $(SM121_CXX20_PROBE) $(SM121_NVRTC_JIT) $(SM121_NVCC_FLAGS_PROBE) $(SM121_NVJITLINK_JIT) $(SM121_RDC_PROBE)
+all: $(DEVICE_PROPS) $(DEVICE_PROPS_TINY) $(SM121_COMPILE_PROBE_OBJ) $(SM121_PROBE) $(SM121_FATBIN_PROBE) $(SM121_DLTO_PROBE) $(CUBLASLT_SMOKE) $(CUBLASLT_FP8_SMOKE) $(CUBLASLT_FP8_E5M2_SMOKE) $(CUBLASLT_FP8_E5M2_SWEEP) $(CUBLASLT_FP4_SMOKE) $(CUBLASLT_FP4_SWEEP) $(SM121_ARCH_REPORT) $(SM121_SMEM_OPTIN) $(SM121_DEVATTRS) $(SM121_FP8_CONV) $(SM121_BF16_CONV) $(SM121_FP4_CONV) $(SM121_PIPELINE_MEMCPY_ASYNC) $(SM120_COMPAT_PROBE) $(SM121_BARRIER_MEMCPY_ASYNC) $(SM121_CP_ASYNC_BULK_TX) $(SM121_WMMA_SMOKE) $(SM121_CLUSTER_LAUNCH) $(SM121_CCCL_ATOMIC_REF) $(SM121_CUDA_GRAPH_SMOKE) $(SM121_CXX20_PROBE) $(SM121_NVRTC_JIT) $(SM121_NVRTC_CXX20_JIT) $(SM121_NVCC_FLAGS_PROBE) $(SM121_NVJITLINK_JIT) $(SM121_RDC_PROBE) $(SM121_TMA_BULK_TENSOR_1D) $(SM121_TMA_BULK_TENSOR_2D) $(SM121_LDMATRIX_SMOKE)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -72,6 +79,15 @@ $(CUBLASLT_FP8_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp8_smoke.cu $(SRC_DI
 
 $(CUBLASLT_FP8_E5M2_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp8_e5m2_smoke.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_cublaslt_fp8_e5m2_smoke.cu -lcublasLt -lcublas $(LDFLAGS)
+
+$(CUBLASLT_FP8_E5M2_SWEEP): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp8_e5m2_sweep.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_cublaslt_fp8_e5m2_sweep.cu -lcublasLt -lcublas $(LDFLAGS)
+
+$(CUBLASLT_FP4_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp4_smoke.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_cublaslt_fp4_smoke.cu -lcublasLt -lcublas $(LDFLAGS)
+
+$(CUBLASLT_FP4_SWEEP): $(BIN_DIR) $(SRC_DIR)/cuda_cublaslt_fp4_sweep.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_cublaslt_fp4_sweep.cu -lcublasLt -lcublas $(LDFLAGS)
 
 $(SM121_ARCH_REPORT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_arch_report.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_arch_report.cu $(LDFLAGS)
@@ -121,6 +137,9 @@ $(SM121_CXX20_PROBE): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_cxx20_probe.cu $(SRC_DIR)
 $(SM121_NVRTC_JIT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_nvrtc_jit.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_nvrtc_jit.cu -lnvrtc -lcuda $(LDFLAGS)
 
+$(SM121_NVRTC_CXX20_JIT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_nvrtc_cxx20_jit.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_nvrtc_cxx20_jit.cu -lnvrtc -lcuda $(LDFLAGS)
+
 $(SM121_NVCC_FLAGS_PROBE): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_nvcc_flags_probe.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS_CXX20) --extended-lambda --expt-relaxed-constexpr -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_nvcc_flags_probe.cu $(LDFLAGS)
 
@@ -138,6 +157,15 @@ $(SM121_RDC_DLINK_OBJ): $(BIN_DIR) $(SM121_RDC_PROBE_OBJ) $(SM121_RDC_LIB_OBJ)
 
 $(SM121_RDC_PROBE): $(BIN_DIR) $(SM121_RDC_PROBE_OBJ) $(SM121_RDC_LIB_OBJ) $(SM121_RDC_DLINK_OBJ)
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SM121_RDC_PROBE_OBJ) $(SM121_RDC_LIB_OBJ) $(SM121_RDC_DLINK_OBJ) $(LDFLAGS)
+
+$(SM121_TMA_BULK_TENSOR_1D): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_tma_bulk_tensor_1d.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_tma_bulk_tensor_1d.cu -lcuda $(LDFLAGS)
+
+$(SM121_TMA_BULK_TENSOR_2D): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_tma_bulk_tensor_2d.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_tma_bulk_tensor_2d.cu -lcuda $(LDFLAGS)
+
+$(SM121_LDMATRIX_SMOKE): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_ldmatrix_smoke.cu $(SRC_DIR)/cuda_probe_util.h
+	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_ldmatrix_smoke.cu $(LDFLAGS)
 
 clean:
 	rm -rf $(BIN_DIR)

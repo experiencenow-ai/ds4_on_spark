@@ -27,6 +27,8 @@ After installing systemd templates under `/etc/systemd/system/`, configs under `
 /tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0
 ```
 
+Note: the periodic preflight timers (`ds4-preflight@.timer`, `ds4-preflight-strict@.timer`) are optional and are not required for `ops_validate_installed_assets.sh`.
+
 ## What It Checks
 
 - Required files exist under:

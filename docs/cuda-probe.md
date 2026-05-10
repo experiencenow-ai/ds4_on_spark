@@ -2,6 +2,32 @@
 
 This track keeps probe-only CUDA snippets that answer: “Can we compile for and run on GB10 (CC 12.1 / `sm_121`) with the installed CUDA toolkit?”
 
+## Spark0: Tiny Smoke (Fast Path)
+
+When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” check:
+
+```bash
+./scripts/cuda_probe_tiny_spark0.sh
+```
+
+This builds and runs only:
+
+- `cuda_device_props_tiny`
+- `cuda_sm121_compile_probe.o` (compile-only gate)
+- `cuda_sm121_probe`
+
+It also prints `nvcc --version` plus `--list-gpu-arch` / `--list-gpu-code` when supported (toolchain sanity gate for CUDA 13).
+
+If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
+
+## Spark0: Tiny Compile-Only `sm_121`
+
+When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
+
+```bash
+./scripts/cuda_probe_compile_only_tiny_spark0.sh
+```
+
 ## Spark0: Compile + Run
 
 From the Mac (this repo checkout):
@@ -13,6 +39,7 @@ From the Mac (this repo checkout):
 What it does:
 
 - Ships `tools/cuda_probe/` to Spark0 (no remote git clone required).
+- Uses `tar --no-xattrs` (and `--no-mac-metadata` on `bsdtar`) + `LC_ALL=C` to avoid macOS xattr/provenance noise during transfer.
 - Builds with `/usr/local/cuda/bin/nvcc`.
 - Runs:
   - `cuda_device_props_tiny` (one-line runtime + device summary)
@@ -26,6 +53,9 @@ What it does:
   - `cuda_cublaslt_smoke` (tiny cuBLASLt matmul smoke test)
   - `cuda_cublaslt_fp8_smoke` (tiny cuBLASLt FP8 (E4M3) matmul smoke test)
   - `cuda_cublaslt_fp8_e5m2_smoke` (tiny cuBLASLt FP8 (E5M2) matmul smoke test)
+  - `cuda_cublaslt_fp8_e5m2_sweep` (sweep E5M2 configs to see whether any cuBLASLt path is supported)
+  - `cuda_cublaslt_fp4_smoke` (tiny cuBLASLt FP4 (E2M1) matmul smoke test; best-effort capability probe)
+  - `cuda_cublaslt_fp4_sweep` (sweep FP4 configs to see whether any cuBLASLt path is supported)
   - `cuda_sm121_smem_optin` (shared-memory opt-in + dynamic shared memory launch)
   - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
   - `cuda_sm121_fp8_conv` (`cuda_fp8.h` conversion probe for FP8 plumbing)
@@ -34,12 +64,16 @@ What it does:
   - `cuda_sm121_pipeline_memcpy_async` (`__pipeline_memcpy_async` global->shared copy probe)
   - `cuda_sm121_barrier_memcpy_async` (`cuda::barrier` + `cuda::memcpy_async` copy probe)
   - `cuda_sm121_cp_async_bulk_tx` (explicit `cp.async.bulk` global->shared copy via CCCL `cuda::device::memcpy_async_tx`)
+  - `cuda_sm121_tma_bulk_tensor_1d` (TMA `cp.async.bulk.tensor.1d` load via `cuTensorMapEncodeTiled` + `cuda::device::experimental::cp_async_bulk_tensor_1d_global_to_shared`)
+  - `cuda_sm121_tma_bulk_tensor_2d` (TMA `cp.async.bulk.tensor.2d` load via `cuTensorMapEncodeTiled` + `cuda::device::experimental::cp_async_bulk_tensor_2d_global_to_shared`)
   - `cuda_sm121_cccl_atomic_ref` (CCCL `cuda::atomic_ref` device-scope + block-scope atomics)
   - `cuda_sm121_cuda_graph_smoke` (CUDA graph capture → instantiate → launch smoke test)
   - `cuda_sm121_nvrtc_jit` (NVRTC compile-to-PTX + Driver API module load/launch for `compute_121`)
+  - `cuda_sm121_nvrtc_cxx20_jit` (NVRTC `--std=c++20` compile-to-PTX + Driver API module load/launch for `compute_121`)
   - `cuda_sm121_nvcc_flags_probe` (nvcc `-std=c++20` + `--extended-lambda` + `--expt-relaxed-constexpr` compile/run gate for `sm_121`)
   - `cuda_sm121_nvjitlink_jit` (NVRTC compile-to-PTX + nvJitLink PTX→CUBIN + Driver API module load/launch for `sm_121`)
   - `cuda_sm121_cxx20_probe` (`-std=c++20` toolchain probe; DeepGEMM-style build gate)
+  - `cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync` smoke test; CUTLASS-style inline-PTX gate)
   - `cuda_sm121_wmma_smoke` (`mma.h` WMMA matmul smoke test; CUTLASS-style proxy)
   - `cuda_sm121_cluster_launch` (thread-block cluster launch + `cooperative_groups::this_cluster().block_rank()` smoke test)
 
@@ -55,9 +89,30 @@ Environment overrides:
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
-It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
+It prints `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` when supported, then compiles `cuda_sm121_compile_probe.o`, `cuda_sm121_probe`, `cuda_sm121_rdc_probe`, `cuda_sm121_fatbin_probe`, `cuda_sm121_dlto_probe`, `cuda_sm121_arch_report`, `cuda_cublaslt_smoke`, `cuda_cublaslt_fp8_smoke`, `cuda_cublaslt_fp8_e5m2_smoke`, `cuda_cublaslt_fp8_e5m2_sweep`, `cuda_cublaslt_fp4_smoke`, `cuda_cublaslt_fp4_sweep`, `cuda_sm121_smem_optin`, `cuda_sm121_devattrs`, `cuda_sm121_fp8_conv`, `cuda_sm121_bf16_conv`, `cuda_sm121_fp4_conv`, `cuda_sm121_pipeline_memcpy_async`, `cuda_sm121_barrier_memcpy_async`, `cuda_sm121_cp_async_bulk_tx`, `cuda_sm121_tma_bulk_tensor_1d`, `cuda_sm121_tma_bulk_tensor_2d`, `cuda_sm121_cccl_atomic_ref`, `cuda_sm121_cxx20_probe`, `cuda_sm121_nvcc_flags_probe`, `cuda_sm121_ldmatrix_smoke`, `cuda_sm121_wmma_smoke`, `cuda_sm121_cluster_launch`, `cuda_sm121_nvrtc_jit`, `cuda_sm121_nvrtc_cxx20_jit`, and `cuda_sm121_nvjitlink_jit` for `sm_121`, plus `cuda_sm120_compat_probe` for `sm_120`.
 It also compiles `cuda_sm121_cuda_graph_smoke` (CUDA graph capture/launch smoke test) for `sm_121`.
 Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using the `__cluster_dims__` attribute (`tools/cuda_probe/src/cuda_sm121_cluster_dims_attr_compile.cu`) and prints whether it compiled or the first lines of the error output.
+
+## Spark0: Disassemble (`cuobjdump` / `nvdisasm`)
+
+```bash
+./scripts/cuda_probe_disasm_spark0.sh
+```
+
+This script builds a small subset of the probes and then dumps the first lines of:
+
+- `cuobjdump --dump-sass` output (to confirm the toolkit can decode `sm_121` SASS)
+- `nvdisasm` output (to confirm the disassembler recognizes `sm_121`)
+
+Currently it disassembles:
+
+- `cuda_sm121_probe`
+- `cuda_sm121_cp_async_bulk_tx`
+- `cuda_sm121_tma_bulk_tensor_2d`
+- `cuda_sm121_ldmatrix_smoke` (inline PTX `ldmatrix.sync`)
+- `cuda_sm121_wmma_smoke` (WMMA / tensor core proxy)
+
+This is useful when bringing up CUTLASS/DeepGEMM-style kernels, because it validates that the developer tooling can inspect the generated kernels on Spark0.
 
 ## Current Spark0 Results (2026-05-09)
 
@@ -72,6 +127,7 @@ Observed:
 
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `-arch=sm_121` compiles and links (including `-lcublasLt`)
+- `cuobjdump --dump-sass` and `nvdisasm` decode `sm_121` binaries on Spark0 (see `./scripts/cuda_probe_disasm_spark0.sh`)
 - `nvcc -arch=sm_121` accepts the `__cluster_dims__` kernel annotation (compile-only check prints `cluster_dims_attr_compile: OK`)
 - `-arch=sm_120` binaries run on GB10 (`sm_121`) successfully (probe prints `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - Runtime launches a tiny `sm_121` kernel successfully
@@ -79,7 +135,9 @@ Observed:
 - Device LTO (`-dlto`) compile/run succeeds for `sm_121` (`cuda_sm121_dlto_probe` runs and validates output)
 - cuBLASLt matmul smoke test succeeds (`max_abs_err=0`)
 - cuBLASLt FP8 matmul smoke test succeeds (`max_abs_err_vs_one=0`)
-- cuBLASLt FP8 (E5M2) matmul smoke probe returns `CUBLAS_STATUS_NOT_SUPPORTED` on Spark0 (CUDA 13.0 `V13.0.88`)
+- cuBLASLt FP8 (E5M2) matmul smoke probe fails to find any supported algo on Spark0 (CUDA 13.0 `V13.0.88`) even after trying `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (the Spark runner continues past this failure; observed `cublasLtGetVersion=130101`)
+- cuBLASLt FP8 (E5M2) sweep returns `CUBLAS_STATUS_NOT_SUPPORTED` across BF16/F16/F32 output dtypes and `CUBLAS_COMPUTE_32F` / `CUBLAS_COMPUTE_32F_FAST_TF32` (observed `cublasLtGetVersion=130101`)
+- cuBLASLt FP4 (E2M1) heuristic selection succeeds for BF16 output (`cuda_cublaslt_fp4_sweep` prints `heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0`), but the current “identity×ones” numeric check in `cuda_cublaslt_fp4_smoke` still reports `max_abs_err_vs_one=1` (treat FP4 as “execution path exists”, not “numerically validated”, until we wire a correct NVFP4 pack/scale recipe)
 - Shared-memory opt-in probe succeeds; `MaxSharedMemoryPerBlockOptin=101376` bytes on GB10
 - FP8 conversion probe succeeds (`fp8_conv ... halfraw_e4m3=0x3d00`)
 - BF16 conversion probe succeeds (`cuda_bf16.h` conversions compile and run for `sm_121`)
@@ -87,9 +145,12 @@ Observed:
 - Pipeline memcpy-async probe succeeds (cp.async-style global->shared copy)
 - Barrier memcpy-async probe succeeds (`cuda::barrier` + `cuda::memcpy_async`)
 - Explicit `cp.async.bulk` (CCCL `memcpy_async_tx`) probe succeeds (`cuda_sm121_cp_async_bulk_tx`)
+- TMA bulk-tensor probe succeeds (`cuda_sm121_tma_bulk_tensor_1d` uses `cuTensorMapEncodeTiled` + `cp.async.bulk.tensor`)
+- TMA bulk-tensor probe succeeds (`cuda_sm121_tma_bulk_tensor_2d` uses `cuTensorMapEncodeTiled` + `cp.async.bulk.tensor`)
 - CCCL atomic-ref probe succeeds (`cuda::atomic_ref`)
 - CUDA graph smoke probe succeeds (stream capture + instantiate + launch)
 - NVRTC JIT probe succeeds (`nvrtc supportedArchs` includes `121`; driver loads PTX and launches kernel)
+- NVRTC JIT probe succeeds in C++20 mode (`--std=c++20` for `compute_121`; probe prints `nvrtc_cxx20_jit ok out=0x1234567a`)
 - NVCC flags probe succeeds (`-std=c++20 --extended-lambda --expt-relaxed-constexpr`)
 - nvJitLink JIT probe succeeds (nvJitLink links `compute_121` PTX to an `sm_121` CUBIN and driver loads/launches the kernel)
 - C++20 toolchain probe succeeds (`-std=c++20`)
@@ -111,8 +172,12 @@ expect: compiled __CUDA_ARCH__=1200 for -arch=sm_120
 kernel wrote magic=0xc0d3cafe __CUDA_ARCH__=1200
 cuBLASLt sgemm smoke max_abs_err=0
 cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0
-cuBLASLt error cublasLtMatmulAlgoGetHeuristic: CUBLAS_STATUS_NOT_SUPPORTED
+cublasLtGetVersion=130101 cublasLtGetCudartVersion=13000
+cuBLASLt fp8 e5m2 probe try m=128 n=128 k=128 ws_bytes=16777216
+cuBLASLt fp8 e5m2 smoke: no supported configuration found
 (cuda_cublaslt_fp8_e5m2_smoke failed; continuing)
+cuBLASLt fp4 e2m1 smoke max_abs_err_vs_one=1
+fp4_e2m1 sweep ws_bytes=1048576 D=CUDA_R_16BF compute=CUBLAS_COMPUTE_32F heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0
 max_smem_per_block_optin_bytes=101376
 smem probe wrote 0x000000a5
 fp8_conv x=1.250000 e4m3=0x3a e5m2=0x3d halfraw_e4m3=0x3d00 halfraw_e5m2=0x3d00
@@ -120,11 +185,14 @@ bf16_conv x=1.250000 raw_x=0x3fa0 x_back=1.250000 y=-2.500000 raw_y=0xc020 y_bac
 fp4_conv x=1.250000 e2m1_storage=0x02 e2m1_nibble=0x2 halfraw_e2m1=0x3c00
 pipeline_memcpy_async out=11111111 22222222 33333333 44444444
 barrier_memcpy_async ok first=decaf000 last=decaf01f
+tma_bulk_tensor_1d rc=0 out0=00 out127=7f
+tma_bulk_tensor_2d rc=0 out0=00 out127=7f
 cluster_dims_attr_compile: OK
 cuda_graph_smoke out=22222222
 nvrtcVersion=13.0
 nvrtc supportedArchs: 75 80 86 87 88 89 90 100 103 110 120 121
 nvrtc_jit ok out=0x12345679
+nvrtc_cxx20_jit ok out=0x1234567a
 nvcc_flags_probe ok out=0x12345679
 nvJitLinkVersion=13.0
 nvjitlink_jit ok out=0x12345679

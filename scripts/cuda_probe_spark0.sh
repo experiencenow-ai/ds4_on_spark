@@ -7,6 +7,10 @@ REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 probe_dir="$repo_root/tools/cuda_probe"
+tar_no_mac_metadata=""
+if tar --version 2>/dev/null | grep -qi "bsdtar"; then
+	tar_no_mac_metadata="--no-mac-metadata"
+fi
 
 if [ ! -d "$probe_dir" ]; then
 	echo "missing $probe_dir" >&2
@@ -18,8 +22,8 @@ rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
 "
 
-env COPYFILE_DISABLE=1 tar -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
-tar -C \"$REMOTE_DIR\" -xf -
+LC_ALL=C env COPYFILE_DISABLE=1 tar --no-xattrs $tar_no_mac_metadata -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
+LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
 "
 
 ssh $SSH_OPTS "$target" "set -eu
@@ -89,6 +93,27 @@ else
 	echo \"(cuda_cublaslt_fp8_e5m2_smoke failed; continuing)\"
 fi
 echo
+echo \"== run: cuda_cublaslt_fp8_e5m2_sweep ==\"
+if \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp8_e5m2_sweep; then
+	:
+else
+	echo \"(cuda_cublaslt_fp8_e5m2_sweep failed; continuing)\" >&2
+fi
+echo
+echo \"== run: cuda_cublaslt_fp4_smoke ==\"
+if \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp4_smoke; then
+	:
+else
+	echo \"(cuda_cublaslt_fp4_smoke failed; continuing)\"
+fi
+echo
+echo \"== run: cuda_cublaslt_fp4_sweep ==\"
+if \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp4_sweep; then
+	:
+else
+	echo \"(cuda_cublaslt_fp4_sweep failed; continuing)\" >&2
+fi
+echo
 run_retry cuda_sm121_smem_optin \"$REMOTE_DIR\"/bin/cuda_sm121_smem_optin
 run_retry cuda_sm121_devattrs \"$REMOTE_DIR\"/bin/cuda_sm121_devattrs
 run_retry cuda_sm121_fp8_conv \"$REMOTE_DIR\"/bin/cuda_sm121_fp8_conv
@@ -97,12 +122,16 @@ run_retry cuda_sm121_fp4_conv \"$REMOTE_DIR\"/bin/cuda_sm121_fp4_conv
 run_retry cuda_sm121_pipeline_memcpy_async \"$REMOTE_DIR\"/bin/cuda_sm121_pipeline_memcpy_async
 run_retry cuda_sm121_barrier_memcpy_async \"$REMOTE_DIR\"/bin/cuda_sm121_barrier_memcpy_async
 run_retry cuda_sm121_cp_async_bulk_tx \"$REMOTE_DIR\"/bin/cuda_sm121_cp_async_bulk_tx
+run_retry cuda_sm121_tma_bulk_tensor_1d \"$REMOTE_DIR\"/bin/cuda_sm121_tma_bulk_tensor_1d
+run_retry cuda_sm121_tma_bulk_tensor_2d \"$REMOTE_DIR\"/bin/cuda_sm121_tma_bulk_tensor_2d
 run_retry cuda_sm121_cccl_atomic_ref \"$REMOTE_DIR\"/bin/cuda_sm121_cccl_atomic_ref
 run_retry cuda_sm121_cuda_graph_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_cuda_graph_smoke
 run_retry cuda_sm121_nvrtc_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_jit
+run_retry cuda_sm121_nvrtc_cxx20_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_cxx20_jit
 run_retry cuda_sm121_nvcc_flags_probe \"$REMOTE_DIR\"/bin/cuda_sm121_nvcc_flags_probe
 run_retry cuda_sm121_nvjitlink_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvjitlink_jit
 run_retry cuda_sm121_cxx20_probe \"$REMOTE_DIR\"/bin/cuda_sm121_cxx20_probe
+run_retry cuda_sm121_ldmatrix_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_ldmatrix_smoke
 run_retry cuda_sm121_wmma_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_wmma_smoke
 run_retry cuda_sm121_cluster_launch \"$REMOTE_DIR\"/bin/cuda_sm121_cluster_launch
 "

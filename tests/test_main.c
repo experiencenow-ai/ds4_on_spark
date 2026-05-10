@@ -23,6 +23,10 @@ int main(void)
 		err = -7;
 	if ( test_cuda() < 0 )
 		err = -8;
+	if ( test_gguf() < 0 )
+		err = -9;
+	if ( test_log_ring() < 0 )
+		err = -10;
 	if ( err < 0 )
 	{
 		fprintf(stderr,"ds4_tests failed (%d)\n",err);

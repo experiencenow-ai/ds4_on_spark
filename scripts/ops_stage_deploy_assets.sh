@@ -57,6 +57,7 @@ rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
 rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_collect_support_bundle.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_staged_assets.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_installed_assets.sh" "$target:/tmp/ds4-scripts/"
 
@@ -81,6 +82,7 @@ sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_spark_standalone_check.sh /opt/ds4/scripts/ops_spark_standalone_check.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_collect_support_bundle.sh /opt/ds4/scripts/ops_collect_support_bundle.sh
 sudo /opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-${instance}.env
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@${instance}.service
@@ -119,6 +121,17 @@ sudo /opt/ds4/scripts/ops_spark_standalone_check.sh --role worker --env /etc/ds4
 #sudo install -m 0755 /tmp/ds4-scripts/ops_validate_installed_assets.sh /opt/ds4/scripts/ops_validate_installed_assets.sh
 #/opt/ds4/scripts/ops_validate_installed_assets.sh --instance ${instance}
 
+== optional (collect a support bundle, human-run) ==
+# Useful when preflight fails or logs/metrics look suspicious (non-destructive; review bundle before sharing).
+/opt/ds4/scripts/ops_collect_support_bundle.sh --instance ${instance} --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-${instance}.env
+
+== optional (periodic support bundle timer, human-run) ==
+# Captures a support bundle periodically (defaults to weekly with a randomized delay).
+# Bundles land in /tmp by default; review disk/retention expectations before enabling.
+sudo install -m 0644 /tmp/ds4-systemd/ds4-support-bundle@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-support-bundle@${instance}.timer
+
 == optional (journald persistence, human-run) ==
 sudo install -d -m 0755 /etc/systemd/journald.conf.d
 sudo install -m 0644 /tmp/ds4-config/journald.ds4.conf.example /etc/systemd/journald.conf.d/ds4.conf
@@ -132,6 +145,11 @@ sudo logrotate -d /etc/logrotate.d/ds4 || true
 == optional (Prometheus scrape snippet, human-run) ==
 # Merge this into your Prometheus config and reload Prometheus.
 cat /tmp/ds4-config/prometheus-scrape.ds4.yml.example
+
+== optional (sysctl network tuning, human-run) ==
+# Host-wide settings; review before applying.
+sudo install -m 0644 /tmp/ds4-config/sysctl.ds4.conf.example /etc/sysctl.d/99-ds4.conf
+sudo sysctl --system
 
 == optional (pin Spark0/Spark1 hostnames, human-run) ==
 # Use only if you are NOT relying on mDNS (`*.local`) and you have a stable wired subnet.

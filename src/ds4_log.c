@@ -90,20 +90,21 @@ int32_t ds4_log_buf_init(ds4_log_buf_t *lb,char *buf,int32_t cap)
 	return(0);
 }
 
-void ds4_log_buf_sink(void *ctx,int32_t level,const char *msg)
+static void ds4_log_buf_append_span(ds4_log_buf_t *lb,const char *s,int32_t slen)
 {
-	ds4_log_buf_t *lb;
-	int32_t msglen,i,avail,copylen;
-	DS4_UNUSED(level);
-	lb = (ds4_log_buf_t *)ctx;
+	int32_t i,avail,copylen;
 	if ( lb == 0 )
 		return;
 	if ( lb->buf == 0 )
 		return;
 	if ( lb->cap <= 0 )
 		return;
-	if ( msg == 0 )
-		msg = "";
+	if ( lb->truncated != 0 )
+		return;
+	if ( s == 0 )
+		return;
+	if ( slen <= 0 )
+		return;
 	if ( lb->used < 0 )
 		lb->used = 0;
 	if ( lb->used >= lb->cap )
@@ -119,23 +120,45 @@ void ds4_log_buf_sink(void *ctx,int32_t level,const char *msg)
 		lb->buf[lb->cap - 1] = 0;
 		return;
 	}
-	msglen = ds4_cstr_len_i32(msg);
-	copylen = msglen;
+	copylen = slen;
 	if ( copylen > avail )
 	{
 		copylen = avail;
 		lb->truncated = 1;
 	}
 	for (i=0; i<copylen; i++)
-		lb->buf[lb->used + i] = msg[i];
+		lb->buf[lb->used + i] = s[i];
 	lb->used += copylen;
-	avail = (lb->cap - lb->used - 1);
-	if ( avail > 0 )
-	{
-		lb->buf[lb->used] = '\n';
-		lb->used += 1;
-	}
-	else
-		lb->truncated = 1;
 	lb->buf[lb->used] = 0;
+}
+
+void ds4_log_buf_sink(void *ctx,int32_t level,const char *msg)
+{
+	ds4_log_buf_t *lb;
+	DS4_UNUSED(level);
+	lb = (ds4_log_buf_t *)ctx;
+	if ( lb == 0 )
+		return;
+	if ( msg == 0 )
+		msg = "";
+	ds4_log_buf_append_span(lb,msg,ds4_cstr_len_i32(msg));
+	ds4_log_buf_append_span(lb,"\n",1);
+}
+
+void ds4_log_buf_sink_prefixed(void *ctx,int32_t level,const char *msg)
+{
+	ds4_log_buf_t *lb;
+	const char *lvl;
+	lb = (ds4_log_buf_t *)ctx;
+	if ( lb == 0 )
+		return;
+	if ( msg == 0 )
+		msg = "";
+	lvl = ds4_log_level_name(level);
+	if ( lvl == 0 )
+		lvl = "?";
+	ds4_log_buf_append_span(lb,lvl,ds4_cstr_len_i32(lvl));
+	ds4_log_buf_append_span(lb,": ",2);
+	ds4_log_buf_append_span(lb,msg,ds4_cstr_len_i32(msg));
+	ds4_log_buf_append_span(lb,"\n",1);
 }

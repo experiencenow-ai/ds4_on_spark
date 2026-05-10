@@ -48,6 +48,14 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - License: MIT
 - Notes: V4-aware fork referenced by `teamblobfish/DeepSeek-V4-Flash-GGUF`; includes V4 loader + V4-specific kernel paths not merged into the pinned `ggml-org/llama.cpp` release tag.
 
+### ssweens/llama.cpp-deepseek-v4
+
+- Repo: `https://github.com/ssweens/llama.cpp-deepseek-v4`
+- Ref: `refs/heads/main`
+- Commit: `443fbfc1eff9ad0e89490bbf5697bfb15c1281e8`
+- License: MIT
+- Notes: Fork required by `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` (IQ1_M + IQ2_XXS GGUFs); upstream README claims it is tested on CPU/CUDA/ROCm/Vulkan and supports pipeline-parallel runs.
+
 ### kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark
 
 - Repo: `https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark`
@@ -55,6 +63,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 - Commit: `9222e55c13c965ccb7e9104fda58796edd84a732`
 - License: MIT
 - Notes: Community fork reportedly running DeepSeek-V4-Flash IQ2XXS GGUF on a single DGX Spark/GB10; validate performance and memory headroom on the actual Spark target.
+  - Provenance (report, 2026-05-05): `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`
 
 ## Upstream build/docs pointers
 
@@ -84,5 +93,6 @@ To fetch the pinned DeepSeek-V4 forks into `./upstreams`:
 ./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_flash
 ./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_support_wip
 ./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_port_cchuter
+./scripts/fetch_upstreams.sh llama_cpp_deepseek_v4_ssweens
 ./scripts/fetch_upstreams.sh llama_cpp_cuda_spark
 ```

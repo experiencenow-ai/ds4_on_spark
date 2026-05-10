@@ -48,6 +48,10 @@ Optional TCP reachability check (if `nc` is installed):
 nc -z -w 2 <peer-host-or-ip> 29500
 ```
 
+If ping/TCP fails (or looks one-way), capture read-only routing + firewall state (some commands require `sudo`):
+
+- `docs/ops-firewall-routing-inspection.md`
+
 Optional bandwidth check (only if both ends have `iperf3` installed):
 
 ```bash
@@ -75,6 +79,8 @@ Record:
 - measured bandwidth/latency
 - driver + NCCL versions
 
+If you later run TP=2 through DS4 (not `nccl-tests` directly), consider pinning the intended NIC by setting `NCCL_SOCKET_IFNAME=<wired-ifname>` in `/etc/ds4/ds4-%i.env` (leave it unset until you need it). `ops_tp2_readiness.sh` already prints `ip route get` hints to help catch accidental Wi‑Fi vs wired routing early.
+
 ## Automation Hook
 
 Once Spark-side scripts are installed under `/opt/ds4/scripts/`, you can run the
@@ -89,6 +95,8 @@ To gate a TP=2 run on required inputs via systemd, use the strict variant:
 ```bash
 sudo systemctl start ds4-preflight-strict@spark0.service
 ```
+
+If strict preflight fails, it triggers `ds4-support-bundle@%i.service` (when installed) to capture a non-destructive snapshot for debugging. See `docs/ops-support-bundle.md`.
 
 `ds4-preflight@.service` validates and reads optional peer settings from `/etc/ds4/ds4-%i.env`:
 
@@ -129,6 +137,16 @@ If `DS4_PEER_HOST` is set, it also attempts a best-effort peer probe of
 The script also prints best-effort host resolution and `ip route get` output for
 the master/peer targets (when `getent` + `ip` are present). This helps catch
 accidental Wi‑Fi vs wired routing early without changing any system settings.
+
+## If Preflight Fails: Capture A Support Bundle
+
+If `ds4-preflight@...` fails (or you see suspicious routing/metrics output), capture a support bundle on the Spark and attach it to the debug thread:
+
+```bash
+/opt/ds4/scripts/ops_collect_support_bundle.sh --instance spark0 --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
+```
+
+See `docs/ops-support-bundle.md` for details on what gets captured and redaction guidance.
 
 ## Optional: Periodic Preflight (Systemd Timer)
 

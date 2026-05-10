@@ -1,0 +1,34 @@
+[Unit]
+Description=DS4 support bundle collector (%i)
+Wants=network-online.target
+After=network-online.target
+ConditionPathIsExecutable=/opt/ds4/scripts/ops_collect_support_bundle.sh
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/ds4
+Environment=DS4_INSTANCE=%i
+EnvironmentFile=-/etc/ds4/ds4.env
+EnvironmentFile=/etc/ds4/ds4-%i.env
+
+# Provide the script on-host at /opt/ds4/scripts/ops_collect_support_bundle.sh.
+ExecStart=/opt/ds4/scripts/ops_collect_support_bundle.sh --instance %i --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-%i.env
+
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

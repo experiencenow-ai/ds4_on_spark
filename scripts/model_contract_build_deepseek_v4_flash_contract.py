@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import ast
 import json
 from collections import Counter
 from hashlib import sha256
@@ -48,61 +49,176 @@ def parse_encoding_constants(encoding_py: Path) -> dict:
 
 	text = encoding_py.read_text(encoding="utf-8")
 
-	def find_str(field: str) -> Optional[str]:
-		for line in text.splitlines():
-			line = line.strip()
-			if not line.startswith(field + ":"):
-				continue
-			if " = " not in line:
-				continue
-			rhs = line.split("=", 1)[1].strip()
-			if rhs.startswith('"') and rhs.endswith('"'):
-				return rhs[1:-1]
-			if rhs.startswith("'") and rhs.endswith("'"):
-				return rhs[1:-1]
-		return None
+	try:
+		mod = ast.parse(text, filename=str(encoding_py))
+	except SyntaxError:
+		return {"encoding_constants": None}
 
-	def find_template_concat(field: str, suffix_field: str, suffix_value: Optional[str]) -> Optional[str]:
-		if suffix_value is None:
+	assigns: dict[str, ast.AST] = {}
+	for node in mod.body:
+		if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+			assigns[node.targets[0].id] = node.value
+		if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+			assigns[node.target.id] = node.value
+
+	env: dict[str, object] = {}
+
+	def eval_expr(expr: Optional[ast.AST]) -> object:
+		if expr is None:
 			return None
-		for line in text.splitlines():
-			line = line.strip()
-			if not line.startswith(field + ":"):
-				continue
-			if " = " not in line:
-				continue
-			rhs = line.split("=", 1)[1].strip()
-			needle = "+ " + suffix_field
-			if needle not in rhs:
-				continue
-			prefix = rhs.split(needle, 1)[0].strip()
-			if prefix.startswith('"') and prefix.endswith('"'):
-				return prefix[1:-1] + suffix_value
-			if prefix.startswith("'") and prefix.endswith("'"):
-				return prefix[1:-1] + suffix_value
+		if isinstance(expr, ast.Constant):
+			return expr.value
+		if isinstance(expr, ast.Name):
+			return env.get(expr.id, None)
+		if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
+			l = eval_expr(expr.left)
+			r = eval_expr(expr.right)
+			if isinstance(l, str) and isinstance(r, str):
+				return l + r
+			return None
+		if isinstance(expr, ast.Dict):
+			out: dict[object, object] = {}
+			for k, v in zip(expr.keys, expr.values):
+				kk = eval_expr(k)
+				vv = eval_expr(v)
+				out[kk] = vv
+			return out
 		return None
 
-	bos_token = find_str("bos_token")
-	eos_token = find_str("eos_token")
-	thinking_start_token = find_str("thinking_start_token")
-	thinking_end_token = find_str("thinking_end_token")
-	dsml_token = find_str("dsml_token")
-	tool_calls_block_name = find_str("tool_calls_block_name")
-	assistant_msg_wo_eos_template = find_str("assistant_msg_wo_eos_template")
-	assistant_msg_template = find_str("assistant_msg_template")
-	if assistant_msg_template is None:
-		assistant_msg_template = find_template_concat("assistant_msg_template", "eos_token", eos_token)
+	for _ in range(8):
+		progress = False
+		for name, expr in assigns.items():
+			if name in env:
+				continue
+			v = eval_expr(expr)
+			if v is None:
+				continue
+			env[name] = v
+			progress = True
+		if not progress:
+			break
+
+	def str_or_none(v: object) -> Optional[str]:
+		return v if isinstance(v, str) else None
+
+	def dict_str_str_or_none(v: object) -> Optional[dict[str, str]]:
+		if not isinstance(v, dict):
+			return None
+		out: dict[str, str] = {}
+		for kk, vv in v.items():
+			if not isinstance(kk, str) or not isinstance(vv, str):
+				return None
+			out[kk] = vv
+		return out
 
 	return {
 		"encoding_constants": {
-			"bos_token": bos_token,
-			"eos_token": eos_token,
-			"thinking_start_token": thinking_start_token,
-			"thinking_end_token": thinking_end_token,
-			"dsml_token": dsml_token,
-			"tool_calls_block_name": tool_calls_block_name,
-			"assistant_msg_template": assistant_msg_template,
-			"assistant_msg_wo_eos_template": assistant_msg_wo_eos_template,
+			"bos_token": str_or_none(env.get("bos_token")),
+			"eos_token": str_or_none(env.get("eos_token")),
+			"thinking_start_token": str_or_none(env.get("thinking_start_token")),
+			"thinking_end_token": str_or_none(env.get("thinking_end_token")),
+			"dsml_token": str_or_none(env.get("dsml_token")),
+			"user_sp_token": str_or_none(env.get("USER_SP_TOKEN")),
+			"assistant_sp_token": str_or_none(env.get("ASSISTANT_SP_TOKEN")),
+			"latest_reminder_sp_token": str_or_none(env.get("LATEST_REMINDER_SP_TOKEN")),
+			"ds_task_sp_tokens": dict_str_str_or_none(env.get("DS_TASK_SP_TOKENS")),
+			"system_msg_template": str_or_none(env.get("system_msg_template")),
+			"user_msg_template": str_or_none(env.get("user_msg_template")),
+			"latest_reminder_msg_template": str_or_none(env.get("latest_reminder_msg_template")),
+			"assistant_msg_template": str_or_none(env.get("assistant_msg_template")),
+			"assistant_msg_wo_eos_template": str_or_none(env.get("assistant_msg_wo_eos_template")),
+			"thinking_template": str_or_none(env.get("thinking_template")),
+			"tool_calls_block_name": str_or_none(env.get("tool_calls_block_name")),
+			"tool_call_template": str_or_none(env.get("tool_call_template")),
+			"tool_calls_template": str_or_none(env.get("tool_calls_template")),
+			"tool_output_template": str_or_none(env.get("tool_output_template")),
+		}
+	}
+
+def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int) -> dict:
+	if not tokenizer_json.exists():
+		return {"tokenizer_json_summary": None}
+
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return {"tokenizer_json_summary": None}
+
+	model = tok.get("model", {}) if isinstance(tok, dict) else {}
+	model_type = model.get("type") if isinstance(model, dict) else None
+	vocab = model.get("vocab") if isinstance(model, dict) else None
+	merges = model.get("merges") if isinstance(model, dict) else None
+
+	base_vocab_size: Optional[int] = None
+	if isinstance(vocab, dict):
+		base_vocab_size = int(len(vocab))
+
+	merges_count: Optional[int] = None
+	if isinstance(merges, list):
+		merges_count = int(len(merges))
+
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	added_tokens_count: Optional[int] = None
+	added_special_tokens_count: Optional[int] = None
+	added_id_min: Optional[int] = None
+	added_id_max: Optional[int] = None
+	if isinstance(added_tokens, list):
+		added_tokens_count = int(len(added_tokens))
+		added_special_tokens_count = int(sum(1 for t in added_tokens if isinstance(t, dict) and t.get("special") is True))
+		ids: list[int] = [int(t["id"]) for t in added_tokens if isinstance(t, dict) and isinstance(t.get("id"), int)]
+		if ids:
+			added_id_min = int(min(ids))
+			added_id_max = int(max(ids))
+
+	effective_vocab_size: Optional[int] = None
+	if isinstance(base_vocab_size, int):
+		effective_vocab_size = int(base_vocab_size)
+		if isinstance(added_id_max, int):
+			effective_vocab_size = int(max(effective_vocab_size, added_id_max + 1))
+
+	def summarize_tok_component(node: object) -> Optional[dict]:
+		if not isinstance(node, dict):
+			return None
+		t = node.get("type")
+		if not isinstance(t, str):
+			return None
+		out: dict[str, object] = {"type": t}
+		if t == "Sequence":
+			items = node.get("normalizers")
+			if items is None:
+				items = node.get("pretokenizers")
+			if isinstance(items, list):
+				out["sequence"] = [summarize_tok_component(c) for c in items]
+		elif t == "Split":
+			pat = node.get("pattern", {})
+			pat_re = None
+			if isinstance(pat, dict):
+				pat_re = pat.get("Regex")
+			out["pattern_regex"] = pat_re
+			out["behavior"] = node.get("behavior")
+			out["invert"] = node.get("invert")
+		elif t == "ByteLevel":
+			for k in ("add_prefix_space", "trim_offsets", "use_regex"):
+				if k in node:
+					out[k] = node.get(k)
+		return out
+
+	return {
+		"tokenizer_json_summary": {
+			"tokenizers_json_version": tok.get("version"),
+			"model_type": model_type,
+			"base_vocab_size": base_vocab_size,
+			"merges_count": merges_count,
+			"added_tokens_count": added_tokens_count,
+			"added_special_tokens_count": added_special_tokens_count,
+			"added_token_id_min": added_id_min,
+			"added_token_id_max": added_id_max,
+			"effective_vocab_size": effective_vocab_size,
+			"effective_vocab_size_matches_config": (effective_vocab_size == int(expected_vocab_size)) if isinstance(effective_vocab_size, int) else None,
+			"normalizer": summarize_tok_component(tok.get("normalizer")),
+			"pre_tokenizer": summarize_tok_component(tok.get("pre_tokenizer")),
+			"post_processor": summarize_tok_component(tok.get("post_processor")),
+			"decoder": summarize_tok_component(tok.get("decoder")),
 		}
 	}
 
@@ -172,6 +288,42 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 		"expert_compute_fp32_expr": expert_fp32,
 	}
 
+def parse_inference_moe_hash_routing(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+	hash_enable = find_first_line_containing(text, "self.hash = layer_id < args.n_hash_layers")
+	tid2eid_decl = find_first_line_containing(text, "self.tid2eid = nn.Parameter")
+	hash_indices = find_first_line_containing(text, "indices = self.tid2eid")
+	bias_none = find_first_line_containing(text, "self.bias = None")
+
+	return {
+		"hash_enabled_expr": hash_enable,
+		"tid2eid_decl_expr": tid2eid_decl,
+		"hash_indices_expr": hash_indices,
+		"bias_none_expr": bias_none,
+	}
+
+def parse_inference_mtp_semantics(model_py: Path) -> dict:
+	text = model_py.read_text(encoding="utf-8")
+	input_shape_comment = find_first_line_containing(text, "# x: [b,s,hc,d]")
+	embed_head_assert = find_first_line_containing(text, "assert self.embed is not None and self.head is not None")
+	embed = find_first_line_containing(text, "e = self.embed(input_ids)")
+	enorm = find_first_line_containing(text, "e = self.enorm(e)")
+	hnorm = find_first_line_containing(text, "x = self.hnorm(x)")
+	combine = find_first_line_containing(text, "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)")
+	super_forward = find_first_line_containing(text, "x = super().forward(x, start_pos, input_ids)")
+	head = find_first_line_containing(text, "logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)")
+
+	return {
+		"input_shape_comment": input_shape_comment,
+		"assert_embed_head_expr": embed_head_assert,
+		"embed_expr": embed,
+		"enorm_expr": enorm,
+		"hnorm_expr": hnorm,
+		"combine_e_and_h_expr": combine,
+		"super_forward_expr": super_forward,
+		"head_logits_expr": head,
+	}
+
 def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> int:
 	if compress_ratio == 0:
 		return int(window_size)
@@ -181,9 +333,16 @@ def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> in
 def parse_inference_quant_constants(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
-	def modelargs_defaults() -> dict:
+	def parse_modelargs_defaults() -> dict:
 		in_model_args = False
-		out: dict[str, Optional[int]] = {"max_batch_size": None, "max_seq_len": None}
+		out: dict[str, object] = {
+			"max_batch_size": None,
+			"max_seq_len": None,
+			"dtype": None,
+			"scale_fmt": None,
+			"scale_dtype": None,
+			"expert_dtype": None,
+		}
 		for raw in text.splitlines():
 			line = raw.strip()
 			if line.startswith("class ModelArgs"):
@@ -193,12 +352,19 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 				break
 			if not in_model_args:
 				continue
-			if not line.startswith(("max_batch_size:", "max_seq_len:")):
+			if not line.startswith(tuple(f + ":" for f in out.keys())):
 				continue
 			if " = " not in line:
 				continue
 			field = line.split(":", 1)[0].strip()
 			rhs = line.split("=", 1)[1].strip()
+
+			if rhs == "None":
+				out[field] = None
+				continue
+			if len(rhs) >= 2 and rhs[0] in ("'", '"') and rhs[-1] == rhs[0]:
+				out[field] = rhs[1:-1]
+				continue
 			try:
 				out[field] = int(rhs)
 			except ValueError:
@@ -351,7 +517,11 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 	block_size = find_int("block_size")
 	fp4_block_size = find_int("fp4_block_size")
 	hc_eps = find_dataclass_float("hc_eps")
-	defaults = modelargs_defaults()
+	modelargs_defaults = parse_modelargs_defaults()
+	defaults = {
+		"max_batch_size": modelargs_defaults.get("max_batch_size"),
+		"max_seq_len": modelargs_defaults.get("max_seq_len"),
+	}
 	kv_act_quant_group_sizes = find_unique_act_quant_group_sizes()
 	attn_softmax_scale_expr = find_line_rhs("self.softmax_scale")
 	indexer_weights_expr = find_line_rhs("weights")
@@ -366,6 +536,7 @@ def parse_inference_quant_constants(model_py: Path) -> dict:
 			"indexer_weights_expr": indexer_weights_expr,
 		},
 		"reference_defaults": defaults,
+		"modelargs_defaults": modelargs_defaults,
 	}
 
 
@@ -523,6 +694,7 @@ def build_compat_mappings() -> dict:
 		{"concept": "n_hash_layers", "transformers_key": "num_hash_layers", "inference_key": "n_hash_layers", "canonical_path": "moe.n_hash_layers"},
 		{"concept": "route_scale", "transformers_key": "routed_scaling_factor", "inference_key": "route_scale", "canonical_path": "moe.route_scale"},
 		{"concept": "scoring_func", "transformers_key": "scoring_func", "inference_key": "score_func", "canonical_path": "moe.scoring_func"},
+		{"concept": "num_nextn_predict_layers", "transformers_key": "num_nextn_predict_layers", "inference_key": None, "canonical_path": "mtp.n_mtp_layers"},
 		{"concept": "rope_theta", "transformers_key": "rope_theta", "inference_key": "rope_theta", "canonical_path": "yarn_rope.rope_theta"},
 		{"concept": "compress_rope_theta", "transformers_key": "compress_rope_theta", "inference_key": "compress_rope_theta", "canonical_path": "yarn_rope.compress_rope_theta"},
 		{"concept": "original_seq_len", "transformers_key": "original_max_position_embeddings", "inference_key": "original_seq_len", "canonical_path": "yarn_rope.original_seq_len"},
@@ -530,8 +702,13 @@ def build_compat_mappings() -> dict:
 		{"concept": "beta_fast", "transformers_key": "rope_scaling.beta_fast", "inference_key": "beta_fast", "canonical_path": "yarn_rope.beta_fast"},
 		{"concept": "beta_slow", "transformers_key": "rope_scaling.beta_slow", "inference_key": "beta_slow", "canonical_path": "yarn_rope.beta_slow"},
 		{"concept": "dtype", "transformers_key": None, "inference_key": "dtype", "canonical_path": "quantization.inference_config.dtype"},
-		{"concept": "expert_dtype", "transformers_key": None, "inference_key": "expert_dtype", "canonical_path": "quantization.inference_config.expert_dtype"},
+		{"concept": "expert_dtype", "transformers_key": "expert_dtype", "inference_key": "expert_dtype", "canonical_path": "quantization.inference_config.expert_dtype"},
 		{"concept": "scale_fmt", "transformers_key": None, "inference_key": "scale_fmt", "canonical_path": "quantization.inference_config.scale_fmt"},
+		{"concept": "quant_method", "transformers_key": "quantization_config.quant_method", "inference_key": None, "canonical_path": "quantization.config_quantization_config.quant_method"},
+		{"concept": "quant_fmt", "transformers_key": "quantization_config.fmt", "inference_key": None, "canonical_path": "quantization.config_quantization_config.fmt"},
+		{"concept": "activation_scheme", "transformers_key": "quantization_config.activation_scheme", "inference_key": None, "canonical_path": "quantization.config_quantization_config.activation_scheme"},
+		{"concept": "scale_fmt_cfg", "transformers_key": "quantization_config.scale_fmt", "inference_key": None, "canonical_path": "quantization.config_quantization_config.scale_fmt"},
+		{"concept": "weight_block_size", "transformers_key": "quantization_config.weight_block_size", "inference_key": None, "canonical_path": "quantization.config_quantization_config.weight_block_size"},
 	]
 
 	by_transformers_key: dict[str, str] = {}
@@ -553,9 +730,12 @@ def build_contract() -> dict:
 	inf = load_json(FIX / "inference" / "config.json")
 	tok_cfg = load_json(FIX / "tokenizer_config.json")
 	idx = load_json(FIX / "model.safetensors.index.json")
+	tok_json_sum = parse_tokenizer_json_summary(FIX / "tokenizer.json", int(cfg["vocab_size"]))
 	inf_model = parse_inference_quant_constants(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	sem = parse_inference_mla_and_cache_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	moe_sem = parse_inference_moe_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
+	moe_hash_sem = parse_inference_moe_hash_routing(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
+	mtp_sem = parse_inference_mtp_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
@@ -718,13 +898,30 @@ def build_contract() -> dict:
 			"route_scale": float(cfg["routed_scaling_factor"]),
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
-				"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
-				"semantics": moe_sem,
+			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
+			"semantics": moe_sem,
+			"hash_routing": {
+				"hash_layer_ids": list(range(int(cfg["num_hash_layers"]))),
+				"tid2eid_dtype": "int32",
+				"tid2eid_shape": [int(cfg["vocab_size"]), int(cfg["num_experts_per_tok"])],
+				**moe_hash_sem,
+			},
 			},
 				"mtp": {
 					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
 					"namespace_prefix": "mtp.{j}.",
+					"semantics": mtp_sem,
+					"trust_gates": {
+						"artifact_requires_mtp_contract_complete": True,
+						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"oracle_requires_include_mtp": True,
+						"oracle_requires_mtp_trace": True,
+						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+						"acceptance_requires_prefill_and_decode": True,
+						"acceptance_topk_ids_exact": True,
+						"acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+					},
 				},
 				"runtime": {
 					"reference_defaults": inf_model.get("reference_defaults", {}),
@@ -751,11 +948,13 @@ def build_contract() -> dict:
 					"eos_token_id": int(cfg["eos_token_id"]),
 					"pad_token_is_eos": True,
 					"encoding_oracle_dir": "encoding/tests",
+					**tok_json_sum,
 				},
 			"quantization": {
 				"config_quantization_config": cfg.get("quantization_config"),
 				"inference_config": {
 					"dtype": inf.get("dtype"),
+					"scale_dtype": inf.get("scale_dtype", (inf_model.get("modelargs_defaults", {}) if isinstance(inf_model, dict) else {}).get("scale_dtype")),
 					"scale_fmt": inf.get("scale_fmt"),
 					"expert_dtype": inf.get("expert_dtype"),
 				},

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export GIT_TERMINAL_PROMPT=0
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_DIR="${ROOT_DIR}/upstreams"
@@ -23,6 +24,7 @@ Targets:
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_preyazz   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_batiai    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_lovedheart  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -32,10 +34,12 @@ Targets:
   bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
   transformers
+  sglang
   llama_cpp
   llama_cpp_deepseek_v4_flash
   llama_cpp_deepseek_v4_support_wip
   llama_cpp_deepseek_v4_port_cchuter
+  llama_cpp_deepseek_v4_ssweens
   llama_cpp_cuda_spark
   spark_v4_bringup_mockingjay
   spark_v4_bringup_bigs
@@ -189,6 +193,10 @@ fetch_one()
 			upstream="huggingface.co/antirez/deepseek-v4-gguf"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_gguf_antirez" "https://huggingface.co/antirez/deepseek-v4-gguf" "${ref}" "${expected}"
 			;;
+		deepseek_v4_gguf_ssweens)
+			upstream="huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "deepseek_v4_gguf_ssweens" "https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV" "${ref}" "${expected}"
+			;;
 		deepseek_v4_gguf_preyazz)
 			upstream="huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_gguf_preyazz" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF" "${ref}" "${expected}"
@@ -225,6 +233,10 @@ fetch_one()
 			upstream="huggingface/transformers"; ref="refs/tags/v5.8.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
 			;;
+		sglang)
+			upstream="sgl-project/sglang"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
+			;;
 		llama_cpp)
 			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9085"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
@@ -240,6 +252,10 @@ fetch_one()
 		llama_cpp_deepseek_v4_port_cchuter)
 			upstream="cchuter/llama.cpp"; ref="refs/heads/feat/v4-port"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp_deepseek_v4_port_cchuter" "https://github.com/cchuter/llama.cpp.git" "${ref}" "${expected}"
+			;;
+		llama_cpp_deepseek_v4_ssweens)
+			upstream="ssweens/llama.cpp-deepseek-v4"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "llama_cpp_deepseek_v4_ssweens" "https://github.com/ssweens/llama.cpp-deepseek-v4.git" "${ref}" "${expected}"
 			;;
 		llama_cpp_cuda_spark)
 			upstream="kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark"; ref="refs/heads/master"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
@@ -284,6 +300,7 @@ main()
 		fetch_one deepseek_v4_flash_hf
 		fetch_one deepseek_v4_flash_base_hf
 		fetch_one deepseek_v4_gguf_antirez
+		fetch_one deepseek_v4_gguf_ssweens
 		fetch_one deepseek_v4_gguf_preyazz
 		fetch_one deepseek_v4_gguf_batiai
 		fetch_one deepseek_v4_gguf_lovedheart
@@ -293,10 +310,12 @@ main()
 		fetch_one bati_cpp
 		fetch_one vllm
 		fetch_one transformers
+		fetch_one sglang
 		fetch_one llama_cpp
 		fetch_one llama_cpp_deepseek_v4_flash
 		fetch_one llama_cpp_deepseek_v4_support_wip
 		fetch_one llama_cpp_deepseek_v4_port_cchuter
+		fetch_one llama_cpp_deepseek_v4_ssweens
 		fetch_one llama_cpp_cuda_spark
 		fetch_one spark_v4_bringup_mockingjay
 		fetch_one spark_v4_bringup_bigs

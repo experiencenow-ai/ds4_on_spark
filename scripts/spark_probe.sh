@@ -7,6 +7,7 @@ usage()
 usage: spark_probe.sh [user@host ...]
 
 Environment:
+  SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
@@ -24,6 +25,7 @@ Examples:
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
+  SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local
 USAGE
 }
 
@@ -35,6 +37,7 @@ case "${1:-}" in
 esac
 
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
+SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
@@ -44,8 +47,36 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
 fi
 
+normalize_target()
+{
+	t="$1"
+	case "$t" in
+		*@*)
+			printf "%s" "$t"
+			;;
+		*)
+			printf "%s" "${SPARK_SSH_USER}@${t}"
+			;;
+	esac
+}
+
+targets=""
 if [ "$#" -eq 0 ]; then
-	set -- "spark0@aitopatom-9ab9.local"
+	targets="$(normalize_target "aitopatom-9ab9.local")"
+else
+	for t in "$@"; do
+		nt="$(normalize_target "$t")"
+		if [ "$targets" = "" ]; then
+			targets="$nt"
+		else
+			targets="$targets $nt"
+		fi
+	done
+fi
+
+probe_args="$*"
+if [ "$probe_args" = "" ]; then
+	probe_args="(default)"
 fi
 
 known_hosts_for_target()
@@ -72,19 +103,28 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "== local meta =="
 	date -u
 	if command -v git >/dev/null 2>&1; then
-		worktree="${DS4_GIT_WORK_TREE:-$PWD}"
-		if [ "${DS4_GIT_DIR:-}" != "" ]; then
-			echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$worktree" rev-parse --short HEAD 2>/dev/null || true)"
+		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
+		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
+			git_dir="$git_worktree/.gitshim/repo/.git"
+		fi
+		if [ "$git_dir" != "" ]; then
+			echo "git: $(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
 		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
 		fi
 	fi
-	echo "probe targets: $*"
-	for t in "$@"; do
+	echo "probe args: $probe_args"
+	echo "resolved targets: $targets"
+	echo "ssh opts: $SSH_OPTS"
+	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
 	echo
-	for target in "$@"; do
+	for target in $targets; do
 		kh="$(known_hosts_for_target "$target")"
 		echo "== target: $target =="
 		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu
@@ -135,12 +175,55 @@ fi
 echo
 echo "== pci nvidia =="
 lspci | grep -i nvidia || true
+if lspci -nn >/dev/null 2>&1; then
+	echo
+	echo "== pci nvidia (numeric ids) =="
+	lspci -nn | grep -i nvidia || true
+fi
 echo
-echo "== nvidia-smi inventory (index + pci bus) =="
+echo "== lspci gpu link state (capped) =="
+if command -v lspci >/dev/null 2>&1; then
+	gpu_buses="$(lspci -D -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
+	if [ "$gpu_buses" = "" ]; then
+		gpu_buses="$(lspci -nn 2>/dev/null | grep -i nvidia | grep -E "VGA compatible controller|3D controller" | awk '"'"'{ print $1 }'"'"' | head -n 16 || true)"
+	fi
+	if [ "$gpu_buses" != "" ]; then
+		for bus in $gpu_buses; do
+			echo "-- $bus --"
+			vv="$(lspci -vv -s "$bus" 2>/dev/null || true)"
+			if [ "$vv" = "" ]; then
+				echo "lspci -vv produced no output (restricted?)"
+			else
+				link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
+				if [ "$link_lines" != "" ]; then
+					printf "%s\n" "$link_lines"
+				else
+					echo "no LnkCap/LnkSta fields found; header:"
+					printf "%s\n" "$vv" | head -n 3 || true
+				fi
+			fi
+		done
+	else
+		echo "no nvidia vga/3d controller buses found"
+	fi
+else
+	echo "lspci not found"
+fi
+echo
 have_smi="0"
-q=""
 if command -v nvidia-smi >/dev/null 2>&1; then
 	have_smi="1"
+fi
+echo "== nvidia-smi version =="
+if [ "$have_smi" = "1" ]; then
+	(nvidia-smi --version 2>/dev/null || nvidia-smi -V 2>/dev/null || true) | sed -E '/^ERROR:/d' | head -n 20 || true
+else
+	echo "nvidia-smi not found"
+fi
+echo
+echo "== nvidia-smi inventory (index + pci bus) =="
+q=""
+if [ "$have_smi" = "1" ]; then
 	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
 	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then
@@ -150,6 +233,24 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 		[ "$q" != "" ] && echo "$q"
 		echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+	fi
+else
+	echo "nvidia-smi not found"
+fi
+echo
+echo "== nvidia-smi pci ids (optional) =="
+if command -v nvidia-smi >/dev/null 2>&1; then
+	ids_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.device_id,pci.sub_device_id --format=csv,noheader,nounits 2>/dev/null || true)"
+	if [ "$ids_q" != "" ]; then
+		if printf "%s" "$ids_q" | grep -qi "not a valid field"; then
+			echo "pci id query not supported"
+			printf "%s\n" "$ids_q" | head -n 2
+		else
+			echo "columns: index,pci.bus_id,pci.device_id,pci.sub_device_id"
+			echo "$ids_q"
+		fi
+	else
+		echo "pci id query not supported"
 	fi
 else
 	echo "nvidia-smi not found"
@@ -198,26 +299,126 @@ else
 	echo "nvidia-smi not found"
 fi
 echo
-echo "== nvidia-smi pcie link (max/current) =="
-if command -v nvidia-smi >/dev/null 2>&1; then
+pcie_link_query()
+{
 	pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$pcie_q" = "" ]; then
 		pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.link.gen.max,pci.link.gen.current,pci.link.width.max,pci.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
 	fi
-	if [ "$pcie_q" != "" ]; then
-		if printf "%s" "$pcie_q" | grep -qi "not a valid field"; then
-			echo "pcie link query not supported"
-			printf "%s\n" "$pcie_q" | head -n 2
+	printf "%s" "$pcie_q"
+	return 0
+}
+
+emit_pcie_link()
+{
+	label="$1"
+	echo "== nvidia-smi pcie link (max/current${label}) =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		pcie_q="$(pcie_link_query)"
+		if [ "$pcie_q" != "" ]; then
+			if printf "%s" "$pcie_q" | grep -qi "not a valid field"; then
+				echo "pcie link query not supported"
+				printf "%s\n" "$pcie_q" | head -n 2
+			else
+				echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
+				echo "$pcie_q"
+			fi
 		else
-			echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
-			echo "$pcie_q"
+			echo "pcie link query not supported"
 		fi
 	else
-		echo "pcie link query not supported"
+		echo "nvidia-smi not found"
 	fi
-else
-	echo "nvidia-smi not found"
-fi
+	return 0
+}
+
+emit_sysfs_pcie_link()
+{
+	label="$1"
+	echo "== pci link (sysfs, current/max${label}) =="
+	if [ -d /sys/bus/pci/devices ]; then
+		bus_ids=""
+		if [ "$q" != "" ]; then
+			bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
+		fi
+		if [ "$bus_ids" != "" ]; then
+			for bus in $bus_ids; do
+				dom="$(printf "%s" "$bus" | cut -d: -f1 | sed -E "s/.*([0-9A-Fa-f]{4})$/\\1/" | tr ABCDEF abcdef)"
+				rest="$(printf "%s" "$bus" | cut -d: -f2-)"
+				short_bus="${dom}:${rest}"
+				sys="/sys/bus/pci/devices/$short_bus"
+				echo "-- $bus -> $short_bus --"
+				if [ -d "$sys" ]; then
+					if command -v readlink >/dev/null 2>&1; then
+						devpath="$(readlink -f "$sys" 2>/dev/null || true)"
+						if [ "$devpath" != "" ]; then
+							echo "sysfs: $devpath"
+							chain="$(printf "%s" "$devpath" | tr "/" "\n" | grep -E "^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}[.][0-7]$" | paste -sd " " - 2>/dev/null || true)"
+							if [ "$chain" != "" ]; then
+								echo "path: $chain"
+									for dev in $chain; do
+										p="/sys/bus/pci/devices/$dev"
+										[ -r "$p/current_link_speed" ] && echo "path $dev current_link_speed: $(cat "$p/current_link_speed" 2>/dev/null || true)"
+										[ -r "$p/current_link_width" ] && echo "path $dev current_link_width: $(cat "$p/current_link_width" 2>/dev/null || true)"
+										[ -r "$p/max_link_speed" ] && echo "path $dev max_link_speed: $(cat "$p/max_link_speed" 2>/dev/null || true)"
+										[ -r "$p/max_link_width" ] && echo "path $dev max_link_width: $(cat "$p/max_link_width" 2>/dev/null || true)"
+										if command -v lspci >/dev/null 2>&1; then
+											vv="$(lspci -vv -s "$dev" 2>/dev/null || true)"
+											if [ "$vv" != "" ]; then
+												link_lines="$(printf "%s\n" "$vv" | grep -E "Lnk(Cap|Sta|Ctl2):" | head -n 20 || true)"
+												if [ "$link_lines" != "" ]; then
+													printf "%s\n" "$link_lines" | sed -E "s/^/path $dev /"
+												fi
+											fi
+										fi
+									done
+								fi
+						fi
+					fi
+					[ -r "$sys/vendor" ] && echo "vendor: $(cat "$sys/vendor" 2>/dev/null || true)"
+					[ -r "$sys/device" ] && echo "device: $(cat "$sys/device" 2>/dev/null || true)"
+					[ -r "$sys/subsystem_vendor" ] && echo "subsystem_vendor: $(cat "$sys/subsystem_vendor" 2>/dev/null || true)"
+					[ -r "$sys/subsystem_device" ] && echo "subsystem_device: $(cat "$sys/subsystem_device" 2>/dev/null || true)"
+					[ -r "$sys/class" ] && echo "class: $(cat "$sys/class" 2>/dev/null || true)"
+					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
+					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
+					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
+					[ -r "$sys/max_link_width" ] && echo "max_link_width: $(cat "$sys/max_link_width" 2>/dev/null || true)"
+				else
+					echo "sysfs device not found: $sys"
+				fi
+			done
+		else
+			echo "no pci.bus_id inventory"
+		fi
+	else
+		echo "/sys/bus/pci/devices not found"
+	fi
+	return 0
+}
+
+emit_smi_q_pci_link()
+{
+	label="$1"
+	echo "== nvidia-smi -q pci link (capped${label}) =="
+	if [ "$have_smi" = "1" ] && [ "$smi_q" != "" ]; then
+		pci_lines="$(printf "%s\n" "$smi_q" | awk '"'"'BEGIN{in_pci=0;count=0} $0 ~ /^[[:space:]]*PCI[[:space:]]*$/ {in_pci=1;next} in_pci==1 && $0 ~ /^[[:space:]]*Fan Speed/ {exit} in_pci==1 {print;count++; if(count>=120) exit }'"'"')"
+		if [ "$pci_lines" != "" ]; then
+			printf "%s\n" "$pci_lines"
+		else
+			echo "no PCI section found in nvidia-smi -q"
+		fi
+	else
+		echo "nvidia-smi -q not available"
+	fi
+	return 0
+}
+
+emit_pcie_link ""
+echo
+emit_sysfs_pcie_link ""
+echo
+emit_smi_q_pci_link ""
 echo
 echo "== nvidia-smi power/clocks (summary) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -262,6 +463,13 @@ if command -v nvcc >/dev/null 2>&1; then
 	nvcc_bin="$(command -v nvcc)"
 elif [ -x /usr/local/cuda/bin/nvcc ]; then
 	nvcc_bin="/usr/local/cuda/bin/nvcc"
+fi
+if [ "$nvcc_bin" != "" ]; then
+	if command -v nvcc >/dev/null 2>&1; then
+		echo "nvcc path: $nvcc_bin (on PATH)"
+	else
+		echo "nvcc path: $nvcc_bin (not on PATH)"
+	fi
 fi
 nvcc_release=""
 if [ "$nvcc_bin" != "" ]; then
@@ -367,6 +575,7 @@ int main()
 	int device_count = 0,dev = 0;
 	cudaDeviceProp prop;
 	int runtime_v = 0,driver_v = 0;
+	int drv_major = 0,drv_minor = 0,rt_major = 0,rt_minor = 0;
 	if ( cudaGetDeviceCount(&device_count) != cudaSuccess )
 	{
 		std::printf("cudaGetDeviceCount failed\n");
@@ -377,8 +586,12 @@ int main()
 		return(0);
 	cudaRuntimeGetVersion(&runtime_v);
 	cudaDriverGetVersion(&driver_v);
-	std::printf("cuda driver api version: %d\n",driver_v);
-	std::printf("cuda runtime api version: %d\n",runtime_v);
+	drv_major = (driver_v / 1000);
+	drv_minor = ((driver_v % 1000) / 10);
+	rt_major = (runtime_v / 1000);
+	rt_minor = ((runtime_v % 1000) / 10);
+	std::printf("cuda driver api version: %d (%d.%d)\n",driver_v,drv_major,drv_minor);
+	std::printf("cuda runtime api version: %d (%d.%d)\n",runtime_v,rt_major,rt_minor);
 	for (dev=0; dev<device_count; dev++)
 	{
 		if ( cudaGetDeviceProperties(&prop,dev) != cudaSuccess )
@@ -407,6 +620,10 @@ CU
 				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
 			fi
 		fi
+		echo
+		emit_pcie_link ", post-load"
+		echo
+		emit_sysfs_pcie_link ", post-load"
 	else
 		echo "nvcc compile failed:"
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
@@ -523,6 +740,7 @@ if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \
 		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
 		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
 		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
 		-e 's/UUID: [^)]*/UUID: <redacted-gpu-uuid>/g' \
 		-e 's/GPU-[0-9A-Fa-f-]{36}/<redacted-gpu-uuid>/g' \

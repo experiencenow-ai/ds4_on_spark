@@ -153,6 +153,16 @@ Use `--strict` if you want fail-fast gating on missing/invalid TP=2 inputs:
 /tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0 --strict
 ```
 
+## Optional: Capture A Support Bundle (Spark Side)
+
+If preflight fails or routing/metrics look suspicious, capture a support bundle (non-destructive; review before sharing):
+
+```bash
+/opt/ds4/scripts/ops_collect_support_bundle.sh --instance spark0 --since "2 hours ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env
+```
+
+Details: `docs/ops-support-bundle.md`.
+
 ## Optional: Env Sanity Check (Spark Side)
 
 Before enabling long-running services, you can validate the env file contents:
@@ -186,6 +196,8 @@ sudo systemctl enable ds4-strict@spark0.service
 sudo systemctl start  ds4-strict@spark0.service
 ```
 
+`ds4-strict@.service` requires `ds4-preflight-strict@%i.service`; if strict preflight fails, `ds4-strict@...` will also fail to start.
+
 Logs:
 
 ```bash
@@ -198,4 +210,5 @@ journalctl -u ds4-preflight@spark0.service -n 200 --no-pager
 - Logging + metrics: `docs/ops-logging-metrics.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=2 readiness checklist: `docs/ops-tp2-readiness.md`
+- Optional sysctl network tuning: `docs/ops-sysctl-network-tuning.md`
 - Optional Spark standalone systemd: `docs/deployment-spark-standalone-systemd.md`

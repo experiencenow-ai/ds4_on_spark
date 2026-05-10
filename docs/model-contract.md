@@ -17,6 +17,8 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Contract doc: `docs/model-deepseek-v4-flash.md`
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, and config-field compatibility mappings for interpreting external runtimes)
+  - Compat mappings also cover MTP (`num_nextn_predict_layers`) and `config.json` quantization knobs (`quantization_config.*`) so external runtime configs can be normalized without guessing.
+  - Tokenizer section also records a `tokenizer.tokenizer_json_summary` snapshot (BPE backend + exact pre-tokenizer `Split` regex patterns + `ByteLevel` flags) so external runtimes can reproduce tokenization without guessing.
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
   - Upstream section records sha256 of the pinned upstream commit (`upstream_commit.txt`), encoding oracle vectors (`encoding/tests/*`), and oracle prompt set (`oracle/prompts.json`) to keep drift machine-detectable.
@@ -25,6 +27,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`
 - Contract verifier: `scripts/model_contract_verify_deepseek_v4_flash.py`
   - Includes the encoding oracle (`fixtures/model_contract/deepseek_v4_flash/encoding/tests/*`).
+  - Also gates `contract_summary.json` `mtp.semantics` (source-derived `MTPBlock.forward(...)` expressions) so MTP path drift is detected even when tensor keys remain stable.
 
 ## Correctness Oracles (requirements)
 
@@ -50,18 +53,26 @@ MTP (multi-token prediction) oracle requirements:
 - Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
   - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py` and record:
     - `tensor_type_counts` + `mtp_tensor_type_counts` (GGUF quant types present)
+    - `tensor_key_namespace_guess` (whether the artifact appears to preserve upstream `layers.{i}.*` / `mtp.0.*` key namespaces; many GGUF conversions are `llama.cpp`)
+    - `mtp_namespace.has_mtp0` + `mtp_namespace.expected_complete` (whether the artifact set appears to preserve the expected `mtp.{id}.*` namespace prefixes)
     - `metadata.general.*` (provenance)
-    - `topology_contract` mismatches (GGUF header metadata vs expected topology)
-    - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`)
+    - `topology_contract` mismatches (GGUF header metadata vs expected topology, including RoPE `dimension_count` / `freq_base` when present)
+    - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
     - `mtp_contract.complete == true` when `mtp_present == true` (MTP tensor-key completeness)
+  - For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` also supports metadata-only inspection via range reads (no full download). Record the `url_prefix_bytes` used:
+    - `python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
+    - If it fails with “unable to parse ... within max_bytes”, increase `--max-bytes` cautiously (it only fetches the header + tensor table, but large MoE GGUFs can have a large tensor directory).
+    - Recorded examples: `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`, `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`, `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`.
+    - These pinned trunk GGUFs currently report `mtp_present=false` and `mtp_namespace.has_mtp0=false` (i.e. the upstream `mtp.0.*` namespace was dropped in conversion).
   - Some community conversions ship MTP weights as a **sidecar** GGUF separate from the main trunk GGUF. In that case, inspect *both* files and treat “MTP present” as a property of the artifact **set**:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json`
   - Some DS4-tuned sidecars (e.g. `antirez/deepseek-v4-gguf`) are not full official `mtp.0.*` checkpoints; they use a compact 32‑tensor `mtp.0.*` table for DS4’s MTP path and advertise `general.architecture=deepseek4_mtp_support`. Before attempting to load these in external runtimes, validate the sidecar header/tensor directory (no full model download required):
     - Local file: `python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json`
     - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
     - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`
+    - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`
-    - `scripts/model_contract_inspect_quantized_artifact.py` reports these as `mtp_sidecar_contract` (rather than a full upstream `mtp_contract`)
+    - Metadata-only inspection confirms these sidecars can be `mtp_present == true` but still **incomplete** relative to the upstream `mtp.0.*` contract (example: pinned antirez sidecar has `mtp_tensor_count == 32` and `mtp_contract.complete == false`).
   - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
 
@@ -69,3 +80,8 @@ Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
 - Ensure the oracle covers both prefill (`start_pos == 0`) and decode (`start_pos > 0`) so KV-cache semantics are exercised.
+
+Machine-readable MTP gating:
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
+- `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).

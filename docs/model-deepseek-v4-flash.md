@@ -124,6 +124,7 @@ Checkpoint formats:
 - Expert weights use FP4 (from `config.json` `expert_dtype: fp4`):
   - In the reference `Linear`, FP4 weights are stored packed as `float4_e2m1fn_x2` with shape `[out_features, in_features//2]` (logically `[out_features, in_features]`).
   - FP4 scale tensors are `float8_e8m0fnu` with shape `[out_features, in_features//32]` (1 scale per 32 FP4 K-elements).
+- Scale dtype default (source-derived): `inference/model.py` `ModelArgs.scale_dtype` defaults to `fp8`. When `scale_dtype == fp8`, `Transformer.__init__` forces `scale_fmt=ue8m0` and uses `float8_e8m0fnu` scale tensors; this is recorded in `contract_summary.json` under `quantization.inference_config.scale_dtype`.
 
 Activation quantization in the reference runtime:
 
@@ -263,6 +264,7 @@ Hash-routed bootstrap layers:
 
 - For layers `0 <= layer_id < n_hash_layers` (here: layers 0–2), routing indices come from a static table:
   - tensor key: `layers.{i}.ffn.gate.tid2eid` (dtype `int32`)
+  - logical shape: `[vocab_size, n_activated_experts]` (here: `[129280, 6]`), indexed by `input_ids`
 - For these layers, `layers.{i}.ffn.gate.bias` is absent in the checkpoint.
 - Even in hash mode, the gate still computes scores and routing weights from hidden state:
   - `tid2eid[input_ids]` selects the expert IDs
@@ -275,7 +277,10 @@ Score-routed layers:
 - Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
 
-These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics` so downstream tooling can validate external runtime logs/configs without guessing.
+These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under:
+
+- `moe.semantics` (score computation + normalization + scaling expressions)
+- `moe.hash_routing` (hash-gating enable/indices expressions + `tid2eid` shape/dtype)
 
 ## Hyper-Connections (mHC)
 
@@ -311,6 +316,8 @@ Reference implementation: `inference/model.py` (`MTPBlock`, `Transformer.mtp`).
   4. Run the normal `Block` forward (attention + MoE + HC mixing).
   5. Compute logits with a **separate** HC head: `hc_head_{fn,base,scale}` under `mtp.0.*`.
 
+These key MTP expressions are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `mtp.semantics` and gated by `scripts/model_contract_verify_deepseek_v4_flash.py`.
+
 DS4 must treat `mtp.*` as a distinct draft-model path with its own HC head weights, not just an alias to the main head.
 
 ## Tokenizer + encoding contract
@@ -325,6 +332,14 @@ Tokenizer (from `tokenizer_config.json`):
 - EOS token string: `<｜end▁of▁sentence｜>` (`eos_token_id: 1` in `config.json`)
 - PAD token is EOS.
 
+Tokenizer backend (from `tokenizer.json`):
+
+- Model: `BPE` (base vocab size 128000 + merges; effective vocab size matches `vocab_size=129280` once added tokens are applied).
+- Pre-tokenizer: a `Sequence` of 3 `Split` regex passes followed by `ByteLevel` (this controls the **exact** text → byte-level pieces fed into BPE).
+- Post-processor + decoder: `ByteLevel`.
+
+These backend pipeline facts (including the exact `Split` regex patterns and `ByteLevel` flags) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tokenizer.tokenizer_json_summary` so external runtimes can reproduce tokenization without guessing.
+
 Message rendering:
 
 - Upstream provides `encoding/encoding_dsv4.py` with templates for:
@@ -334,6 +349,15 @@ Message rendering:
 - The oracle for this repo is the upstream `encoding/tests/*` vectors.
 
 The upstream string constants used by the encoder (`bos_token`, `eos_token`, `thinking_*`, `dsml_token`, etc.) are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `encoding_constants`.
+
+In addition to the special tokens, the contract summary records the **exact upstream message/tool templates** required to reproduce prompt rendering in external runtimes:
+
+- `encoding_constants.{system,user,latest_reminder}_msg_template`
+- `encoding_constants.assistant_msg_template` and `encoding_constants.assistant_msg_wo_eos_template`
+- `encoding_constants.thinking_template`
+- `encoding_constants.tool_call_template` and `encoding_constants.tool_calls_template`
+- Role markers: `encoding_constants.{user,assistant,latest_reminder}_sp_token`
+- Task-classifier tokens: `encoding_constants.ds_task_sp_tokens`
 
 ## Tensor key contract (checkpoint naming)
 
@@ -460,6 +484,15 @@ Official-source safetensors **do** include the MTP namespace:
 
 - `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json` contains `mtp.0.*` (1,575 tensor keys as of the pinned upstream commit).
 
+As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
+
+Recorded probe outputs (range-read header + tensor table only; no full downloads):
+
+- `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
+- `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
+- `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
+- These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
+
 For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
@@ -477,7 +510,13 @@ To inspect a trunk+sidecar pair, pass both paths:
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_contract`.
+For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` can also do range-read inspection (header + tensor table only; no full download). Record the `url_prefix_bytes`:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
+```
+
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, and `mtp_trust`.
 
 When multiple `--path` values are provided, the tool emits both:
 
@@ -493,11 +532,17 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co
 ```
 
 Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
+Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`.
+
+As of 2026-05-09, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
+- The same inspection reports `mtp_namespace.has_mtp0=true` and `mtp_trust.status=incomplete` (the `mtp.0.*` prefix exists, but the tensor set does not satisfy the upstream MTP contract).
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
+- When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make the “structural complete but still needs an oracle” status explicit in JSON.
 - Also record and review:
-  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`)
+  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
+  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
   - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
 
 ## Next steps (oracle + remaining unknowns)

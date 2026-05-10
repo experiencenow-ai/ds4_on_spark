@@ -12,7 +12,7 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - License: MIT (upstream repo metadata)
 - What it is (from upstream README, summarized):
   - A Spark/GB10-focused flow for producing and serving a **pruned** DeepSeek-V4-Flash checkpoint (example: learned-router experts pruned from 256 → 128) plus a **streaming loader** to avoid unified-memory OOM during load.
-  - The upstream README states the full FP4 checkpoint is ~149 GB and does not fit on a 128 GB unified-memory Spark, while a 128-expert prune is ~85 GB and leaves headroom for runtime/KV.
+  - The upstream README states the full FP4 checkpoint is ~149 GB and does not fit on a 128 GB unified-memory Spark; the HF API reports the official Flash `*.safetensors` total is 148.66 GiB at `deepseek-ai/DeepSeek-V4-Flash` commit `6976c7ff1b30a1b2cb7805021b8ba4684041f136`. A 128-expert prune is ~85 GB and leaves headroom for runtime/KV.
 - Why we track it:
   - Reference for single-Spark feasibility when staying in the official checkpoint format (not GGUF), and for “page-cache aware” streaming load patterns that matter on unified-memory systems.
 - Risk notes:
@@ -53,6 +53,7 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - Ref: `refs/heads/main`
 - Commit: `c2eac5a9b2b457881d69b1164d909e8beab9286e`
 - License: Apache-2.0 (upstream; README also calls out CUTLASS submodule licensing)
+- Base runtime: `sgl-project/sglang` pinned at `8087e07d52eede91414d7c1b9b323c98b1cf2dbf` (see [`docs/upstream-sglang.md`](upstream-sglang.md))
 - What it is (from upstream README, summarized):
   - A small CUDA extension + runtime patch for SGLang to provide FlashMLA sparse-decode kernels on Blackwell SM120 GPUs (the upstream image targets SM90/SM100).
 - Why we track it:

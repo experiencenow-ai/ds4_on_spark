@@ -68,6 +68,19 @@ If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATIO
 
 Observed on Spark0 (2026-05-09): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
 
+### NVRTC `--std=c++20` Gate (DeepGEMM-style JIT)
+
+DeepGEMM-style stacks compile CUDA code at runtime and often require C++20 in the NVRTC compile step.
+
+The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_cxx20_jit` is a tiny compile/run check that:
+
+- Compiles a tiny kernel with `--std=c++20 --gpu-architecture=compute_121` via NVRTC.
+- Loads the PTX via the CUDA Driver API and launches the kernel.
+
+If this probe fails, treat it as “NVRTC cannot compile C++20 for `compute_121` on this toolkit”, even if `nvcc -arch=sm_121 -std=c++20` works.
+
+Observed on Spark0 (2026-05-09): probe prints `nvrtc_cxx20_jit ok out=0x1234567a`.
+
 ## nvcc Extended Lambda + Relaxed Constexpr Gate
 
 Many CUTLASS/DeepGEMM-style codebases rely on `nvcc` accepting and correctly compiling with flags like:
@@ -166,6 +179,14 @@ The probe `tools/cuda_probe/bin/cuda_sm121_fp4_conv` is a tiny compile/run check
 - converts a `float` to FP4 storage (`e2m1`)
 - converts back to `__half_raw` and prints the raw bits
 
+## cuBLASLt FP4 (E2M1) Smoke
+
+The probe `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke` is a best-effort “link + run” check for FP4 (E2M1) matmul via cuBLASLt on `sm_121`.
+
+Treat `CUBLAS_STATUS_NOT_SUPPORTED` as an informative result while the CUDA stack matures (DeepGEMM-style FP4 kernels may still need custom codepaths even when conversion helpers are present).
+
+Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88`): `cuda_cublaslt_fp4_smoke` returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection.
+
 ## Pipeline memcpy-async (cp.async-style mainloops)
 
 Many CUTLASS and custom GEMM kernels rely on CUDA pipeline primitives (cp.async-style) to move data from global memory into shared memory efficiently.
@@ -195,6 +216,17 @@ The probe `tools/cuda_probe/bin/cuda_sm121_cp_async_bulk_tx` is a tiny compile/r
 - includes CCCL’s internal `<cuda/__memcpy_async/memcpy_async_tx.h>`
 - issues a 64-byte global->shared copy via `cuda::device::memcpy_async_tx` (which lowers to `cp.async.bulk` on SM90+)
 - waits via `cuda::barrier` and validates the copied values
+
+## Inline PTX `ldmatrix.sync` (CUTLASS-style gate)
+
+CUTLASS and similar template kernels often rely on inline PTX for tensor-core data movement (e.g., `ldmatrix.sync` loads from shared memory).
+
+The probe `tools/cuda_probe/bin/cuda_sm121_ldmatrix_smoke` is a tiny compile/run check that:
+
+- emits `cvta.to.shared` + `ldmatrix.sync.aligned.m8n8.x4.shared.b16` inline PTX
+- launches a single warp and checks the loaded registers are non-zero
+
+Treat failures as an immediate blocker for CUTLASS-style kernels that rely on inline PTX mainloops.
 
 ## WMMA Tensor Core Smoke (CUTLASS-style proxy)
 
@@ -237,8 +269,9 @@ DeepGEMM and many CUTLASS kernels use FP8 inputs; a quick “works-first” gate
 The probes `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` and `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke` are tiny compile/run checks that:
 
 - use FP8 E4M3 or E5M2 inputs for A/B (`CUDA_R_8F_E4M3` / `CUDA_R_8F_E5M2`)
-- accumulates into FP32 (`CUBLAS_COMPUTE_32F`) and writes FP32 output
-- uses default scale pointers (NULL ⇒ scale=1) to keep the API surface minimal
+- uses the narrow-precision-recommended “TN” format (A transposed, B non-transposed)
+- accumulates into FP32 (`CUBLAS_COMPUTE_32F`) and writes BF16 output (`CUDA_R_16BF`)
+- uses scalar scale pointers for A/B (scale=1) to keep the API surface minimal and match cuBLASLt narrow-precision conventions
 
 Observed on Spark0 (2026-05-09): `cuBLASLt fp8 e4m3 smoke max_abs_err_vs_one=0`.
-Observed on Spark0 (2026-05-09): `cuda_cublaslt_fp8_e5m2_smoke` currently returns `CUBLAS_STATUS_NOT_SUPPORTED` (cuBLASLt heuristic selection fails).
+Observed on Spark0 (2026-05-09 / `cublasLtGetVersion=130101`): `cuda_cublaslt_fp8_e5m2_smoke` fails to find any supported algo even after trying `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}`.

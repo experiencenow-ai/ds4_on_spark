@@ -8,6 +8,7 @@ int32_t test_ctx(void)
 {
 	ds4_ctx_t ctx;
 	ds4_config_t cfg;
+	ds4_cuda_status_t st;
 	uint8_t mem[128];
 	int32_t err;
 	if ( ds4_config_defaults(&cfg) < 0 )
@@ -27,8 +28,17 @@ int32_t test_ctx(void)
 	}
 	else
 	{
-		if ( err < 0 )
-			return(-6);
+		st = ds4_cuda_init();
+		if ( ds4_cuda_is_ok(st) == 0 )
+		{
+			if ( err >= 0 )
+				return(-6);
+		}
+		else
+		{
+			if ( err < 0 )
+				return(-7);
+		}
 	}
 	return(0);
 }

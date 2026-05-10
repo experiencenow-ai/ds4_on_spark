@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 #include "test_suite.h"
@@ -34,18 +35,41 @@ int32_t test_config(void)
 	static const uint8_t buf1[] = "enable_cuda=ON\n";
 	static const uint8_t buf2[] = "log_level=0 # comment\n# full line comment\n enable_cuda = yes\t# trailing\n";
 	static const uint8_t buf3[] = "log_level=debug\nenable_cuda=0\n";
+	static const uint8_t buf_cuda_dev0[] = "cuda_device=0\n";
+	static const uint8_t buf_cuda_dev_bad[] = "cuda_device=-2\n";
+	static const uint8_t buf_mem0[] = "arena_size=256\nlog_ring_entries=8\n";
+	static const uint8_t buf_unknown0[] = "log_level=2\nunknown_key=1\nenable_cuda=0\n";
 	static const uint8_t buf_over0[] = "log_level=2147483648\nenable_cuda=0\n";
 	static const uint8_t buf_over1[] = "log_level=-2147483649\nenable_cuda=0\n";
 	static const uint8_t buf_i32min[] = "log_level=-2147483648\nenable_cuda=0\n";
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
 	static const uint8_t capbuf[] = "log_level=1\n";
 	char path[64];
-	char out[64];
-	int32_t fd,plen,n,out_len;
+	char out[128];
+	int32_t fd,fdin,fd_save,plen,n,out_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
+	int32_t unknown;
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
+	if ( ds4_config_parse_kv_cstr(&cfg,"log_level","debug") != 0 )
+		return(-60);
+	if ( cfg.log_level != 3 )
+		return(-61);
+	if ( ds4_config_parse_kv_cstr(&cfg,"enable_cuda","true") != 0 )
+		return(-62);
+	if ( cfg.enable_cuda != 1 )
+		return(-63);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","123") != 0 )
+		return(-140);
+	if ( cfg.arena_size != 123 )
+		return(-141);
+	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","9") != 0 )
+		return(-142);
+	if ( cfg.log_ring_entries != 9 )
+		return(-143);
+	if ( ds4_config_parse_kv_cstr(&cfg,0,"1") >= 0 )
+		return(-64);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
 		return(-2);
 	if ( cfg.log_level != 3 )
@@ -73,6 +97,36 @@ int32_t test_config(void)
 	if ( cfg.enable_cuda != 0 )
 		return(-14);
 	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-110);
+	if ( ds4_config_parse_mem(&cfg,buf_cuda_dev0,(int32_t)(sizeof(buf_cuda_dev0) - 1)) < 0 )
+		return(-111);
+	if ( cfg.cuda_device != 0 )
+		return(-112);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-113);
+	if ( ds4_config_parse_mem(&cfg,buf_cuda_dev_bad,(int32_t)(sizeof(buf_cuda_dev_bad) - 1)) >= 0 )
+		return(-114);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-144);
+	if ( ds4_config_parse_mem(&cfg,buf_mem0,(int32_t)(sizeof(buf_mem0) - 1)) < 0 )
+		return(-145);
+	if ( cfg.arena_size != 256 )
+		return(-146);
+	if ( cfg.log_ring_entries != 8 )
+		return(-147);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-120);
+	unknown = -1;
+	if ( ds4_config_parse_mem_ex(&cfg,buf_unknown0,(int32_t)(sizeof(buf_unknown0) - 1),0,&unknown) < 0 )
+		return(-121);
+	if ( unknown != 1 )
+		return(-122);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-123);
+	unknown = -1;
+	if ( ds4_config_parse_mem_ex(&cfg,buf_unknown0,(int32_t)(sizeof(buf_unknown0) - 1),DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown) >= 0 )
+		return(-124);
+	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-101);
 	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )
 		return(-102);
@@ -90,14 +144,29 @@ int32_t test_config(void)
 		return(-16);
 	if ( setenv("DS4_ENABLE_CUDA","yes",1) != 0 )
 		return(-17);
+	if ( setenv("DS4_CUDA_DEVICE","3",1) != 0 )
+		return(-115);
+	if ( setenv("DS4_ARENA_SIZE","512",1) != 0 )
+		return(-148);
+	if ( setenv("DS4_LOG_RING_ENTRIES","7",1) != 0 )
+		return(-149);
 	if ( ds4_config_parse_env(&cfg) < 0 )
 		return(-18);
 	if ( cfg.log_level != 1 )
 		return(-19);
 	if ( cfg.enable_cuda != 1 )
 		return(-20);
+	if ( cfg.cuda_device != 3 )
+		return(-116);
+	if ( cfg.arena_size != 512 )
+		return(-150);
+	if ( cfg.log_ring_entries != 7 )
+		return(-151);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
+	unsetenv("DS4_CUDA_DEVICE");
+	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-107);
 	if ( setenv("DS4_ENABLE_CUDA","2147483648",1) != 0 )
@@ -105,6 +174,13 @@ int32_t test_config(void)
 	if ( ds4_config_parse_env(&cfg) >= 0 )
 		return(-109);
 	unsetenv("DS4_ENABLE_CUDA");
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-117);
+	if ( setenv("DS4_CUDA_DEVICE","-2",1) != 0 )
+		return(-118);
+	if ( ds4_config_parse_env(&cfg) >= 0 )
+		return(-119);
+	unsetenv("DS4_CUDA_DEVICE");
 	for (n=0; n<(int32_t)sizeof(path); n++)
 		path[n] = 0;
 	plen = ds4_cstr_len_i32("/tmp/ds4_cfg_XXXXXX");
@@ -123,6 +199,69 @@ int32_t test_config(void)
 		return(-23);
 	}
 	close(fd);
+	fdin = (int32_t)open(path,O_RDONLY);
+	if ( fdin < 0 )
+	{
+		unlink(path);
+		return(-130);
+	}
+	fd_save = (int32_t)dup(0);
+	if ( fd_save < 0 )
+	{
+		close(fdin);
+		unlink(path);
+		return(-131);
+	}
+	if ( dup2(fdin,0) < 0 )
+	{
+		close(fdin);
+		close(fd_save);
+		unlink(path);
+		return(-132);
+	}
+	close(fdin);
+	if ( ds4_config_defaults(&cfg) < 0 )
+	{
+		dup2(fd_save,0);
+		close(fd_save);
+		unlink(path);
+		return(-133);
+	}
+	out_len = -1;
+	if ( ds4_config_parse_file(&cfg,"-",io_buf,(int32_t)sizeof(io_buf),&out_len) < 0 )
+	{
+		dup2(fd_save,0);
+		close(fd_save);
+		unlink(path);
+		return(-134);
+	}
+	if ( dup2(fd_save,0) < 0 )
+	{
+		close(fd_save);
+		unlink(path);
+		return(-135);
+	}
+	close(fd_save);
+	if ( out_len <= 0 )
+	{
+		unlink(path);
+		return(-136);
+	}
+	if ( cfg.log_level != 0 )
+	{
+		unlink(path);
+		return(-137);
+	}
+	if ( cfg.enable_cuda != 1 )
+	{
+		unlink(path);
+		return(-138);
+	}
+	if ( cfg.cuda_device != DS4_CUDA_DEVICE_AUTO )
+	{
+		unlink(path);
+		return(-139);
+	}
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	if ( setenv("DS4_LOG_LEVEL","2",1) != 0 )
@@ -156,7 +295,7 @@ int32_t test_config(void)
 		return(-29);
 	}
 	n = ds4_cstr_len_i32(out);
-	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\n") == 0 )
+	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\ncuda_device=-1\narena_size=0\nlog_ring_entries=0\n") == 0 )
 	{
 		unlink(path);
 		return(-49);
@@ -211,6 +350,22 @@ int32_t test_config(void)
 		return(-37);
 	}
 	out_len = 0;
+	unknown = -1;
+	if ( ds4_config_parse_file_ex(&cfg,path,io_cap_buf,(int32_t)sizeof(io_cap_buf),&out_len,0,&unknown) < 0 )
+	{
+		unlink(path);
+		return(-125);
+	}
+	if ( unknown != 0 )
+	{
+		unlink(path);
+		return(-126);
+	}
+	if ( ds4_config_defaults(&cfg) < 0 )
+	{
+		unlink(path);
+		return(-127);
+	}
 	if ( ds4_config_parse_file(&cfg,path,io_cap_buf,(int32_t)sizeof(io_cap_buf),&out_len) < 0 )
 	{
 		unlink(path);
@@ -272,6 +427,17 @@ int32_t test_config(void)
 	{
 		unlink(path);
 		return(-48);
+	}
+	unknown = -1;
+	if ( ds4_config_load_auto_ex(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0,0,&unknown) < 0 )
+	{
+		unlink(path);
+		return(-128);
+	}
+	if ( unknown != 0 )
+	{
+		unlink(path);
+		return(-129);
 	}
 	unlink(path);
 	unsetenv("DS4_CONFIG_PATH");

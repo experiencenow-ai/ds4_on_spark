@@ -66,6 +66,8 @@ offset draft overhead for realistic accept rates.
 Tip: for synthetic traces, `--arrival-units output_tokens` keeps output-token
 demand fixed while varying MTP accept rates.
 
+Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
+
 ## Phase 1: Real Router Trace Replay
 
 Once the baseline quantized runtime can emit per-token routing, capture a trace
@@ -73,13 +75,20 @@ and replay it:
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-summary --json
-python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 64 --json
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --json   # 0 = infer from trace/meta
+```
+
+If the runtime emits `dt_ms` deltas (or only emits `accepted_mtp` / `rejected_mtp`), canonicalize it first so replay can infer `num_experts` / `mtp_draft_len` cleanly:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
 If the runtime trace includes per-token chosen `K`, replay it directly:
 
 ```bash
-python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mode trace --num-experts 64 --json
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mode trace --num-experts 0 --json
 ```
 
 Trace JSONL fields:
@@ -88,14 +97,23 @@ Trace JSONL fields:
 - `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - `cls`: `"interactive"` or `"batch"`
 - `candidates`: ordered expert candidates for that token
-- `k`: optional chosen `K`; required with `--k-mode trace`
-- `scores`: optional per-candidate router scores
+- `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
+  - `candidates`: ordered expert candidates for that layer (required)
+  - `scores`: optional per-candidate scores (same length as that layer's `candidates`)
+  - `k`: optional layer-local chosen `K`. When using `--k-mode trace`, you may omit top-level `k` if every layer provides `k`.
+  - `cost_scale`: optional layer-specific cost multiplier (multiplied into top-level `cost_scale` when both are present)
+  - when `layers` is present, `candidates` should either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); the simulator uses the per-layer candidate lists for admission
+- `k`: optional chosen `K`; required with `--k-mode trace` unless every layer provides `layers[].k`
+- `scores`: optional per-candidate router scores (when `layers` is present, use `layers[].scores`; top-level `scores` are not valid when `layers` is present)
 - `mtp_accept_len`: optional accept length for MTP replay
 - `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
 - `cost_scale`: optional per-token cost multiplier
 - `decode_ms`: optional observed per-token decode latency (the simulator reports `trace.decode_ms` and `trace.decode_error_ms` vs modeled latency when present)
 - `kv_tokens`: optional KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens` when present)
 - `expert_batch_size`: optional observed expert batch size (the simulator summarizes this under `trace.expert_batch_size` when present)
+- (optional) metadata: JSONL meta records like `{"type":"meta","meta":{...}}` are accepted and ignored by replay; you can also supply a sidecar metadata JSON via `--trace-meta-json`
+
+If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts.
 
 ## Expert Queueing
 
@@ -127,8 +145,10 @@ Initial scope:
 
 - confirm the quantized artifact includes usable MTP weights or document why it
   does not
+  - As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
 - expose draft logits/tokens from the runtime or a sidecar path
 - when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

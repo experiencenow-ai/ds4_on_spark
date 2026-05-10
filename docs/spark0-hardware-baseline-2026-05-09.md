@@ -30,8 +30,12 @@ High-level facts observed (from the probe output below):
 - `ptxas` path: `/usr/local/cuda/bin/ptxas`
 - CUDA driver/runtime API version (nvcc probe): `13000` (CUDA 13.0)
 - Wired NIC: `enP7s7`, MTU 9000, link speed 10Gb/s (ethtool)
+- Wi-Fi NIC driver: `mt7925e` (mt7925e firmware present per `ethtool -i`)
+- RDMA/ROCE: Mellanox `MT4129` devices present (`/sys/class/infiniband`), but ports were `DOWN`/`Disabled` during probes
 - Default route: via Wi-Fi during probe
 - Root filesystem: ~3.7 TiB NVMe, model `SAMSUNG MZALC4T0HBL1-00B07`
+- PCIe link negotiation: currently Gen1 x1 (nvidia-smi + sysfs); `nvidia-smi -q` reports `Device Max`/`Host Max` Gen5, suggesting downtraining/training rather than a true capability limit; `lspci -vv` does not expose `LnkCap/LnkSta` fields without extra privileges on this host
+- Sysfs PCIe path chain (root port -> endpoint): upstream `max_link_speed` reports `32.0 GT/s PCIe` while the GPU endpoint reports `max_link_speed` `2.5 GT/s PCIe` (Gen1); `current_link_width` remains `1`
 - NVIDIA driver (proc): Open Kernel Module `580.142` build timestamp `2026-03-03`
 - cuDNN: not detected (no headers/libs found via probe)
 
@@ -543,6 +547,60 @@ device0 global mem (bytes): 128518373376
 device0 sms: 48
 ```
 
+## Update: Probe Refresh (2026-05-09 18:39Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/spark0_probe_redacted_2026-05-09_18-39Z.txt
+```
+
+```text
+== memory ==
+               total        used        free      shared  buff/cache   available
+Mem:           119Gi        90Gi       5.1Gi       465Mi        25Gi        29Gi
+Swap:           15Gi       743Mi        15Gi
+
+== network links (no IPs) ==
+-- ethtool enP7s7 --
+driver: r8127
+version: 11.014.00-NAPI
+bus-info: 0007:01:00.0
+-- ethtool wlP9s9 --
+driver: mt7925e
+version: 6.17.0-1014-nvidia
+firmware-version: ____000000-20251210093025
+bus-info: 0009:01:00.0
+
+== rdma (roce/infiniband, optional) ==
+-- rocep1s0f0 --
+fw_ver: 28.45.4028
+hca_type: MT4129
+port1: state=1: DOWN phys=3: Disabled rate=40 Gb/sec (4X QDR) layer=Ethernet
+```
+
+## Update: Probe Refresh (2026-05-09 15:42Z)
+
+Commands run:
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-09T154208Z_probe12.txt
+```
+
+Notes:
+
+- This refresh adds numeric PCI IDs (`lspci -nn`) and an `nvidia-smi` PCI ID query (when supported) to cross-check GPU identity.
+
+```text
+== pci nvidia (numeric ids) ==
+0000:00:00.0 PCI bridge [0604]: NVIDIA Corporation Device [10de:22ce] (rev 01)
+000f:01:00.0 VGA compatible controller [0300]: NVIDIA Corporation Device [10de:2e12] (rev a1)
+
+== nvidia-smi pci ids (optional) ==
+columns: index,pci.bus_id,pci.device_id,pci.sub_device_id
+0, 0000000F:01:00.0, 0x2E1210DE, 0x10DE
+```
+
 ## Update: Probe Refresh (2026-05-09 11:24Z)
 
 Commands run:
@@ -1021,7 +1079,7 @@ REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git/.git SPARK_KNOWN_HOSTS_PER_HOST=1 ./sc
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
-- The `probe targets:` + `known_hosts:` lines are emitted for reproducible multi-target runs.
+- The `probe args:`/`resolved targets:` + `known_hosts:` lines are emitted for reproducible multi-target runs (older excerpts may show `probe targets:`).
 
 ```text
 == local meta ==

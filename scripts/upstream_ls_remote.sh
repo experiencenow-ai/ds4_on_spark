@@ -46,9 +46,9 @@ print_ref()
 
 	printf "== %s\n" "${name}"
 	if [ "${ref}" = "HEAD" ]; then
-		git ls-remote --symref "${url}" HEAD | sed -n '1,2p'
+		GIT_TERMINAL_PROMPT=0 git ls-remote --symref "${url}" HEAD | sed -n '1,2p'
 	else
-		git ls-remote "${url}" "${ref}" | sed -n '1p'
+		GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | sed -n '1p'
 	fi
 	echo
 }
@@ -101,7 +101,7 @@ print_pinned()
 	local expected="$5"
 	local got
 
-	got="$(git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
 	if [ -z "${got}" ]; then
 		printf "== %s\n" "${name}"
 		printf "upstream:  %s\n" "${upstream}"
@@ -113,7 +113,7 @@ print_pinned()
 
 	if [[ "${ref}" == refs/tags/* ]]; then
 		local deref
-		deref="$(git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
+		deref="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
 		if [ -n "${deref}" ]; then
 			got="${deref}"
 		fi
@@ -135,6 +135,7 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash"
 	print_ref "DeepSeek-V4-Flash-Base (HF)" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Base"
 	print_ref "DeepSeek-V4-Flash GGUF (antirez, HF)" "https://huggingface.co/antirez/deepseek-v4-gguf"
+	print_ref "DeepSeek-V4-Flash GGUF (ssweens, HF)" "https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV"
 	print_ref "DeepSeek-V4-Flash GGUF (Preyazz, HF)" "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (BatiAI, HF)" "https://huggingface.co/batiai/DeepSeek-V4-Flash-GGUF"
 	print_ref "DeepSeek-V4-Flash GGUF (lovedheart, HF)" "https://huggingface.co/lovedheart/DeepSeek-V4-Flash-GGUF"
@@ -143,10 +144,12 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash GGUF (teamblobfish, HF)" "https://huggingface.co/teamblobfish/DeepSeek-V4-Flash-GGUF"
 	print_ref "vLLM" "https://github.com/vllm-project/vllm.git"
 	print_ref "Transformers" "https://github.com/huggingface/transformers.git"
+	print_ref "SGLang" "https://github.com/sgl-project/sglang.git"
 	print_ref "llama.cpp" "https://github.com/ggml-org/llama.cpp.git"
 	print_ref "llama.cpp (antirez V4 fork)" "https://github.com/antirez/llama.cpp-deepseek-v4-flash.git"
 	print_ref "llama.cpp (nisparks V4 WIP)" "https://github.com/nisparks/llama.cpp.git" "refs/heads/wip/deepseek-v4-support"
 	print_ref "llama.cpp (cchuter V4 port)" "https://github.com/cchuter/llama.cpp.git" "refs/heads/feat/v4-port"
+	print_ref "llama.cpp (ssweens V4 fork)" "https://github.com/ssweens/llama.cpp-deepseek-v4.git" "refs/heads/main"
 	print_ref "llama.cpp (CUDA Spark fork)" "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git"
 	print_ref "bati.cpp" "https://github.com/batiai/bati.cpp.git"
 	print_ref "Spark bring-up (pruned checkpoint)" "https://github.com/Mockingjay1316/deepseek-v4-flash-spark.git"

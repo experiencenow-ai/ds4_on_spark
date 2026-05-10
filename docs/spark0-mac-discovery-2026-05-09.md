@@ -134,6 +134,278 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+## Update: Discovery Refresh (2026-05-09 23:38Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2346Z_loop_v3.txt
+```
+
+```text
+== meta ==
+Sat May  9 23:38:15 UTC 2026
+git: 69f5626
+targets: aitopatom-9ab9.local spark1.local
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+23:38:15.473  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+23:38:20.481  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+23:38:20.481  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+-- spark1.local --
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 23:13Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2313Z_loop_v13.txt
+```
+
+```text
+== meta ==
+Sat May  9 23:13:05 UTC 2026
+git: b6057a9
+targets: aitopatom-9ab9.local spark1.local
+```
+
+```text
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+23:13:05.785  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+23:13:05.786  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+23:13:05.786  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+```
+
+```text
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 22:14Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2211Z_loop_v10.txt
+```
+
+```text
+== meta ==
+Sat May  9 22:14:39 UTC 2026
+git: 94d4737
+targets: aitopatom-9ab9.local spark1.local
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+22:14:39.732  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 21:42Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2137Z_loop_v9.txt
+```
+
+Notes:
+
+- This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses (including compressed IPv6 `::` forms).
+
+```text
+== meta ==
+Sat May  9 21:42:10 UTC 2026
+git: 6164658
+targets: aitopatom-9ab9.local spark1.local
+
+== ssh service browse, 5 seconds ==
+Browsing for _ssh._tcp.local
+DATE: ---Sat 09 May 2026---
+21:42:10.339  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 21:07Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2107Z_loop_v8.txt
+```
+
+```text
+== meta ==
+Sat May  9 21:07:27 UTC 2026
+git: c1f57f0
+targets: aitopatom-9ab9.local spark1.local
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
+21:07:32.507  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+21:07:32.507  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+-- spark1.local --
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 20:44Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2044Z_loop_v7b.txt
+```
+
+```text
+== meta ==
+Sat May  9 20:44:06 UTC 2026
+git: d3e8aae
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 20:06Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T2006Z_loop_v6.txt
+```
+
+```text
+== meta ==
+Sat May  9 20:06:43 UTC 2026
+git: 25a8c94
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 19:39Z)
+
+Commands run from the Mac:
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T1939Z_loop_v5.txt
+```
+
+```text
+== meta ==
+Sat May  9 19:39:12 UTC 2026
+git: 3fd13b3
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 19:07Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T1907Z_loop_v4.txt
+```
+
+```text
+== meta ==
+Sat May  9 19:07:26 UTC 2026
+git: 49403f0
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 17:35Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T173515Z_probe8.txt
+```
+
+```text
+== meta ==
+Sat May  9 17:35:15 UTC 2026
+git: ad143d0
+targets: aitopatom-9ab9.local spark1.local
+```
+
+```text
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 16:40Z)
+
+Commands run:
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T164004Z_probe16.txt
+```
+
+```text
+== meta ==
+Sat May  9 16:40:04 UTC 2026
+git: c8f2283
+targets: aitopatom-9ab9.local spark1.local
+```
+
+```text
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+## Update: Discovery Refresh (2026-05-09 16:10Z)
+
+Commands run:
+
+```bash
+REDACT=1 DS4_GIT_DIR=/private/tmp/ds4_git_spark_access_probe_loop_1778342741/.git DS4_GIT_WORK_TREE=/private/tmp/ds4_git_spark_access_probe_loop_1778342741 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-09T161036Z_probe13.txt
+```
+
+```text
+== meta ==
+Sat May  9 16:10:37 UTC 2026
+git: 51720ee
+targets: aitopatom-9ab9.local spark1.local
+```
+
 ## Update: Discovery Refresh (2026-05-09 12:25Z)
 
 Commands run:

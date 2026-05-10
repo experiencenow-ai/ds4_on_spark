@@ -45,14 +45,22 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 {
 echo "== meta =="
 date -u
-if command -v git >/dev/null 2>&1; then
-	worktree="${DS4_GIT_WORK_TREE:-$PWD}"
-	if [ "${DS4_GIT_DIR:-}" != "" ]; then
-		echo "git: $(git --git-dir="$DS4_GIT_DIR" --work-tree="$worktree" rev-parse --short HEAD 2>/dev/null || true)"
-	elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-		echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
-	fi
+	if command -v git >/dev/null 2>&1; then
+		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
+		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
+			git_dir="$git_worktree/.gitshim/repo/.git"
+		fi
+		if [ "$git_dir" != "" ]; then
+			echo "git: $(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
+		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
+		fi
 fi
+echo "targets: $targets"
 echo
 echo "== interfaces =="
 for iface in en0 en1; do
@@ -108,6 +116,7 @@ if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \
 		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
 		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
 		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
 		"$tmp"
 else

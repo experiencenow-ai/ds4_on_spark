@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from collections import Counter
+import io
 import json
 import struct
 import sys
@@ -8,6 +9,8 @@ from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,7 @@ class InspectResult:
 	path: str
 	artifact_type: str
 	gguf_version: Optional[int]
+	url_prefix_bytes: Optional[int]
 	metadata: dict[str, Any]
 	tensor_count: int
 	tensor_type_counts: dict[str, int]
@@ -53,20 +57,16 @@ def read_bytes(f: BinaryIO, n: int) -> bytes:
 	return b
 
 
-def read_gguf_string(f: BinaryIO) -> str:
-	# GGUF strings are: uint64_t length + UTF-8 bytes (no NUL terminator).
-	n = read_u64_le(f)
-	if n > (256 * 1024 * 1024):
-		raise ValueError(f"unreasonable gguf string length: {n}")
-	b = read_bytes(f, int(n))
+def read_gguf_string(f: BinaryIO, n: int) -> str:
+	b = read_bytes(f, n)
 	try:
 		return b.decode("utf-8")
 	except UnicodeDecodeError:
 		return b.decode("utf-8", errors="replace")
 
 
-def skip_gguf_value(f: BinaryIO, value_type: int) -> None:
-	# Types follow gguf spec: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
+def skip_gguf_value(read_size, f: BinaryIO, value_type: int) -> None:
+	# Types follow gguf spec: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
 	if value_type in (0, 1, 7):  # u8, i8, bool
 		read_bytes(f, 1)
 		return
@@ -80,13 +80,13 @@ def skip_gguf_value(f: BinaryIO, value_type: int) -> None:
 		read_bytes(f, 8)
 		return
 	if value_type == 8:  # string
-		_ = read_gguf_string(f)
+		_ = read_gguf_string(f, int(read_size()))
 		return
 	if value_type == 9:  # array
 		elem_type = read_u32_le(f)
-		n = read_u64_le(f)
+		n = int(read_size())
 		for _ in range(int(n)):
-			skip_gguf_value(f, int(elem_type))
+			skip_gguf_value(read_size, f, int(elem_type))
 		return
 	raise ValueError(f"unsupported gguf value_type={value_type}")
 
@@ -131,7 +131,7 @@ def read_f64_le(f: BinaryIO) -> float:
 	return float(struct.unpack("<d", b)[0])
 
 
-def read_gguf_value(f: BinaryIO, value_type: int) -> Any:
+def read_gguf_value(read_size, f: BinaryIO, value_type: int) -> Any:
 	# Values follow gguf spec: https://github.com/ggerganov/ggml/blob/master/docs/gguf.md
 	if value_type == 0:
 		return read_u8(f)
@@ -150,7 +150,7 @@ def read_gguf_value(f: BinaryIO, value_type: int) -> Any:
 	if value_type == 7:
 		return (read_u8(f) != 0)
 	if value_type == 8:
-		return read_gguf_string(f)
+		return read_gguf_string(f, int(read_size()))
 	if value_type == 10:
 		return read_u64_le(f)
 	if value_type == 11:
@@ -159,7 +159,7 @@ def read_gguf_value(f: BinaryIO, value_type: int) -> Any:
 		return read_f64_le(f)
 	if value_type == 9:
 		# Arrays can be huge (e.g. tokenizer.ggml.tokens). Avoid loading them here.
-		skip_gguf_value(f, value_type)
+		skip_gguf_value(read_size, f, value_type)
 		return "<array omitted>"
 	raise ValueError(f"unsupported gguf value_type={value_type}")
 
@@ -203,6 +203,7 @@ def inspect_weight_keys(weight_keys: list[str], path: str, artifact_type: str) -
 		path=path,
 		artifact_type=artifact_type,
 		gguf_version=None,
+		url_prefix_bytes=None,
 		metadata={},
 		tensor_count=len(weight_keys),
 		tensor_type_counts={},
@@ -222,6 +223,100 @@ def load_default_contract_summary_path() -> Optional[Path]:
 	if candidate.exists():
 		return candidate
 	return None
+
+
+def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int) -> bytes:
+	req = Request(url, headers={"Range": f"bytes=0-{want_bytes - 1}"})
+	with urlopen(req, timeout=timeout_s) as resp:
+		return resp.read(want_bytes)
+
+
+def parse_gguf_url_prefix(url: str, max_bytes: int, timeout_s: int) -> tuple[int, dict[str, Any], list[str], list[int], int]:
+	want = 256 * 1024
+	while want <= max_bytes:
+		try:
+			prefix = fetch_url_prefix(url, want, timeout_s=timeout_s)
+			f = io.BytesIO(prefix)
+			vers, metadata, weight_keys, weight_types = parse_gguf_stream(f, url)
+			return (vers, metadata, weight_keys, weight_types, len(prefix))
+		except EOFError:
+			want *= 2
+			continue
+		except HTTPError as e:
+			raise RuntimeError(f"HTTP error fetching {url}: {e}") from e
+		except URLError as e:
+			raise RuntimeError(f"URL error fetching {url}: {e}") from e
+	raise RuntimeError(f"unable to parse gguf header/tensor table from {url} within max_bytes={max_bytes}")
+
+
+def parse_gguf_stream(f: BinaryIO, label: str) -> tuple[int, dict[str, Any], list[str], list[int]]:
+	magic = read_bytes(f, 4)
+	if magic != b"GGUF":
+		raise ValueError(f"{label} does not look like a GGUF file (bad magic {magic!r})")
+	vers = int(read_u32_le(f))
+
+	def read_size() -> int:
+		if vers == 1:
+			return int(read_u32_le(f))
+		return int(read_u64_le(f))
+
+	n_tensors = int(read_size())
+	n_kv = int(read_size())
+
+	metadata: dict[str, Any] = {}
+	for _ in range(int(n_kv)):
+		key = read_gguf_string(f, int(read_size()))
+		vtype = read_u32_le(f)
+		if should_capture_gguf_metadata(key, int(vtype)):
+			metadata[key] = read_gguf_value(read_size, f, int(vtype))
+		else:
+			skip_gguf_value(read_size, f, int(vtype))
+
+	weight_keys: list[str] = []
+	weight_types: list[int] = []
+	for _ in range(int(n_tensors)):
+		name = read_gguf_string(f, int(read_size()))
+		nd = read_u32_le(f)
+		for _ in range(int(nd)):
+			_ = read_u64_le(f)
+		tensor_type = read_u32_le(f)  # ggml_type
+		_ = read_u64_le(f)  # offset
+		weight_keys.append(name)
+		weight_types.append(int(tensor_type))
+
+	return (vers, metadata, weight_keys, weight_types)
+
+
+def guess_tensor_key_namespace(weight_keys: list[str]) -> tuple[str, list[str]]:
+	if not weight_keys:
+		return ("empty", ["no tensor keys"])
+
+	evidence: list[str] = []
+
+	def saw_prefix(prefix: str) -> bool:
+		return any(k.startswith(prefix) for k in weight_keys)
+
+	def saw_any(keys: set[str]) -> bool:
+		return any(k in keys for k in weight_keys)
+
+	if saw_prefix("layers.") or saw_any({"embed.weight", "head.weight", "norm.weight"}):
+		evidence.append("found deepseek upstream-style keys (layers.* and/or embed/head/norm)")
+		return ("deepseek-upstream", evidence)
+
+	if saw_prefix("mtp."):
+		evidence.append("found mtp.* tensor namespace")
+		return ("deepseek-upstream-mtp-only", evidence)
+
+	if saw_prefix("blk.") or saw_any({"token_embd.weight", "output.weight"}):
+		evidence.append("found llama.cpp-style keys (blk.* and/or token_embd/output)")
+		return ("llama.cpp", evidence)
+
+	if saw_prefix("block.") or saw_prefix("model.layers."):
+		evidence.append("found transformer-style keys (block.* or model.layers.*), not deepseek upstream namespace")
+		return ("hf-transformers", evidence)
+
+	evidence.append("no known key namespace patterns matched")
+	return ("unknown", evidence)
 
 
 def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
@@ -262,6 +357,15 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 		return {"checked": False, "reason": "contract_summary has invalid layer/expert counts"}
 	if len(compress_ratios) < n_layers_i:
 		return {"checked": False, "reason": "contract_summary compress_ratios shorter than num_hidden_layers"}
+
+	# Most GGUF conversion toolchains rename layer tensor keys; only run this
+	# check when the artifact appears to preserve the upstream `layers.{i}.*`
+	# namespace.
+	if not any(k.startswith("layers.") for k in weight_keys):
+		return {
+			"checked": False,
+			"reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable",
+		}
 
 	missing_count = 0
 	missing_sample: list[str] = []
@@ -348,6 +452,7 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 
 	topo = contract_summary.get("topology", {})
 	mtp = contract_summary.get("mtp", {})
+	yarn = contract_summary.get("yarn_rope", {})
 
 	def expected_int(name: str) -> Optional[int]:
 		try:
@@ -360,6 +465,11 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 	expected_heads = expected_int("num_attention_heads")
 	expected_kv_heads = expected_int("num_key_value_heads")
 	expected_vocab = expected_int("vocab_size")
+	expected_rope_dim = expected_int("rope_head_dim")
+	try:
+		expected_rope_theta = float(yarn.get("rope_theta"))
+	except Exception:
+		expected_rope_theta = None
 	try:
 		expected_mtp_layers = int(mtp.get("n_mtp_layers", 0))
 	except Exception:
@@ -374,17 +484,30 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 				continue
 		return None
 
+	def pick_float(keys: list[str]) -> Optional[float]:
+		for k in keys:
+			v = metadata.get(k, None)
+			try:
+				return float(v)
+			except Exception:
+				continue
+		return None
+
 	embedding_keys = [k for k in metadata.keys() if k.endswith(".embedding_length")]
 	block_keys = [k for k in metadata.keys() if k.endswith(".block_count")]
 	vocab_keys = [k for k in metadata.keys() if k.endswith(".vocab_size")]
 	head_keys = [k for k in metadata.keys() if k.endswith(".head_count")]
 	kv_head_keys = [k for k in metadata.keys() if k.endswith(".head_count_kv")]
+	rope_dim_keys = [k for k in metadata.keys() if k.endswith(".rope.dimension_count")]
+	rope_freq_base_keys = [k for k in metadata.keys() if k.endswith(".rope.freq_base")]
 
 	embedding_len = pick_int(sorted(embedding_keys))
 	block_count = pick_int(sorted(block_keys))
 	vocab_size = pick_int(sorted(vocab_keys))
 	head_count = pick_int(sorted(head_keys))
 	kv_head_count = pick_int(sorted(kv_head_keys))
+	rope_dim = pick_int(sorted(rope_dim_keys))
+	rope_freq_base = pick_float(sorted(rope_freq_base_keys))
 
 	mismatches: list[str] = []
 
@@ -394,10 +517,18 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 		if int(got) != int(expected):
 			mismatches.append(f"{label}: got={got} expected={expected}")
 
+	def check_eq_float(label: str, got: Optional[float], expected: Optional[float]) -> None:
+		if got is None or expected is None:
+			return
+		if float(got) != float(expected):
+			mismatches.append(f"{label}: got={got} expected={expected}")
+
 	check_eq("embedding_length", embedding_len, expected_hidden)
 	check_eq("vocab_size", vocab_size, expected_vocab)
 	check_eq("head_count", head_count, expected_heads)
 	check_eq("head_count_kv", kv_head_count, expected_kv_heads)
+	check_eq("rope_dimension_count", rope_dim, expected_rope_dim)
+	check_eq_float("rope_freq_base", rope_freq_base, expected_rope_theta)
 
 	block_count_ok = None
 	if block_count is not None and expected_layers is not None:
@@ -416,6 +547,8 @@ def compute_topology_contract(metadata: dict[str, Any], contract_summary: dict[s
 		"vocab_size": vocab_size,
 		"head_count": head_count,
 		"head_count_kv": kv_head_count,
+		"rope_dimension_count": rope_dim,
+		"rope_freq_base": rope_freq_base,
 		"mismatches": mismatches[:20],
 	}
 
@@ -497,65 +630,62 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 	}
 
 
-MTP_SIDECAR_EXPECTED_TENSORS: list[str] = [
-	"mtp.0.hc_head_base.weight",
-	"mtp.0.hc_head_fn.weight",
-	"mtp.0.hc_head_scale.weight",
-	"mtp.0.e_proj.weight",
-	"mtp.0.h_proj.weight",
-	"mtp.0.enorm.weight",
-	"mtp.0.hnorm.weight",
-	"mtp.0.norm.weight",
-	"mtp.0.hc_attn_fn.weight",
-	"mtp.0.hc_attn_scale.weight",
-	"mtp.0.hc_attn_base.weight",
-	"mtp.0.attn_norm.weight",
-	"mtp.0.attn_q_a.weight",
-	"mtp.0.attn_q_a_norm.weight",
-	"mtp.0.attn_q_b.weight",
-	"mtp.0.attn_kv.weight",
-	"mtp.0.attn_kv_a_norm.weight",
-	"mtp.0.attn_sinks.weight",
-	"mtp.0.attn_output_a.weight",
-	"mtp.0.attn_output_b.weight",
-	"mtp.0.hc_ffn_fn.weight",
-	"mtp.0.hc_ffn_scale.weight",
-	"mtp.0.hc_ffn_base.weight",
-	"mtp.0.ffn_norm.weight",
-	"mtp.0.ffn_gate_inp.weight",
-	"mtp.0.exp_probs_b.bias",
-	"mtp.0.ffn_gate_exps.weight",
-	"mtp.0.ffn_up_exps.weight",
-	"mtp.0.ffn_down_exps.weight",
-	"mtp.0.ffn_gate_shexp.weight",
-	"mtp.0.ffn_up_shexp.weight",
-	"mtp.0.ffn_down_shexp.weight",
-]
+def compute_mtp_namespace_status(mtp_layer_ids: list[int], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
+	present_ids: list[int] = sorted({int(i) for i in mtp_layer_ids})
+	present_prefixes = [f"mtp.{i}." for i in present_ids]
 
+	expected_ids: list[int] = []
+	if isinstance(contract_summary, dict):
+		try:
+			n_mtp_layers = int(contract_summary.get("mtp", {}).get("n_mtp_layers", 0))
+		except Exception:
+			n_mtp_layers = 0
+		if n_mtp_layers > 0:
+			expected_ids = list(range(int(n_mtp_layers)))
 
-def compute_mtp_sidecar_contract(mtp_keys: set[str]) -> dict[str, Any]:
-	# DS4-tuned MTP sidecars (general.architecture=deepseek4_mtp_support) are not
-	# full official mtp.* checkpoints. They are expected to contain exactly this
-	# 32-tensor mtp.0.* table.
-	if not mtp_keys:
-		return {"checked": False, "reason": "no mtp.* tensors present"}
-	expected = set(MTP_SIDECAR_EXPECTED_TENSORS)
-	missing = sorted(expected - mtp_keys)
-	extra = sorted(mtp_keys - expected)
-	out: dict[str, Any] = {
+	missing_expected_ids = [i for i in expected_ids if i not in present_ids]
+	return {
 		"checked": True,
-		"expected_tensor_count": len(MTP_SIDECAR_EXPECTED_TENSORS),
-		"found_tensor_count": len(mtp_keys),
-		"complete": (not missing and not extra and len(mtp_keys) == len(MTP_SIDECAR_EXPECTED_TENSORS)),
-		"missing_count": len(missing),
-		"extra_count": len(extra),
-		"missing_sample": missing[:20],
-		"extra_sample": extra[:20],
+		"present_layer_ids": present_ids,
+		"present_prefixes": present_prefixes,
+		"has_mtp0": (0 in present_ids),
+		"expected_layer_ids": expected_ids,
+		"missing_expected_layer_ids": missing_expected_ids,
+		"expected_complete": (len(expected_ids) > 0 and len(missing_expected_ids) == 0),
 	}
-	if any(not k.startswith("mtp.0.") for k in mtp_keys):
-		out["complete"] = False
-		out["namespace_error"] = True
-	return out
+
+def compute_mtp_trust(mtp_present: bool, mtp_contract: Optional[dict[str, Any]], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
+	if not mtp_present:
+		return {"checked": True, "trusted": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+
+	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
+		return {"checked": False, "trusted": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+
+	trust_gates = None
+	if isinstance(contract_summary, dict):
+		trust_gates = contract_summary.get("mtp", {}).get("trust_gates", None)
+	if not isinstance(trust_gates, dict):
+		trust_gates = {}
+
+	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
+	if requires_complete and mtp_contract.get("complete") is not True:
+		return {
+			"checked": True,
+			"trusted": False,
+			"status": "incomplete",
+			"reasons": ["mtp_contract.complete != true"],
+		}
+
+	reasons = ["structural mtp.* keys complete"]
+	if trust_gates.get("oracle_requires_include_mtp") is True or trust_gates.get("oracle_requires_mtp_trace") is True:
+		reasons.append("requires logits oracle with include_mtp before trusting MTP")
+
+	return {
+		"checked": True,
+		"trusted": False,
+		"status": "structural_complete_untrusted",
+		"reasons": reasons,
+	}
 
 
 def inspect_safetensors_index(path: Path) -> InspectResult:
@@ -610,33 +740,7 @@ def inspect_gguf(path: Path) -> InspectResult:
 		return ggml_type_names.get(code, f"TYPE_{code}")
 
 	with path.open("rb") as f:
-		magic = read_bytes(f, 4)
-		if magic != b"GGUF":
-			raise ValueError(f"{path} does not look like a GGUF file (bad magic {magic!r})")
-		vers = int(read_u32_le(f))
-		n_tensors = read_u64_le(f)
-		n_kv = read_u64_le(f)
-
-		metadata: dict[str, Any] = {}
-		for _ in range(int(n_kv)):
-			key = read_gguf_string(f)
-			vtype = read_u32_le(f)
-			if should_capture_gguf_metadata(key, int(vtype)):
-				metadata[key] = read_gguf_value(f, int(vtype))
-			else:
-				skip_gguf_value(f, int(vtype))
-
-		weight_keys: list[str] = []
-		weight_types: list[int] = []
-		for _ in range(int(n_tensors)):
-			name = read_gguf_string(f)
-			nd = read_u32_le(f)
-			for _ in range(int(nd)):
-				_ = read_u64_le(f)
-			tensor_type = read_u32_le(f)  # ggml_type
-			_ = read_u64_le(f)  # offset
-			weight_keys.append(name)
-			weight_types.append(int(tensor_type))
+		vers, metadata, weight_keys, weight_types = parse_gguf_stream(f, str(path))
 
 	type_counts = Counter(ggml_type_name(t) for t in weight_types)
 	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
@@ -645,6 +749,69 @@ def inspect_gguf(path: Path) -> InspectResult:
 		path=res.path,
 		artifact_type=res.artifact_type,
 		gguf_version=vers,
+		url_prefix_bytes=None,
+		metadata=metadata,
+		tensor_count=res.tensor_count,
+		tensor_type_counts=dict(sorted(type_counts.items())),
+		weight_keys_all=res.weight_keys_all,
+		mtp_present=res.mtp_present,
+		mtp_tensor_count=res.mtp_tensor_count,
+		mtp_tensor_type_counts=dict(sorted(mtp_type_counts.items())),
+		mtp_layer_ids=res.mtp_layer_ids,
+		first_mtp_keys=res.first_mtp_keys,
+		mtp_keys_all=res.mtp_keys_all,
+	)
+
+
+def inspect_gguf_url(url: str, max_bytes: int, timeout_s: int) -> InspectResult:
+	# See inspect_gguf for ggml_type mapping.
+	ggml_type_names: dict[int, str] = {
+		0: "F32",
+		1: "F16",
+		2: "Q4_0",
+		3: "Q4_1",
+		6: "Q5_0",
+		7: "Q5_1",
+		8: "Q8_0",
+		9: "Q8_1",
+		10: "Q2_K",
+		11: "Q3_K",
+		12: "Q4_K",
+		13: "Q5_K",
+		14: "Q6_K",
+		15: "Q8_K",
+		16: "IQ2_XXS",
+		17: "IQ2_XS",
+		18: "IQ3_XXS",
+		19: "IQ1_S",
+		20: "IQ4_NL",
+		21: "IQ3_S",
+		22: "IQ2_S",
+		23: "IQ4_XS",
+		24: "I8",
+		25: "I16",
+		26: "I32",
+		27: "I64",
+		28: "F64",
+		29: "IQ1_M",
+		30: "BF16",
+		34: "TQ1_0",
+		35: "TQ2_0",
+		39: "MXFP4",
+	}
+
+	def ggml_type_name(code: int) -> str:
+		return ggml_type_names.get(code, f"TYPE_{code}")
+
+	vers, metadata, weight_keys, weight_types, prefix_bytes = parse_gguf_url_prefix(url, max_bytes=max_bytes, timeout_s=timeout_s)
+	type_counts = Counter(ggml_type_name(t) for t in weight_types)
+	mtp_type_counts = Counter(ggml_type_name(t) for k, t in zip(weight_keys, weight_types) if k.startswith("mtp."))
+	res = inspect_weight_keys(weight_keys, url, "gguf.url")
+	return InspectResult(
+		path=res.path,
+		artifact_type=res.artifact_type,
+		gguf_version=vers,
+		url_prefix_bytes=int(prefix_bytes),
 		metadata=metadata,
 		tensor_count=res.tensor_count,
 		tensor_type_counts=dict(sorted(type_counts.items())),
@@ -677,8 +844,15 @@ def main() -> int:
 		"--path",
 		type=str,
 		action="append",
-		required=True,
+		default=[],
 		help="Quantized artifact path: .gguf, model.safetensors.index.json, or a directory containing it. May be passed multiple times (e.g. trunk + MTP sidecar).",
+	)
+	parser.add_argument(
+		"--url",
+		type=str,
+		action="append",
+		default=[],
+		help="HTTP(S) URL to a GGUF file; downloads only the header/tensor table via range reads. May be passed multiple times (e.g. trunk + MTP sidecar).",
 	)
 	parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
 	parser.add_argument("--require-mtp", action="store_true", help="Exit non-zero if no mtp.* tensors are present.")
@@ -688,12 +862,26 @@ def main() -> int:
 		default=None,
 		help="Optional path to a DeepSeek V4 Flash contract_summary.json. When provided (or when the repo default exists), emits an mtp_contract completeness check for mtp.* tensor keys.",
 	)
+	parser.add_argument("--max-bytes", type=int, default=(16 * 1024 * 1024), help="Max bytes to fetch per --url (default: 16777216).")
+	parser.add_argument("--timeout-s", type=int, default=20, help="HTTP timeout seconds for --url (default: 20).")
 	args = parser.parse_args()
+
+	if not args.path and not args.url:
+		print("ERROR: must provide at least one --path or --url")
+		return 2
 
 	results: list[InspectResult] = []
 	for p in args.path:
 		try:
 			results.append(detect_and_inspect(Path(p)))
+		except Exception as e:
+			print(f"ERROR: {e}")
+			return 2
+	for u in args.url:
+		try:
+			if not str(u).lower().endswith(".gguf"):
+				raise ValueError(f"unsupported --url artifact type for {u} (expected .gguf)")
+			results.append(inspect_gguf_url(str(u), max_bytes=int(args.max_bytes), timeout_s=int(args.timeout_s)))
 		except Exception as e:
 			print(f"ERROR: {e}")
 			return 2
@@ -706,21 +894,24 @@ def main() -> int:
 		except Exception:
 			contract_summary = None
 
-	def is_mtp_sidecar(metadata: dict[str, Any]) -> bool:
-		return (metadata.get("general.architecture", None) == "deepseek4_mtp_support")
-
 	def as_dict(res: InspectResult) -> dict[str, Any]:
+		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
 		return {
 			"path": res.path,
 			"artifact_type": res.artifact_type,
 			"gguf_version": res.gguf_version,
+			"url_prefix_bytes": res.url_prefix_bytes,
 			"metadata": res.metadata,
 			"tensor_count": res.tensor_count,
 			"tensor_type_counts": res.tensor_type_counts,
+			"first_tensor_keys": res.weight_keys_all[:20],
+			"tensor_key_namespace_guess": namespace_guess,
+			"tensor_key_namespace_evidence": namespace_evidence,
 			"mtp_present": res.mtp_present,
 			"mtp_tensor_count": res.mtp_tensor_count,
 			"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
 			"mtp_layer_ids": res.mtp_layer_ids,
+			"mtp_namespace": compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary),
 			"first_mtp_keys": res.first_mtp_keys,
 		}
 
@@ -748,22 +939,14 @@ def main() -> int:
 				if len(first_mtp_keys) >= 20:
 					break
 		mtp_contract = None
-		mtp_sidecar_contract = None
 		trunk_contract = None
 		topology_contract = None
-		if any(is_mtp_sidecar(r.metadata) for r in results):
-			sidecar_union = set()
-			for r in results:
-				if is_mtp_sidecar(r.metadata):
-					sidecar_union.update(r.mtp_keys_all)
-			mtp_sidecar_contract = compute_mtp_sidecar_contract(sidecar_union)
-			mtp_contract = {"checked": False, "reason": "deepseek4_mtp_support sidecar present; mtp_sidecar_contract applies"}
-		elif contract_summary is not None:
-				mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 		if contract_summary is not None:
+			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
 			if topology_candidate is not None:
 				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
+		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -774,9 +957,10 @@ def main() -> int:
 			"mtp_tensor_count": sum(r.mtp_tensor_count for r in results),
 			"mtp_tensor_type_counts": dict(sorted(mtp_type_counts.items())),
 			"mtp_layer_ids": sorted(mtp_layer_ids),
+			"mtp_namespace": compute_mtp_namespace_status(sorted(mtp_layer_ids), contract_summary),
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
-			"mtp_sidecar_contract": mtp_sidecar_contract,
+			"mtp_trust": mtp_trust,
 			"trunk_contract": trunk_contract,
 			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"topology_contract": topology_contract,
@@ -785,12 +969,9 @@ def main() -> int:
 	if args.json:
 		if len(results) == 1:
 			out = as_dict(results[0])
-			if is_mtp_sidecar(results[0].metadata):
-				out["mtp_sidecar_contract"] = compute_mtp_sidecar_contract(set(results[0].mtp_keys_all))
-				out["mtp_contract"] = {"checked": False, "reason": "deepseek4_mtp_support sidecar; mtp_sidecar_contract applies"}
-			elif contract_summary is not None:
-				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
 			if contract_summary is not None:
+				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
+				out["mtp_trust"] = compute_mtp_trust(bool(out.get("mtp_present", False)), out.get("mtp_contract"), contract_summary)
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
@@ -803,23 +984,11 @@ def main() -> int:
 							{
 								**as_dict(r),
 								**(
-									(
-										{
-											"mtp_sidecar_contract": compute_mtp_sidecar_contract(set(r.mtp_keys_all)),
-											"mtp_contract": {"checked": False, "reason": "deepseek4_mtp_support sidecar; mtp_sidecar_contract applies"},
-										}
-										if is_mtp_sidecar(r.metadata)
-										else (
-											{}
-											if contract_summary is None
-											else {"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary)}
-										)
-									)
-								),
-								**(
 									{}
 									if contract_summary is None
 									else {
+										"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
+										"mtp_trust": compute_mtp_trust(bool(r.mtp_present), compute_mtp_contract(set(r.mtp_keys_all), contract_summary), contract_summary),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 									}
@@ -853,14 +1022,6 @@ def main() -> int:
 					print(f"mtp_contract_missing_required: {k}")
 				for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 					print(f"mtp_contract_forbidden_present: {k}")
-			mtp_sidecar_contract = combined.get("mtp_sidecar_contract", None)
-			if isinstance(mtp_sidecar_contract, dict) and mtp_sidecar_contract.get("checked") is True:
-				print(f"mtp_sidecar_contract_complete: {str(bool(mtp_sidecar_contract.get('complete', False))).lower()}")
-				print(f"mtp_sidecar_contract_missing_count: {int(mtp_sidecar_contract.get('missing_count', 0))}")
-				for k in list(mtp_sidecar_contract.get("missing_sample", []))[:10]:
-					print(f"mtp_sidecar_contract_missing: {k}")
-				for k in list(mtp_sidecar_contract.get("extra_sample", []))[:10]:
-					print(f"mtp_sidecar_contract_extra: {k}")
 			trunk_contract = combined.get("trunk_contract", None)
 			if isinstance(trunk_contract, dict) and trunk_contract.get("checked") is True:
 				print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
@@ -916,24 +1077,14 @@ def main() -> int:
 			for k in res.first_mtp_keys:
 				print(f"mtp_key: {k}")
 			if contract_summary is not None:
-				if is_mtp_sidecar(res.metadata):
-					mtp_sidecar_contract = compute_mtp_sidecar_contract(set(res.mtp_keys_all))
-					if mtp_sidecar_contract.get("checked") is True:
-						print(f"mtp_sidecar_contract_complete: {str(bool(mtp_sidecar_contract.get('complete', False))).lower()}")
-						print(f"mtp_sidecar_contract_missing_count: {int(mtp_sidecar_contract.get('missing_count', 0))}")
-						for k in list(mtp_sidecar_contract.get("missing_sample", []))[:10]:
-							print(f"mtp_sidecar_contract_missing: {k}")
-						for k in list(mtp_sidecar_contract.get("extra_sample", []))[:10]:
-							print(f"mtp_sidecar_contract_extra: {k}")
-					else:
-						mtp_contract = compute_mtp_contract(set(res.mtp_keys_all), contract_summary)
-						if mtp_contract.get("checked") is True:
-							print(f"mtp_contract_complete: {str(bool(mtp_contract.get('complete', False))).lower()}")
-							print(f"mtp_contract_missing_required_count: {int(mtp_contract.get('missing_required_count', 0))}")
-							for k in list(mtp_contract.get("missing_required_sample", []))[:10]:
-								print(f"mtp_contract_missing_required: {k}")
-							for k in list(mtp_contract.get("forbidden_present", []))[:10]:
-								print(f"mtp_contract_forbidden_present: {k}")
+				mtp_contract = compute_mtp_contract(set(res.mtp_keys_all), contract_summary)
+				if mtp_contract.get("checked") is True:
+					print(f"mtp_contract_complete: {str(bool(mtp_contract.get('complete', False))).lower()}")
+					print(f"mtp_contract_missing_required_count: {int(mtp_contract.get('missing_required_count', 0))}")
+					for k in list(mtp_contract.get("missing_required_sample", []))[:10]:
+						print(f"mtp_contract_missing_required: {k}")
+					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
+						print(f"mtp_contract_forbidden_present: {k}")
 				trunk_contract = compute_trunk_contract(set(res.weight_keys_all), contract_summary)
 				if trunk_contract.get("checked") is True:
 					print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
