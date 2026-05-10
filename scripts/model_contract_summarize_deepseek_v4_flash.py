@@ -26,6 +26,12 @@ def main() -> int:
     mtp_ratios = compress_ratios[n_layers:]
 
     c = Counter(main_ratios)
+    pattern_ok = (
+        (len(main_ratios) >= 2)
+        and (main_ratios[0] == 0)
+        and (main_ratios[1] == 0)
+        and all((main_ratios[i] == (4 if (i % 2) == 0 else 128)) for i in range(2, len(main_ratios)))
+    )
 
     weight_map = idx.get("weight_map", {})
     keys = list(weight_map.keys())
@@ -67,6 +73,8 @@ def main() -> int:
     print(f"- compress_ratios_len: {len(compress_ratios)} (main={n_layers} mtp={len(mtp_ratios)})")
     print(f"- main_ratio_counts: {dict(c)}")
     print(f"- mtp_ratios: {mtp_ratios}")
+    if pattern_ok:
+        print("- main_pattern: layers 0..1 sliding (0); layers 2..end alternate CSA (4) on even IDs and HCA (128) on odd IDs")
     print("")
     print("Tokenizer")
     print(f"- tokenizer_class: {tok_cfg.get('tokenizer_class')}")
