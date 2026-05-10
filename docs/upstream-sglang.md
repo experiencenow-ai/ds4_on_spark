@@ -3,8 +3,8 @@
 SGLang is a high-performance serving framework that includes explicit DeepSeek-V4 guidance and runtime hooks. We track it as a **Spark-relevant serving-runtime reference** alongside vLLM/Transformers.
 
 - Repo: `https://github.com/sgl-project/sglang`
-- Ref: `refs/heads/main`
-- Commit: `335dbd60b49241f26ae2ca08b3307df1c702af58`
+- Ref: `refs/tags/v0.5.11`
+- Commit: `612785ffdcaf35552f1ed433a981d596ca9fe900`
 - License: Apache-2.0 (see upstream `LICENSE`)
 
 ## Why we track it
