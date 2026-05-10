@@ -19,6 +19,10 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` validates that CMake (>= 3.18) can configure/build a minimal CUDA project with `CMAKE_CUDA_ARCHITECTURES="121"` and run it on GB10 (`__CUDA_ARCH__=1210`) without shipping the repo
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o` is a compile-only toolchain gate for build systems that use `nvcc --gpu-architecture=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
+- CUDA 13 “variant targets”:
+  - Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` / `sm_121f`.
+  - Best-effort compile-only and build+run for `-arch=sm_121a` and `-arch=sm_121f` both succeed on Spark0 (treat as “optional compatibility”; do not rely on `nvcc --list-gpu-code` advertising them).
+  - Spark0’s toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 - For a small “kernel plumbing” bring-up gate set (no cuBLASLt), run `./scripts/cuda_probe_kernel_tiny_spark0.sh` from the Mac; it validates C++20 + template flags, inline PTX (`ldmatrix`), pipeline/bulk async copy plumbing, TMA tensor-map encode + `cp.async.bulk.tensor`, and NVRTC/nvJitLink JIT paths for `sm_121`.
 - `./scripts/cuda_probe_capability_spark0.sh` includes the kernel-plumbing gates by default; set `WITH_KERNEL_TINY=0` to skip them for a faster sweep.
 - CUDA 13 developer tooling (`cuobjdump --dump-sass`, `nvdisasm`) can decode `sm_121` binaries on Spark0 (validated via `scripts/cuda_probe_disasm_spark0.sh`: 2026-05-09)
