@@ -8,7 +8,7 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Ref: `refs/heads/main`
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
-  - Note (as of 2026-05-09): we treat this HF repo as the canonical public “official configs” source; we do not rely on a separate DeepSeek-V4-Flash GitHub code repo.
+  - Note (as of 2026-05-10): we treat this HF repo as the canonical public “official configs” source; a GitHub search under `deepseek-ai/*` did not show a dedicated DeepSeek-V4-Flash code repo.
 
 Related checkpoint (same “official configs” approach):
 
