@@ -471,7 +471,9 @@
         "canonical_path": "quantization.inference_config.expert_dtype",
         "concept": "expert_dtype",
         "inference_key": "expert_dtype",
-        "transformers_key": "expert_dtype"
+        "note": "HF refs/pr/14 removes config.json expert_dtype; treat inference/config.json expert_dtype as canonical.",
+        "transformers_key": "expert_dtype",
+        "transformers_key_optional": true
       },
       {
         "canonical_path": "quantization.inference_config.scale_fmt",
