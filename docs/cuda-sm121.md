@@ -23,7 +23,7 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 `scripts/cuda_probe_compile_only_tiny_spark0.sh` always attempts best-effort compile-only builds for `sm_121a` and `sm_121f`, and reports whether each target was advertised by `nvcc --list-gpu-code` (`advertised=yes/no/unknown`) plus `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure).
 
-Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed.
+Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, and best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both.
 
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
