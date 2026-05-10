@@ -48,7 +48,9 @@ print_ref()
 	if [[ "${url}" == https://huggingface.co/* ]]; then
 		local repo sha
 		repo="${url#https://huggingface.co/}"
-		sha="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${repo}" | awk '/^sha:/ {print $2; exit}')"
+		local report
+		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${repo}")"
+		sha="$(awk '/^sha:/ {print $2}' <<<"${report}")"
 		if [ -z "${sha}" ] || [ "${sha}" = "UNKNOWN" ]; then
 			printf "ref: (hf api) UNKNOWN\n\n"
 			return 0
@@ -126,7 +128,9 @@ print_pinned()
 			printf "got:       UNSUPPORTED_HF_REF\n\n"
 			return 0
 		fi
-		got="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}" | awk '/^sha:/ {print $2; exit}')"
+		local report
+		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
+		got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
 		printf "== %s\n" "${name}"
 		printf "upstream:  %s\n" "${upstream}"
 		printf "ref:       %s\n" "${ref}"

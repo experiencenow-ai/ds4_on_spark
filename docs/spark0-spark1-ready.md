@@ -25,6 +25,8 @@ REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 Omit args to use the same default targets.
 The discovery output prints `targets:` so the exact target list is visible in committed excerpts.
 
+If `spark1.local` does not resolve from the Mac yet, keep the probe flow the same but pass whatever Spark1 identifier you do have (a different mDNS name, a wired IPv4, or an IPv6 link-local) and let the scripts record the exact `resolved targets:` and reachability state in the redacted output.
+
 ## Spark Probe (Redacted)
 
 Always use `REDACT=1` when saving output for commit.
@@ -71,7 +73,7 @@ Notes:
 - The CUDA runtime probe prints both the raw `cuda*GetVersion()` integers and a `major.minor` parse to avoid ambiguity (e.g. `13000 (13.0)`).
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
-- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.git-codex/` (used by some automation runners) and `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
+- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.git-codex/` (bare gitdir) or `.git-codex/.git` (non-bare `git init .git-codex` layout), plus `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
 
 ## What To Record In `docs/spark0-*.md`
 
@@ -79,9 +81,11 @@ Notes:
 - `nvidia-smi` version banner (`nvidia-smi --version` / `nvidia-smi -V`) for NVML/driver/CUDA summary.
 - `nvidia-smi` inventory line(s) (includes GPU `index` + `pci.bus_id`).
 - `nvidia-smi` PCIe link state (gen/width max/current) and power/clocks/utilization summary (when supported); capture both the initial and `post-load` link snapshots when diagnosing lane/speed issues.
+- When available, also capture the optional `nvidia-smi --query-gpu=pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,...` output printed by the probe; these fields tend to line up with `nvidia-smi -q` `GPU Link Info` (`Device Max`/`Host Max`) and help interpret surprising `pcie.link.gen.max` values.
 - PCIe link state cross-check via sysfs (`/sys/bus/pci/devices/*/{current,max}_link_{speed,width}` + PCI IDs via `{vendor,device,subsystem_*}`), since `lspci -vv` capability fields can be restricted without root on some hosts; capture both the initial and `post-load` sysfs snapshots when present.
 - CUDA compute capability (from `nvidia-smi` query and the `nvcc` runtime probe; plus `deviceQuery` when available).
 - `nvcc` path and version (toolkit version).
+- `/usr/local/cuda/version.json` (when present) to capture toolkit component versions.
 - `nvcc --list-gpu-arch` output (capped) to confirm supported SM targets (useful when `NVCC_ARCH=...` overrides fail).
 - `cuda.h` macros (`CUDA_VERSION` / `CUDART_VERSION`) to cross-check toolkit headers.
 - Any `warning:` line emitted by the probe when `nvcc release` and `cuda.h` disagree.

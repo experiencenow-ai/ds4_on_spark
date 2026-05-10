@@ -208,6 +208,12 @@ The output includes:
 - `baseline`: `summary` + full `metrics`
 - `variants.<label>`: `summary`, `delta_vs_baseline`, and full `metrics`
 
+To dump per-token results for the baseline and each variant (useful when debugging real trace replay), include `--dump-sim-jsonl` with a `{label}` placeholder:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --summary-json --dump-sim-jsonl '/tmp/sim_{label}.jsonl' --compare 'reserve:{"expert_queue_reserve_interactive":16}' --compare 'no_reserve:{"expert_queue_reserve_interactive":0}'
+```
+
 Batching-style service model example:
 
 ```bash
@@ -408,6 +414,12 @@ Trace sanity-check (contract summary only):
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
+```
+
+Per-token simulation dump (debug trace-vs-model mismatches by inspecting per-step latency, drops, stage skips, and MTP accept lengths):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --num-experts 0 --dump-sim-jsonl /tmp/sim_tokens.jsonl --summary-json
 ```
 
 Tip: in replay mode you can set `--num-experts 0` to infer `num_experts` from the trace (or `meta.num_experts`), and `--mtp-draft-len -1` to infer `mtp_draft_len` from `meta.mtp_draft_len` or consistent `accepted_mtp+rejected_mtp` fields.

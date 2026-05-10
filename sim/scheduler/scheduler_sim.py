@@ -187,6 +187,11 @@ class TokenState:
     trace_decode_ms: Optional[float] = None
     trace_kv_tokens: Optional[int] = None
     trace_expert_batch_size: Optional[int] = None
+    admitted_tasks_total: int = 0
+    dropped_tasks_backpressure: int = 0
+    skipped_stages_backpressure: int = 0
+    skipped_stages_backpressure_verify: int = 0
+    skipped_stages_backpressure_draft: int = 0
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
@@ -1727,6 +1732,62 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
             f.close()
 
 
+def write_sim_jsonl(path: str, trace: Sequence[TokenRoute], tokens: Sequence[TokenState], cfg: SimConfig, meta: Optional[Dict[str, object]] = None) -> None:
+    if path.strip() == "":
+        raise ValueError("path must be non-empty")
+    if len(trace) != len(tokens):
+        raise ValueError("trace/tokens length mismatch")
+
+    meta_out: Dict[str, object] = {"sim_token_dump": True, "num_tokens": int(len(trace)), "sim_cfg": dataclasses.asdict(cfg)}
+    if meta is not None and len(meta) != 0:
+        meta_out["trace_meta"] = dict(meta)
+
+    f = sys.stdout if path == "-" else open(path, "w", encoding="utf-8")
+    try:
+        f.write(json.dumps({"type": "meta", "meta": meta_out}, sort_keys=True))
+        f.write("\n")
+        for i, (r, ts) in enumerate(zip(trace, tokens)):
+            obj: Dict[str, object] = {
+                "type": "sim_token",
+                "i": int(i),
+                "t_ms": float(ts.submit_ms),
+                "cls": str(ts.cls.value),
+                "chosen_k": int(ts.chosen_k),
+                "done_ms": None if ts.done_ms is None else float(ts.done_ms),
+                "lat_ms": None if ts.done_ms is None else float(float(ts.done_ms) - float(ts.submit_ms)),
+                "admitted_any": bool(ts.admitted_any),
+                "admitted_tasks_total": int(ts.admitted_tasks_total),
+                "dropped_tasks_backpressure": int(ts.dropped_tasks_backpressure),
+                "skipped_stages_backpressure": int(ts.skipped_stages_backpressure),
+                "skipped_stages_backpressure_verify": int(ts.skipped_stages_backpressure_verify),
+                "skipped_stages_backpressure_draft": int(ts.skipped_stages_backpressure_draft),
+                "effective_k_layer0": int(ts.admitted_verify_layer0),
+                "effective_k_total": int(ts.admitted_verify_total),
+                "desired_verify_layer0": int(ts.desired_verify_layer0),
+                "partial_any_layer": bool(ts.partial_any_layer),
+                "output_len": int(ts.output_len),
+                "mtp_accept_len": int(ts.mtp_accept_len),
+                "mtp_draft_attempt_len": int(ts.mtp_draft_attempt_len),
+                "trace_decode_ms": ts.trace_decode_ms,
+                "trace_kv_tokens": ts.trace_kv_tokens,
+                "trace_expert_batch_size": ts.trace_expert_batch_size,
+                "stage_total": int(ts.stage_total),
+            }
+            if r.token_index is not None:
+                obj["token_index"] = int(r.token_index)
+            if r.decode_ms is not None and ts.trace_decode_ms is None:
+                obj["trace_decode_ms"] = float(r.decode_ms)
+            if r.kv_tokens is not None and ts.trace_kv_tokens is None:
+                obj["trace_kv_tokens"] = int(r.kv_tokens)
+            if r.expert_batch_size is not None and ts.trace_expert_batch_size is None:
+                obj["trace_expert_batch_size"] = int(r.expert_batch_size)
+            f.write(json.dumps(obj, sort_keys=True))
+            f.write("\n")
+    finally:
+        if path != "-":
+            f.close()
+
+
 def _derive_mtp_accept_len(route: TokenRoute, mtp_draft_len: int) -> Optional[int]:
     if route.mtp_accept_len is not None:
         return(int(route.mtp_accept_len))
@@ -2368,7 +2429,7 @@ def _mtp_attempted_draft_len(draft_len: int, accept_len: int) -> int:
     return(min(draft_len, accept_len))
 
 
-def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
+def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out: Optional[List[TokenState]] = None) -> SimMetrics:
     if cfg.num_experts <= 0:
         raise ValueError("num_experts must be > 0")
     if cfg.expert_parallelism <= 0:
@@ -2717,6 +2778,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     metrics.dropped_tasks_backpressure_interactive += 1
                 else:
                     metrics.dropped_tasks_backpressure_batch += 1
+                tokens[tid].dropped_tasks_backpressure += 1
                 continue
             task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase)
             if route.cls == LatencyClass.INTERACTIVE:
@@ -2726,6 +2788,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                 eq.lo.append(task)
                 eq.pending_work_lo += float(task.cost_scale)
             tokens[tid].remaining += 1
+            tokens[tid].admitted_tasks_total += 1
             metrics.admitted_tasks += 1
             if route.cls == LatencyClass.INTERACTIVE:
                 metrics.admitted_tasks_interactive += 1
@@ -2801,6 +2864,11 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
                     metrics.skipped_stages_backpressure_verify += 1
                 else:
                     metrics.skipped_stages_backpressure_draft += 1
+                ts.skipped_stages_backpressure += 1
+                if stage.is_verify:
+                    ts.skipped_stages_backpressure_verify += 1
+                else:
+                    ts.skipped_stages_backpressure_draft += 1
             if admitted != 0:
                 _token_first_admit(tid)
             if stage.is_verify:
@@ -3085,6 +3153,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute]) -> SimMetrics:
         metrics.mean_pending_work_per_expert[e] = (pending_work_area[e] / makespan_ms)
         metrics.mean_utilization_per_expert[e] = (inflight_area[e] / (makespan_ms * float(cfg.expert_parallelism)))
         metrics.saturated_time_frac_per_expert[e] = (saturated_area[e] / makespan_ms)
+    if token_states_out is not None:
+        token_states_out.extend([tokens[i] for i in range(len(trace))])
     return(metrics)
 
 
@@ -3240,8 +3310,23 @@ def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> S
 
 
 def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute], variants: Sequence[Tuple[str, Dict[str, object]]]) -> Dict[str, object]:
+    return(compare_simulation_variants_with_dumps(base_cfg, trace, variants, dump_sim_jsonl_tmpl="", trace_meta=None))
+
+
+def compare_simulation_variants_with_dumps(
+    base_cfg: SimConfig,
+    trace: Sequence[TokenRoute],
+    variants: Sequence[Tuple[str, Dict[str, object]]],
+    dump_sim_jsonl_tmpl: str = "",
+    trace_meta: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
     out: Dict[str, object] = {}
-    base_metrics = run_simulation(base_cfg, trace)
+    dump_tmpl = dump_sim_jsonl_tmpl.strip()
+    dump_enabled = (dump_tmpl != "")
+    base_token_states: List[TokenState] = []
+    base_metrics = run_simulation(base_cfg, trace, token_states_out=base_token_states if dump_enabled else None)
+    if dump_enabled:
+        write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), trace, base_token_states, base_cfg, meta=trace_meta)
     base_json = base_metrics.to_jsonable()
     base_summary = compare_summary_jsonable(base_metrics)
     out["baseline"] = {"overrides": {}, "summary": base_summary, "metrics": base_json}
@@ -3249,7 +3334,10 @@ def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute]
     variants_out: Dict[str, object] = {}
     for label, overrides in variants:
         cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
-        m = run_simulation(cfg, trace)
+        token_states: List[TokenState] = []
+        m = run_simulation(cfg, trace, token_states_out=token_states if dump_enabled else None)
+        if dump_enabled:
+            write_sim_jsonl(dump_tmpl.replace("{label}", label), trace, token_states, cfg, meta=trace_meta)
         summary = compare_summary_jsonable(m)
         delta: Dict[str, float] = {}
         for k, v in summary.items():
@@ -3266,15 +3354,33 @@ def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute]
 
 
 def compare_simulation_summaries(base_cfg: SimConfig, trace: Sequence[TokenRoute], variants: Sequence[Tuple[str, Dict[str, object]]]) -> Dict[str, object]:
+    return(compare_simulation_summaries_with_dumps(base_cfg, trace, variants, dump_sim_jsonl_tmpl="", trace_meta=None))
+
+
+def compare_simulation_summaries_with_dumps(
+    base_cfg: SimConfig,
+    trace: Sequence[TokenRoute],
+    variants: Sequence[Tuple[str, Dict[str, object]]],
+    dump_sim_jsonl_tmpl: str = "",
+    trace_meta: Optional[Dict[str, object]] = None,
+) -> Dict[str, object]:
     out: Dict[str, object] = {}
-    base_metrics = run_simulation(base_cfg, trace)
+    dump_tmpl = dump_sim_jsonl_tmpl.strip()
+    dump_enabled = (dump_tmpl != "")
+    base_token_states: List[TokenState] = []
+    base_metrics = run_simulation(base_cfg, trace, token_states_out=base_token_states if dump_enabled else None)
+    if dump_enabled:
+        write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), trace, base_token_states, base_cfg, meta=trace_meta)
     base_summary = compare_summary_jsonable(base_metrics)
     out["baseline"] = {"overrides": {}, "summary": base_summary}
 
     variants_out: Dict[str, object] = {}
     for label, overrides in variants:
         cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
-        m = run_simulation(cfg, trace)
+        token_states: List[TokenState] = []
+        m = run_simulation(cfg, trace, token_states_out=token_states if dump_enabled else None)
+        if dump_enabled:
+            write_sim_jsonl(dump_tmpl.replace("{label}", label), trace, token_states, cfg, meta=trace_meta)
         summary = compare_summary_jsonable(m)
         delta: Dict[str, float] = {}
         for k, v in summary.items():
@@ -3396,6 +3502,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len) and exit. Requires --trace-jsonl/--trace-csv. Use '-' for stdout.")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
+    p.add_argument(
+        "--dump-sim-jsonl",
+        type=str,
+        default="",
+        help="Write per-token simulation results to JSONL after running (meta header + one record per trace step). Use '-' for stdout. With --compare, include '{label}' in the path to emit one dump per variant (plus baseline).",
+    )
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
     p.add_argument("--num-experts", type=int, default=64, help="Number of experts. Replay: use 0 to infer from the trace/meta.")
     p.add_argument("--num-tokens", type=int, default=20000)
@@ -3498,6 +3610,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.canonicalize_trace_jsonl.strip() != "" and args.trace_jsonl == "" and args.trace_csv == "":
         raise SystemExit("--canonicalize-trace-jsonl requires --trace-jsonl or --trace-csv")
+
+    dump_sim_jsonl = args.dump_sim_jsonl.strip()
+    dump_sim_enabled = (dump_sim_jsonl != "")
+
+    if dump_sim_enabled and args.trace_summary:
+        raise SystemExit("--dump-sim-jsonl is not compatible with --trace-summary (no simulation run)")
+    if dump_sim_enabled and args.canonicalize_trace_jsonl.strip() != "":
+        raise SystemExit("--dump-sim-jsonl is not compatible with --canonicalize-trace-jsonl (no simulation run)")
+    if dump_sim_enabled and len(args.compare) != 0 and "{label}" not in dump_sim_jsonl:
+        raise SystemExit("--dump-sim-jsonl with --compare requires a '{label}' placeholder in the path")
 
     trace_meta: Dict[str, object] = {}
     if args.trace_meta_json.strip() != "":
@@ -3719,14 +3841,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if not isinstance(overrides, dict):
                 raise SystemExit(f"--compare JSON for '{label}' must be an object/dict")
             variants.append((label, overrides))
-        if args.summary_json:
-            out = compare_simulation_summaries(sim_cfg, trace, variants)
-        else:
-            out = compare_simulation_variants(sim_cfg, trace, variants)
+        try:
+            if args.summary_json:
+                if dump_sim_enabled:
+                    out = compare_simulation_summaries_with_dumps(sim_cfg, trace, variants, dump_sim_jsonl_tmpl=dump_sim_jsonl, trace_meta=trace_meta)
+                else:
+                    out = compare_simulation_summaries(sim_cfg, trace, variants)
+            else:
+                if dump_sim_enabled:
+                    out = compare_simulation_variants_with_dumps(sim_cfg, trace, variants, dump_sim_jsonl_tmpl=dump_sim_jsonl, trace_meta=trace_meta)
+                else:
+                    out = compare_simulation_variants(sim_cfg, trace, variants)
+        except (ValueError, OSError) as e:
+            raise SystemExit(str(e))
         if len(trace_meta) != 0:
             out["trace_meta"] = trace_meta
     else:
-        metrics = run_simulation(sim_cfg, trace)
+        token_states: List[TokenState] = []
+        metrics = run_simulation(sim_cfg, trace, token_states_out=token_states if dump_sim_enabled else None)
+        if dump_sim_enabled:
+            try:
+                dump_path = dump_sim_jsonl.replace("{label}", "baseline") if "{label}" in dump_sim_jsonl else dump_sim_jsonl
+                write_sim_jsonl(dump_path, trace, token_states, sim_cfg, meta=trace_meta)
+            except (ValueError, OSError) as e:
+                raise SystemExit(str(e))
         if args.summary_json:
             out = {"summary": compare_summary_jsonable(metrics)}
             if len(trace_meta) != 0:

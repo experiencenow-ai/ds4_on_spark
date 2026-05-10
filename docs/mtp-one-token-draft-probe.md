@@ -33,6 +33,8 @@ Emit a single JSON object (stdout or file) containing at least:
 
 Keep this probe *fast*: it should stop after the first verify step and draft computation.
 
+Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`.
+
 ## Validation
 
 After capturing the JSON, validate its shape (and optionally cross-check `mtp_params` against the sidecar’s derived params):

@@ -112,6 +112,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
 			git_dir="$git_worktree/.git-codex"
 		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex/.git" ] && [ -r "$git_worktree/.git-codex/.git/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex/.git"
+		fi
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
 			git_dir="$git_worktree/.gitshim/repo/.git"
 		fi
@@ -303,34 +306,87 @@ if [ "$have_smi" = "1" ]; then
 else
 	echo "nvidia-smi not found"
 fi
-echo
-pcie_link_query()
-{
-	pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
-	if [ "$pcie_q" = "" ]; then
-		pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.link.gen.max,pci.link.gen.current,pci.link.width.max,pci.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
-	fi
-	printf "%s" "$pcie_q"
-	return 0
-}
+	echo
+	pcie_link_query()
+	{
+		pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
+		if [ "$pcie_q" = "" ]; then
+			pcie_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.link.gen.max,pci.link.gen.current,pci.link.width.max,pci.link.width.current --format=csv,noheader,nounits 2>/dev/null || true)"
+		fi
+		printf "%s" "$pcie_q"
+		return 0
+	}
 
-emit_pcie_link()
-{
-	label="$1"
-	echo "== nvidia-smi pcie link (max/current${label}) =="
+	smi_q_pcie_warn()
+	{
+		bus="$1"
+		q_gen_max="$2"
+		q_gen_cur="$3"
+		q_width_max="$4"
+		q_width_cur="$5"
+		[ "$bus" = "" ] && return 0
+		[ "$smi_q" = "" ] && return 0
+		block="$(printf "%s\n" "$smi_q" | awk -v bus="$bus" "BEGIN{inblk=0;count=0} \$0 ~ /^[[:space:]]*Bus Id[[:space:]]*:[[:space:]]*/ { if ( \$0 ~ bus ) { inblk=1; next } if ( inblk==1 ) { exit } } inblk==1 { print; count++; if ( count >= 140 ) exit }")"
+		[ "$block" = "" ] && return 0
+		dev_max_gen="$(printf "%s\n" "$block" | sed -nE "s/^[[:space:]]*Device Max[[:space:]]*:[[:space:]]*([0-9]+).*/\\1/p" | head -n 1 || true)"
+		host_max_gen="$(printf "%s\n" "$block" | sed -nE "s/^[[:space:]]*Host Max[[:space:]]*:[[:space:]]*([0-9]+).*/\\1/p" | head -n 1 || true)"
+		dev_cur_gen="$(printf "%s\n" "$block" | sed -nE "s/^[[:space:]]*Device Current[[:space:]]*:[[:space:]]*([0-9]+).*/\\1/p" | head -n 1 || true)"
+		q_max_gen="$(printf "%s" "$q_gen_max" | sed -E "s/[^0-9]//g")"
+		q_cur_gen="$(printf "%s" "$q_gen_cur" | sed -E "s/[^0-9]//g")"
+		if [ "$q_max_gen" != "" ] && [ "$dev_max_gen" != "" ] && [ "$host_max_gen" != "" ]; then
+			if [ "$q_max_gen" -lt "$dev_max_gen" ] && [ "$q_max_gen" -lt "$host_max_gen" ]; then
+				echo "warning: nvidia-smi query pcie.gen.max=$q_max_gen but -q shows device_max=$dev_max_gen host_max=$host_max_gen (bus $bus)"
+			fi
+		fi
+		if [ "$q_cur_gen" != "" ] && [ "$dev_cur_gen" != "" ]; then
+			if [ "$q_cur_gen" -ne "$dev_cur_gen" ]; then
+				echo "note: nvidia-smi query pcie.gen.current=$q_cur_gen but -q device_current=$dev_cur_gen (bus $bus)"
+			fi
+		fi
+		q_max_width="$(printf "%s" "$q_width_max" | sed -E "s/[^0-9]//g")"
+		q_cur_width="$(printf "%s" "$q_width_cur" | sed -E "s/[^0-9]//g")"
+		dev_max_width="$(printf "%s\n" "$block" | awk "BEGIN{inw=0} \$0 ~ /^[[:space:]]*Link Width[[:space:]]*$/ {inw=1;next} inw==1 && \$0 ~ /^[[:space:]]*Max[[:space:]]*:/ {v=\$0; sub(/.*:/,\"\",v); gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",v); sub(/x.*/,\"\",v); gsub(/[^0-9]/,\"\",v); if(v!=\"\"){print v; exit}}")"
+		dev_cur_width="$(printf "%s\n" "$block" | awk "BEGIN{inw=0} \$0 ~ /^[[:space:]]*Link Width[[:space:]]*$/ {inw=1;next} inw==1 && \$0 ~ /^[[:space:]]*Current[[:space:]]*:/ {v=\$0; sub(/.*:/,\"\",v); gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",v); sub(/x.*/,\"\",v); gsub(/[^0-9]/,\"\",v); if(v!=\"\"){print v; exit}}")"
+		if [ "$q_max_width" != "" ] && [ "$dev_max_width" != "" ]; then
+			if [ "$q_max_width" -ne "$dev_max_width" ]; then
+				echo "note: nvidia-smi query pcie.width.max=$q_max_width but -q width_max=$dev_max_width (bus $bus)"
+			fi
+		fi
+		if [ "$q_cur_width" != "" ] && [ "$dev_cur_width" != "" ]; then
+			if [ "$q_cur_width" -ne "$dev_cur_width" ]; then
+				echo "note: nvidia-smi query pcie.width.current=$q_cur_width but -q width_current=$dev_cur_width (bus $bus)"
+			fi
+		fi
+		return 0
+	}
+
+	emit_pcie_link()
+	{
+		label="$1"
+		echo "== nvidia-smi pcie link (max/current${label}) =="
 	if command -v nvidia-smi >/dev/null 2>&1; then
 		pcie_q="$(pcie_link_query)"
 		if [ "$pcie_q" != "" ]; then
 			if printf "%s" "$pcie_q" | grep -qi "not a valid field"; then
 				echo "pcie link query not supported"
 				printf "%s\n" "$pcie_q" | head -n 2
+				else
+					echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
+					echo "$pcie_q"
+					printf "%s\n" "$pcie_q" | awk -F"," "{ b=\$2; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", b); gmax=\$3; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", gmax); gcur=\$4; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", gcur); wmax=\$5; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", wmax); wcur=\$6; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", wcur); printf \"%s\\t%s\\t%s\\t%s\\t%s\\n\", b,gmax,gcur,wmax,wcur; }" | while IFS="$(printf \"\\t\")" read -r bus gmax gcur wmax wcur; do
+						smi_q_pcie_warn "$bus" "$gmax" "$gcur" "$wmax" "$wcur"
+					done
+					extra_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max --format=csv,noheader,nounits 2>/dev/null || true)"
+					if [ "$extra_q" != "" ] && ! printf "%s" "$extra_q" | grep -qi "not a valid field"; then
+						echo
+						echo "== nvidia-smi pcie link (gpu/host max, optional${label}) =="
+						echo "columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max"
+						echo "$extra_q"
+					fi
+				fi
 			else
-				echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
-				echo "$pcie_q"
+				echo "pcie link query not supported"
 			fi
-		else
-			echo "pcie link query not supported"
-		fi
 	else
 		echo "nvidia-smi not found"
 	fi
@@ -507,6 +563,11 @@ fi
 [ -e /usr/local/cuda ] && ls -ld /usr/local/cuda || true
 command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null || true
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
+if [ -r /usr/local/cuda/version.json ]; then
+	echo
+	echo "== cuda version.json (capped) =="
+	cat /usr/local/cuda/version.json 2>/dev/null | head -n 80 || true
+fi
 echo
 echo "== cuda headers (cuda.h) =="
 cuda_h="/usr/local/cuda/include/cuda.h"

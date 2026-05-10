@@ -33,6 +33,7 @@ check:
 	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=OFF DS4_WERROR=ON
 
 check-cuda:
+	@if [ "$(UNAME_S)" = "Darwin" ]; then echo "check-cuda: unsupported on macOS (run on Linux with CUDA toolkit)"; exit 2; fi
 	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=ON DS4_WERROR=ON
 
 ci: check
