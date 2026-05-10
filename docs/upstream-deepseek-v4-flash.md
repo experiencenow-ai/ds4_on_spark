@@ -100,6 +100,16 @@ Flash vs Flash-Base (important runtime semantic):
   - Flash-Base: `expert_dtype="fp8"` (FP8 block experts + float32 FP8 scales)
 - Treat “Flash vs Base” as more than just weights: it changes which expert kernels and scale dtypes are correct.
 
+## Config field stability (watch)
+
+The official HF repos are actively edited. As of 2026-05-10, there is a draft HF PR (`refs/pr/14`) that removes `expert_dtype` from `config.json`. vLLM (and our docs) currently treat `expert_dtype` as the canonical Flash vs Flash-Base switch, so pin updates must re-validate this assumption.
+
+Re-check quickly (metadata-only fetch; no weights):
+
+```bash
+./scripts/upstream_feature_probe.sh --fetch
+```
+
 ## Transformers references
 
 Transformers publishes an architecture + integration reference for `deepseek_v4`:
