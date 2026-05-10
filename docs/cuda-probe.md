@@ -59,6 +59,7 @@ This also performs best-effort toolchain-only checks when supported:
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt compile-only `-gencode` builds for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` (multi-target build plumbing gate).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
+- If `cuobjdump` is available and `compute_121` is advertised, emit `-fatbin` artifacts with explicit `-gencode` (`code=sm_121` only, `code=compute_121` only, and `sm_121+compute_121`) and report whether embedded PTX is present (expected: SM-only missing; PTX-only present; SM+PTX present).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
 
 ## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)

@@ -7,7 +7,7 @@ Spark0 reports compute capability `12.1`, which corresponds to `sm_121` in `nvcc
 For reproducible builds targeting GB10:
 
 - Prefer `-arch=sm_121`, or
-- Use explicit `-gencode arch=compute_121,code=sm_121` (and optionally add PTX).
+- Use explicit `-gencode` (for example: `-gencode arch=compute_121,code=sm_121` for SASS, and add `-gencode arch=compute_121,code=compute_121` when you want embedded PTX for JIT portability).
 - The probe `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is built via explicit `-gencode` and includes both `sm_120` + `sm_121` SASS plus `compute_121` PTX as a “portable fatbin” reference.
 
 For convenience on single-GPU bring-up:
