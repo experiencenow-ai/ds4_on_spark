@@ -110,6 +110,12 @@ Refreshed again (14:11Z, kernel module metadata snapshot):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1411Z_loop_access.txt
 ```
 
+Refreshed again (14:47Z refresh, runtime max cc line):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1446Z_loop_runtime_maxcc.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)

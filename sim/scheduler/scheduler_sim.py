@@ -1118,6 +1118,7 @@ def load_trace_jsonl(
     non_route_policy: str = "error",
     input_format: str = "strict",
     route_type: str = "",
+    default_cls: str = "",
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
@@ -1170,7 +1171,7 @@ def load_trace_jsonl(
             if input_format == "runtime":
                 from sim.scheduler import trace_extract
 
-                rec = trace_extract.extract_route_record(obj, route_type=route_type)
+                rec = trace_extract.extract_route_record(obj, route_type=route_type, default_cls=default_cls)
                 if rec is None:
                     if non_route_policy == "skip":
                         continue
@@ -1192,6 +1193,8 @@ def load_trace_jsonl(
                     raise ValueError(f"{display_path}:{lineno}: t_ms is not valid with time_mode=dt_ms")
                 if "dt_ms" not in obj:
                     raise ValueError(f"{display_path}:{lineno}: missing dt_ms")
+            if "cls" not in obj and default_cls.strip() != "":
+                obj["cls"] = default_cls.strip().lower()
             if "cls" not in obj:
                 if non_route_policy == "skip" and "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
                     continue
@@ -2866,12 +2869,6 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         if not ts.admitted_any:
             ts.mtp_accounted = True
             return
-        if ts.admitted_verify_layer0 <= 0:
-            metrics.mtp_accept_len_per_step[tid] = 0
-            metrics.mtp_draft_attempt_len_per_step[tid] = 0
-            ts.output_len = 0
-            ts.mtp_accounted = True
-            return
         metrics.mtp_accept_len_per_step[tid] = ts.mtp_accept_len
         metrics.mtp_draft_attempt_len_per_step[tid] = ts.mtp_draft_attempt_len
         metrics.mtp_output_tokens += ts.mtp_accept_len
@@ -3457,8 +3454,23 @@ def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> S
     return(cfg)
 
 
-def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute], variants: Sequence[Tuple[str, Dict[str, object]]]) -> Dict[str, object]:
-    return(compare_simulation_variants_with_dumps(base_cfg, trace, variants, dump_sim_jsonl_tmpl="", trace_meta=None))
+def compare_simulation_variants(
+    base_cfg: SimConfig,
+    trace: Sequence[TokenRoute],
+    variants: Sequence[Tuple[str, Dict[str, object]]],
+    *,
+    arrival_units: str = "steps",
+) -> Dict[str, object]:
+    return(
+        compare_simulation_variants_with_dumps(
+            base_cfg,
+            trace,
+            variants,
+            dump_sim_jsonl_tmpl="",
+            trace_meta=None,
+            arrival_units=arrival_units,
+        )
+    )
 
 
 def compare_simulation_variants_with_dumps(
@@ -3467,14 +3479,17 @@ def compare_simulation_variants_with_dumps(
     variants: Sequence[Tuple[str, Dict[str, object]]],
     dump_sim_jsonl_tmpl: str = "",
     trace_meta: Optional[Dict[str, object]] = None,
+    *,
+    arrival_units: str = "steps",
 ) -> Dict[str, object]:
-    out: Dict[str, object] = {}
+    out: Dict[str, object] = {"arrival_units": str(arrival_units)}
     dump_tmpl = dump_sim_jsonl_tmpl.strip()
     dump_enabled = (dump_tmpl != "")
     base_token_states: List[TokenState] = []
-    base_metrics = run_simulation(base_cfg, trace, token_states_out=base_token_states if dump_enabled else None)
+    base_trace = scale_trace_arrival_units(trace, arrival_units, base_cfg)
+    base_metrics = run_simulation(base_cfg, base_trace, token_states_out=base_token_states if dump_enabled else None)
     if dump_enabled:
-        write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), trace, base_token_states, base_cfg, meta=trace_meta)
+        write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), base_trace, base_token_states, base_cfg, meta=trace_meta)
     base_json = base_metrics.to_jsonable()
     base_summary = compare_summary_jsonable(base_metrics)
     out["baseline"] = {"overrides": {}, "summary": base_summary, "metrics": base_json}
@@ -3483,9 +3498,10 @@ def compare_simulation_variants_with_dumps(
     for label, overrides in variants:
         cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
         token_states: List[TokenState] = []
-        m = run_simulation(cfg, trace, token_states_out=token_states if dump_enabled else None)
+        v_trace = scale_trace_arrival_units(trace, arrival_units, cfg)
+        m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None)
         if dump_enabled:
-            write_sim_jsonl(dump_tmpl.replace("{label}", label), trace, token_states, cfg, meta=trace_meta)
+            write_sim_jsonl(dump_tmpl.replace("{label}", label), v_trace, token_states, cfg, meta=trace_meta)
         summary = compare_summary_jsonable(m)
         delta: Dict[str, float] = {}
         for k, v in summary.items():
@@ -3501,8 +3517,23 @@ def compare_simulation_variants_with_dumps(
     return(out)
 
 
-def compare_simulation_summaries(base_cfg: SimConfig, trace: Sequence[TokenRoute], variants: Sequence[Tuple[str, Dict[str, object]]]) -> Dict[str, object]:
-    return(compare_simulation_summaries_with_dumps(base_cfg, trace, variants, dump_sim_jsonl_tmpl="", trace_meta=None))
+def compare_simulation_summaries(
+    base_cfg: SimConfig,
+    trace: Sequence[TokenRoute],
+    variants: Sequence[Tuple[str, Dict[str, object]]],
+    *,
+    arrival_units: str = "steps",
+) -> Dict[str, object]:
+    return(
+        compare_simulation_summaries_with_dumps(
+            base_cfg,
+            trace,
+            variants,
+            dump_sim_jsonl_tmpl="",
+            trace_meta=None,
+            arrival_units=arrival_units,
+        )
+    )
 
 
 def compare_simulation_summaries_with_dumps(
@@ -3511,14 +3542,17 @@ def compare_simulation_summaries_with_dumps(
     variants: Sequence[Tuple[str, Dict[str, object]]],
     dump_sim_jsonl_tmpl: str = "",
     trace_meta: Optional[Dict[str, object]] = None,
+    *,
+    arrival_units: str = "steps",
 ) -> Dict[str, object]:
-    out: Dict[str, object] = {}
+    out: Dict[str, object] = {"arrival_units": str(arrival_units)}
     dump_tmpl = dump_sim_jsonl_tmpl.strip()
     dump_enabled = (dump_tmpl != "")
     base_token_states: List[TokenState] = []
-    base_metrics = run_simulation(base_cfg, trace, token_states_out=base_token_states if dump_enabled else None)
+    base_trace = scale_trace_arrival_units(trace, arrival_units, base_cfg)
+    base_metrics = run_simulation(base_cfg, base_trace, token_states_out=base_token_states if dump_enabled else None)
     if dump_enabled:
-        write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), trace, base_token_states, base_cfg, meta=trace_meta)
+        write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), base_trace, base_token_states, base_cfg, meta=trace_meta)
     base_summary = compare_summary_jsonable(base_metrics)
     out["baseline"] = {"overrides": {}, "summary": base_summary}
 
@@ -3526,9 +3560,10 @@ def compare_simulation_summaries_with_dumps(
     for label, overrides in variants:
         cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
         token_states: List[TokenState] = []
-        m = run_simulation(cfg, trace, token_states_out=token_states if dump_enabled else None)
+        v_trace = scale_trace_arrival_units(trace, arrival_units, cfg)
+        m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None)
         if dump_enabled:
-            write_sim_jsonl(dump_tmpl.replace("{label}", label), trace, token_states, cfg, meta=trace_meta)
+            write_sim_jsonl(dump_tmpl.replace("{label}", label), v_trace, token_states, cfg, meta=trace_meta)
         summary = compare_summary_jsonable(m)
         delta: Dict[str, float] = {}
         for k, v in summary.items():
@@ -3546,6 +3581,39 @@ def scale_trace_speedup(trace: Sequence[TokenRoute], speedup: float) -> List[Tok
         return(list(trace))
     scale = (1.0 / float(speedup))
     return([dataclasses.replace(r, t_ms=(float(r.t_ms) * scale)) for r in trace])
+
+
+def scale_trace_arrival_units(trace: Sequence[TokenRoute], arrival_units: str, cfg: SimConfig) -> List[TokenRoute]:
+    units = arrival_units.strip().lower()
+    if units in ("", "steps"):
+        return(list(trace))
+    if units != "output_tokens":
+        raise ValueError("arrival_units must be 'steps' or 'output_tokens'")
+    if cfg.mtp_draft_len <= 0:
+        return(list(trace))
+    if len(trace) <= 1:
+        return(list(trace))
+
+    derived: List[float] = []
+    for r in trace:
+        al = _derive_mtp_accept_len(r, int(cfg.mtp_draft_len))
+        if al is not None:
+            derived.append(float(int(al)))
+    if len(derived) != 0:
+        scale = statistics.fmean(derived)
+    else:
+        scale = expected_mtp_accept_len(int(cfg.mtp_draft_len), float(cfg.mtp_accept_prob), float(cfg.mtp_accept_decay))
+    if scale <= 0.0:
+        return(list(trace))
+    if abs(scale - 1.0) < 1e-12:
+        return(list(trace))
+
+    t0 = float(trace[0].t_ms)
+    out: List[TokenRoute] = []
+    for r in trace:
+        t_ms = float(t0 + ((float(r.t_ms) - t0) * float(scale)))
+        out.append(dataclasses.replace(r, t_ms=t_ms))
+    return(out)
 
 
 def _p50(xs: Sequence[float]) -> float:
@@ -3624,6 +3692,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="JSONL trace input format: strict expects the simulator contract; runtime applies the trace extractor's alias mapping first (useful for mixed/alias-heavy runtime logs).",
     )
     p.add_argument("--trace-route-type", type=str, default="", help="JSONL runtime-format trace: only accept records with obj.type == trace-route-type (empty = accept all).")
+    p.add_argument(
+        "--trace-default-cls",
+        type=str,
+        default="",
+        help="Optional: when trace records omit cls/latency class, treat all routes as this value (interactive or batch). Useful for early runtime traces that do not tag QoS.",
+    )
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -3680,7 +3754,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--arrival-rate-tps", type=float, default=5000.0)
     p.add_argument("--interactive-arrival-rate-tps", type=float, default=-1.0, help="Two-stream synthetic trace: interactive arrival rate (defaults to arrival_rate_tps * interactive_prob).")
     p.add_argument("--batch-arrival-rate-tps", type=float, default=-1.0, help="Two-stream synthetic trace: batch arrival rate (defaults to arrival_rate_tps * (1-interactive_prob)).")
-    p.add_argument("--arrival-units", type=str, default="steps", help="Interpret --arrival-rate-tps as steps (verify steps) or output_tokens (rescale by expected MTP accept length when enabled). Synthetic traces only.")
+    p.add_argument(
+        "--arrival-units",
+        type=str,
+        default="steps",
+        help="Synthetic: interpret --arrival-rate-tps as steps (verify steps) or output_tokens (rescale by expected MTP accept length when enabled). Trace replay: output_tokens scales trace arrival deltas by expected/observed accept length so MTP comparisons hold output-token demand roughly constant.",
+    )
     p.add_argument("--burst-prob", type=float, default=0.05)
     p.add_argument("--burst-scale", type=float, default=8.0)
     p.add_argument("--interactive-burst-prob", type=float, default=-1.0, help="Two-stream synthetic trace: interactive burst probability (defaults to --burst-prob).")
@@ -3797,8 +3876,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             raise SystemExit("--synthetic-cost-scale-mode is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.dump_trace_jsonl.strip() != "" or args.dump_trace_csv.strip() != "":
             raise SystemExit("--dump-trace-* is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
-        if args.arrival_units.strip().lower() != "steps":
-            raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
+        # --arrival-units can also be applied in trace replay mode by scaling trace arrival deltas per run.
         if args.trace_jsonl != "":
             trace = load_trace_jsonl(
                 args.trace_jsonl,
@@ -3807,6 +3885,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 non_route_policy=args.trace_non_route.strip().lower(),
                 input_format=args.trace_input_format.strip().lower(),
                 route_type=args.trace_route_type.strip(),
+                default_cls=args.trace_default_cls,
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
@@ -4015,6 +4094,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_draft_attempt_policy=args.mtp_draft_attempt_policy,
     )
 
+    replay_mode = (args.trace_jsonl != "" or args.trace_csv != "")
+    arrival_units_sim = args.arrival_units.strip().lower() if replay_mode else "steps"
+
     if len(args.compare) != 0:
         variants: List[Tuple[str, Dict[str, object]]] = []
         for spec in args.compare:
@@ -4034,25 +4116,40 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             if args.summary_json:
                 if dump_sim_enabled:
-                    out = compare_simulation_summaries_with_dumps(sim_cfg, trace, variants, dump_sim_jsonl_tmpl=dump_sim_jsonl, trace_meta=trace_meta)
+                    out = compare_simulation_summaries_with_dumps(
+                        sim_cfg,
+                        trace,
+                        variants,
+                        dump_sim_jsonl_tmpl=dump_sim_jsonl,
+                        trace_meta=trace_meta,
+                        arrival_units=arrival_units_sim,
+                    )
                 else:
-                    out = compare_simulation_summaries(sim_cfg, trace, variants)
+                    out = compare_simulation_summaries(sim_cfg, trace, variants, arrival_units=arrival_units_sim)
             else:
                 if dump_sim_enabled:
-                    out = compare_simulation_variants_with_dumps(sim_cfg, trace, variants, dump_sim_jsonl_tmpl=dump_sim_jsonl, trace_meta=trace_meta)
+                    out = compare_simulation_variants_with_dumps(
+                        sim_cfg,
+                        trace,
+                        variants,
+                        dump_sim_jsonl_tmpl=dump_sim_jsonl,
+                        trace_meta=trace_meta,
+                        arrival_units=arrival_units_sim,
+                    )
                 else:
-                    out = compare_simulation_variants(sim_cfg, trace, variants)
+                    out = compare_simulation_variants(sim_cfg, trace, variants, arrival_units=arrival_units_sim)
         except (ValueError, OSError) as e:
             raise SystemExit(str(e))
         if len(trace_meta) != 0:
             out["trace_meta"] = trace_meta
     else:
+        sim_trace = scale_trace_arrival_units(trace, arrival_units_sim, sim_cfg)
         token_states: List[TokenState] = []
-        metrics = run_simulation(sim_cfg, trace, token_states_out=token_states if dump_sim_enabled else None)
+        metrics = run_simulation(sim_cfg, sim_trace, token_states_out=token_states if dump_sim_enabled else None)
         if dump_sim_enabled:
             try:
                 dump_path = dump_sim_jsonl.replace("{label}", "baseline") if "{label}" in dump_sim_jsonl else dump_sim_jsonl
-                write_sim_jsonl(dump_path, trace, token_states, sim_cfg, meta=trace_meta)
+                write_sim_jsonl(dump_path, sim_trace, token_states, sim_cfg, meta=trace_meta)
             except (ValueError, OSError) as e:
                 raise SystemExit(str(e))
         if args.summary_json:

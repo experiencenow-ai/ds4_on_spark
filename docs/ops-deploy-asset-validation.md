@@ -51,4 +51,5 @@ Note: the periodic preflight timers (`ds4-preflight@.timer`, `ds4-preflight-stri
 ## When To Use It
 
 - Before staging templates to Spark0/Spark1 with `scripts/ops_stage_deploy_assets.sh`
+- Before staging both Sparks in one flow with `scripts/ops_stage_spark0_spark1.sh`
 - Before opening or merging ops-hardening PRs that change `deploy/` or `scripts/ops*.sh`

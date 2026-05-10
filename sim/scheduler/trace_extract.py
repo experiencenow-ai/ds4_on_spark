@@ -148,7 +148,7 @@ def _extract_layers(obj: Dict[str, object]) -> Optional[List[Dict[str, object]]]
     return(out)
 
 
-def extract_route_record(obj_in: object, route_type: str = "") -> Optional[Dict[str, object]]:
+def extract_route_record(obj_in: object, route_type: str = "", default_cls: str = "") -> Optional[Dict[str, object]]:
     obj = _as_dict(obj_in)
     if obj is None:
         return(None)
@@ -173,6 +173,11 @@ def extract_route_record(obj_in: object, route_type: str = "") -> Optional[Dict[
         return(None)
 
     cls = _extract_cls(obj)
+    if cls is None and default_cls.strip() != "":
+        d = default_cls.strip().lower()
+        if d not in ("interactive", "batch"):
+            raise ValueError("default_cls must be 'interactive' or 'batch'")
+        cls = d
     if cls is None:
         return(None)
     out["cls"] = cls
@@ -245,7 +250,12 @@ def extract_route_record(obj_in: object, route_type: str = "") -> Optional[Dict[
     return(out)
 
 
-def extract_jsonl_lines(lines: Iterable[str], route_type: str = "", non_route_policy: str = "skip") -> List[Dict[str, object]]:
+def extract_jsonl_lines(
+    lines: Iterable[str],
+    route_type: str = "",
+    non_route_policy: str = "skip",
+    default_cls: str = "",
+) -> List[Dict[str, object]]:
     if non_route_policy not in ("skip", "error"):
         raise ValueError("non_route_policy must be one of: skip, error")
     out: List[Dict[str, object]] = []
@@ -259,7 +269,7 @@ def extract_jsonl_lines(lines: Iterable[str], route_type: str = "", non_route_po
             if non_route_policy == "error":
                 raise ValueError(f"line {lineno}: invalid JSON")
             continue
-        rec = extract_route_record(obj, route_type=route_type)
+        rec = extract_route_record(obj, route_type=route_type, default_cls=default_cls)
         if rec is None:
             if non_route_policy == "error":
                 raise ValueError(f"line {lineno}: could not extract route record")
@@ -274,11 +284,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--out-jsonl", type=str, default="-", help="Output JSONL path ('-' for stdout).")
     p.add_argument("--route-type", type=str, default="", help="Only extract records with obj.type == route-type (empty = auto).")
     p.add_argument("--non-route", type=str, default="skip", help="What to do for non-route input: skip (default; also skips non-JSON lines) or error.")
+    p.add_argument("--default-cls", type=str, default="", help="Optional: when records omit cls/latency class, force all extracted records to this value (interactive or batch).")
     args = p.parse_args(argv)
 
     f_in = sys.stdin if args.in_jsonl == "-" else open(args.in_jsonl, "r", encoding="utf-8")
     try:
-        recs = extract_jsonl_lines(f_in, route_type=args.route_type.strip(), non_route_policy=args.non_route.strip().lower())
+        recs = extract_jsonl_lines(
+            f_in,
+            route_type=args.route_type.strip(),
+            non_route_policy=args.non_route.strip().lower(),
+            default_cls=args.default_cls,
+        )
     finally:
         if f_in is not sys.stdin:
             f_in.close()

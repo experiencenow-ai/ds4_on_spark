@@ -54,10 +54,26 @@ REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
 scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 ```
 
+Optional convenience: instead of embedding the command string inside `REMOTE_MTP_ONE_TOKEN_ENV`, you can set it as a separate local env var and the runner will forward it as `MTP_ONE_TOKEN_CMD=...` unless already present in `REMOTE_MTP_ONE_TOKEN_ENV`:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1" \
+REMOTE_MTP_ONE_TOKEN_CMD="..." \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
 Optional cross-check against a previously captured sidecar probe JSON (remote path on Spark):
 
 ```bash
 REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...' SIDE_CAR_PROBE_JSON=/abs/path/to/mtp_sidecar_probe.json" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Optional convenience: set the remote sidecar-probe JSON path separately; the runner forwards it as `SIDE_CAR_PROBE_JSON=...` unless already present in `REMOTE_MTP_ONE_TOKEN_ENV`:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
+REMOTE_SIDE_CAR_PROBE_JSON="/abs/path/to/mtp_sidecar_probe.json" \
 scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 ```
 
