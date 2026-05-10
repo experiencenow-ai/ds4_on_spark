@@ -111,6 +111,62 @@
     },
     "kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
     "kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
+    "kv_cache_sizes_at_reference_defaults": {
+      "kv_cache_size_by_compress_ratio": {
+        "0": 128,
+        "128": 160,
+        "4": 1152
+      },
+      "kv_cache_size_by_layer": [
+        128,
+        128,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152,
+        160,
+        1152
+      ],
+      "kv_cache_slots_total_main": 27648,
+      "kv_cache_slots_total_mtp": 128,
+      "max_batch_size": 4,
+      "max_seq_len": 4096
+    },
     "prefill": {
       "compress_indices": {
         "csa": "Indexer(...)",
@@ -119,17 +175,401 @@
       "compressed_index_offset": "seqlen",
       "window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)"
     },
+    "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+    "topk_mask_value": -1,
+    "update_semantics": {
+      "decode_compressed_update_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
+      "decode_sliding_ring_update_expr": "self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
+      "prefill_sliding_wrap_expr": "cutoff = seqlen % win"
+    },
     "window_size": 128
   },
   "checkpoint_index": {
     "metadata": {
       "total_size": 159609485896
-    }
+    },
+    "weight_map_file_counts": {
+      "model-00001-of-00046.safetensors": 1,
+      "model-00002-of-00046.safetensors": 1565,
+      "model-00003-of-00046.safetensors": 1565,
+      "model-00004-of-00046.safetensors": 1576,
+      "model-00005-of-00046.safetensors": 1569,
+      "model-00006-of-00046.safetensors": 1576,
+      "model-00007-of-00046.safetensors": 1569,
+      "model-00008-of-00046.safetensors": 1576,
+      "model-00009-of-00046.safetensors": 1569,
+      "model-00010-of-00046.safetensors": 1576,
+      "model-00011-of-00046.safetensors": 1569,
+      "model-00012-of-00046.safetensors": 1576,
+      "model-00013-of-00046.safetensors": 1569,
+      "model-00014-of-00046.safetensors": 1576,
+      "model-00015-of-00046.safetensors": 1569,
+      "model-00016-of-00046.safetensors": 1576,
+      "model-00017-of-00046.safetensors": 1569,
+      "model-00018-of-00046.safetensors": 1576,
+      "model-00019-of-00046.safetensors": 1569,
+      "model-00020-of-00046.safetensors": 1576,
+      "model-00021-of-00046.safetensors": 1569,
+      "model-00022-of-00046.safetensors": 1576,
+      "model-00023-of-00046.safetensors": 1569,
+      "model-00024-of-00046.safetensors": 1576,
+      "model-00025-of-00046.safetensors": 1569,
+      "model-00026-of-00046.safetensors": 1576,
+      "model-00027-of-00046.safetensors": 1569,
+      "model-00028-of-00046.safetensors": 1576,
+      "model-00029-of-00046.safetensors": 1569,
+      "model-00030-of-00046.safetensors": 1576,
+      "model-00031-of-00046.safetensors": 1569,
+      "model-00032-of-00046.safetensors": 1576,
+      "model-00033-of-00046.safetensors": 1569,
+      "model-00034-of-00046.safetensors": 1576,
+      "model-00035-of-00046.safetensors": 1569,
+      "model-00036-of-00046.safetensors": 1576,
+      "model-00037-of-00046.safetensors": 1569,
+      "model-00038-of-00046.safetensors": 1576,
+      "model-00039-of-00046.safetensors": 1569,
+      "model-00040-of-00046.safetensors": 1576,
+      "model-00041-of-00046.safetensors": 1569,
+      "model-00042-of-00046.safetensors": 1576,
+      "model-00043-of-00046.safetensors": 1569,
+      "model-00044-of-00046.safetensors": 1576,
+      "model-00045-of-00046.safetensors": 5,
+      "model-00046-of-00046.safetensors": 1575
+    },
+    "weight_map_keys_sha256": "f010f0041b4630a335fcf2368134154c4e7c1e17a04e750baa62a1ffe0a4f87a",
+    "weight_map_num_tensors": 69187,
+    "weight_map_unique_files": 46
+  },
+  "compat": {
+    "by_inference_key": {
+      "beta_fast": "yarn_rope.beta_fast",
+      "beta_slow": "yarn_rope.beta_slow",
+      "compress_ratios": "attention_schedule.compress_ratios",
+      "compress_rope_theta": "yarn_rope.compress_rope_theta",
+      "dim": "topology.hidden_size",
+      "dtype": "quantization.inference_config.dtype",
+      "expert_dtype": "quantization.inference_config.expert_dtype",
+      "head_dim": "topology.head_dim",
+      "moe_inter_dim": "moe.moe_inter_dim",
+      "n_activated_experts": "moe.n_activated_experts",
+      "n_hash_layers": "moe.n_hash_layers",
+      "n_heads": "topology.num_attention_heads",
+      "n_layers": "topology.num_hidden_layers",
+      "n_routed_experts": "moe.n_routed_experts",
+      "n_shared_experts": "moe.n_shared_experts",
+      "o_groups": "topology.o_groups",
+      "o_lora_rank": "topology.o_lora_rank",
+      "original_seq_len": "yarn_rope.original_seq_len",
+      "q_lora_rank": "topology.q_lora_rank",
+      "rope_factor": "yarn_rope.rope_factor",
+      "rope_head_dim": "topology.rope_head_dim",
+      "rope_theta": "yarn_rope.rope_theta",
+      "route_scale": "moe.route_scale",
+      "scale_fmt": "quantization.inference_config.scale_fmt",
+      "score_func": "moe.scoring_func",
+      "vocab_size": "topology.vocab_size",
+      "window_size": "topology.sliding_window"
+    },
+    "by_transformers_key": {
+      "compress_ratios": "attention_schedule.compress_ratios",
+      "compress_rope_theta": "yarn_rope.compress_rope_theta",
+      "expert_dtype": "quantization.inference_config.expert_dtype",
+      "head_dim": "topology.head_dim",
+      "hidden_size": "topology.hidden_size",
+      "moe_intermediate_size": "moe.moe_inter_dim",
+      "n_routed_experts": "moe.n_routed_experts",
+      "n_shared_experts": "moe.n_shared_experts",
+      "num_attention_heads": "topology.num_attention_heads",
+      "num_experts_per_tok": "moe.n_activated_experts",
+      "num_hash_layers": "moe.n_hash_layers",
+      "num_hidden_layers": "topology.num_hidden_layers",
+      "num_key_value_heads": "topology.num_key_value_heads",
+      "num_nextn_predict_layers": "mtp.n_mtp_layers",
+      "o_groups": "topology.o_groups",
+      "o_lora_rank": "topology.o_lora_rank",
+      "original_max_position_embeddings": "yarn_rope.original_seq_len",
+      "q_lora_rank": "topology.q_lora_rank",
+      "qk_rope_head_dim": "topology.rope_head_dim",
+      "quantization_config.activation_scheme": "quantization.config_quantization_config.activation_scheme",
+      "quantization_config.fmt": "quantization.config_quantization_config.fmt",
+      "quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
+      "quantization_config.scale_fmt": "quantization.config_quantization_config.scale_fmt",
+      "quantization_config.weight_block_size": "quantization.config_quantization_config.weight_block_size",
+      "rope_scaling.beta_fast": "yarn_rope.beta_fast",
+      "rope_scaling.beta_slow": "yarn_rope.beta_slow",
+      "rope_scaling.factor": "yarn_rope.rope_factor",
+      "rope_theta": "yarn_rope.rope_theta",
+      "routed_scaling_factor": "moe.route_scale",
+      "scoring_func": "moe.scoring_func",
+      "sliding_window": "topology.sliding_window",
+      "vocab_size": "topology.vocab_size"
+    },
+    "fields": [
+      {
+        "canonical_path": "topology.vocab_size",
+        "concept": "vocab_size",
+        "inference_key": "vocab_size",
+        "transformers_key": "vocab_size"
+      },
+      {
+        "canonical_path": "topology.hidden_size",
+        "concept": "hidden_size",
+        "inference_key": "dim",
+        "transformers_key": "hidden_size"
+      },
+      {
+        "canonical_path": "topology.num_hidden_layers",
+        "concept": "num_hidden_layers",
+        "inference_key": "n_layers",
+        "transformers_key": "num_hidden_layers"
+      },
+      {
+        "canonical_path": "topology.num_attention_heads",
+        "concept": "num_attention_heads",
+        "inference_key": "n_heads",
+        "transformers_key": "num_attention_heads"
+      },
+      {
+        "canonical_path": "topology.num_key_value_heads",
+        "concept": "num_key_value_heads",
+        "inference_key": null,
+        "transformers_key": "num_key_value_heads"
+      },
+      {
+        "canonical_path": "topology.head_dim",
+        "concept": "head_dim",
+        "inference_key": "head_dim",
+        "transformers_key": "head_dim"
+      },
+      {
+        "canonical_path": "topology.rope_head_dim",
+        "concept": "rope_head_dim",
+        "inference_key": "rope_head_dim",
+        "transformers_key": "qk_rope_head_dim"
+      },
+      {
+        "canonical_path": "topology.q_lora_rank",
+        "concept": "q_lora_rank",
+        "inference_key": "q_lora_rank",
+        "transformers_key": "q_lora_rank"
+      },
+      {
+        "canonical_path": "topology.o_groups",
+        "concept": "o_groups",
+        "inference_key": "o_groups",
+        "transformers_key": "o_groups"
+      },
+      {
+        "canonical_path": "topology.o_lora_rank",
+        "concept": "o_lora_rank",
+        "inference_key": "o_lora_rank",
+        "transformers_key": "o_lora_rank"
+      },
+      {
+        "canonical_path": "topology.sliding_window",
+        "concept": "sliding_window",
+        "inference_key": "window_size",
+        "transformers_key": "sliding_window"
+      },
+      {
+        "canonical_path": "attention_schedule.compress_ratios",
+        "concept": "compress_ratios",
+        "inference_key": "compress_ratios",
+        "transformers_key": "compress_ratios"
+      },
+      {
+        "canonical_path": "moe.moe_inter_dim",
+        "concept": "moe_inter_dim",
+        "inference_key": "moe_inter_dim",
+        "transformers_key": "moe_intermediate_size"
+      },
+      {
+        "canonical_path": "moe.n_routed_experts",
+        "concept": "n_routed_experts",
+        "inference_key": "n_routed_experts",
+        "transformers_key": "n_routed_experts"
+      },
+      {
+        "canonical_path": "moe.n_shared_experts",
+        "concept": "n_shared_experts",
+        "inference_key": "n_shared_experts",
+        "transformers_key": "n_shared_experts"
+      },
+      {
+        "canonical_path": "moe.n_activated_experts",
+        "concept": "n_activated_experts",
+        "inference_key": "n_activated_experts",
+        "transformers_key": "num_experts_per_tok"
+      },
+      {
+        "canonical_path": "moe.n_hash_layers",
+        "concept": "n_hash_layers",
+        "inference_key": "n_hash_layers",
+        "transformers_key": "num_hash_layers"
+      },
+      {
+        "canonical_path": "moe.route_scale",
+        "concept": "route_scale",
+        "inference_key": "route_scale",
+        "transformers_key": "routed_scaling_factor"
+      },
+      {
+        "canonical_path": "moe.scoring_func",
+        "concept": "scoring_func",
+        "inference_key": "score_func",
+        "transformers_key": "scoring_func"
+      },
+      {
+        "canonical_path": "mtp.n_mtp_layers",
+        "concept": "num_nextn_predict_layers",
+        "inference_key": null,
+        "transformers_key": "num_nextn_predict_layers"
+      },
+      {
+        "canonical_path": "yarn_rope.rope_theta",
+        "concept": "rope_theta",
+        "inference_key": "rope_theta",
+        "transformers_key": "rope_theta"
+      },
+      {
+        "canonical_path": "yarn_rope.compress_rope_theta",
+        "concept": "compress_rope_theta",
+        "inference_key": "compress_rope_theta",
+        "transformers_key": "compress_rope_theta"
+      },
+      {
+        "canonical_path": "yarn_rope.original_seq_len",
+        "concept": "original_seq_len",
+        "inference_key": "original_seq_len",
+        "transformers_key": "original_max_position_embeddings"
+      },
+      {
+        "canonical_path": "yarn_rope.rope_factor",
+        "concept": "rope_factor",
+        "inference_key": "rope_factor",
+        "transformers_key": "rope_scaling.factor"
+      },
+      {
+        "canonical_path": "yarn_rope.beta_fast",
+        "concept": "beta_fast",
+        "inference_key": "beta_fast",
+        "transformers_key": "rope_scaling.beta_fast"
+      },
+      {
+        "canonical_path": "yarn_rope.beta_slow",
+        "concept": "beta_slow",
+        "inference_key": "beta_slow",
+        "transformers_key": "rope_scaling.beta_slow"
+      },
+      {
+        "canonical_path": "quantization.inference_config.dtype",
+        "concept": "dtype",
+        "inference_key": "dtype",
+        "transformers_key": null
+      },
+      {
+        "canonical_path": "quantization.inference_config.expert_dtype",
+        "concept": "expert_dtype",
+        "inference_key": "expert_dtype",
+        "note": "HF refs/pr/14 removes config.json expert_dtype; treat inference/config.json expert_dtype as canonical.",
+        "transformers_key": "expert_dtype",
+        "transformers_key_optional": true
+      },
+      {
+        "canonical_path": "quantization.inference_config.scale_fmt",
+        "concept": "scale_fmt",
+        "inference_key": "scale_fmt",
+        "transformers_key": null
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.quant_method",
+        "concept": "quant_method",
+        "inference_key": null,
+        "transformers_key": "quantization_config.quant_method"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.fmt",
+        "concept": "quant_fmt",
+        "inference_key": null,
+        "transformers_key": "quantization_config.fmt"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.activation_scheme",
+        "concept": "activation_scheme",
+        "inference_key": null,
+        "transformers_key": "quantization_config.activation_scheme"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.scale_fmt",
+        "concept": "scale_fmt_cfg",
+        "inference_key": null,
+        "transformers_key": "quantization_config.scale_fmt"
+      },
+      {
+        "canonical_path": "quantization.config_quantization_config.weight_block_size",
+        "concept": "weight_block_size",
+        "inference_key": null,
+        "transformers_key": "quantization_config.weight_block_size"
+      }
+    ]
+  },
+  "encoding_constants": {
+    "assistant_msg_template": "{reasoning}{content}{tool_calls}<\uff5cend\u2581of\u2581sentence\uff5c>",
+    "assistant_msg_wo_eos_template": "{reasoning}{content}{tool_calls}",
+    "assistant_sp_token": "<\uff5cAssistant\uff5c>",
+    "bos_token": "<\uff5cbegin\u2581of\u2581sentence\uff5c>",
+    "ds_task_sp_tokens": {
+      "action": "<\uff5caction\uff5c>",
+      "authority": "<\uff5cauthority\uff5c>",
+      "domain": "<\uff5cdomain\uff5c>",
+      "query": "<\uff5cquery\uff5c>",
+      "read_url": "<\uff5cread_url\uff5c>",
+      "title": "<\uff5ctitle\uff5c>"
+    },
+    "dsml_token": "\uff5cDSML\uff5c",
+    "eos_token": "<\uff5cend\u2581of\u2581sentence\uff5c>",
+    "latest_reminder_msg_template": "{content}",
+    "latest_reminder_sp_token": "<\uff5clatest_reminder\uff5c>",
+    "system_msg_template": "{content}",
+    "thinking_end_token": "</think>",
+    "thinking_start_token": "<think>",
+    "thinking_template": "{reasoning_content}",
+    "tool_call_template": "<{dsml_token}invoke name=\"{name}\">\n{arguments}\n</{dsml_token}invoke>",
+    "tool_calls_block_name": "tool_calls",
+    "tool_calls_template": "<{dsml_token}{tc_block_name}>\n{tool_calls}\n</{dsml_token}{tc_block_name}>",
+    "tool_output_template": "<tool_result>{content}</tool_result>",
+    "user_msg_template": "{content}",
+    "user_sp_token": "<\uff5cUser\uff5c>"
   },
   "format_version": 1,
+  "mla": {
+    "kv_rope_apply_expr": "apply_rotary_emb(kv[..., -rd:], freqs_cis)",
+    "output_derotate_expr": "apply_rotary_emb(o[..., -rd:], freqs_cis, True)",
+    "output_derotate_present": true,
+    "q_extra_rms_norm_expr": "q *= torch.rsqrt(q.square().mean(-1, keepdim=True) + self.eps)",
+    "q_extra_rms_norm_present": true,
+    "q_rope_apply_expr": "apply_rotary_emb(q[..., -rd:], freqs_cis)",
+    "rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]"
+  },
   "model": "deepseek_v4_flash",
   "moe": {
     "hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
+    "hash_routing": {
+      "bias_none_expr": "self.bias = None",
+      "hash_enabled_expr": "self.hash = layer_id < args.n_hash_layers",
+      "hash_indices_expr": "indices = self.tid2eid[input_ids]",
+      "hash_layer_ids": [
+        0,
+        1,
+        2
+      ],
+      "tid2eid_decl_expr": "self.tid2eid = nn.Parameter(torch.empty(args.vocab_size, args.n_activated_experts, dtype=torch.int32), requires_grad=False)",
+      "tid2eid_dtype": "int32",
+      "tid2eid_shape": [
+        129280,
+        6
+      ]
+    },
     "moe_inter_dim": 2048,
     "n_activated_experts": 6,
     "n_hash_layers": 3,
@@ -137,12 +577,73 @@
     "n_shared_experts": 1,
     "route_scale": 1.5,
     "score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
-    "scoring_func": "sqrtsoftplus"
+    "scoring_func": "sqrtsoftplus",
+    "semantics": {
+      "bias_affects_selection_only_comment": "# Bias shifts scores for expert selection (topk) but does not affect routing weights.",
+      "expert_compute_fp32_expr": "gate = self.w1(x).float()",
+      "gate_scores_fp32_expr": "scores = linear(x.float(), self.weight.float())",
+      "score_func_exprs": {
+        "sigmoid": "scores = scores.sigmoid()",
+        "softmax": "scores = scores.softmax(dim=-1)",
+        "sqrtsoftplus": "scores = F.softplus(scores).sqrt()"
+      },
+      "weights_normalize_expr": "weights /= weights.sum(dim=-1, keepdim=True)",
+      "weights_scale_expr": "weights *= self.route_scale"
+    }
   },
   "mtp": {
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
-    "namespace_prefix": "mtp.{j}."
+    "namespace_prefix": "mtp.{j}.",
+    "semantics": {
+      "assert_embed_head_expr": "assert self.embed is not None and self.head is not None",
+      "combine_e_and_h_expr": "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)",
+      "embed_expr": "e = self.embed(input_ids)",
+      "enorm_expr": "e = self.enorm(e)",
+      "head_logits_expr": "logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)",
+      "hnorm_expr": "x = self.hnorm(x)",
+      "input_shape_comment": "# x: [b,s,hc,d], hc_fn: [mix_hc,hc*d], hc_scale: [3], hc_base: [mix_hc], y: [b,s,hc,d]",
+      "super_forward_expr": "x = super().forward(x, start_pos, input_ids)"
+    },
+    "trust_gates": {
+      "acceptance_logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md",
+      "acceptance_requires_prefill_and_decode": true,
+      "acceptance_topk_ids_exact": true,
+      "artifact_requires_mtp_contract_complete": true,
+      "artifact_requires_namespace_prefix": "mtp.{j}.",
+      "oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+      "oracle_requires_include_mtp": true,
+      "oracle_requires_mtp_trace": true
+    }
+  },
+  "oracle": {
+    "encoding_oracle": {
+      "fixtures_glob": "encoding/tests/*",
+      "note": "Tokenizer/chat rendering must match upstream encoding vectors before any logit comparison is meaningful.",
+      "required": true,
+      "verifier": "scripts/model_contract_verify_deepseek_v4_flash.py"
+    },
+    "logits_oracle": {
+      "acceptance": {
+        "logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
+        "requires_prefill_and_decode": true,
+        "topk_ids_exact": true
+      },
+      "generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
+      "note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
+      "output_fixture": "oracle/logits_oracle.json",
+      "prompts_fixture": "oracle/prompts.json",
+      "weights_required": true
+    },
+    "mtp": {
+      "acceptance": {
+        "logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
+        "requires_mtp_trace": true,
+        "topk_ids_exact": true
+      },
+      "generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+      "weights_required": true
+    }
   },
   "quantization": {
     "config_quantization_config": {
@@ -158,12 +659,48 @@
     "inference_config": {
       "dtype": "fp8",
       "expert_dtype": "fp4",
+      "scale_dtype": "fp8",
       "scale_fmt": "ue8m0"
     },
     "inference_model_constants": {
+      "attn_softmax_scale_expr": "self.head_dim ** -0.5",
       "block_size": 128,
       "fp4_block_size": 32,
-      "hc_eps": 1e-06
+      "hc_eps": 1e-06,
+      "indexer_weights_expr": "self.weights_proj(x) * (self.softmax_scale * self.n_heads ** -0.5)",
+      "kv_act_quant_group_sizes": [
+        64
+      ]
+    },
+    "linear_tensor_contract": {
+      "fp4": {
+        "fp4_block_size": 32,
+        "scale_dtype": "float8_e8m0fnu",
+        "scale_shape_formula": "[out_features, in_features//fp4_block_size]",
+        "weight_dtype": "float4_e2m1fn_x2",
+        "weight_logical_shape": "[out_features, in_features]",
+        "weight_storage_shape": "[out_features, in_features//2]"
+      },
+      "fp8": {
+        "block_size": 128,
+        "scale_dtype": "float8_e8m0fnu",
+        "scale_shape_formula": "[(out_features+block_size-1)//block_size, (in_features+block_size-1)//block_size]",
+        "weight_dtype": "float8_e4m3fn",
+        "weight_shape": "[out_features, in_features]"
+      },
+      "reference_source": "inference/model.py:Linear"
+    },
+    "modelargs_defaults": {
+      "dtype": "fp8",
+      "expert_dtype": null,
+      "max_batch_size": 4,
+      "max_seq_len": 4096,
+      "scale_dtype": "fp8",
+      "scale_fmt": "ue8m0"
+    },
+    "reference_defaults": {
+      "max_batch_size": 4,
+      "max_seq_len": 4096
     }
   },
   "runtime": {
@@ -176,6 +713,10 @@
       "index_head_dim": 128,
       "index_n_heads": 64,
       "index_topk": 512
+    },
+    "reference_defaults": {
+      "max_batch_size": 4,
+      "max_seq_len": 4096
     },
     "swiglu_limit": 10.0
   },
@@ -235,9 +776,13 @@
       "present": true,
       "tensor_key_count": 1575
     },
+    "mtp_embed_present": false,
+    "mtp_head_present": false,
     "mtp_layer_ids": [
       0
     ],
+    "mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
+    "mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
     "namespaces": [
       "embed",
       "hc_head_base",
@@ -293,6 +838,18 @@
       "attn.compressor.wgate.weight",
       "attn.compressor.wkv.weight"
     ],
+    "required_mtp_additional_suffixes": [
+      "e_proj.weight",
+      "e_proj.scale",
+      "h_proj.weight",
+      "h_proj.scale",
+      "enorm.weight",
+      "hnorm.weight",
+      "norm.weight",
+      "hc_head_fn",
+      "hc_head_base",
+      "hc_head_scale"
+    ],
     "required_top_level": [
       "embed.weight",
       "norm.weight",
@@ -315,6 +872,193 @@
     },
     "weight_index_source": "model.safetensors.index.json:weight_map"
   },
+  "tensor_shapes": {
+    "mla": {
+      "nope_head_dim": 448,
+      "rope_head_dim": 64,
+      "rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]"
+    },
+    "mtp": {
+      "e_proj.weight": [
+        4096,
+        4096
+      ],
+      "enorm.weight": [
+        4096
+      ],
+      "h_proj.weight": [
+        4096,
+        4096
+      ],
+      "hc_head_base": [
+        4
+      ],
+      "hc_head_fn": [
+        4,
+        16384
+      ],
+      "hc_head_scale": [
+        1
+      ],
+      "hnorm.weight": [
+        4096
+      ],
+      "norm.weight": [
+        4096
+      ]
+    },
+    "per_layer": {
+      "attn": {
+        "attn_norm.weight": [
+          4096
+        ],
+        "attn_sink": [
+          64
+        ],
+        "kv_norm.weight": [
+          512
+        ],
+        "q_norm.weight": [
+          1024
+        ],
+        "wkv.weight": [
+          512,
+          4096
+        ],
+        "wo_a.weight": [
+          8192,
+          4096
+        ],
+        "wo_b.weight": [
+          4096,
+          8192
+        ],
+        "wq_a.weight": [
+          1024,
+          4096
+        ],
+        "wq_b.weight": [
+          32768,
+          1024
+        ]
+      },
+      "compressor": {
+        "ape.shape_formula": "[compress_ratio, (1+overlap)*head_dim]",
+        "norm.weight": [
+          512
+        ],
+        "note": "Compressor tensors exist only when compress_ratio != 0. For CSA (ratio==4), overlap=true and coff=2; otherwise coff=1.",
+        "overlap_rule": "overlap = (compress_ratio == 4)",
+        "wgate.weight.shape_formula": "[(1+overlap)*head_dim, hidden_size]",
+        "wkv.weight.shape_formula": "[(1+overlap)*head_dim, hidden_size]"
+      },
+      "hyper_connections": {
+        "hc_attn_base": [
+          24
+        ],
+        "hc_attn_fn": [
+          24,
+          16384
+        ],
+        "hc_attn_scale": [
+          3
+        ],
+        "hc_dim": 16384,
+        "hc_ffn_base": [
+          24
+        ],
+        "hc_ffn_fn": [
+          24,
+          16384
+        ],
+        "hc_ffn_scale": [
+          3
+        ],
+        "hc_mult": 4,
+        "mix_hc": 24
+      },
+      "indexer": {
+        "compressor": {
+          "ape.shape_formula": "[compress_ratio, (1+overlap)*index_head_dim]",
+          "norm.weight": [
+            128
+          ],
+          "wgate.weight.shape_formula": "[(1+overlap)*index_head_dim, hidden_size]",
+          "wkv.weight.shape_formula": "[(1+overlap)*index_head_dim, hidden_size]"
+        },
+        "note": "Indexer tensors exist only for CSA layers (compress_ratio==4).",
+        "weights_proj.weight": [
+          64,
+          4096
+        ],
+        "wq_b.weight": [
+          8192,
+          1024
+        ]
+      },
+      "moe": {
+        "experts.{eid}.w1.weight": [
+          2048,
+          4096
+        ],
+        "experts.{eid}.w2.weight": [
+          4096,
+          2048
+        ],
+        "experts.{eid}.w3.weight": [
+          2048,
+          4096
+        ],
+        "gate.bias": [
+          256
+        ],
+        "gate.tid2eid": [
+          129280,
+          6
+        ],
+        "gate.weight": [
+          256,
+          4096
+        ],
+        "shared_experts.w1.weight": [
+          2048,
+          4096
+        ],
+        "shared_experts.w2.weight": [
+          4096,
+          2048
+        ],
+        "shared_experts.w3.weight": [
+          2048,
+          4096
+        ]
+      }
+    },
+    "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (logical/unsharded shapes)",
+    "top_level": {
+      "embed.weight": [
+        129280,
+        4096
+      ],
+      "hc_head_base": [
+        4
+      ],
+      "hc_head_fn": [
+        4,
+        16384
+      ],
+      "hc_head_scale": [
+        1
+      ],
+      "head.weight": [
+        129280,
+        4096
+      ],
+      "norm.weight": [
+        4096
+      ]
+    }
+  },
   "tokenizer": {
     "add_bos_token": false,
     "add_eos_token": false,
@@ -325,7 +1069,68 @@
     "eos_token_id": 1,
     "model_max_length": 1048576,
     "pad_token_is_eos": true,
-    "tokenizer_class": "PreTrainedTokenizerFast"
+    "tokenizer_class": "PreTrainedTokenizerFast",
+    "tokenizer_json_summary": {
+      "added_special_tokens_count": 1230,
+      "added_special_tokens_count_ge_base_vocab": 1227,
+      "added_token_id_max": 129279,
+      "added_token_id_max_ge_base_vocab": 129279,
+      "added_token_id_min": 0,
+      "added_token_id_min_ge_base_vocab": 128000,
+      "added_tokens_count": 1283,
+      "added_tokens_count_ge_base_vocab": 1280,
+      "base_vocab_size": 128000,
+      "decoder": {
+        "add_prefix_space": true,
+        "trim_offsets": true,
+        "type": "ByteLevel",
+        "use_regex": true
+      },
+      "effective_vocab_size": 129280,
+      "effective_vocab_size_matches_config": true,
+      "merges_count": 127741,
+      "model_type": "BPE",
+      "normalizer": {
+        "sequence": [],
+        "type": "Sequence"
+      },
+      "post_processor": {
+        "add_prefix_space": true,
+        "trim_offsets": false,
+        "type": "ByteLevel",
+        "use_regex": true
+      },
+      "pre_tokenizer": {
+        "sequence": [
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "\\p{N}{1,3}",
+            "type": "Split"
+          },
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff]+",
+            "type": "Split"
+          },
+          {
+            "behavior": "Isolated",
+            "invert": false,
+            "pattern_regex": "[!\"#$%&'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~][A-Za-z]+|[^\r\n\\p{L}\\p{P}\\p{S}]?[\\p{L}\\p{M}]+| ?[\\p{P}\\p{S}]+[\r\n]*|\\s*[\r\n]+|\\s+(?!\\S)|\\s+",
+            "type": "Split"
+          },
+          {
+            "add_prefix_space": false,
+            "trim_offsets": true,
+            "type": "ByteLevel",
+            "use_regex": false
+          }
+        ],
+        "type": "Sequence"
+      },
+      "tokenizers_json_version": "1.0"
+    }
   },
   "topology": {
     "head_dim": 512,
@@ -348,20 +1153,32 @@
       "inference_config_json": "inference/config.json",
       "inference_kernel_py": "inference/kernel.py",
       "inference_model_py": "inference/model.py",
+      "oracle_prompts_json": "oracle/prompts.json",
       "tokenizer_config_json": "tokenizer_config.json",
       "tokenizer_json": "tokenizer.json",
+      "upstream_commit_txt": "upstream_commit.txt",
       "weight_index_json": "model.safetensors.index.json"
     },
     "fixtures_sha256": {
       "config.json": "b628e63398a645abc711d92207f8737dd8140f7a4ef1e0a5b3616019e0ddd818",
       "encoding/encoding_dsv4.py": "bdbd57c132a1b3725042323d02b98b9d1df28e5f388f134399555d041f5055e0",
+      "encoding/tests/test_input_1.json": "10e0c074c977c3a80daab758af28219c6b1c2bd7f3f5cf2890c84b361cc32897",
+      "encoding/tests/test_input_2.json": "c44ae0db20fafff38a6021e8068d7ed6e28605d76cafd20be80b03398509f447",
+      "encoding/tests/test_input_3.json": "37bf8ef95e0411ea5f411be0b02fbafec7363438b6ccefddca0c52ec9aeaf69a",
+      "encoding/tests/test_input_4.json": "c45bbd0a1b7a2f75033d8db4ba74ee5b7653bd01114045a52f79d3b387663465",
+      "encoding/tests/test_output_1.txt": "9b366d9d2eac842a6e890594aac0b58648e5623717202b33497afadf03e26540",
+      "encoding/tests/test_output_2.txt": "ca66b01a1ac3a204bb032c928fb607d4877171e998a50f7f89f39fa821b75665",
+      "encoding/tests/test_output_3.txt": "b3b1cd8748b7b90d3c6be6da3f786f12e4d70be073bd445ea162dfad4dc01a64",
+      "encoding/tests/test_output_4.txt": "60e1643840ba9e4aeede450feb7b0498fa66ee24e4a939d48855ce04ec6fc375",
       "generation_config.json": "5fccff80f55a4d455bbe516bdd552edf3e9623df95e99fbf2a3c3389fdf91af0",
       "inference/config.json": "6cc6f816ca73a8d38750194e330398e4f6955b4b45f674f7d29c96da14ccb733",
       "inference/kernel.py": "c4dc859a2208f9182ae00f6267cf8655deba51dcd92dfd14d0e65401658593e4",
       "inference/model.py": "ce962f1face79d4f633d36436576214057a7e11443c9789935e1deb5c6cd1d71",
       "model.safetensors.index.json": "7e975ba3bef8947a94e7da0abd60888375b232b4dfad883d59653e65c6ba522a",
+      "oracle/prompts.json": "214a1db0e1f301afc2df0a89db99d755db383dcd43b917710a5241555b8f4c4c",
       "tokenizer.json": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
-      "tokenizer_config.json": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547"
+      "tokenizer_config.json": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+      "upstream_commit.txt": "d8249ed1b51232dccf45c69169711e62b7bcf7b82100dbec557984aea7838aa9"
     },
     "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
     "hf_revision": "main",
@@ -372,6 +1189,16 @@
     "beta_slow": 1,
     "compress_rope_theta": 160000.0,
     "original_seq_len": 65536,
+    "per_layer_rule": {
+      "if_compress_ratio_nonzero": {
+        "original_seq_len": "yarn_rope.original_seq_len",
+        "rope_theta": "yarn_rope.compress_rope_theta"
+      },
+      "if_compress_ratio_zero": {
+        "original_seq_len": 0,
+        "rope_theta": "yarn_rope.rope_theta"
+      }
+    },
     "rope_factor": 16.0,
     "rope_theta": 10000.0
   }

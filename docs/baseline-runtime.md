@@ -127,6 +127,30 @@ Recognized keys (non-exhaustive):
 These env strings are recorded in the generated report, so do not put tokens or
 other secrets in them.
 
+To validate a DS4-tuned MTP sidecar GGUF that already exists on Spark (no trunk
+model load, and no tensor payload reads), set `REMOTE_MTP_SIDECAR_ENV` on the
+Mac and `MTP_SIDECAR_GGUF` on Spark:
+
+```sh
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+The report includes a `## MTP sidecar contract probe (Spark)` section with the
+JSON output from `scripts/model_contract_probe_mtp_sidecar.py`.
+
+After the first successful quantized run, prefer instrumentation over immediate
+optimization. The next useful report should say whether the runtime can expose:
+
+- per-token decode latency
+- routed expert IDs and top-k scores
+- expert batch sizes / queue depth
+- MTP draft, accepted, and rejected token counters
+
+Those fields feed the quantized high-performance path in
+`docs/quantized-performance-path.md` and the replay work in
+`docs/scheduler-simulator.md`.
+
 ## One-command entrypoint (Mac local: antirez/ds4)
 
 Run from the Mac:
@@ -151,14 +175,13 @@ All baseline scripts share the same safety gates (these are passed through by `s
 When using `scripts/run_baseline_existing_runtime.sh`, the model path inputs (`MODEL_GGUF`, `VLLM_MODEL`, and `LLAMA_DIR`) are also passed through to the remote benchmark scripts.
 
 Per-script useful env vars:
-- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
-- `scripts/run_baseline_existing_runtime.sh`: `FETCH_REMOTE_ARTIFACTS` (default `1`)
-- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`
-- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `VLLM_MODEL`, `DS4_DIR`, `DS4_MODEL_GGUF`
-- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`
-- `scripts/run_baseline_existing_runtime.sh`: `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`
-- `scripts/benchmark_llamacpp_spark.sh`: `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
-- `scripts/benchmark_vllm_spark.sh`: `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`, `OUT_DIR`
+- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`, `FETCH_REMOTE_ARTIFACTS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
+- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
+- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `SKIP_MODEL_SHA`
+- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SERVER_SWEEP`, `LLAMA_SERVER_THROUGHPUT_SWEEP` + `LLAMA_SERVER_*` knobs, `LLAMA_FATTN_PATCH_PROBE`, `LLAMA_MULTISLOT_PATCH_PROBE`
+- `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL`, `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`, `DS4_DIR`, `DS4_MODEL_GGUF`
+- `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `OUT_DIR`
+- `scripts/benchmark_vllm_spark.sh`: `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 
 ## Required Fixtures

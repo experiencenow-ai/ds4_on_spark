@@ -24,8 +24,12 @@ journalctl -u ds4@spark0.service --since "1 hour ago" --no-pager
 journalctl -u ds4@spark0.service -o json | head
 ```
 
+If you need to capture a repeatable snapshot for debugging (systemd + journald + routing + key DS4 env fields), use the support bundle script:
+
+- `docs/ops-support-bundle.md`
+
 If file logs are needed, use `/var/log/ds4/` and ensure log rotation is in
-place before a soak test.
+place before a soak test. Example: `deploy/config/logrotate.ds4.conf.example`.
 
 ### Journald Persistence (Optional)
 

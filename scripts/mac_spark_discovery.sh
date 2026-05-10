@@ -1,16 +1,81 @@
 #!/usr/bin/env sh
 set -eu
 
+usage()
+{
+	cat <<'EOF'
+usage: mac_spark_discovery.sh [host...]
+
+Runs lightweight macOS-side discovery for Spark hosts:
+- Interface snapshots (en0/en1, no MAC addresses)
+- ARP table (MACs stripped)
+- Bonjour SSH browse
+- Optional mDNS resolution checks for *.local targets
+- TCP/22 reachability probes
+
+Environment:
+  DS4_GIT_DIR       Optional git dir override for printing `git: <hash>`
+  DS4_GIT_WORK_TREE Optional work tree override (defaults to $PWD)
+  REDACT=1    Redact IPv4/IPv6/MAC addresses from output
+
+Examples:
+  ./scripts/mac_spark_discovery.sh
+  REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+  ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
+  ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local
+EOF
+}
+
+case "${1:-}" in
+	-h|--help)
+		usage
+		exit 0
+		;;
+esac
+
+if [ "$#" -gt 0 ]; then
+	targets="$*"
+else
+	targets="aitopatom-9ab9.local spark1.local"
+fi
+
+tmp="$(mktemp /private/tmp/ds4_mac_spark_discovery.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT INT HUP TERM
+
+{
+echo "== meta =="
+date -u
+	if command -v git >/dev/null 2>&1; then
+		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
+		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
+			git_dir="$git_worktree/.gitshim/repo/.git"
+		fi
+		if [ "$git_dir" != "" ]; then
+			echo "git: $(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
+		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
+		fi
+fi
+echo "targets: $targets"
+echo
 echo "== interfaces =="
 for iface in en0 en1; do
-    echo "-- $iface --"
-    ifconfig "$iface" 2>/dev/null | awk '
-        /^\\tstatus:/ { print; next }
-        /^\\tmtu/ { print; next }
-        /^\\tinet / { print; next }
-        /^\\tinet6 / { print; next }
-    ' || true
+	echo "-- $iface --"
+	ifconfig "$iface" 2>/dev/null | awk '
+		/^[[:space:]]*status:/ { print; next }
+		/^[[:space:]]*mtu/ { print; next }
+		/^[[:space:]]*inet / { print; next }
+		/^[[:space:]]*inet6 / { print; next }
+	' || true
 done
+echo
+echo "== routes =="
+netstat -rn -f inet 2>/dev/null | head -n 40 || true
+netstat -rn -f inet6 2>/dev/null | head -n 40 || true
 echo
 echo "== arp =="
 arp -an 2>/dev/null | sed -E 's/ at [^ ]+ on / on /' || true
@@ -22,8 +87,38 @@ sleep 5
 kill "$pid" >/dev/null 2>&1 || true
 wait "$pid" >/dev/null 2>&1 || true
 echo
-echo "== known target checks =="
-for host in aitopatom-9ab9.local 10.0.0.2 192.168.100.2 192.168.100.10 192.168.100.11; do
-    printf "%s: " "$host"
-    nc -vz -G 2 "$host" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
+echo "== mdns resolution, 3 seconds each =="
+for host in $targets; do
+	host_only="${host#*@}"
+	case "$host_only" in
+		*.local)
+			echo "-- $host_only --"
+			dns-sd -G v4v6 "$host_only" &
+			pid="$!"
+			sleep 3
+			kill "$pid" >/dev/null 2>&1 || true
+			wait "$pid" >/dev/null 2>&1 || true
+			;;
+		*)
+			;;
+	esac
 done
+echo
+echo "== known target checks =="
+for host in $targets; do
+	printf "%s: " "$host"
+	host_only="${host#*@}"
+	nc -vz -G 2 "$host_only" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
+done
+} >"$tmp"
+
+if [ "${REDACT:-0}" = "1" ]; then
+	sed -E \
+		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
+		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
+		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+		"$tmp"
+else
+	cat "$tmp"
+fi

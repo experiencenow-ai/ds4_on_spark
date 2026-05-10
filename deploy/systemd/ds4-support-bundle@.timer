@@ -1,0 +1,13 @@
+[Unit]
+Description=DS4 support bundle collector timer (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=30m
+Unit=ds4-support-bundle@%i.service
+
+[Install]
+WantedBy=timers.target

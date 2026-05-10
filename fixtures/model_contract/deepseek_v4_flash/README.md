@@ -10,7 +10,7 @@ Included upstream sources (metadata only):
 
 - `config.json`, `generation_config.json`
 - `model.safetensors.index.json` (tensor key set; no weight shards)
-- `contract_summary.json` (repo-generated, source-derived constants: topology, cache schedule, runtime params, and tensor-key invariants)
+- `contract_summary.json` (repo-generated, source-derived constants: topology, cache schedule, runtime params, tensor-key invariants, plus `compat` mappings for interpreting external runtimes/configs)
 - `tokenizer.json`, `tokenizer_config.json`
 - `encoding/*` (chat/tool/thinking encoder + gold vectors)
 - `inference/*` (reference runtime semantics: MLA, CSA/HCA cache compression, MoE, MTP, FP8/FP4 quantization)
@@ -26,3 +26,5 @@ Verify:
 ```bash
 python3 scripts/model_contract_verify_deepseek_v4_flash.py
 ```
+
+Quantized artifacts (GGUF) are not stored here, but when inspecting a human-provided GGUF conversion note that some communities ship MTP weights as a separate sidecar file. `scripts/model_contract_inspect_quantized_artifact.py` supports passing multiple `--path` values (trunk + MTP sidecar) and emits a combined `mtp_present` summary in `--json` mode.

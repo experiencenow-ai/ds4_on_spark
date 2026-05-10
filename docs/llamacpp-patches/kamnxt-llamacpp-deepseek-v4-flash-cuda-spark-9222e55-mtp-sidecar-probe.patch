@@ -1,0 +1,414 @@
+diff --git a/examples/CMakeLists.txt b/examples/CMakeLists.txt
+index a29dc70..b73b923 100644
+--- a/examples/CMakeLists.txt
++++ b/examples/CMakeLists.txt
+@@ -21,6 +21,7 @@ else()
+ 
+     add_subdirectory(gguf-hash)
+     add_subdirectory(gguf)
++    add_subdirectory(ds4-mtp-sidecar-probe)
+     add_subdirectory(idle)
+     add_subdirectory(lookahead)
+     add_subdirectory(lookup)
+diff --git a/examples/ds4-mtp-sidecar-probe/CMakeLists.txt b/examples/ds4-mtp-sidecar-probe/CMakeLists.txt
+new file mode 100644
+index 0000000..0e749fd
+--- /dev/null
++++ b/examples/ds4-mtp-sidecar-probe/CMakeLists.txt
+@@ -0,0 +1,5 @@
++set(TARGET llama-ds4-mtp-sidecar-probe)
++add_executable(${TARGET} ds4-mtp-sidecar-probe.cpp)
++install(TARGETS ${TARGET} RUNTIME)
++target_link_libraries(${TARGET} PRIVATE ggml ${CMAKE_THREAD_LIBS_INIT})
++target_compile_features(${TARGET} PRIVATE cxx_std_17)
+diff --git a/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
+new file mode 100644
+index 0000000..ee2fc8b
+--- /dev/null
++++ b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
+@@ -0,0 +1,385 @@
++#include "gguf.h"
++#include "ggml.h"
++
++#include <algorithm>
++#include <cinttypes>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <string>
++#include <unordered_set>
++#include <vector>
++
++static void usage(const char * prog) {
++    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json]\n", prog);
++}
++
++static std::string json_escape(const std::string & s) {
++    std::string out;
++    out.reserve(s.size() + 8);
++    for (const char c : s) {
++        switch (c) {
++            case '\\': out += "\\\\"; break;
++            case '"':  out += "\\\""; break;
++            case '\n': out += "\\n"; break;
++            case '\r': out += "\\r"; break;
++            case '\t': out += "\\t"; break;
++            default: out += c; break;
++        }
++    }
++    return out;
++}
++
++static bool tensor_dims_eq(const ggml_tensor * t, const std::vector<int64_t> & want) {
++    if (t == nullptr) {
++        return false;
++    }
++    if (t->n_dims != (int) want.size()) {
++        return false;
++    }
++    for (int i = 0; i < t->n_dims; i++) {
++        if (t->ne[i] != want[i]) {
++            return false;
++        }
++    }
++    return true;
++}
++
++static bool tensor_is_1d_len(const ggml_tensor * t, int64_t n) {
++    return tensor_dims_eq(t, { n });
++}
++
++static bool tensor_is_2d(const ggml_tensor * t, int64_t a, int64_t b) {
++    return tensor_dims_eq(t, { a, b });
++}
++
++static bool tensor_is_3d(const ggml_tensor * t, int64_t a, int64_t b, int64_t c) {
++    return tensor_dims_eq(t, { a, b, c });
++}
++
++static const std::vector<std::string> & expected_tensor_names() {
++    static const std::vector<std::string> k = {
++        "mtp.0.attn_kv.weight",
++        "mtp.0.attn_kv_a_norm.weight",
++        "mtp.0.attn_norm.weight",
++        "mtp.0.attn_output_a.weight",
++        "mtp.0.attn_output_b.weight",
++        "mtp.0.attn_q_a.weight",
++        "mtp.0.attn_q_a_norm.weight",
++        "mtp.0.attn_q_b.weight",
++        "mtp.0.attn_sinks.weight",
++        "mtp.0.e_proj.weight",
++        "mtp.0.enorm.weight",
++        "mtp.0.exp_probs_b.bias",
++        "mtp.0.ffn_down_exps.weight",
++        "mtp.0.ffn_down_shexp.weight",
++        "mtp.0.ffn_gate_exps.weight",
++        "mtp.0.ffn_gate_inp.weight",
++        "mtp.0.ffn_gate_shexp.weight",
++        "mtp.0.ffn_norm.weight",
++        "mtp.0.ffn_up_exps.weight",
++        "mtp.0.ffn_up_shexp.weight",
++        "mtp.0.h_proj.weight",
++        "mtp.0.hc_attn_base.weight",
++        "mtp.0.hc_attn_fn.weight",
++        "mtp.0.hc_attn_scale.weight",
++        "mtp.0.hc_ffn_base.weight",
++        "mtp.0.hc_ffn_fn.weight",
++        "mtp.0.hc_ffn_scale.weight",
++        "mtp.0.hc_head_base.weight",
++        "mtp.0.hc_head_fn.weight",
++        "mtp.0.hc_head_scale.weight",
++        "mtp.0.hnorm.weight",
++        "mtp.0.norm.weight",
++    };
++
++    return k;
++}
++
++int main(int argc, char ** argv) {
++    std::string path;
++    bool json = false;
++
++    for (int i = 1; i < argc; i++) {
++        const char * arg = argv[i];
++
++        if ((std::strcmp(arg, "--path") == 0 || std::strcmp(arg, "-p") == 0) && i + 1 < argc) {
++            path = argv[++i];
++            continue;
++        }
++
++        if (std::strcmp(arg, "--json") == 0) {
++            json = true;
++            continue;
++        }
++
++        if (std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0) {
++            usage(argv[0]);
++            return 0;
++        }
++
++        std::fprintf(stderr, "unknown arg: %s\n", arg);
++        usage(argv[0]);
++        return 2;
++    }
++
++    if (path.empty()) {
++        usage(argv[0]);
++        return 2;
++    }
++
++    std::vector<std::string> errors;
++
++    ggml_context * ctx_meta = nullptr;
++    gguf_init_params params = {
++        /*.no_alloc =*/ true,
++        /*.ctx      =*/ &ctx_meta,
++    };
++
++    gguf_context * ctx_gguf = gguf_init_from_file(path.c_str(), params);
++
++    if (ctx_gguf == nullptr) {
++        std::fprintf(stderr, "failed to open gguf: %s\n", path.c_str());
++        return 1;
++    }
++
++    std::string arch;
++    {
++        const int kid = gguf_find_key(ctx_gguf, "general.architecture");
++        if (kid < 0 || gguf_get_kv_type(ctx_gguf, kid) != GGUF_TYPE_STRING) {
++            errors.push_back("missing metadata key general.architecture");
++        } else {
++            arch = gguf_get_val_str(ctx_gguf, kid);
++            if (arch != "deepseek4_mtp_support") {
++                errors.push_back("general.architecture is '" + arch + "', expected 'deepseek4_mtp_support'");
++            }
++        }
++    }
++
++    const int64_t n_tensors = gguf_get_n_tensors(ctx_gguf);
++
++    // verify expected tensor set
++    std::unordered_set<std::string> expected;
++    expected.reserve(expected_tensor_names().size());
++    for (const auto & n : expected_tensor_names()) {
++        expected.insert(n);
++    }
++
++    std::vector<std::string> missing;
++    for (const auto & n : expected_tensor_names()) {
++        if (gguf_find_tensor(ctx_gguf, n.c_str()) < 0) {
++            missing.push_back(n);
++        }
++    }
++
++    std::vector<std::string> extra;
++    for (int64_t i = 0; i < n_tensors; i++) {
++        const char * n = gguf_get_tensor_name(ctx_gguf, i);
++        if (n == nullptr) {
++            continue;
++        }
++        if (expected.find(std::string(n)) == expected.end()) {
++            extra.push_back(n);
++        }
++    }
++
++    if (!missing.empty()) {
++        errors.push_back("missing expected mtp.0.* tensors (see missing[])");
++    }
++
++    if (!extra.empty()) {
++        errors.push_back("unexpected extra tensors present (see extra[])");
++    }
++
++    // light self-consistency checks (derived only from the 32 tensor shapes)
++    int64_t n_embd = -1;
++    int64_t n_head = -1;
++    int64_t n_head_dim = -1;
++    int64_t n_lora_q = -1;
++    int64_t n_lora_o = -1;
++    int64_t n_expert = -1;
++    int64_t n_ff_exp = -1;
++    int64_t n_hc = -1;
++
++    if (ctx_meta != nullptr) {
++        const ggml_tensor * t_norm = ggml_get_tensor(ctx_meta, "mtp.0.norm.weight");
++        if (t_norm != nullptr && t_norm->n_dims == 1) {
++            n_embd = t_norm->ne[0];
++        }
++
++        const ggml_tensor * t_sinks = ggml_get_tensor(ctx_meta, "mtp.0.attn_sinks.weight");
++        if (t_sinks != nullptr && t_sinks->n_dims == 1) {
++            n_head = t_sinks->ne[0];
++        }
++
++        const ggml_tensor * t_kv = ggml_get_tensor(ctx_meta, "mtp.0.attn_kv.weight");
++        if (t_kv != nullptr && t_kv->n_dims == 2) {
++            n_head_dim = t_kv->ne[1];
++        }
++
++        const ggml_tensor * t_q_a = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_a.weight");
++        if (t_q_a != nullptr && t_q_a->n_dims == 2) {
++            n_lora_q = t_q_a->ne[1];
++        }
++
++        const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
++        if (t_q_b != nullptr && t_q_b->n_dims == 2) {
++            n_lora_o = t_q_b->ne[0];
++        }
++
++        const ggml_tensor * t_exp_bias = ggml_get_tensor(ctx_meta, "mtp.0.exp_probs_b.bias");
++        if (t_exp_bias != nullptr && t_exp_bias->n_dims == 1) {
++            n_expert = t_exp_bias->ne[0];
++        }
++
++        const ggml_tensor * t_up_exps = ggml_get_tensor(ctx_meta, "mtp.0.ffn_up_exps.weight");
++        if (t_up_exps != nullptr && t_up_exps->n_dims == 3) {
++            n_ff_exp = t_up_exps->ne[1];
++        }
++
++        const ggml_tensor * t_hc_head_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_base.weight");
++        if (t_hc_head_base != nullptr && t_hc_head_base->n_dims == 1) {
++            n_hc = t_hc_head_base->ne[0];
++        }
++
++        if (n_embd > 0) {
++            const ggml_tensor * t_attn_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_norm.weight");
++            const ggml_tensor * t_ffn_norm = ggml_get_tensor(ctx_meta, "mtp.0.ffn_norm.weight");
++            const ggml_tensor * t_enorm = ggml_get_tensor(ctx_meta, "mtp.0.enorm.weight");
++            const ggml_tensor * t_hnorm = ggml_get_tensor(ctx_meta, "mtp.0.hnorm.weight");
++            const ggml_tensor * t_norm2 = ggml_get_tensor(ctx_meta, "mtp.0.norm.weight");
++
++            if (!tensor_is_1d_len(t_attn_norm, n_embd)) errors.push_back("shape mismatch: mtp.0.attn_norm.weight");
++            if (!tensor_is_1d_len(t_ffn_norm,  n_embd)) errors.push_back("shape mismatch: mtp.0.ffn_norm.weight");
++            if (!tensor_is_1d_len(t_enorm,     n_embd)) errors.push_back("shape mismatch: mtp.0.enorm.weight");
++            if (!tensor_is_1d_len(t_hnorm,     n_embd)) errors.push_back("shape mismatch: mtp.0.hnorm.weight");
++            if (!tensor_is_1d_len(t_norm2,     n_embd)) errors.push_back("shape mismatch: mtp.0.norm.weight");
++
++            const ggml_tensor * t_eproj = ggml_get_tensor(ctx_meta, "mtp.0.e_proj.weight");
++            const ggml_tensor * t_hproj = ggml_get_tensor(ctx_meta, "mtp.0.h_proj.weight");
++            if (!tensor_is_2d(t_eproj, n_embd, n_embd)) errors.push_back("shape mismatch: mtp.0.e_proj.weight");
++            if (!tensor_is_2d(t_hproj, n_embd, n_embd)) errors.push_back("shape mismatch: mtp.0.h_proj.weight");
++
++            const ggml_tensor * t_attn_out_a = ggml_get_tensor(ctx_meta, "mtp.0.attn_output_a.weight");
++            const ggml_tensor * t_attn_out_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_output_b.weight");
++            if (t_attn_out_a && t_attn_out_a->n_dims == 2) {
++                if (t_attn_out_a->ne[0] != n_embd) errors.push_back("shape mismatch: mtp.0.attn_output_a.weight");
++            }
++            if (t_attn_out_b && t_attn_out_b->n_dims == 2) {
++                if (t_attn_out_b->ne[1] != n_embd) errors.push_back("shape mismatch: mtp.0.attn_output_b.weight");
++            }
++        }
++
++        if (n_lora_q > 0) {
++            const ggml_tensor * t_q_a_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_a_norm.weight");
++            if (!tensor_is_1d_len(t_q_a_norm, n_lora_q)) errors.push_back("shape mismatch: mtp.0.attn_q_a_norm.weight");
++        }
++
++        if (n_embd > 0 && n_lora_q > 0) {
++            const ggml_tensor * t_q_a = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_a.weight");
++            if (!tensor_is_2d(t_q_a, n_embd, n_lora_q)) errors.push_back("shape mismatch: mtp.0.attn_q_a.weight");
++        }
++
++        if (n_embd > 0 && n_head_dim > 0) {
++            const ggml_tensor * t_kv = ggml_get_tensor(ctx_meta, "mtp.0.attn_kv.weight");
++            if (!tensor_is_2d(t_kv, n_embd, n_head_dim)) errors.push_back("shape mismatch: mtp.0.attn_kv.weight");
++        }
++
++        if (n_head > 0 && n_head_dim > 0 && n_lora_o > 0) {
++            const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
++            const int64_t want_out = n_head * n_head_dim;
++            if (t_q_b && t_q_b->n_dims == 2) {
++                if (t_q_b->ne[0] != n_lora_o || t_q_b->ne[1] != want_out) {
++                    errors.push_back("shape mismatch: mtp.0.attn_q_b.weight");
++                }
++            }
++        }
++
++        if (n_embd > 0 && n_expert > 0 && n_ff_exp > 0) {
++            const ggml_tensor * t_gate_exps = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_exps.weight");
++            const ggml_tensor * t_up_exps   = ggml_get_tensor(ctx_meta, "mtp.0.ffn_up_exps.weight");
++            const ggml_tensor * t_down_exps = ggml_get_tensor(ctx_meta, "mtp.0.ffn_down_exps.weight");
++
++            if (!tensor_is_3d(t_gate_exps, n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_exps.weight");
++            if (!tensor_is_3d(t_up_exps,   n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_up_exps.weight");
++            if (!tensor_is_3d(t_down_exps, n_ff_exp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_down_exps.weight");
++        }
++
++        if (n_hc > 0) {
++            const ggml_tensor * t_hc_attn_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_scale.weight");
++            const ggml_tensor * t_hc_ffn_scale  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_scale.weight");
++            const ggml_tensor * t_hc_head_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_scale.weight");
++
++            if (!tensor_is_1d_len(t_hc_attn_scale, 3)) errors.push_back("shape mismatch: mtp.0.hc_attn_scale.weight");
++            if (!tensor_is_1d_len(t_hc_ffn_scale,  3)) errors.push_back("shape mismatch: mtp.0.hc_ffn_scale.weight");
++            if (!tensor_is_1d_len(t_hc_head_scale, 1)) errors.push_back("shape mismatch: mtp.0.hc_head_scale.weight");
++
++            const ggml_tensor * t_hc_head_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_base.weight");
++            const ggml_tensor * t_hc_head_fn   = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_fn.weight");
++            if (!tensor_is_1d_len(t_hc_head_base, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_base.weight");
++            if (!tensor_is_2d(t_hc_head_fn, 16384, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_fn.weight");
++        }
++    }
++
++    const bool ok = errors.empty() && missing.empty() && extra.empty();
++
++    if (!json) {
++        if (ok) {
++            std::printf("ok=true\n");
++            std::printf("architecture=%s\n", arch.empty() ? "(missing)" : arch.c_str());
++            std::printf("tensor_count=%" PRId64 "\n", n_tensors);
++        } else {
++            std::printf("ok=false\n");
++            for (const auto & e : errors) {
++                std::printf("error=%s\n", e.c_str());
++            }
++            if (!missing.empty()) {
++                std::printf("missing=%zu\n", missing.size());
++                for (const auto & n : missing) {
++                    std::printf("missing_tensor=%s\n", n.c_str());
++                }
++            }
++            if (!extra.empty()) {
++                std::printf("extra=%zu\n", extra.size());
++                for (const auto & n : extra) {
++                    std::printf("extra_tensor=%s\n", n.c_str());
++                }
++            }
++        }
++    } else {
++        std::printf("{\n");
++        std::printf("  \"ok\": %s,\n", ok ? "true" : "false");
++        std::printf("  \"path\": \"%s\",\n", json_escape(path).c_str());
++        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
++        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
++
++        std::printf("  \"missing\": [");
++        for (size_t i = 0; i < missing.size(); i++) {
++            if (i) std::printf(", ");
++            std::printf("\"%s\"", json_escape(missing[i]).c_str());
++        }
++        std::printf("],\n");
++
++        std::printf("  \"extra\": [");
++        for (size_t i = 0; i < extra.size(); i++) {
++            if (i) std::printf(", ");
++            std::printf("\"%s\"", json_escape(extra[i]).c_str());
++        }
++        std::printf("],\n");
++
++        std::printf("  \"errors\": [");
++        for (size_t i = 0; i < errors.size(); i++) {
++            if (i) std::printf(", ");
++            std::printf("\"%s\"", json_escape(errors[i]).c_str());
++        }
++        std::printf("]\n");
++        std::printf("}\n");
++    }
++
++    gguf_free(ctx_gguf);
++    if (ctx_meta != nullptr) {
++        ggml_free(ctx_meta);
++    }
++
++    return ok ? 0 : 3;
++}

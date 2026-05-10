@@ -174,6 +174,7 @@ int main(int argc,char **argv)
 	(void)argc;
 	(void)argv;
 	cuda_probe_print_versions();
+	printf("cublasLtGetVersion=%zu cublasLtGetCudartVersion=%zu\n",cublasLtGetVersion(),cublasLtGetCudartVersion());
 	do
 	{
 		rc = fill_identity_f32(h_a,m,k);

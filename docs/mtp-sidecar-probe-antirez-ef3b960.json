@@ -1,0 +1,306 @@
+{
+  "architecture": "deepseek4_mtp_support",
+  "derived_params": {
+    "n_embd": 4096,
+    "n_expert": 256,
+    "n_ff_exp": 2048,
+    "n_hc": 4,
+    "n_head": 64,
+    "n_head_dim": 512,
+    "n_lora_o": 1024,
+    "n_lora_q": 1024,
+    "n_out_group": 8
+  },
+  "errors": [],
+  "extra_tensors": [],
+  "gguf_version": 3,
+  "metadata": {
+    "deepseek4.expert_count": 256,
+    "deepseek4.mtp_layer_count": 1,
+    "deepseek4.nextn_predict_layers": 1,
+    "general.architecture": "deepseek4_mtp_support"
+  },
+  "missing_tensors": [],
+  "ok": true,
+  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+  "tensor_count": 32,
+  "tensors": [
+    {
+      "dims": [
+        4096,
+        512
+      ],
+      "name": "mtp.0.attn_kv.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        512
+      ],
+      "name": "mtp.0.attn_kv_a_norm.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096
+      ],
+      "name": "mtp.0.attn_norm.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096,
+        8192
+      ],
+      "name": "mtp.0.attn_output_a.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        8192,
+        4096
+      ],
+      "name": "mtp.0.attn_output_b.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        4096,
+        1024
+      ],
+      "name": "mtp.0.attn_q_a.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        1024
+      ],
+      "name": "mtp.0.attn_q_a_norm.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        1024,
+        32768
+      ],
+      "name": "mtp.0.attn_q_b.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        64
+      ],
+      "name": "mtp.0.attn_sinks.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096,
+        4096
+      ],
+      "name": "mtp.0.e_proj.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        4096
+      ],
+      "name": "mtp.0.enorm.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        256
+      ],
+      "name": "mtp.0.exp_probs_b.bias",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        2048,
+        4096,
+        256
+      ],
+      "name": "mtp.0.ffn_down_exps.weight",
+      "type": "Q4_K",
+      "type_code": 12
+    },
+    {
+      "dims": [
+        2048,
+        4096
+      ],
+      "name": "mtp.0.ffn_down_shexp.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "mtp.0.ffn_gate_exps.weight",
+      "type": "Q4_K",
+      "type_code": 12
+    },
+    {
+      "dims": [
+        4096,
+        256
+      ],
+      "name": "mtp.0.ffn_gate_inp.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096,
+        2048
+      ],
+      "name": "mtp.0.ffn_gate_shexp.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        4096
+      ],
+      "name": "mtp.0.ffn_norm.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096,
+        2048,
+        256
+      ],
+      "name": "mtp.0.ffn_up_exps.weight",
+      "type": "Q4_K",
+      "type_code": 12
+    },
+    {
+      "dims": [
+        4096,
+        2048
+      ],
+      "name": "mtp.0.ffn_up_shexp.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        4096,
+        4096
+      ],
+      "name": "mtp.0.h_proj.weight",
+      "type": "Q8_0",
+      "type_code": 8
+    },
+    {
+      "dims": [
+        24
+      ],
+      "name": "mtp.0.hc_attn_base.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        16384,
+        24
+      ],
+      "name": "mtp.0.hc_attn_fn.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        3
+      ],
+      "name": "mtp.0.hc_attn_scale.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        24
+      ],
+      "name": "mtp.0.hc_ffn_base.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        16384,
+        24
+      ],
+      "name": "mtp.0.hc_ffn_fn.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        3
+      ],
+      "name": "mtp.0.hc_ffn_scale.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4
+      ],
+      "name": "mtp.0.hc_head_base.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        16384,
+        4
+      ],
+      "name": "mtp.0.hc_head_fn.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        1
+      ],
+      "name": "mtp.0.hc_head_scale.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096
+      ],
+      "name": "mtp.0.hnorm.weight",
+      "type": "F32",
+      "type_code": 0
+    },
+    {
+      "dims": [
+        4096
+      ],
+      "name": "mtp.0.norm.weight",
+      "type": "F32",
+      "type_code": 0
+    }
+  ],
+  "url_prefix_bytes": 262144
+}

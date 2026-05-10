@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 
 
@@ -37,6 +38,12 @@ def find_mtp_layer_ids(weight_keys: set[str]) -> list[int]:
 			continue
 	return sorted(ids)
 
+def sha256_lines(lines: list[str]) -> str:
+	h = sha256()
+	for line in lines:
+		h.update(line.encode("utf-8"))
+		h.update(b"\n")
+	return h.hexdigest()
 
 def main() -> int:
 	failures: list[Failure] = []
@@ -44,6 +51,7 @@ def main() -> int:
 	cfg = load_json(FIX / "config.json")
 	inf = load_json(FIX / "inference" / "config.json")
 	idx = load_json(FIX / "model.safetensors.index.json")
+	tok_cfg = load_json(FIX / "tokenizer_config.json")
 	weight_map = idx.get("weight_map", {})
 	weight_keys = set(weight_map.keys())
 
@@ -60,6 +68,320 @@ def main() -> int:
 		r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_contract_build_deepseek_v4_flash_contract.py"), "--check"], cwd=str(ROOT))
 		if r.returncode != 0:
 			failures.append(Failure(12, f"contract summary fixture is stale: {contract_summary} (re-run scripts/model_contract_build_deepseek_v4_flash_contract.py)"))
+		else:
+			try:
+				summary = load_json(contract_summary)
+				up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
+				fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
+				if not isinstance(fixture_sha, dict):
+					fixture_sha = {}
+				expected_sha_keys = [
+					"encoding/tests/test_input_1.json",
+					"encoding/tests/test_output_1.txt",
+					"encoding/tests/test_input_4.json",
+					"encoding/tests/test_output_4.txt",
+					"oracle/prompts.json",
+					"upstream_commit.txt",
+				]
+				for k in expected_sha_keys:
+					if fixture_sha.get(k) is None:
+						failures.append(Failure(32, f"contract summary missing upstream.fixtures_sha256 entry for {k}: {contract_summary}"))
+						break
+				enc_test_keys = [k for k in fixture_sha.keys() if isinstance(k, str) and k.startswith("encoding/tests/")]
+				if len(enc_test_keys) < 8:
+					failures.append(Failure(33, f"contract summary must record sha256 for encoding oracle vectors under encoding/tests/* (expected >=8, got {len(enc_test_keys)}): {contract_summary}"))
+
+				enc = summary.get("encoding_constants", {}) if isinstance(summary, dict) else {}
+				tok = summary.get("tokenizer", {}) if isinstance(summary, dict) else {}
+				if isinstance(enc, dict) and isinstance(tok, dict):
+					if enc.get("bos_token") != tok.get("bos_token"):
+						failures.append(Failure(34, f"contract summary encoding_constants.bos_token must match tokenizer.bos_token: {contract_summary}"))
+					if enc.get("eos_token") != tok.get("eos_token"):
+						failures.append(Failure(35, f"contract summary encoding_constants.eos_token must match tokenizer.eos_token: {contract_summary}"))
+					try:
+						cfg_bos_id = int(cfg.get("bos_token_id"))
+						cfg_eos_id = int(cfg.get("eos_token_id"))
+					except Exception:
+						cfg_bos_id = None
+						cfg_eos_id = None
+					if cfg_bos_id is not None and tok.get("bos_token_id") != cfg_bos_id:
+						failures.append(Failure(80, f"contract summary tokenizer.bos_token_id must match config.json bos_token_id={cfg_bos_id}: {contract_summary}"))
+					if cfg_eos_id is not None and tok.get("eos_token_id") != cfg_eos_id:
+						failures.append(Failure(81, f"contract summary tokenizer.eos_token_id must match config.json eos_token_id={cfg_eos_id}: {contract_summary}"))
+					if tok.get("pad_token_is_eos") is not True:
+						failures.append(Failure(82, f"contract summary tokenizer.pad_token_is_eos must be true (per tokenizer_config.json): {contract_summary}"))
+
+					def _tok_cfg_content(x):
+						if isinstance(x, dict):
+							return x.get("content")
+						if isinstance(x, str):
+							return x
+						return None
+
+					tok_cfg_bos = _tok_cfg_content(tok_cfg.get("bos_token"))
+					tok_cfg_eos = _tok_cfg_content(tok_cfg.get("eos_token"))
+					tok_cfg_pad = _tok_cfg_content(tok_cfg.get("pad_token"))
+					if tok_cfg_bos is not None and tok.get("bos_token") != tok_cfg_bos:
+						failures.append(Failure(83, f"contract summary tokenizer.bos_token must match tokenizer_config.json bos_token.content: {contract_summary}"))
+					if tok_cfg_eos is not None and tok.get("eos_token") != tok_cfg_eos:
+						failures.append(Failure(84, f"contract summary tokenizer.eos_token must match tokenizer_config.json eos_token.content: {contract_summary}"))
+					if tok_cfg_pad is not None and tok_cfg_eos is not None and tok_cfg_pad != tok_cfg_eos:
+						failures.append(Failure(85, f"tokenizer_config.json pad_token.content must match eos_token.content (pad token is EOS): {contract_summary}"))
+					if tok.get("add_bos_token") != bool(tok_cfg.get("add_bos_token", False)):
+						failures.append(Failure(86, f"contract summary tokenizer.add_bos_token must match tokenizer_config.json add_bos_token: {contract_summary}"))
+					if tok.get("add_eos_token") != bool(tok_cfg.get("add_eos_token", False)):
+						failures.append(Failure(87, f"contract summary tokenizer.add_eos_token must match tokenizer_config.json add_eos_token: {contract_summary}"))
+					if tok.get("model_max_length") != tok_cfg.get("model_max_length"):
+						failures.append(Failure(88, f"contract summary tokenizer.model_max_length must match tokenizer_config.json model_max_length: {contract_summary}"))
+					tok_js = tok.get("tokenizer_json_summary")
+					if not isinstance(tok_js, dict):
+						failures.append(Failure(40, f"contract summary missing tokenizer.tokenizer_json_summary (expected dict): {contract_summary}"))
+					else:
+						if tok_js.get("model_type") != "BPE":
+							failures.append(Failure(41, f"contract summary tokenizer.tokenizer_json_summary.model_type must be BPE: {contract_summary}"))
+						if tok_js.get("effective_vocab_size_matches_config") is not True:
+							failures.append(Failure(42, f"contract summary tokenizer.tokenizer_json_summary.effective_vocab_size_matches_config must be true: {contract_summary}"))
+						base_vocab_size = tok_js.get("base_vocab_size")
+						effective_vocab_size = tok_js.get("effective_vocab_size")
+						min_ge_base = tok_js.get("added_token_id_min_ge_base_vocab")
+						max_ge_base = tok_js.get("added_token_id_max_ge_base_vocab")
+						count_ge_base = tok_js.get("added_tokens_count_ge_base_vocab")
+						if isinstance(base_vocab_size, int) and isinstance(effective_vocab_size, int):
+							if not (isinstance(min_ge_base, int) and min_ge_base >= base_vocab_size):
+								failures.append(Failure(46, f"contract summary tokenizer.tokenizer_json_summary.added_token_id_min_ge_base_vocab must be int >= base_vocab_size: {contract_summary}"))
+							if not (isinstance(max_ge_base, int) and max_ge_base == (effective_vocab_size - 1)):
+								failures.append(Failure(47, f"contract summary tokenizer.tokenizer_json_summary.added_token_id_max_ge_base_vocab must equal effective_vocab_size-1: {contract_summary}"))
+							if not (isinstance(count_ge_base, int) and count_ge_base == (effective_vocab_size - base_vocab_size)):
+								failures.append(Failure(48, f"contract summary tokenizer.tokenizer_json_summary.added_tokens_count_ge_base_vocab must equal effective_vocab_size-base_vocab_size: {contract_summary}"))
+							if isinstance(min_ge_base, int) and min_ge_base != base_vocab_size:
+								failures.append(Failure(49, f"contract summary tokenizer.tokenizer_json_summary.added_token_id_min_ge_base_vocab must equal base_vocab_size (contiguous added IDs): {contract_summary}"))
+						pre = tok_js.get("pre_tokenizer")
+						post = tok_js.get("post_processor")
+						dec = tok_js.get("decoder")
+						if not (isinstance(pre, dict) and pre.get("type") == "Sequence"):
+							failures.append(Failure(43, f"contract summary tokenizer.tokenizer_json_summary.pre_tokenizer must be a Sequence: {contract_summary}"))
+						if not (isinstance(post, dict) and post.get("type") == "ByteLevel"):
+							failures.append(Failure(44, f"contract summary tokenizer.tokenizer_json_summary.post_processor must be ByteLevel: {contract_summary}"))
+						if not (isinstance(dec, dict) and dec.get("type") == "ByteLevel"):
+							failures.append(Failure(45, f"contract summary tokenizer.tokenizer_json_summary.decoder must be ByteLevel: {contract_summary}"))
+					required_enc_fields = [
+						"system_msg_template",
+						"user_msg_template",
+						"assistant_msg_template",
+						"assistant_msg_wo_eos_template",
+						"thinking_template",
+						"tool_call_template",
+						"tool_calls_template",
+					]
+					for f in required_enc_fields:
+						v = enc.get(f)
+						if not (isinstance(v, str) and v):
+							failures.append(Failure(37, f"contract summary missing encoding_constants.{f} (expected non-empty string): {contract_summary}"))
+							break
+					task_tokens = enc.get("ds_task_sp_tokens")
+					if not isinstance(task_tokens, dict):
+						failures.append(Failure(38, f"contract summary missing encoding_constants.ds_task_sp_tokens (expected dict): {contract_summary}"))
+					else:
+						expected_task_keys = {"action", "query", "authority", "domain", "title", "read_url"}
+						if set(task_tokens.keys()) != expected_task_keys:
+							failures.append(Failure(39, f"contract summary encoding_constants.ds_task_sp_tokens keys mismatch (expected {sorted(expected_task_keys)}): {contract_summary}"))
+				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
+					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
+
+				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
+				if 64 not in list(group_sizes):
+					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
+				mla = summary.get("mla", {})
+				if mla.get("output_derotate_present") is not True:
+					failures.append(Failure(15, f"contract summary missing MLA output de-rotation marker (mla.output_derotate_present=true): {contract_summary}"))
+				if mla.get("q_extra_rms_norm_present") is not True:
+					failures.append(Failure(16, f"contract summary missing MLA Q extra RMS normalization marker (mla.q_extra_rms_norm_present=true): {contract_summary}"))
+				cache_update = summary.get("cache", {}).get("update_semantics", {})
+				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
+				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
+					failures.append(Failure(17, f"contract summary missing decode sliding-ring update expression containing 'start_pos % win': {contract_summary}"))
+				moe_sem = summary.get("moe", {}).get("semantics", {})
+				if moe_sem.get("bias_affects_selection_only_comment") is None:
+					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
+				moe = summary.get("moe", {})
+				moe_hash = moe.get("hash_routing", {}) if isinstance(moe, dict) else {}
+				try:
+					n_hash = int(moe.get("n_hash_layers", 0)) if isinstance(moe, dict) else 0
+				except Exception:
+					n_hash = 0
+					if n_hash > 0:
+						if not isinstance(moe_hash, dict):
+							failures.append(Failure(40, f"contract summary missing moe.hash_routing dict (hash routing is enabled with n_hash_layers={n_hash}): {contract_summary}"))
+						else:
+							expected_ids = list(range(n_hash))
+							if moe_hash.get("hash_layer_ids") != expected_ids:
+								failures.append(Failure(41, f"contract summary moe.hash_routing.hash_layer_ids mismatch (expected {expected_ids}): {contract_summary}"))
+							if moe_hash.get("tid2eid_dtype") != "int32":
+								failures.append(Failure(42, f"contract summary moe.hash_routing.tid2eid_dtype must be 'int32': {contract_summary}"))
+							try:
+								expected_shape = [int(summary.get("topology", {}).get("vocab_size")), int(moe.get("n_activated_experts"))]
+							except Exception:
+								expected_shape = None
+							if expected_shape is not None and moe_hash.get("tid2eid_shape") != expected_shape:
+								failures.append(Failure(43, f"contract summary moe.hash_routing.tid2eid_shape mismatch (expected {expected_shape}): {contract_summary}"))
+							need_exprs = ["hash_enabled_expr", "hash_indices_expr"]
+							for k in need_exprs:
+								v = moe_hash.get(k)
+								if not (isinstance(v, str) and v):
+									failures.append(Failure(44, f"contract summary moe.hash_routing missing {k} expression string: {contract_summary}"))
+									break
+
+				chk = summary.get("checkpoint_index", {})
+				expected_key_sha = sha256_lines(sorted(weight_keys))
+				if chk.get("weight_map_num_tensors") != int(len(weight_keys)):
+					failures.append(Failure(19, f"contract summary checkpoint_index.weight_map_num_tensors mismatch (expected {len(weight_keys)}): {contract_summary}"))
+				if chk.get("weight_map_keys_sha256") != expected_key_sha:
+					failures.append(Failure(27, f"contract summary checkpoint_index.weight_map_keys_sha256 mismatch (expected {expected_key_sha}): {contract_summary}"))
+
+				tk = summary.get("tensor_keys", {})
+				if tk.get("mtp_embed_present") is not False:
+					failures.append(Failure(28, f"contract summary expects no mtp.*.embed.* keys in official checkpoint (tensor_keys.mtp_embed_present=false): {contract_summary}"))
+				if tk.get("mtp_head_present") is not False:
+					failures.append(Failure(29, f"contract summary expects no mtp.*.head.* keys in official checkpoint (tensor_keys.mtp_head_present=false): {contract_summary}"))
+				mtp_add = tk.get("required_mtp_additional_suffixes", None)
+				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
+					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
+
+				mtp = summary.get("mtp", {})
+				trust = mtp.get("trust_gates", {}) if isinstance(mtp, dict) else {}
+				if not isinstance(trust, dict):
+					failures.append(Failure(68, f"contract summary mtp.trust_gates must be an object: {contract_summary}"))
+				else:
+					expected = {
+						"artifact_requires_mtp_contract_complete": True,
+						"artifact_requires_namespace_prefix": "mtp.{j}.",
+						"oracle_requires_include_mtp": True,
+						"oracle_requires_mtp_trace": True,
+						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+						"acceptance_requires_prefill_and_decode": True,
+						"acceptance_topk_ids_exact": True,
+					}
+					for k, want in expected.items():
+						got = trust.get(k)
+						if got != want:
+							failures.append(Failure(69, f"contract summary mtp.trust_gates[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
+
+				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
+				if not isinstance(mtp_sem, dict):
+					failures.append(Failure(70, f"contract summary mtp.semantics must be an object: {contract_summary}"))
+				else:
+					combine = mtp_sem.get("combine_e_and_h_expr")
+					if not (isinstance(combine, str) and "self.e_proj(e).unsqueeze(2)" in combine and "+ self.h_proj(x)" in combine):
+						failures.append(Failure(71, f"contract summary mtp.semantics.combine_e_and_h_expr missing or unexpected: {contract_summary}"))
+					head = mtp_sem.get("head_logits_expr")
+					if not (isinstance(head, str) and head.startswith("logits = self.head(")):
+						failures.append(Failure(72, f"contract summary mtp.semantics.head_logits_expr missing or unexpected: {contract_summary}"))
+
+				compat = summary.get("compat", {})
+				bt = compat.get("by_transformers_key", {}) if isinstance(compat, dict) else {}
+				if not isinstance(bt, dict):
+					failures.append(Failure(60, f"contract summary compat.by_transformers_key must be an object: {contract_summary}"))
+				else:
+					expected = {
+						"num_nextn_predict_layers": "mtp.n_mtp_layers",
+						"expert_dtype": "quantization.inference_config.expert_dtype",
+						"quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
+						"quantization_config.fmt": "quantization.config_quantization_config.fmt",
+						"quantization_config.activation_scheme": "quantization.config_quantization_config.activation_scheme",
+						"quantization_config.scale_fmt": "quantization.config_quantization_config.scale_fmt",
+						"quantization_config.weight_block_size": "quantization.config_quantization_config.weight_block_size",
+					}
+					for k, want in expected.items():
+						got = bt.get(k)
+						if got != want:
+							failures.append(Failure(61, f"contract summary compat.by_transformers_key[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
+
+				q = summary.get("quantization", {}) if isinstance(summary, dict) else {}
+				q_inf = q.get("inference_config", {}) if isinstance(q, dict) else {}
+				if not (isinstance(q_inf, dict) and q_inf.get("scale_dtype") == "fp8"):
+					failures.append(Failure(70, f"contract summary quantization.inference_config.scale_dtype must be 'fp8' (derived from inference/model.py ModelArgs default): {contract_summary}"))
+				else:
+					want = inf.get("dtype")
+					if not (isinstance(want, str) and q_inf.get("dtype") == want):
+						failures.append(Failure(73, f"contract summary quantization.inference_config.dtype mismatch (expected inference/config.json dtype={want!r}): {contract_summary}"))
+					want = inf.get("expert_dtype")
+					if not (isinstance(want, str) and q_inf.get("expert_dtype") == want):
+						failures.append(Failure(74, f"contract summary quantization.inference_config.expert_dtype mismatch (expected inference/config.json expert_dtype={want!r}): {contract_summary}"))
+					want = inf.get("scale_fmt")
+					if not (isinstance(want, str) and q_inf.get("scale_fmt") == want):
+						failures.append(Failure(75, f"contract summary quantization.inference_config.scale_fmt mismatch (expected inference/config.json scale_fmt={want!r}): {contract_summary}"))
+					want = cfg.get("expert_dtype")
+					if isinstance(want, str) and q_inf.get("expert_dtype") != want:
+						failures.append(Failure(76, f"fixtures/config.json expert_dtype mismatch between config.json and inference/config.json (config.json expert_dtype={want!r}, inference/config.json expert_dtype={q_inf.get('expert_dtype')!r}): {contract_summary}"))
+
+				q_cfg = q.get("config_quantization_config", None) if isinstance(q, dict) else None
+				want_cfg = cfg.get("quantization_config", None)
+				if want_cfg is not None and q_cfg != want_cfg:
+					failures.append(Failure(77, f"contract summary quantization.config_quantization_config mismatch (expected config.json quantization_config): {contract_summary}"))
+
+				oracle = summary.get("oracle", {})
+				if not isinstance(oracle, dict):
+					failures.append(Failure(90, f"contract summary oracle must be an object: {contract_summary}"))
+				else:
+					enc_oracle = oracle.get("encoding_oracle", {})
+					log_oracle = oracle.get("logits_oracle", {})
+					mtp_oracle = oracle.get("mtp", {})
+					if not (isinstance(enc_oracle, dict) and enc_oracle.get("required") is True and isinstance(enc_oracle.get("fixtures_glob"), str)):
+						failures.append(Failure(91, f"contract summary oracle.encoding_oracle must declare required=true and fixtures_glob: {contract_summary}"))
+					if not (isinstance(log_oracle, dict) and log_oracle.get("weights_required") is True and isinstance(log_oracle.get("generator"), str)):
+						failures.append(Failure(92, f"contract summary oracle.logits_oracle must declare weights_required=true and generator: {contract_summary}"))
+					if not (isinstance(mtp_oracle, dict) and mtp_oracle.get("weights_required") is True and isinstance(mtp_oracle.get("generator_hint"), str)):
+						failures.append(Failure(93, f"contract summary oracle.mtp must declare weights_required=true and generator_hint: {contract_summary}"))
+
+				ts = summary.get("tensor_shapes", {})
+				if not isinstance(ts, dict):
+					failures.append(Failure(94, f"contract summary tensor_shapes must be an object: {contract_summary}"))
+				else:
+					tl = ts.get("top_level", {})
+					if not (isinstance(tl, dict) and tl.get("hc_head_scale") == [1]):
+						failures.append(Failure(95, f"contract summary tensor_shapes.top_level.hc_head_scale must be [1]: {contract_summary}"))
+					phc = ts.get("per_layer", {}).get("hyper_connections", {})
+					if not isinstance(phc, dict):
+						failures.append(Failure(96, f"contract summary tensor_shapes.per_layer.hyper_connections must be an object: {contract_summary}"))
+					else:
+						try:
+							hc_mult = int(inf.get("hc_mult"))
+							mix_hc = (2 + hc_mult) * hc_mult
+						except Exception:
+							hc_mult = None
+							mix_hc = None
+						if mix_hc is not None and phc.get("mix_hc") != mix_hc:
+							failures.append(Failure(97, f"contract summary tensor_shapes.per_layer.hyper_connections.mix_hc mismatch (expected {mix_hc}): {contract_summary}"))
+						if phc.get("hc_attn_scale") != [3] or phc.get("hc_ffn_scale") != [3]:
+							failures.append(Failure(98, f"contract summary tensor_shapes.per_layer.hyper_connections hc_*_scale must be [3]: {contract_summary}"))
+
+				top = summary.get("topology", {})
+				if isinstance(top, dict):
+					expected_top = {
+						"vocab_size": int(cfg.get("vocab_size")),
+						"hidden_size": int(cfg.get("hidden_size")),
+						"num_hidden_layers": int(cfg.get("num_hidden_layers")),
+						"num_attention_heads": int(cfg.get("num_attention_heads")),
+						"num_key_value_heads": int(cfg.get("num_key_value_heads")),
+						"head_dim": int(cfg.get("head_dim")),
+						"rope_head_dim": int(cfg.get("qk_rope_head_dim")),
+						"q_lora_rank": int(cfg.get("q_lora_rank")),
+						"o_groups": int(cfg.get("o_groups")),
+						"o_lora_rank": int(cfg.get("o_lora_rank")),
+						"sliding_window": int(cfg.get("sliding_window")),
+					}
+					for kk, want in expected_top.items():
+						got = top.get(kk)
+						if got != want:
+							failures.append(Failure(99, f"contract summary topology.{kk} mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
+					want_nope = int(cfg.get("head_dim")) - int(cfg.get("qk_rope_head_dim"))
+					if top.get("nope_head_dim") != want_nope:
+						failures.append(Failure(100, f"contract summary topology.nope_head_dim mismatch (got {top.get('nope_head_dim')!r} expected {want_nope!r}): {contract_summary}"))
+			except Exception as e:
+				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 
 	# Cross-check the two config sources for the fields they share.
 	for k in ("vocab_size", "hidden_size", "num_hidden_layers", "num_attention_heads", "head_dim", "q_lora_rank", "o_groups", "o_lora_rank", "compress_ratios"):
@@ -221,6 +543,76 @@ def main() -> int:
 			if k not in weight_keys:
 				failures.append(Failure(30, f"missing required tensor key: {k}"))
 
+		if any(k.startswith(base + bad) for bad in ("attn.compressor.", "attn.indexer.")):
+			failures.append(Failure(32, f"unexpected {base}attn.compressor.* or {base}attn.indexer.* keys for MTP layer (must be sliding-only)"))
+		if (base + "ffn.gate.tid2eid") in weight_keys:
+			failures.append(Failure(33, f"unexpected {base}ffn.gate.tid2eid in MTP layer (must be score-routed)"))
+		for bad in ("embed.weight", "head.weight"):
+			if (base + bad) in weight_keys:
+				failures.append(Failure(34, f"unexpected {base}{bad} key (MTP shares top-level embed/head)"))
+
+		# Core attention + norms (same as a sliding score-routed trunk layer).
+		for suffix in (
+			"attn.attn_sink",
+			"attn.wq_a.weight",
+			"attn.wq_a.scale",
+			"attn.q_norm.weight",
+			"attn.wq_b.weight",
+			"attn.wq_b.scale",
+			"attn.wkv.weight",
+			"attn.wkv.scale",
+			"attn.kv_norm.weight",
+			"attn.wo_a.weight",
+			"attn.wo_a.scale",
+			"attn.wo_b.weight",
+			"attn.wo_b.scale",
+			"attn_norm.weight",
+		):
+			req_mtp(suffix)
+
+		# MoE gate + experts (score-routed).
+		for suffix in ("ffn.gate.weight", "ffn.gate.bias"):
+			req_mtp(suffix)
+		for suffix in (
+			"ffn.shared_experts.w1.weight",
+			"ffn.shared_experts.w1.scale",
+			"ffn.shared_experts.w2.weight",
+			"ffn.shared_experts.w2.scale",
+			"ffn.shared_experts.w3.weight",
+			"ffn.shared_experts.w3.scale",
+			"ffn_norm.weight",
+			"hc_attn_fn",
+			"hc_attn_base",
+			"hc_attn_scale",
+			"hc_ffn_fn",
+			"hc_ffn_base",
+			"hc_ffn_scale",
+		):
+			req_mtp(suffix)
+
+		# Experts: require 0..n_routed_experts-1 and the expected tensor key count.
+		mtp_expert_id_seen: set[int] = set()
+		mtp_expert_key_count = 0
+		for k in weight_keys:
+			if not k.startswith(base + "ffn.experts."):
+				continue
+			parts = k.split(".")
+			if len(parts) < 5:
+				continue
+			try:
+				eid = int(parts[4])
+			except ValueError:
+				continue
+			mtp_expert_id_seen.add(eid)
+			mtp_expert_key_count += 1
+
+		if mtp_expert_id_seen != set(range(n_routed_experts)):
+			failures.append(Failure(35, f"mtp layer {mtp_id} expert id set mismatch: expected 0..{n_routed_experts-1} got {sorted(mtp_expert_id_seen)[:8]}... ({len(mtp_expert_id_seen)} total)"))
+		expected_expert_key_count = n_routed_experts * 6
+		if mtp_expert_key_count != expected_expert_key_count:
+			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
+
+		# MTPBlock-specific projections + norms + HC head.
 		for suffix in (
 			"e_proj.weight",
 			"e_proj.scale",
@@ -232,8 +624,6 @@ def main() -> int:
 			"hc_head_fn",
 			"hc_head_base",
 			"hc_head_scale",
-			"ffn.gate.weight",
-			"ffn.gate.bias",
 		):
 			req_mtp(suffix)
 
@@ -294,10 +684,25 @@ def main() -> int:
 			if not isinstance(cases, list) or not cases:
 				failures.append(Failure(52, f"logits oracle must contain non-empty cases[]: {oracle_path}"))
 			else:
+				include_mtp = bool(oracle.get("include_mtp", False))
+				if include_mtp and n_mtp_layers < 1:
+					failures.append(Failure(64, f"logits oracle requests include_mtp but fixtures contain no mtp.* weights: {oracle_path}"))
 				for c in cases[:4]:
 					if "id" not in c or "prompt_tokens" not in c or "trace" not in c:
 						failures.append(Failure(53, f"logits oracle case missing required keys: {oracle_path}"))
 						break
+					if include_mtp:
+						mt = c.get("mtp_trace")
+						if not isinstance(mt, list):
+							failures.append(Failure(65, f"logits oracle include_mtp requires cases[].mtp_trace[] list: {oracle_path}"))
+							break
+						tr = c.get("trace")
+						if isinstance(tr, list) and len(mt) != len(tr):
+							failures.append(Failure(66, f"logits oracle cases[].mtp_trace must match cases[].trace length (got {len(mt)} vs {len(tr)}): {oracle_path}"))
+							break
+						if mt and ("argmax_id" not in mt[0] or "topk_ids" not in mt[0] or "topk_logits" not in mt[0]):
+							failures.append(Failure(67, f"logits oracle cases[].mtp_trace entries missing required keys: {oracle_path}"))
+							break
 
 	if failures:
 		for f in failures:

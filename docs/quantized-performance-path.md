@@ -1,6 +1,6 @@
-# Quantized Performance Path (Single-Spark → Native DS4)
+# Quantized Performance Path (Single-Spark → Scheduler/MTP → Native DS4)
 
-This document describes the **minimum-risk** path to a credible quantized performance baseline, starting with an **existing external runtime** on **one Spark (Spark0)** and advancing toward native `ds4_on_spark` measurements.
+Goal: use a working quantized DeepSeek V4 Flash runtime as the fastest path to a useful high-performance Spark0 baseline. Native DS4 remains the long-term engine, but a V4-capable quantized runtime can let us validate scheduler, expert-queue, MTP, serving, and memory behavior against real generation much earlier.
 
 Constraints:
 
@@ -8,125 +8,248 @@ Constraints:
 - Prefer read-only probes and low-cost smoke generations first.
 - Record full provenance (runtime, model artifact, quant, hashes, command line, env).
 
-## Milestone 0: First Token Stream (Quantized Single-Spark)
+## Thesis
+
+If Spark0 can load a quantized V4 Flash artifact and produce tokens, then the next priority is not immediately rewriting the whole model loader. The next priority is to add measurable performance layers around that working path:
+
+1. stabilize one quantized runtime + artifact pair
+2. instrument decode, routing, expert activity, memory, and per-token latency
+3. add expert queueing or batching where MoE dispatch underfills GPU work
+4. add MTP speculative decode when acceptance rate is measurable and positive
+5. turn the best working path into the reference behavior for native DS4
+
+This can get us most of the way to a usable high-performance quantized product before the native FP4/FP8 loader and dual-Spark TP path are complete.
+
+## Milestones (Baseline Runner)
+
+These are the least-cost milestones to keep the loop moving, before deeper scheduler work.
+
+### Milestone 0: First Token Stream (Quantized Single-Spark)
 
 Canonical definition: `docs/quantized-single-spark.md`.
 
-Success means: one command on Spark0 produces non-empty generated text from a DeepSeek V4 Flash-family **quantized artifact**, with a baseline report capturing:
+Success means: one command on Spark0 produces non-empty generated text from a V4 Flash-family **quantized artifact**, with a baseline report capturing:
 
-- runtime provenance (source + revision, or binary hash/version)
-- model provenance (source, quant, file size, sha256)
+- runtime provenance (repo/branch/commit or binary hash/version)
+- model provenance (source/revision, quant, file size, sha256)
 - exact command line + key env knobs
 - TTFT, tokens/sec where available
 - GPU snapshots + CPU RSS
 - stdout/stderr + exit code
-- failure mode classification when it fails
+- whether MTP tensors are present (`mtp.0.*`) and whether MTP was enabled/disabled
 
-## Milestone 1: Small-Cost Repeatability
+### Milestone 1: Small-Cost Repeatability
 
 Once Milestone 0 succeeds, immediately establish repeatability without growing cost:
 
-- Same model + runtime, same prompt, **2 runs** (cold + warm)
+- same model + runtime, same prompt, **2 runs** (cold + warm)
 - `CTX=2048`, `N_TOKENS=32` (or smaller if needed)
-- Confirm the baseline report contains stable provenance fields and predictable failure modes.
+- confirm the baseline report contains stable provenance fields and predictable failure modes
 
-## Milestone 2: “Smallest Credible” Artifact Envelope
+### Milestone 2: “Smallest Credible” Artifact Envelope
 
 Goal: the smallest artifact that is still credible for V4 Flash behavior, for iteration speed.
 
-- Prefer a small quant (example: `Q2_K`) for first smoke.
-- If the runtime supports it, validate a second quant (example: `Q3_K_M`) with the same run shape to sanity-check quality/memory pressure deltas.
-- Keep context and tokens small until memory growth behavior is characterized.
+- prefer a small quant (example: `Q2_K`) for first smoke
+- if the runtime supports it, validate a second quant (example: `Q3_K_M`) with the same run shape to sanity-check quality/memory pressure deltas
+- keep context and tokens small until memory growth behavior is characterized
 
-## Milestone 3: Read-Only Instrumentation (After First Success)
+## Gate 1: Real Quantized Generation
 
-After the first successful run, prioritize instrumentation that does **not** require runtime modifications:
+Before scheduler or MTP work, capture one successful run from `docs/quantized-single-spark.md`.
 
-- **Per-run GPU polling**: `nvidia-smi` CSV sampled during the run.
-  - The baseline scripts already support `GPU_SAMPLE=1` (default) and emit `nvidia_smi_poll.csv`.
-  - Adjust `GPU_SAMPLE_INTERVAL_S` (default `1`) for higher/lower resolution.
-  - The llama.cpp baseline summary derives best-effort stats from the CSV (mem min/max/delta; plus util/power percentiles when present).
-- **CPU RSS**: captured by the wrapper (`max_rss_*` fields).
-- **KV / memory growth proxy**: inferred from GPU polling deltas during prefill vs decode.
-- **KV cache init (best-effort)**: when the runtime prints `llama_kv_cache_init` / KV buffer sizing lines, `scripts/benchmark_llamacpp_spark.sh` emits `kv_probe.json` in the artifacts dir and mirrors `kv_probe_*` summary fields (sizes are heuristic; log formats vary across forks).
+Required report fields:
 
-Then, add runtime-exposed counters only when the runtime makes them available (do not guess flags):
+- runtime repo, branch, commit, and build flags (or pinned binary hash/version)
+- model HF repo/revision or local fixture provenance
+- quant, size, sha256, context length, and prompt/chat format
+- TTFT, generation tokens/sec, memory snapshots, stdout/stderr
+- whether the runtime exposes routing, expert, logits, or MTP hooks
 
-- routed expert IDs / top-k scores
-- expert batch sizes / queue depth
-- MTP draft/accepted/rejected counters
-- CUDA fallback / graph placement (best-effort): run `scripts/benchmark_llamacpp_server_sweep.py` and inspect `fattn_reservation_probe.json` + the `node_kind_*` / `sched_reserve_*` fields (see `docs/baseline-fattn-reservation.md`).
-  - To include this sweep in the standard baseline report (Mac → Spark), set `LLAMA_SERVER_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
-  - If the runtime exposes a Prometheus `/metrics` endpoint (for example when started with `--metrics`), set `LLAMA_SERVER_SWEEP_SCRAPE_METRICS=1` to snapshot `metrics_start.prom` and `metrics_end.prom` alongside a best-effort delta (`metrics_delta.json`, `metrics_delta.md`).
-- Batching/concurrency throughput sweep (expensive): run `scripts/benchmark_llamacpp_server_throughput_sweep.py` and treat `--parallel`, `-b/--batch-size`, `-ub/--ubatch-size`, prompt size, and request concurrency as first-class variables.
-  - To include this sweep in the standard baseline report, set `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
-  - See `docs/baseline-batching-throughput.md` and `docs/baseline-multislot-parallel2.md` (multi-slot failure probe).
-- Patch presence (optional, read-only): set `LLAMA_FATTN_PATCH_PROBE=1` to run `scripts/benchmark_llamacpp_fattn_patch_probe.py` on Spark and fetch `fattn_patch_probe.json` (heuristic source scan; see `docs/baseline-fattn-reservation.md`).
-- Patch presence (optional, read-only): set `LLAMA_MULTISLOT_PATCH_PROBE=1` to run `scripts/benchmark_llamacpp_multislot_patch_probe.py` on Spark and fetch `multislot_patch_probe.json` (heuristic source scan; see `docs/baseline-multislot-parallel2.md`).
-- CUDA fallback / placement (one-shot, best-effort): when the runtime prints `sched_reserve:` / `__fattn__-*` placement lines during a normal `llama-cli` run, `scripts/benchmark_llamacpp_spark.sh` writes `fattn_cli_probe.json` into the fetched artifacts directory and mirrors key fields into the baseline summary (`fattn_*`, `node_kind_*`, `sched_reserve_*`). This is opportunistic and may be `NA` on forks that do not emit those lines.
+If the runtime cannot expose hooks, record the missing hook as the blocker. Do not guess at hidden scheduler behavior from aggregate tokens/sec.
 
-The llama.cpp Spark baseline script also supports a **best-effort token trace** capture:
+## Gate 2: Runtime Instrumentation
 
-- If the runtime emits per-token JSON log lines (for example, `function=process_token` events), the script writes them to `token_trace.jsonl` inside the Spark artifacts directory for the run.
-- This is disabled by default unless the runtime is configured to emit those events; consult `llama_cli.help.txt` in the artifacts directory and only enable logging flags that the runtime actually supports.
+The first performance loops should add read-only instrumentation before changing scheduling behavior:
 
-When token JSON is present, the llama.cpp Spark baseline script also computes **read-only** derived metrics and prints them into the `== baseline summary (approx) ==` block:
+- per-token decode latency
+- per-layer MoE dispatch counts
+- selected expert IDs and top-k scores when available
+- expert GEMM batch sizes
+- GPU memory and KV cache growth
+- MTP draft tokens, accepted tokens, and rejected tokens when available
 
-- per-token latency percentiles (ms, from local monotonic timestamps between token events)
-- routed expert ID frequencies (best-effort: only if the runtime includes expert IDs in token JSON)
-- routed expert top-k score summaries (best-effort: `router_top1_score_*` and `router_topk_n_*` only when token JSON includes a compatible `scores` list)
-- queue depth / batch size / expert batch size summaries (best-effort: only if present in token JSON)
-- MTP draft/accepted/rejected counters (best-effort: only if present in token JSON)
+Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
 
-These derived fields are intended to be *opportunistic*: they are `NA` unless the runtime actually emits compatible keys.
+Baseline runner knobs and probes that already exist (read-only unless explicitly enabled):
 
-## Spark0 Command Shape (No Downloads/Builds)
+- GPU polling (`GPU_SAMPLE=1`): emits `nvidia_smi_poll.csv` + derived summary stats.
+- Flash-attention reservation probe: set `LLAMA_SERVER_SWEEP=1` to run `scripts/benchmark_llamacpp_server_sweep.py` and capture `fattn_reservation_probe.json` (see `docs/baseline-fattn-reservation.md`).
+- Batching/concurrency throughput sweep (expensive): set `LLAMA_SERVER_THROUGHPUT_SWEEP=1` to run `scripts/benchmark_llamacpp_server_throughput_sweep.py` and treat `--parallel`, `-b/--batch-size`, `-ub/--ubatch-size`, prompt size, and request concurrency as first-class experiment variables (see `docs/baseline-batching-throughput.md`).
+- Patch presence (read-only): `LLAMA_FATTN_PATCH_PROBE=1` and/or `LLAMA_MULTISLOT_PATCH_PROBE=1` to run source scanners on Spark for narrow patch bookkeeping (see `docs/baseline-fattn-reservation.md` and `docs/baseline-multislot-parallel2.md`).
+- One-shot placement probe (best-effort): `scripts/benchmark_llamacpp_spark.sh` emits `fattn_cli_probe.json` when the runtime prints `sched_reserve:` / `__fattn__-*` placement lines during a one-shot `llama-cli` run.
 
-From the Mac:
+## Phase 0: Simulator-Only
 
-```sh
-ALLOW_RUN=1 \
-RUNTIME_LABEL=v4-capable-llama \
-MODEL_SOURCE='<hf-repo-or-local-note>' \
-MODEL_QUANT=Q2_K \
-MODEL_GGUF=/abs/path/to/model.gguf \
-LLAMA_CLI=/abs/path/to/v4-capable/llama-cli \
-CTX=2048 \
-N_TOKENS=32 \
-N_GPU_LAYERS=99 \
-scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+Use `docs/scheduler-simulator.md` with synthetic traces to explore:
+
+- adaptive-K control loops
+- expert queue depth, backpressure drops, starvation
+- latency classes (interactive vs batch)
+- MTP draft/accept tradeoffs with synthetic acceptance
+
+The goal is to identify safe default invariants: max starvation, acceptable drop rate, target p95 latency, and whether MTP output-token throughput can plausibly offset draft overhead for realistic accept rates.
+
+Tip: for synthetic traces, `--arrival-units output_tokens` keeps output-token demand fixed while varying MTP accept rates.
+
+Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
+
+Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
+
+## Phase 1: Real Router Trace Replay
+
+Once the baseline quantized runtime can emit per-token routing, capture a trace and replay it:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-summary --json
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --json   # 0 = infer from trace/meta
 ```
 
-Wrapper variant:
+For concise loop output, use `--summary-json`:
 
-```sh
-MODEL_GGUF=/abs/path/to/model.gguf \
-LLAMA_CLI=/abs/path/to/v4-capable/llama-cli \
-MODEL_SOURCE='<hf-repo-or-local-note>' \
-MODEL_QUANT=Q2_K \
-scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
 ```
 
-Notes:
+If the runtime emits `dt_ms` deltas (or only emits `accepted_mtp` / `rejected_mtp`), canonicalize it first so replay can infer `num_experts` / `mtp_draft_len` cleanly:
 
-- Prompts are passed to Spark as base64 (`PROMPT_B64`) to avoid shell quoting pitfalls; the report records prompt **hash + length**, not the prompt text.
-- The Spark scripts do not install packages or fetch weights; they only run when `ALLOW_RUN=1`.
-- Optional inventory: set `SPARK_INVENTORY=1` on the entrypoint to record a best-effort scan for candidate `*.gguf` files + runtime binaries (read-only).
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
 
-## Next: External Runtime Baselines (llama.cpp / vLLM)
+If the runtime produces a mixed JSONL log stream (multiple record types), use `--trace-jsonl -` with `--trace-non-route skip` to ignore non-route objects that have a non-meta `type` field:
 
-Use the same `scripts/run_baseline_existing_runtime.sh` entrypoint to capture:
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-non-route skip --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
 
-- llama.cpp (Spark/CUDA) baseline behavior for known-good small GGUFs
-- vLLM package presence + version probe, and (when a model dir is already present) a gated generation probe
+When `--trace-non-route skip` is set, the loader also ignores non-JSON lines (plain text logs), which makes it safe to pipe raw mixed stdout/stderr streams.
 
-Do not treat these as correctness proofs for V4 Flash; they are operational references (drivers, CUDA, memory envelope, throughput sanity).
+If the runtime log stream is mixed and/or cannot easily emit the simulator’s strict trace field names, you can run replay/canonicalization in `runtime` input format (inline alias mapping), or normalize it explicitly with the extractor.
 
-## Later: Native `ds4_on_spark` Measurements
+Inline alias mapping:
 
-Only after the external-runtime quantized single-Spark run is repeatable and instrumented:
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
 
-- run `ds4_on_spark` native benchmarks on Spark0 (then TP/dual-Spark as appropriate)
-- compare baseline envelopes: TTFT, decode t/s, GPU memory growth, crash modes
+Extractor (maps common aliases like `latency_class`→`cls`, `experts`→`candidates`):
 
-Keep baseline reports using `docs/baseline-template.md` structure where committed.
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+`trace_extract.py` preserves multi-layer routing when present (`layers[]` / `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` so the simulator can replay the trace without additional massaging.
+
+If the runtime trace includes per-token chosen `K`, replay it directly:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --k-mode trace --num-experts 0 --json
+```
+
+Trace JSONL fields:
+
+- `t_ms`: token arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and emit per-line `dt_ms` deltas.
+- `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
+- `cls`: `"interactive"` or `"batch"`
+- `candidates`: ordered expert candidates for that token
+- `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
+  - `candidates`: ordered expert candidates for that layer (required)
+  - `scores`: optional per-candidate scores (same length as that layer's `candidates`)
+  - `k`: optional layer-local chosen `K`. When using `--k-mode trace`, you may omit top-level `k` if every layer provides `k`.
+  - `cost_scale`: optional layer-specific cost multiplier (multiplied into top-level `cost_scale` when both are present)
+  - when `layers` is present, `candidates` should either be omitted/empty or equal the union of `layers[].candidates` (first-seen order); the simulator uses the per-layer candidate lists for admission
+- `k`: optional chosen `K`; required with `--k-mode trace` unless every layer provides `layers[].k`
+- `scores`: optional per-candidate router scores (when `layers` is present, use `layers[].scores`; top-level `scores` are not valid when `layers` is present)
+- `mtp_accept_len`: optional accept length for MTP replay
+- `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
+- `cost_scale`: optional per-token cost multiplier
+- `decode_ms`: optional observed per-token decode latency (the simulator reports `trace.decode_ms` and `trace.decode_error_ms` vs modeled latency when present)
+- `kv_tokens`: optional KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens` when present)
+- `expert_batch_size`: optional observed expert batch size (the simulator summarizes this under `trace.expert_batch_size` when present)
+- (optional) metadata: JSONL meta records like `{"type":"meta","meta":{...}}` are accepted and ignored by replay; you can also supply a sidecar metadata JSON via `--trace-meta-json`
+
+If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts.
+
+If the runtime can log `kv_tokens` or `decode_ms` but cannot easily log `cost_scale`, the scheduler simulator can derive a simple `cost_scale` proxy during replay/canonicalization via `--trace-derive-cost-scale {kv_tokens_p50,decode_ms_p50}`.
+
+## Expert Queueing
+
+Expert queueing is worth attempting against the quantized runtime if decode shows many small expert GEMMs or hot experts causing idle gaps.
+
+Initial scope:
+
+- collect real route traces from the quantized runtime
+- replay them in the host scheduler simulator
+- test queue depth, adaptive K, batching size, starvation, and latency-class policies before changing runtime behavior
+- patch the runtime only after simulator metrics show a clear win
+
+Success criteria:
+
+- interactive p95 does not regress beyond the agreed bound
+- generation throughput improves on the same prompt set
+- starvation and dropped/partial-admit counters stay bounded
+- output tokens remain deterministic under temperature `0.0` when scheduling is not supposed to change model semantics
+
+## MTP
+
+MTP should move earlier once a quantized runtime works, because V4 Flash includes MTP artifacts and MTP can be tested as a wrapper around a working decode loop.
+
+Initial scope:
+
+- confirm the quantized artifact includes usable MTP weights or document why it does not
+  - As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
+- expose draft logits/tokens from the runtime or a sidecar path
+- when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
+- once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
+- implement strict accept/reject accounting before optimizing
+- measure acceptance rate by prompt class and context length
+
+Success criteria:
+
+- accepted-token rate is high enough to offset draft overhead
+- generated output matches normal decode for deterministic acceptance tests
+- MTP can be disabled at runtime with a flag
+- MTP metrics appear in every baseline report
+
+Trace replay should log draft length and observed accept length per verify step (`mtp_accept_len`, range `1..gamma+1`). Use trace `t_ms` as verify-step timestamps.
+
+## Practical Loop
+
+1. Reproduce a simulator regime that stresses backpressure or starvation.
+2. Capture a router trace from the quantized runtime under comparable load.
+3. Replay via `--trace-jsonl` and compare queue depth, starvation, drop rates, and MTP accept-rate sensitivity.
+4. Document acceptance/throughput evidence before touching runtime code.
+
+## Automation Ownership
+
+- Baseline runtime owns Spark0 quantized runs and records instrumentation/MTP flags in reports.
+- Scheduler simulator owns real route replay, expert queue experiments, and acceptance/backpressure metrics.
+- Model contract owns the MTP correctness contract and tokenizer/logit oracle.
+- Build skeleton/native DS4 owns reusable control-plane interfaces once the quantized path proves which hooks matter.
+
+## Stop Conditions
+
+Stop optimizing the quantized path and fall back to native DS4 work if:
+
+- no available runtime can load a credible single-Spark quantized artifact
+- runtime hooks are too invasive to add safely
+- expert queueing changes semantics or causes unacceptable p95 regressions
+- MTP acceptance is too low to pay for itself on representative prompts
+

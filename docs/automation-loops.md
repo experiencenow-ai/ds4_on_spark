@@ -65,6 +65,9 @@ Tasks:
 - Run known llama.cpp/antirez path if available.
 - Try a V4-capable external runtime with the smallest credible quantized V4
   Flash artifact on Spark0 before attempting native DS4 or dual-Spark work.
+- If the runtime can expose hooks, collect per-token latency, routing traces,
+  expert batch sizes, and MTP accept/reject counters for the quantized
+  high-performance path.
 - Capture command line, context, quant, t/s, TTFT, memory use.
 - Record failures exactly.
 
@@ -97,12 +100,18 @@ Exit: local build/test command succeeds on Mac where possible.
 
 ## Loop 8: Scheduler Model
 
-Goal: build and test scheduler logic before CUDA integration.
+Goal: build and test scheduler logic before CUDA integration, using real
+quantized-runtime traces as soon as they exist.
 
 Tasks:
 
 - Implement host-only scheduler simulation.
 - Feed synthetic expert routing traces.
+- Replay quantized-runtime routing traces when the baseline loop can collect
+  them.
+- Model expert queueing and MTP accept/reject behavior before patching runtime
+  code.
 - Measure queue fill, starvation, K selection, and oscillation.
 
-Exit: scheduler simulator with tests and plots/logs.
+Exit: scheduler simulator with tests, replayable route traces, and quantified
+expert-queue/MTP recommendations.

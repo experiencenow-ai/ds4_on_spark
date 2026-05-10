@@ -1,0 +1,130 @@
+if(NOT DEFINED DS4_CLI_PATH)
+	message(FATAL_ERROR "DS4_CLI_PATH is required")
+endif()
+if(NOT DEFINED DS4_MODE)
+	message(FATAL_ERROR "DS4_MODE is required")
+endif()
+
+if(DS4_MODE MATCHES "^config_")
+	if(NOT DEFINED DS4_TMP_DIR)
+		message(FATAL_ERROR "DS4_TMP_DIR is required for DS4_MODE='${DS4_MODE}'")
+	endif()
+endif()
+
+if(DS4_MODE STREQUAL "dump_config_overrides")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --log-level debug --no-cuda --arena-size 4096 --log-ring-entries 64 --dump-config
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_level=debug" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_level=debug'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "enable_cuda=0" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'enable_cuda=0'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "arena_size=4096" _ds4_idx3)
+	if(_ds4_idx3 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'arena_size=4096'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_ring_entries=64" _ds4_idx4)
+	if(_ds4_idx4 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_ring_entries=64'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "config_file_dump")
+	set(_ds4_cfg "${DS4_TMP_DIR}/ds4_cli_smoke.conf")
+	file(WRITE "${_ds4_cfg}" "log_level=debug\nunknown_key=1\nenable_cuda=0\n")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --config "${_ds4_cfg}" --dump-config
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_level=debug" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_level=debug'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "enable_cuda=0" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'enable_cuda=0'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "config_stdin_dump")
+	set(_ds4_cfg "${DS4_TMP_DIR}/ds4_cli_smoke_stdin.conf")
+	file(WRITE "${_ds4_cfg}" "log_level=debug\nenable_cuda=0\n")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --config - --dump-config
+		INPUT_FILE "${_ds4_cfg}"
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_level=debug" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_level=debug'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "enable_cuda=0" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'enable_cuda=0'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "config_strict_unknown_reject")
+	set(_ds4_cfg "${DS4_TMP_DIR}/ds4_cli_smoke_strict.conf")
+	file(WRITE "${_ds4_cfg}" "log_level=debug\nunknown_key=1\nenable_cuda=0\n")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --strict-config --config "${_ds4_cfg}" --dump-config
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(_ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli strict config unexpectedly succeeded\nstdout:\n${_ds4_out}\nstderr:\n${_ds4_err}")
+	endif()
+	string(FIND "${_ds4_err}" "unknown keys" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli strict config stderr missing 'unknown keys'\nstderr:\n${_ds4_err}")
+	endif()
+	string(FIND "${_ds4_err}" "1 unknown keys" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli strict config stderr missing '1 unknown keys'\nstderr:\n${_ds4_err}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "version_semver")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --version
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(STRIP "${_ds4_out}" _ds4_ver)
+	if(NOT _ds4_ver MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+		message(FATAL_ERROR "ds4_cli --version output not semver: '${_ds4_ver}'")
+	endif()
+	return()
+endif()
+
+message(FATAL_ERROR "unknown DS4_MODE='${DS4_MODE}'")

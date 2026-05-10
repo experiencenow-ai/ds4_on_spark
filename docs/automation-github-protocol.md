@@ -11,6 +11,7 @@ Each automation owns one branch prefix:
 - `codex/loop-upstream-intake-*`
 - `codex/loop-model-contract-*`
 - `codex/loop-cuda-probe-*`
+- `codex/loop-mtp-cuda-*`
 - `codex/loop-baseline-runtime-*`
 - `codex/loop-build-skeleton-*`
 - `codex/loop-scheduler-sim-*`

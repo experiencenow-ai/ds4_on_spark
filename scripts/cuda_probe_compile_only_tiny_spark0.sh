@@ -1,0 +1,206 @@
+#!/usr/bin/env sh
+set -eu
+
+target="${1:-spark0@aitopatom-9ab9.local}"
+SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
+REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_compile_only_tiny}"
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+probe_dir="$repo_root/tools/cuda_probe"
+tar_no_mac_metadata=""
+if tar --version 2>/dev/null | grep -qi "bsdtar"; then
+	tar_no_mac_metadata="--no-mac-metadata"
+fi
+
+if [ ! -d "$probe_dir" ]; then
+	echo "missing $probe_dir" >&2
+	exit 2
+fi
+
+ssh $SSH_OPTS "$target" "set -eu
+rm -rf \"$REMOTE_DIR\"
+mkdir -p \"$REMOTE_DIR\"
+"
+
+LC_ALL=C env COPYFILE_DISABLE=1 tar --no-xattrs $tar_no_mac_metadata -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
+LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
+"
+
+ssh $SSH_OPTS "$target" "set -eu
+NVCC=\"\"
+echo \"== nvcc ==\"
+if [ -x /usr/local/cuda/bin/nvcc ]; then
+	NVCC=\"/usr/local/cuda/bin/nvcc\"
+elif command -v nvcc >/dev/null 2>&1; then
+	NVCC=\"nvcc\"
+else
+	echo \"nvcc not found\" >&2
+	exit 3
+fi
+\$NVCC --version
+echo
+echo \"== nvcc: --list-gpu-arch (if supported) ==\"
+list_gpu_arch=\$(\$NVCC --list-gpu-arch 2>/dev/null || true)
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported)\"
+else
+	printf \"%s\n\" \"\${list_gpu_arch}\"
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		:
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121)\" >&2
+		exit 4
+	fi
+fi
+echo
+echo \"== nvcc: --list-gpu-code (if supported) ==\"
+list_gpu_code=\$(\$NVCC --list-gpu-code 2>/dev/null || true)
+if [ \"\${list_gpu_code}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-code not supported)\"
+	else
+		printf \"%s\n\" \"\${list_gpu_code}\"
+		if echo \"\${list_gpu_code}\" | grep -q \"sm_121\"; then
+			:
+		else
+			echo \"(nvcc --list-gpu-code missing sm_121)\" >&2
+			exit 5
+		fi
+	fi
+
+echo
+echo \"== nvcc: sm_121 variant compile (best-effort) ==\"
+cd \"$REMOTE_DIR\"
+mkdir -p bin
+try_variant() {
+	arch=\"\$1\"
+	if [ \"\${list_gpu_code}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-code not supported; skipping \${arch})\"
+		return 0
+	fi
+	if echo \"\${list_gpu_code}\" | grep -q \"\${arch}\"; then
+		echo \"-- \${arch}\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/cuda_\${arch}_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_\${arch}_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"variant_\${arch}: OK\"
+		else
+			echo \"variant_\${arch}: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_\${arch}_compile_probe.err || true
+		fi
+	else
+		echo \"(nvcc --list-gpu-code missing \${arch}; skipping)\"
+	fi
+}
+try_variant sm_121a
+try_variant sm_121f
+
+echo
+echo \"== nvcc: compute_121 compile (best-effort) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
+else
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		echo \"-- compute_121\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=compute_121 -c -o bin/cuda_compute_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_compute_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"arch_compute_121: OK\"
+		else
+			echo \"arch_compute_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_compute_121_compile_probe.err || true
+		fi
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\"
+	fi
+fi
+
+echo
+echo \"== nvcc: gencode compile (best-effort) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping gencode)\"
+else
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=sm_121\" -c -o bin/cuda_gencode_sm_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_gencode_sm_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_sm_121: OK\"
+		else
+			echo \"gencode_sm_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_gencode_sm_121_compile_probe.err || true
+		fi
+
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=compute_121\" -c -o bin/cuda_gencode_compute_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_gencode_compute_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_compute_121: OK\"
+		else
+			echo \"gencode_compute_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_gencode_compute_121_compile_probe.err || true
+		fi
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121; skipping gencode)\"
+	fi
+fi
+
+echo
+echo \"== compile-only (tiny) ==\"
+make clean
+make bin/cuda_sm121_compile_probe.o
+
+echo
+echo \"== nvcc: -arch=sm_121 emits embedded PTX (best-effort) ==\"
+CUOBJDUMP=\"\"
+if [ -x /usr/local/cuda/bin/cuobjdump ]; then
+	CUOBJDUMP=\"/usr/local/cuda/bin/cuobjdump\"
+elif command -v cuobjdump >/dev/null 2>&1; then
+	CUOBJDUMP=\"cuobjdump\"
+fi
+if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+	echo \"(cuobjdump not found; skipping)\"
+else
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=sm_121 -fatbin -o bin/cuda_sm121_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_sm121_arch_shorthand.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -arch=sm_121 failed rc=\$rc)\" >&2
+		head -n 40 bin/cuda_sm121_arch_shorthand.err || true
+		else
+			if \$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+				echo \"ptx_embed: OK\"
+			else
+				echo \"ptx_embed: MISSING\" >&2
+				\$CUOBJDUMP --dump-ptx bin/cuda_sm121_arch_shorthand.fatbin 2>/dev/null | head -n 40 || true
+			fi
+		fi
+	fi
+
+echo
+echo \"== nvcc: -arch=native emits embedded PTX (best-effort; expected missing) ==\"
+if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+	echo \"(cuobjdump not found; skipping)\"
+else
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=native -fatbin -o bin/cuda_native_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_native_arch_shorthand.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -arch=native failed rc=\$rc)\" >&2
+		head -n 40 bin/cuda_native_arch_shorthand.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx bin/cuda_native_arch_shorthand.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_native: PRESENT\"
+		else
+			echo \"ptx_embed_native: MISSING (expected)\"
+		fi
+	fi
+fi
+"

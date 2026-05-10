@@ -104,6 +104,17 @@ def topk_trace(logits, k: int) -> dict[str, Any]:
 	}
 
 
+def forward_hidden_and_logits(model, input_ids, start_pos: int):
+	# Mirrors Transformer.forward(...) but returns both the final HC hidden states and logits.
+	# Important: this must only be called once per step so KV/compressor state is updated exactly once.
+	h = model.embed(input_ids)
+	h = h.unsqueeze(2).repeat(1, 1, model.hc_mult, 1)
+	for layer in model.layers:
+		h = layer(h, start_pos, input_ids)
+	logits = model.head(h, model.hc_head_fn, model.hc_head_scale, model.hc_head_base, model.norm)
+	return h, logits
+
+
 def main() -> int:
 	parser = ArgumentParser()
 	parser.add_argument("--ckpt-path", type=str, required=True, help="Converted checkpoint directory with model{rank}-mp{mp}.safetensors and tokenizer files.")
@@ -111,6 +122,7 @@ def main() -> int:
 	parser.add_argument("--prompts", type=str, default=str(ORACLE_DIR / "prompts.json"), help="Oracle prompt cases JSON.")
 	parser.add_argument("--out", type=str, default=str(ORACLE_DIR / "logits_oracle.json"), help="Output oracle JSON path (commit only after review).")
 	parser.add_argument("--steps", type=int, default=8, help="Number of decode steps to record per case (defaults to max_new_tokens from prompts).")
+	parser.add_argument("--include-mtp", action="store_true", help="Also record MTP (mtp.0.*) draft logits traces (weights required).")
 	args = parser.parse_args()
 
 	world_size, rank, local_rank = init_dist()
@@ -197,6 +209,7 @@ def main() -> int:
 		"tokenizer_sha256": tokenizer_sha,
 		"world_size": world_size,
 		"seed": 33377335,
+		"include_mtp": bool(args.include_mtp),
 		"cases": [],
 	}
 
@@ -219,12 +232,24 @@ def main() -> int:
 		tokens[0, :len(prompt_tokens)] = torch.tensor(prompt_tokens, dtype=torch.long, device="cuda")
 
 		trace: list[dict[str, Any]] = []
+		mtp_trace: list[dict[str, Any]] = []
 		prev_pos = 0
 		for cur_pos in range(len(prompt_tokens), total_len):
-			logits = model.forward(tokens[:, prev_pos:cur_pos], prev_pos)[0]
+			input_ids = tokens[:, prev_pos:cur_pos]
+			h, logits = forward_hidden_and_logits(model, input_ids, prev_pos)
+			logits = logits[0]
 			trace_entry = {"cur_pos": int(cur_pos), "start_pos": int(prev_pos)}
 			trace_entry.update(topk_trace(logits, topk))
 			trace.append(trace_entry)
+
+			if args.include_mtp:
+				if not getattr(model, "mtp", None) or not len(model.mtp):
+					print("ERROR: --include-mtp requested but model has no MTP blocks")
+					return 2
+				mtp_logits = model.mtp[0].forward(h, prev_pos, input_ids)[0]
+				mtp_entry = {"cur_pos": int(cur_pos), "start_pos": int(prev_pos)}
+				mtp_entry.update(topk_trace(mtp_logits, topk))
+				mtp_trace.append(mtp_entry)
 
 			# Deterministic decode: temperature=0 uses argmax.
 			if temperature > 0:
@@ -238,14 +263,15 @@ def main() -> int:
 			prev_pos = cur_pos
 
 		if rank == 0:
-			results["cases"].append(
-				{
-					"id": case_id,
-					"thinking_mode": thinking_mode,
-					"prompt_tokens": [int(x) for x in prompt_tokens],
-					"trace": trace,
-				}
-			)
+			case_out = {
+				"id": case_id,
+				"thinking_mode": thinking_mode,
+				"prompt_tokens": [int(x) for x in prompt_tokens],
+				"trace": trace,
+			}
+			if args.include_mtp:
+				case_out["mtp_trace"] = mtp_trace
+			results["cases"].append(case_out)
 			print(f"case {case_id}: prompt_tokens={len(prompt_tokens)} steps={len(trace)}")
 
 	if rank == 0:

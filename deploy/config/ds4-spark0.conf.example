@@ -1,0 +1,20 @@
+# DS4 runtime config example for Spark0 (key=value).
+#
+# Copy to: /etc/ds4/ds4-spark0.conf
+#
+# Parser notes (src/ds4_config.c):
+# - Blank lines are allowed.
+# - Comment lines starting with '#' are allowed.
+# - Non-empty, non-comment lines must be `key=value`.
+#
+# Supported keys today:
+#   - log_level   (error|warn|info|debug or 0..3)
+#   - enable_cuda (0/1, true/false, yes/no, on/off)
+#   - cuda_device (-1=auto, >=0 fixed)
+#
+# Most deployments should set the effective values via the per-instance env file
+# (`/etc/ds4/ds4-spark0.env`) so operators can override without editing this file.
+#
+#log_level=info
+#enable_cuda=1
+#cuda_device=-1

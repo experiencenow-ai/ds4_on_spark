@@ -4,7 +4,7 @@
 
 - Repo: `https://github.com/antirez/ds4`
 - Ref: `refs/heads/main`
-- Commit: `d615ab08c8bce9b8242963ecece5aed6b5a79367`
+- Commit: `8e7575be0ef44bd97c5ebaccf49ef85e05048b7b`
 - License: MIT (see upstream `LICENSE`)
 
 ## What it is
@@ -18,6 +18,8 @@ We track `ds4` as a compact reference point for:
 - DeepSeek-V4-Flash execution semantics as implemented by a dedicated engine,
 - KV-cache design choices (including disk-oriented cache ideas), and
 - end-to-end ergonomics (CLI/server flags, test vectors, validation posture).
+
+For the specific DeepSeek V4 Flash MTP draft/verify/rollback semantics and the `mtp.0.*` binding contract, see `docs/mtp-ds4-reference.md`.
 
 This repo must not vendor large third-party trees or model weights: treat `ds4` as read-only reference material.
 

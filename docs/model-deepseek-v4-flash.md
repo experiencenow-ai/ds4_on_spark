@@ -11,10 +11,12 @@ Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
-- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, and tensor-key invariants)
+- `upstream_commit.txt` (pinned upstream git commit hash)
+- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
+- `oracle/prompts.json` (prompt cases used by the logit-oracle generator)
 - `inference/config.json`, `inference/model.py`, `inference/kernel.py` (reference execution semantics: MLA, sliding/CSA/HCA caches, MoE routing, MTP block)
 
 Notes on config sources:
@@ -79,14 +81,14 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 
 ## Logical parameter shapes (from `inference/model.py` + configs)
 
-These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below).
+These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below). The machine-readable shape contract is recorded under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_shapes`.
 
 Top-level:
 
 - `embed.weight`: `[vocab_size, hidden_size]`
 - `norm.weight`: `[hidden_size]`
 - `head.weight`: `[vocab_size, hidden_size]`
-- `hc_head_{fn,base,scale}`: `[mix_hc,hc_mult*hidden_size]`, `[mix_hc]`, `[3]` where `mix_hc=(2+hc_mult)*hc_mult`
+- `hc_head_{fn,base,scale}`: `[hc_mult,hc_mult*hidden_size]`, `[hc_mult]`, `[1]` (Transformer HC head; per-layer HC uses `mix_hc=(2+hc_mult)*hc_mult` and `*.scale` length `3`)
 
 Per-layer attention (`layers.{i}.attn.*`):
 
@@ -110,7 +112,7 @@ Per-layer MoE (`layers.{i}.ffn.*`):
 
 ## Quantization + scale tensors (FP8 trunk, FP4 experts)
 
-Upstream sources: `config.json` (`quantization_config`, `expert_dtype`) and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
+Upstream sources: `config.json` (`quantization_config`; `expert_dtype` may be absent in some upstream revisions), `inference/config.json` (`expert_dtype`), and `inference/model.py` (`Linear`, `act_quant`, `fp4_gemm`/`fp8_gemm`).
 
 Checkpoint formats:
 
@@ -119,9 +121,10 @@ Checkpoint formats:
   - `quantization_config.fmt`: `e4m3`
   - `quantization_config.scale_fmt`: `ue8m0` (power-of-2 scale rounding / MXFP style)
   - `quantization_config.weight_block_size`: `[128,128]`
-- Expert weights use FP4 (from `config.json` `expert_dtype: fp4`):
+- Expert weights use FP4 (Flash `inference/config.json` `expert_dtype: fp4`):
   - In the reference `Linear`, FP4 weights are stored packed as `float4_e2m1fn_x2` with shape `[out_features, in_features//2]` (logically `[out_features, in_features]`).
   - FP4 scale tensors are `float8_e8m0fnu` with shape `[out_features, in_features//32]` (1 scale per 32 FP4 K-elements).
+- Scale dtype default (source-derived): `inference/model.py` `ModelArgs.scale_dtype` defaults to `fp8`. When `scale_dtype == fp8`, `Transformer.__init__` forces `scale_fmt=ue8m0` and uses `float8_e8m0fnu` scale tensors; this is recorded in `contract_summary.json` under `quantization.inference_config.scale_dtype`.
 
 Activation quantization in the reference runtime:
 
@@ -131,6 +134,11 @@ Activation quantization in the reference runtime:
 - The compressed KV path (`Compressor.rotate == true`) applies a Hadamard rotation then uses FP4 act quantization with `fp4_block_size=32`.
 
 DS4 must treat `*.scale` tensors and the block-size rules above as part of the execution contract; skipping them can preserve shapes but still diverge numerically.
+
+Flash vs Flash-Base compatibility note:
+
+- DeepSeek’s official HF ecosystem also publishes `deepseek-ai/DeepSeek-V4-Flash-Base` which differs in **expert quantization** (`expert_dtype="fp8"` vs Flash `expert_dtype="fp4"`). External runtimes (and conversion pipelines) must not mix these variants: expert dtype changes both the correct expert kernel family and the expected linear scale dtype/format behavior.
+- For DS4 contract purposes, treat `quantization.inference_config.expert_dtype` as the canonical “Flash vs Base” switch (source-derived from upstream `inference/config.json`). If an external artifact/runtime cannot expose or preserve this field, treat MoE expert execution as **high risk** until validated by an oracle.
 
 ## Attention schedule (sliding vs CSA vs HCA)
 
@@ -175,6 +183,14 @@ Per-layer KV cache allocation:
   - `kv_cache[:,:window_size]` is a **ring buffer** for the sliding window (index `t % window_size` in decode).
   - `kv_cache[:,window_size:]` is a **linear** compressed segment (index `t // compress_ratio` in decode for `compress_ratio != 0`).
 
+For the upstream reference defaults (`max_seq_len=4096`, `window_size=128`), the resulting per-layer `kv_cache_size` values are:
+
+- sliding (`compress_ratio==0`): `128`
+- CSA (`compress_ratio==4`): `128 + 4096//4 = 1152`
+- HCA (`compress_ratio==128`): `128 + 4096//128 = 160`
+
+These values (plus the full `kv_cache_size_by_layer[]` schedule) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.kv_cache_sizes_at_reference_defaults`.
+
 Runtime update rules:
 
 - **Prefill** (`start_pos == 0`):
@@ -196,6 +212,15 @@ Important indexing details (from `Attention.forward`):
 - Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
 - Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
 
+### Sparse attention masking rule (sentinel indices)
+
+Reference implementation: `inference/kernel.py` (`sparse_attn`).
+
+- Sparse top-k index buffers use `topk_mask_value == -1` as a sentinel.
+- When an index is masked (`idx == -1`), the kernel must behave as if `score=-inf` and `kv=0` (i.e. it contributes nothing to the softmax numerator and cannot introduce NaNs via invalid gathers).
+
+These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value` and `cache.sparse_attn_mask_rule`.
+
 ### MLA positional semantics (partial RoPE + inverse on output)
 
 Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
@@ -215,6 +240,19 @@ Upstream applies RoPE only to the **trailing** `rope_head_dim` slice:
 
 DS4 must match the de-rotation step, or logits will diverge even if attention indexing is correct.
 
+These MLA/cache update semantics are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`:
+
+- `mla.*` records the presence of the extra per-token Q normalization and the output de-rotation marker.
+- `cache.update_semantics.*` records the decode-time KV ring-buffer update expression (`start_pos % win`) and the compressed-cache update expression (`start_pos // ratio`).
+
+### Attention scaling + activation QAT constants
+
+These constants are **source-derived** from `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.inference_model_constants` to avoid accidental drift:
+
+- KV activation QAT group size(s): `kv_act_quant_group_sizes` (expected: `[64]`; enforced by `scripts/model_contract_verify_deepseek_v4_flash.py`)
+- Attention softmax scaling expression: `attn_softmax_scale_expr` (expected: `self.head_dim ** -0.5`)
+- CSA Indexer per-token weights scaling expression: `indexer_weights_expr` (expected: `self.weights_proj(x) * (self.softmax_scale * self.n_heads ** -0.5)`)
+
 ### Attention sink semantics (`attn_sink`)
 
 Reference implementation: `inference/kernel.py` (`sparse_attn`).
@@ -232,6 +270,7 @@ Shared facts:
 - Each MoE layer routes each token to `n_activated_experts=6` routed experts **plus** 1 shared expert.
 - Expert outputs are accumulated (and `all_reduce`d across TP ranks) before adding the shared expert output.
 - Routing weights:
+  - Gate scores are computed in float32 (`linear(x.float(), gate.weight.float())`) even if the trunk runs in lower precision.
   - `scoring_func == sqrtsoftplus` implemented as `sqrt(softplus(linear(...)))`
   - If not softmax, weights are normalized to sum to 1 before multiplying by `route_scale`.
 
@@ -239,13 +278,23 @@ Hash-routed bootstrap layers:
 
 - For layers `0 <= layer_id < n_hash_layers` (here: layers 0–2), routing indices come from a static table:
   - tensor key: `layers.{i}.ffn.gate.tid2eid` (dtype `int32`)
+  - logical shape: `[vocab_size, n_activated_experts]` (here: `[129280, 6]`), indexed by `input_ids`
 - For these layers, `layers.{i}.ffn.gate.bias` is absent in the checkpoint.
+- Even in hash mode, the gate still computes scores and routing weights from hidden state:
+  - `tid2eid[input_ids]` selects the expert IDs
+  - weights are computed by gathering the **unbiased** `original_scores` at those IDs, normalizing, then applying `route_scale`.
 
 Score-routed layers:
 
 - For layers `layer_id >= n_hash_layers` (here: layers 3–42), routing indices come from score top-k:
   - tensor key: `layers.{i}.ffn.gate.bias` (float32) exists and is applied only for expert selection.
+- Routing weights are always gathered from the **unbiased** `original_scores` (bias shifts top-k selection but does not change weights).
 - The MTP block is also score-routed and includes `mtp.0.ffn.gate.bias`.
+
+These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under:
+
+- `moe.semantics` (score computation + normalization + scaling expressions)
+- `moe.hash_routing` (hash-gating enable/indices expressions + `tid2eid` shape/dtype)
 
 ## Hyper-Connections (mHC)
 
@@ -281,6 +330,8 @@ Reference implementation: `inference/model.py` (`MTPBlock`, `Transformer.mtp`).
   4. Run the normal `Block` forward (attention + MoE + HC mixing).
   5. Compute logits with a **separate** HC head: `hc_head_{fn,base,scale}` under `mtp.0.*`.
 
+These key MTP expressions are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `mtp.semantics` and gated by `scripts/model_contract_verify_deepseek_v4_flash.py`.
+
 DS4 must treat `mtp.*` as a distinct draft-model path with its own HC head weights, not just an alias to the main head.
 
 ## Tokenizer + encoding contract
@@ -295,6 +346,18 @@ Tokenizer (from `tokenizer_config.json`):
 - EOS token string: `<｜end▁of▁sentence｜>` (`eos_token_id: 1` in `config.json`)
 - PAD token is EOS.
 
+Tokenizer backend (from `tokenizer.json`):
+
+- Model: `BPE` (base vocab size 128000 + merges; effective vocab size matches `vocab_size=129280` once added tokens are applied).
+- Pre-tokenizer: a `Sequence` of 3 `Split` regex passes followed by `ByteLevel` (this controls the **exact** text → byte-level pieces fed into BPE).
+- Post-processor + decoder: `ByteLevel`.
+
+These backend pipeline facts (including the exact `Split` regex patterns and `ByteLevel` flags) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tokenizer.tokenizer_json_summary` so external runtimes can reproduce tokenization without guessing.
+
+Tokenizer added-token ID range note:
+
+- The raw `tokenizer.json` `added_tokens[]` list can include tokens whose IDs are within the base BPE vocab range (e.g. BOS/EOS). For the contiguous “extra IDs above base vocab” range, use `tokenizer.tokenizer_json_summary.{added_token_id_min_ge_base_vocab,added_token_id_max_ge_base_vocab,added_tokens_count_ge_base_vocab}` from `contract_summary.json`.
+
 Message rendering:
 
 - Upstream provides `encoding/encoding_dsv4.py` with templates for:
@@ -302,6 +365,17 @@ Message rendering:
   - explicit thinking blocks (`<think>...</think>`)
   - DSML tool-call markup (e.g. `｜DSML｜tool_calls` blocks)
 - The oracle for this repo is the upstream `encoding/tests/*` vectors.
+
+The upstream string constants used by the encoder (`bos_token`, `eos_token`, `thinking_*`, `dsml_token`, etc.) are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `encoding_constants`.
+
+In addition to the special tokens, the contract summary records the **exact upstream message/tool templates** required to reproduce prompt rendering in external runtimes:
+
+- `encoding_constants.{system,user,latest_reminder}_msg_template`
+- `encoding_constants.assistant_msg_template` and `encoding_constants.assistant_msg_wo_eos_template`
+- `encoding_constants.thinking_template`
+- `encoding_constants.tool_call_template` and `encoding_constants.tool_calls_template`
+- Role markers: `encoding_constants.{user,assistant,latest_reminder}_sp_token`
+- Task-classifier tokens: `encoding_constants.ds_task_sp_tokens`
 
 ## Tensor key contract (checkpoint naming)
 
@@ -327,6 +401,30 @@ Quantized linear layers include per-block scale tensors:
   - `{...}.scale`
 
 DS4 must treat the `model.safetensors.index.json` key set as authoritative for loader compatibility.
+
+To make the key set easy to reference in downstream tooling (and to detect accidental fixture drift), `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records a stable fingerprint of the sorted weight-map keys:
+
+- `checkpoint_index.weight_map_num_tensors`
+- `checkpoint_index.weight_map_keys_sha256`
+- `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
+
+### Quantization scale tensor semantics (FP8/FP4)
+
+Reference implementation: `inference/model.py` (`Linear`, `linear(...)`).
+
+DeepSeek V4 Flash uses **block-scaled** quantized weights:
+
+- FP8 weights (`torch.float8_e4m3fn`):
+  - logical weight shape: `[out_features, in_features]`
+  - scale dtype: `torch.float8_e8m0fnu`
+  - scale shape: `[(out_features+block_size-1)//block_size, (in_features+block_size-1)//block_size]` (with `block_size=128`)
+- FP4 expert weights (`torch.float4_e2m1fn_x2`):
+  - storage weight shape: `[out_features, in_features//2]` (packed 2 fp4 per byte)
+  - logical weight shape: `[out_features, in_features]`
+  - scale dtype: `torch.float8_e8m0fnu`
+  - scale shape: `[out_features, in_features//fp4_block_size]` (with `fp4_block_size=32`)
+
+These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.linear_tensor_contract`.
 
 ### Tensor key patterns (loader contract)
 
@@ -374,6 +472,7 @@ MTP block (`mtp.0.*`):
   - `mtp.0.e_proj.{weight,scale}`, `mtp.0.h_proj.{weight,scale}`
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
+- Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
 
 This repo includes a verifier for these invariants: `scripts/model_contract_verify_deepseek_v4_flash.py`.
 
@@ -403,10 +502,67 @@ Official-source safetensors **do** include the MTP namespace:
 
 - `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json` contains `mtp.0.*` (1,575 tensor keys as of the pinned upstream commit).
 
+As of 2026-05-09, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
+
+Recorded probe outputs (range-read header + tensor table only; no full downloads):
+
+- `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
+- `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
+- `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
+- The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this under `tensor_type_counts`.
+- These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
+
 For external/quantized artifacts:
 
 - Do **not** assume `mtp.0.*` survives conversion into GGUF or other derived formats.
+- Some community GGUF conversions ship `mtp.0.*` as a **separate sidecar** file rather than embedding it in the trunk GGUF. Treat MTP presence as a property of the artifact **set**, not just one file.
+- At least one pinned candidate (`docs/upstream-quantized-v4-flash.md`: `antirez/deepseek-v4-gguf`) explicitly publishes an MTP sidecar GGUF; expect the trunk GGUF to be missing `mtp.0.*` unless both files are supplied to the runtime.
 - Treat MTP as **disabled/untrusted** unless the artifact is inspected and proven to contain `mtp.0.*` weights (and, ideally, MTP passes an oracle check; see below).
+- Record whether the runtime can expose draft logits or draft token IDs.
+- A successful MTP speedup is not enough by itself; the acceptance path must be
+  reproducible under deterministic sampling and must be disableable for oracle
+  comparisons.
+
+To inspect a trunk+sidecar pair, pass both paths:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json
+```
+
+For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` can also do range-read inspection (header + tensor table only; no full download). Record the `url_prefix_bytes`:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
+```
+
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, and `mtp_trust`.
+
+When multiple `--path` values are provided, the tool emits both:
+
+- per-artifact `topology_contract` (computed from that artifact's captured GGUF header metadata, when present)
+- a `combined.topology_contract` computed from the GGUF path with the most tensors (`combined.topology_contract_source_path` records which)
+
+Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published as a compact 32‑tensor `mtp.0.*` table with `general.architecture=deepseek4_mtp_support` (not a full official `mtp.0.*` checkpoint). Validate these sidecars explicitly before trying to load them in external runtimes:
+
+```sh
+python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json
+# Or, for metadata-only validation without a full download:
+python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
+```
+
+Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`.
+Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`.
+
+As of 2026-05-09, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
+- The same inspection reports `mtp_namespace.has_mtp0=true` and `mtp_trust.status=incomplete` (the `mtp.0.*` prefix exists, but the tensor set does not satisfy the upstream MTP contract).
+
+- Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
+- If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
+- When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make the “structural complete but still needs an oracle” status explicit in JSON.
+- Also record and review:
+  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
+  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
+  - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
 
 ## Next steps (oracle + remaining unknowns)
 
@@ -416,6 +572,8 @@ For external/quantized artifacts:
   - Generator (weights required): `scripts/model_contract_generate_deepseek_v4_flash_oracle.py`
   - Output (commit only after review): `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`
 - The verifier enforces that any committed `logits_oracle.json` matches the pinned `upstream_commit.txt` and records core runtime metadata (TP size, seed, tokenizer hashes).
-- Record the exact `max_seq_len` and `max_batch_size` used for Spark baselines, since KV cache sizing depends on them.
+- Upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4` (see `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `runtime.reference_defaults`), but Spark baselines may override them; record the exact values used since KV cache sizing depends on them.
 
 Before relying on MTP for speculative decoding, extend the logit oracle to cover the `mtp` path (weights required) and gate DS4’s `mtp` implementation against it.
+
+The oracle generator supports this by adding `--include-mtp`, which records `cases[].mtp_trace[]` (draft logits from `MTPBlock.forward(...)`) alongside the main trunk `cases[].trace[]`.

@@ -72,8 +72,10 @@ DS4_MODEL_GGUF="${DS4_MODEL_GGUF:-}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
 REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
-REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-}"
-REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-}"
+REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -503,6 +505,21 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo "$REMOTE_VLLM_ENV"
     echo '```'
     echo
+    echo "Remote MTP sidecar env:"
+    echo
+    echo "Used when running the sidecar contract probe (optional; set MTP_SIDECAR_GGUF on Spark)."
+    echo "Do not put secrets in REMOTE_* env values; this report records them."
+    echo
+    echo '```'
+    echo "$REMOTE_MTP_SIDECAR_ENV"
+    echo '```'
+    echo
+    echo "Remote MTP sidecar args:"
+    echo
+    echo '```'
+    echo "$REMOTE_MTP_SIDECAR_ARGS"
+    echo '```'
+    echo
     echo "## Spark Probe"
     echo
     echo '```'
@@ -692,6 +709,44 @@ fetch_remote_artifacts "$target" "$REMOTE_LLAMA_OUT_DIR" "$LLAMA_ARTIFACT_DIR" "
     echo
 } >>"$REPORT_MD"
 
+echo "== running MTP sidecar contract probe on spark (may be gated) =="
+ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py && $REMOTE_MTP_SIDECAR_ENV sh -lc '
+set -eu
+if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
+  echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
+  exit 0
+fi
+if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
+  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\"
+  exit 0
+fi
+if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
+  echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
+  exit 0
+fi
+python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
+    >"$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" 2>"$OUT_DIR/remote_mtp_sidecar_probe_stderr.txt" || true
+
+{
+    echo "## MTP sidecar contract probe (Spark)"
+    echo
+    echo "This is a metadata-only sanity check for DS4-tuned MTP sidecars (e.g. `general.architecture=deepseek4_mtp_support` + 32 `mtp.0.*` tensors)."
+    echo "It does not require loading the trunk GGUF or reading tensor payloads into RAM."
+    echo
+    echo "Summary (best-effort):"
+    echo
+    echo '```'
+    sed -n '1,120p' "$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" || true
+    echo '```'
+    echo
+    echo "Full logs:"
+    echo
+    echo "- stdout: $OUT_DIR/remote_mtp_sidecar_probe_stdout.txt"
+    echo "- stderr: $OUT_DIR/remote_mtp_sidecar_probe_stderr.txt"
+    echo
+} >>"$REPORT_MD"
+
 if [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
     echo "== running llama-server sweep on spark (may be gated; long model loads) =="
     rc_llama_server_sweep=0
@@ -737,27 +792,26 @@ if [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
     LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR="$OUT_DIR/spark_llamacpp_server_throughput_sweep_artifacts"
     fetch_remote_artifacts "$target" "$REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR" "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR" "llamacpp_server_throughput_sweep" || true
 
-	    {
-	        echo "## llama-server throughput sweep (Spark)"
-	        echo
-	        echo "- ssh_exit_code: $rc_llama_server_throughput_sweep"
-	        echo "- spark_out_dir: $REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR"
-	        echo "- spark_artifacts_local: $LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR"
-	        echo
-	        if [ -f "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR/throughput_sweep.md" ]; then
-	            echo "Artifacts summary (throughput_sweep.md head):"
-	            echo
-	            echo '```'
-	            sed -n '1,200p' "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR/throughput_sweep.md" || true
-	            echo '```'
-	            echo
-	        fi
-	        echo
-	        echo "Full logs:"
-	        echo
-	        echo "- stdout: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stdout.txt"
-	        echo "- stderr: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stderr.txt"
-	        echo
+    {
+        echo "## llama-server throughput sweep (Spark)"
+        echo
+        echo "- ssh_exit_code: $rc_llama_server_throughput_sweep"
+        echo "- spark_out_dir: $REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR"
+        echo "- spark_artifacts_local: $LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR"
+        echo
+        if [ -f "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR/throughput_sweep.md" ]; then
+            echo "Artifacts summary (throughput_sweep.md head):"
+            echo
+            echo '```'
+            sed -n '1,200p' "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR/throughput_sweep.md" || true
+            echo '```'
+            echo
+        fi
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stderr.txt"
+        echo
         echo "Stdout (head):"
         echo
         echo '```'
