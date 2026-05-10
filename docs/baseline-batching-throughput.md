@@ -61,6 +61,15 @@ Notes:
 - The script uses `--parallel` / `-b` / `-ub` by default; for forks that use different flag spellings, set `PARALLEL_FLAG`, `BATCH_FLAG`, and `UBATCH_FLAG` on Spark by wrapping them into `LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS` (or by invoking the sweep script directly on Spark).
 - If model reloads are too expensive, set `LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO=0` and provide exactly one `(parallel,batch,ubatch)` combination (the script enforces this).
 
+### Presets (Convenience)
+
+If you want a quick starting grid without typing `*_BATCH_VALUES` / `*_UBATCH_VALUES`, set:
+
+- `LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET=quick` (small grid)
+- `LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET=highbatch` (the documented “high batching” grid)
+
+The preset only fills in values you did not explicitly set (so you can still override `*_BATCH_VALUES` / `*_UBATCH_VALUES` by providing them directly).
+
 ## Interpreting Results
 
 Each sweep “wave” reports:
