@@ -121,6 +121,28 @@ python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" 
 ' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
 	>"$OUT_DIR/remote_contract_probe_stdout.txt" 2>"$OUT_DIR/remote_contract_probe_stderr.txt" || true
 
+python3 - "$OUT_DIR/remote_contract_probe_stdout.txt" >"$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+out = {"ok": False, "errors": [], "probe_ok": None}
+try:
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(doc, dict):
+        out["probe_ok"] = bool(doc.get("ok", False))
+        out["ok"] = out["probe_ok"]
+        errs = doc.get("errors", [])
+        if isinstance(errs, list):
+            out["errors"] = [str(x) for x in errs[:64]]
+    else:
+        out["errors"].append("stdout JSON top-level is not an object")
+except Exception as e:
+    out["errors"].append(f"failed to parse stdout as JSON: {e}")
+print(json.dumps(out, indent=2, sort_keys=True))
+PY
+
 {
 	echo "## Contract Probe Results (Python)"
 	echo
@@ -140,6 +162,7 @@ python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" 
 	echo
 	echo "- stdout: $OUT_DIR/remote_contract_probe_stdout.txt"
 	echo "- stderr: $OUT_DIR/remote_contract_probe_stderr.txt"
+	echo "- parsed status: $OUT_DIR/contract_probe_parse.json"
 	echo
 } >>"$REPORT_MD"
 
@@ -169,6 +192,50 @@ export PATCH_FILE
 ' " \
 	>"$OUT_DIR/remote_loader_probe_stdout.txt" 2>"$OUT_DIR/remote_loader_probe_stderr.txt" || true
 
+python3 - "$OUT_DIR/remote_loader_probe_stdout.txt" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
+import json
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+txt = path.read_text(encoding="utf-8", errors="replace")
+
+out = {"ok": False, "errors": [], "probe_ok": None, "extracted_json_bytes": 0}
+
+decoder = json.JSONDecoder()
+best_doc = None
+best_len = 0
+
+for m in re.finditer(r"^\\{", txt, flags=re.M):
+    idx = m.start()
+    try:
+        doc, end = decoder.raw_decode(txt[idx:])
+    except Exception:
+        continue
+    if isinstance(doc, dict):
+        consumed = int(end)
+        if consumed > best_len:
+            best_len = consumed
+            best_doc = doc
+
+if best_doc is None:
+    out["errors"].append(
+        "unable to locate JSON object in stdout; set JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV for machine-parseable output"
+    )
+    print(json.dumps(out, indent=2, sort_keys=True))
+    raise SystemExit(0)
+
+out["extracted_json_bytes"] = best_len
+out["probe_ok"] = bool(best_doc.get("ok", False))
+out["ok"] = out["probe_ok"]
+errs = best_doc.get("errors", [])
+if isinstance(errs, list):
+    out["errors"] = [str(x) for x in errs[:64]]
+
+print(json.dumps(out, indent=2, sort_keys=True))
+PY
+
 {
 	echo "## Loader Probe Results (llama.cpp)"
 	echo
@@ -188,6 +255,7 @@ export PATCH_FILE
 	echo
 	echo "- stdout: $OUT_DIR/remote_loader_probe_stdout.txt"
 	echo "- stderr: $OUT_DIR/remote_loader_probe_stderr.txt"
+	echo "- parsed status: $OUT_DIR/loader_probe_parse.json"
 	echo "- upload helper stderr: $OUT_DIR/remote_loader_upload_helper_stderr.txt"
 	echo "- upload patch stderr: $OUT_DIR/remote_loader_upload_patch_stderr.txt"
 	echo
