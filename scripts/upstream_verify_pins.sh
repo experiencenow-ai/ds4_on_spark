@@ -22,10 +22,29 @@ fi
 check_ref()
 {
 	local name="$1"
-	local url="$2"
-	local ref="$3"
-	local expected="$4"
+	local upstream="$2"
+	local url="$3"
+	local ref="$4"
+	local expected="$5"
 	local got
+
+	if [[ "${upstream}" == huggingface.co/* ]]; then
+		if [ "${ref}" != "refs/heads/main" ] && [ "${ref}" != "refs/heads/master" ]; then
+			echo "FAIL ${name}: unsupported HF ref: ${ref}" >&2
+			return 1
+		fi
+		got="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}" | awk '/^sha:/ {print $2; exit}')"
+		if [ -z "${got}" ] || [ "${got}" = "UNKNOWN" ]; then
+			echo "FAIL ${name}: HF API did not return sha" >&2
+			return 1
+		fi
+		if [ "${got}" != "${expected}" ]; then
+			echo "FAIL ${name}: expected ${expected}, got ${got}" >&2
+			return 1
+		fi
+		echo "OK   ${name}"
+		return 0
+	fi
 
 	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
 	if [ -z "${got}" ]; then
@@ -92,7 +111,7 @@ fail=0
 
 while IFS=$'\t' read -r name upstream ref commit; do
 	url="$(upstream_url "${upstream}")"
-	check_ref "${name}" "${url}" "${ref}" "${commit}" || fail=1
+	check_ref "${name}" "${upstream}" "${url}" "${ref}" "${commit}" || fail=1
 done < <(manifest_rows)
 
 exit "${fail}"
