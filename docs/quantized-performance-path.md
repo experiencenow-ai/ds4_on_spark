@@ -78,6 +78,12 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trac
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --json   # 0 = infer from trace/meta
 ```
 
+For concise loop output, use `--summary-json`:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
+```
+
 If the runtime emits `dt_ms` deltas (or only emits `accepted_mtp` / `rejected_mtp`), canonicalize it first so replay can infer `num_experts` / `mtp_draft_len` cleanly:
 
 ```bash

@@ -239,6 +239,32 @@ class SchedulerSimTest(unittest.TestCase):
         first_route = json.loads(lines[1])
         self.assertEqual(first_route.get("mtp_accept_len"), 2)
 
+    def test_summary_json_outputs_concise_metrics(self) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = scheduler_sim.main(["--num-tokens", "2000", "--summary-json"])
+        self.assertEqual(rc, 0)
+        out = json.loads(buf.getvalue())
+        self.assertIn("summary", out)
+        summary = out["summary"]
+        self.assertIsInstance(summary, dict)
+        for k in ("makespan_ms", "token_throughput_tps", "task_throughput_tps", "drop_frac_tokens"):
+            self.assertIn(k, summary)
+
+    def test_summary_json_compare_omits_full_metrics(self) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = scheduler_sim.main(["--num-tokens", "2000", "--summary-json", "--compare", "mtp_off:{\"mtp_draft_len\":0}"])
+        self.assertEqual(rc, 0)
+        out = json.loads(buf.getvalue())
+        self.assertIn("baseline", out)
+        self.assertIn("variants", out)
+        self.assertNotIn("metrics", out["baseline"])
+        self.assertIn("summary", out["baseline"])
+        self.assertIn("mtp_off", out["variants"])
+        self.assertNotIn("metrics", out["variants"]["mtp_off"])
+        self.assertIn("delta_vs_baseline", out["variants"]["mtp_off"])
+
     def test_infer_num_experts_from_trace_uses_meta(self) -> None:
         trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 7))]
         meta: dict[str, object] = {"num_experts": 10}

@@ -3085,6 +3085,26 @@ def compare_simulation_variants(base_cfg: SimConfig, trace: Sequence[TokenRoute]
     return(out)
 
 
+def compare_simulation_summaries(base_cfg: SimConfig, trace: Sequence[TokenRoute], variants: Sequence[Tuple[str, Dict[str, object]]]) -> Dict[str, object]:
+    out: Dict[str, object] = {}
+    base_metrics = run_simulation(base_cfg, trace)
+    base_summary = compare_summary_jsonable(base_metrics)
+    out["baseline"] = {"overrides": {}, "summary": base_summary}
+
+    variants_out: Dict[str, object] = {}
+    for label, overrides in variants:
+        cfg = _sim_cfg_apply_overrides(base_cfg, overrides)
+        m = run_simulation(cfg, trace)
+        summary = compare_summary_jsonable(m)
+        delta: Dict[str, float] = {}
+        for k, v in summary.items():
+            base_v = float(base_summary.get(k, 0.0))
+            delta[k] = (float(v) - base_v)
+        variants_out[label] = {"overrides": overrides, "summary": summary, "delta_vs_baseline": delta}
+    out["variants"] = variants_out
+    return(out)
+
+
 def scale_trace_speedup(trace: Sequence[TokenRoute], speedup: float) -> List[TokenRoute]:
     if speedup <= 0.0:
         raise ValueError("trace_speedup must be > 0")
@@ -3114,6 +3134,11 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
+    p.add_argument(
+        "--summary-json",
+        action="store_true",
+        help="Print a concise JSON summary of the simulation metrics (and exit). When used with --compare, prints only summaries + deltas (no full metrics).",
+    )
     p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len) and exit. Requires --trace-jsonl/--trace-csv. Use '-' for stdout.")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
@@ -3404,16 +3429,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if not isinstance(overrides, dict):
                 raise SystemExit(f"--compare JSON for '{label}' must be an object/dict")
             variants.append((label, overrides))
-        out = compare_simulation_variants(sim_cfg, trace, variants)
+        if args.summary_json:
+            out = compare_simulation_summaries(sim_cfg, trace, variants)
+        else:
+            out = compare_simulation_variants(sim_cfg, trace, variants)
         if len(trace_meta) != 0:
             out["trace_meta"] = trace_meta
     else:
         metrics = run_simulation(sim_cfg, trace)
-        out = metrics.to_jsonable()
-        if len(trace_meta) != 0:
-            trace_out = out.get("trace")
-            if isinstance(trace_out, dict):
-                trace_out["meta"] = trace_meta
+        if args.summary_json:
+            out = {"summary": compare_summary_jsonable(metrics)}
+            if len(trace_meta) != 0:
+                out["trace_meta"] = trace_meta
+        else:
+            out = metrics.to_jsonable()
+            if len(trace_meta) != 0:
+                trace_out = out.get("trace")
+                if isinstance(trace_out, dict):
+                    trace_out["meta"] = trace_meta
+    if args.summary_json:
+        print(json.dumps(out, sort_keys=True))
+        return(0)
     if args.json:
         print(json.dumps(out, sort_keys=True))
         return(0)
