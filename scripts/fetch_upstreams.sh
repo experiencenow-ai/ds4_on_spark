@@ -275,7 +275,7 @@ fetch_one()
 			clone_or_update "spark_v4_bringup_bigs" "https://github.com/bigs/deepseek-v4-flash-dgx-spark.git" "${ref}" "${expected}"
 			;;
 		spark_v4_gb10_runtime_devid791)
-			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/tags/v0.1.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_gb10_runtime_devid791" "https://github.com/devid791/dsv4-flash-gb10-runtime.git" "${ref}" "${expected}"
 			;;
 		deepseek_v4_flash_sm120_patch)

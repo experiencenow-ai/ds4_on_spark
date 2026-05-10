@@ -33,6 +33,7 @@ The sizes below are taken from Git LFS pointer metadata (no GGUF downloads), as 
 Fixture provenance note:
 
 - If a human approves a GGUF download, record and verify the artifact `sha256` against the HF API `lfs.sha256` values listed in [`docs/upstream-quantized-v4-flash.md`](upstream-quantized-v4-flash.md). This lets us validate fixtures without trusting filenames.
+- For `antirez/deepseek-v4-gguf`, there is also a separate MTP sidecar GGUF (~3.5 GiB). Only fetch it if the chosen runtime needs MTP; verify its `sha256` the same way (see `docs/mtp-ds4-reference.md`).
 
 ## Candidates (native checkpoint path)
 

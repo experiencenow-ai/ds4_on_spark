@@ -8,7 +8,7 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Ref: `refs/heads/main`
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
-  - Note (as of 2026-05-10): we treat this HF repo as the canonical public “official configs” source; a GitHub search under `deepseek-ai/*` did not show a dedicated DeepSeek-V4-Flash code repo.
+  - Note (as of 2026-05-10): we treat this HF repo as the canonical public “official configs” source; `deepseek-ai`’s GitHub org does not list a dedicated DeepSeek-V4(-Flash) code/config repo (checked via `gh repo list deepseek-ai --limit 100 | rg -i v4`).
 
 Related checkpoint (same “official configs” approach):
 
@@ -60,7 +60,7 @@ The Hub increasingly serves large files via Xet-backed storage, while keeping Gi
 
 ## Hugging Face revisions vs git commits
 
-Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) that don’t match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
+Hugging Face’s web UI may show short “revision IDs” (often 7 hex chars) or Xet-backed “tree” IDs that do not match the git commit hash returned by `git ls-remote`. This project treats the git transport as the source of truth because `scripts/fetch_upstreams.sh` uses `git clone/fetch`.
 
 To see the HF API-reported revision SHA (and file sizes) without cloning/downloading:
 
