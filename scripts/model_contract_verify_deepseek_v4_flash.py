@@ -200,6 +200,31 @@ def main() -> int:
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
 					failures.append(Failure(17, f"contract summary missing decode sliding-ring update expression containing 'start_pos % win': {contract_summary}"))
+				comp = summary.get("cache", {}).get("compression_semantics", None)
+				if not isinstance(comp, dict):
+					failures.append(Failure(83, f"contract summary missing cache.compression_semantics object: {contract_summary}"))
+				else:
+					if comp.get("overlap_rule") != "overlap = (compress_ratio == 4)":
+						failures.append(Failure(84, f"contract summary cache.compression_semantics.overlap_rule mismatch: {contract_summary}"))
+					if comp.get("indexer_present_rule") != "indexer exists iff compress_ratio == 4 (CSA only)":
+						failures.append(Failure(85, f"contract summary cache.compression_semantics.indexer_present_rule mismatch: {contract_summary}"))
+					att = comp.get("attention_compressor", {})
+					if not isinstance(att, dict) or att.get("rotate") is not False:
+						failures.append(Failure(86, f"contract summary cache.compression_semantics.attention_compressor.rotate must be false: {contract_summary}"))
+					else:
+						rule = att.get("kv_quant_rule")
+						if not (isinstance(rule, str) and "group=64" in rule and "rope" in rule.lower()):
+							failures.append(Failure(87, f"contract summary cache.compression_semantics.attention_compressor.kv_quant_rule must mention group=64 and rope slice: {contract_summary}"))
+					idxp = comp.get("indexer_scoring_path", {})
+					if not isinstance(idxp, dict) or idxp.get("compressor_rotate") is not True:
+						failures.append(Failure(88, f"contract summary cache.compression_semantics.indexer_scoring_path.compressor_rotate must be true: {contract_summary}"))
+					else:
+						kv_rule = idxp.get("kv_quant_rule")
+						q_rule = idxp.get("q_quant_rule")
+						if not (isinstance(kv_rule, str) and "fp4_block_size" in kv_rule):
+							failures.append(Failure(89, f"contract summary cache.compression_semantics.indexer_scoring_path.kv_quant_rule must mention fp4_block_size: {contract_summary}"))
+						if not (isinstance(q_rule, str) and "fp4_block_size" in q_rule):
+							failures.append(Failure(90, f"contract summary cache.compression_semantics.indexer_scoring_path.q_quant_rule must mention fp4_block_size: {contract_summary}"))
 				moe_sem = summary.get("moe", {}).get("semantics", {})
 				if moe_sem.get("bias_affects_selection_only_comment") is None:
 					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))

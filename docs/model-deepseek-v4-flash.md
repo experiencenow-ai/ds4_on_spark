@@ -152,7 +152,9 @@ Activation quantization in the reference runtime:
 - GEMM input activations are block-quantized to FP8 in blocks of `block_size=128`.
 - KV path uses QAT-style activation quantization on the **non-RoPE** dims only:
   - `act_quant(kv[..., :-rope_head_dim], block_size=64, inplace=True)` (RoPE slice stays BF16 for positional precision).
-- The compressed KV path (`Compressor.rotate == true`) applies a Hadamard rotation then uses FP4 act quantization with `fp4_block_size=32`.
+- KV compression has **two** quantization modes in the upstream reference code:
+  - Attention KV compressor (`Attention.compressor`, `Compressor(rotate=false)`): `act_quant(kv[..., :-rope_head_dim], group=64, ...)` (FP8-simulated QAT on non-RoPE dims; RoPE slice stays BF16).
+  - CSA Indexer scoring path (`Indexer.compressor`, `Compressor(rotate=true)`): `rotate_activation(kv); fp4_act_quant(kv, fp4_block_size=32, ...)` and `rotate_activation(q); fp4_act_quant(q, fp4_block_size=32, ...)` (Hadamard rotation + FP4 act quantization for the learned indexer’s q·k scoring).
 
 DS4 must treat `*.scale` tensors and the block-size rules above as part of the execution contract; skipping them can preserve shapes but still diverge numerically.
 
