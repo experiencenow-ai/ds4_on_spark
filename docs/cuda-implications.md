@@ -51,9 +51,9 @@ Implication:
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
 - The cuBLASLt smoke probes print `cublasLtGetVersion` and `cublasLtGetCudartVersion`; keep these lines in logs so failures can be correlated to the exact cuBLASLt stack.
 - FP8 matmul is verified via cuBLASLt on `sm_121` for E4M3 (see `cuda_cublaslt_fp8_smoke`), which de-risks early FP8 bring-up for DeepGEMM-style paths.
-- The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (observed `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
+- The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (observed 2026-05-10: `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
 - FP4 conversion helpers exist in CUDA 13 (`cuda_fp4.h`), but FP4 matmul support and packing/scale semantics are cuBLASLt-stack dependent; use `cuda_cublaslt_fp4_smoke` / `cuda_cublaslt_fp4_sweep` as the first “does FP4 GEMM exist?” gate before investing in FP4 kernels.
-- Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88` / `cublasLtGetVersion=130101`):
+- Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88` / `cublasLtGetVersion=130101`):
   - `cuda_cublaslt_fp4_sweep` reports `heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0` for BF16 output (`CUBLAS_COMPUTE_32F`), which suggests an FP4 matmul execution path exists in cuBLASLt on GB10.
   - `cuda_cublaslt_fp4_smoke` currently prints `max_abs_err_vs_one=1` for a naive “identity×ones” check (so treat this as “matmul runs” not “numeric validated” until we wire a correct NVFP4 pack+scale recipe).
 
@@ -72,6 +72,9 @@ Implication:
 - Any CUTLASS integration work must explicitly include `sm_121` in its arch list; do not assume `sm_100` build settings apply.
 - If `sm_121` is not available in a given upstream build system yet, validate whether building for `sm_120` runs correctly on GB10 first (see `cuda_sm120_compat_probe` below).
 - CUTLASS 3-style TMA loads appear viable on GB10; the `cuda_sm121_tma_bulk_tensor_1d` / `cuda_sm121_tma_bulk_tensor_2d` probes are minimal “tensor map encode + `cp.async.bulk.tensor`” gates that should fail fast if TMA plumbing is missing or broken.
+- The “kernel plumbing” probe set (`./scripts/cuda_probe_kernel_tiny_spark0.sh`) already covers many CUTLASS prerequisites on GB10: C++20 compilation, common nvcc template flags, inline PTX (`ldmatrix.sync`), async copy plumbing (pipeline + CCCL `cp.async.bulk`), and TMA tensor-map encode + `cp.async.bulk.tensor`.
+- When repo transfer is blocked (or you want a faster gate), `./scripts/cuda_probe_nvcc_minimal_spark0.sh` includes a compile-only `-std=c++20 --extended-lambda --expt-relaxed-constexpr` check for `sm_121` to catch “toolchain can’t compile CUTLASS-style code” failures early.
+- A real CUTLASS bring-up still needs a minimal CUTLASS compile+run probe, because CUTLASS may hard-gate unknown arch tags (`sm_121`) or require a small arch mapping patch even when the toolchain is otherwise healthy.
 
 Next probe step:
 
@@ -86,31 +89,6 @@ Next probe step:
 - Confirm that cluster launches and cluster intrinsics work on GB10; see `tools/cuda_probe/bin/cuda_sm121_cluster_launch`.
 - If using cluster annotations (`__cluster_dims__`) in any CUTLASS-style code, verify whether `nvcc -arch=sm_121` accepts it on Spark0; `./scripts/cuda_probe_compile_only_spark0.sh` prints a `cluster_dims_attr_compile` result (observed `OK` on 2026-05-09 with CUDA 13.0 `V13.0.88`).
 - Note: this repo’s pinned DeepGEMM upstream uses a CUTLASS submodule; we intentionally do not auto-init submodules in the probe loop (see `docs/upstream-deepgemm.md`), so a CUTLASS compile/run probe requires an explicit submodule init (extra downloads).
-
-## CUTLASS
-
-Implication:
-
-- The “kernel plumbing” probe set (`./scripts/cuda_probe_kernel_tiny_spark0.sh`) already covers many CUTLASS prerequisites on GB10: C++20 compilation, common nvcc template flags, inline PTX (`ldmatrix.sync`), async copy plumbing (pipeline + CCCL `cp.async.bulk`), and TMA tensor-map encode + `cp.async.bulk.tensor`.
-- When repo transfer is blocked (or you want a faster gate), `./scripts/cuda_probe_nvcc_minimal_spark0.sh` now includes a compile-only `-std=c++20 --extended-lambda --expt-relaxed-constexpr` check for `sm_121` to catch “toolchain can’t compile CUTLASS-style code” failures early.
-- A real CUTLASS bring-up still needs a minimal CUTLASS compile+run probe, because CUTLASS may hard-gate unknown arch tags (`sm_121`) or require a small arch mapping patch even when the toolchain is otherwise healthy.
-
-Next probe step:
-
-- Build and run the smallest CUTLASS example on Spark0, capture the exact failure mode (arch mapping vs. missing intrinsics vs. build system assumptions), then decide whether to patch arch detection or temporarily target `sm_120` as a compatibility bridge (see `tools/cuda_probe/bin/cuda_sm120_compat_probe`).
-
-## cuBLASLt
-
-Implication:
-
-- cuBLASLt is the “fast path” fallback when DeepGEMM/CUTLASS kernels are blocked on arch gating, but early probe results suggest that not all low-precision modes are ready on GB10 yet.
-- Observed on Spark0 (2026-05-09 / CUDA 13.0 `V13.0.88`): `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke` returns `CUBLAS_STATUS_NOT_SUPPORTED` during heuristic selection (treat as informative; likely needs toolkit/driver maturity or different API surface).
-- Observed on Spark0 (2026-05-09 / `cublasLtGetVersion=130101`): `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke` fails to find any supported algo even after trying small square problems and multiple workspace sizes.
-- Observed on Spark0 (2026-05-09): `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke` (E4M3) does find a supported path and returns sensible results (`max_abs_err_vs_one=0`).
-
-Next probe step:
-
-- Re-run the cuBLASLt smoke probes on Spark0 after any driver/toolkit updates to track whether FP4 / FP8 E5M2 support changes, and treat “support matrix drift” as an input into whether DeepGEMM should prioritize custom kernels vs. cuBLASLt fallbacks.
 
 ## Build Portability Notes (CUDA 13)
 
@@ -130,7 +108,7 @@ Implication:
 - We should expect one of:
   - DeepGEMM fails fast on unknown `sm_121` and needs an upstream update or a local arch-spec patch, or
   - DeepGEMM falls back to a supported path with reduced performance/features.
- - DeepGEMM requires C++20; use `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` as the first gate before pulling upstream code.
+- DeepGEMM requires C++20; use `tools/cuda_probe/bin/cuda_sm121_cxx20_probe` as the first gate before pulling upstream code.
 
 Next probe step:
 

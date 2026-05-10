@@ -222,13 +222,13 @@ Observed:
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
 - The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure
 
-## Full Suite Spark0 Results (2026-05-09)
+## Full Suite Spark0 Results (2026-05-10)
 
 Commands run:
 
 ```bash
-./scripts/cuda_probe_compile_only_spark0.sh
-./scripts/cuda_probe_spark0.sh
+./scripts/cuda_probe_compile_only_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_spark0.sh spark0@aitopatom-9ab9.local
 ```
 
 Observed:
