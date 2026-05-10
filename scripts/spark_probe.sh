@@ -22,6 +22,7 @@ Environment:
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
+  DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
@@ -674,6 +675,7 @@ int main()
 {
 	int device_count = 0,dev = 0;
 	cudaDeviceProp prop;
+	int cc = 0,max_cc = -1,max_cc_major = 0,max_cc_minor = 0;
 	int runtime_v = 0,driver_v = 0;
 	int drv_major = 0,drv_minor = 0,rt_major = 0,rt_minor = 0;
 	char pci_bus_id[64];
@@ -700,6 +702,13 @@ int main()
 			std::printf("cudaGetDeviceProperties failed for dev %d\n",dev);
 			return(2);
 		}
+		cc = ((prop.major * 100) + prop.minor);
+		if ( cc > max_cc )
+		{
+			max_cc = cc;
+			max_cc_major = prop.major;
+			max_cc_minor = prop.minor;
+		}
 		std::printf("device%d name: %s\n",dev,prop.name);
 		std::printf("device%d cc: %d.%d\n",dev,prop.major,prop.minor);
 		std::printf("device%d global mem (bytes): %llu\n",dev,(unsigned long long)prop.totalGlobalMem);
@@ -710,6 +719,8 @@ int main()
 		else
 			std::printf("device%d pci bus id: (unavailable)\n",dev);
 	}
+	if ( max_cc >= 0 )
+		std::printf("runtime max cc: %d.%d\n",max_cc_major,max_cc_minor);
 	return(0);
 }
 CU
@@ -717,22 +728,27 @@ CU
 	if [ "$nvcc_arch" != "" ]; then
 		nvcc_extra="-arch=$nvcc_arch"
 	fi
-		if "$nvcc_bin" $nvcc_extra -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
-			out="$("$cu_bin" 2>/dev/null || true)"
-			[ "$out" != "" ] && printf "%s\n" "$out"
-			if [ "$compute_cap" != "" ] && [ "$out" != "" ]; then
-				cc_max="$(printf "%s\n" "$out" | sed -nE "s/^device[0-9]+ cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }")"
-				if [ "$cc_max" != "" ]; then
-					echo "runtime max cc: $cc_max"
-					if [ "$cc_max" != "$compute_cap" ]; then
-						echo "warning: compute_cap $compute_cap != runtime max cc $cc_max"
-					fi
-				fi
+	if "$nvcc_bin" $nvcc_extra -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
+		out="$("$cu_bin" 2>/dev/null || true)"
+		[ "$out" != "" ] && printf "%s\n" "$out"
+		if [ "$compute_cap" != "" ] && [ "$out" != "" ]; then
+			rtmax="$(printf "%s\n" "$out" | sed -nE "s/^runtime max cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | head -n 1)"
+			if [ "$rtmax" = "" ]; then
+				rtmax="$(printf "%s\n" "$out" | sed -nE "s/^device[0-9]+ cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }")"
 			fi
-			echo
-			emit_pcie_link ", post-load"
-			echo
-			emit_sysfs_pcie_link ", post-load"
+			cc0="$(printf "%s\n" "$out" | sed -nE "s/^device0 cc: ([0-9]+)[.]([0-9]+)/\\1.\\2/p" | head -n 1)"
+			if [ "$rtmax" != "" ] && [ "$rtmax" != "$compute_cap" ]; then
+				echo "warning: compute_cap $compute_cap != runtime max cc $rtmax"
+			fi
+			if [ "$cc0" != "" ] && [ "$cc0" != "$compute_cap" ]; then
+				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
+			fi
+		fi
+		fi
+		echo
+		emit_pcie_link ", post-load"
+		echo
+		emit_sysfs_pcie_link ", post-load"
 	else
 		echo "nvcc compile failed:"
 		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true

@@ -21,6 +21,7 @@ Environment:
 Examples:
   ./scripts/mac_spark_discovery.sh
   REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+  DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
   ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
   ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local
 EOF
