@@ -2739,6 +2739,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("k_signal_policy", scenarios)
         self.assertIn("starvation_knobs", scenarios)
         self.assertIn("expert_queue_reserve_sweep", scenarios)
+        self.assertIn("expert_batching_sweep", scenarios)
         self.assertNotIn("mtp_attempt_policy", scenarios)
 
         ksig = scenarios["k_signal_policy"]["results"]
@@ -2793,6 +2794,16 @@ class SchedulerSimTest(unittest.TestCase):
         )
         out = trace_sweep.run_trace_sweeps(trace, base_cfg)
         self.assertIn("mtp_attempt_policy", out.get("scenarios", {}))
+
+    def test_recommendations_quick_expert_batching_reduces_service_per_output_token(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["expert_batching"]
+        base = scenario["results"]["baseline"]["summary"]
+        b4 = scenario["results"]["variants"]["batch_max_batch_4"]["summary"]
+        self.assertLess(float(b4["service_slot_ms_per_output_token"]), float(base["service_slot_ms_per_output_token"]))
+        self.assertLess(float(b4["drop_frac_tokens"]), float(base["drop_frac_tokens"]))
 
 
 if __name__ == "__main__":

@@ -225,6 +225,74 @@ def _adaptive_k_batch_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _expert_batching_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 6000 if quick else 30000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=500.0,
+        batch_arrival_rate_tps=20000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=8,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="global",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+        batch_max_interactive=1,
+        batch_max_batch=1,
+        batch_wait_interactive_ms=0.0,
+        batch_wait_batch_ms=0.0,
+        service_base_ms=0.25,
+        service_per_task_ms=1.0,
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("batch_max_batch_4", {"batch_max_batch": 4}),
+        ("batch_max_batch_8", {"batch_max_batch": 8}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "expert_batching",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "batch_max_batch_default": 4,
+                "batch_wait_batch_ms_default": 0.0,
+                "service_base_ms_model": 0.25,
+                "reason": "Synthetic overload with per-batch overhead: larger batch_max_batch amortizes service_base_ms and reduces backpressure drops, but increases interactive tail latency because batch work becomes less preemptible. Treat 4 as a conservative starting point; validate on real traces.",
+            },
+        }
+    )
+
+
 def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
     num_tokens = 8000 if quick else 40000
     interactive_output_tps = 500.0
@@ -454,6 +522,7 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "expert_queue_reserve": _expert_queue_reserve_scenario(quick),
         "mtp_efficiency_sweep": _mtp_efficiency_sweep(quick),
         "adaptive_k_batch": _adaptive_k_batch_scenario(quick),
+        "expert_batching": _expert_batching_scenario(quick),
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
