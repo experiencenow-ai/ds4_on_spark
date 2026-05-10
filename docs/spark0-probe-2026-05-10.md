@@ -19,6 +19,7 @@ Additional probe run (later the same day):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0109Z_loop_v4.txt
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0138Z_loop_v5.txt
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0221Z_loop_spark_access_after4.txt
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0413Z_loop_spark_access_v13.txt
 ```
 
 Notes:
@@ -86,6 +87,39 @@ This run uses the updated `scripts/spark_probe.sh` PCIe reporting which warns wh
 columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
 0, 0000000F:01:00.0, 1, 1, 16, 1
 warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+```
+
+### Single-target probe (Spark0, 04:13Z, CUDA `version.json` snapshot)
+
+This run uses the updated probe output to include `/usr/local/cuda/version.json` (when present) so the toolkit component versions can be captured without relying on package metadata alone.
+
+```text
+== local meta ==
+Sun May 10 04:13:01 UTC 2026
+git: eb46bba
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== cuda toolkit ==
+nvcc path: /usr/local/cuda/bin/nvcc (not on PATH)
+Cuda compilation tools, release 13.0, V13.0.88
+
+== cuda version.json (capped) ==
+{
+   "cuda" : {
+      "name" : "CUDA SDK",
+      "version" : "13.0.3"
+   },
+   "cuda_cccl" : {
+      "name" : "CUDA C++ Core Compute Libraries",
+      "version" : "13.0.85"
+   },
+   "cuda_crt" : {
+      "name" : "CUDA crt Compiler for CUDA applications",
+      "version" : "13.0.88"
+   },
 ```
 
 ### Multi-target probe (Spark0 ok, Spark1 unreachable)
