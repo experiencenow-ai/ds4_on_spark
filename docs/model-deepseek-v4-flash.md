@@ -128,7 +128,7 @@ Per-layer MoE (`layers.{i}.ffn.*`):
 
 MTP (`mtp.{j}.*`):
 
-- MTP blocks are implemented as `MTPBlock(Block)` in `fixtures/model_contract/deepseek_v4_flash/inference/model.py`, so the per-layer tensor shapes under `mtp.{j}.layers.{i}.*` match the trunk `layers.{i}.*` shapes above (machine-recorded in `contract_summary.json` under `tensor_shapes.mtp_per_layer`).
+- MTP blocks are implemented as `MTPBlock(Block)` in `fixtures/model_contract/deepseek_v4_flash/inference/model.py`, so the block-level shapes under `mtp.{j}.attn.*` / `mtp.{j}.ffn.*` match the trunk per-layer shapes under `layers.{i}.attn.*` / `layers.{i}.ffn.*` (machine-recorded in `contract_summary.json` under `tensor_shapes.mtp_per_layer`).
 - MTP adds a small set of extra weights (notably `{e,h}_proj.*` and extra norms / HC head parameters) recorded in `contract_summary.json` under `tensor_shapes.mtp`.
 
 ## Quantization + scale tensors (FP8 trunk, FP4 experts)

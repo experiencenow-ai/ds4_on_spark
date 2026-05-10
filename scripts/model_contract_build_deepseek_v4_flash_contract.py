@@ -158,7 +158,7 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			},
 		},
 		"mtp_per_layer": {
-			"note": "MTP blocks are implemented as MTPBlock(Block) in inference/model.py; mtp.{j}.layers.{i}.* tensors follow the same logical shapes as trunk layers.{i}.*.",
+			"note": "MTP blocks are implemented as MTPBlock(Block) in inference/model.py; the block-level tensor shapes under mtp.{j}.attn.* / mtp.{j}.ffn.* match the trunk per-layer shapes under layers.{i}.attn.* / layers.{i}.ffn.*.",
 			"per_layer": {
 				"attn": {
 					"attn_sink": [n_heads],
@@ -172,7 +172,7 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 					"attn_norm.weight": [dim],
 				},
 				"compressor": {
-					"note": "MTP compress_ratios are required to be 0 (sliding-only), so compressor/indexer tensors should be absent under mtp.{j}.layers.{i}.attn.*.",
+					"note": "MTP compress_ratios are required to be 0 (sliding-only), so compressor/indexer tensors should be absent under mtp.{j}.attn.*.",
 				},
 				"moe": {
 					"gate.weight": [n_routed_experts, dim],
