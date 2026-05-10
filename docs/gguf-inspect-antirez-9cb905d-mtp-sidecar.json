@@ -103,7 +103,7 @@
     "status": "incomplete",
     "trusted": false
   },
-  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
   "quantization_contract": {
     "checked": true,
     "dense_fp8_like": false,

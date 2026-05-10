@@ -7,9 +7,9 @@ set -euo pipefail
 # This script performs a metadata-only validation via HTTP range reads (no full model download).
 #
 # Override with:
-#   SIDECAR_URL=... ./scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh
+#   SIDECAR_URL=... ./scripts/model_contract_probe_mtp_sidecar_antirez.sh
 
-SIDECAR_URL="${SIDECAR_URL:-https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
+SIDECAR_URL="${SIDECAR_URL:-https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 PAYLOAD_SAMPLE_BYTES="${PAYLOAD_SAMPLE_BYTES:-64}"
 
 python3 scripts/model_contract_probe_mtp_sidecar.py --url "$SIDECAR_URL" --json --expect-deepseek-v4-flash --payload-sample-bytes "$PAYLOAD_SAMPLE_BYTES"

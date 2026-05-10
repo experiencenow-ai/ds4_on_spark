@@ -41,15 +41,15 @@ refresh_one \
   "$OUT_DIR/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json"
 
 refresh_one \
-  "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf" \
-  "$OUT_DIR/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json"
+  "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf" \
+  "$OUT_DIR/gguf-inspect-antirez-9cb905d-iq2xxs-chat-v2.json"
 
 refresh_one \
-  "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf" \
-  "$OUT_DIR/gguf-inspect-antirez-ef3b960-mtp-sidecar.json"
+  "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf" \
+  "$OUT_DIR/gguf-inspect-antirez-9cb905d-mtp-sidecar.json"
 
 refresh_probe \
-  "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf" \
-  "$OUT_DIR/mtp-sidecar-probe-antirez-ef3b960.json"
+  "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf" \
+  "$OUT_DIR/mtp-sidecar-probe-antirez-9cb905d.json"
 
 echo "OK: refreshed pinned DeepSeek V4 Flash GGUF inspections into $OUT_DIR (MAX_BYTES=$MAX_BYTES)"

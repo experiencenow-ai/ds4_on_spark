@@ -107,12 +107,12 @@ Observed metadata-only inspections (2026-05-10):
 | --- | --- | --- | --- | --- |
 | `https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d/DeepSeek-V4-Flash-Q4_K_M.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` |
 | `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` |
-| `https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json` |
+| `https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-antirez-9cb905d-iq2xxs-chat-v2.json` |
 
 MTP sidecar example (metadata-only inspection; 2026-05-10):
 
-- `antirez/deepseek-v4-gguf` `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` @ `ef3b960827870d69ed0b225c095a617c12d7e80d`:
-  - Recorded output: `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
+- `antirez/deepseek-v4-gguf` `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` @ `9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a`:
+  - Recorded output: `docs/gguf-inspect-antirez-9cb905d-mtp-sidecar.json`
   - Summary: `mtp_present=true` and `tensor_key_namespace_guess=deepseek-upstream-mtp-only`, but `mtp_contract.complete=false` with `mtp_tensor_count=32` (compact DS4-tuned sidecar, not a full upstream `mtp.0.*` checkpoint).
 
 To validate a sidecar that is already present on Spark (no downloads; no trunk model load), run the Spark-side contract probe via the baseline runner:
