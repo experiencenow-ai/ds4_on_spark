@@ -91,6 +91,12 @@ For concise loop output, use `--summary-json`:
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
 ```
 
+To run a small set of trace-backed go/no-go sweeps (reservation, k-signal policy, starvation knobs, and optionally MTP attempt policy), use:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
+```
+
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
 
 ```bash
