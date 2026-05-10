@@ -572,9 +572,39 @@ class SchedulerSimTest(unittest.TestCase):
             "expert_utilization_p50",
             "expert_saturation_p95",
             "pending_depth_time_weighted_p95",
+            "pending_depth_time_weighted_p95_mtp_draft",
+            "pending_depth_time_weighted_p95_mtp_verify",
             "mtp_accept_rate",
         ):
             self.assertIn(k, summary)
+
+    def test_mtp_pending_depth_time_weighted_tracks_draft_and_verify(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)) for _ in range(200)]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            mtp_draft_len=2,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            sim_seed=123,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_draft[1:] if len(m.pending_depth_hist_mtp_draft) > 1 else [])) or m.pending_depth_hist_mtp_draft_overflow > 0.0)
+        self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_verify[1:] if len(m.pending_depth_hist_mtp_verify) > 1 else [])) or m.pending_depth_hist_mtp_verify_overflow > 0.0)
 
     def test_summary_json_compare_omits_full_metrics(self) -> None:
         buf = io.StringIO()
@@ -2760,6 +2790,34 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(rec["decode_ms"]), 2.5)
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
+
+    def test_trace_extract_maps_nested_mtp_fields(self) -> None:
+        obj = {
+            "ts_us": 5000,
+            "latency_class": "interactive",
+            "route": {"experts": [7, 3, 19]},
+            "mtp": {"accept_len": 2, "accepted": 1, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [7, 3, 19])
+        self.assertEqual(rec["mtp_accept_len"], 2)
+        self.assertEqual(rec["accepted_mtp"], 1)
+        self.assertEqual(rec["rejected_mtp"], 0)
+
+        obj2 = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0], "accept_len": 3, "mtp_accepted": 2, "mtp_rejected": 0},
+        }
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2["candidates"], [0])
+        self.assertEqual(rec2["mtp_accept_len"], 3)
+        self.assertEqual(rec2["accepted_mtp"], 2)
+        self.assertEqual(rec2["rejected_mtp"], 0)
 
     def test_trace_extract_preserves_layers_and_unions_candidates(self) -> None:
         obj = {
