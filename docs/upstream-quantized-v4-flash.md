@@ -69,6 +69,15 @@ Quick scan for “single Spark produces tokens” candidates (Spark0 baseline ~1
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ1_M (2 shards)` | 64508041632 | 60.1 | `c0d4aac8...f2856` + `812b1367...d2d81f` | Plausible (sharded; more headroom than ~70–100 GiB candidates) |
 | `teamblobfish/DeepSeek-V4-Flash-GGUF` | `IQ2_XXS-XL (2 shards)` | 78518818624 | 73.1 | `a2472110...a04fdce` + `aedfb2c7...ea9bf92` | Plausible (sharded; upstream README indicates pointing llama.cpp at shard 00001 auto-loads the rest) |
 
+## Not single-Spark plausible (still DeepSeek-V4-Flash)
+
+The HF search results often include “native” conversions that are **correctly based on** `deepseek-ai/DeepSeek-V4-Flash`, but are too large for a single Spark0-class node. Track them as provenance references only.
+
+| Source | Pinned commit | Artifact | Size (GiB) | LFS sha256 (content) | License | Notes |
+| --- | --- | --- | ---: | --- | --- | --- |
+| `asidaddy/Deepseek-V4-Flash-GGUF` | `2c3a2233ec6492024ee1c90aa6a06ec22173d909` | `DeepSeek-V4-Flash-native.gguf` | 145.42 | `e16f070a...738babcd` | MIT | Repo also contains large LFS `model-*.safetensors`; treat as metadata-only. |
+| `Volko76/DeepSeek-V4-Flash-GGUF` | `5f45ca7217f7b4e46e230e7c8bce3d3ff705555a` | `DeepSeek-V4-Flash-Q2_K.gguf` | 142.47 | `b807d57e...27dc013` | MIT | Q2_K is still too large for Spark0-class memory headroom. |
+
 ## Reproducing the size numbers (no downloads)
 
 The GGUF “sizes” above are taken from the Git LFS pointer metadata in a metadata-only clone (i.e. `GIT_LFS_SKIP_SMUDGE=1` / LFS filters disabled). This lets us record exact byte counts without fetching multi‑GB blobs.
