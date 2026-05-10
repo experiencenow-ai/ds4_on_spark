@@ -145,7 +145,26 @@ Currently it disassembles:
 
 This is useful when bringing up CUTLASS/DeepGEMM-style kernels, because it validates that the developer tooling can inspect the generated kernels on Spark0.
 
-## Current Spark0 Results (2026-05-09)
+## Current Spark0 Results (2026-05-10)
+
+Commands run:
+
+```bash
+./scripts/cuda_probe_compile_only_tiny_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_tiny_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_kernel_tiny_spark0.sh spark0@aitopatom-9ab9.local
+```
+
+Observed:
+
+- `nvcc` is CUDA 13.0 (`V13.0.88`)
+- `nvcc --list-gpu-arch` includes `compute_121` when supported
+- `nvcc --list-gpu-code` includes `sm_121` when supported
+- Device is reported as `NVIDIA GB10` with `cc=12.1`
+- `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
+- The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure
+
+## Full Suite Spark0 Results (2026-05-09)
 
 Commands run:
 
