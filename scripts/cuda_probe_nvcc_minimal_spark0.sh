@@ -279,13 +279,16 @@ static int32_t ck(cudaError_t err,int32_t code,const char *what)
 
 static int32_t get_attr_i32(int32_t *out,int32_t dev,cudaDeviceAttr attr)
 {
-	int32_t v = 0;
+	int32_t v = -1;
 	cudaError_t err;
 	if ( out == 0 )
 		return(-1001);
 	err = cudaDeviceGetAttribute(&v,attr,dev);
 	if ( err != cudaSuccess )
+	{
+		*out = -1;
 		return(-1002);
+	}
 	*out = v;
 	return(0);
 }
@@ -301,10 +304,10 @@ __global__ void cuda_arch_probe(uint32_t *out)
 
 int main(int argc,char **argv)
 {
-	int32_t count = 0,driver_v = 0,runtime_v = 0,rc = 0,clock_khz = 0,mem_clock_khz = 0;
-	int32_t smem_optin = 0,l2_bytes = 0,max_threads_sm = 0,regs_sm = 0;
-	int32_t max_threads_block = 0,max_blocks_sm = 0,smem_sm = 0,regs_block = 0,smem_block_max = 0;
-	int32_t coop_launch = 0,cluster_launch = 0;
+	int32_t count = 0,driver_v = -1,runtime_v = -1,rc = 0,clock_khz = -1,mem_clock_khz = -1;
+	int32_t smem_optin = -1,l2_bytes = -1,max_threads_sm = -1,regs_sm = -1;
+	int32_t max_threads_block = -1,max_blocks_sm = -1,smem_sm = -1,regs_block = -1,smem_block_max = -1;
+	int32_t coop_launch = -1,cluster_launch = -1;
 	cudaDeviceProp prop;
 	uint32_t out = 0;
 	uint32_t *dout = 0;

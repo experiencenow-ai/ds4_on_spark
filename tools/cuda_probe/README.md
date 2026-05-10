@@ -19,7 +19,7 @@ make
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
-- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly).
+- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` field).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe`: compile/run separate-compilation (`-rdc=true`) device-link smoke test for `sm_121`.

@@ -8,29 +8,32 @@
 
 static int32_t get_attr_i32(int32_t *out,int32_t dev,cudaDeviceAttr attr)
 {
-	int32_t v = 0;
+	int32_t v = -1;
 	cudaError_t err;
 	if ( out == 0 )
 		return(-1001);
 	err = cudaDeviceGetAttribute(&v,attr,dev);
 	if ( err != cudaSuccess )
+	{
+		*out = -1;
 		return(-1002);
+	}
 	*out = v;
 	return(0);
 }
 
 int main(int argc,char **argv)
 {
-	int32_t count = 0,rc = 0,driver_v = 0,runtime_v = 0,clock_khz = 0,mem_clock_khz = 0;
-	int32_t smem_optin = 0,l2_bytes = 0,max_threads_sm = 0,regs_sm = 0;
-	int32_t max_threads_block = 0,max_blocks_sm = 0,smem_sm = 0,regs_block = 0,smem_block_max = 0;
-	int32_t coop_launch = 0,cluster_launch = 0;
+	int32_t count = 0,rc = 0,driver_v = -1,runtime_v = -1,clock_khz = -1,mem_clock_khz = -1;
+	int32_t smem_optin = -1,l2_bytes = -1,max_threads_sm = -1,regs_sm = -1;
+	int32_t max_threads_block = -1,max_blocks_sm = -1,smem_sm = -1,regs_block = -1,smem_block_max = -1;
+	int32_t coop_launch = -1,cluster_launch = -1;
 	cudaDeviceProp prop;
 	uint64_t mem_bytes = 0,smem_block_bytes = 0;
 	(void)argc;
 	(void)argv;
-	cudaDriverGetVersion(&driver_v);
-	cudaRuntimeGetVersion(&runtime_v);
+	(void)cudaDriverGetVersion(&driver_v);
+	(void)cudaRuntimeGetVersion(&runtime_v);
 	rc = cuda_probe_check(cudaGetDeviceCount(&count),-1,"cudaGetDeviceCount");
 	if ( rc != 0 )
 		return(rc);
