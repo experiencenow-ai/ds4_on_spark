@@ -8,6 +8,12 @@ Commands run:
 REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T0007Z_loop_v11.txt
 ```
 
+Refreshed later the same day:
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T0109Z_loop_v4.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses.
@@ -39,3 +45,22 @@ aitopatom-9ab9.local: ssh reachable
 spark1.local: not reachable
 ```
 
+```text
+== meta ==
+Sun May 10 01:07:24 UTC 2026
+git: 1502af6
+targets: aitopatom-9ab9.local spark1.local
+
+== mdns resolution, 3 seconds each ==
+-- aitopatom-9ab9.local --
+Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
+ 1:07:29.254  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+ 1:07:29.254  Add  40000003      10  aitopatom-9ab9.local.                  <redacted-ipv6>%en0  120
+ 1:07:29.254  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+ 1:07:29.254  Add  40000002      10  aitopatom-9ab9.local.                  <redacted-ipv4>                                     120
+-- spark1.local --
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
