@@ -8,6 +8,7 @@ import json
 import sys
 
 from sim.scheduler import scheduler_sim
+from sim.scheduler import trace_extract
 
 
 class SchedulerSimTest(unittest.TestCase):
@@ -2306,6 +2307,52 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(m_on.service_slot_ms_total, 1.5, places=6)
         self.assertEqual(m_on.mtp_output_tokens, 3)
         self.assertLess((m_on.service_slot_ms_total / float(m_on.mtp_output_tokens)), (m_off.service_slot_ms_total / float(m_off.admitted_tokens)))
+
+    def test_trace_extract_maps_common_aliases(self) -> None:
+        obj = {
+            "ts_us": 5000,
+            "latency_class": "interactive",
+            "experts": [7, 3, 19],
+            "router_scores": [0.9, 0.7, 0.4],
+            "token_idx": 12,
+            "accepted_mtp": 1,
+            "rejected_mtp": 1,
+            "decode_ms": 2.5,
+            "kv_tokens": 2048,
+            "expert_batch_size": 8,
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertAlmostEqual(float(rec["t_ms"]), 5.0)
+        self.assertEqual(rec["cls"], "interactive")
+        self.assertEqual(rec["token_index"], 12)
+        self.assertEqual(rec["candidates"], [7, 3, 19])
+        self.assertEqual(rec["scores"], [0.9, 0.7, 0.4])
+        self.assertEqual(rec["accepted_mtp"], 1)
+        self.assertEqual(rec["rejected_mtp"], 1)
+        self.assertAlmostEqual(float(rec["decode_ms"]), 2.5)
+        self.assertEqual(rec["kv_tokens"], 2048)
+        self.assertEqual(rec["expert_batch_size"], 8)
+
+    def test_trace_extract_filters_route_type(self) -> None:
+        route = {"type": "moe_route", "t_ms": 0.0, "cls": "batch", "candidates": [0]}
+        other = {"type": "log", "t_ms": 0.0, "msg": "hello"}
+        out = trace_extract.extract_jsonl_lines(
+            [json.dumps(route), json.dumps(other)],
+            route_type="moe_route",
+            non_route_policy="skip",
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["candidates"], [0])
+
+    def test_trace_extract_non_route_error_mode_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            trace_extract.extract_jsonl_lines(
+                [json.dumps({"type": "log", "t_ms": 0.0, "msg": "hello"})],
+                route_type="moe_route",
+                non_route_policy="error",
+            )
 
 
 if __name__ == "__main__":

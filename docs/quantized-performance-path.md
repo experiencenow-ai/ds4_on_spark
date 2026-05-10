@@ -100,6 +100,14 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+If the runtime log stream is mixed and/or cannot easily emit the simulator’s strict trace field names, normalize it first with the extractor (maps common aliases like `latency_class`→`cls`, `experts`→`candidates`):
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jsonl - --out-jsonl - --non-route skip > /tmp/route.extracted.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
 If the runtime trace includes per-token chosen `K`, replay it directly:
 
 ```bash
