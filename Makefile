@@ -16,7 +16,7 @@ DS4_WERROR ?= OFF
 DS4_ENABLE_ASAN ?= OFF
 DS4_ENABLE_UBSAN ?= OFF
 
-.PHONY: all configure build test check check-cuda ci ci-cuda install clean
+.PHONY: all configure build test check check-cuda check-asan check-ubsan check-sanitize ci ci-cuda ci-sanitize install clean
 
 all: build
 
@@ -36,9 +36,20 @@ check-cuda:
 	@if [ "$(UNAME_S)" = "Darwin" ]; then echo "check-cuda: unsupported on macOS (run on Linux with CUDA toolkit)"; exit 2; fi
 	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=ON DS4_WERROR=ON
 
+check-asan:
+	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=OFF DS4_WERROR=ON DS4_ENABLE_ASAN=ON DS4_ENABLE_UBSAN=OFF
+
+check-ubsan:
+	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=OFF DS4_WERROR=ON DS4_ENABLE_ASAN=OFF DS4_ENABLE_UBSAN=ON
+
+check-sanitize:
+	$(MAKE) test DS4_ENABLE_TESTS=ON DS4_ENABLE_CLI=ON DS4_ENABLE_CUDA=OFF DS4_WERROR=ON DS4_ENABLE_ASAN=ON DS4_ENABLE_UBSAN=ON
+
 ci: check
 
 ci-cuda: check-cuda
+
+ci-sanitize: check-sanitize
 
 install: build
 	@if [ -n "$(PREFIX)" ]; then cmake --install "$(BUILD_DIR)" --prefix "$(PREFIX)" $(INSTALL_OPTS); else cmake --install "$(BUILD_DIR)" $(INSTALL_OPTS); fi
