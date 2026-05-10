@@ -9,6 +9,8 @@ DS4 wraps the CUDA Runtime API behind `include/ds4/cuda.h` so CPU-only builds ca
 
 macOS defaults to `DS4_ENABLE_CUDA=OFF`.
 
+The Makefile targets `check-cuda` / `ci-cuda` are intended for Linux runners with CUDA installed; on macOS they fail fast with a short message.
+
 ## Error wrappers
 
 For Runtime API calls that return a CUDA error code, use:
