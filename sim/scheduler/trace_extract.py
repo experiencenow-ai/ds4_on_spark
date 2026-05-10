@@ -22,7 +22,15 @@ def _deep_candidates_container(obj: Dict[str, object]) -> Optional[Dict[str, obj
 
 
 def _deep_mtp_container(obj: Dict[str, object]) -> Optional[Dict[str, object]]:
-    for k in ("mtp", "mtp_stats", "spec_decode", "speculative", "speculative_decode", "spec"):
+    for k in ("mtp", "mtp_stats"):
+        inner = _as_dict(obj.get(k))
+        if inner is not None:
+            return(inner)
+    return(None)
+
+
+def _deep_dflash_container(obj: Dict[str, object]) -> Optional[Dict[str, object]]:
+    for k in ("dflash", "dflash_stats", "flash", "flash_stats", "spec_decode", "speculative", "speculative_decode", "spec"):
         inner = _as_dict(obj.get(k))
         if inner is not None:
             return(inner)
@@ -275,41 +283,85 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
         if isinstance(k, int) and k > 0:
             out["k"] = int(k)
 
-    mtp_accept_len = _get_any(obj, ("mtp_accept_len", "accept_len", "mtp_len"))
+    # MTP (DeepSeek) stats:
+    # - Prefer explicit mtp_* keys when available.
+    # - Allow generic accept_len/accepted/rejected only inside a nested mtp container or inside the route container
+    #   when mtp-specific counters are also present. This avoids mixing speculative-decoding comparator stats into MTP.
+    mtp_accept_len = _get_any(obj, ("mtp_accept_len", "mtp_len"))
     if mtp_accept_len is None and container is not obj:
-        mtp_accept_len = _get_any(container, ("mtp_accept_len", "accept_len", "mtp_len"))
-    if mtp_accept_len is None:
-        mtp = _deep_mtp_container(obj)
-        if mtp is None and container is not obj:
-            mtp = _deep_mtp_container(container)
-        if mtp is not None:
-            mtp_accept_len = _get_any(mtp, ("mtp_accept_len", "accept_len", "mtp_len"))
-    if isinstance(mtp_accept_len, int) and mtp_accept_len > 0:
-        out["mtp_accept_len"] = int(mtp_accept_len)
+        mtp_accept_len = _get_any(container, ("mtp_accept_len", "mtp_len"))
 
     accepted_mtp = _get_any(obj, ("accepted_mtp", "mtp_accepted"))
     if accepted_mtp is None and container is not obj:
         accepted_mtp = _get_any(container, ("accepted_mtp", "mtp_accepted"))
-    if accepted_mtp is None:
-        mtp = _deep_mtp_container(obj)
-        if mtp is None and container is not obj:
-            mtp = _deep_mtp_container(container)
-        if mtp is not None:
-            accepted_mtp = _get_any(mtp, ("accepted_mtp", "mtp_accepted", "accepted"))
-    if isinstance(accepted_mtp, int) and accepted_mtp >= 0:
-        out["accepted_mtp"] = int(accepted_mtp)
 
     rejected_mtp = _get_any(obj, ("rejected_mtp", "mtp_rejected"))
     if rejected_mtp is None and container is not obj:
         rejected_mtp = _get_any(container, ("rejected_mtp", "mtp_rejected"))
-    if rejected_mtp is None:
-        mtp = _deep_mtp_container(obj)
-        if mtp is None and container is not obj:
-            mtp = _deep_mtp_container(container)
-        if mtp is not None:
-            rejected_mtp = _get_any(mtp, ("rejected_mtp", "mtp_rejected", "rejected"))
+
+    mtp = _deep_mtp_container(obj)
+    if mtp is None and container is not obj:
+        mtp = _deep_mtp_container(container)
+
+    dflash = _deep_dflash_container(obj)
+    if dflash is None and container is not obj:
+        dflash = _deep_dflash_container(container)
+
+    if mtp_accept_len is None and mtp is not None:
+        mtp_accept_len = _get_any(mtp, ("mtp_accept_len", "accept_len", "mtp_len"))
+    if mtp_accept_len is None and isinstance(container, dict):
+        if "accept_len" in container and (accepted_mtp is not None or rejected_mtp is not None or ("mtp_accepted" in container) or ("mtp_rejected" in container)):
+            mtp_accept_len = container.get("accept_len")
+    if mtp_accept_len is None and dflash is not None:
+        mtp_accept_len = _get_any(dflash, ("mtp_accept_len", "mtp_len"))
+    if isinstance(mtp_accept_len, int) and mtp_accept_len > 0:
+        out["mtp_accept_len"] = int(mtp_accept_len)
+
+    if accepted_mtp is None and mtp is not None:
+        accepted_mtp = _get_any(mtp, ("accepted_mtp", "mtp_accepted", "accepted"))
+    if accepted_mtp is None and dflash is not None:
+        accepted_mtp = _get_any(dflash, ("accepted_mtp", "mtp_accepted"))
+    if isinstance(accepted_mtp, int) and accepted_mtp >= 0:
+        out["accepted_mtp"] = int(accepted_mtp)
+
+    if rejected_mtp is None and mtp is not None:
+        rejected_mtp = _get_any(mtp, ("rejected_mtp", "mtp_rejected", "rejected"))
+    if rejected_mtp is None and dflash is not None:
+        rejected_mtp = _get_any(dflash, ("rejected_mtp", "mtp_rejected"))
     if isinstance(rejected_mtp, int) and rejected_mtp >= 0:
         out["rejected_mtp"] = int(rejected_mtp)
+
+    # Qwen+DFlash speculative-decoding comparator stats (kept separate from MTP).
+    dflash_has_mtp_keys = False
+    if dflash is not None:
+        for k in ("mtp_accept_len", "mtp_len", "accepted_mtp", "mtp_accepted", "rejected_mtp", "mtp_rejected"):
+            if k in dflash:
+                dflash_has_mtp_keys = True
+                break
+
+    dflash_accept_len = _get_any(obj, ("dflash_accept_len", "spec_accept_len"))
+    if dflash_accept_len is None and container is not obj:
+        dflash_accept_len = _get_any(container, ("dflash_accept_len", "spec_accept_len"))
+    if dflash_accept_len is None and dflash is not None and dflash_has_mtp_keys is False:
+        dflash_accept_len = _get_any(dflash, ("dflash_accept_len", "spec_accept_len", "accept_len"))
+    if isinstance(dflash_accept_len, int) and dflash_accept_len > 0:
+        out["dflash_accept_len"] = int(dflash_accept_len)
+
+    accepted_dflash = _get_any(obj, ("accepted_dflash", "dflash_accepted", "spec_accepted"))
+    if accepted_dflash is None and container is not obj:
+        accepted_dflash = _get_any(container, ("accepted_dflash", "dflash_accepted", "spec_accepted"))
+    if accepted_dflash is None and dflash is not None and dflash_has_mtp_keys is False:
+        accepted_dflash = _get_any(dflash, ("accepted_dflash", "dflash_accepted", "spec_accepted", "accepted"))
+    if isinstance(accepted_dflash, int) and accepted_dflash >= 0:
+        out["accepted_dflash"] = int(accepted_dflash)
+
+    rejected_dflash = _get_any(obj, ("rejected_dflash", "dflash_rejected", "spec_rejected"))
+    if rejected_dflash is None and container is not obj:
+        rejected_dflash = _get_any(container, ("rejected_dflash", "dflash_rejected", "spec_rejected"))
+    if rejected_dflash is None and dflash is not None and dflash_has_mtp_keys is False:
+        rejected_dflash = _get_any(dflash, ("rejected_dflash", "dflash_rejected", "spec_rejected", "rejected"))
+    if isinstance(rejected_dflash, int) and rejected_dflash >= 0:
+        out["rejected_dflash"] = int(rejected_dflash)
 
     cost_scale = _get_any(obj, ("cost_scale", "cost", "work_scale"))
     if isinstance(cost_scale, (int, float)) and float(cost_scale) > 0.0:

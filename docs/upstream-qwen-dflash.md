@@ -1,25 +1,28 @@
-# Upstream: Qwen and DFlash candidates
+# Upstream: model comparison candidates
 
-This note adds Qwen-family comparison targets and DFlash speculative decoding to
-the Spark0 evaluation matrix. It is metadata-only: no model weights were
-downloaded while preparing this document.
+This note tracks Qwen, Ling, and DFlash speculative-decoding candidates for the
+Spark0 evaluation matrix. It is metadata-only: no model weights were downloaded
+while preparing this document.
 
 - Pinned-at: 2026-05-10 (UTC)
-- Primary goal: compare DeepSeek V4 Flash against runnable Qwen baselines on one
-  Spark, then test DFlash only where an exact target/draft pair exists.
+- Primary goal: compare DeepSeek V4 Flash against runnable Ling and Qwen
+  baselines on one Spark, then test DFlash only where an exact target/draft pair
+  exists.
 - Safety policy: use `GIT_LFS_SKIP_SMUDGE=1`, Hugging Face API metadata, or local
   Spark paths first; large weight fetches require explicit human approval.
 
-## Candidate Matrix
+## Core Comparison Matrix
 
 | Priority | Target | Target ref | Target commit / SHA | Target license | Target safetensors | Draft / accelerator | Draft commit / SHA | Draft license | Draft safetensors | Single Spark? | Why test |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | `refs/heads/main` | `dcaee4d4dfc5ee71ad501f01f530e5652438fde0` | `apache-2.0` | 29.03 GiB | `z-lab/Qwen3-Coder-30B-A3B-DFlash` | `98ca0e3e2e6a372f2789d3a5e146566194084317` | `mit` | 0.88 GiB | likely | Smallest strong coding target with an official DFlash drafter. Good first Qwen smoke test. |
 | 2 | `Qwen/Qwen3.6-35B-A3B-FP8` | `refs/heads/main` | `95a723d08a9490559dae23d0cff1d9466213d989` | `apache-2.0` | 34.89 GiB | `z-lab/Qwen3.6-35B-A3B-DFlash` | `42d3b34d588423cdae7ba8f53a8cf7789346a719` | `mit` | 0.88 GiB | likely | Spark-sized FP8 target, 3B active params, and DFlash pair. Best near-term latency/throughput comparison. |
-| 3 | `Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.6-27B-DFlash` | `0919688658996800f86b895034249700e9481106` | `mit` | 3.22 GiB | likely | Dense-ish 27B reference with a larger drafter; useful if FP8 MoE behavior hides bottlenecks. |
-| 4 | `Qwen/Qwen3.5-27B` | `refs/heads/main` | `fc05daec18b0a78c049392ed2e771dde82bdf654` | `apache-2.0` | 51.76 GiB | `z-lab/Qwen3.5-27B-DFlash` | `b0400439c04be32c24e04d9dce3821b582c1a68a` | `mit` | 3.22 GiB | likely | Alternate dense-ish 27B Qwen baseline with an official DFlash drafter; keep as a variant comparator for 27B-class behavior. |
-| 5 | `Qwen/Qwen3-Coder-Next-FP8` | `refs/heads/main` | `da6e2ed27304dd39abadd9c82ef50e8de67bdd4c` | `apache-2.0` | 74.86 GiB | `z-lab/Qwen3-Coder-Next-DFlash` | `6d741db11b89d7ea80a423b109f0424817ce8f1b` | `mit` | 0.88 GiB | maybe | Larger 80B/3B-active coding-agent target; plausible on Spark0, but should run after the smaller candidates. |
-| 6 | `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | `refs/heads/main` | `003f183a92fbe5b9a8325aaa8b2ae797c91dd90f` | `apache-2.0` | 449.04 GiB | none selected | n/a | n/a | n/a | no | Dual-Spark or future reference only unless a smaller local quantized artifact appears. |
+| 3 | `Qwen/Qwen3.5-27B` | `refs/heads/main` | `fc05daec18b0a78c049392ed2e771dde82bdf654` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.5-27B-DFlash` | `b0400439c04be32c24e04d9dce3821b582c1a68a` | `mit` | 3.22 GiB | likely | User-requested Qwen 27B comparator; DFlash card says it is paired with this exact target and trained at 4096 context. |
+| 4 | `Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.6-27B-DFlash` | `0919688658996800f86b895034249700e9481106` | `mit` | 3.22 GiB | likely | Newer 27B comparator; DFlash card warns inference support may still be incomplete because of architecture changes. |
+| 5 | `inclusionAI/Ling-2.6-flash-int4` | `refs/heads/main` | `1bff63aa1f869e89499d52363790a119fd282edf` | `mit` | 60.38 GiB | none found | n/a | n/a | n/a | maybe | Ling 2.6 comparison baseline; smallest official Ling-2.6-flash precision found so far. |
+| 6 | `inclusionAI/Ling-2.6-flash-fp8` | `refs/heads/main` | `8bc416b60fe28be33303d57bb77dd826445a1eb1` | `mit` | 101.48 GiB | none found | n/a | n/a | n/a | unlikely | Higher-precision Ling 2.6 comparator if Spark0 has enough memory headroom; test after INT4. |
+| 7 | `Qwen/Qwen3-Coder-Next-FP8` | `refs/heads/main` | `da6e2ed27304dd39abadd9c82ef50e8de67bdd4c` | `apache-2.0` | 74.86 GiB | `z-lab/Qwen3-Coder-Next-DFlash` | `6d741db11b89d7ea80a423b109f0424817ce8f1b` | `mit` | 0.88 GiB | maybe | Larger 80B/3B-active coding-agent target; plausible on Spark0, but should run after the smaller candidates. |
+| 8 | `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | `refs/heads/main` | `003f183a92fbe5b9a8325aaa8b2ae797c91dd90f` | `apache-2.0` | not measured here | none selected | n/a | n/a | n/a | no | Dual-Spark or future reference only unless a smaller local quantized artifact appears. |
 
 The DFlash implementation reference is `z-lab/dflash`
 `94e4abc5e0c31b67bc1a9d30f1cc34ece28a8756` on `refs/heads/main` (`MIT`).
@@ -44,10 +47,30 @@ The table above is derived from Hugging Face API metadata:
 ./scripts/upstream_hf_api_report.sh Qwen/Qwen3.6-35B-A3B-FP8 --sum-safetensors
 ```
 
+## DFlash Expansion Candidates
+
+Use this table after the core rows above or when a target is already staged on
+Spark0. A DFlash row is only valid when the draft checkpoint matches the exact
+target checkpoint named by its model card.
+
+| Target | Target commit / SHA | Target safetensors | DFlash draft | Draft commit / SHA | Draft safetensors | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Qwen/Qwen3.5-9B` | `c202236235762e1c871ad0ccb60c8ee5ba337b9a` | 17.98 GiB | `z-lab/Qwen3.5-9B-DFlash` | `492f4b532a957a50561e1418e5a3f31690f127f4` | 1.95 GiB | Best cheap DFlash plumbing test if 27B downloads are not staged yet. |
+| `Qwen/Qwen3.5-4B` | `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` | 8.68 GiB | `z-lab/Qwen3.5-4B-DFlash` | `96899cc270945f554998309580b08a04a05a3187` | 1.00 GiB | Lowest-cost target/draft sanity check for DFlash launch syntax and counters. |
+| `Qwen/Qwen3.5-35B-A3B` | not pinned here | not measured here | `z-lab/Qwen3.5-35B-A3B-DFlash` | not pinned here | not measured here | Add if upstream loop verifies target size and commit. |
+| `gemma-4-26B-A4B-it` | gated target | not measured here | `z-lab/gemma-4-26B-A4B-it-DFlash` | gated | not measured here | Promising non-Qwen DFlash path, but HF access gates apply. |
+| `gemma-4-31B-it` | gated target | not measured here | `z-lab/gemma-4-31B-it-DFlash` | gated | not measured here | Promising non-Qwen DFlash path, but HF access gates apply. |
+| `openai/gpt-oss-20b` | not pinned here | not measured here | `z-lab/gpt-oss-20b-DFlash` | `d53f6551543204c859e8bbaaddbd15d11b447af9` | 1.46 GiB | Exploratory; pin target/licensing/runtime before spending Spark time. |
+| `meta-llama/Llama-3.1-8B-Instruct` | gated target | not measured here | `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat` | `d3af30def9601abdd10810aba220d692f0e803f0` | 1.95 GiB | Exploratory; gated target and not directly comparable to DS4/Ling/Qwen. |
+
+No Ling-2.6-flash DFlash drafter was found in the checked Z Lab/Hugging Face
+search results as of 2026-05-10. Keep Ling in the target-only comparison set and
+watch for a paired drafter later.
+
 ## Measurement Order
 
 1. Run a no-download vLLM package/CUDA probe on Spark0.
-2. If a target is already present on Spark0, run a short non-DFlash generation
+2. If a target is already present on Spark0, run a short target-only generation
    probe first: fixed prompt, `MAX_TOKENS=64`, `TENSOR_PARALLEL_SIZE=1`.
 3. Record artifact path, total bytes, sha256, vLLM/SGLang version, CUDA driver,
    load time, generated tokens, wall time, approximate tok/s, and GPU memory.
@@ -79,9 +102,9 @@ tokens or secrets there.
 ## Automation Ownership
 
 - Upstream loop: refresh this document, exact commits, licenses, file sizes, and
-  runtime requirements for Qwen/DFlash candidates.
-- Baseline loop: run target-only Qwen and paired DFlash probes on Spark0 when
-  artifacts are already present or a download has been approved.
+  runtime requirements for Ling/Qwen/DFlash candidates.
+- Baseline loop: run target-only Ling/Qwen and paired DFlash probes on Spark0
+  when artifacts are already present or a download has been approved.
 - Model-contract loop: document config/tokenizer/runtime assumptions for any
   Qwen model that becomes a serious performance comparator.
 - Scheduler loop: reuse DFlash accept/reject counters as a speculative decoding

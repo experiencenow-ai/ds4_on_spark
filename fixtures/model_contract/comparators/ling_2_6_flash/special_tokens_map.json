@@ -1,0 +1,7 @@
+{
+  "bos_token": "<|startoftext|>",
+  "cls_token": "[CLS]",
+  "eos_token": "<|role_end|>",
+  "gmask_token": "[gMASK]",
+  "pad_token": "<|endoftext|>"
+}

@@ -223,6 +223,58 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_jsonl_loads_dflash_fields(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "dflash_accept_len": 3, "accepted_dflash": 2, "rejected_dflash": 0}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path)
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].dflash_accept_len, 3)
+            self.assertEqual(trace[0].accepted_dflash, 2)
+            self.assertEqual(trace[0].rejected_dflash, 0)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_summary_includes_dflash_comparator_metrics(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                dflash_accept_len=3,
+                accepted_dflash=2,
+                rejected_dflash=0,
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertEqual(int(s["dflash_steps"]), 1)
+        self.assertEqual(int(s["dflash_output_tokens"]), 3)
+        self.assertEqual(int(s["dflash_bonus_tokens"]), 2)
+        self.assertAlmostEqual(float(s["dflash_mean_accept_len"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["dflash_accept_rate"]), 1.0, places=6)
+
     def test_stage_skip_totals_count_attempts(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
@@ -2896,6 +2948,40 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec2["mtp_accept_len"], 3)
         self.assertEqual(rec2["accepted_mtp"], 2)
         self.assertEqual(rec2["rejected_mtp"], 0)
+
+    def test_trace_extract_maps_nested_dflash_fields_separately(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0]},
+            "spec_decode": {"accept_len": 3, "accepted": 2, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [0])
+        self.assertEqual(rec.get("dflash_accept_len"), 3)
+        self.assertEqual(rec.get("accepted_dflash"), 2)
+        self.assertEqual(rec.get("rejected_dflash"), 0)
+        self.assertNotIn("mtp_accept_len", rec)
+        self.assertNotIn("accepted_mtp", rec)
+        self.assertNotIn("rejected_mtp", rec)
+
+        obj2 = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0]},
+            "spec_decode": {"mtp_accept_len": 2, "mtp_accepted": 1, "mtp_rejected": 1},
+        }
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2.get("mtp_accept_len"), 2)
+        self.assertEqual(rec2.get("accepted_mtp"), 1)
+        self.assertEqual(rec2.get("rejected_mtp"), 1)
+        self.assertNotIn("dflash_accept_len", rec2)
+        self.assertNotIn("accepted_dflash", rec2)
+        self.assertNotIn("rejected_dflash", rec2)
 
     def test_trace_extract_preserves_layers_and_unions_candidates(self) -> None:
         obj = {
