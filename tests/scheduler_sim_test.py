@@ -572,9 +572,39 @@ class SchedulerSimTest(unittest.TestCase):
             "expert_utilization_p50",
             "expert_saturation_p95",
             "pending_depth_time_weighted_p95",
+            "pending_depth_time_weighted_p95_mtp_draft",
+            "pending_depth_time_weighted_p95_mtp_verify",
             "mtp_accept_rate",
         ):
             self.assertIn(k, summary)
+
+    def test_mtp_pending_depth_time_weighted_tracks_draft_and_verify(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)) for _ in range(200)]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            mtp_draft_len=2,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            sim_seed=123,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_draft[1:] if len(m.pending_depth_hist_mtp_draft) > 1 else [])) or m.pending_depth_hist_mtp_draft_overflow > 0.0)
+        self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_verify[1:] if len(m.pending_depth_hist_mtp_verify) > 1 else [])) or m.pending_depth_hist_mtp_verify_overflow > 0.0)
 
     def test_summary_json_compare_omits_full_metrics(self) -> None:
         buf = io.StringIO()
