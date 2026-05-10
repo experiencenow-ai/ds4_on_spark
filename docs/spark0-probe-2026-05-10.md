@@ -28,6 +28,12 @@ Additional probe run (07:12Z refresh, `.git-codex/.git` shim):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0712Z_loop.txt
 ```
 
+Additional probe run (07:43Z refresh, optional GPU/host PCIe query):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0743Z_loop.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -162,6 +168,29 @@ warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (b
 == cuda runtime probe (nvcc, no deps) ==
 device0 name: NVIDIA GB10
 device0 cc: 12.1
+```
+
+### Single-target probe (Spark0, 07:43Z, GPU/host max PCIe query)
+
+This run adds an optional `nvidia-smi` PCIe query snapshot to make `GPU Link Info` (`Device Max`/`Host Max`) fields available in CSV form when supported.
+
+```text
+== local meta ==
+Sun May 10 07:43:26 UTC 2026
+git: d68bc45
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi pcie link (max/current) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== nvidia-smi pcie link (gpu/host max, optional) ==
+columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max
+0, 0000000F:01:00.0, 1, 5, 5, 1, 16
 ```
 
 ### Multi-target probe (Spark0 ok, Spark1 unreachable)

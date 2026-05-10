@@ -38,6 +38,12 @@ Refreshed again (07:11Z, `.git-codex/.git` shim):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0712Z_loop.txt
 ```
 
+Refreshed again (07:43Z, optional GPU/host PCIe query):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0743Z_loop.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -57,5 +63,6 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - NVMe root disk: ~3.7 TiB, model `SAMSUNG MZALC4T0HBL1-00B07`
 - PCIe link negotiation (GPU): Gen1 x1 (`nvidia-smi -q` + sysfs)
 - `nvidia-smi -q` also reports `Device Max`/`Host Max` Gen5 + x16, suggesting downtraining/training rather than a true capability limit
+- When supported, the probe also prints `nvidia-smi` optional CSV fields `pcie.link.gen.gpumax` / `pcie.link.gen.hostmax`, which match the `nvidia-smi -q` `Device Max`/`Host Max` Gen5 report (while the legacy `pcie.link.gen.max` field remains `1` on this host)
 - RDMA/ROCE devices present (`/sys/class/infiniband`, Mellanox `MT4129`), but ports were `DOWN`/`Disabled` during the probe
 - cuDNN: not detected by the probe (no headers/libs found)
