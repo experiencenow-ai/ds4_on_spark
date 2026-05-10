@@ -56,6 +56,12 @@ REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 AL
 scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 ```
 
+This runner writes additional artifacts next to the Markdown report:
+
+- `contract_probe.json`: full Python contract probe JSON (when parseable)
+- `loader_probe.json`: full llama.cpp probe JSON (when extracted)
+- `deepseek4_mtp_sidecar.hpp`: generated binder skeleton (only when the contract probe reports `ok=true`)
+
 By default this Spark-only runner also samples 64 bytes from each tensor payload (`--payload-sample-bytes 64`) to catch truncated/corrupt uploads without loading full weights. Override with `REMOTE_MTP_SIDECAR_ARGS='--json --expect-deepseek-v4-flash --payload-sample-bytes 0'` if you need a strictly header-only check.
 
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
