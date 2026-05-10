@@ -37,6 +37,21 @@ This also performs best-effort toolchain-only checks when supported:
 
 - If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
+- If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
+
+## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)
+
+When you want a completely self-contained check that does not ship `tools/cuda_probe/`:
+
+```bash
+./scripts/cuda_probe_nvcc_minimal_spark0.sh
+```
+
+This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
+
+- Compiles and runs it with `-arch=sm_121` and `-arch=native`
+- Prints runtime device info + the device-observed `__CUDA_ARCH__`
+- If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `native` missing)
 
 ## Spark0: Kernel Bring-up Tiny (CUTLASS/DeepGEMM Gates)
 
@@ -158,6 +173,7 @@ Commands run:
 
 ```bash
 ./scripts/cuda_probe_compile_only_tiny_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_nvcc_minimal_spark0.sh spark0@aitopatom-9ab9.local
 ./scripts/cuda_probe_tiny_spark0.sh spark0@aitopatom-9ab9.local
 ./scripts/cuda_probe_kernel_tiny_spark0.sh spark0@aitopatom-9ab9.local
 ```
@@ -167,6 +183,7 @@ Observed:
 - `nvcc` is CUDA 13.0 (`V13.0.88`)
 - `nvcc --list-gpu-arch` includes `compute_121` when supported
 - `nvcc --list-gpu-code` includes `sm_121` when supported
+- `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
 - The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure

@@ -128,4 +128,25 @@ else
 			fi
 		fi
 	fi
+
+echo
+echo \"== nvcc: -arch=native emits embedded PTX (best-effort; expected missing) ==\"
+if [ \"\${CUOBJDUMP}\" = \"\" ]; then
+	echo \"(cuobjdump not found; skipping)\"
+else
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=native -fatbin -o bin/cuda_native_arch_shorthand.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_native_arch_shorthand.err
+	rc=\$?
+	set -e
+	if [ \$rc -ne 0 ]; then
+		echo \"(nvcc -fatbin -arch=native failed rc=\$rc)\" >&2
+		head -n 40 bin/cuda_native_arch_shorthand.err || true
+	else
+		if \$CUOBJDUMP --dump-ptx bin/cuda_native_arch_shorthand.fatbin 2>/dev/null | grep -q \"^\\\\.target\"; then
+			echo \"ptx_embed_native: PRESENT\"
+		else
+			echo \"ptx_embed_native: MISSING (expected)\"
+		fi
+	fi
+fi
 "

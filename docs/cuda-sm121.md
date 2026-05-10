@@ -13,6 +13,7 @@ For reproducible builds targeting GB10:
 For convenience on single-GPU bring-up:
 
 - `-arch=native` will compile for the visible GPU(s) detected by `nvcc` at build time.
+  - `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort `-fatbin` + `cuobjdump --dump-ptx` check for `-arch=native` and reports whether PTX is embedded (expected missing; treat as a portability signal, not a functional failure).
 
 ### `sm_121a` / `sm_121f` Variant Targets (Toolchain Probe)
 

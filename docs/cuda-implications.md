@@ -84,6 +84,7 @@ Next probe step:
 Implication:
 
 - `-arch=native` is convenient for single-host bring-up, but `nvcc` generates SASS for the visible GPU(s) and (per CUDA 13 `nvcc` docs) does not embed PTX; this is not ideal for “ship one binary and run anywhere”.
+- `scripts/cuda_probe_compile_only_tiny_spark0.sh` and `scripts/cuda_probe_nvcc_minimal_spark0.sh` both include best-effort `cuobjdump --dump-ptx` checks to make the “PTX present vs missing” behavior observable on Spark0.
 - For artifacts expected to run across multiple GPU variants, prefer explicit `-gencode` with both SASS and PTX (for example: `arch=compute_121,code=sm_121,compute_121`) and add additional `sm_*` entries as needed for your fleet.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is a tiny “fatbin portability” gate that builds via `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX) and runs the same sanity kernel as the `-arch=sm_121` probe.
 
