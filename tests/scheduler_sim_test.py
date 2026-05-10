@@ -1313,6 +1313,36 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m_work.chosen_k_batch[1], 2)
         self.assertGreater(m_tasks.pending_signal_batch[1], m_work.pending_signal_batch[1])
 
+    def test_backpressure_units_work_caps_cost_scale(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=2.0),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=2.0),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=2,
+            service_ms=10.0,
+            service_base_ms=0.0,
+            service_per_task_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+        )
+        m_tasks = scheduler_sim.run_simulation(dataclasses.replace(cfg, backpressure_units="tasks"), trace)
+        m_work = scheduler_sim.run_simulation(dataclasses.replace(cfg, backpressure_units="work"), trace)
+        self.assertEqual(m_tasks.dropped_tokens_backpressure, 0)
+        self.assertEqual(m_work.dropped_tokens_backpressure, 1)
+
     def test_pending_work_metrics_time_weighted(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=2.0),
@@ -3315,6 +3345,9 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("pending_units", out["scenarios"])
         variants = out["scenarios"]["pending_units"]["results"]["variants"]
         self.assertIn("pending_work", variants)
+        self.assertIn("backpressure_units", out["scenarios"])
+        variants_bp = out["scenarios"]["backpressure_units"]["results"]["variants"]
+        self.assertIn("backpressure_work", variants_bp)
 
     def test_trace_sweep_includes_k_scope_when_multi_layer_controller(self) -> None:
         from sim.scheduler import scheduler_sim

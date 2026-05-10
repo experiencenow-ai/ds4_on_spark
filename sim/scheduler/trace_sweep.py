@@ -162,6 +162,18 @@ def run_trace_sweeps(
             "note": "Only included when trace contains cost_scale (token or layer); otherwise tasks==work.",
         }
 
+        variants_backpressure_units: List[Tuple[str, Dict[str, object]]] = [
+            ("backpressure_tasks", {"backpressure_units": "tasks"}),
+            ("backpressure_work", {"backpressure_units": "work"}),
+        ]
+        scenarios["backpressure_units"] = {
+            "name": "backpressure_units",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": variants_backpressure_units,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_backpressure_units, arrival_units=arrival_units),
+            "note": "Only included when trace contains cost_scale (token or layer); otherwise tasks==work.",
+        }
+
     if str(base_cfg.k_mode).strip().lower() == "controller" and _trace_is_multi_layer(trace_in):
         variants_k_scope: List[Tuple[str, Dict[str, object]]] = [
             ("k_scope_token", {"k_scope": "token"}),
