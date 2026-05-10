@@ -67,6 +67,32 @@ if [ "$instance0" = "" ] || [ "$instance1" = "" ]; then
 	echo "instance names must be non-empty" >&2
 	exit 2
 fi
+if [ "$instance0" = "$instance1" ]; then
+	echo "instance names must be distinct (instance0=$instance0 instance1=$instance1)" >&2
+	exit 2
+fi
+if [ "$spark0" = "$spark1" ]; then
+	echo "spark targets must be distinct (spark0=$spark0 spark1=$spark1)" >&2
+	exit 2
+fi
+
+host_from_target()
+{
+	case "$1" in
+		*@*)
+			echo "${1#*@}"
+			return 0
+			;;
+	esac
+	echo "$1"
+	return 0
+}
+
+spark0_host="$(host_from_target "$spark0")"
+spark1_host="$(host_from_target "$spark1")"
+if [ "$spark0_host" = "$spark1_host" ]; then
+	echo "warning: spark0 and spark1 share the same host ($spark0_host); prefer staging instances individually" >&2
+fi
 
 echo "== stage spark0/spark1 deploy assets (Mac-side) =="
 date -Is 2>/dev/null || date || true

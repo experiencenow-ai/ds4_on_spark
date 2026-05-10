@@ -13,6 +13,13 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
+If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids instance-name mistakes and can run an optional mesh check first):
+
+```bash
+./scripts/ops_stage_spark0_spark1.sh spark0@<spark0-host> spark1@<spark1-host>
+# optional: add --mesh-check and/or --tcp <port>
+```
+
 ## Validation Helpers
 
 When staging assets to a Spark via `scripts/ops_stage_deploy_assets.sh`, the repo also stages two safe validators under `/tmp/ds4-scripts/`:
