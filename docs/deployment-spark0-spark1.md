@@ -154,6 +154,7 @@ Notes:
 
 - The DS4 config examples are `key=value` placeholders (see `src/ds4_config.c`).
 - `ds4@.service` is wired to *want* the preflight unit for the same instance; you can run preflight independently at any time.
+- If you want to gate TP=2 runs on “wired-only” routing, set `DS4_EXPECT_IFACE=<wired-ifname>` in `/etc/ds4/ds4-%i.env` and use the strict preflight unit (`ds4-preflight-strict@%i.service`).
 
 ## Optional: Validate Installed Assets (Spark Side)
 

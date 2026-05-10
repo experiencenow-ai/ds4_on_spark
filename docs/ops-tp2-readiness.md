@@ -138,6 +138,8 @@ The script also prints best-effort host resolution and `ip route get` output for
 the master/peer targets (when `getent` + `ip` are present). This helps catch
 accidental Wi‑Fi vs wired routing early without changing any system settings.
 
+If you want to make the intended route interface explicit, set `DS4_EXPECT_IFACE=<wired-ifname>` in `/etc/ds4/ds4-%i.env`. When set, `ops_tp2_readiness.sh` checks the `ip route get` `dev` for the master and peer targets. With `--strict`, an interface mismatch causes a non-zero exit (useful for gating TP=2 runs on “wired-only” routing).
+
 ## If Preflight Fails: Capture A Support Bundle
 
 If `ds4-preflight@...` fails (or you see suspicious routing/metrics output), capture a support bundle on the Spark and attach it to the debug thread:
