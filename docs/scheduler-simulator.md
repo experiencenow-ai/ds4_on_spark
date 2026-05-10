@@ -324,6 +324,8 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl 
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+`trace_extract.py` also preserves multi-layer routing when the runtime logs `layers[]` (or `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` (first-seen order) to satisfy the simulator trace contract.
+
 If the runtime trace logs `kv_tokens` or `decode_ms` but does not log `cost_scale`, you can derive a simple per-token `cost_scale` proxy during replay or canonicalization. This is useful with `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts:
 
 ```bash
