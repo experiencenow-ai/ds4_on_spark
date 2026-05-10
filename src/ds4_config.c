@@ -136,21 +136,54 @@ int32_t ds4_config_defaults(ds4_config_t *cfg)
 	return(0);
 }
 
+static int32_t ds4_trim_env_value(const char *v,const char **out_v,int32_t *out_len)
+{
+	int32_t vlen,i,j;
+	if ( out_v == 0 )
+		return(-1);
+	if ( out_len == 0 )
+		return(-2);
+	*out_v = 0;
+	*out_len = 0;
+	if ( v == 0 )
+		return(0);
+	vlen = ds4_cstr_len_i32(v);
+	if ( vlen <= 0 )
+		return(0);
+	for (i=0; i<vlen; i++)
+	{
+		if ( v[i]!=' ' && v[i]!='\t' && v[i]!='\r' && v[i]!='\n' )
+			break;
+	}
+	j = (vlen - 1);
+	for (; j>=i; j--)
+	{
+		if ( v[j]!=' ' && v[j]!='\t' && v[j]!='\r' && v[j]!='\n' )
+			break;
+	}
+	if ( j < i )
+		return(0);
+	*out_v = &v[i];
+	*out_len = ((j - i) + 1);
+	return(1);
+}
+
 int32_t ds4_config_parse_env(ds4_config_t *cfg)
 {
 	const char *v;
-	int32_t vlen,iv;
+	const char *tv;
+	int32_t tvlen,iv,rv;
 	if ( cfg == 0 )
 		return(-1);
 	v = getenv("DS4_LOG_LEVEL");
 	if ( v != 0 )
 	{
-		if ( v[0] != 0 )
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-2);
+		if ( rv != 0 )
 		{
-			vlen = ds4_cstr_len_i32(v);
-			if ( vlen <= 0 )
-				return(-2);
-			if ( ds4_parse_log_level(v,vlen,&iv) < 0 )
+			if ( ds4_parse_log_level(tv,tvlen,&iv) < 0 )
 				return(-3);
 			cfg->log_level = iv;
 		}
@@ -158,12 +191,12 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 	v = getenv("DS4_ENABLE_CUDA");
 	if ( v != 0 )
 	{
-		if ( v[0] != 0 )
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-6);
+		if ( rv != 0 )
 		{
-			vlen = ds4_cstr_len_i32(v);
-			if ( vlen <= 0 )
-				return(-6);
-			if ( ds4_parse_bool(v,vlen,&iv) < 0 )
+			if ( ds4_parse_bool(tv,tvlen,&iv) < 0 )
 				return(-7);
 			cfg->enable_cuda = iv;
 		}
@@ -171,12 +204,12 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 	v = getenv("DS4_CUDA_DEVICE");
 	if ( v != 0 )
 	{
-		if ( v[0] != 0 )
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-10);
+		if ( rv != 0 )
 		{
-			vlen = ds4_cstr_len_i32(v);
-			if ( vlen <= 0 )
-				return(-10);
-			if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
 				return(-11);
 			if ( iv < DS4_CUDA_DEVICE_AUTO )
 				return(-12);
@@ -186,12 +219,12 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 	v = getenv("DS4_ARENA_SIZE");
 	if ( v != 0 )
 	{
-		if ( v[0] != 0 )
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-13);
+		if ( rv != 0 )
 		{
-			vlen = ds4_cstr_len_i32(v);
-			if ( vlen <= 0 )
-				return(-13);
-			if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
 				return(-14);
 			if ( iv < 0 )
 				return(-15);
@@ -201,12 +234,12 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 	v = getenv("DS4_LOG_RING_ENTRIES");
 	if ( v != 0 )
 	{
-		if ( v[0] != 0 )
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-16);
+		if ( rv != 0 )
 		{
-			vlen = ds4_cstr_len_i32(v);
-			if ( vlen <= 0 )
-				return(-16);
-			if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
 				return(-17);
 			if ( iv < 0 )
 				return(-18);
