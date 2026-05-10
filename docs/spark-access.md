@@ -82,6 +82,7 @@ Notes:
 - The Spark probe also emits a capped `nvidia-smi -q` PCI section (`nvidia-smi -q pci link`) so the output includes `GPU Link Info` fields like `Device Max` / `Host Max` alongside the negotiated `Current` link state (useful when `nvidia-smi --query-gpu=pcie.link.*` reports surprising `max` values).
 - The Spark probe also prints a small `nvidia-smi -q fabric/c2c (summary)` section (`Product Architecture`, `Peer Type`, `GPU C2C Mode`) to help interpret misleading PCIe link fields on GB10-class platforms.
 - The Spark probe prints both `selected compute_cap:` and `selected nvcc arch:` so `NVCC_ARCH` selection is explicit in committed excerpts.
+- The Spark probe also prints a `== cuda/toolchain facts (summary) ==` block that consolidates the key version/arch facts (`driver`, `smi CUDA`, `nvcc release`, `cuda version.json`, `cuda.h CUDA_VERSION`, `compute_cap`, `nvcc arch`) into a single paste-friendly stanza.
 - The Spark probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
 
 ### Mac-side Discovery (mDNS + reachability)
@@ -111,6 +112,18 @@ The probe is designed to capture non-secret OS/CPU/GPU/network/storage data with
 If the driver-side `nvidia-smi` compute capability query is unavailable, the `nvcc` runtime probe is the fallback source for compute capability (`device0 cc:`). The runtime probe also prints `runtime max cc: ...` as a quick sanity-check on multi-GPU hosts.
 When `REDACT=1`, the probe also scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 The `nvidia-smi` inventory section includes per-GPU `index` and `pci.bus_id` to make multi-GPU hosts easier to compare across reboots.
+
+For quick smoke checks (especially when Spark1 is flaky/not-yet-provisioned), use summary mode:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh spark1.local || true
+```
+
+In summary mode, the Spark probe suppresses larger/diagnostic-only sections (for example, `nvcc --list-gpu-*` lists and the full `/usr/local/cuda/version.json` dump). It still records the key CUDA/toolchain facts (including `selected compute_cap`, the `nvcc` release banner when present, and `cuda version.json` `cuda: <version>` when available) so Spark1 bring-up checks stay readable.
+
+Summary mode also prints `nvcc supports gpu code: sm_...` (when `nvcc --list-gpu-code` is available) as a one-line sanity check that the selected `NVCC_ARCH` is supported without dumping the full list.
+
+Summary mode also includes a compact sysfs PCIe cross-check for the GPU endpoint bus id(s) (link `current/max` speed/width) to help diagnose PCIe link downtraining without the full path-chain dump.
 
 ## Spark1 Ready Checklist
 
