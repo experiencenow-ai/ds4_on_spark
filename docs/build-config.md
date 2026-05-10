@@ -57,7 +57,7 @@ Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "
 
 `ds4_config_load_auto` also consults:
 
-- `DS4_CONFIG_PATH` (default config file path when no `path` is provided)
+- `DS4_CONFIG_PATH` (default config file path when no `path` is provided; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
 
 ## Load order helper
 
