@@ -211,6 +211,8 @@ class TokenState:
     skipped_stages_backpressure: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    mtp_verify_layer0_skipped_backpressure: bool = False
+    mtp_accept_len_clamped_backpressure: bool = False
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
@@ -385,6 +387,8 @@ class SimMetrics:
     mtp_draft_attempt_len_per_step: List[int] = dataclasses.field(default_factory=list)
     mtp_pos_attempted: List[int] = dataclasses.field(default_factory=list)
     mtp_pos_accepted: List[int] = dataclasses.field(default_factory=list)
+    mtp_verify_layer0_skipped_backpressure: int = 0
+    mtp_accept_len_clamped_backpressure: int = 0
 
     def to_jsonable(self) -> Dict[str, object]:
         def percentile(xs_sorted: Sequence[float], p: float) -> float:
@@ -527,6 +531,8 @@ class SimMetrics:
                     "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
                     "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
                     "bonus_tokens": self.mtp_bonus_tokens,
+                    "verify_layer0_skipped_backpressure": self.mtp_verify_layer0_skipped_backpressure,
+                    "accept_len_clamped_backpressure": self.mtp_accept_len_clamped_backpressure,
                     "tasks_started": {
                         "draft": self.tasks_started_mtp_draft,
                         "verify": self.tasks_started_mtp_verify,
@@ -1884,14 +1890,16 @@ def write_sim_jsonl(path: str, trace: Sequence[TokenRoute], tokens: Sequence[Tok
                 "effective_k_total": int(ts.admitted_verify_total),
                 "desired_verify_layer0": int(ts.desired_verify_layer0),
                 "partial_any_layer": bool(ts.partial_any_layer),
-                "output_len": int(ts.output_len),
-                "mtp_accept_len": int(ts.mtp_accept_len),
-                "mtp_draft_attempt_len": int(ts.mtp_draft_attempt_len),
-                "trace_decode_ms": ts.trace_decode_ms,
-                "trace_kv_tokens": ts.trace_kv_tokens,
-                "trace_expert_batch_size": ts.trace_expert_batch_size,
-                "stage_total": int(ts.stage_total),
-            }
+                    "output_len": int(ts.output_len),
+                    "mtp_accept_len": int(ts.mtp_accept_len),
+                    "mtp_draft_attempt_len": int(ts.mtp_draft_attempt_len),
+                    "mtp_verify_layer0_skipped_backpressure": bool(ts.mtp_verify_layer0_skipped_backpressure),
+                    "mtp_accept_len_clamped_backpressure": bool(ts.mtp_accept_len_clamped_backpressure),
+                    "trace_decode_ms": ts.trace_decode_ms,
+                    "trace_kv_tokens": ts.trace_kv_tokens,
+                    "trace_expert_batch_size": ts.trace_expert_batch_size,
+                    "stage_total": int(ts.stage_total),
+                }
             if r.token_index is not None:
                 obj["token_index"] = int(r.token_index)
             if r.decode_ms is not None and ts.trace_decode_ms is None:
@@ -3002,6 +3010,14 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
                 if stage.layer_index == 0:
                     ts.admitted_verify_layer0 = admitted
                     ts.desired_verify_layer0 = desired_layer
+                    if cfg.mtp_draft_len > 0 and desired_layer > 0 and admitted == 0:
+                        metrics.mtp_verify_layer0_skipped_backpressure += 1
+                        ts.mtp_verify_layer0_skipped_backpressure = True
+                        if ts.mtp_accept_len > 1:
+                            metrics.mtp_accept_len_clamped_backpressure += 1
+                            ts.mtp_accept_len = 1
+                            ts.output_len = 1
+                            ts.mtp_accept_len_clamped_backpressure = True
                     _maybe_account_token_mtp(tid)
             ts.stage_idx += 1
             if admitted != 0:
@@ -3162,6 +3178,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
             ts.mtp_draft_attempt_len = draft_attempt_len
             ts.mtp_accounted = False
             ts.output_len = accept_len if mtp_enabled else 1
+            ts.mtp_verify_layer0_skipped_backpressure = False
+            ts.mtp_accept_len_clamped_backpressure = False
 
             micro_tokens = (draft_attempt_len + 1) if mtp_enabled else 1
             layers = _route_layers(route)
@@ -3420,6 +3438,10 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
+            "mtp_verify_layer0_skipped_backpressure": float(metrics.mtp_verify_layer0_skipped_backpressure),
+            "mtp_verify_layer0_skipped_backpressure_frac": float(float(metrics.mtp_verify_layer0_skipped_backpressure) / float(metrics.mtp_verify_steps)) if metrics.mtp_verify_steps > 0 else 0.0,
+            "mtp_accept_len_clamped_backpressure": float(metrics.mtp_accept_len_clamped_backpressure),
+            "mtp_accept_len_clamped_backpressure_frac": float(float(metrics.mtp_accept_len_clamped_backpressure) / float(metrics.mtp_verify_steps)) if metrics.mtp_verify_steps > 0 else 0.0,
             "stages_total": float(stages_total),
             "skipped_stages_backpressure": float(skipped_stages),
             "skipped_stage_frac": float(skipped_stage_frac),

@@ -2434,6 +2434,55 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLessEqual(m.starved_tasks_mtp_draft, m.tasks_started_mtp_draft)
         self.assertLessEqual(m.starved_tasks_mtp_verify, m.tasks_started_mtp_verify)
 
+    def test_mtp_verify_layer0_backpressure_clamps_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                mtp_accept_len=3,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=0.1,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0,),
+                mtp_accept_len=1,
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=2,
+            expert_queue_reserve_interactive=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=1.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+        )
+        token_states: list[scheduler_sim.TokenState] = []
+        m = scheduler_sim.run_simulation(cfg, trace, token_states_out=token_states)
+        self.assertEqual(len(token_states), 2)
+        self.assertTrue(token_states[0].mtp_verify_layer0_skipped_backpressure)
+        self.assertTrue(token_states[0].mtp_accept_len_clamped_backpressure)
+        self.assertEqual(token_states[0].mtp_accept_len, 1)
+        self.assertEqual(token_states[0].output_len, 1)
+        self.assertEqual(m.mtp_verify_layer0_skipped_backpressure, 1)
+        self.assertEqual(m.mtp_accept_len_clamped_backpressure, 1)
+        self.assertEqual(m.mtp_accept_len_per_step[0], 1)
+
     def test_mtp_accounting_does_not_require_verify_layer0_admission(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
