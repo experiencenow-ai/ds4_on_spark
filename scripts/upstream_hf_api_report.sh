@@ -99,16 +99,31 @@ last_modified="$(echo "${json}" | jq -r '.lastModified // "UNKNOWN"')"
 used_storage="$(echo "${json}" | jq -r '.usedStorage // 0')"
 total_bytes="$(echo "${json}" | jq -r '[.siblings[].size] | add // 0')"
 base_model="$(echo "${json}" | jq -r '
-	(.cardData.base_model? // "") as $bm
-	| if $bm != "" then
-		$bm
-	  else
-		(.cardData.base_models? // []) as $bms
-		| if ($bms | length) > 0 then
-			($bms | join(", "))
-		  else
+	def norm_bm:
+		if . == null then
 			""
-		  end
+		elif (type == "string") then
+			.
+		elif (type == "array") then
+			(map(
+				if (type == "string") then
+					.
+				elif (type == "object") then
+					(.id? // .modelId? // .repo? // .name? // "")
+				else
+					""
+				end
+			) | map(select(. != "")) | join(", "))
+		elif (type == "object") then
+			(.id? // .modelId? // .repo? // .name? // "")
+		else
+			""
+		end;
+	(.cardData.base_model?) as $bm
+	| if ($bm != null) and ($bm | tostring) != "" then
+		($bm | norm_bm)
+	  else
+		(.cardData.base_models? | norm_bm)
 	  end
 	' | head -n 1)"
 library_name="$(echo "${json}" | jq -r '.cardData.library_name? // ""' | head -n 1)"
