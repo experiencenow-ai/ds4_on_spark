@@ -39,6 +39,29 @@ Notes:
 - `ds4_ctx_init` applies config immediately, so to enable log capture you typically initialize the ring and then call `ds4_ctx_apply_config` once more with `log_ring_entries > 0`.
 - Logging is currently process-global (`ds4_log_set_sink`); wiring a ring into one context affects all `DS4_LOG*` calls in the process.
 
+## Auto-attaching a log ring
+
+To avoid a two-phase init, `ds4_ctx_init_auto` can allocate the log ring entries out of the arena (static caller-provided buffer) and attach capture in the same call:
+
+```c
+#include "ds4/ds4.h"
+
+static uint8_t g_arena_mem[1<<20];
+
+int32_t example_auto(void)
+{
+	ds4_ctx_t ctx;
+	ds4_config_t cfg;
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-1);
+	cfg.log_ring_entries = 256;
+	if ( ds4_ctx_init_auto(&ctx,&cfg,g_arena_mem,(int32_t)sizeof(g_arena_mem)) < 0 )
+		return(-2);
+	DS4_LOGI("captured into ctx ring");
+	return(0);
+}
+```
+
 ## Reading captured logs
 
 After you attach a log ring, you can retrieve entries via:
