@@ -363,11 +363,15 @@ class SchedulerSimTest(unittest.TestCase):
             "token_throughput_tps",
             "task_throughput_tps",
             "drop_frac_tokens",
+            "drop_frac_tokens_interactive",
+            "drop_frac_tokens_batch",
             "partial_admit_frac_tokens",
             "starved_task_frac",
+            "starved_task_frac_interactive",
             "expert_max_pending_tasks_max",
             "expert_utilization_p50",
             "expert_saturation_p95",
+            "pending_depth_time_weighted_p95",
             "mtp_accept_rate",
         ):
             self.assertIn(k, summary)

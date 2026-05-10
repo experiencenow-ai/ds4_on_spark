@@ -185,6 +185,8 @@ python3 sim/scheduler/scheduler_sim.py --summary-json
 python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_draft_len":0}'
 ```
 
+The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, and `{pending,hi_queue,lo_queue}_depth_time_weighted_p95`).
+
 ### Compare Variants (Ablations)
 
 Use `--compare label:JSON` to run one or more config variants against the
