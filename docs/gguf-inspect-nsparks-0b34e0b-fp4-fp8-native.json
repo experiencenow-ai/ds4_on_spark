@@ -75,6 +75,24 @@
     "trusted": false
   },
   "path": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "quantization_contract": {
+    "checked": true,
+    "dense_fp8_like": false,
+    "expected": {
+      "dense_dtype": "fp8",
+      "expert_dtype": "fp4",
+      "scale_fmt": "ue8m0"
+    },
+    "expert_fp4_like": true,
+    "notes": [
+      "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+      "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+    ],
+    "observed": {
+      "dense_primary_type": "F32",
+      "expert_primary_type": "MXFP4"
+    }
+  },
   "tensor_count": 1328,
   "tensor_key_namespace_evidence": [
     "found llama.cpp-style keys (blk.* and/or token_embd/output)"
