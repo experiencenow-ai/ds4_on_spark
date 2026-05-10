@@ -108,6 +108,25 @@ class MarkovTraceConfig:
 
 
 @dataclass(frozen=True)
+class TwoStreamTraceConfig:
+    num_tokens: int
+    num_experts: int
+    num_candidates: int
+    interactive_arrival_rate_tps: float
+    batch_arrival_rate_tps: float
+    interactive_burst_prob: float
+    interactive_burst_scale: float
+    batch_burst_prob: float
+    batch_burst_scale: float
+    zipf_alpha: float
+    seed: int
+    num_layers: int = 1
+    synthetic_score_mode: str = "none"
+    synthetic_cost_scale_mode: str = "none"
+    synthetic_cost_scale_log_sigma: float = 0.5
+
+
+@dataclass(frozen=True)
 class AdaptiveKConfig:
     k_min_interactive: int
     k_max_interactive: int
@@ -990,6 +1009,93 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
             for lc, ls in zip(layer_candidates, layer_scores):
                 layers.append(LayerRoute(candidates=lc, scores=ls))
             routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=tuple(layers), cost_scale=cost_scale))
+
+    routes.sort(key=lambda r: r.t_ms)
+    return(routes)
+
+
+def generate_twostream_trace(cfg: TwoStreamTraceConfig) -> List[TokenRoute]:
+    if cfg.num_experts <= 0:
+        raise ValueError("num_experts must be > 0")
+    if cfg.num_candidates <= 0:
+        raise ValueError("num_candidates must be > 0")
+    if cfg.num_candidates > cfg.num_experts:
+        raise ValueError("num_candidates must be <= num_experts")
+    if cfg.num_tokens <= 0:
+        raise ValueError("num_tokens must be > 0")
+    if cfg.interactive_arrival_rate_tps < 0.0:
+        raise ValueError("interactive_arrival_rate_tps must be >= 0")
+    if cfg.batch_arrival_rate_tps < 0.0:
+        raise ValueError("batch_arrival_rate_tps must be >= 0")
+    if cfg.interactive_burst_prob < 0.0 or cfg.interactive_burst_prob > 1.0:
+        raise ValueError("interactive_burst_prob must be within [0,1]")
+    if cfg.batch_burst_prob < 0.0 or cfg.batch_burst_prob > 1.0:
+        raise ValueError("batch_burst_prob must be within [0,1]")
+    if cfg.interactive_burst_scale <= 0.0:
+        raise ValueError("interactive_burst_scale must be > 0")
+    if cfg.batch_burst_scale <= 0.0:
+        raise ValueError("batch_burst_scale must be > 0")
+    if cfg.zipf_alpha <= 0.0:
+        raise ValueError("zipf_alpha must be > 0")
+    if cfg.num_layers <= 0:
+        raise ValueError("num_layers must be > 0")
+    if cfg.synthetic_score_mode not in ("none", "random", "router_desc"):
+        raise ValueError("synthetic_score_mode must be one of: none, random, router_desc")
+    if cfg.synthetic_cost_scale_mode not in ("none", "lognormal"):
+        raise ValueError("synthetic_cost_scale_mode must be one of: none, lognormal")
+    if cfg.synthetic_cost_scale_mode != "none" and cfg.synthetic_cost_scale_log_sigma <= 0.0:
+        raise ValueError("synthetic_cost_scale_log_sigma must be > 0 when synthetic_cost_scale_mode != none")
+
+    total_rate = float(cfg.interactive_arrival_rate_tps) + float(cfg.batch_arrival_rate_tps)
+    if total_rate <= 0.0:
+        raise ValueError("interactive_arrival_rate_tps + batch_arrival_rate_tps must be > 0")
+
+    num_hi = int(round(float(cfg.num_tokens) * float(cfg.interactive_arrival_rate_tps) / total_rate))
+    num_hi = max(0, min(cfg.num_tokens, num_hi))
+    num_lo = int(cfg.num_tokens - num_hi)
+
+    rng = random.Random(cfg.seed)
+    rng_hi = random.Random((cfg.seed ^ 0xC0DEC0DE) & 0xFFFFFFFF)
+    rng_lo = random.Random((cfg.seed ^ 0xBADC0FFE) & 0xFFFFFFFF)
+
+    weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
+    routes: List[TokenRoute] = []
+
+    arrivals_hi: List[float] = []
+    arrivals_lo: List[float] = []
+    if num_hi > 0:
+        if cfg.interactive_arrival_rate_tps <= 0.0:
+            raise ValueError("interactive_arrival_rate_tps must be > 0 when interactive tokens are generated")
+        arrivals_hi = _generate_arrival_times_ms(rng_hi, num_hi, cfg.interactive_arrival_rate_tps, cfg.interactive_burst_prob, cfg.interactive_burst_scale)
+    if num_lo > 0:
+        if cfg.batch_arrival_rate_tps <= 0.0:
+            raise ValueError("batch_arrival_rate_tps must be > 0 when batch tokens are generated")
+        arrivals_lo = _generate_arrival_times_ms(rng_lo, num_lo, cfg.batch_arrival_rate_tps, cfg.batch_burst_prob, cfg.batch_burst_scale)
+
+    def emit_token(t_ms: float, cls: LatencyClass) -> None:
+        cost_scale = _synthetic_cost_scale(rng, cfg.synthetic_cost_scale_mode, cfg.synthetic_cost_scale_log_sigma)
+        if cfg.num_layers <= 1:
+            candidates = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
+            candidates, scores = _synthetic_scores_for_candidates(rng, candidates, cfg.synthetic_score_mode)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates, scores=scores, cost_scale=cost_scale))
+            return
+        layer_candidates: List[Tuple[int, ...]] = []
+        layer_scores: List[Optional[Tuple[float, ...]]] = []
+        for _li in range(cfg.num_layers):
+            lc = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
+            lc, ls = _synthetic_scores_for_candidates(rng, lc, cfg.synthetic_score_mode)
+            layer_candidates.append(lc)
+            layer_scores.append(ls)
+        union = _union_candidates_for_layers(layer_candidates)
+        layers: List[LayerRoute] = []
+        for lc, ls in zip(layer_candidates, layer_scores):
+            layers.append(LayerRoute(candidates=lc, scores=ls))
+        routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=tuple(layers), cost_scale=cost_scale))
+
+    for t_ms in arrivals_hi:
+        emit_token(t_ms, LatencyClass.INTERACTIVE)
+    for t_ms in arrivals_lo:
+        emit_token(t_ms, LatencyClass.BATCH)
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -3508,7 +3614,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="",
         help="Write per-token simulation results to JSONL after running (meta header + one record per trace step). Use '-' for stdout. With --compare, include '{label}' in the path to emit one dump per variant (plus baseline).",
     )
-    p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
+    p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, markov, or twostream.")
     p.add_argument("--num-experts", type=int, default=64, help="Number of experts. Replay: use 0 to infer from the trace/meta.")
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
@@ -3530,9 +3636,15 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--synthetic-cost-scale-log-sigma", type=float, default=0.5, help="Synthetic trace: lognormal sigma for --synthetic-cost-scale-mode lognormal (must be >0).")
     p.add_argument("--interactive-prob", type=float, default=0.3)
     p.add_argument("--arrival-rate-tps", type=float, default=5000.0)
+    p.add_argument("--interactive-arrival-rate-tps", type=float, default=-1.0, help="Two-stream synthetic trace: interactive arrival rate (defaults to arrival_rate_tps * interactive_prob).")
+    p.add_argument("--batch-arrival-rate-tps", type=float, default=-1.0, help="Two-stream synthetic trace: batch arrival rate (defaults to arrival_rate_tps * (1-interactive_prob)).")
     p.add_argument("--arrival-units", type=str, default="steps", help="Interpret --arrival-rate-tps as steps (verify steps) or output_tokens (rescale by expected MTP accept length when enabled). Synthetic traces only.")
     p.add_argument("--burst-prob", type=float, default=0.05)
     p.add_argument("--burst-scale", type=float, default=8.0)
+    p.add_argument("--interactive-burst-prob", type=float, default=-1.0, help="Two-stream synthetic trace: interactive burst probability (defaults to --burst-prob).")
+    p.add_argument("--interactive-burst-scale", type=float, default=-1.0, help="Two-stream synthetic trace: interactive burst scale (defaults to --burst-scale).")
+    p.add_argument("--batch-burst-prob", type=float, default=-1.0, help="Two-stream synthetic trace: batch burst probability (defaults to --burst-prob).")
+    p.add_argument("--batch-burst-scale", type=float, default=-1.0, help="Two-stream synthetic trace: batch burst scale (defaults to --burst-scale).")
     p.add_argument("--zipf-alpha", type=float, default=1.1)
     p.add_argument("--hotset-size", type=int, default=8, help="Hotset trace: number of 'hot' experts.")
     p.add_argument("--hotset-bias", type=float, default=0.9, help="Hotset trace: probability a candidate is drawn from the hotset.")
@@ -3759,8 +3871,44 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 synthetic_cost_scale_log_sigma=float(args.synthetic_cost_scale_log_sigma),
             )
             trace = generate_markov_trace(trace_cfg)
+        elif mode == "twostream":
+            try:
+                hi_rate_in = float(args.interactive_arrival_rate_tps) if float(args.interactive_arrival_rate_tps) >= 0.0 else -1.0
+                lo_rate_in = float(args.batch_arrival_rate_tps) if float(args.batch_arrival_rate_tps) >= 0.0 else -1.0
+                if hi_rate_in < 0.0:
+                    hi_rate_in = (float(args.arrival_rate_tps) * float(args.interactive_prob))
+                if lo_rate_in < 0.0:
+                    lo_rate_in = (float(args.arrival_rate_tps) * (1.0 - float(args.interactive_prob)))
+                hi_rate = arrival_rate_steps_tps(hi_rate_in, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay) if hi_rate_in > 0.0 else 0.0
+                lo_rate = arrival_rate_steps_tps(lo_rate_in, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay) if lo_rate_in > 0.0 else 0.0
+            except ValueError as e:
+                raise SystemExit(str(e))
+
+            hi_burst_prob = float(args.interactive_burst_prob) if float(args.interactive_burst_prob) >= 0.0 else float(args.burst_prob)
+            hi_burst_scale = float(args.interactive_burst_scale) if float(args.interactive_burst_scale) > 0.0 else float(args.burst_scale)
+            lo_burst_prob = float(args.batch_burst_prob) if float(args.batch_burst_prob) >= 0.0 else float(args.burst_prob)
+            lo_burst_scale = float(args.batch_burst_scale) if float(args.batch_burst_scale) > 0.0 else float(args.burst_scale)
+
+            trace_cfg = TwoStreamTraceConfig(
+                num_tokens=args.num_tokens,
+                num_experts=args.num_experts,
+                num_candidates=args.num_candidates,
+                interactive_arrival_rate_tps=float(hi_rate),
+                batch_arrival_rate_tps=float(lo_rate),
+                interactive_burst_prob=float(hi_burst_prob),
+                interactive_burst_scale=float(hi_burst_scale),
+                batch_burst_prob=float(lo_burst_prob),
+                batch_burst_scale=float(lo_burst_scale),
+                zipf_alpha=args.zipf_alpha,
+                seed=args.seed,
+                num_layers=args.num_layers,
+                synthetic_score_mode=args.synthetic_score_mode.strip().lower(),
+                synthetic_cost_scale_mode=args.synthetic_cost_scale_mode.strip().lower(),
+                synthetic_cost_scale_log_sigma=float(args.synthetic_cost_scale_log_sigma),
+            )
+            trace = generate_twostream_trace(trace_cfg)
         else:
-            raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf, hotset, or markov.")
+            raise SystemExit(f"Unknown --trace-mode '{args.trace_mode}'; expected zipf, hotset, markov, or twostream.")
 
         if trace_speedup != 1.0:
             try:
