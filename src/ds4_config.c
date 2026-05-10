@@ -387,6 +387,8 @@ int32_t ds4_config_parse_mem_ex(ds4_config_t *cfg,const uint8_t *buf,int32_t len
 			if ( rv > 0 )
 			{
 				unknown += 1;
+				if ( out_unknown != 0 )
+					*out_unknown = unknown;
 				if ( (flags & DS4_CONFIG_PARSE_STRICT_UNKNOWN) != 0 )
 					return(-11);
 			}
@@ -481,7 +483,11 @@ int32_t ds4_config_parse_file_ex(ds4_config_t *cfg,const char *path,uint8_t *buf
 		return(0);
 	err = ds4_config_parse_mem_ex(cfg,buf,n,flags,&unknown);
 	if ( err < 0 )
+	{
+		if ( out_unknown != 0 )
+			*out_unknown = unknown;
 		return(-11);
+	}
 	if ( out_unknown != 0 )
 		*out_unknown = unknown;
 	return(0);
@@ -523,7 +529,11 @@ int32_t ds4_config_load_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32
 		if ( path[0] != 0 )
 		{
 			if ( ds4_config_parse_file_ex(cfg,path,buf,cap,out_len,flags,&unknown) < 0 )
+			{
+				if ( out_unknown != 0 )
+					*out_unknown = unknown;
 				return(-4);
+			}
 		}
 	}
 	if ( ds4_config_parse_env(cfg) < 0 )

@@ -159,10 +159,11 @@ int main(int argc,char **argv)
 	ds4_config_t cfg;
 	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
-	int32_t dump_cfg,print_ver,strict_cfg,err;
+	int32_t dump_cfg,print_ver,strict_cfg,err,unknown;
 	dump_cfg = 0;
 	print_ver = 0;
 	strict_cfg = 0;
+	unknown = -1;
 	cfg_path = 0;
 	log_level = 0;
 	enable_cuda = 0;
@@ -181,13 +182,18 @@ int main(int argc,char **argv)
 		return(2);
 	}
 	if ( strict_cfg != 0 )
-		err = ds4_config_load_auto_ex(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,0);
+		err = ds4_config_load_auto_ex(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown);
 	else
 		err = ds4_config_load_auto(&cfg,cfg_path,cfg_buf,(int32_t)sizeof(cfg_buf),0);
 	if ( err < 0 )
 	{
 		if ( strict_cfg != 0 )
-			fprintf(stderr,"ds4_cli: failed to load config (strict)\n");
+		{
+			if ( unknown > 0 )
+				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys\n",unknown);
+			else
+				fprintf(stderr,"ds4_cli: failed to load config (strict)\n");
+		}
 		else
 			fprintf(stderr,"ds4_cli: failed to load config\n");
 		return(1);

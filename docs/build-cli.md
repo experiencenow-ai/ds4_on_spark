@@ -41,6 +41,8 @@ Reject unknown keys in the config file:
 ./build_cli/ds4_cli --strict-config --config path/to/ds4.conf --dump-config
 ```
 
+When strict parsing fails due to unknown keys, `ds4_cli` reports how many were seen.
+
 Override config fields from the command line:
 
 ```bash
