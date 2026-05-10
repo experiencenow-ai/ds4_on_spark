@@ -85,6 +85,13 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+If the runtime produces a mixed JSONL log stream (multiple record types), use `--trace-jsonl -` with `--trace-non-route skip` to ignore non-route objects that have a non-meta `type` field:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-non-route skip --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
 If the runtime trace includes per-token chosen `K`, replay it directly:
 
 ```bash

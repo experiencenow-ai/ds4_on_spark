@@ -5,6 +5,7 @@ import dataclasses
 import contextlib
 import io
 import json
+import sys
 
 from sim.scheduler import scheduler_sim
 
@@ -175,6 +176,68 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    def test_trace_jsonl_stdin_dash_loads(self) -> None:
+        payload = json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0, 1]}) + "\n"
+        old_stdin = sys.stdin
+        sys.stdin = io.StringIO(payload)
+        try:
+            trace = scheduler_sim.load_trace_jsonl("-")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].candidates, (0, 1))
+        finally:
+            sys.stdin = old_stdin
+
+    def test_trace_jsonl_non_route_default_errors(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "decode", "t_ms": 0.0, "decode_ms": 0.01}))
+            f.write("\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0]}))
+            f.write("\n")
+        try:
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(tmp_path)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_jsonl_non_route_skip_ignores_mixed_logs(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "decode", "t_ms": 0.0, "decode_ms": 0.01}))
+            f.write("\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0]}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, non_route_policy="skip")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].candidates, (0,))
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_canonicalize_jsonl_stdout_dash_reads_stdin(self) -> None:
+        payload = json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "accepted_mtp": 1}) + "\n"
+        buf = io.StringIO()
+        old_stdin = sys.stdin
+        sys.stdin = io.StringIO(payload)
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(
+                    ["--trace-jsonl", "-", "--canonicalize-trace-jsonl", "-", "--trace-time-mode", "t_ms", "--mtp-draft-len", "2", "--json"]
+                )
+            self.assertEqual(rc, 0)
+        finally:
+            sys.stdin = old_stdin
+        lines = [ln for ln in buf.getvalue().splitlines() if ln.strip() != ""]
+        self.assertGreaterEqual(len(lines), 2)
+        meta = json.loads(lines[0])
+        self.assertEqual(meta.get("type"), "meta")
+        first_route = json.loads(lines[1])
+        self.assertEqual(first_route.get("mtp_accept_len"), 2)
 
     def test_infer_num_experts_from_trace_uses_meta(self) -> None:
         trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 7))]

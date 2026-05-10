@@ -263,7 +263,7 @@ When `--num-layers > 1`, each generated trace record includes a `layers` array w
 
 Replay mode can read either JSONL (`--trace-jsonl`) or CSV (`--trace-csv`).
 
-JSONL reads one JSON object per line with required fields:
+JSONL reads one JSON object per line (use `--trace-jsonl -` to read from stdin) with required fields:
 
 - `t_ms` (number): arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and provide `dt_ms` instead.
 - `dt_ms` (optional number): inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
@@ -279,6 +279,13 @@ If you have a raw runtime trace that uses `dt_ms` deltas (or emits `accepted_mtp
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --canonicalize-trace-jsonl /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+If the runtime emits a *mixed* JSONL log stream (multiple record types), canonicalization and replay can ignore non-route records that have a non-meta `type` field via `--trace-non-route skip`:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-non-route skip --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 - `layers` (optional list[object]): per-layer routing (for multi-MoE-layer traces). Each element is a JSON object with:
