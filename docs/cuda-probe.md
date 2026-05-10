@@ -14,6 +14,7 @@ This builds and runs only:
 
 - `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
+- `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_probe`
 - `cuda_sm121_arch_report` (prints runtime device CC plus compiled `__CUDA_ARCH__` from an `sm_121` build; expected `1210`)
 
@@ -82,6 +83,7 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
 - Runs best-effort compile-only probes for `-arch=sm_121` plus any advertised `compute_121` / `sm_121a` / `sm_121f` targets (fast toolchain signal; no kernel run required; prints first error lines on failure)
+- Runs a best-effort compile-only probe using `nvcc --gpu-architecture=sm_121` (long-form flag used by some build systems)
 - Runs a best-effort compile-only probe with `-std=c++20 --extended-lambda --expt-relaxed-constexpr` for `-arch=sm_121` (and `compute_121` when advertised) as a CUTLASS/DeepGEMM-style toolchain gate (no repo transfer)
 - Attempts a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and prints `cluster_dims_attr_compile: OK` or the first lines of the compile error
 - Runs best-effort compile-only `-gencode` probes for `arch=compute_121,code=sm_121` and `arch=compute_121,code=compute_121` when `compute_121` is advertised (multi-target build plumbing gate)
@@ -103,6 +105,7 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 
 - `cuda_device_props_tiny`
 - `cuda_sm121_compile_probe.o` (compile-only gate)
+- `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121`)
 - `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)
 - `cuda_sm121_smem_optin` (shared-memory opt-in + max dynamic shared-memory launch gate)
 - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)

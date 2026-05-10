@@ -63,6 +63,8 @@ The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and ru
 
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.
 
+Some build systems use the long-form `nvcc --gpu-architecture=...` flag instead of `-arch=...`. The compile-only object `make bin/cuda_sm121_gpuarch_compile_probe.o` is the same source compiled via `--gpu-architecture=sm_121` as a compatibility gate.
+
 ## Separate Compilation / Device Link (`-rdc=true`)
 
 Some CUDA codebases (and some build systems) rely on separate compilation and device linking (`nvlink`), especially when device functions span translation units.
