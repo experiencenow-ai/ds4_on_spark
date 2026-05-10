@@ -1563,6 +1563,28 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_trace_summary_includes_dflash_accept_len(self) -> None:
+        fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write('{"t_ms":0.0,"cls":"batch","candidates":[0],"dflash_accept_len":3,"accepted_dflash":2,"rejected_dflash":0}\n')
+                f.write('{"t_ms":1.0,"cls":"batch","candidates":[0],"accepted_dflash":1,"rejected_dflash":1}\n')
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(["--trace-jsonl", path, "--trace-summary", "--json"])
+            self.assertEqual(rc, 0)
+            out = json.loads(buf.getvalue().strip())
+            present = out["optional_fields_present"]
+            self.assertEqual(present["dflash_accept_len"], 1)
+            self.assertEqual(present["accepted_dflash"], 1)
+            self.assertEqual(present["rejected_dflash"], 0)
+            dsum = out["dflash_accept_len_derived"]
+            self.assertEqual(dsum["count"], 2)
+            self.assertEqual(dsum["min"], 2.0)
+            self.assertEqual(dsum["max"], 3.0)
+        finally:
+            os.unlink(path)
+
     def test_trace_jsonl_dt_ms_rejected_without_mode(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:
