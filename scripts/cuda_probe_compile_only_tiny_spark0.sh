@@ -97,6 +97,28 @@ try_variant sm_121a
 try_variant sm_121f
 
 echo
+echo \"== nvcc: compute_121 compile (best-effort) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
+else
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		echo \"-- compute_121\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=compute_121 -c -o bin/cuda_compute_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_compute_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"arch_compute_121: OK\"
+		else
+			echo \"arch_compute_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_compute_121_compile_probe.err || true
+		fi
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\"
+	fi
+fi
+
+echo
 echo \"== compile-only (tiny) ==\"
 make clean
 make bin/cuda_sm121_compile_probe.o

@@ -36,6 +36,7 @@ When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
 This also performs best-effort toolchain-only checks when supported:
 
 - If `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`, attempt compile-only builds for those variant targets.
+- If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=sm_121` and confirm an embedded PTX section exists (`cuobjdump --dump-ptx`).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
 
