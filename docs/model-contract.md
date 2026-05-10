@@ -59,7 +59,7 @@ MTP (multi-token prediction) oracle requirements:
   - Before trusting MTP on any artifact (especially GGUF or other quantized conversions):
   - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py` and record:
     - `tensor_type_counts` + `mtp_tensor_type_counts` (GGUF quant types present)
-    - Note: some DeepSeek-V4-capable GGUF forks extend `ggml_type` beyond the upstream GGUF spec. For example, nsparks’ native FP4/FP8 DeepSeek4 GGUF uses `F8_E4M3_B128` (type code `42`) for dense weights; the inspector maps this when `metadata["general.architecture"] == "deepseek4"`.
+    - Note: some DeepSeek-V4-capable GGUF forks extend `ggml_type` beyond the upstream GGUF spec. For example, nsparks’ native FP4/FP8 DeepSeek4 GGUF uses `F8_E4M3_B128` (type code `42`) for dense weights; the inspector maps this when `metadata["general.architecture"] == "deepseek4"` (see the pinned `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` example output).
     - `tensor_key_namespace_guess` (whether the artifact appears to preserve upstream `layers.{i}.*` / `mtp.0.*` key namespaces; many GGUF conversions are `llama.cpp`)
     - `mtp_namespace.has_mtp0` + `mtp_namespace.expected_complete` (whether the artifact set appears to preserve the expected `mtp.{id}.*` namespace prefixes)
     - `metadata.general.*` (provenance)

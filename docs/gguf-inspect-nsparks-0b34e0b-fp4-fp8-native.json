@@ -1,107 +1,107 @@
 {
-    "artifact_type": "gguf.url",
-    "first_mtp_keys": [],
-    "first_tensor_keys": [
-        "token_embd.weight",
-        "blk.0.attn_sinks",
-        "blk.0.attn_kv_a_norm.weight",
-        "blk.0.attn_q_a_norm.weight",
-        "blk.0.attn_kv_latent.weight",
-        "blk.0.attn_output_a.weight",
-        "blk.0.attn_output_b.weight",
-        "blk.0.attn_q_a.weight",
-        "blk.0.attn_q_b.weight",
-        "blk.0.attn_norm.weight",
-        "blk.0.ffn_down_exps.weight",
-        "blk.0.ffn_gate_exps.weight",
-        "blk.0.ffn_up_exps.weight",
-        "blk.0.ffn_gate_tid2eid",
-        "blk.0.ffn_gate_inp.weight",
-        "blk.0.ffn_gate_shexp.weight",
-        "blk.0.ffn_down_shexp.weight",
-        "blk.0.ffn_up_shexp.weight",
-        "blk.0.ffn_norm.weight",
-        "blk.0.hc_attn_base"
+  "artifact_type": "gguf.url",
+  "first_mtp_keys": [],
+  "first_tensor_keys": [
+    "token_embd.weight",
+    "blk.0.attn_sinks",
+    "blk.0.attn_kv_a_norm.weight",
+    "blk.0.attn_q_a_norm.weight",
+    "blk.0.attn_kv_latent.weight",
+    "blk.0.attn_output_a.weight",
+    "blk.0.attn_output_b.weight",
+    "blk.0.attn_q_a.weight",
+    "blk.0.attn_q_b.weight",
+    "blk.0.attn_norm.weight",
+    "blk.0.ffn_down_exps.weight",
+    "blk.0.ffn_gate_exps.weight",
+    "blk.0.ffn_up_exps.weight",
+    "blk.0.ffn_gate_tid2eid",
+    "blk.0.ffn_gate_inp.weight",
+    "blk.0.ffn_gate_shexp.weight",
+    "blk.0.ffn_down_shexp.weight",
+    "blk.0.ffn_up_shexp.weight",
+    "blk.0.ffn_norm.weight",
+    "blk.0.hc_attn_base"
+  ],
+  "gguf_version": 3,
+  "metadata": {
+    "deepseek4.attention.head_count": 64,
+    "deepseek4.attention.head_count_kv": 1,
+    "deepseek4.attention.indexer.head_count": 64,
+    "deepseek4.block_count": 43,
+    "deepseek4.context_length": 1048576,
+    "deepseek4.embedding_length": 4096,
+    "deepseek4.rope.dimension_count": 64,
+    "deepseek4.rope.freq_base": 10000.0,
+    "deepseek4.vocab_size": 129280,
+    "general.architecture": "deepseek4",
+    "general.file_type": 41,
+    "general.license": "mit",
+    "general.name": "DeepSeek V4 Flash",
+    "general.quantization_version": 2,
+    "general.sampling.temp": 1.0,
+    "general.sampling.top_p": 1.0,
+    "general.size_label": "256x8.4B",
+    "general.type": "model",
+    "tokenizer.ggml.model": "gpt2"
+  },
+  "mtp_contract": {
+    "checked": false,
+    "reason": "no mtp.* tensors present"
+  },
+  "mtp_layer_ids": [],
+  "mtp_namespace": {
+    "checked": true,
+    "expected_complete": false,
+    "expected_layer_ids": [
+      0
     ],
-    "gguf_version": 3,
-    "metadata": {
-        "deepseek4.attention.head_count": 64,
-        "deepseek4.attention.head_count_kv": 1,
-        "deepseek4.attention.indexer.head_count": 64,
-        "deepseek4.block_count": 43,
-        "deepseek4.context_length": 1048576,
-        "deepseek4.embedding_length": 4096,
-        "deepseek4.rope.dimension_count": 64,
-        "deepseek4.rope.freq_base": 10000.0,
-        "deepseek4.vocab_size": 129280,
-        "general.architecture": "deepseek4",
-        "general.file_type": 41,
-        "general.license": "mit",
-        "general.name": "DeepSeek V4 Flash",
-        "general.quantization_version": 2,
-        "general.sampling.temp": 1.0,
-        "general.sampling.top_p": 1.0,
-        "general.size_label": "256x8.4B",
-        "general.type": "model",
-        "tokenizer.ggml.model": "gpt2"
-    },
-    "mtp_contract": {
-        "checked": false,
-        "reason": "no mtp.* tensors present"
-    },
-    "mtp_layer_ids": [],
-    "mtp_namespace": {
-        "checked": true,
-        "expected_complete": false,
-        "expected_layer_ids": [
-            0
-        ],
-        "has_mtp0": false,
-        "missing_expected_layer_ids": [
-            0
-        ],
-        "present_layer_ids": [],
-        "present_prefixes": []
-    },
-    "mtp_present": false,
-    "mtp_tensor_count": 0,
-    "mtp_tensor_type_counts": {},
-    "mtp_trust": {
-        "checked": true,
-        "reasons": [
-            "no mtp.* tensors present"
-        ],
-        "status": "absent",
-        "trusted": false
-    },
-    "path": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
-    "tensor_count": 1328,
-    "tensor_key_namespace_evidence": [
-        "found llama.cpp-style keys (blk.* and/or token_embd/output)"
+    "has_mtp0": false,
+    "missing_expected_layer_ids": [
+      0
     ],
-    "tensor_key_namespace_guess": "llama.cpp",
-    "tensor_type_counts": {
-        "BF16": 147,
-        "F32": 684,
-        "I32": 3,
-        "MXFP4": 129,
-        "TYPE_42": 365
-    },
-    "topology_contract": {
-        "block_count": 43,
-        "block_count_ok": true,
-        "checked": true,
-        "embedding_length": 4096,
-        "head_count": 64,
-        "head_count_kv": 1,
-        "mismatches": [],
-        "rope_dimension_count": 64,
-        "rope_freq_base": 10000.0,
-        "vocab_size": 129280
-    },
-    "trunk_contract": {
-        "checked": false,
-        "reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable"
-    },
-    "url_prefix_bytes": 8388608
+    "present_layer_ids": [],
+    "present_prefixes": []
+  },
+  "mtp_present": false,
+  "mtp_tensor_count": 0,
+  "mtp_tensor_type_counts": {},
+  "mtp_trust": {
+    "checked": true,
+    "reasons": [
+      "no mtp.* tensors present"
+    ],
+    "status": "absent",
+    "trusted": false
+  },
+  "path": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+  "tensor_count": 1328,
+  "tensor_key_namespace_evidence": [
+    "found llama.cpp-style keys (blk.* and/or token_embd/output)"
+  ],
+  "tensor_key_namespace_guess": "llama.cpp",
+  "tensor_type_counts": {
+    "BF16": 147,
+    "F32": 684,
+    "F8_E4M3_B128": 365,
+    "I32": 3,
+    "MXFP4": 129
+  },
+  "topology_contract": {
+    "block_count": 43,
+    "block_count_ok": true,
+    "checked": true,
+    "embedding_length": 4096,
+    "head_count": 64,
+    "head_count_kv": 1,
+    "mismatches": [],
+    "rope_dimension_count": 64,
+    "rope_freq_base": 10000.0,
+    "vocab_size": 129280
+  },
+  "trunk_contract": {
+    "checked": false,
+    "reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable"
+  },
+  "url_prefix_bytes": 8388608
 }
