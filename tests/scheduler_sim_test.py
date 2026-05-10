@@ -2646,6 +2646,16 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLess(base_drop, fixed_hi_drop)
         self.assertGreaterEqual(fixed_hi_drop, (base_drop + 0.05))
 
+    def test_recommendations_quick_mtp_congestion_sweep_stop_at_reject_reduces_overhead_at_zero_accept(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        sweep = out["scenarios"]["mtp_congestion_sweep"]["sweep"]
+        row0 = next(r for r in sweep if float(r["accept_prob"]) == 0.0)
+        full = row0["mtp_full"]
+        stop = row0["mtp_stop_at_reject"]
+        self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -225,11 +225,116 @@ def _adaptive_k_batch_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
+    num_tokens = 8000 if quick else 40000
+    interactive_output_tps = 500.0
+    batch_output_tps = 20000.0
+
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=float(interactive_output_tps),
+        batch_arrival_rate_tps=float(batch_output_tps),
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    base_trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="class",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    draft_len = 2
+    accept_decay = 0.8
+    accept_probs = (0.0, 0.6, 1.0) if quick else (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+
+    def _scale_trace_time(trace: List[scheduler_sim.TokenRoute], scale: float) -> List[scheduler_sim.TokenRoute]:
+        if scale <= 0.0:
+            raise ValueError("scale must be > 0")
+        return([dataclasses.replace(r, t_ms=(float(r.t_ms) * float(scale))) for r in trace])
+
+    no_mtp_metrics = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, mtp_draft_len=0), base_trace)
+    no_mtp_summary = scheduler_sim.compare_summary_jsonable(no_mtp_metrics)
+
+    sweep: List[Dict[str, Any]] = []
+    for accept_prob in accept_probs:
+        exp_len = scheduler_sim.expected_mtp_accept_len(draft_len, float(accept_prob), float(accept_decay))
+        if exp_len <= 0.0:
+            exp_len = 1.0
+        trace_scaled = _scale_trace_time(base_trace, float(exp_len))
+
+        cfg_full = dataclasses.replace(
+            base_cfg,
+            mtp_draft_len=draft_len,
+            mtp_accept_prob=float(accept_prob),
+            mtp_accept_decay=float(accept_decay),
+            mtp_draft_cost_scale=0.25,
+            mtp_draft_attempt_policy="full",
+        )
+        cfg_stop = dataclasses.replace(cfg_full, mtp_draft_attempt_policy="stop_at_reject")
+
+        m_full = scheduler_sim.run_simulation(cfg_full, trace_scaled)
+        m_stop = scheduler_sim.run_simulation(cfg_stop, trace_scaled)
+
+        s_full = scheduler_sim.compare_summary_jsonable(m_full)
+        s_stop = scheduler_sim.compare_summary_jsonable(m_stop)
+
+        sweep.append(
+            {
+                "accept_prob": float(accept_prob),
+                "expected_accept_len": float(exp_len),
+                "trace_time_scale": float(exp_len),
+                "no_mtp": no_mtp_summary,
+                "mtp_full": s_full,
+                "mtp_stop_at_reject": s_stop,
+            }
+        )
+
+    return(
+        {
+            "name": "mtp_congestion_sweep",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "sweep": sweep,
+            "recommendation": {
+                "draft_len": int(draft_len),
+                "draft_attempt_policy_default": "stop_at_reject",
+                "reason": "Synthetic overload: even when MTP can improve service/throughput, draft work can increase queue pressure; prefer stop_at_reject for safer overhead under low accept, and validate interactive SLA + verify-phase starvation on real traces before enabling.",
+            },
+        }
+    )
+
+
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
         "expert_queue_reserve": _expert_queue_reserve_scenario(quick),
         "mtp_efficiency_sweep": _mtp_efficiency_sweep(quick),
         "adaptive_k_batch": _adaptive_k_batch_scenario(quick),
+        "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
     }
     return({"scenarios": scenarios})
 
