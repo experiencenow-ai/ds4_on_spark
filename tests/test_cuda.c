@@ -62,7 +62,7 @@ int32_t test_cuda(void)
 	st0 = DS4_CUDA_CALL(0);
 	if ( ds4_cuda_is_ok(st0) == 0 )
 		return(-9);
-#if defined(DS4_HAS_CUDA)
+#if DS4_HAS_CUDA
 	if ( ds4_cuda_is_enabled_build() != 1 )
 		return(-10);
 	st5 = ds4_cuda_init();

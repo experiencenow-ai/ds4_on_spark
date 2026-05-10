@@ -1,7 +1,7 @@
 #include "ds4/cuda.h"
 #include "ds4/log.h"
 
-#if defined(DS4_HAS_CUDA)
+#if DS4_HAS_CUDA
 #include <cuda_runtime.h>
 #include <limits.h>
 #include <stddef.h>
@@ -551,5 +551,5 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h_async(void *dst,const void *src,int64_t by
 
 }
 #else
-#error "ds4_cuda.cu must only compile when DS4_HAS_CUDA is set"
+#error "ds4_cuda.cu must only compile when DS4_HAS_CUDA=1"
 #endif
