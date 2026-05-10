@@ -12,7 +12,7 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
 
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
 - `upstream_commit.txt` (pinned upstream git commit hash)
-- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, plus sha256 fingerprints for the pinned encoding oracle vectors and oracle prompt set)
+- `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
@@ -81,14 +81,14 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 
 ## Logical parameter shapes (from `inference/model.py` + configs)
 
-These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below).
+These shapes are the **logical (unsharded)** contract. The upstream reference code supports TP sharding (column/row parallel linears), but the checkpoint tensor keys in `model.safetensors.index.json` are expressed in the **global** namespace (see “Tensor key contract” below). The machine-readable shape contract is recorded under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `tensor_shapes`.
 
 Top-level:
 
 - `embed.weight`: `[vocab_size, hidden_size]`
 - `norm.weight`: `[hidden_size]`
 - `head.weight`: `[vocab_size, hidden_size]`
-- `hc_head_{fn,base,scale}`: `[mix_hc,hc_mult*hidden_size]`, `[mix_hc]`, `[3]` where `mix_hc=(2+hc_mult)*hc_mult`
+- `hc_head_{fn,base,scale}`: `[hc_mult,hc_mult*hidden_size]`, `[hc_mult]`, `[1]` (Transformer HC head; per-layer HC uses `mix_hc=(2+hc_mult)*hc_mult` and `*.scale` length `3`)
 
 Per-layer attention (`layers.{i}.attn.*`):
 
