@@ -54,6 +54,27 @@ From the report JSON:
 
 Recommendation (synthetic): don’t enable MTP by default unless real traces show **measured** acceptance rate comfortably above ~`0.27` for the chosen `draft_len` and cost model; otherwise treat it as an opt-in experiment.
 
+## Adaptive K (Batch Throttling Under Congestion)
+
+Scenario: two-stream arrivals (interactive + batch) with sustained overload, small per-expert queue (`expert_queue_max=128`), and `service_ms=1.0`. Compare:
+
+- adaptive batch K (`k_min_batch=1`, `k_max_batch=2`, `q_low=8`, `q_high=96`)
+- fixed batch K=2 (always admit 2 batch experts per step)
+- fixed batch K=1
+
+Key signals (from the report JSON):
+
+- `drop_frac_tokens`:
+  - adaptive: `0.58295`
+  - fixed batch K=2: `0.724825`
+  - fixed batch K=1: `0.5813`
+- `partial_admit_frac_tokens` (tokens that admitted some but not all desired tasks):
+  - adaptive: `0.0`
+  - fixed batch K=2: `0.4518033978377396`
+  - fixed batch K=1: `0.0`
+
+Recommendation (synthetic): keep an **adaptive batch-K controller** available; fixed high batch K can sharply inflate backpressure drops under overload. Tune thresholds against real traces once available.
+
 ## Next Step (Real Traces)
 
 These are synthetic signals only. The next gating artifact for scheduler work is a real quantized-runtime JSONL route trace (routing + latency + optional MTP accounting) that can be replayed via:
@@ -61,4 +82,3 @@ These are synthetic signals only. The next gating artifact for scheduler work is
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --summary-json
 ```
-
