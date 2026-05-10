@@ -2869,12 +2869,6 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         if not ts.admitted_any:
             ts.mtp_accounted = True
             return
-        if ts.admitted_verify_layer0 <= 0:
-            metrics.mtp_accept_len_per_step[tid] = 0
-            metrics.mtp_draft_attempt_len_per_step[tid] = 0
-            ts.output_len = 0
-            ts.mtp_accounted = True
-            return
         metrics.mtp_accept_len_per_step[tid] = ts.mtp_accept_len
         metrics.mtp_draft_attempt_len_per_step[tid] = ts.mtp_draft_attempt_len
         metrics.mtp_output_tokens += ts.mtp_accept_len
