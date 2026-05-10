@@ -40,6 +40,12 @@ Additional probe run (08:13Z refresh, `origin/main` at `git: 3728f20`, temporary
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitdir_c87c955/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0817Z_loop.txt
 ```
 
+Additional probe run (08:43Z refresh, `origin/main` at `git: 3a42299`, temporary gitdir):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_gitshim_20260510T083825Z/git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T084323Z_loop.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -255,7 +261,39 @@ Cuda compilation tools, release 13.0, V13.0.88
 {
    "cuda" : {
       "name" : "CUDA SDK",
+   "version" : "13.0.3"
+   },
+```
+
+### Single-target probe (Spark0, 08:43Z refresh, `origin/main` `git: 3a42299`)
+
+```text
+== local meta ==
+Sun May 10 08:43:23 UTC 2026
+git: 3a42299
+probe args: spark0@aitopatom-9ab9.local
+resolved targets: spark0@aitopatom-9ab9.local
+```
+
+```text
+== nvidia-smi inventory (index + pci bus) ==
+columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total
+0, NVIDIA GB10, 0000000F:01:00.0, 580.142, 12.1, 54, P0, [N/A]
+
+selected compute_cap: 12.1
+selected nvcc arch: sm_121
+```
+
+```text
+== cuda version.json (capped) ==
+{
+   "cuda" : {
+      "name" : "CUDA SDK",
       "version" : "13.0.3"
+   },
+   "cuda_nvcc" : {
+      "name" : "CUDA NVCC",
+      "version" : "13.0.88"
    },
 ```
 
