@@ -73,6 +73,48 @@ static int32_t ds4_parse_i32(const char *s,int32_t slen,int32_t *out)
 	return(0);
 }
 
+static int32_t ds4_parse_i32_kmg(const char *s,int32_t slen,int32_t *out)
+{
+	int32_t base_len,iv;
+	int64_t scale,scaled;
+	uint8_t suf;
+	if ( s == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( slen <= 0 )
+		return(-3);
+	base_len = slen;
+	scale = 1;
+	suf = (uint8_t)s[slen - 1];
+	if ( suf == 'k' || suf == 'K' )
+	{
+		scale = 1024;
+		base_len = (slen - 1);
+	}
+	else if ( suf == 'm' || suf == 'M' )
+	{
+		scale = (1024 * 1024);
+		base_len = (slen - 1);
+	}
+	else if ( suf == 'g' || suf == 'G' )
+	{
+		scale = (1024 * 1024 * 1024);
+		base_len = (slen - 1);
+	}
+	if ( base_len <= 0 )
+		return(-4);
+	if ( ds4_parse_i32(s,base_len,&iv) < 0 )
+		return(-5);
+	scaled = ((int64_t)iv * scale);
+	if ( scaled > (int64_t)INT32_MAX )
+		return(-6);
+	if ( scaled < (int64_t)INT32_MIN )
+		return(-7);
+	*out = (int32_t)scaled;
+	return(0);
+}
+
 static int32_t ds4_parse_bool(const char *s,int32_t slen,int32_t *out)
 {
 	int32_t iv;
@@ -269,7 +311,7 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 			return(-13);
 		if ( rv != 0 )
 		{
-			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
+			if ( ds4_parse_i32_kmg(tv,tvlen,&iv) < 0 )
 				return(-14);
 			if ( iv < 0 )
 				return(-15);
@@ -284,7 +326,7 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 			return(-16);
 		if ( rv != 0 )
 		{
-			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
+			if ( ds4_parse_i32_kmg(tv,tvlen,&iv) < 0 )
 				return(-17);
 			if ( iv < 0 )
 				return(-18);
@@ -332,7 +374,7 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 	}
 	if ( ds4_span_eq(k,klen,"arena_size") != 0 )
 	{
-		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+		if ( ds4_parse_i32_kmg(v,vlen,&iv) < 0 )
 			return(-16);
 		if ( iv < 0 )
 			return(-17);
@@ -341,7 +383,7 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 	}
 	if ( ds4_span_eq(k,klen,"log_ring_entries") != 0 )
 	{
-		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+		if ( ds4_parse_i32_kmg(v,vlen,&iv) < 0 )
 			return(-20);
 		if ( iv < 0 )
 			return(-21);
