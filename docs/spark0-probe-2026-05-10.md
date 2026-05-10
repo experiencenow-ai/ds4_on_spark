@@ -10,6 +10,7 @@ Commands run from the Mac:
 
 ```bash
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T0007Z_loop_v11.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_spark01_probe_redacted_2026-05-10T0111Z_loop_v4.txt || true
 ```
 
 Notes:
@@ -19,6 +20,23 @@ Notes:
 - PCIe link state is captured from `nvidia-smi -q` and sysfs (`/sys/bus/pci/devices/*/current_link_*`) because `lspci -vv` capability fields may be restricted without elevated privileges.
 
 ## Probe Excerpts (Redacted)
+
+### Multi-target probe (Spark0 ok, Spark1 unreachable)
+
+```text
+== local meta ==
+Sun May 10 01:11:45 UTC 2026
+git: 3b928be
+probe args: aitopatom-9ab9.local spark1.local
+resolved targets: spark0@aitopatom-9ab9.local spark0@spark1.local
+
+== target: spark0@spark1.local ==
+ssh: Could not resolve hostname spark1.local: nodename nor servname provided, or not known
+ssh: failed rc=255
+
+== probe summary ==
+ssh failures: 1
+```
 
 ```text
 == nvidia-smi version ==
@@ -91,4 +109,3 @@ Filesystem      Size  Used Avail Use% Mounted on
 == disks (summary) ==
 nvme0n1   3.7T SAMSUNG MZALC4T0HBL1-00B07    0 disk
 ```
-
