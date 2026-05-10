@@ -354,6 +354,10 @@ Tokenizer backend (from `tokenizer.json`):
 
 These backend pipeline facts (including the exact `Split` regex patterns and `ByteLevel` flags) are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tokenizer.tokenizer_json_summary` so external runtimes can reproduce tokenization without guessing.
 
+Tokenizer added-token ID range note:
+
+- The raw `tokenizer.json` `added_tokens[]` list can include tokens whose IDs are within the base BPE vocab range (e.g. BOS/EOS). For the contiguous “extra IDs above base vocab” range, use `tokenizer.tokenizer_json_summary.{added_token_id_min_ge_base_vocab,added_token_id_max_ge_base_vocab,added_tokens_count_ge_base_vocab}` from `contract_summary.json`.
+
 Message rendering:
 
 - Upstream provides `encoding/encoding_dsv4.py` with templates for:

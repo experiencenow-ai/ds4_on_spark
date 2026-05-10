@@ -141,6 +141,20 @@ def main() -> int:
 							failures.append(Failure(41, f"contract summary tokenizer.tokenizer_json_summary.model_type must be BPE: {contract_summary}"))
 						if tok_js.get("effective_vocab_size_matches_config") is not True:
 							failures.append(Failure(42, f"contract summary tokenizer.tokenizer_json_summary.effective_vocab_size_matches_config must be true: {contract_summary}"))
+						base_vocab_size = tok_js.get("base_vocab_size")
+						effective_vocab_size = tok_js.get("effective_vocab_size")
+						min_ge_base = tok_js.get("added_token_id_min_ge_base_vocab")
+						max_ge_base = tok_js.get("added_token_id_max_ge_base_vocab")
+						count_ge_base = tok_js.get("added_tokens_count_ge_base_vocab")
+						if isinstance(base_vocab_size, int) and isinstance(effective_vocab_size, int):
+							if not (isinstance(min_ge_base, int) and min_ge_base >= base_vocab_size):
+								failures.append(Failure(46, f"contract summary tokenizer.tokenizer_json_summary.added_token_id_min_ge_base_vocab must be int >= base_vocab_size: {contract_summary}"))
+							if not (isinstance(max_ge_base, int) and max_ge_base == (effective_vocab_size - 1)):
+								failures.append(Failure(47, f"contract summary tokenizer.tokenizer_json_summary.added_token_id_max_ge_base_vocab must equal effective_vocab_size-1: {contract_summary}"))
+							if not (isinstance(count_ge_base, int) and count_ge_base == (effective_vocab_size - base_vocab_size)):
+								failures.append(Failure(48, f"contract summary tokenizer.tokenizer_json_summary.added_tokens_count_ge_base_vocab must equal effective_vocab_size-base_vocab_size: {contract_summary}"))
+							if isinstance(min_ge_base, int) and min_ge_base != base_vocab_size:
+								failures.append(Failure(49, f"contract summary tokenizer.tokenizer_json_summary.added_token_id_min_ge_base_vocab must equal base_vocab_size (contiguous added IDs): {contract_summary}"))
 						pre = tok_js.get("pre_tokenizer")
 						post = tok_js.get("post_processor")
 						dec = tok_js.get("decoder")
