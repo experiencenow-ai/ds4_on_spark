@@ -178,6 +178,13 @@ python3 sim/scheduler/scheduler_sim.py --json > /tmp/sched_metrics.json
 python3 sim/scheduler/scheduler_sim.py --num-tokens 200000 --arrival-rate-tps 8000
 ```
 
+For concise, loop-friendly output, use `--summary-json` (prints the same summary block as `--compare`, without the full metrics payload):
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --summary-json
+python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_draft_len":0}'
+```
+
 ### Compare Variants (Ablations)
 
 Use `--compare label:JSON` to run one or more config variants against the
