@@ -114,6 +114,26 @@
     "Q4_K": 3,
     "Q8_0": 10
   },
+  "tensor_type_profile": {
+    "category_type_counts": {
+      "mtp": {
+        "F32": 19,
+        "Q4_K": 3,
+        "Q8_0": 10
+      }
+    },
+    "checked": true,
+    "general_architecture": "deepseek4_mtp_support",
+    "hints": {
+      "dense_primary": {
+        "count": 19,
+        "type": "F32"
+      },
+      "expert_primary": null,
+      "shared_expert_primary": null
+    },
+    "namespace_guess": "deepseek-upstream-mtp-only"
+  },
   "topology_contract": {
     "block_count": null,
     "block_count_ok": null,

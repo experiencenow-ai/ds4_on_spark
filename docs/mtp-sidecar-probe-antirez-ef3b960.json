@@ -1,5 +1,7 @@
 {
+  "alignment": 32,
   "architecture": "deepseek4_mtp_support",
+  "data_offset": 2208,
   "derived_params": {
     "n_embd": 4096,
     "n_expert": 256,
