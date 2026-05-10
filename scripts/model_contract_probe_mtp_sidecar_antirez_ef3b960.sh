@@ -11,4 +11,4 @@ set -euo pipefail
 
 SIDECAR_URL="${SIDECAR_URL:-https://huggingface.co/antirez/deepseek-v4-gguf/resolve/ef3b960827870d69ed0b225c095a617c12d7e80d/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 
-python3 scripts/model_contract_probe_mtp_sidecar.py --url "$SIDECAR_URL" --json
+python3 scripts/model_contract_probe_mtp_sidecar.py --url "$SIDECAR_URL" --json --expect-deepseek-v4-flash

@@ -352,6 +352,13 @@ def main() -> int:
 	src.add_argument("--path", type=str, help="Path to MTP sidecar GGUF (DeepSeek4 MTP support).")
 	src.add_argument("--url", type=str, help="HTTP(S) URL to MTP sidecar GGUF; downloads only the header/tensor table.")
 	parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+	parser.add_argument(
+		"--expect-deepseek-v4-flash",
+		"--expect-flash",
+		dest="expect_deepseek_v4_flash",
+		action="store_true",
+		help="Require the sidecar-derived params to match DeepSeek-V4-Flash (n_embd=4096,n_head=64,n_head_dim=512,n_hc=4,n_lora_q=1024,n_out_group=8,n_lora_o=1024,n_expert=256,n_ff_exp=2048).",
+	)
 	parser.add_argument("--max-bytes", type=int, default=(16 * 1024 * 1024), help="Max bytes to fetch when using --url (default: 16777216).")
 	parser.add_argument("--timeout-s", type=int, default=20, help="HTTP timeout seconds for --url (default: 20).")
 	args = parser.parse_args()
@@ -470,6 +477,33 @@ def main() -> int:
 		n_ff_exp = int(derived.get("n_ff_exp", 0))
 	if n_hc == 0:
 		n_hc = int(derived.get("n_hc", 0))
+
+	if args.expect_deepseek_v4_flash:
+		want = {
+			"n_embd": 4096,
+			"n_head": 64,
+			"n_head_dim": 512,
+			"n_hc": 4,
+			"n_lora_q": 1024,
+			"n_out_group": 8,
+			"n_lora_o": 1024,
+			"n_expert": 256,
+			"n_ff_exp": 2048,
+		}
+		got = {
+			"n_embd": int(n_embd),
+			"n_head": int(n_head),
+			"n_head_dim": int(n_head_dim),
+			"n_hc": int(n_hc),
+			"n_lora_q": int(n_lora_q),
+			"n_out_group": int(n_out_group),
+			"n_lora_o": int(n_lora_o),
+			"n_expert": int(n_expert),
+			"n_ff_exp": int(n_ff_exp),
+		}
+		for k in sorted(want.keys()):
+			if int(got[k]) != int(want[k]):
+				errors.append(f"param {k} is {got[k]}, expected {want[k]} (--expect-deepseek-v4-flash)")
 
 	if n_embd and n_head and n_head_dim and n_lora_q and n_lora_o and n_out_group and n_expert and n_ff_exp and n_hc:
 		hc_dim = n_embd * n_hc
