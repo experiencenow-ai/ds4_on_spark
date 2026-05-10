@@ -192,6 +192,13 @@ if [ "${DS4_CONFIG_PATH:-}" != "" ]; then
 	elif [ ! -r "$DS4_CONFIG_PATH" ]; then
 		echo "unreadable file: DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
 		err=1
+	else
+		bad_line="$(grep -n -E '^[[:space:]]*[^#[:space:]]' "$DS4_CONFIG_PATH" 2>/dev/null | grep -n -v '=' 2>/dev/null | head -n 1 || true)"
+		if [ "$bad_line" != "" ]; then
+			echo "invalid config syntax (expected key=value or comment): DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
+			echo "$bad_line" >&2
+			err=1
+		fi
 	fi
 fi
 
