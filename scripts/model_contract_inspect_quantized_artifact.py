@@ -440,6 +440,77 @@ def compute_tensor_type_profile(
 	}
 
 
+def compute_quantization_contract_hint(
+	tensor_type_profile: Optional[dict[str, Any]],
+	contract_summary: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+	if not (isinstance(tensor_type_profile, dict) and tensor_type_profile.get("checked") is True):
+		return None
+	if not isinstance(contract_summary, dict):
+		return None
+
+	q = contract_summary.get("quantization", {})
+	inf_q = q.get("inference_config", {}) if isinstance(q, dict) else {}
+	if not isinstance(inf_q, dict):
+		return None
+
+	expected_dense = inf_q.get("dtype", None)
+	expected_expert = inf_q.get("expert_dtype", None)
+	expected_scale_fmt = inf_q.get("scale_fmt", None)
+
+	hints = tensor_type_profile.get("hints", {})
+	if not isinstance(hints, dict):
+		hints = {}
+
+	def _hint_primary_type(name: str) -> Optional[str]:
+		v = hints.get(name, None)
+		if not isinstance(v, dict):
+			return None
+		t = v.get("type", None)
+		return t if isinstance(t, str) and t else None
+
+	obs_dense_type = _hint_primary_type("dense_primary")
+	obs_expert_type = _hint_primary_type("expert_primary")
+
+	def _fp8_like(t: Optional[str]) -> Optional[bool]:
+		if t is None:
+			return None
+		if t.startswith("F8_E4M3"):
+			return True
+		return False
+
+	def _fp4_like(t: Optional[str]) -> Optional[bool]:
+		if t is None:
+			return None
+		if t == "MXFP4":
+			return True
+		return False
+
+	expert_like = _fp4_like(obs_expert_type) if expected_expert == "fp4" else None
+	dense_like = _fp8_like(obs_dense_type) if expected_dense == "fp8" else None
+
+	notes: list[str] = []
+	if expected_expert == "fp4" and expert_like is False:
+		notes.append(
+			f"expected Flash experts fp4; artifact expert primary type is {obs_expert_type!r} (likely re-quantized or non-native conversion)"
+		)
+	if expected_dense == "fp8" and dense_like is False:
+		notes.append(
+			f"expected Flash trunk fp8; artifact dense primary type is {obs_dense_type!r} (likely re-quantized or non-native conversion)"
+		)
+	if expected_scale_fmt is not None:
+		notes.append(f"scale_fmt is source-derived as {expected_scale_fmt!r}; GGUF headers typically do not encode scale-tensor semantics")
+
+	return {
+		"checked": True,
+		"expected": {"dense_dtype": expected_dense, "expert_dtype": expected_expert, "scale_fmt": expected_scale_fmt},
+		"observed": {"dense_primary_type": obs_dense_type, "expert_primary_type": obs_expert_type},
+		"dense_fp8_like": dense_like,
+		"expert_fp4_like": expert_like,
+		"notes": notes,
+	}
+
+
 def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, Any]) -> dict[str, Any]:
 	if not weight_keys:
 		return {"checked": False, "reason": "no tensor keys found"}
@@ -1057,6 +1128,9 @@ def main() -> int:
 		}
 		if res.tensor_type_profile is not None:
 			out["tensor_type_profile"] = res.tensor_type_profile
+			qh = compute_quantization_contract_hint(res.tensor_type_profile, contract_summary)
+			if qh is not None:
+				out["quantization_contract"] = qh
 		return out
 
 	def combine(results: list[InspectResult]) -> dict[str, Any]:
@@ -1085,11 +1159,14 @@ def main() -> int:
 		mtp_contract = None
 		trunk_contract = None
 		topology_contract = None
+		quantization_contract = None
 		if contract_summary is not None:
 			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
 			if topology_candidate is not None:
 				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
+			if topology_candidate is not None:
+				quantization_contract = compute_quantization_contract_hint(topology_candidate.tensor_type_profile, contract_summary)
 		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary)
 		return {
 			"paths": [r.path for r in results],
@@ -1108,6 +1185,8 @@ def main() -> int:
 			"trunk_contract": trunk_contract,
 			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"topology_contract": topology_contract,
+			"quantization_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
+			"quantization_contract": quantization_contract,
 		}
 
 	if args.json:
