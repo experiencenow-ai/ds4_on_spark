@@ -112,6 +112,9 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
 			git_dir="$git_worktree/.git-codex"
 		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex/.git" ] && [ -r "$git_worktree/.git-codex/.git/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex/.git"
+		fi
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
 			git_dir="$git_worktree/.gitshim/repo/.git"
 		fi

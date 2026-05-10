@@ -71,7 +71,7 @@ Notes:
 - The CUDA runtime probe prints both the raw `cuda*GetVersion()` integers and a `major.minor` parse to avoid ambiguity (e.g. `13000 (13.0)`).
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
-- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.git-codex/` (used by some automation runners) and `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
+- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.git-codex/` (bare gitdir) or `.git-codex/.git` (non-bare `git init .git-codex` layout), plus `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
 
 ## What To Record In `docs/spark0-*.md`
 
