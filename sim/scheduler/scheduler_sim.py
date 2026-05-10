@@ -3324,6 +3324,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     dropped_batch = float(metrics.dropped_tokens_backpressure_batch)
     denom_batch = float(metrics.admitted_tokens_batch + metrics.dropped_tokens_backpressure_batch)
     drop_frac_batch = (dropped_batch / denom_batch) if denom_batch > 0.0 else 0.0
+    sla_violation_frac_interactive = (float(metrics.token_sla_violations_interactive) / float(len(metrics.token_lat_ms_interactive))) if len(metrics.token_lat_ms_interactive) != 0 else 0.0
+    sla_violation_frac_batch = (float(metrics.token_sla_violations_batch) / float(len(metrics.token_lat_ms_batch))) if len(metrics.token_lat_ms_batch) != 0 else 0.0
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -3365,6 +3367,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_p95_interactive_ms": float(_p_or_zero(metrics.output_token_lat_ms_interactive, 0.95)),
             "output_token_p50_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.50)),
             "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
+            "sla_violation_frac_tokens_interactive": float(sla_violation_frac_interactive),
+            "sla_violation_frac_tokens_batch": float(sla_violation_frac_batch),
             "starved_tasks": float(metrics.starved_tasks),
             "starved_task_frac": float(starved_task_frac),
             "starved_task_frac_interactive": float(starved_task_frac_interactive),
