@@ -75,6 +75,7 @@ need_file "scripts/ops_spark01_mesh_check.sh"
 need_file "scripts/ops_collect_support_bundle.sh"
 need_file "scripts/ops_validate_staged_assets.sh"
 need_file "scripts/ops_validate_installed_assets.sh"
+need_file "scripts/ops_install_staged_assets.sh"
 
 echo "== sh -n (ops scripts) =="
 sh -n scripts/ops_stage_deploy_assets.sh
@@ -86,6 +87,7 @@ sh -n scripts/ops_collect_support_bundle.sh
 sh -n scripts/ops_validate_deploy_assets.sh
 sh -n scripts/ops_validate_staged_assets.sh
 sh -n scripts/ops_validate_installed_assets.sh
+sh -n scripts/ops_install_staged_assets.sh
 
 echo "== env examples include required keys =="
 for env in deploy/config/ds4.env.example deploy/config/ds4-spark0.env.example deploy/config/ds4-spark1.env.example; do

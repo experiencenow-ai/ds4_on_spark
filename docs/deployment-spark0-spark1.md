@@ -86,6 +86,15 @@ SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 
 If you want repeatable user/dir bring-up via sysusers/tmpfiles, run the `sysusers.d`/`tmpfiles.d` install commands printed by `ops_stage_deploy_assets.sh` first.
 
+Recommended: use the staged installer wrapper (human-run; review first). This installs the staged templates into `/etc` + `/opt`, reloads systemd, and can optionally start preflight:
+
+```bash
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1> --start-preflight
+# optional: add --install-timers, --install-spark-units, and/or --strict
+```
+
+Manual step-by-step (equivalent):
+
 On Spark0:
 
 ```bash
