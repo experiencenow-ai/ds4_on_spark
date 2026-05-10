@@ -54,12 +54,6 @@ target_compile_definitions(ds4
 		DS4_VERSION_V2=${PROJECT_VERSION_PATCH}
 )
 
-if(DS4_ENABLE_CUDA)
-	target_compile_definitions(ds4 PUBLIC DS4_HAS_CUDA=1)
-else()
-	target_compile_definitions(ds4 PUBLIC DS4_HAS_CUDA=0)
-endif()
-
 ds4_target_warnings(ds4 ${DS4_WERROR})
 ds4_target_sanitizers(ds4 ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 
