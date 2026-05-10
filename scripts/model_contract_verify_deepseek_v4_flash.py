@@ -288,6 +288,66 @@ def main() -> int:
 				q_inf = q.get("inference_config", {}) if isinstance(q, dict) else {}
 				if not (isinstance(q_inf, dict) and q_inf.get("scale_dtype") == "fp8"):
 					failures.append(Failure(70, f"contract summary quantization.inference_config.scale_dtype must be 'fp8' (derived from inference/model.py ModelArgs default): {contract_summary}"))
+
+				oracle = summary.get("oracle", {})
+				if not isinstance(oracle, dict):
+					failures.append(Failure(90, f"contract summary oracle must be an object: {contract_summary}"))
+				else:
+					enc_oracle = oracle.get("encoding_oracle", {})
+					log_oracle = oracle.get("logits_oracle", {})
+					mtp_oracle = oracle.get("mtp", {})
+					if not (isinstance(enc_oracle, dict) and enc_oracle.get("required") is True and isinstance(enc_oracle.get("fixtures_glob"), str)):
+						failures.append(Failure(91, f"contract summary oracle.encoding_oracle must declare required=true and fixtures_glob: {contract_summary}"))
+					if not (isinstance(log_oracle, dict) and log_oracle.get("weights_required") is True and isinstance(log_oracle.get("generator"), str)):
+						failures.append(Failure(92, f"contract summary oracle.logits_oracle must declare weights_required=true and generator: {contract_summary}"))
+					if not (isinstance(mtp_oracle, dict) and mtp_oracle.get("weights_required") is True and isinstance(mtp_oracle.get("generator_hint"), str)):
+						failures.append(Failure(93, f"contract summary oracle.mtp must declare weights_required=true and generator_hint: {contract_summary}"))
+
+				ts = summary.get("tensor_shapes", {})
+				if not isinstance(ts, dict):
+					failures.append(Failure(94, f"contract summary tensor_shapes must be an object: {contract_summary}"))
+				else:
+					tl = ts.get("top_level", {})
+					if not (isinstance(tl, dict) and tl.get("hc_head_scale") == [1]):
+						failures.append(Failure(95, f"contract summary tensor_shapes.top_level.hc_head_scale must be [1]: {contract_summary}"))
+					phc = ts.get("per_layer", {}).get("hyper_connections", {})
+					if not isinstance(phc, dict):
+						failures.append(Failure(96, f"contract summary tensor_shapes.per_layer.hyper_connections must be an object: {contract_summary}"))
+					else:
+						try:
+							hc_mult = int(inf.get("hc_mult"))
+							mix_hc = (2 + hc_mult) * hc_mult
+						except Exception:
+							hc_mult = None
+							mix_hc = None
+						if mix_hc is not None and phc.get("mix_hc") != mix_hc:
+							failures.append(Failure(97, f"contract summary tensor_shapes.per_layer.hyper_connections.mix_hc mismatch (expected {mix_hc}): {contract_summary}"))
+						if phc.get("hc_attn_scale") != [3] or phc.get("hc_ffn_scale") != [3]:
+							failures.append(Failure(98, f"contract summary tensor_shapes.per_layer.hyper_connections hc_*_scale must be [3]: {contract_summary}"))
+
+				top = summary.get("topology", {})
+				if isinstance(top, dict):
+					expected_top = {
+						"vocab_size": int(cfg.get("vocab_size")),
+						"hidden_size": int(cfg.get("hidden_size")),
+						"num_hidden_layers": int(cfg.get("num_hidden_layers")),
+						"num_attention_heads": int(cfg.get("num_attention_heads")),
+						"num_key_value_heads": int(cfg.get("num_key_value_heads")),
+						"head_dim": int(cfg.get("head_dim")),
+						"rope_head_dim": int(cfg.get("qk_rope_head_dim")),
+						"q_lora_rank": int(cfg.get("q_lora_rank")),
+						"o_groups": int(cfg.get("o_groups")),
+						"o_lora_rank": int(cfg.get("o_lora_rank")),
+						"sliding_window": int(cfg.get("sliding_window")),
+					}
+					for kk, want in expected_top.items():
+						got = top.get(kk)
+						if got != want:
+							failures.append(Failure(99, f"contract summary topology.{kk} mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+							break
+					want_nope = int(cfg.get("head_dim")) - int(cfg.get("qk_rope_head_dim"))
+					if top.get("nope_head_dim") != want_nope:
+						failures.append(Failure(100, f"contract summary topology.nope_head_dim mismatch (got {top.get('nope_head_dim')!r} expected {want_nope!r}): {contract_summary}"))
 			except Exception as e:
 				failures.append(Failure(14, f"failed to parse contract summary JSON {contract_summary}: {e}"))
 

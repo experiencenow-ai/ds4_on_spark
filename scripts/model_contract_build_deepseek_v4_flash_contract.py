@@ -43,6 +43,137 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(b"\n")
 	return h.hexdigest()
 
+def build_oracle_contract() -> dict:
+	return {
+		"encoding_oracle": {
+			"required": True,
+			"fixtures_glob": "encoding/tests/*",
+			"verifier": "scripts/model_contract_verify_deepseek_v4_flash.py",
+			"note": "Tokenizer/chat rendering must match upstream encoding vectors before any logit comparison is meaningful.",
+		},
+		"logits_oracle": {
+			"weights_required": True,
+			"prompts_fixture": "oracle/prompts.json",
+			"generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
+			"output_fixture": "oracle/logits_oracle.json",
+			"acceptance": {
+				"requires_prefill_and_decode": True,
+				"topk_ids_exact": True,
+				"logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
+			},
+			"note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
+		},
+		"mtp": {
+			"weights_required": True,
+			"generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+			"acceptance": {
+				"requires_mtp_trace": True,
+				"topk_ids_exact": True,
+				"logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
+			},
+		},
+	}
+
+def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
+	dim = int(cfg["hidden_size"])
+	vocab_size = int(cfg["vocab_size"])
+	n_heads = int(cfg["num_attention_heads"])
+	head_dim = int(cfg["head_dim"])
+	q_lora_rank = int(cfg["q_lora_rank"])
+	o_groups = int(cfg["o_groups"])
+	o_lora_rank = int(cfg["o_lora_rank"])
+	rope_head_dim = int(cfg["qk_rope_head_dim"])
+	nope_head_dim = head_dim - rope_head_dim
+	n_routed_experts = int(cfg["n_routed_experts"])
+	n_activated_experts = int(cfg["num_experts_per_tok"])
+	moe_inter_dim = int(cfg["moe_intermediate_size"])
+	hc_mult = int(inf["hc_mult"])
+	hc_dim = hc_mult * dim
+	mix_hc = (2 + hc_mult) * hc_mult
+	index_n_heads = int(inf["index_n_heads"])
+	index_head_dim = int(inf["index_head_dim"])
+
+	return {
+		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (logical/unsharded shapes)",
+		"top_level": {
+			"embed.weight": [vocab_size, dim],
+			"norm.weight": [dim],
+			"head.weight": [vocab_size, dim],
+			"hc_head_fn": [hc_mult, hc_dim],
+			"hc_head_base": [hc_mult],
+			"hc_head_scale": [1],
+		},
+		"per_layer": {
+			"attn": {
+				"attn_sink": [n_heads],
+				"wq_a.weight": [q_lora_rank, dim],
+				"q_norm.weight": [q_lora_rank],
+				"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+				"wkv.weight": [head_dim, dim],
+				"kv_norm.weight": [head_dim],
+				"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+				"wo_b.weight": [dim, o_groups * o_lora_rank],
+				"attn_norm.weight": [dim],
+			},
+			"compressor": {
+				"note": "Compressor tensors exist only when compress_ratio != 0. For CSA (ratio==4), overlap=true and coff=2; otherwise coff=1.",
+				"ape.shape_formula": "[compress_ratio, (1+overlap)*head_dim]",
+				"wkv.weight.shape_formula": "[(1+overlap)*head_dim, hidden_size]",
+				"wgate.weight.shape_formula": "[(1+overlap)*head_dim, hidden_size]",
+				"norm.weight": [head_dim],
+				"overlap_rule": "overlap = (compress_ratio == 4)",
+			},
+			"indexer": {
+				"note": "Indexer tensors exist only for CSA layers (compress_ratio==4).",
+				"wq_b.weight": [index_n_heads * index_head_dim, q_lora_rank],
+				"weights_proj.weight": [index_n_heads, dim],
+				"compressor": {
+					"ape.shape_formula": "[compress_ratio, (1+overlap)*index_head_dim]",
+					"wkv.weight.shape_formula": "[(1+overlap)*index_head_dim, hidden_size]",
+					"wgate.weight.shape_formula": "[(1+overlap)*index_head_dim, hidden_size]",
+					"norm.weight": [index_head_dim],
+				},
+			},
+			"moe": {
+				"gate.weight": [n_routed_experts, dim],
+				"gate.tid2eid": [vocab_size, n_activated_experts],
+				"gate.bias": [n_routed_experts],
+				"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+				"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+				"shared_experts.w1.weight": [moe_inter_dim, dim],
+				"shared_experts.w2.weight": [dim, moe_inter_dim],
+				"shared_experts.w3.weight": [moe_inter_dim, dim],
+			},
+			"hyper_connections": {
+				"hc_mult": hc_mult,
+				"hc_dim": hc_dim,
+				"mix_hc": mix_hc,
+				"hc_attn_fn": [mix_hc, hc_dim],
+				"hc_attn_base": [mix_hc],
+				"hc_attn_scale": [3],
+				"hc_ffn_fn": [mix_hc, hc_dim],
+				"hc_ffn_base": [mix_hc],
+				"hc_ffn_scale": [3],
+			},
+		},
+		"mla": {
+			"rope_head_dim": rope_head_dim,
+			"nope_head_dim": nope_head_dim,
+			"rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]",
+		},
+		"mtp": {
+			"e_proj.weight": [dim, dim],
+			"h_proj.weight": [dim, dim],
+			"enorm.weight": [dim],
+			"hnorm.weight": [dim],
+			"norm.weight": [dim],
+			"hc_head_fn": [hc_mult, hc_dim],
+			"hc_head_base": [hc_mult],
+			"hc_head_scale": [1],
+		},
+	}
+
 def parse_encoding_constants(encoding_py: Path) -> dict:
 	if not encoding_py.exists():
 		return {"encoding_constants": None}
@@ -824,6 +955,7 @@ def build_contract() -> dict:
 			},
 		},
 		"compat": build_compat_mappings(),
+		"oracle": build_oracle_contract(),
 		"mla": sem.get("mla", {}) if isinstance(sem, dict) else {},
 		"topology": {
 			"vocab_size": int(cfg["vocab_size"]),
@@ -839,6 +971,7 @@ def build_contract() -> dict:
 			"o_lora_rank": int(cfg["o_lora_rank"]),
 			"sliding_window": int(cfg["sliding_window"]),
 		},
+		"tensor_shapes": build_tensor_shapes(cfg, inf),
 		"yarn_rope": {
 			"rope_theta": float(cfg.get("rope_theta", 10000)),
 			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),

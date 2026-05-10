@@ -614,6 +614,35 @@
       "oracle_requires_mtp_trace": true
     }
   },
+  "oracle": {
+    "encoding_oracle": {
+      "fixtures_glob": "encoding/tests/*",
+      "note": "Tokenizer/chat rendering must match upstream encoding vectors before any logit comparison is meaningful.",
+      "required": true,
+      "verifier": "scripts/model_contract_verify_deepseek_v4_flash.py"
+    },
+    "logits_oracle": {
+      "acceptance": {
+        "logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
+        "requires_prefill_and_decode": true,
+        "topk_ids_exact": true
+      },
+      "generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
+      "note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
+      "output_fixture": "oracle/logits_oracle.json",
+      "prompts_fixture": "oracle/prompts.json",
+      "weights_required": true
+    },
+    "mtp": {
+      "acceptance": {
+        "logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
+        "requires_mtp_trace": true,
+        "topk_ids_exact": true
+      },
+      "generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+      "weights_required": true
+    }
+  },
   "quantization": {
     "config_quantization_config": {
       "activation_scheme": "dynamic",
@@ -840,6 +869,193 @@
       "norm": 1
     },
     "weight_index_source": "model.safetensors.index.json:weight_map"
+  },
+  "tensor_shapes": {
+    "mla": {
+      "nope_head_dim": 448,
+      "rope_head_dim": 64,
+      "rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]"
+    },
+    "mtp": {
+      "e_proj.weight": [
+        4096,
+        4096
+      ],
+      "enorm.weight": [
+        4096
+      ],
+      "h_proj.weight": [
+        4096,
+        4096
+      ],
+      "hc_head_base": [
+        4
+      ],
+      "hc_head_fn": [
+        4,
+        16384
+      ],
+      "hc_head_scale": [
+        1
+      ],
+      "hnorm.weight": [
+        4096
+      ],
+      "norm.weight": [
+        4096
+      ]
+    },
+    "per_layer": {
+      "attn": {
+        "attn_norm.weight": [
+          4096
+        ],
+        "attn_sink": [
+          64
+        ],
+        "kv_norm.weight": [
+          512
+        ],
+        "q_norm.weight": [
+          1024
+        ],
+        "wkv.weight": [
+          512,
+          4096
+        ],
+        "wo_a.weight": [
+          8192,
+          4096
+        ],
+        "wo_b.weight": [
+          4096,
+          8192
+        ],
+        "wq_a.weight": [
+          1024,
+          4096
+        ],
+        "wq_b.weight": [
+          32768,
+          1024
+        ]
+      },
+      "compressor": {
+        "ape.shape_formula": "[compress_ratio, (1+overlap)*head_dim]",
+        "norm.weight": [
+          512
+        ],
+        "note": "Compressor tensors exist only when compress_ratio != 0. For CSA (ratio==4), overlap=true and coff=2; otherwise coff=1.",
+        "overlap_rule": "overlap = (compress_ratio == 4)",
+        "wgate.weight.shape_formula": "[(1+overlap)*head_dim, hidden_size]",
+        "wkv.weight.shape_formula": "[(1+overlap)*head_dim, hidden_size]"
+      },
+      "hyper_connections": {
+        "hc_attn_base": [
+          24
+        ],
+        "hc_attn_fn": [
+          24,
+          16384
+        ],
+        "hc_attn_scale": [
+          3
+        ],
+        "hc_dim": 16384,
+        "hc_ffn_base": [
+          24
+        ],
+        "hc_ffn_fn": [
+          24,
+          16384
+        ],
+        "hc_ffn_scale": [
+          3
+        ],
+        "hc_mult": 4,
+        "mix_hc": 24
+      },
+      "indexer": {
+        "compressor": {
+          "ape.shape_formula": "[compress_ratio, (1+overlap)*index_head_dim]",
+          "norm.weight": [
+            128
+          ],
+          "wgate.weight.shape_formula": "[(1+overlap)*index_head_dim, hidden_size]",
+          "wkv.weight.shape_formula": "[(1+overlap)*index_head_dim, hidden_size]"
+        },
+        "note": "Indexer tensors exist only for CSA layers (compress_ratio==4).",
+        "weights_proj.weight": [
+          64,
+          4096
+        ],
+        "wq_b.weight": [
+          8192,
+          1024
+        ]
+      },
+      "moe": {
+        "experts.{eid}.w1.weight": [
+          2048,
+          4096
+        ],
+        "experts.{eid}.w2.weight": [
+          4096,
+          2048
+        ],
+        "experts.{eid}.w3.weight": [
+          2048,
+          4096
+        ],
+        "gate.bias": [
+          256
+        ],
+        "gate.tid2eid": [
+          129280,
+          6
+        ],
+        "gate.weight": [
+          256,
+          4096
+        ],
+        "shared_experts.w1.weight": [
+          2048,
+          4096
+        ],
+        "shared_experts.w2.weight": [
+          4096,
+          2048
+        ],
+        "shared_experts.w3.weight": [
+          2048,
+          4096
+        ]
+      }
+    },
+    "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (logical/unsharded shapes)",
+    "top_level": {
+      "embed.weight": [
+        129280,
+        4096
+      ],
+      "hc_head_base": [
+        4
+      ],
+      "hc_head_fn": [
+        4,
+        16384
+      ],
+      "hc_head_scale": [
+        1
+      ],
+      "head.weight": [
+        129280,
+        4096
+      ],
+      "norm.weight": [
+        4096
+      ]
+    }
   },
   "tokenizer": {
     "add_bos_token": false,
