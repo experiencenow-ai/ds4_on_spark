@@ -65,6 +65,9 @@ class TraceConfig:
     zipf_alpha: float
     seed: int
     num_layers: int = 1
+    synthetic_score_mode: str = "none"
+    synthetic_cost_scale_mode: str = "none"
+    synthetic_cost_scale_log_sigma: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,9 @@ class HotsetTraceConfig:
     hotset_rotate_every_tokens: int
     seed: int
     num_layers: int = 1
+    synthetic_score_mode: str = "none"
+    synthetic_cost_scale_mode: str = "none"
+    synthetic_cost_scale_log_sigma: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,9 @@ class MarkovTraceConfig:
     stay_prob: float
     seed: int
     num_layers: int = 1
+    synthetic_score_mode: str = "none"
+    synthetic_cost_scale_mode: str = "none"
+    synthetic_cost_scale_log_sigma: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -748,6 +757,31 @@ def _union_candidates_for_layers(layer_candidates: Sequence[Tuple[int, ...]]) ->
     return(tuple(union))
 
 
+def _synthetic_scores_for_candidates(rng: random.Random, candidates: Tuple[int, ...], mode: str) -> Tuple[Tuple[int, ...], Optional[Tuple[float, ...]]]:
+    if mode == "none":
+        return(candidates, None)
+    if mode not in ("random", "router_desc"):
+        raise ValueError("synthetic_score_mode must be one of: none, random, router_desc")
+    scores = [rng.random() for _i in range(len(candidates))]
+    if mode == "router_desc":
+        ranked = [(-float(scores[i]), i, int(candidates[i])) for i in range(len(candidates))]
+        ranked.sort()
+        c_out = [c for _s, _i, c in ranked]
+        s_out = [float(scores[i]) for _s, i, _c in ranked]
+        return(tuple(c_out), tuple(s_out))
+    return(candidates, tuple(float(s) for s in scores))
+
+
+def _synthetic_cost_scale(rng: random.Random, mode: str, log_sigma: float) -> Optional[float]:
+    if mode == "none":
+        return(None)
+    if mode != "lognormal":
+        raise ValueError("synthetic_cost_scale_mode must be one of: none, lognormal")
+    if log_sigma <= 0.0:
+        raise ValueError("synthetic_cost_scale_log_sigma must be > 0 for lognormal cost_scale")
+    return(float(math.exp(rng.gauss(0.0, float(log_sigma)))))
+
+
 def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
     if cfg.num_experts <= 0:
         raise ValueError("num_experts must be > 0")
@@ -769,6 +803,12 @@ def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
         raise ValueError("zipf_alpha must be > 0")
     if cfg.num_layers <= 0:
         raise ValueError("num_layers must be > 0")
+    if cfg.synthetic_score_mode not in ("none", "random", "router_desc"):
+        raise ValueError("synthetic_score_mode must be one of: none, random, router_desc")
+    if cfg.synthetic_cost_scale_mode not in ("none", "lognormal"):
+        raise ValueError("synthetic_cost_scale_mode must be one of: none, lognormal")
+    if cfg.synthetic_cost_scale_mode != "none" and cfg.synthetic_cost_scale_log_sigma <= 0.0:
+        raise ValueError("synthetic_cost_scale_log_sigma must be > 0 when synthetic_cost_scale_mode != none")
 
     rng = random.Random(cfg.seed)
     weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
@@ -777,16 +817,24 @@ def generate_synthetic_trace(cfg: TraceConfig) -> List[TokenRoute]:
     arrivals = _generate_arrival_times_ms(rng, cfg.num_tokens, cfg.arrival_rate_tps, cfg.burst_prob, cfg.burst_scale)
     for t_ms in arrivals:
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
+        cost_scale = _synthetic_cost_scale(rng, cfg.synthetic_cost_scale_mode, cfg.synthetic_cost_scale_log_sigma)
         if cfg.num_layers <= 1:
             candidates = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+            candidates, scores = _synthetic_scores_for_candidates(rng, candidates, cfg.synthetic_score_mode)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates, scores=scores, cost_scale=cost_scale))
         else:
             layer_candidates: List[Tuple[int, ...]] = []
+            layer_scores: List[Optional[Tuple[float, ...]]] = []
             for _li in range(cfg.num_layers):
-                layer_candidates.append(_sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates))
+                lc = _sample_unique_ordered(rng, cfg.num_experts, weights, cfg.num_candidates)
+                lc, ls = _synthetic_scores_for_candidates(rng, lc, cfg.synthetic_score_mode)
+                layer_candidates.append(lc)
+                layer_scores.append(ls)
             union = _union_candidates_for_layers(layer_candidates)
-            layers = tuple(LayerRoute(candidates=lc) for lc in layer_candidates)
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=layers))
+            layers: List[LayerRoute] = []
+            for lc, ls in zip(layer_candidates, layer_scores):
+                layers.append(LayerRoute(candidates=lc, scores=ls))
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=tuple(layers), cost_scale=cost_scale))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -815,6 +863,12 @@ def generate_hotset_trace(cfg: HotsetTraceConfig) -> List[TokenRoute]:
         raise ValueError("hotset_bias must be within [0,1]")
     if cfg.num_layers <= 0:
         raise ValueError("num_layers must be > 0")
+    if cfg.synthetic_score_mode not in ("none", "random", "router_desc"):
+        raise ValueError("synthetic_score_mode must be one of: none, random, router_desc")
+    if cfg.synthetic_cost_scale_mode not in ("none", "lognormal"):
+        raise ValueError("synthetic_cost_scale_mode must be one of: none, lognormal")
+    if cfg.synthetic_cost_scale_mode != "none" and cfg.synthetic_cost_scale_log_sigma <= 0.0:
+        raise ValueError("synthetic_cost_scale_log_sigma must be > 0 when synthetic_cost_scale_mode != none")
 
     rng = random.Random(cfg.seed)
     perm = list(range(cfg.num_experts))
@@ -825,16 +879,24 @@ def generate_hotset_trace(cfg: HotsetTraceConfig) -> List[TokenRoute]:
     for i, t_ms in enumerate(arrivals):
         hotset = _hotset_for_token(perm, cfg.hotset_size, cfg.hotset_rotate_every_tokens, i)
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
+        cost_scale = _synthetic_cost_scale(rng, cfg.synthetic_cost_scale_mode, cfg.synthetic_cost_scale_log_sigma)
         if cfg.num_layers <= 1:
             candidates = _sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates)
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+            candidates, scores = _synthetic_scores_for_candidates(rng, candidates, cfg.synthetic_score_mode)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates, scores=scores, cost_scale=cost_scale))
         else:
             layer_candidates: List[Tuple[int, ...]] = []
+            layer_scores: List[Optional[Tuple[float, ...]]] = []
             for _li in range(cfg.num_layers):
-                layer_candidates.append(_sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates))
+                lc = _sample_hotset_candidates(rng, cfg.num_experts, hotset, cfg.hotset_bias, cfg.num_candidates)
+                lc, ls = _synthetic_scores_for_candidates(rng, lc, cfg.synthetic_score_mode)
+                layer_candidates.append(lc)
+                layer_scores.append(ls)
             union = _union_candidates_for_layers(layer_candidates)
-            layers = tuple(LayerRoute(candidates=lc) for lc in layer_candidates)
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=layers))
+            layers: List[LayerRoute] = []
+            for lc, ls in zip(layer_candidates, layer_scores):
+                layers.append(LayerRoute(candidates=lc, scores=ls))
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=tuple(layers), cost_scale=cost_scale))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -886,6 +948,12 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
         raise ValueError("stay_prob must be within [0,1]")
     if cfg.num_layers <= 0:
         raise ValueError("num_layers must be > 0")
+    if cfg.synthetic_score_mode not in ("none", "random", "router_desc"):
+        raise ValueError("synthetic_score_mode must be one of: none, random, router_desc")
+    if cfg.synthetic_cost_scale_mode not in ("none", "lognormal"):
+        raise ValueError("synthetic_cost_scale_mode must be one of: none, lognormal")
+    if cfg.synthetic_cost_scale_mode != "none" and cfg.synthetic_cost_scale_log_sigma <= 0.0:
+        raise ValueError("synthetic_cost_scale_log_sigma must be > 0 when synthetic_cost_scale_mode != none")
 
     rng = random.Random(cfg.seed)
     weights = _zipf_weights(cfg.num_experts, cfg.zipf_alpha)
@@ -897,18 +965,26 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
         if rng.random() > cfg.stay_prob:
             primary = rng.choices(range(cfg.num_experts), weights=weights, k=1)[0]
         cls = LatencyClass.INTERACTIVE if rng.random() < cfg.interactive_prob else LatencyClass.BATCH
+        cost_scale = _synthetic_cost_scale(rng, cfg.synthetic_cost_scale_mode, cfg.synthetic_cost_scale_log_sigma)
         if cfg.num_layers <= 1:
             others = _sample_unique_ordered_excluding(rng, cfg.num_experts, weights, cfg.num_candidates - 1, excluded=(primary,))
             candidates = (primary,) + others
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates))
+            candidates, scores = _synthetic_scores_for_candidates(rng, candidates, cfg.synthetic_score_mode)
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=candidates, scores=scores, cost_scale=cost_scale))
         else:
             layer_candidates: List[Tuple[int, ...]] = []
+            layer_scores: List[Optional[Tuple[float, ...]]] = []
             for _li in range(cfg.num_layers):
                 others = _sample_unique_ordered_excluding(rng, cfg.num_experts, weights, cfg.num_candidates - 1, excluded=(primary,))
-                layer_candidates.append((primary,) + others)
+                lc = (primary,) + others
+                lc, ls = _synthetic_scores_for_candidates(rng, lc, cfg.synthetic_score_mode)
+                layer_candidates.append(lc)
+                layer_scores.append(ls)
             union = _union_candidates_for_layers(layer_candidates)
-            layers = tuple(LayerRoute(candidates=lc) for lc in layer_candidates)
-            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=layers))
+            layers: List[LayerRoute] = []
+            for lc, ls in zip(layer_candidates, layer_scores):
+                layers.append(LayerRoute(candidates=lc, scores=ls))
+            routes.append(TokenRoute(t_ms=t_ms, cls=cls, candidates=union, layers=tuple(layers), cost_scale=cost_scale))
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -3213,6 +3289,21 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--num-tokens", type=int, default=20000)
     p.add_argument("--num-candidates", type=int, default=16)
     p.add_argument("--num-layers", type=int, default=1, help="Synthetic trace: number of MoE layers per token (1 = candidates only; >1 emits per-layer routing under `layers`).")
+    p.add_argument(
+        "--synthetic-score-mode",
+        type=str,
+        default="none",
+        choices=("none", "random", "router_desc"),
+        help="Synthetic trace: emit per-candidate `scores`. random assigns independent U[0,1) scores; router_desc also reorders candidates by descending score (router-like). Multi-layer traces emit scores under layers[].scores.",
+    )
+    p.add_argument(
+        "--synthetic-cost-scale-mode",
+        type=str,
+        default="none",
+        choices=("none", "lognormal"),
+        help="Synthetic trace: emit per-token `cost_scale`. lognormal draws exp(N(0, sigma)) so median is ~1.0.",
+    )
+    p.add_argument("--synthetic-cost-scale-log-sigma", type=float, default=0.5, help="Synthetic trace: lognormal sigma for --synthetic-cost-scale-mode lognormal (must be >0).")
     p.add_argument("--interactive-prob", type=float, default=0.3)
     p.add_argument("--arrival-rate-tps", type=float, default=5000.0)
     p.add_argument("--arrival-units", type=str, default="steps", help="Interpret --arrival-rate-tps as steps (verify steps) or output_tokens (rescale by expected MTP accept length when enabled). Synthetic traces only.")
@@ -3312,6 +3403,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         trace_meta.update(obj)
 
     if args.trace_jsonl != "" or args.trace_csv != "":
+        if args.synthetic_score_mode.strip().lower() != "none":
+            raise SystemExit("--synthetic-score-mode is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
+        if args.synthetic_cost_scale_mode.strip().lower() != "none":
+            raise SystemExit("--synthetic-cost-scale-mode is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.dump_trace_jsonl.strip() != "" or args.dump_trace_csv.strip() != "":
             raise SystemExit("--dump-trace-* is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.arrival_units.strip().lower() != "steps":
@@ -3386,6 +3481,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 zipf_alpha=args.zipf_alpha,
                 seed=args.seed,
                 num_layers=args.num_layers,
+                synthetic_score_mode=args.synthetic_score_mode.strip().lower(),
+                synthetic_cost_scale_mode=args.synthetic_cost_scale_mode.strip().lower(),
+                synthetic_cost_scale_log_sigma=float(args.synthetic_cost_scale_log_sigma),
             )
             trace = generate_synthetic_trace(trace_cfg)
         elif mode == "hotset":
@@ -3402,6 +3500,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 hotset_rotate_every_tokens=args.hotset_rotate_every_tokens,
                 seed=args.seed,
                 num_layers=args.num_layers,
+                synthetic_score_mode=args.synthetic_score_mode.strip().lower(),
+                synthetic_cost_scale_mode=args.synthetic_cost_scale_mode.strip().lower(),
+                synthetic_cost_scale_log_sigma=float(args.synthetic_cost_scale_log_sigma),
             )
             trace = generate_hotset_trace(trace_cfg)
         elif mode == "markov":
@@ -3417,6 +3518,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 stay_prob=args.markov_stay_prob,
                 seed=args.seed,
                 num_layers=args.num_layers,
+                synthetic_score_mode=args.synthetic_score_mode.strip().lower(),
+                synthetic_cost_scale_mode=args.synthetic_cost_scale_mode.strip().lower(),
+                synthetic_cost_scale_log_sigma=float(args.synthetic_cost_scale_log_sigma),
             )
             trace = generate_markov_trace(trace_cfg)
         else:

@@ -256,6 +256,26 @@ Markov mode creates temporal locality by reusing the previous token's primary ex
 python3 sim/scheduler/scheduler_sim.py --trace-mode markov --markov-stay-prob 0.9 --zipf-alpha 1.1 --json
 ```
 
+### Synthetic Scores and Cost Scaling
+
+To exercise score-aware admission (`--admit-policy score_desc`) before real runtime traces are available, synthetic traces can emit per-candidate `scores`:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode zipf --synthetic-score-mode random --admit-policy score_desc --json
+```
+
+Notes:
+
+- `--synthetic-score-mode random` assigns independent `U[0,1)` scores per candidate while keeping the candidate order unchanged.
+- `--synthetic-score-mode router_desc` also reorders candidates by descending score (router-like), which makes `--admit-policy ordered` and `score_desc` equivalent.
+- When `--num-layers > 1`, scores are emitted under `layers[].scores` (top-level `scores` is omitted).
+
+To explore work-weighted congestion (and `--pending-units work`) on synthetic traces, you can also emit per-token `cost_scale`:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py --trace-mode hotset --synthetic-cost-scale-mode lognormal --pending-units work --json
+```
+
 ### Synthetic Multi-Layer Routes
 
 To approximate multi-MoE-layer models before real quantized-runtime traces are available, synthetic traces can emit per-layer routing:

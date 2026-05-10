@@ -60,6 +60,65 @@ class SchedulerSimTest(unittest.TestCase):
                         seen.add(c)
             self.assertEqual(r.candidates, tuple(union))
 
+    def test_synthetic_trace_score_mode_random_emits_scores(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=6,
+            num_experts=8,
+            num_candidates=4,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            synthetic_score_mode="random",
+        )
+        t0 = scheduler_sim.generate_synthetic_trace(cfg)
+        t1 = scheduler_sim.generate_synthetic_trace(cfg)
+        self.assertEqual(t0, t1)
+        for r in t0:
+            self.assertIsNotNone(r.scores)
+            self.assertEqual(len(r.scores or ()), 4)
+
+    def test_synthetic_trace_multi_layer_score_mode_emits_layer_scores_only(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=5,
+            num_experts=8,
+            num_candidates=3,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            num_layers=3,
+            synthetic_score_mode="random",
+        )
+        trace = scheduler_sim.generate_synthetic_trace(cfg)
+        for r in trace:
+            self.assertIsNone(r.scores)
+            self.assertIsNotNone(r.layers)
+            for lr in r.layers or ():
+                self.assertIsNotNone(lr.scores)
+                self.assertEqual(len(lr.scores or ()), 3)
+
+    def test_synthetic_trace_cost_scale_lognormal_emits_positive(self) -> None:
+        cfg = scheduler_sim.TraceConfig(
+            num_tokens=8,
+            num_experts=8,
+            num_candidates=4,
+            interactive_prob=0.0,
+            arrival_rate_tps=1000.0,
+            burst_prob=0.0,
+            burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+            synthetic_cost_scale_mode="lognormal",
+            synthetic_cost_scale_log_sigma=0.2,
+        )
+        trace = scheduler_sim.generate_synthetic_trace(cfg)
+        self.assertTrue(all(r.cost_scale is not None and float(r.cost_scale) > 0.0 for r in trace))
+
     def test_hotset_trace_deterministic_and_rotates(self) -> None:
         cfg = scheduler_sim.HotsetTraceConfig(
             num_tokens=4,
@@ -215,6 +274,19 @@ class SchedulerSimTest(unittest.TestCase):
             trace = scheduler_sim.load_trace_jsonl(tmp_path, non_route_policy="skip")
             self.assertEqual(len(trace), 1)
             self.assertEqual(trace[0].candidates, (0,))
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_synthetic_score_mode_rejected_in_trace_replay(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0, 1]}))
+            f.write("\n")
+        try:
+            with self.assertRaises(SystemExit):
+                scheduler_sim.main(["--trace-jsonl", tmp_path, "--synthetic-score-mode", "random", "--json"])
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
