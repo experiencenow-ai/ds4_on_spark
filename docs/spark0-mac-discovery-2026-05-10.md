@@ -59,6 +59,12 @@ Refreshed again (11:43Z, matches Spark0 probe refresh, runtime PCI bus id cross-
 REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T114344Z_loop_pci_busid_git1ea8f17.txt
 ```
 
+Refreshed again (13:13Z, matches Spark0 probe refresh, runtime cc max sanity-check):
+
+```bash
+REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local | tee /private/tmp/ds4_mac_spark_discovery_redacted_2026-05-10T1313Z_loop_git_0cd918d.txt
+```
+
 Refreshed again (12:13Z, matches Spark0 probe refresh, toolchain paths + glibc banner):
 
 ```bash
@@ -82,6 +88,17 @@ Notes:
 == meta ==
 Sun May 10 12:44:00 UTC 2026
 git: e8b0486
+targets: aitopatom-9ab9.local spark1.local
+
+== known target checks ==
+aitopatom-9ab9.local: ssh reachable
+spark1.local: not reachable
+```
+
+```text
+== meta ==
+Sun May 10 13:13:06 UTC 2026
+git: 0cd918d
 targets: aitopatom-9ab9.local spark1.local
 
 == known target checks ==

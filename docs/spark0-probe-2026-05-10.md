@@ -77,6 +77,12 @@ Additional probe run (12:43Z refresh, `nvidia-smi -q` C2C summary):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
 ```
 
+Additional probe run (13:13Z refresh, runtime max cc sanity-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1313Z_loop_runtime_ccmax_git_0cd918d.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -579,6 +585,14 @@ device0 name: NVIDIA GB10
 device0 cc: 12.1
 device0 global mem (bytes): 128518373376
 device0 sms: 48
+```
+
+```text
+== cuda runtime probe (nvcc, no deps) ==
+nvcc arch: sm_121
+cuda devices: 1
+device0 cc: 12.1
+runtime max cc: 12.1
 ```
 
 ```text

@@ -92,6 +92,12 @@ Refreshed again (12:43Z, `nvidia-smi -q` C2C summary):
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1246Z_loop_c2csummary_git_e8b0486.txt
 ```
 
+Refreshed again (13:13Z, runtime max cc sanity-check):
+
+```bash
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_redacted_2026-05-10T1313Z_loop_runtime_ccmax_git_0cd918d.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)
@@ -104,7 +110,7 @@ High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-1
 - GPU: `NVIDIA GB10`
 - Driver (nvidia-smi): `580.142`
 - CUDA version reported by nvidia-smi: `13.0`
-- CUDA compute capability: `12.1` (nvidia-smi + nvcc runtime probe)
+- CUDA compute capability: `12.1` (nvidia-smi + nvcc runtime probe; probe also prints `runtime max cc: 12.1`)
 - CUDA runtime probe prints `device0 pci bus id: 000F:01:00.0`, matching `nvidia-smi` `pci.bus_id` (`0000000F:01:00.0`)
 - CUDA toolkit (nvcc): 13.0 (V13.0.88), `nvcc` at `/usr/local/cuda/bin/nvcc` (not on default `PATH`)
 - `nvcc --list-gpu-code` includes `sm_121`, matching the observed compute capability (`12.1`) and `NVCC_ARCH=sm_121` probe default
