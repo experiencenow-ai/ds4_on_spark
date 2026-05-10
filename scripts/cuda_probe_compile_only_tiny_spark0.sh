@@ -145,6 +145,17 @@ else
 			echo \"gencode_compute_121: FAILED rc=\$rc\"
 			head -n 40 bin/cuda_gencode_compute_121_compile_probe.err || true
 		fi
+
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=[sm_121,compute_121]\" -c -o bin/cuda_gencode_sm_121_plus_compute_121_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_gencode_sm_121_plus_compute_121_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_sm_121_plus_compute_121: OK\"
+		else
+			echo \"gencode_sm_121_plus_compute_121: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_gencode_sm_121_plus_compute_121_compile_probe.err || true
+		fi
 	else
 		echo \"(nvcc --list-gpu-arch missing compute_121; skipping gencode)\"
 	fi
@@ -236,6 +247,23 @@ fi
 				echo \"ptx_target_gencode_ptx_only: \${ptx_target_line}\"
 			else
 				echo \"ptx_embed_gencode_ptx_only: MISSING\" >&2
+			fi
+		fi
+
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=[sm_121,compute_121]\" -fatbin -o bin/cuda_gencode_sm_plus_ptx_list.fatbin src/cuda_sm121_probe.cu 2>bin/cuda_gencode_sm_plus_ptx_list.err
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"(nvcc -fatbin -gencode code=[sm_121,compute_121] failed rc=\$rc)\" >&2
+			head -n 40 bin/cuda_gencode_sm_plus_ptx_list.err || true
+		else
+			ptx_target_line=\$(\$CUOBJDUMP --dump-ptx bin/cuda_gencode_sm_plus_ptx_list.fatbin 2>/dev/null | grep \"^\\\\.target\" | head -n 1 || true)
+			if [ \"\${ptx_target_line}\" != \"\" ]; then
+				echo \"ptx_embed_gencode_sm_plus_ptx_list: PRESENT (expected)\"
+				echo \"ptx_target_gencode_sm_plus_ptx_list: \${ptx_target_line}\"
+			else
+				echo \"ptx_embed_gencode_sm_plus_ptx_list: MISSING\" >&2
 			fi
 		fi
 

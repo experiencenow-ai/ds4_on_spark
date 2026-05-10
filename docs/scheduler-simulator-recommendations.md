@@ -139,6 +139,29 @@ Key signals to inspect (from the report JSON):
 
 Recommendation (synthetic): default to **`k_signal=global`** (or `candidates`) until real traces are replayed. In this overload regime, `k_signal=class` can over-admit interactive work and amplify interactive SLA violations even when a reservation is present.
 
+## Candidate Admission Policy (Load Skew)
+
+Scenario: a worst-case burst where every token arrives at the same timestamp and shares the same candidate set (`candidates=[0..7]`). Batch K is fixed at `2` so the only difference is *which* two experts are chosen from the candidate list.
+
+Compare `admit_policy`:
+
+- `ordered` (router order; default)
+- `least_pending` (pick the least-pending experts among candidates)
+
+Key signals (from the report JSON):
+
+- `expert_tasks_started_gini` (lower is more balanced):
+  - `ordered`: `0.75`
+  - `least_pending`: `0.0`
+- `expert_tasks_started_top1_frac` (lower is more balanced):
+  - `ordered`: `0.5`
+  - `least_pending`: `0.125`
+- `makespan_ms` (lower is faster completion under burst):
+  - `ordered`: `256.0`
+  - `least_pending`: `64.0`
+
+Recommendation (synthetic): keep `ordered` as the default to respect router preference ordering, but keep `least_pending` available as an experiment for hot-expert regimes. Validate on real quantized-runtime traces before enabling because changing admission order could change routing quality (and potentially output).
+
 ## Batch Starvation Knobs (hi_burst vs promote_ms)
 
 Scenario: mixed load with more uniform routing (low Zipf skew) to isolate service-discipline effects. Strict priority can starve batch tasks even when interactive latency is healthy.

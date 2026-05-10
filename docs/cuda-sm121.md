@@ -8,6 +8,7 @@ For reproducible builds targeting GB10:
 
 - Prefer `-arch=sm_121`, or
 - Use explicit `-gencode` (for example: `-gencode arch=compute_121,code=sm_121` for SASS, and add `-gencode arch=compute_121,code=compute_121` when you want embedded PTX for JIT portability).
+- `nvcc` also supports a bracket-list syntax for multi-code builds (for example: `-gencode arch=compute_121,code=[sm_121,compute_121]`). `scripts/cuda_probe_compile_only_tiny_spark0.sh` includes a best-effort compile-only probe for this form when `compute_121` is advertised.
 - The probe `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is built via explicit `-gencode` and includes both `sm_120` + `sm_121` SASS plus `compute_121` PTX as a “portable fatbin” reference.
 
 For convenience on single-GPU bring-up:
@@ -27,6 +28,8 @@ Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` i
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
 When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
+
+For an end-to-end “PTX → driver/runtime JIT → run” gate, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also builds and runs the same minimal probe via `-arch=compute_121` when `compute_121` is advertised.
 
 ### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
 
