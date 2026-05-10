@@ -16,18 +16,14 @@ It validates:
 - the exact expected 32 tensor names under `mtp.0.*` (same list as the pinned `antirez/ds4` binder; see `docs/mtp-ds4-reference.md`)
 - light self-consistency checks derived only from the tensor shapes
 
+When `--json` is used, the probe also emits a per-tensor `tensors[]` table (name, presence, ggml type code, dims, byte size, payload offset, and `has_data` when `--load-weights` is enabled). This is intended as a stable “binder inventory” for downstream loader work.
+
 It does **not** require loading the trunk GGUF. By default it does **not** read tensor payloads into RAM (uses `gguf_init_from_file(..., no_alloc=true)` with a meta-only ggml context). When `--payload-sample-bytes N` is set, it reads only `N` bytes per tensor payload (via file seeks) and emits `fnv1a64` sample hashes.
 
 ## Patch
 
 - Patch file: `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
 - Target upstream: `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` at commit `9222e55`
-
-Local sanity check (ensures the patch hunk is not truncated):
-
-```bash
-python3 scripts/verify_llamacpp_mtp_sidecar_probe_patch.py --patch docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch
-```
 
 ## Apply + build (Spark)
 
