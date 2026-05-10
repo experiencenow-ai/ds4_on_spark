@@ -376,6 +376,13 @@ fi
 					printf "%s\n" "$pcie_q" | awk -F"," "{ b=\$2; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", b); gmax=\$3; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", gmax); gcur=\$4; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", gcur); wmax=\$5; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", wmax); wcur=\$6; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", wcur); printf \"%s\\t%s\\t%s\\t%s\\t%s\\n\", b,gmax,gcur,wmax,wcur; }" | while IFS="$(printf \"\\t\")" read -r bus gmax gcur wmax wcur; do
 						smi_q_pcie_warn "$bus" "$gmax" "$gcur" "$wmax" "$wcur"
 					done
+					extra_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max --format=csv,noheader,nounits 2>/dev/null || true)"
+					if [ "$extra_q" != "" ] && ! printf "%s" "$extra_q" | grep -qi "not a valid field"; then
+						echo
+						echo "== nvidia-smi pcie link (gpu/host max, optional${label}) =="
+						echo "columns: index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max"
+						echo "$extra_q"
+					fi
 				fi
 			else
 				echo "pcie link query not supported"
