@@ -2625,6 +2625,28 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["candidates"], [0])
 
+    def test_trace_extract_default_cls_fills_missing_cls(self) -> None:
+        obj = {"t_ms": 0.0, "candidates": [0]}
+        self.assertIsNone(trace_extract.extract_route_record(obj))
+        rec = trace_extract.extract_route_record(obj, default_cls="batch")
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["cls"], "batch")
+
+    def test_trace_load_jsonl_runtime_default_cls_allows_missing_cls(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "candidates": [0]}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, input_format="runtime", non_route_policy="error", default_cls="interactive")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_trace_extract_non_json_line_skip_ignores(self) -> None:
         out = trace_extract.extract_jsonl_lines(
             [
@@ -2737,6 +2759,7 @@ class SchedulerSimTest(unittest.TestCase):
         out = trace_sweep.run_trace_sweeps(trace, base_cfg, trace_meta={"note": "unit_test"}, max_tokens=200)
         scenarios = out.get("scenarios", {})
         self.assertIn("k_signal_policy", scenarios)
+        self.assertIn("adaptive_k_policy", scenarios)
         self.assertIn("starvation_knobs", scenarios)
         self.assertIn("expert_queue_max_sweep", scenarios)
         self.assertIn("expert_queue_reserve_sweep", scenarios)
@@ -2747,6 +2770,10 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("baseline", ksig)
         self.assertIn("variants", ksig)
         self.assertIn("k_signal_global", ksig["variants"])
+
+        adaptive = scenarios["adaptive_k_policy"]["results"]["variants"]
+        self.assertIn("k_fixed_min", adaptive)
+        self.assertIn("k_fixed_max", adaptive)
 
         reserve = scenarios["expert_queue_reserve_sweep"]["results"]["variants"]
         self.assertIn("reserve_0", reserve)

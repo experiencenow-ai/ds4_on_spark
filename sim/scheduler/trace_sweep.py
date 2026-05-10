@@ -91,6 +91,53 @@ def run_trace_sweeps(
         "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_k_signal),
     }
 
+    ak = base_cfg.adaptive_k
+    q_low = int(ak.q_low)
+    q_high = int(ak.q_high)
+    fixed_min_variants: List[Tuple[str, Dict[str, object]]] = [
+        (
+            "k_fixed_min",
+            {
+                "adaptive_k.k_min_interactive": int(ak.k_min_interactive),
+                "adaptive_k.k_max_interactive": int(ak.k_min_interactive),
+                "adaptive_k.k_min_batch": int(ak.k_min_batch),
+                "adaptive_k.k_max_batch": int(ak.k_min_batch),
+                "adaptive_k.q_low": 0,
+                "adaptive_k.q_high": 0,
+            },
+        ),
+        (
+            "k_fixed_max",
+            {
+                "adaptive_k.k_min_interactive": int(ak.k_max_interactive),
+                "adaptive_k.k_max_interactive": int(ak.k_max_interactive),
+                "adaptive_k.k_min_batch": int(ak.k_max_batch),
+                "adaptive_k.k_max_batch": int(ak.k_max_batch),
+                "adaptive_k.q_low": 0,
+                "adaptive_k.q_high": 0,
+            },
+        ),
+    ]
+
+    threshold_variants: List[Tuple[str, Dict[str, object]]] = []
+    if q_high > 0:
+        tight_q_low = max(1, (q_low // 2)) if q_low > 0 else 1
+        tight_q_high = max(tight_q_low, (q_high // 2))
+        loose_q_low = (q_low * 2) if q_low > 0 else 1
+        loose_q_high = max(loose_q_low, (q_high * 2))
+        threshold_variants = [
+            ("adaptive_q_tight", {"adaptive_k.q_low": int(tight_q_low), "adaptive_k.q_high": int(tight_q_high)}),
+            ("adaptive_q_loose", {"adaptive_k.q_low": int(loose_q_low), "adaptive_k.q_high": int(loose_q_high)}),
+        ]
+
+    variants_adaptive_k = fixed_min_variants + threshold_variants
+    scenarios["adaptive_k_policy"] = {
+        "name": "adaptive_k_policy",
+        "base_cfg": dataclasses.asdict(base_cfg),
+        "variants": variants_adaptive_k,
+        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_adaptive_k),
+    }
+
     variants_starvation: List[Tuple[str, Dict[str, object]]] = [
         ("strict_priority", {"hi_burst": 0, "promote_ms": 0.0}),
         ("hi_burst_16", {"hi_burst": 16, "promote_ms": 0.0}),
@@ -135,6 +182,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--trace-input-format", type=str, default="runtime", choices=("strict", "runtime"))
     p.add_argument("--trace-non-route", type=str, default="skip", choices=("skip", "error"))
     p.add_argument("--trace-route-type", type=str, default="", help="Runtime-format trace: only accept records with obj.type == this value (empty = accept all).")
+    p.add_argument("--trace-default-cls", type=str, default="", help="Optional: force a default cls (interactive or batch) when trace records omit it.")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file merged into trace_meta.")
     p.add_argument("--trace-derive-cost-scale", type=str, default="none", choices=("none", "kv_tokens_p50", "decode_ms_p50"))
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace time by 1/speedup (>= 1 makes arrivals faster).")
@@ -201,6 +249,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         non_route_policy=args.trace_non_route.strip().lower(),
         input_format=args.trace_input_format.strip().lower(),
         route_type=args.trace_route_type.strip(),
+        default_cls=args.trace_default_cls,
     )
     if args.trace_speedup != 1.0:
         trace = scheduler_sim.scale_trace_speedup(trace, float(args.trace_speedup))

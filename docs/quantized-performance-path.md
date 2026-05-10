@@ -97,6 +97,12 @@ To run a small set of trace-backed go/no-go sweeps (expert queue max, reservatio
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
 ```
 
+If the runtime trace does not tag `cls`, force a default for replay:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
+```
+
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
 
 ```bash

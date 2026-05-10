@@ -1118,6 +1118,7 @@ def load_trace_jsonl(
     non_route_policy: str = "error",
     input_format: str = "strict",
     route_type: str = "",
+    default_cls: str = "",
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
@@ -1170,7 +1171,7 @@ def load_trace_jsonl(
             if input_format == "runtime":
                 from sim.scheduler import trace_extract
 
-                rec = trace_extract.extract_route_record(obj, route_type=route_type)
+                rec = trace_extract.extract_route_record(obj, route_type=route_type, default_cls=default_cls)
                 if rec is None:
                     if non_route_policy == "skip":
                         continue
@@ -1192,6 +1193,8 @@ def load_trace_jsonl(
                     raise ValueError(f"{display_path}:{lineno}: t_ms is not valid with time_mode=dt_ms")
                 if "dt_ms" not in obj:
                     raise ValueError(f"{display_path}:{lineno}: missing dt_ms")
+            if "cls" not in obj and default_cls.strip() != "":
+                obj["cls"] = default_cls.strip().lower()
             if "cls" not in obj:
                 if non_route_policy == "skip" and "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
                     continue
@@ -3624,6 +3627,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="JSONL trace input format: strict expects the simulator contract; runtime applies the trace extractor's alias mapping first (useful for mixed/alias-heavy runtime logs).",
     )
     p.add_argument("--trace-route-type", type=str, default="", help="JSONL runtime-format trace: only accept records with obj.type == trace-route-type (empty = accept all).")
+    p.add_argument(
+        "--trace-default-cls",
+        type=str,
+        default="",
+        help="Optional: when trace records omit cls/latency class, treat all routes as this value (interactive or batch). Useful for early runtime traces that do not tag QoS.",
+    )
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -3807,6 +3816,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 non_route_policy=args.trace_non_route.strip().lower(),
                 input_format=args.trace_input_format.strip().lower(),
                 route_type=args.trace_route_type.strip(),
+                default_cls=args.trace_default_cls,
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())

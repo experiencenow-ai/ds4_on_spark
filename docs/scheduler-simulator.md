@@ -191,6 +191,12 @@ For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sw
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
 ```
 
+If early runtime traces do not tag latency class (`cls`), force a default class for replay:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
+```
+
 The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, and `{pending,hi_queue,lo_queue}_depth_time_weighted_p95`). For multi-layer traces, it also reports layer-local drop/skip signals via `skipped_stage_frac*` and `skipped_stages_backpressure`.
 
 When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size percentiles for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) and `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed, when present).
