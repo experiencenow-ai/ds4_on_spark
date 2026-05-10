@@ -737,18 +737,27 @@ if [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
     LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR="$OUT_DIR/spark_llamacpp_server_throughput_sweep_artifacts"
     fetch_remote_artifacts "$target" "$REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR" "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR" "llamacpp_server_throughput_sweep" || true
 
-    {
-        echo "## llama-server throughput sweep (Spark)"
-        echo
-        echo "- ssh_exit_code: $rc_llama_server_throughput_sweep"
-        echo "- spark_out_dir: $REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR"
-        echo "- spark_artifacts_local: $LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR"
-        echo
-        echo "Full logs:"
-        echo
-        echo "- stdout: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stdout.txt"
-        echo "- stderr: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stderr.txt"
-        echo
+	    {
+	        echo "## llama-server throughput sweep (Spark)"
+	        echo
+	        echo "- ssh_exit_code: $rc_llama_server_throughput_sweep"
+	        echo "- spark_out_dir: $REMOTE_LLAMA_SERVER_THROUGHPUT_SWEEP_OUT_DIR"
+	        echo "- spark_artifacts_local: $LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR"
+	        echo
+	        if [ -f "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR/throughput_sweep.md" ]; then
+	            echo "Artifacts summary (throughput_sweep.md head):"
+	            echo
+	            echo '```'
+	            sed -n '1,200p' "$LLAMA_SERVER_THROUGHPUT_SWEEP_ARTIFACT_DIR/throughput_sweep.md" || true
+	            echo '```'
+	            echo
+	        fi
+	        echo
+	        echo "Full logs:"
+	        echo
+	        echo "- stdout: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stdout.txt"
+	        echo "- stderr: $OUT_DIR/remote_llamacpp_server_throughput_sweep_stderr.txt"
+	        echo
         echo "Stdout (head):"
         echo
         echo '```'

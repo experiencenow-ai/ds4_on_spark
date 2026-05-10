@@ -437,11 +437,11 @@ def write_summary(path, combos, meta, best=None, best_by_concurrency=None):
                 f.write("```json\n")
                 f.write(json.dumps(best_by_concurrency[conc], indent=2, sort_keys=True))
                 f.write("\n```\n\n")
-        f.write("| parallel | batch | ubatch | prompt_words | concurrency | repeats | ok | errors | wall_s | agg_prompt_tok_s | agg_gen_tok_s |\n")
-        f.write("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+        f.write("| parallel | batch | ubatch | prompt_words | concurrency | repeats | ok | errors | wall_s | agg_prompt_tok_s | agg_gen_tok_s | fattn_disabled | fattn_backend0_only | multislot_sched_reserve_fail |\n")
+        f.write("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: |\n")
         for c in combos:
             f.write(
-                "| %s | %s | %s | %s | %s | %s | %s | %s | %.6f | %s | %s |\n"
+                "| %s | %s | %s | %s | %s | %s | %s | %s | %.6f | %s | %s | %s | %s | %s |\n"
                 % (
                     c.get("parallel", "NA"),
                     c.get("batch", "NA"),
@@ -454,8 +454,59 @@ def write_summary(path, combos, meta, best=None, best_by_concurrency=None):
                     float(c.get("wave_wall_s", 0.0)),
                     "%.6f" % float(c["agg_prompt_tok_s"]) if c.get("agg_prompt_tok_s") is not None else "NA",
                     "%.6f" % float(c["agg_generated_tok_s"]) if c.get("agg_generated_tok_s") is not None else "NA",
+                    "Y" if bool(c.get("fattn_seen_disabled")) else "N",
+                    "Y" if bool(c.get("fattn_backend0_only")) else "N",
+                    "Y" if bool(c.get("multislot_seen_sched_reserve_fail")) else "N",
                 )
             )
+
+
+def compact_fattn(fattn):
+    if not isinstance(fattn, dict):
+        return {}
+    out = {}
+    for k in (
+        "seen_fattn_disabled",
+        "seen_sched_reserve_cpu_fattn",
+        "fattn_line_count",
+        "fattn_node_unique",
+        "fattn_id_min",
+        "fattn_id_max",
+        "fattn_id_span",
+        "fattn_id_missing_count",
+        "fattn_expected_id_0_42_ok",
+        "fattn_backend_unique",
+        "fattn_backend0_only",
+        "fattn_expected_backend0_ok",
+        "fattn_cuda_device_unique",
+        "fattn_cuda_device0_only",
+        "fattn_expected_cuda_device0_ok",
+        "sched_reserve_line_count",
+        "sched_reserve_graph_nodes",
+        "sched_reserve_graph_splits",
+        "sched_reserve_took_ms",
+        "node_kind_unique",
+        "node_kind_cpu_top",
+        "node_kind_cuda_top",
+    ):
+        if k in fattn:
+            out[k] = fattn.get(k)
+    return out
+
+
+def compact_multislot(ms):
+    if not isinstance(ms, dict):
+        return {}
+    out = {}
+    for k in (
+        "seen_sched_reserve_fail",
+        "seen_reshape_3d",
+        "seen_n_comp_visible_le_n_comp_cache",
+        "seen_assert",
+    ):
+        if k in ms:
+            out[k] = ms.get(k)
+    return out
 
 
 def main():
@@ -642,6 +693,7 @@ def main():
                             "ubatch": ubval if ubval is not None else "NA",
                             "server_args": " ".join(shlex.quote(x) for x in server_args),
                         }
+                        combo_rows = []
 
                         try:
                             load_s, health = wait_health(base_url, wait_timeout_s, poll_s)
@@ -672,20 +724,7 @@ def main():
                                         row["ubatch"] = combo_meta["ubatch"]
                                         row["server_args"] = combo_meta["server_args"]
                                         row["repeats"] = repeats
-                                        rf.write(json.dumps(row, sort_keys=True) + "\n")
-                                        rf.flush()
-                                        combos_out.append(row)
-                                        if best is None or score_row(row) > score_row(best):
-                                            best = row
-                                        try:
-                                            conc_key = int(row.get("concurrency"))
-                                        except Exception:
-                                            conc_key = None
-                                        if conc_key is not None:
-                                            prev = best_by_concurrency.get(conc_key)
-                                            if prev is None or score_row(row) > score_row(prev):
-                                                best_by_concurrency[conc_key] = row
-                                        print(json.dumps(row, sort_keys=True), flush=True)
+                                        combo_rows.append(row)
                             if scrape_metrics != 0 and os.path.exists(combo_dir):
                                 try:
                                     txt = http_text("GET", base_url + "/metrics", None, timeout=metrics_timeout_s)
@@ -706,22 +745,46 @@ def main():
                                 "server_args": combo_meta["server_args"],
                                 "repeats": repeats,
                             }
-                            rf.write(json.dumps(err_row, sort_keys=True) + "\n")
-                            rf.flush()
-                            combos_out.append(err_row)
-                            print(json.dumps(err_row, sort_keys=True), flush=True)
+                            combo_rows.append(err_row)
+
+                        fattn = None
+                        ms = None
                         try:
                             fattn = scan_fattn_reservation(server_log)
                             with open(fattn_probe_path, "w", encoding="utf-8") as pf:
                                 json.dump(fattn, pf, indent=2, sort_keys=True)
                         except Exception:
-                            pass
+                            fattn = None
                         try:
                             ms = scan_multislot_reservation(server_log)
                             with open(multislot_probe_path, "w", encoding="utf-8") as pf:
                                 json.dump(ms, pf, indent=2, sort_keys=True)
                         except Exception:
-                            pass
+                            ms = None
+
+                        fattn_c = compact_fattn(fattn or {})
+                        ms_c = compact_multislot(ms or {})
+                        for row in combo_rows:
+                            row["fattn_probe"] = fattn_c
+                            row["multislot_probe"] = ms_c
+                            row["fattn_seen_disabled"] = bool(fattn_c.get("seen_fattn_disabled"))
+                            row["fattn_backend0_only"] = bool(fattn_c.get("fattn_backend0_only"))
+                            row["multislot_seen_sched_reserve_fail"] = bool(ms_c.get("seen_sched_reserve_fail"))
+
+                            rf.write(json.dumps(row, sort_keys=True) + "\n")
+                            rf.flush()
+                            combos_out.append(row)
+                            if best is None or score_row(row) > score_row(best):
+                                best = row
+                            try:
+                                conc_key = int(row.get("concurrency"))
+                            except Exception:
+                                conc_key = None
+                            if conc_key is not None:
+                                prev = best_by_concurrency.get(conc_key)
+                                if prev is None or score_row(row) > score_row(prev):
+                                    best_by_concurrency[conc_key] = row
+                            print(json.dumps(row, sort_keys=True), flush=True)
                         if start_server != 0 and restart_per_combo != 0:
                             stop_server(proc, log_fp)
                             if proc is global_server_proc:
