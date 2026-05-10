@@ -534,7 +534,7 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 	n_routed_experts = moe.get("n_routed_experts", None)
 
 	if not isinstance(required_top_level, list) or not isinstance(required_layer_suffixes, list):
-		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_* lists"}
+		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_top_level or tensor_keys.required_layer_suffixes"}
 	if not isinstance(required_nonzero, list) or not isinstance(required_ratio4, list):
 		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_layer_suffixes_compress_ratio_* lists"}
 	if not isinstance(compress_ratios, list):
@@ -758,7 +758,7 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 	n_routed_experts = moe.get("n_routed_experts", None)
 
 	if not isinstance(required_layer_suffixes, list) or not isinstance(required_mtp_additional_suffixes, list):
-		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_* lists"}
+		return {"checked": False, "reason": "contract_summary missing tensor_keys.required_layer_suffixes or tensor_keys.required_mtp_additional_suffixes"}
 	try:
 		n_routed_experts_i = int(n_routed_experts)
 	except Exception:
