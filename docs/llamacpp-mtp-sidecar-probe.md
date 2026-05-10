@@ -23,6 +23,12 @@ It does **not** require loading the trunk GGUF. By default it does **not** read 
 - Patch file: `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
 - Target upstream: `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` at commit `9222e55`
 
+Local sanity check (ensures the patch hunk is not truncated):
+
+```bash
+python3 scripts/verify_llamacpp_mtp_sidecar_probe_patch.py --patch docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch
+```
+
 ## Apply + build (Spark)
 
 ```bash
