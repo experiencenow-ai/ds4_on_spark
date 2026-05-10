@@ -658,6 +658,7 @@ int main()
 	cudaDeviceProp prop;
 	int runtime_v = 0,driver_v = 0;
 	int drv_major = 0,drv_minor = 0,rt_major = 0,rt_minor = 0;
+	char pci_bus_id[64];
 	if ( cudaGetDeviceCount(&device_count) != cudaSuccess )
 	{
 		std::printf("cudaGetDeviceCount failed\n");
@@ -685,6 +686,11 @@ int main()
 		std::printf("device%d cc: %d.%d\n",dev,prop.major,prop.minor);
 		std::printf("device%d global mem (bytes): %llu\n",dev,(unsigned long long)prop.totalGlobalMem);
 		std::printf("device%d sms: %d\n",dev,prop.multiProcessorCount);
+		pci_bus_id[0] = 0;
+		if ( cudaDeviceGetPCIBusId(pci_bus_id,(int)sizeof(pci_bus_id),dev) == cudaSuccess )
+			std::printf("device%d pci bus id: %s\n",dev,pci_bus_id);
+		else
+			std::printf("device%d pci bus id: (unavailable)\n",dev);
 	}
 	return(0);
 }
