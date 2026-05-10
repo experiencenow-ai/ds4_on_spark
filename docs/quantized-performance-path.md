@@ -74,6 +74,8 @@ Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realist
 
 Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
 
+Tip: when `cost_scale` is meaningful (synthetic or replayed), consider `--backpressure-units work` so backpressure reflects weighted expert work instead of raw task counts.
+
 Synthetic recommendations (reservation + MTP breakeven) are tracked in:
 
 - `docs/scheduler-simulator-recommendations.md`
@@ -95,7 +97,7 @@ For concise loop output, use `--summary-json`:
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
 ```
 
-To run a small set of trace-backed go/no-go sweeps (expert queue max, reservation, k-signal policy, admit policy, starvation knobs, expert batching, optional pending-units, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep), use:
+To run a small set of trace-backed go/no-go sweeps (expert queue max, reservation, k-signal policy, admit policy, starvation knobs, expert batching, optional pending-units and backpressure-units when `cost_scale` is present, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep), use:
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
@@ -181,7 +183,7 @@ Trace JSONL fields:
 - `expert_batch_size`: optional observed expert batch size (the simulator summarizes this under `trace.expert_batch_size` when present)
 - (optional) metadata: JSONL meta records like `{"type":"meta","meta":{...}}` are accepted and ignored by replay; you can also supply a sidecar metadata JSON via `--trace-meta-json`
 
-If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts.
+If you emit meaningful `cost_scale` (or per-layer `layers[].cost_scale`), consider using `--pending-units work` so adaptive-K reacts to *work* rather than raw task counts, and `--backpressure-units work` so backpressure capacity is enforced in the same units.
 
 If the runtime can log `kv_tokens` or `decode_ms` but cannot easily log `cost_scale`, the scheduler simulator can derive a simple `cost_scale` proxy during replay/canonicalization via `--trace-derive-cost-scale {kv_tokens_p50,decode_ms_p50}`.
 

@@ -156,6 +156,7 @@ class SimConfig:
     k_mode: str = "controller"
     k_signal: str = "global"
     pending_units: str = "tasks"
+    backpressure_units: str = "tasks"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -289,6 +290,7 @@ class SimMetrics:
     makespan_ms: float = 0.0
     k_mode: str = "controller"
     pending_units: str = "tasks"
+    backpressure_units: str = "tasks"
     tasks_started_per_expert: List[int] = dataclasses.field(default_factory=list)
     starved_tasks_started_per_expert: List[int] = dataclasses.field(default_factory=list)
     max_task_queue_wait_ms_per_expert: List[float] = dataclasses.field(default_factory=list)
@@ -501,6 +503,7 @@ class SimMetrics:
                 "sim": {
                     "num_tokens": self.num_tokens,
                     "makespan_ms": self.makespan_ms,
+                    "backpressure_units": self.backpressure_units,
                     "token_throughput_tps": (float(self.num_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                     "task_throughput_tps": (float(self.admitted_tasks) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                 },
@@ -2424,6 +2427,18 @@ def _expert_queue_pending_limit(cfg: SimConfig, cls: LatencyClass) -> int:
     return(limit)
 
 
+def _expert_queue_pending_limit_units(cfg: SimConfig, cls: LatencyClass, backpressure_units: str) -> float:
+    if backpressure_units == "tasks":
+        return(float(_expert_queue_pending_limit(cfg, cls)))
+
+    if cls == LatencyClass.INTERACTIVE:
+        return(float(cfg.expert_queue_max))
+    limit = (float(cfg.expert_queue_max) - float(cfg.expert_queue_reserve_interactive))
+    if limit < 0.0:
+        return(0.0)
+    return(float(limit))
+
+
 def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
     if admit_policy == "ordered":
         return(candidates)
@@ -2756,6 +2771,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     if pending_units not in ("tasks", "work"):
         raise ValueError("pending_units must be 'tasks' or 'work'")
 
+    backpressure_units = cfg.backpressure_units.strip().lower()
+    if backpressure_units not in ("tasks", "work"):
+        raise ValueError("backpressure_units must be 'tasks' or 'work'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -2863,6 +2882,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         num_tokens=len(trace),
         k_mode=k_mode,
         pending_units=pending_units,
+        backpressure_units=backpressure_units,
         tasks_started_per_expert=[0 for _ in range(cfg.num_experts)],
         starved_tasks_started_per_expert=[0 for _ in range(cfg.num_experts)],
         max_task_queue_wait_ms_per_expert=[0.0 for _ in range(cfg.num_experts)],
@@ -2957,7 +2977,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
             last_hi_queue[e] = len(experts[e].hi)
             last_lo_queue[e] = len(experts[e].lo)
             last_inflight[e] = experts[e].in_flight
-            last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
+            if backpressure_units == "work":
+                last_saturated[e] = 1 if last_pending_work[e] >= float(cfg.expert_queue_max) else 0
+            else:
+                last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             last_pending_mtp_draft[e] = experts[e].pending_mtp_draft()
             last_pending_mtp_verify[e] = experts[e].pending_mtp_verify()
             if last_pending[e] > metrics.max_pending_per_expert[e]:
@@ -3093,12 +3116,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
         route = trace[tid]
         admitted = 0
-        pending_limit = _expert_queue_pending_limit(cfg, route.cls)
+        pending_limit = _expert_queue_pending_limit_units(cfg, route.cls, backpressure_units)
         for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores):
             if admitted >= stage.k:
                 break
             eq = experts[expert_id]
-            if eq.pending() >= pending_limit:
+            if backpressure_units == "work":
+                pending_now = float(eq.pending_work())
+            else:
+                pending_now = float(eq.pending())
+            if pending_now >= float(pending_limit):
                 metrics.dropped_tasks_backpressure += 1
                 if route.cls == LatencyClass.INTERACTIVE:
                     metrics.dropped_tasks_backpressure_interactive += 1
@@ -4131,6 +4158,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Adaptive-K congestion signal: global (max total pending across all experts), candidates (max total pending among this token's candidates), or class (max pending in this token's latency-class queue + in-flight across all experts).",
     )
     p.add_argument("--pending-units", type=str, default="tasks", help="Adaptive-K pending units: tasks (default) uses outstanding task counts; work uses sum(cost_scale) of queued + in-flight work per expert.")
+    p.add_argument(
+        "--backpressure-units",
+        type=str,
+        default="tasks",
+        help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
+    )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
@@ -4393,6 +4426,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_mode=args.k_mode,
         k_signal=args.k_signal,
         pending_units=args.pending_units,
+        backpressure_units=args.backpressure_units,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,

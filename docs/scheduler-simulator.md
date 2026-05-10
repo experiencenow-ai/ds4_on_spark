@@ -38,6 +38,10 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
+By default, backpressure is enforced in *task* units (each admitted expert task counts as `1`). When traces include a meaningful `cost_scale` (or `layers[].cost_scale`), you can instead enforce backpressure in *work* units via:
+
+- `--backpressure-units work`: cap `sum(cost_scale)` of queued + in-flight work per expert (still using `--expert-queue-max` / `--expert-queue-reserve-interactive` as the capacity in the same units)
+
 To prevent batch traffic from fully consuming that queue capacity, you can reserve
 per-expert headroom for interactive tasks:
 
@@ -189,7 +193,7 @@ python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_d
 
 Note: when replaying a trace that already contains `mtp_accept_len` / `accepted_mtp` / `rejected_mtp`, `mtp_off` variants run with those fields ignored (stripped) so you can do an on/off comparison in one invocation.
 
-For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sweeps (expert queue max, reservation, `k_signal`, admit policy, starvation knobs, expert batching, optional pending-units, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep) and returns a JSON bundle with per-variant summaries:
+For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sweeps (expert queue max, reservation, `k_signal`, admit policy, starvation knobs, expert batching, optional pending-units and backpressure-units when `cost_scale` is present, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep) and returns a JSON bundle with per-variant summaries:
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
