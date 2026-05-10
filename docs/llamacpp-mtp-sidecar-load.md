@@ -53,6 +53,8 @@ Add a dedicated loader that:
 - loads tensor payloads (`gguf_init_from_file(..., no_alloc=false)`) into a `ggml_context`
 - exposes the `ggml_tensor *` handles for the 32 weights by name
 
+Status in this repo: the patch in `docs/llamacpp-mtp-sidecar-probe.md` now supports `--load-weights`, which loads the entire sidecar tensor blob into RAM and validates that all 32 `mtp.0.*` tensors have non-null `data` pointers. This is a Spark-safe “does the file actually load?” gate, but it does not yet provide a reusable `deepseek4_mtp_sidecar` binder for forward/kv work.
+
 Design target: a `struct deepseek4_mtp_sidecar` holding pointers for:
 
 - head: `hc_head_{base,fn,scale}`

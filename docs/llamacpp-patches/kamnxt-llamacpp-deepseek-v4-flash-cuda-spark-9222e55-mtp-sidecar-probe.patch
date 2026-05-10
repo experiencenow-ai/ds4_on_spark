@@ -41,7 +41,7 @@ index 0000000..1c12591
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N]\n", prog);
++    std::fprintf(stderr, "usage: %s --path <mtp_sidecar.gguf> [--json] [--payload-sample-bytes N] [--load-weights]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -149,6 +149,7 @@ index 0000000..1c12591
 +    std::string path;
 +    bool json = false;
 +    int payload_sample_bytes = 0;
++    bool load_weights = false;
 +
 +    for (int i = 1; i < argc; i++) {
 +        const char * arg = argv[i];
@@ -172,6 +173,11 @@ index 0000000..1c12591
 +            continue;
 +        }
 +
++        if (std::strcmp(arg, "--load-weights") == 0) {
++            load_weights = true;
++            continue;
++        }
++
 +        if (std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0) {
 +            usage(argv[0]);
 +            return 0;
@@ -191,7 +197,7 @@ index 0000000..1c12591
 +
 +    ggml_context * ctx_meta = nullptr;
 +    gguf_init_params params = {
-+        /*.no_alloc =*/ true,
++        /*.no_alloc =*/ !load_weights,
 +        /*.ctx      =*/ &ctx_meta,
 +    };
 +
@@ -216,6 +222,17 @@ index 0000000..1c12591
 +    }
 +
 +    const int64_t n_tensors = gguf_get_n_tensors(ctx_gguf);
++
++    size_t blob_bytes = 0;
++    if (load_weights) {
++        for (int64_t tid = 0; tid < n_tensors; tid++) {
++            const size_t offs = gguf_get_tensor_offset(ctx_gguf, tid);
++            const size_t sz = gguf_get_tensor_size(ctx_gguf, tid);
++            if (offs + sz > blob_bytes) {
++                blob_bytes = offs + sz;
++            }
++        }
++    }
 +
 +    // verify expected tensor set
 +    std::unordered_set<std::string> expected;
@@ -431,6 +448,25 @@ index 0000000..1c12591
 +        }
 +    }
 +
++    if (load_weights) {
++        for (const auto & name : expected_tensor_names()) {
++            const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
++            if (t == nullptr) {
++                errors.push_back("load-weights: missing tensor '" + name + "'");
++                continue;
++            }
++            if (t->data == nullptr) {
++                errors.push_back("load-weights: tensor has null data '" + name + "'");
++                continue;
++            }
++            const size_t nbytes = (size_t) ggml_nbytes(t);
++            if (nbytes == 0) {
++                errors.push_back("load-weights: tensor has zero bytes '" + name + "'");
++                continue;
++            }
++        }
++    }
++
 +    const bool ok = errors.empty() && missing.empty() && extra.empty();
 +
 +    if (!json) {
@@ -438,6 +474,10 @@ index 0000000..1c12591
 +            std::printf("ok=true\n");
 +            std::printf("architecture=%s\n", arch.empty() ? "(missing)" : arch.c_str());
 +            std::printf("tensor_count=%" PRId64 "\n", n_tensors);
++            if (load_weights) {
++                std::printf("loaded_weights=true\n");
++                std::printf("blob_bytes=%zu\n", blob_bytes);
++            }
 +            if (payload_sample_bytes > 0) {
 +                std::printf("payload_sample_bytes=%d\n", payload_sample_bytes);
 +                for (const auto & e : payload_samples) {
@@ -468,6 +508,10 @@ index 0000000..1c12591
 +        std::printf("  \"path\": \"%s\",\n", json_escape(path).c_str());
 +        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
 +        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
++        std::printf("  \"loaded_weights\": %s,\n", load_weights ? "true" : "false");
++        if (load_weights) {
++            std::printf("  \"blob_bytes\": %zu,\n", blob_bytes);
++        }
 +        std::printf("  \"payload_sample_bytes\": %d,\n", payload_sample_bytes);
 +
 +        std::printf("  \"missing\": [");
