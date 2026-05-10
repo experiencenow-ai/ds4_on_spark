@@ -684,6 +684,14 @@ class SimMetrics:
                     "max_pending_max": max(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
+                    "tasks_started_total": int(sum(self.tasks_started_per_expert)) if len(self.tasks_started_per_expert) != 0 else 0,
+                    "tasks_started_top1_frac": (
+                        (float(max(self.tasks_started_per_expert)) / float(sum(self.tasks_started_per_expert)))
+                        if len(self.tasks_started_per_expert) != 0 and sum(self.tasks_started_per_expert) != 0
+                        else 0.0
+                    ),
+                    "tasks_started_gini": _gini_nonneg([float(v) for v in self.tasks_started_per_expert]),
+                    "utilization_gini": _gini_nonneg([float(v) for v in self.mean_utilization_per_expert]),
                     "starvation_task_frac": summarize_experts(
                         [
                             (float(self.starved_tasks_started_per_expert[i]) / float(self.tasks_started_per_expert[i])) if self.tasks_started_per_expert[i] != 0 else 0.0
@@ -3381,6 +3389,29 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     return(metrics)
 
 
+def _gini_nonneg(xs: Sequence[float]) -> float:
+    if len(xs) == 0:
+        return(0.0)
+    vals: List[float] = []
+    for x in xs:
+        v = float(x)
+        vals.append(v if v > 0.0 else 0.0)
+    vals.sort()
+    s = float(sum(vals))
+    if s <= 0.0:
+        return(0.0)
+    n = float(len(vals))
+    cum = 0.0
+    for i, x in enumerate(vals, 1):
+        cum += (float(i) * float(x))
+    g = ((2.0 * cum) / (n * s)) - ((n + 1.0) / n)
+    if g < 0.0:
+        return(0.0)
+    if g > 1.0:
+        return(1.0)
+    return(float(g))
+
+
 def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     def _p_or_zero(xs: Sequence[float], p: float) -> float:
         if len(xs) == 0:
@@ -3428,6 +3459,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
     tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
+    expert_tasks_started_gini = _gini_nonneg([float(v) for v in metrics.tasks_started_per_expert])
+    expert_utilization_gini = _gini_nonneg([float(v) for v in metrics.mean_utilization_per_expert])
+    expert_tasks_started_top1_frac = (
+        (float(max(metrics.tasks_started_per_expert)) / tasks_started_total) if tasks_started_total > 0.0 and len(metrics.tasks_started_per_expert) != 0 else 0.0
+    )
     starved_task_frac = (float(metrics.starved_tasks) / tasks_started_total) if tasks_started_total > 0.0 else 0.0
     starved_task_frac_interactive = (float(metrics.starved_tasks_interactive) / float(len(metrics.task_queue_wait_ms_interactive))) if len(metrics.task_queue_wait_ms_interactive) != 0 else 0.0
     starved_task_frac_batch = (float(metrics.starved_tasks_batch) / float(len(metrics.task_queue_wait_ms_batch))) if len(metrics.task_queue_wait_ms_batch) != 0 else 0.0
@@ -3514,8 +3550,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
             "expert_utilization_p50": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.50)),
             "expert_utilization_p95": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.95)),
+            "expert_utilization_gini": float(expert_utilization_gini),
             "expert_saturation_p50": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.50)),
             "expert_saturation_p95": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.95)),
+            "expert_tasks_started_gini": float(expert_tasks_started_gini),
+            "expert_tasks_started_top1_frac": float(expert_tasks_started_top1_frac),
             "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
