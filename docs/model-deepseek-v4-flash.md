@@ -512,6 +512,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - `docs/gguf-inspect-antirez-ef3b960-iq2xxs-chat-v2.json`
 - The nsparks native FP4/FP8 GGUF encodes dense weights as `F8_E4M3_B128` (a DeepSeek-V4 fork `ggml_type` extension; commonly type code `42`) and MoE experts as `MXFP4`; `scripts/model_contract_inspect_quantized_artifact.py` reports this under `tensor_type_counts`.
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
+- To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
 
 For external/quantized artifacts:
 
