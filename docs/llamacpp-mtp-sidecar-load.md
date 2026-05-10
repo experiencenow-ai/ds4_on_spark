@@ -4,6 +4,8 @@ This repo can validate the DS4-tuned MTP sidecar (`general.architecture=deepseek
 
 This document records the concrete, code-pointer-backed gap analysis and the minimum patch plan required before attempting the one-token draft wiring gate (`docs/mtp-one-token-draft-probe.md`).
 
+For the upstream reference semantics (tensor binding, MTP raw cache, draft/verify/rollback), use `docs/mtp-ds4-reference.md` (pinned `antirez/ds4`).
+
 ## Why the sidecar cannot be “loaded as a model”
 
 The sidecar is not a trunk model GGUF. It contains a compact 32‑tensor table under `mtp.0.*` plus a small amount of DeepSeek4 metadata. Treating it as a normal model triggers:
@@ -93,4 +95,3 @@ Do not claim acceptance rates or speedups until:
 
 1. The one-token draft probe runs deterministically.
 2. A correctness oracle exists for MTP draft/verify behavior (see `docs/model-contract.md` MTP gating).
-

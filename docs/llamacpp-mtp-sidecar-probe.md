@@ -13,7 +13,7 @@ This patch adds a **metadata-only** probe binary to the Spark fork:
 It validates:
 
 - `general.architecture == deepseek4_mtp_support`
-- the exact expected 32 tensor names under `mtp.0.*`
+- the exact expected 32 tensor names under `mtp.0.*` (same list as the pinned `antirez/ds4` binder; see `docs/mtp-ds4-reference.md`)
 - light self-consistency checks derived only from the tensor shapes
 
 It does **not** require loading the trunk GGUF and does **not** read tensor payloads into RAM (uses `gguf_init_from_file(..., no_alloc=true)` with a meta-only ggml context).
