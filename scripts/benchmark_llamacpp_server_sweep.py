@@ -156,12 +156,15 @@ def scan_fattn_reservation(log_path):
         "fattn_id_max": None,
         "fattn_id_span": None,
         "fattn_id_missing_count": None,
+        "fattn_expected_id_0_42_ok": None,
         "fattn_backend_counts": {},
         "fattn_backend_unique": 0,
         "fattn_backend0_only": False,
+        "fattn_expected_backend0_ok": None,
         "fattn_cuda_device_counts": {},
         "fattn_cuda_device_unique": 0,
         "fattn_cuda_device0_only": False,
+        "fattn_expected_cuda_device0_ok": None,
         "fattn_cpu_line_count": 0,
         "fattn_cuda_line_count": 0,
         "sched_reserve_line_count": 0,
@@ -274,12 +277,17 @@ def scan_fattn_reservation(log_path):
             if i not in have:
                 missing += 1
         out["fattn_id_missing_count"] = missing
+        out["fattn_expected_id_0_42_ok"] = (ids[0] == 0 and ids[-1] >= 42 and missing == 0)
     out["fattn_backend_counts"] = {str(k): int(v) for (k, v) in sorted(fattn_backend.items(), key=lambda kv: kv[0])}
     out["fattn_backend_unique"] = len(fattn_backend)
     out["fattn_backend0_only"] = (len(fattn_backend) == 1 and 0 in fattn_backend and len(fattn_ids) > 0)
+    if out["fattn_backend_unique"] > 0:
+        out["fattn_expected_backend0_ok"] = bool(out["fattn_backend0_only"])
     out["fattn_cuda_device_counts"] = {str(k): int(v) for (k, v) in sorted(fattn_cuda_dev.items(), key=lambda kv: kv[0])}
     out["fattn_cuda_device_unique"] = len(fattn_cuda_dev)
     out["fattn_cuda_device0_only"] = (len(fattn_cuda_dev) == 1 and 0 in fattn_cuda_dev and len(fattn_ids) > 0)
+    if out["fattn_cuda_device_unique"] > 0:
+        out["fattn_expected_cuda_device0_ok"] = bool(out["fattn_cuda_device0_only"])
     return out
 
 
@@ -406,11 +414,22 @@ def main():
         meta["fattn_id_missing_count"] = str(
             fattn.get("fattn_id_missing_count") if fattn.get("fattn_id_missing_count") is not None else "NA"
         )
+        meta["fattn_expected_id_0_42_ok"] = str(
+            fattn.get("fattn_expected_id_0_42_ok") if fattn.get("fattn_expected_id_0_42_ok") is not None else "NA"
+        )
         meta["fattn_backend_unique"] = str(int(fattn.get("fattn_backend_unique") or 0))
         meta["fattn_backend0_only"] = str(bool(fattn.get("fattn_backend0_only")))
+        meta["fattn_expected_backend0_ok"] = str(
+            fattn.get("fattn_expected_backend0_ok") if fattn.get("fattn_expected_backend0_ok") is not None else "NA"
+        )
         meta["fattn_backend_counts"] = json.dumps(fattn.get("fattn_backend_counts") or {}, sort_keys=True)
         meta["fattn_cuda_device_unique"] = str(int(fattn.get("fattn_cuda_device_unique") or 0))
         meta["fattn_cuda_device0_only"] = str(bool(fattn.get("fattn_cuda_device0_only")))
+        meta["fattn_expected_cuda_device0_ok"] = str(
+            fattn.get("fattn_expected_cuda_device0_ok")
+            if fattn.get("fattn_expected_cuda_device0_ok") is not None
+            else "NA"
+        )
         meta["fattn_cuda_device_counts"] = json.dumps(fattn.get("fattn_cuda_device_counts") or {}, sort_keys=True)
         meta["sched_reserve_line_count"] = str(int(fattn.get("sched_reserve_line_count") or 0))
         meta["sched_reserve_graph_nodes"] = str(fattn.get("sched_reserve_graph_nodes") or "NA")

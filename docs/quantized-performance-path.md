@@ -48,6 +48,7 @@ After the first successful run, prioritize instrumentation that does **not** req
   - The llama.cpp baseline summary derives best-effort stats from the CSV (mem min/max/delta; plus util/power percentiles when present).
 - **CPU RSS**: captured by the wrapper (`max_rss_*` fields).
 - **KV / memory growth proxy**: inferred from GPU polling deltas during prefill vs decode.
+- **KV cache init (best-effort)**: when the runtime prints `llama_kv_cache_init` / KV buffer sizing lines, `scripts/benchmark_llamacpp_spark.sh` emits `kv_probe.json` in the artifacts dir and mirrors `kv_probe_*` summary fields (sizes are heuristic; log formats vary across forks).
 
 Then, add runtime-exposed counters only when the runtime makes them available (do not guess flags):
 

@@ -436,6 +436,11 @@ with open(log_raw, "w", encoding="utf-8") as f:
             "match_lines": [],
         },
     }
+    kv_probe = {
+        "line_count": 0,
+        "size_mib": [],
+        "sample_lines": [],
+    }
 
     def _append_cap(xs, v, cap=200000):
         if len(xs) >= cap:
@@ -600,6 +605,32 @@ with open(log_raw, "w", encoding="utf-8") as f:
             if isinstance(lines, list) and len(lines) < 50:
                 lines.append(ln[:4000])
 
+    def _kv_probe_line(line: str):
+        ln = line.rstrip("\n")
+        low = ln.lower()
+        if (
+            "kv_cache_init" not in low
+            and "kv cache" not in low
+            and "kv_cache" not in low
+            and "kv buffer" not in low
+            and "kv self" not in low
+        ):
+            return
+        kv_probe["line_count"] = int(kv_probe.get("line_count") or 0) + 1
+        lines = kv_probe.get("sample_lines")
+        if isinstance(lines, list) and len(lines) < 20:
+            lines.append(ln[:4000])
+        m = re.search(r"([0-9]+(?:\\.[0-9]+)?)\\s*(MiB|GiB)", ln, flags=re.IGNORECASE)
+        if m is None:
+            return
+        try:
+            v = float(m.group(1))
+            if m.group(2).lower() == "gib":
+                v = v * 1024.0
+            kv_probe["size_mib"].append(v)
+        except Exception:
+            pass
+
     def _emit_text(s: str):
         f.write(s)
         f.flush()
@@ -626,6 +657,7 @@ with open(log_raw, "w", encoding="utf-8") as f:
             except Exception:
                 pass
         _fattn_probe_line(line)
+        _kv_probe_line(line)
         if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line) or ("Prompt:" in line and "Generation:" in line):
             timings_lines.append(line.strip())
         _emit_text(line)
@@ -851,6 +883,15 @@ else:
     summary_lines.append("token_latency_ms_max=NA")
     summary_lines.append("token_latency_ms_mean=NA")
 
+summary_lines.append("kv_probe_line_count=%d" % int(kv_probe.get("line_count") or 0))
+kv_mib = kv_probe.get("size_mib") or []
+if kv_mib:
+    summary_lines.append("kv_probe_size_mib_min=%.6f" % min(kv_mib))
+    summary_lines.append("kv_probe_size_mib_max=%.6f" % max(kv_mib))
+else:
+    summary_lines.append("kv_probe_size_mib_min=NA")
+    summary_lines.append("kv_probe_size_mib_max=NA")
+
 if gpu_used_mib:
     summary_lines.append("gpu_poll_mem_used_min_mib=%.3f" % min(gpu_used_mib))
     summary_lines.append("gpu_poll_mem_used_max_mib=%.3f" % max(gpu_used_mib))
@@ -946,6 +987,7 @@ if gen_ms_per_tok is not None:
 fp = token_trace.get("fattn_probe") or {}
 if isinstance(fp, dict):
     ids = fp.get("fattn_ids")
+    expected_0_42 = None
     if isinstance(ids, set) and ids:
         id_min = min(ids)
         id_max = max(ids)
@@ -958,6 +1000,7 @@ if isinstance(fp, dict):
         summary_lines.append("fattn_id_max=%d" % int(id_max))
         summary_lines.append("fattn_id_span=%d" % int(span))
         summary_lines.append("fattn_id_missing_count=%d" % int(missing))
+        expected_0_42 = (id_min == 0 and id_max >= 42 and missing == 0)
     else:
         summary_lines.append("fattn_id_min=NA")
         summary_lines.append("fattn_id_max=NA")
@@ -970,25 +1013,33 @@ if isinstance(fp, dict):
 
     nodes = fp.get("fattn_nodes")
     summary_lines.append("fattn_node_unique=%s" % (str(len(nodes)) if isinstance(nodes, set) else "NA"))
+    if expected_0_42 is None:
+        summary_lines.append("fattn_expected_id_0_42_ok=NA")
+    else:
+        summary_lines.append("fattn_expected_id_0_42_ok=%s" % str(bool(expected_0_42)))
 
     bc = fp.get("fattn_backend_counts")
     if isinstance(bc, dict) and bc:
         summary_lines.append("fattn_backend_unique=%d" % len(bc))
         summary_lines.append("fattn_backend0_only=%s" % str((len(bc) == 1 and 0 in bc)))
+        summary_lines.append("fattn_expected_backend0_ok=%s" % str((len(bc) == 1 and 0 in bc)))
         summary_lines.append("fattn_backend_counts=%s" % ",".join("%s:%s" % (k, bc[k]) for k in sorted(bc)))
     else:
         summary_lines.append("fattn_backend_unique=NA")
         summary_lines.append("fattn_backend0_only=NA")
+        summary_lines.append("fattn_expected_backend0_ok=NA")
         summary_lines.append("fattn_backend_counts=NA")
 
     dc = fp.get("fattn_cuda_device_counts")
     if isinstance(dc, dict) and dc:
         summary_lines.append("fattn_cuda_device_unique=%d" % len(dc))
         summary_lines.append("fattn_cuda_device0_only=%s" % str((len(dc) == 1 and 0 in dc)))
+        summary_lines.append("fattn_expected_cuda_device0_ok=%s" % str((len(dc) == 1 and 0 in dc)))
         summary_lines.append("fattn_cuda_device_counts=%s" % ",".join("%s:%s" % (k, dc[k]) for k in sorted(dc)))
     else:
         summary_lines.append("fattn_cuda_device_unique=NA")
         summary_lines.append("fattn_cuda_device0_only=NA")
+        summary_lines.append("fattn_expected_cuda_device0_ok=NA")
         summary_lines.append("fattn_cuda_device_counts=NA")
 
     summary_lines.append("sched_reserve_line_count=%d" % int(fp.get("sched_reserve_line_count") or 0))
@@ -1020,8 +1071,11 @@ if isinstance(fp, dict):
             "fattn_cuda_line_count": int(fp.get("fattn_cuda_line_count") or 0),
             "fattn_nodes": sorted(list(fp.get("fattn_nodes") or []))[:2000],
             "fattn_ids": sorted(list(fp.get("fattn_ids") or []))[:2000],
+            "fattn_expected_id_0_42_ok": (bool(expected_0_42) if expected_0_42 is not None else None),
             "fattn_backend_counts": fp.get("fattn_backend_counts") or {},
+            "fattn_expected_backend0_ok": ((len(bc) == 1 and 0 in bc) if isinstance(bc, dict) and bc else None),
             "fattn_cuda_device_counts": fp.get("fattn_cuda_device_counts") or {},
+            "fattn_expected_cuda_device0_ok": ((len(dc) == 1 and 0 in dc) if isinstance(dc, dict) and dc else None),
             "sched_reserve_line_count": int(fp.get("sched_reserve_line_count") or 0),
             "sched_reserve_graph_nodes": fp.get("sched_reserve_graph_nodes"),
             "sched_reserve_graph_splits": fp.get("sched_reserve_graph_splits"),
@@ -1035,6 +1089,20 @@ if isinstance(fp, dict):
             json.dump(fp_out, pf, sort_keys=True, indent=2)
     except Exception:
         pass
+
+try:
+    kv_mib = kv_probe.get("size_mib") or []
+    kv_out = {
+        "kv_probe_line_count": int(kv_probe.get("line_count") or 0),
+        "kv_probe_size_mib_min": (float(min(kv_mib)) if kv_mib else None),
+        "kv_probe_size_mib_max": (float(max(kv_mib)) if kv_mib else None),
+        "kv_probe_size_mib_samples": [float(x) for x in kv_mib[:200]],
+        "kv_probe_sample_lines": list(kv_probe.get("sample_lines") or [])[:20],
+    }
+    with open(os.path.join(os.path.dirname(log_raw), "kv_probe.json"), "w", encoding="utf-8") as pf:
+        json.dump(kv_out, pf, sort_keys=True, indent=2)
+except Exception:
+    pass
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

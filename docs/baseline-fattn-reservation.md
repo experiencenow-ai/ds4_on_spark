@@ -83,8 +83,11 @@ The script writes these fields into `server_sweep.md` metadata:
 - `fattn_seen_sched_reserve_cpu`: should be `False` on a healthy runtime
 - `fattn_line_count` / `fattn_node_unique`: should be non-zero when the runtime logs `__fattn__` scheduling placement
 - `fattn_id_min` / `fattn_id_max` / `fattn_id_missing_count`: best-effort `__fattn__-{id}` range check (helps confirm the expected reservation graph shape, e.g. `0..42` with no gaps)
+- `fattn_expected_id_0_42_ok`: derived boolean for the common Spark0 expectation (`id_min=0`, `id_max>=42`, no gaps); `NA` when ids are not logged
 - `fattn_backend0_only` / `fattn_backend_counts`: best-effort parse of a `backend 0` / `cuda backend 0` tag from `__fattn__` lines (not all forks include it)
+- `fattn_expected_backend0_ok`: derived boolean (`backend0_only`) when backend tags are present; `NA` otherwise
 - `fattn_cuda_device0_only` / `fattn_cuda_device_counts`: best-effort parse of `CUDA0` tags from `__fattn__` lines (not all forks include it)
+- `fattn_expected_cuda_device0_ok`: derived boolean (`cuda_device0_only`) when device tags are present; `NA` otherwise
 - `sched_reserve_graph_nodes` / `sched_reserve_graph_splits` / `sched_reserve_took_ms`: best-effort parse of reservation summary lines (helps compare graph size / split count)
 - `node_kind_unique`: unique `__op__` kinds seen in the log (best-effort)
 - `node_kind_cpu_top` / `node_kind_cuda_top`: best-effort top-k counts by `__op__` kind, based on whether each matching log line mentions `cpu` / `cuda`
