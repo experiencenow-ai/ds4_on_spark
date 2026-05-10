@@ -176,6 +176,14 @@ def parse_gguf(path: Path) -> tuple[int, dict[str, Any], list[TensorDesc]]:
 def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int = 20) -> bytes:
 	req = Request(url, headers={"Range": f"bytes=0-{want_bytes - 1}"})
 	with urlopen(req, timeout=timeout_s) as resp:
+		status = getattr(resp, "status", None)
+		content_range = resp.headers.get("Content-Range", None)
+		if status is not None and int(status) != 206:
+			raise RuntimeError(
+				f"server did not honor Range request for {url} (status={status}); refusing to risk a full download"
+			)
+		if content_range is None:
+			raise RuntimeError(f"server did not return Content-Range for {url}; refusing to risk a full download")
 		return resp.read(want_bytes)
 
 

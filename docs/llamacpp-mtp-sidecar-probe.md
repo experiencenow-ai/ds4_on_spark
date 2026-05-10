@@ -18,14 +18,6 @@ It validates:
 
 It does **not** require loading the trunk GGUF and does **not** read tensor payloads into RAM (uses `gguf_init_from_file(..., no_alloc=true)` with a meta-only ggml context).
 
-## What this does *not* solve
-
-This probe only verifies the sidecar’s header + tensor directory contract. It does not make the Spark/CUDA fork capable of **running** DeepSeek V4 MTP draft/verify.
-
-For the current gap analysis + minimum patch plan toward the one-token draft wiring gate, see:
-
-- `docs/llamacpp-mtp-sidecar-load.md`
-
 ## Patch
 
 - Patch file: `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
@@ -66,6 +58,12 @@ For the canonical repo-side, no-download validation (HTTP range-read of header/t
 
 ```bash
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
+```
+
+Pinned reference runner:
+
+```bash
+./scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh
 ```
 
 Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-ef3b960.json`.

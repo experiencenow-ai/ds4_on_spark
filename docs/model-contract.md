@@ -68,7 +68,8 @@ MTP (multi-token prediction) oracle requirements:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json`
   - Some DS4-tuned sidecars (e.g. `antirez/deepseek-v4-gguf`) are not full official `mtp.0.*` checkpoints; they use a compact 32‑tensor `mtp.0.*` table for DS4’s MTP path and advertise `general.architecture=deepseek4_mtp_support`. Before attempting to load these in external runtimes, validate the sidecar header/tensor directory (no full model download required):
     - Local file: `python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json`
-    - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
+    - Hugging Face URL (range-reads only the header/tensor table; requires HTTP 206 + `Content-Range`): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
+    - Pinned antirez reference: `./scripts/model_contract_probe_mtp_sidecar_antirez_ef3b960.sh`
     - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-ef3b960.json`
     - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-ef3b960-mtp-sidecar.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`
