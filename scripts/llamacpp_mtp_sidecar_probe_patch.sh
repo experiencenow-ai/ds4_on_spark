@@ -9,6 +9,8 @@ LLAMA_COMMIT="${LLAMA_COMMIT:-9222e55}"
 PATCH_FILE="${PATCH_FILE:-$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch}"
 
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
+PAYLOAD_SAMPLE_BYTES="${PAYLOAD_SAMPLE_BYTES:-0}"
+LOAD_WEIGHTS="${LOAD_WEIGHTS:-0}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_PATCH="${ALLOW_PATCH:-0}"
@@ -22,6 +24,8 @@ echo "llama_dir=$LLAMA_DIR"
 echo "llama_repo=$LLAMA_REPO"
 echo "llama_commit=$LLAMA_COMMIT"
 echo "patch_file=$PATCH_FILE"
+echo "payload_sample_bytes=$PAYLOAD_SAMPLE_BYTES"
+echo "load_weights=$LOAD_WEIGHTS"
 echo
 
 if [ ! -d "$LLAMA_DIR" ]; then
@@ -91,4 +95,12 @@ if [ ! -x "$PROBE_BIN" ]; then
     exit 6
 fi
 
-"$PROBE_BIN" --path "$MTP_SIDECAR_GGUF" --json
+PROBE_ARGS="--path \"$MTP_SIDECAR_GGUF\" --json"
+if [ "$PAYLOAD_SAMPLE_BYTES" != "0" ]; then
+    PROBE_ARGS="$PROBE_ARGS --payload-sample-bytes $PAYLOAD_SAMPLE_BYTES"
+fi
+if [ "$LOAD_WEIGHTS" = "1" ]; then
+    PROBE_ARGS="$PROBE_ARGS --load-weights"
+fi
+
+sh -lc "\"$PROBE_BIN\" $PROBE_ARGS"

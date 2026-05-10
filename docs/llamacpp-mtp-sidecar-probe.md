@@ -44,7 +44,12 @@ cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
 
 # optional stronger check: sample 64 bytes per tensor payload
 ./build/bin/llama-ds4-mtp-sidecar-probe --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --payload-sample-bytes 64
+
+# optional stronger check: load full sidecar weights blob and validate all 32 tensors have non-null data pointers
+./build/bin/llama-ds4-mtp-sidecar-probe --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --load-weights
 ```
+
+Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1` and `PAYLOAD_SAMPLE_BYTES=N`.
 
 Expected success signal:
 
