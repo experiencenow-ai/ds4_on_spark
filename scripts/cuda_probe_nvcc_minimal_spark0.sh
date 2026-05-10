@@ -117,6 +117,47 @@ __global__ void cuda_compile_only_cxx20_flags(uint32_t *out)
 }
 EOF
 
+cat > \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu <<'EOF'
+#include <stdint.h>
+
+#if defined(__CUDA_ARCH__)
+#if (__CUDA_ARCH__ != 1210)
+#error nvcc_featureset_macros_expected___CUDA_ARCH___1210
+#endif
+
+#if defined(EXPECT_SPECIFIC)
+#if !defined(__CUDA_ARCH_SPECIFIC__)
+#error nvcc_featureset_macros_expected___CUDA_ARCH_SPECIFIC___defined
+#endif
+#if (__CUDA_ARCH_SPECIFIC__ != 1210)
+#error nvcc_featureset_macros_expected___CUDA_ARCH_SPECIFIC___1210
+#endif
+#else
+#if defined(__CUDA_ARCH_SPECIFIC__)
+#error nvcc_featureset_macros_unexpected___CUDA_ARCH_SPECIFIC___defined
+#endif
+#endif
+
+#if defined(EXPECT_FAMILY)
+#if !defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+#error nvcc_featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___defined
+#endif
+#if (__CUDA_ARCH_FAMILY_SPECIFIC__ != 1210)
+#error nvcc_featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___1210
+#endif
+#else
+#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+#error nvcc_featureset_macros_unexpected___CUDA_ARCH_FAMILY_SPECIFIC___defined
+#endif
+#endif
+#endif
+
+__global__ void cuda_featureset_macros_compile_only(uint32_t *out)
+{
+	(void)out;
+}
+EOF
+
 	try_compile_only() {
 		tag=\"\$1\"
 		arch=\"\$2\"
@@ -168,6 +209,24 @@ EOF
 		fi
 	}
 
+	try_compile_only_featureset_macros() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		defs=\"\$3\"
+		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+		set +e
+		\$NVCC -O2 -std=c++17 \${defs} -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"\${tag}: OK\"
+		else
+			echo \"\${tag}: FAILED rc=\${rc}\"
+			head -n 40 \"\${err_path}\" || true
+		fi
+	}
+
 try_gencode_only() {
 	tag=\"\$1\"
 	gencode_arch=\"\$2\"
@@ -189,6 +248,10 @@ try_gencode_only() {
 	try_compile_only arch_sm_121 sm_121
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
+	try_compile_only variant_sm_121a sm_121a
+	try_compile_only variant_sm_121f sm_121f
+	try_compile_only_featureset_macros featureset_compute_121a compute_121a \"-DEXPECT_SPECIFIC=1 -DEXPECT_FAMILY=1\"
+	try_compile_only_featureset_macros featureset_compute_121f compute_121f \"-DEXPECT_FAMILY=1\"
 	echo
 	echo \"== nvcc: ptxas -v (sm_121 compile-only, best-effort) ==\"
 	if [ -x \"\$PTXAS\" ]; then
@@ -208,15 +271,11 @@ try_gencode_only() {
 	if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		try_compile_only arch_compute_121 compute_121
 		try_compile_only_cxx20_flags arch_compute_121_cxx20_flags compute_121
+		try_compile_only arch_compute_121a compute_121a
+		try_compile_only arch_compute_121f compute_121f
 		try_gencode_only gencode_sm_121 compute_121 sm_121
 		try_gencode_only gencode_compute_121 compute_121 compute_121
 	fi
-if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121a\"; then
-	try_compile_only variant_sm_121a sm_121a
-fi
-if [ \"\${list_gpu_code}\" != \"\" ] && echo \"\${list_gpu_code}\" | grep -q \"sm_121f\"; then
-	try_compile_only variant_sm_121f sm_121f
-fi
 
 echo
 echo \"== nvcc: __cluster_dims__ attribute compile (best-effort) ==\"
