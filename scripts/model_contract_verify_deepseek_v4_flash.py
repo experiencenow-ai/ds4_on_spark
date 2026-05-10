@@ -413,6 +413,53 @@ def main() -> int:
 		if compress_ratios[n_layers + j] != 0:
 			failures.append(Failure(9, f"mtp compress_ratio must be 0 (sliding-only) at compress_ratios[{n_layers + j}], got {compress_ratios[n_layers + j]}"))
 
+	# Contract summary must include a Transformers-compatible per-layer schedule derived from compress_ratios.
+	try:
+		attn = summary.get("attention_schedule", {}) if isinstance(summary, dict) else {}
+		if isinstance(attn, dict):
+			tf_types = attn.get("transformers_main_layer_types", None)
+			if not isinstance(tf_types, list) or len(tf_types) != n_layers:
+				failures.append(Failure(101, f"contract summary attention_schedule.transformers_main_layer_types must be a list of length n_layers={n_layers}: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:n_layers]):
+					r = int(r)
+					want = "sliding_attention" if r == 0 else ("compressed_sparse_attention" if r == 4 else "heavily_compressed_attention")
+					if tf_types[i] != want:
+						failures.append(Failure(102, f"contract summary transformers_main_layer_types[{i}] mismatch (got {tf_types[i]!r} expected {want!r}): {contract_summary}"))
+						break
+
+			tf_rates = attn.get("transformers_compress_rates", None)
+			want_rates = {"compressed_sparse_attention": 4, "heavily_compressed_attention": 128, "sliding_attention": 0}
+			if tf_rates != want_rates:
+				failures.append(Failure(103, f"contract summary attention_schedule.transformers_compress_rates mismatch (got {tf_rates!r} expected {want_rates!r}): {contract_summary}"))
+
+			tf_mtp = attn.get("transformers_mtp_layer_types", None)
+			if n_mtp_layers > 0:
+				if not isinstance(tf_mtp, list) or len(tf_mtp) != n_mtp_layers:
+					failures.append(Failure(104, f"contract summary attention_schedule.transformers_mtp_layer_types must be a list of length n_mtp_layers={n_mtp_layers}: {contract_summary}"))
+				else:
+					for j, r in enumerate(compress_ratios[n_layers : n_layers + n_mtp_layers]):
+						r = int(r)
+						want = "sliding_attention" if r == 0 else ("compressed_sparse_attention" if r == 4 else "heavily_compressed_attention")
+						if tf_mtp[j] != want:
+							failures.append(Failure(105, f"contract summary transformers_mtp_layer_types[{j}] mismatch (got {tf_mtp[j]!r} expected {want!r}): {contract_summary}"))
+							break
+
+			moe = summary.get("moe", {}) if isinstance(summary, dict) else {}
+			if isinstance(moe, dict):
+				tf_mlp = moe.get("transformers_mlp_layer_types", None)
+				if not isinstance(tf_mlp, list) or len(tf_mlp) != n_layers:
+					failures.append(Failure(106, f"contract summary moe.transformers_mlp_layer_types must be a list of length n_layers={n_layers}: {contract_summary}"))
+				else:
+					for i in range(n_layers):
+						want = "hash_moe" if i < n_hash_layers else "moe"
+						if tf_mlp[i] != want:
+							failures.append(Failure(107, f"contract summary moe.transformers_mlp_layer_types[{i}] mismatch (got {tf_mlp[i]!r} expected {want!r}): {contract_summary}"))
+							break
+	except Exception:
+		# If the contract summary is missing, other checks will flag it earlier.
+		pass
+
 	# Top-level required tensors.
 	for k in ("embed.weight", "norm.weight", "head.weight", "hc_head_fn", "hc_head_base", "hc_head_scale"):
 		if k not in weight_keys:

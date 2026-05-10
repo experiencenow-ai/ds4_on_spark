@@ -376,6 +376,14 @@ def layer_type_from_ratio(ratio: int) -> str:
 		return "csa"
 	return "hca"
 
+def transformers_layer_type_from_ratio(ratio: int) -> str:
+	# Official Transformers deepseek_v4 naming for `config.layer_types[i]`.
+	if ratio == 0:
+		return "sliding_attention"
+	if ratio == 4:
+		return "compressed_sparse_attention"
+	return "heavily_compressed_attention"
+
 def find_first_line_containing(text: str, needle: str) -> Optional[str]:
 	for raw in text.splitlines():
 		if needle in raw:
@@ -897,7 +905,10 @@ def build_contract() -> dict:
 	n_mtp_layers = int(cfg.get("num_nextn_predict_layers", 0))
 	mtp_ratios = compress_ratios[n_layers:]
 	layer_types = [layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
+	transformers_layer_types = [transformers_layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
+	transformers_mtp_layer_types = [transformers_layer_type_from_ratio(int(r)) for r in mtp_ratios]
 	type_counts = {t: layer_types.count(t) for t in ("sliding", "csa", "hca")}
+	transformers_mlp_layer_types = [("hash_moe" if i < int(cfg["num_hash_layers"]) else "moe") for i in range(n_layers)]
 
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
@@ -1015,8 +1026,15 @@ def build_contract() -> dict:
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
 			"main_layer_types": layer_types,
+			"transformers_main_layer_types": transformers_layer_types,
+			"transformers_compress_rates": {
+				"compressed_sparse_attention": 4,
+				"heavily_compressed_attention": 128,
+				"sliding_attention": 0,
+			},
 			"type_counts": type_counts,
 			"mtp_compress_ratios": [int(r) for r in mtp_ratios],
+			"transformers_mtp_layer_types": transformers_mtp_layer_types,
 		},
 		"cache": {
 			"window_size": window_size,
@@ -1044,7 +1062,7 @@ def build_contract() -> dict:
 				"compress_indices": {"csa": "Indexer(...,offset=window_size)", "hca": "get_compress_topk_idxs(...,offset=window_size)"},
 			},
 		},
-			"moe": {
+		"moe": {
 			"n_routed_experts": int(cfg["n_routed_experts"]),
 			"n_shared_experts": int(cfg["n_shared_experts"]),
 			"n_activated_experts": int(cfg["num_experts_per_tok"]),
@@ -1052,6 +1070,7 @@ def build_contract() -> dict:
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
 			"n_hash_layers": int(cfg["num_hash_layers"]),
+			"transformers_mlp_layer_types": transformers_mlp_layer_types,
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
 			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
 			"semantics": moe_sem,
