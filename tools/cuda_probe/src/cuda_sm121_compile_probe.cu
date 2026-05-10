@@ -1,5 +1,11 @@
 #include <stdint.h>
 
+#if defined(__CUDA_ARCH__)
+#if (__CUDA_ARCH__ != 1210)
+#error "sm_121 compile probe: expected __CUDA_ARCH__=1210 (sm_121)"
+#endif
+#endif
+
 __global__ void sm121_compile_probe(uint32_t *out)
 {
 	if ( ((int32_t)threadIdx.x) == 0 )
@@ -11,4 +17,3 @@ __global__ void sm121_compile_probe(uint32_t *out)
 #endif
 	}
 }
-
