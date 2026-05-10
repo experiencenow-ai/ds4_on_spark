@@ -6,7 +6,8 @@ Goal: define **reproducible** baseline runs for:
 - `llama.cpp` on Spark (CUDA baseline)
 - vLLM on Spark (reference)
 - quantized DeepSeek V4 Flash on one Spark (first real token stream)
-- Qwen-family Spark comparisons and paired DFlash speculative probes
+- Ling 2.6 Flash and Qwen-family Spark comparisons
+- paired DFlash speculative probes where exact draft checkpoints exist
 - later: `ds4_on_spark` (native DS4 Flash measurements)
 
 This baseline track is designed to capture **exact command lines**, **model artifact requirements**, and the key metrics:
@@ -121,7 +122,7 @@ Per-script useful env vars:
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 
-See `docs/upstream-qwen-dflash.md` for Qwen and DFlash candidate order,
+See `docs/upstream-qwen-dflash.md` for Ling, Qwen, and DFlash candidate order,
 artifact sizes, and example vLLM env strings.
 
 ## Required Fixtures
