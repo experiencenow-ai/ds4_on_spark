@@ -7,6 +7,8 @@ Baseline type:
 - [ ] antirez/ds4 (Mac / Metal)
 - [ ] llama.cpp (Spark / CUDA)
 - [ ] vLLM (Spark / reference)
+- [ ] Qwen target-only (Spark / vLLM or SGLang)
+- [ ] Qwen + DFlash draft (Spark / speculative)
 - [ ] ds4_on_spark (future)
 
 ## Host
@@ -58,4 +60,3 @@ Attach or paste minimal excerpts (redact secrets / private LAN details).
 - Exit code:
 - Stderr excerpt:
 - Notes / suspected cause:
-
