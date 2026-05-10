@@ -95,6 +95,26 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 - Prints the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `gpuarch_sm_121` present, `native` missing)
 
+## Spark0: Minimal CMake Configure + Build + Run (No Repo Transfer)
+
+When you want to validate that a typical CMake CUDA project can target GB10 (`sm_121`) using `CMAKE_CUDA_ARCHITECTURES="121"`:
+
+```bash
+./scripts/cuda_probe_cmake_minimal_spark0.sh
+```
+
+This script writes a tiny `CMakeLists.txt` + `main.cu` directly into a Spark0 temp directory, then:
+
+- Prints `cmake --version` and fails if `cmake` is missing or older than 3.18 (first version with `CMAKE_CUDA_ARCHITECTURES`)
+- Prints `nvcc --version`
+- Configures with `-DCMAKE_CUDA_ARCHITECTURES="121"` and builds a single tiny CUDA executable
+- Runs the executable and expects `__CUDA_ARCH__=1210`
+
+Environment overrides:
+
+- `SSH_OPTS`: forwarded to `ssh`
+- `REMOTE_DIR`: where the temp project is created on Spark0 (default: `/tmp/ds4_cuda_probe_cmake_minimal`)
+
 ## Spark0: Kernel Bring-up Tiny (CUTLASS/DeepGEMM Gates)
 
 When you want a small, focused “kernel plumbing” gate set (no cuBLASLt) that is still representative for CUTLASS/DeepGEMM-style kernels:
@@ -219,6 +239,7 @@ Commands run:
 ```bash
 ./scripts/cuda_probe_compile_only_tiny_spark0.sh spark0@aitopatom-9ab9.local
 ./scripts/cuda_probe_nvcc_minimal_spark0.sh spark0@aitopatom-9ab9.local
+./scripts/cuda_probe_cmake_minimal_spark0.sh spark0@aitopatom-9ab9.local
 ./scripts/cuda_probe_tiny_spark0.sh spark0@aitopatom-9ab9.local
 ./scripts/cuda_probe_kernel_tiny_spark0.sh spark0@aitopatom-9ab9.local
 ```
@@ -233,6 +254,7 @@ Observed:
 - `cluster_dims_attr_compile: OK` for a kernel annotated with `__cluster_dims__(2,1,1)` (toolchain accepts cluster annotations for `sm_121`)
 - `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
 - `nvcc --gpu-architecture=sm_121` compiles, links, and runs the minimal probe (prints `__CUDA_ARCH__=1210`; PTX embedded)
+- CMake config/build/run with `CMAKE_CUDA_ARCHITECTURES="121"` prints `__CUDA_ARCH__=1210`
 - When PTX is present, scripts also print the first PTX `.target` line (`ptx_target_*`) for quick arch verification.
 - Device is reported as `NVIDIA GB10` with `cc=12.1`
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
