@@ -10,6 +10,7 @@ import json
 import math
 import random
 import statistics
+import sys
 from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -913,23 +914,32 @@ def generate_markov_trace(cfg: MarkovTraceConfig) -> List[TokenRoute]:
     return(routes)
 
 
-def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict[str, object]] = None) -> List[TokenRoute]:
+def load_trace_jsonl(
+    path: str,
+    time_mode: str = "t_ms",
+    meta_out: Optional[Dict[str, object]] = None,
+    non_route_policy: str = "error",
+) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
+    if non_route_policy not in ("error", "skip"):
+        raise ValueError("non_route_policy must be 'error' or 'skip'")
     routes: List[TokenRoute] = []
     t_ms_accum = 0.0
+    display_path = path if path != "-" else "<stdin>"
 
     def merge_meta(payload: object, lineno: int) -> None:
         if meta_out is None:
             return
         if not isinstance(payload, dict):
-            raise ValueError(f"{path}:{lineno}: meta payload must be a JSON object")
+            raise ValueError(f"{display_path}:{lineno}: meta payload must be a JSON object")
         for k, v in payload.items():
             if not isinstance(k, str):
-                raise ValueError(f"{path}:{lineno}: meta keys must be strings")
+                raise ValueError(f"{display_path}:{lineno}: meta keys must be strings")
             meta_out[k] = v
 
-    with open(path, "r", encoding="utf-8") as f:
+    f = sys.stdin if path == "-" else open(path, "r", encoding="utf-8")
+    try:
         for lineno, line in enumerate(f, 1):
             line = line.strip()
             if line == "":
@@ -938,7 +948,7 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
                 continue
             obj = json.loads(line)
             if not isinstance(obj, dict):
-                raise ValueError(f"{path}:{lineno}: expected JSON object")
+                raise ValueError(f"{display_path}:{lineno}: expected JSON object")
 
             if "type" in obj and obj["type"] in ("meta", "trace_meta"):
                 payload = obj.get("meta", {k: v for k, v in obj.items() if k != "type"})
@@ -948,101 +958,110 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
                 merge_meta(obj["meta"], lineno)
                 continue
 
+            if non_route_policy == "skip":
+                if "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                    if "cls" not in obj or ("candidates" not in obj and "layers" not in obj):
+                        continue
+
             if time_mode == "t_ms":
                 if "dt_ms" in obj and obj["dt_ms"] is not None:
-                    raise ValueError(f"{path}:{lineno}: dt_ms is only valid with time_mode=dt_ms")
+                    raise ValueError(f"{display_path}:{lineno}: dt_ms is only valid with time_mode=dt_ms")
                 if "t_ms" not in obj:
-                    raise ValueError(f"{path}:{lineno}: missing t_ms")
+                    raise ValueError(f"{display_path}:{lineno}: missing t_ms")
             else:
                 if "t_ms" in obj and obj["t_ms"] is not None:
-                    raise ValueError(f"{path}:{lineno}: t_ms is not valid with time_mode=dt_ms")
+                    raise ValueError(f"{display_path}:{lineno}: t_ms is not valid with time_mode=dt_ms")
                 if "dt_ms" not in obj:
-                    raise ValueError(f"{path}:{lineno}: missing dt_ms")
+                    raise ValueError(f"{display_path}:{lineno}: missing dt_ms")
             if "cls" not in obj:
-                raise ValueError(f"{path}:{lineno}: missing cls")
+                if non_route_policy == "skip" and "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                    continue
+                raise ValueError(f"{display_path}:{lineno}: missing cls")
             if "candidates" not in obj and "layers" not in obj:
-                raise ValueError(f"{path}:{lineno}: missing candidates (or layers)")
+                if non_route_policy == "skip" and "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                    continue
+                raise ValueError(f"{display_path}:{lineno}: missing candidates (or layers)")
 
             token_index: Optional[int] = None
             if "token_index" in obj and obj["token_index"] is not None:
                 ti_raw = obj["token_index"]
                 if not isinstance(ti_raw, int):
-                    raise ValueError(f"{path}:{lineno}: token_index must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: token_index must be an integer")
                 if ti_raw < 0:
-                    raise ValueError(f"{path}:{lineno}: token_index must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: token_index must be >= 0")
                 token_index = int(ti_raw)
 
             if time_mode == "t_ms":
                 t_ms = float(obj["t_ms"])
                 if t_ms < 0.0:
-                    raise ValueError(f"{path}:{lineno}: t_ms must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: t_ms must be >= 0")
             else:
                 dt_ms = float(obj["dt_ms"])
                 if dt_ms < 0.0:
-                    raise ValueError(f"{path}:{lineno}: dt_ms must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: dt_ms must be >= 0")
                 t_ms_accum += dt_ms
                 t_ms = t_ms_accum
 
             cls_raw = obj["cls"]
             if not isinstance(cls_raw, str):
-                raise ValueError(f"{path}:{lineno}: cls must be a string")
+                raise ValueError(f"{display_path}:{lineno}: cls must be a string")
             cls_norm = cls_raw.strip().lower()
             if cls_norm == "interactive":
                 cls = LatencyClass.INTERACTIVE
             elif cls_norm == "batch":
                 cls = LatencyClass.BATCH
             else:
-                raise ValueError(f"{path}:{lineno}: cls must be 'interactive' or 'batch'")
+                raise ValueError(f"{display_path}:{lineno}: cls must be 'interactive' or 'batch'")
 
             layers: Optional[Tuple[LayerRoute, ...]] = None
             candidates: List[int] = []
             if "layers" in obj and obj["layers"] is not None:
                 layers_raw = obj["layers"]
                 if not isinstance(layers_raw, list):
-                    raise ValueError(f"{path}:{lineno}: layers must be a JSON list")
+                    raise ValueError(f"{display_path}:{lineno}: layers must be a JSON list")
                 layer_routes: List[LayerRoute] = []
                 union: List[int] = []
                 seen_union: set[int] = set()
                 for li, lobj in enumerate(layers_raw):
                     if not isinstance(lobj, dict):
-                        raise ValueError(f"{path}:{lineno}: layers[{li}] must be a JSON object")
+                        raise ValueError(f"{display_path}:{lineno}: layers[{li}] must be a JSON object")
                     if "candidates" not in lobj:
-                        raise ValueError(f"{path}:{lineno}: layers[{li}] missing candidates")
+                        raise ValueError(f"{display_path}:{lineno}: layers[{li}] missing candidates")
                     lcand_raw = lobj["candidates"]
                     if not isinstance(lcand_raw, list):
-                        raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be a JSON list")
+                        raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be a JSON list")
                     lcands: List[int] = []
                     for c in lcand_raw:
                         if not isinstance(c, int):
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be integers")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be integers")
                         if c < 0:
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be >= 0")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be >= 0")
                         lcands.append(int(c))
                     if len(lcands) == 0:
-                        raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be non-empty")
+                        raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be non-empty")
                     if len(set(lcands)) != len(lcands):
-                        raise ValueError(f"{path}:{lineno}: layers[{li}].candidates must be unique")
+                        raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be unique")
 
                     layer_k: Optional[int] = None
                     if "k" in lobj and lobj["k"] is not None:
                         lk_raw = lobj["k"]
                         if not isinstance(lk_raw, int):
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].k must be an integer")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].k must be an integer")
                         if lk_raw <= 0:
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].k must be > 0")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].k must be > 0")
                         layer_k = int(lk_raw)
 
                     layer_scores: Optional[Tuple[float, ...]] = None
                     if "scores" in lobj and lobj["scores"] is not None:
                         ls_raw = lobj["scores"]
                         if not isinstance(ls_raw, list):
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].scores must be a JSON list")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].scores must be a JSON list")
                         if len(ls_raw) != len(lcands):
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].scores must have same length as candidates")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].scores must have same length as candidates")
                         out_scores: List[float] = []
                         for s in ls_raw:
                             if not isinstance(s, (int, float)):
-                                raise ValueError(f"{path}:{lineno}: layers[{li}].scores must be numbers")
+                                raise ValueError(f"{display_path}:{lineno}: layers[{li}].scores must be numbers")
                             out_scores.append(float(s))
                         layer_scores = tuple(out_scores)
 
@@ -1050,9 +1069,9 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
                     if "cost_scale" in lobj and lobj["cost_scale"] is not None:
                         lcs_raw = lobj["cost_scale"]
                         if not isinstance(lcs_raw, (int, float)):
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].cost_scale must be a number")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].cost_scale must be a number")
                         if float(lcs_raw) <= 0.0:
-                            raise ValueError(f"{path}:{lineno}: layers[{li}].cost_scale must be > 0")
+                            raise ValueError(f"{display_path}:{lineno}: layers[{li}].cost_scale must be > 0")
                         layer_cost_scale = float(lcs_raw)
 
                     layer_routes.append(LayerRoute(candidates=tuple(lcands), k=layer_k, scores=layer_scores, cost_scale=layer_cost_scale))
@@ -1062,28 +1081,28 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
                             seen_union.add(c)
 
                 if len(layer_routes) == 0:
-                    raise ValueError(f"{path}:{lineno}: layers must be non-empty")
+                    raise ValueError(f"{display_path}:{lineno}: layers must be non-empty")
 
                 if "scores" in obj and obj["scores"] is not None:
-                    raise ValueError(f"{path}:{lineno}: scores is not valid when layers are present (use layers[].scores)")
+                    raise ValueError(f"{display_path}:{lineno}: scores is not valid when layers are present (use layers[].scores)")
 
                 if "candidates" in obj and obj["candidates"] is not None:
                     cand_raw = obj["candidates"]
                     if not isinstance(cand_raw, list):
-                        raise ValueError(f"{path}:{lineno}: candidates must be a JSON list")
+                        raise ValueError(f"{display_path}:{lineno}: candidates must be a JSON list")
                     top_candidates: List[int] = []
                     for c in cand_raw:
                         if not isinstance(c, int):
-                            raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                            raise ValueError(f"{display_path}:{lineno}: candidates must be integers")
                         if c < 0:
-                            raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
+                            raise ValueError(f"{display_path}:{lineno}: candidates must be >= 0")
                         top_candidates.append(int(c))
                     if len(top_candidates) == 0:
-                        raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+                        raise ValueError(f"{display_path}:{lineno}: candidates must be non-empty")
                     if len(set(top_candidates)) != len(top_candidates):
-                        raise ValueError(f"{path}:{lineno}: candidates must be unique")
+                        raise ValueError(f"{display_path}:{lineno}: candidates must be unique")
                     if top_candidates != union:
-                        raise ValueError(f"{path}:{lineno}: candidates must equal the union of layers[].candidates when layers are present")
+                        raise ValueError(f"{display_path}:{lineno}: candidates must equal the union of layers[].candidates when layers are present")
                     candidates = top_candidates
                 else:
                     candidates = union
@@ -1091,38 +1110,38 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
             else:
                 cand_raw = obj["candidates"]
                 if not isinstance(cand_raw, list):
-                    raise ValueError(f"{path}:{lineno}: candidates must be a JSON list")
+                    raise ValueError(f"{display_path}:{lineno}: candidates must be a JSON list")
                 for c in cand_raw:
                     if not isinstance(c, int):
-                        raise ValueError(f"{path}:{lineno}: candidates must be integers")
+                        raise ValueError(f"{display_path}:{lineno}: candidates must be integers")
                     if c < 0:
-                        raise ValueError(f"{path}:{lineno}: candidates must be >= 0")
+                        raise ValueError(f"{display_path}:{lineno}: candidates must be >= 0")
                     candidates.append(int(c))
                 if len(candidates) == 0:
-                    raise ValueError(f"{path}:{lineno}: candidates must be non-empty")
+                    raise ValueError(f"{display_path}:{lineno}: candidates must be non-empty")
                 if len(set(candidates)) != len(candidates):
-                    raise ValueError(f"{path}:{lineno}: candidates must be unique")
+                    raise ValueError(f"{display_path}:{lineno}: candidates must be unique")
 
             k: Optional[int] = None
             if "k" in obj and obj["k"] is not None:
                 k_raw = obj["k"]
                 if not isinstance(k_raw, int):
-                    raise ValueError(f"{path}:{lineno}: k must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: k must be an integer")
                 if k_raw <= 0:
-                    raise ValueError(f"{path}:{lineno}: k must be > 0")
+                    raise ValueError(f"{display_path}:{lineno}: k must be > 0")
                 k = int(k_raw)
 
             scores: Optional[Tuple[float, ...]] = None
             if layers is None and "scores" in obj and obj["scores"] is not None:
                 scores_raw = obj["scores"]
                 if not isinstance(scores_raw, list):
-                    raise ValueError(f"{path}:{lineno}: scores must be a JSON list")
+                    raise ValueError(f"{display_path}:{lineno}: scores must be a JSON list")
                 if len(scores_raw) != len(candidates):
-                    raise ValueError(f"{path}:{lineno}: scores must have same length as candidates")
+                    raise ValueError(f"{display_path}:{lineno}: scores must have same length as candidates")
                 scores_list: List[float] = []
                 for s in scores_raw:
                     if not isinstance(s, (int, float)):
-                        raise ValueError(f"{path}:{lineno}: scores must be numbers")
+                        raise ValueError(f"{display_path}:{lineno}: scores must be numbers")
                     scores_list.append(float(s))
                 scores = tuple(scores_list)
 
@@ -1130,63 +1149,63 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
             if "mtp_accept_len" in obj and obj["mtp_accept_len"] is not None:
                 al_raw = obj["mtp_accept_len"]
                 if not isinstance(al_raw, int):
-                    raise ValueError(f"{path}:{lineno}: mtp_accept_len must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: mtp_accept_len must be an integer")
                 if al_raw < 1:
-                    raise ValueError(f"{path}:{lineno}: mtp_accept_len must be >= 1")
+                    raise ValueError(f"{display_path}:{lineno}: mtp_accept_len must be >= 1")
                 mtp_accept_len = int(al_raw)
 
             accepted_mtp: Optional[int] = None
             if "accepted_mtp" in obj and obj["accepted_mtp"] is not None:
                 am_raw = obj["accepted_mtp"]
                 if not isinstance(am_raw, int):
-                    raise ValueError(f"{path}:{lineno}: accepted_mtp must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: accepted_mtp must be an integer")
                 if am_raw < 0:
-                    raise ValueError(f"{path}:{lineno}: accepted_mtp must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: accepted_mtp must be >= 0")
                 accepted_mtp = int(am_raw)
 
             rejected_mtp: Optional[int] = None
             if "rejected_mtp" in obj and obj["rejected_mtp"] is not None:
                 rm_raw = obj["rejected_mtp"]
                 if not isinstance(rm_raw, int):
-                    raise ValueError(f"{path}:{lineno}: rejected_mtp must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: rejected_mtp must be an integer")
                 if rm_raw < 0:
-                    raise ValueError(f"{path}:{lineno}: rejected_mtp must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: rejected_mtp must be >= 0")
                 rejected_mtp = int(rm_raw)
 
             cost_scale: Optional[float] = None
             if "cost_scale" in obj and obj["cost_scale"] is not None:
                 cs_raw = obj["cost_scale"]
                 if not isinstance(cs_raw, (int, float)):
-                    raise ValueError(f"{path}:{lineno}: cost_scale must be a number")
+                    raise ValueError(f"{display_path}:{lineno}: cost_scale must be a number")
                 if float(cs_raw) <= 0.0:
-                    raise ValueError(f"{path}:{lineno}: cost_scale must be > 0")
+                    raise ValueError(f"{display_path}:{lineno}: cost_scale must be > 0")
                 cost_scale = float(cs_raw)
 
             decode_ms: Optional[float] = None
             if "decode_ms" in obj and obj["decode_ms"] is not None:
                 dm_raw = obj["decode_ms"]
                 if not isinstance(dm_raw, (int, float)):
-                    raise ValueError(f"{path}:{lineno}: decode_ms must be a number")
+                    raise ValueError(f"{display_path}:{lineno}: decode_ms must be a number")
                 if float(dm_raw) < 0.0:
-                    raise ValueError(f"{path}:{lineno}: decode_ms must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: decode_ms must be >= 0")
                 decode_ms = float(dm_raw)
 
             kv_tokens: Optional[int] = None
             if "kv_tokens" in obj and obj["kv_tokens"] is not None:
                 kv_raw = obj["kv_tokens"]
                 if not isinstance(kv_raw, int):
-                    raise ValueError(f"{path}:{lineno}: kv_tokens must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: kv_tokens must be an integer")
                 if kv_raw < 0:
-                    raise ValueError(f"{path}:{lineno}: kv_tokens must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: kv_tokens must be >= 0")
                 kv_tokens = int(kv_raw)
 
             expert_batch_size: Optional[int] = None
             if "expert_batch_size" in obj and obj["expert_batch_size"] is not None:
                 bs_raw = obj["expert_batch_size"]
                 if not isinstance(bs_raw, int):
-                    raise ValueError(f"{path}:{lineno}: expert_batch_size must be an integer")
+                    raise ValueError(f"{display_path}:{lineno}: expert_batch_size must be an integer")
                 if bs_raw < 0:
-                    raise ValueError(f"{path}:{lineno}: expert_batch_size must be >= 0")
+                    raise ValueError(f"{display_path}:{lineno}: expert_batch_size must be >= 0")
                 expert_batch_size = int(bs_raw)
 
             routes.append(
@@ -1207,6 +1226,9 @@ def load_trace_jsonl(path: str, time_mode: str = "t_ms", meta_out: Optional[Dict
                     layers=layers,
                 )
             )
+    finally:
+        if path != "-":
+            f.close()
 
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
@@ -1560,7 +1582,8 @@ def write_trace_csv(path: str, trace: Sequence[TokenRoute]) -> None:
 def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
     if path.strip() == "":
         raise ValueError("path must be non-empty")
-    with open(path, "w", encoding="utf-8") as f:
+    f = sys.stdout if path == "-" else open(path, "w", encoding="utf-8")
+    try:
         for r in trace:
             obj: Dict[str, object] = {
                 "t_ms": float(r.t_ms),
@@ -1601,6 +1624,9 @@ def write_trace_jsonl(path: str, trace: Sequence[TokenRoute]) -> None:
                 obj["expert_batch_size"] = int(r.expert_batch_size)
             f.write(json.dumps(obj, sort_keys=True))
             f.write("\n")
+    finally:
+        if path != "-":
+            f.close()
 
 
 def _derive_mtp_accept_len(route: TokenRoute, mtp_draft_len: int) -> Optional[int]:
@@ -1630,7 +1656,8 @@ def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Op
     if isinstance(meta_out.get("mtp_draft_len"), int):
         mtp_draft_len = int(meta_out["mtp_draft_len"])
 
-    with open(path, "w", encoding="utf-8") as f:
+    f = sys.stdout if path == "-" else open(path, "w", encoding="utf-8")
+    try:
         f.write(json.dumps({"type": "meta", "meta": meta_out}, sort_keys=True))
         f.write("\n")
         for r in trace:
@@ -1674,6 +1701,9 @@ def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Op
                 obj["expert_batch_size"] = int(r.expert_batch_size)
             f.write(json.dumps(obj, sort_keys=True))
             f.write("\n")
+    finally:
+        if path != "-":
+            f.close()
 
 
 def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, meta: Optional[Dict[str, object]] = None) -> Dict[str, object]:
@@ -3066,13 +3096,25 @@ def scale_trace_speedup(trace: Sequence[TokenRoute], speedup: float) -> List[Tok
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Host-only scheduler simulator (synthetic routing traces).")
-    p.add_argument("--trace-jsonl", type=str, default="", help="Replay routing trace from JSONL file (t_ms, cls, candidates; optional token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size).")
+    p.add_argument(
+        "--trace-jsonl",
+        type=str,
+        default="",
+        help="Replay routing trace from JSONL file (use '-' for stdin). Required fields: t_ms/dt_ms, cls, candidates (or layers). Optional: token_index, k, scores, mtp_accept_len, accepted_mtp, rejected_mtp, cost_scale, decode_ms, kv_tokens, expert_batch_size.",
+    )
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
+    p.add_argument(
+        "--trace-non-route",
+        type=str,
+        default="error",
+        choices=("error", "skip"),
+        help="JSONL trace replay: what to do with non-route JSON objects. 'skip' ignores objects with a non-meta 'type' that do not include route fields (useful for mixed runtime logs).",
+    )
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
-    p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len) and exit. Requires --trace-jsonl/--trace-csv.")
+    p.add_argument("--canonicalize-trace-jsonl", type=str, default="", help="Replay trace tool: write a canonical JSONL trace (meta header + derived mtp_accept_len) and exit. Requires --trace-jsonl/--trace-csv. Use '-' for stdout.")
     p.add_argument("--dump-trace-jsonl", type=str, default="", help="Write the generated synthetic trace to a JSONL file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--dump-trace-csv", type=str, default="", help="Write the generated synthetic trace to a CSV file before simulation (t_ms, cls, candidates; includes layers when --num-layers>1).")
     p.add_argument("--trace-mode", type=str, default="zipf", help="Synthetic trace mode: zipf (default), hotset, or markov.")
@@ -3184,7 +3226,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.arrival_units.strip().lower() != "steps":
             raise SystemExit("--arrival-units is only supported for synthetic trace generation (omit --trace-jsonl/--trace-csv)")
         if args.trace_jsonl != "":
-            trace = load_trace_jsonl(args.trace_jsonl, time_mode=args.trace_time_mode.strip().lower(), meta_out=trace_meta)
+            trace = load_trace_jsonl(
+                args.trace_jsonl,
+                time_mode=args.trace_time_mode.strip().lower(),
+                meta_out=trace_meta,
+                non_route_policy=args.trace_non_route.strip().lower(),
+            )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
         if trace_speedup != 1.0:
