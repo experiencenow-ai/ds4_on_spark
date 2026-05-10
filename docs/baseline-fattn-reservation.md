@@ -33,6 +33,27 @@ Run a resident `llama-server` sweep and inspect the emitted probe JSON:
 - Script: `scripts/benchmark_llamacpp_server_sweep.py`
 - Output: `fattn_reservation_probe.json` in `OUT_DIR`
 
+### Run From Mac (baseline wrapper)
+
+To attach the probe to the standard baseline entrypoint (so the artifacts get fetched and recorded in the same report), run from the Mac:
+
+```sh
+ALLOW_RUN=1 \
+LLAMA_SERVER_SWEEP=1 \
+MODEL_GGUF=/abs/path/on/spark/to/model.gguf \
+LLAMA_SERVER=/abs/path/on/spark/to/llama-server \
+LLAMA_SERVER_SWEEP_CTX=8192 \
+LLAMA_SERVER_SWEEP_PORT=18081 \
+LLAMA_SERVER_SWEEP_SERVER_ARGS="--cache-ram -1 --fit off --no-warmup --no-webui --cache-prompt --parallel 1 --log-verbosity 2" \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+Notes:
+
+- `LLAMA_SERVER` is required when `LLAMA_SERVER_SWEEP=1`.
+- Use a non-default port to avoid colliding with any resident server already running.
+- Keep `LLAMA_SERVER_SWEEP_PROMPT_WORDS` small when iterating; the sweep is intended to be **read-only**, but model loads are still expensive.
+
 The script writes these fields into `server_sweep.md` metadata:
 
 - `fattn_seen_disabled`: should be `False` on a healthy runtime

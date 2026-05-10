@@ -54,6 +54,7 @@ Then, add runtime-exposed counters only when the runtime makes them available (d
 - expert batch sizes / queue depth
 - MTP draft/accepted/rejected counters
 - CUDA fallback / graph placement (best-effort): run `scripts/benchmark_llamacpp_server_sweep.py` and inspect `fattn_reservation_probe.json` + the `node_kind_*` / `sched_reserve_*` fields (see `docs/baseline-fattn-reservation.md`).
+  - To include this sweep in the standard baseline report (Mac → Spark), set `LLAMA_SERVER_SWEEP=1` and provide `LLAMA_SERVER=/abs/path/on/spark/to/llama-server` when running `scripts/run_baseline_existing_runtime.sh`.
 
 The llama.cpp Spark baseline script also supports a **best-effort token trace** capture:
 

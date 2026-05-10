@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Resident llama-server prompt-size sweep for Spark-style hosts."""
 
+import base64
 import hashlib
 import json
 import os
@@ -12,6 +13,16 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+
+def env_str_b64(name, default=""):
+    b64 = os.environ.get(name + "_B64", "")
+    if b64:
+        try:
+            return base64.b64decode(b64.encode("utf-8")).decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    return os.environ.get(name, default)
 
 
 def env_int(name, default):
@@ -274,8 +285,8 @@ def scan_fattn_reservation(log_path):
 
 def main():
     out_dir = os.environ.get("OUT_DIR", "/tmp/llamacpp_server_sweep")
-    llama_server = os.environ.get("LLAMA_SERVER", "")
-    model = os.environ.get("MODEL_GGUF", "")
+    llama_server = env_str_b64("LLAMA_SERVER", "")
+    model = env_str_b64("MODEL_GGUF", "")
     host = os.environ.get("HOST", "127.0.0.1")
     port = env_int("PORT", 18080)
     ctx = env_int("CTX", 8192)
@@ -288,7 +299,7 @@ def main():
     wait_timeout_s = env_float("WAIT_TIMEOUT_S", 1200.0)
     poll_s = env_float("POLL_S", 5.0)
     prompt_sizes = split_ints(os.environ.get("PROMPT_WORDS", "256 1024 4096"))
-    extra = os.environ.get("SERVER_ARGS", "")
+    extra = env_str_b64("SERVER_ARGS", "")
     os.makedirs(out_dir, exist_ok=True)
     base_url = "http://%s:%d" % (host, port)
     server_log = os.path.join(out_dir, "llama_server.log")

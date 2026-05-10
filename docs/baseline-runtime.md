@@ -82,6 +82,18 @@ MODEL_QUANT=Q2_K \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
+Optional: run the resident `llama-server` sweep probe in the same report (useful for catching `__fattn__` reservation fallbacks that disable Flash Attention globally):
+
+```sh
+ALLOW_RUN=1 \
+LLAMA_SERVER_SWEEP=1 \
+MODEL_GGUF=/abs/path/on/spark/to/model.gguf \
+LLAMA_SERVER=/abs/path/on/spark/to/llama-server \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+See `docs/baseline-fattn-reservation.md` for interpretation and the narrow padding patch.
+
 Use `REMOTE_BENCH_ENV` for env vars shared by both Spark benchmark scripts, or
 `REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime.
 
@@ -93,7 +105,7 @@ Recognized keys (non-exhaustive):
 
 - Shared: `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `GPU_SAMPLE`, `GPU_SAMPLE_INTERVAL_S`
 - Inventory: `SPARK_INVENTORY`, `INVENTORY_DIRS`, `INVENTORY_MAX_DEPTH`, `INVENTORY_MAX_FILES`
-- llama.cpp: `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`
+- llama.cpp: `LLAMA_DIR`, `MODEL_GGUF`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `LLAMA_PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `LLAMA_SERVER_SWEEP`, `LLAMA_SERVER`, `LLAMA_SERVER_SWEEP_PORT`, `LLAMA_SERVER_SWEEP_CTX`, `LLAMA_SERVER_SWEEP_PROMPT_WORDS`, `LLAMA_SERVER_SWEEP_N_PREDICT`, `LLAMA_SERVER_SWEEP_REPEATS`, `LLAMA_SERVER_SWEEP_CACHE_PROMPT`, `LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S`, `LLAMA_SERVER_SWEEP_POLL_S`, `LLAMA_SERVER_SWEEP_KEEP_SERVER`, `LLAMA_SERVER_SWEEP_SERVER_ARGS`
 - vLLM: `VLLM_MODEL`, `VLLM_PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `MEASURE_TTFT`
 
 These env strings are recorded in the generated report, so do not put tokens or

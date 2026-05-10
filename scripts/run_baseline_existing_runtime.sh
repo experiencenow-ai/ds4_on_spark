@@ -24,6 +24,18 @@ N_TOKENS="${N_TOKENS:-}"
 N_GPU_LAYERS="${N_GPU_LAYERS:-}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 SKIP_MODEL_SHA="${SKIP_MODEL_SHA:-0}"
+LLAMA_SERVER_SWEEP="${LLAMA_SERVER_SWEEP:-0}"
+LLAMA_SERVER="${LLAMA_SERVER:-}"
+LLAMA_SERVER_SWEEP_PORT="${LLAMA_SERVER_SWEEP_PORT:-18080}"
+LLAMA_SERVER_SWEEP_CTX="${LLAMA_SERVER_SWEEP_CTX:-}"
+LLAMA_SERVER_SWEEP_PROMPT_WORDS="${LLAMA_SERVER_SWEEP_PROMPT_WORDS:-256 1024 4096}"
+LLAMA_SERVER_SWEEP_N_PREDICT="${LLAMA_SERVER_SWEEP_N_PREDICT:-8}"
+LLAMA_SERVER_SWEEP_REPEATS="${LLAMA_SERVER_SWEEP_REPEATS:-1}"
+LLAMA_SERVER_SWEEP_CACHE_PROMPT="${LLAMA_SERVER_SWEEP_CACHE_PROMPT:-0}"
+LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S="${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S:-1200}"
+LLAMA_SERVER_SWEEP_POLL_S="${LLAMA_SERVER_SWEEP_POLL_S:-5}"
+LLAMA_SERVER_SWEEP_KEEP_SERVER="${LLAMA_SERVER_SWEEP_KEEP_SERVER:-0}"
+LLAMA_SERVER_SWEEP_SERVER_ARGS="${LLAMA_SERVER_SWEEP_SERVER_ARGS:-}"
 VLLM_MODEL="${VLLM_MODEL:-}"
 VLLM_PROMPT="${VLLM_PROMPT:-${PROMPT:-}}"
 MAX_TOKENS="${MAX_TOKENS:-}"
@@ -182,6 +194,18 @@ apply_overrides()
             llama:N_GPU_LAYERS) N_GPU_LAYERS="$v" ;;
             llama:EXTRA_ARGS) EXTRA_ARGS="$v" ;;
             llama:SKIP_MODEL_SHA) SKIP_MODEL_SHA="$v" ;;
+            llama:LLAMA_SERVER_SWEEP) LLAMA_SERVER_SWEEP="$v" ;;
+            llama:LLAMA_SERVER) LLAMA_SERVER="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_PORT) LLAMA_SERVER_SWEEP_PORT="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_CTX) LLAMA_SERVER_SWEEP_CTX="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_PROMPT_WORDS) LLAMA_SERVER_SWEEP_PROMPT_WORDS="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_N_PREDICT) LLAMA_SERVER_SWEEP_N_PREDICT="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_REPEATS) LLAMA_SERVER_SWEEP_REPEATS="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_CACHE_PROMPT) LLAMA_SERVER_SWEEP_CACHE_PROMPT="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S) LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_POLL_S) LLAMA_SERVER_SWEEP_POLL_S="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_KEEP_SERVER) LLAMA_SERVER_SWEEP_KEEP_SERVER="$v" ;;
+            llama:LLAMA_SERVER_SWEEP_SERVER_ARGS) LLAMA_SERVER_SWEEP_SERVER_ARGS="$v" ;;
 
             vllm:VLLM_MODEL) VLLM_MODEL="$v" ;;
             vllm:VLLM_PROMPT) VLLM_PROMPT="$v" ;;
@@ -197,6 +221,7 @@ EOF
 LLAMA_PROMPT_B64="$(b64_enc "$LLAMA_PROMPT")"
 VLLM_PROMPT_B64="$(b64_enc "$VLLM_PROMPT")"
 EXTRA_ARGS_B64="$(b64_enc "$EXTRA_ARGS")"
+LLAMA_SERVER_SWEEP_SERVER_ARGS_B64="$(b64_enc "$LLAMA_SERVER_SWEEP_SERVER_ARGS")"
 
 apply_overrides "$REMOTE_BENCH_ENV" bench
 apply_overrides "${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}" llama
@@ -205,10 +230,12 @@ apply_overrides "${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}" vllm
 LLAMA_PROMPT_B64="$(b64_enc "$LLAMA_PROMPT")"
 VLLM_PROMPT_B64="$(b64_enc "$VLLM_PROMPT")"
 EXTRA_ARGS_B64="$(b64_enc "$EXTRA_ARGS")"
+LLAMA_SERVER_SWEEP_SERVER_ARGS_B64="$(b64_enc "$LLAMA_SERVER_SWEEP_SERVER_ARGS")"
 
 LLAMA_DIR_B64="$(b64_enc "$LLAMA_DIR")"
 MODEL_GGUF_B64="$(b64_enc "$MODEL_GGUF")"
 LLAMA_CLI_B64="$(b64_enc "$LLAMA_CLI")"
+LLAMA_SERVER_B64="$(b64_enc "$LLAMA_SERVER")"
 RUNTIME_LABEL_B64="$(b64_enc "$RUNTIME_LABEL")"
 MODEL_SOURCE_B64="$(b64_enc "$MODEL_SOURCE")"
 MODEL_QUANT_B64="$(b64_enc "$MODEL_QUANT")"
@@ -216,11 +243,15 @@ VLLM_MODEL_B64="$(b64_enc "$VLLM_MODEL")"
 INVENTORY_DIRS_B64="$(b64_enc "$INVENTORY_DIRS")"
 
 REMOTE_LLAMA_OUT_DIR="/tmp/baseline_llamacpp_${ts}"
+REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR="/tmp/baseline_llamacpp_server_sweep_${ts}"
 REMOTE_VLLM_OUT_DIR="/tmp/baseline_vllm_${ts}"
 REMOTE_INV_OUT_DIR="/tmp/baseline_spark_inventory_${ts}"
 
 REMOTE_LLAMA_CMD="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S SKIP_MODEL_SHA=$SKIP_MODEL_SHA LLAMA_DIR='' LLAMA_DIR_B64='${LLAMA_DIR_B64}' MODEL_GGUF='' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_CLI='' LLAMA_CLI_B64='${LLAMA_CLI_B64}' RUNTIME_LABEL='' RUNTIME_LABEL_B64='${RUNTIME_LABEL_B64}' MODEL_SOURCE='' MODEL_SOURCE_B64='${MODEL_SOURCE_B64}' MODEL_QUANT='' MODEL_QUANT_B64='${MODEL_QUANT_B64}' PROMPT_B64='${LLAMA_PROMPT_B64}' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
 REMOTE_LLAMA_CMD_PRINT="cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && ALLOW_FETCH=$ALLOW_FETCH ALLOW_BUILD=$ALLOW_BUILD ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S SKIP_MODEL_SHA=$SKIP_MODEL_SHA LLAMA_DIR_B64='${LLAMA_DIR_B64}' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_CLI_B64='${LLAMA_CLI_B64}' RUNTIME_LABEL_B64='${RUNTIME_LABEL_B64}' MODEL_SOURCE_B64='${MODEL_SOURCE_B64}' MODEL_QUANT_B64='${MODEL_QUANT_B64}' PROMPT_B64='<omitted>' CTX='${CTX}' N_TOKENS='${N_TOKENS}' N_GPU_LAYERS='${N_GPU_LAYERS}' EXTRA_ARGS_B64='${EXTRA_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_OUT_DIR}' /tmp/benchmark_llamacpp_spark.sh"
+
+REMOTE_LLAMA_SERVER_SWEEP_CMD="cat > /tmp/benchmark_llamacpp_server_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_sweep.py && MODEL_GGUF='' MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_SERVER='' LLAMA_SERVER_B64='${LLAMA_SERVER_B64}' SERVER_ARGS='' SERVER_ARGS_B64='${LLAMA_SERVER_SWEEP_SERVER_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR}' START_SERVER=1 KEEP_SERVER='${LLAMA_SERVER_SWEEP_KEEP_SERVER}' CACHE_PROMPT='${LLAMA_SERVER_SWEEP_CACHE_PROMPT}' WAIT_TIMEOUT_S='${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S}' POLL_S='${LLAMA_SERVER_SWEEP_POLL_S}' PROMPT_WORDS='${LLAMA_SERVER_SWEEP_PROMPT_WORDS}' N_PREDICT='${LLAMA_SERVER_SWEEP_N_PREDICT}' REPEATS='${LLAMA_SERVER_SWEEP_REPEATS}' PORT='${LLAMA_SERVER_SWEEP_PORT}' CTX='${LLAMA_SERVER_SWEEP_CTX:-$CTX}' N_GPU_LAYERS='${N_GPU_LAYERS}' /tmp/benchmark_llamacpp_server_sweep.py"
+REMOTE_LLAMA_SERVER_SWEEP_CMD_PRINT="cat > /tmp/benchmark_llamacpp_server_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_sweep.py && MODEL_GGUF_B64='${MODEL_GGUF_B64}' LLAMA_SERVER_B64='${LLAMA_SERVER_B64}' SERVER_ARGS_B64='${LLAMA_SERVER_SWEEP_SERVER_ARGS_B64}' OUT_DIR='${REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR}' START_SERVER=1 KEEP_SERVER='${LLAMA_SERVER_SWEEP_KEEP_SERVER}' CACHE_PROMPT='${LLAMA_SERVER_SWEEP_CACHE_PROMPT}' WAIT_TIMEOUT_S='${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S}' POLL_S='${LLAMA_SERVER_SWEEP_POLL_S}' PROMPT_WORDS='${LLAMA_SERVER_SWEEP_PROMPT_WORDS}' N_PREDICT='${LLAMA_SERVER_SWEEP_N_PREDICT}' REPEATS='${LLAMA_SERVER_SWEEP_REPEATS}' PORT='${LLAMA_SERVER_SWEEP_PORT}' CTX='${LLAMA_SERVER_SWEEP_CTX:-$CTX}' N_GPU_LAYERS='${N_GPU_LAYERS}' /tmp/benchmark_llamacpp_server_sweep.py"
 
 REMOTE_VLLM_CMD="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL='' VLLM_MODEL_B64='${VLLM_MODEL_B64}' PROMPT_B64='${VLLM_PROMPT_B64}' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
 REMOTE_VLLM_CMD_PRINT="cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && ALLOW_RUN=$ALLOW_RUN GPU_SAMPLE=$GPU_SAMPLE GPU_SAMPLE_INTERVAL_S=$GPU_SAMPLE_INTERVAL_S VLLM_MODEL_B64='${VLLM_MODEL_B64}' PROMPT_B64='<omitted>' MAX_TOKENS='${MAX_TOKENS}' TENSOR_PARALLEL_SIZE='${TENSOR_PARALLEL_SIZE}' MEASURE_TTFT='${MEASURE_TTFT}' OUT_DIR='${REMOTE_VLLM_OUT_DIR}' /tmp/benchmark_vllm_spark.sh"
@@ -293,6 +324,18 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo "- N_TOKENS (llama.cpp): ${N_TOKENS:-<default>}"
     echo "- N_GPU_LAYERS (llama.cpp): ${N_GPU_LAYERS:-<default>}"
     echo "- EXTRA_ARGS (llama.cpp): ${EXTRA_ARGS:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP (llama-server probe): ${LLAMA_SERVER_SWEEP:-<default>}"
+    echo "- LLAMA_SERVER (llama-server override): ${LLAMA_SERVER:-<unset>}"
+    echo "- LLAMA_SERVER_SWEEP_PORT: ${LLAMA_SERVER_SWEEP_PORT:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_CTX: ${LLAMA_SERVER_SWEEP_CTX:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_PROMPT_WORDS: ${LLAMA_SERVER_SWEEP_PROMPT_WORDS:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_N_PREDICT: ${LLAMA_SERVER_SWEEP_N_PREDICT:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_REPEATS: ${LLAMA_SERVER_SWEEP_REPEATS:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_CACHE_PROMPT: ${LLAMA_SERVER_SWEEP_CACHE_PROMPT:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S: ${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_POLL_S: ${LLAMA_SERVER_SWEEP_POLL_S:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_KEEP_SERVER: ${LLAMA_SERVER_SWEEP_KEEP_SERVER:-<default>}"
+    echo "- LLAMA_SERVER_SWEEP_SERVER_ARGS: ${LLAMA_SERVER_SWEEP_SERVER_ARGS:-<default>}"
     echo "- VLLM_MODEL (hf dir): ${VLLM_MODEL:-<unset>}"
     echo "- VLLM_PROMPT (vLLM): $(prompt_meta_line "$VLLM_PROMPT")"
     echo "- MAX_TOKENS (vLLM): ${MAX_TOKENS:-<default>}"
@@ -314,6 +357,12 @@ tar -C '$remote_parent' -czf '$remote_tar' '$remote_base'
     echo
     echo '```sh'
     echo "ssh $SSH_OPTS $target \"$REMOTE_LLAMA_CMD_PRINT\" < scripts/benchmark_llamacpp_spark.sh"
+    echo '```'
+    echo
+    echo "llama-server sweep (optional; LLAMA_SERVER_SWEEP=1):"
+    echo
+    echo '```sh'
+    echo "ssh $SSH_OPTS $target \"$REMOTE_LLAMA_SERVER_SWEEP_CMD_PRINT\" < scripts/benchmark_llamacpp_server_sweep.py"
     echo '```'
     echo
     echo "vLLM:"
@@ -470,6 +519,42 @@ fetch_remote_artifacts "$target" "$REMOTE_LLAMA_OUT_DIR" "$LLAMA_ARTIFACT_DIR" "
     echo '```'
     echo
 } >>"$REPORT_MD"
+
+if [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
+    echo "== running llama-server sweep on spark (may be gated; long model loads) =="
+    rc_llama_server_sweep=0
+    ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_SERVER_SWEEP_CMD" <"$repo_root/scripts/benchmark_llamacpp_server_sweep.py" \
+        >"$OUT_DIR/remote_llamacpp_server_sweep_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_server_sweep_stderr.txt" || rc_llama_server_sweep=$?
+
+    LLAMA_SERVER_SWEEP_ARTIFACT_DIR="$OUT_DIR/spark_llamacpp_server_sweep_artifacts"
+    fetch_remote_artifacts "$target" "$REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR" "$LLAMA_SERVER_SWEEP_ARTIFACT_DIR" "llamacpp_server_sweep" || true
+
+    {
+        echo "## llama-server sweep (Spark)"
+        echo
+        echo "- ssh_exit_code: $rc_llama_server_sweep"
+        echo "- spark_out_dir: $REMOTE_LLAMA_SERVER_SWEEP_OUT_DIR"
+        echo "- spark_artifacts_local: $LLAMA_SERVER_SWEEP_ARTIFACT_DIR"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_llamacpp_server_sweep_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_llamacpp_server_sweep_stderr.txt"
+        echo
+        echo "Stdout (head):"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_llamacpp_server_sweep_stdout.txt" || true
+        echo '```'
+        echo
+        echo "Stderr (head):"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_llamacpp_server_sweep_stderr.txt" || true
+        echo '```'
+        echo
+    } >>"$REPORT_MD"
+fi
 
 echo "== running vLLM probe script on spark =="
 rc_vllm=0
