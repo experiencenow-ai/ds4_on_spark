@@ -437,6 +437,33 @@ if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"c
 	\"$REMOTE_DIR\"/nvcc_compute121_minimal
 fi
 
+try_gencode_build_run() {
+	tag=\"\$1\"
+	gencode=\"\$2\"
+	echo
+	echo \"-- build+run (best-effort): \${tag} (-gencode \${gencode})\"
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"\${gencode}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
+	rc=\$?
+	if [ \$rc -ne 0 ]; then
+		echo \"\${tag}: build FAILED rc=\${rc}\"
+		head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\" || true
+		set -e
+		return 0
+	fi
+	\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\"
+	rc=\$?
+	if [ \$rc -ne 0 ]; then
+		echo \"\${tag}: run FAILED rc=\${rc}\"
+	fi
+	set -e
+	return 0
+}
+
+if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+	try_gencode_build_run gencode_sm_plus_ptx_list \"arch=compute_121,code=[sm_121,compute_121]\"
+fi
+
 try_variant_build_run() {
 	tag=\"\$1\"
 	arch=\"\$2\"
@@ -494,6 +521,9 @@ else
 	check_ptx native \"$REMOTE_DIR\"/nvcc_native_minimal
 	if [ -x \"$REMOTE_DIR\"/nvcc_compute121_minimal ]; then
 		check_ptx compute_121 \"$REMOTE_DIR\"/nvcc_compute121_minimal
+	fi
+	if [ -x \"$REMOTE_DIR\"/nvcc_gencode_sm_plus_ptx_list_minimal ]; then
+		check_ptx gencode_sm_plus_ptx_list \"$REMOTE_DIR\"/nvcc_gencode_sm_plus_ptx_list_minimal
 	fi
 	if [ -x \"$REMOTE_DIR\"/nvcc_sm_121a_minimal ]; then
 		check_ptx sm_121a \"$REMOTE_DIR\"/nvcc_sm_121a_minimal
