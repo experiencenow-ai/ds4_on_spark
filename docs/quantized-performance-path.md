@@ -68,6 +68,8 @@ demand fixed while varying MTP accept rates.
 
 Tip: for trace replay, `--arrival-units output_tokens` scales trace arrival deltas by the expected/observed MTP accept length per run, so MTP comparisons hold output-token demand roughly constant (use this for non-MTP traces where each record is one output token).
 
+Tip: when comparing MTP on/off against a replay trace that already includes `mtp_accept_len` (or `accepted_mtp`/`rejected_mtp`), `mtp_off` variants ignore (strip) those fields so a single-run compare works.
+
 Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
 
 Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
@@ -93,7 +95,7 @@ For concise loop output, use `--summary-json`:
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --num-experts 0 --summary-json
 ```
 
-To run a small set of trace-backed go/no-go sweeps (expert queue max, reservation, k-signal policy, starvation knobs, expert batching, and optionally MTP attempt policy), use:
+To run a small set of trace-backed go/no-go sweeps (expert queue max, reservation, k-signal policy, admit policy, starvation knobs, expert batching, optional pending-units, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep), use:
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
@@ -143,6 +145,8 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/trace_extract.py --in-jso
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl --trace-time-mode dt_ms --trace-non-route skip --canonicalize-trace-jsonl /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
+
+If the runtime mixes JSON objects into plain-text log lines (for example `INFO route={...}`), keep `--extract-substrings 1` (default) so `trace_extract.py` scans each line for embedded JSON objects.
 
 `trace_extract.py` preserves multi-layer routing when present (`layers[]` / `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` so the simulator can replay the trace without additional massaging.
 

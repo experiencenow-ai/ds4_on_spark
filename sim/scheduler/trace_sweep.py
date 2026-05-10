@@ -20,6 +20,48 @@ def _reserve_default(expert_queue_max: int) -> int:
         return(0)
     return(min(16, int(expert_queue_max)))
 
+def _trace_has_full_scores(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
+    for r in trace:
+        if r.layers is None:
+            if r.scores is None:
+                return(False)
+            if len(r.scores) != len(r.candidates):
+                return(False)
+            continue
+        for lr in r.layers:
+            if lr.scores is None:
+                return(False)
+            if len(lr.scores) != len(lr.candidates):
+                return(False)
+    return(True)
+
+
+def _trace_has_any_cost_scale(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
+    for r in trace:
+        if r.cost_scale is not None:
+            return(True)
+        if r.layers is None:
+            continue
+        for lr in r.layers:
+            if lr.cost_scale is not None:
+                return(True)
+    return(False)
+
+
+def _trace_is_multi_layer(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
+    for r in trace:
+        if r.layers is not None and len(r.layers) > 1:
+            return(True)
+    return(False)
+
+def _trace_has_any_mtp_accept(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
+    for r in trace:
+        if r.mtp_accept_len is not None:
+            return(True)
+        if r.accepted_mtp is not None or r.rejected_mtp is not None:
+            return(True)
+    return(False)
+
 
 def _maybe_slice_trace(trace: Sequence[scheduler_sim.TokenRoute], max_tokens: int) -> List[scheduler_sim.TokenRoute]:
     if max_tokens <= 0:
@@ -37,6 +79,7 @@ def run_trace_sweeps(
 ) -> Dict[str, Any]:
     trace_in = _maybe_slice_trace(trace, int(max_tokens))
     scenarios: Dict[str, Any] = {}
+    trace_summary = scheduler_sim.trace_summary_jsonable(trace_in, mtp_draft_len=int(base_cfg.mtp_draft_len), meta=trace_meta)
 
     base_batch_max = int(base_cfg.batch_max_batch)
     batch_variants: List[Tuple[str, Dict[str, object]]] = []
@@ -91,6 +134,46 @@ def run_trace_sweeps(
         "variants": variants_k_signal,
         "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_k_signal, arrival_units=arrival_units),
     }
+
+    variants_admit_policy: List[Tuple[str, Dict[str, object]]] = [
+        ("admit_ordered", {"admit_policy": "ordered"}),
+        ("admit_least_pending", {"admit_policy": "least_pending"}),
+    ]
+    if _trace_has_full_scores(trace_in):
+        variants_admit_policy.append(("admit_score_desc", {"admit_policy": "score_desc"}))
+    scenarios["admit_policy"] = {
+        "name": "admit_policy",
+        "base_cfg": dataclasses.asdict(base_cfg),
+        "variants": variants_admit_policy,
+        "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_admit_policy, arrival_units=arrival_units),
+        "note": "score_desc is included only when every route layer has scores.",
+    }
+
+    if _trace_has_any_cost_scale(trace_in):
+        variants_pending_units: List[Tuple[str, Dict[str, object]]] = [
+            ("pending_tasks", {"pending_units": "tasks"}),
+            ("pending_work", {"pending_units": "work"}),
+        ]
+        scenarios["pending_units"] = {
+            "name": "pending_units",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": variants_pending_units,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_pending_units, arrival_units=arrival_units),
+            "note": "Only included when trace contains cost_scale (token or layer); otherwise tasks==work.",
+        }
+
+    if str(base_cfg.k_mode).strip().lower() == "controller" and _trace_is_multi_layer(trace_in):
+        variants_k_scope: List[Tuple[str, Dict[str, object]]] = [
+            ("k_scope_token", {"k_scope": "token"}),
+            ("k_scope_layer", {"k_scope": "layer"}),
+        ]
+        scenarios["k_scope"] = {
+            "name": "k_scope",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": variants_k_scope,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_k_scope, arrival_units=arrival_units),
+            "note": "Only included when the trace has >1 layer and k_mode=controller.",
+        }
 
     ak = base_cfg.adaptive_k
     q_low = int(ak.q_low)
@@ -153,6 +236,32 @@ def run_trace_sweeps(
     }
 
     if int(base_cfg.mtp_draft_len) > 0:
+        variants_mtp_toggle: List[Tuple[str, Dict[str, object]]] = [
+            ("mtp_off", {"mtp_draft_len": 0}),
+        ]
+        scenarios["mtp_toggle"] = {
+            "name": "mtp_toggle",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": variants_mtp_toggle,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_mtp_toggle, arrival_units=arrival_units),
+            "note": "mtp_off strips trace mtp_accept_len / accepted_mtp / rejected_mtp for that variant to allow a single-run on/off comparison.",
+        }
+
+        if not _trace_has_any_mtp_accept(trace_in):
+            variants_accept_prob: List[Tuple[str, Dict[str, object]]] = []
+            for ap in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
+                if float(ap) == float(base_cfg.mtp_accept_prob):
+                    continue
+                variants_accept_prob.append((f"accept_prob_{int(round(float(ap) * 100.0))}", {"mtp_accept_prob": float(ap)}))
+            if len(variants_accept_prob) != 0:
+                scenarios["mtp_accept_prob_sweep"] = {
+                    "name": "mtp_accept_prob_sweep",
+                    "base_cfg": dataclasses.asdict(base_cfg),
+                    "variants": variants_accept_prob,
+                    "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, variants_accept_prob, arrival_units=arrival_units),
+                    "note": "Only included when the replay trace omits mtp_accept_len / accepted_mtp / rejected_mtp; used to explore synthetic acceptance sensitivity on real routing traces that have not been instrumented for MTP yet.",
+                }
+
         variants_mtp: List[Tuple[str, Dict[str, object]]] = [
             ("mtp_full", {"mtp_draft_attempt_policy": "full"}),
             ("mtp_stop_at_reject", {"mtp_draft_attempt_policy": "stop_at_reject"}),
@@ -165,7 +274,7 @@ def run_trace_sweeps(
         }
 
     out: Dict[str, Any] = {
-        "trace_summary": scheduler_sim.trace_summary_jsonable(trace_in, mtp_draft_len=int(base_cfg.mtp_draft_len), meta=trace_meta),
+        "trace_summary": trace_summary,
         "base_cfg": dataclasses.asdict(base_cfg),
         "scenarios": scenarios,
     }
