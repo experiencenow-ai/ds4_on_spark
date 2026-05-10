@@ -136,6 +136,29 @@ int32_t test_cuda(void)
 				return(-18);
 			}
 		}
+		for (i=0; i<(int32_t)sizeof(h1); i++)
+			h1[i] = 0;
+		stream.h = 0;
+		st0 = ds4_cuda_fill_u8(dev,(uint8_t)0xa5,(int64_t)sizeof(h1),stream);
+		if ( ds4_cuda_is_ok(st0) == 0 )
+		{
+			ds4_cuda_free(dev);
+			return(-108);
+		}
+		st0 = ds4_cuda_memcpy_d2h(h1,dev,(int64_t)sizeof(h1));
+		if ( ds4_cuda_is_ok(st0) == 0 )
+		{
+			ds4_cuda_free(dev);
+			return(-109);
+		}
+		for (i=0; i<(int32_t)sizeof(h1); i++)
+		{
+			if ( h1[i] != (uint8_t)0xa5 )
+			{
+				ds4_cuda_free(dev);
+				return(-110);
+			}
+		}
 		st0 = ds4_cuda_free(dev);
 		if ( ds4_cuda_is_ok(st0) == 0 )
 			return(-19);
@@ -270,6 +293,9 @@ int32_t test_cuda(void)
 	st0 = ds4_cuda_memcpy_d2h_async((void *)0x1,(void *)0x2,16,stream);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )
 		return(-203);
+	st0 = ds4_cuda_fill_u8((void *)0x1,(uint8_t)0xa5,16,stream);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-204);
 	ev0.h = (void *)0x1;
 	st0 = ds4_cuda_event_create(&ev0,DS4_CUDA_EVENT_FLAGS_DEFAULT);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )

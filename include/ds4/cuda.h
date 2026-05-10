@@ -70,6 +70,7 @@ ds4_cuda_status_t ds4_cuda_free_host(void *ptr);
 ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes);
 ds4_cuda_status_t ds4_cuda_memcpy_h2d(void *dst,const void *src,int64_t bytes);
 ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes);
+ds4_cuda_status_t ds4_cuda_fill_u8(void *dst,uint8_t value,int64_t bytes,ds4_cuda_stream_t s);
 ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds4_cuda_stream_t s);
 ds4_cuda_status_t ds4_cuda_memcpy_h2d_async(void *dst,const void *src,int64_t bytes,ds4_cuda_stream_t s);
 ds4_cuda_status_t ds4_cuda_memcpy_d2h_async(void *dst,const void *src,int64_t bytes,ds4_cuda_stream_t s);
