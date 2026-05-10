@@ -539,25 +539,66 @@ def run_wave(base_url, prompt_words, n_predict, cache_prompt, concurrency, repea
     return out_rows
 
 
-def write_summary(path, combos, meta, best=None, best_by_concurrency=None):
+def write_summary(
+    path,
+    combos,
+    meta,
+    best_prompt=None,
+    best_decode=None,
+    best_total=None,
+    best_prompt_by_concurrency=None,
+    best_decode_by_concurrency=None,
+    best_total_by_concurrency=None,
+):
     with open(path, "w", encoding="utf-8") as f:
         f.write("# llama-server Throughput Sweep\n\n")
         for k in sorted(meta):
             f.write("- %s: `%s`\n" % (k, meta[k]))
         f.write("\n")
-        f.write("Scoring: maximize `agg_prompt_tok_s`, break ties with `agg_generated_tok_s`.\n\n")
-        if best is not None:
-            f.write("## Best (overall)\n\n")
+        f.write("Scoring (ties broken with the other rate):\n\n")
+        f.write("- `prompt`: maximize `agg_prompt_tok_s`\n")
+        f.write("- `decode`: maximize `agg_generated_tok_s`\n")
+        f.write("- `total`: maximize `agg_prompt_tok_s + agg_generated_tok_s`\n\n")
+        if best_prompt is not None:
+            f.write("## Best (overall, prompt)\n\n")
             f.write("```json\n")
-            f.write(json.dumps(best, indent=2, sort_keys=True))
+            f.write(json.dumps(best_prompt, indent=2, sort_keys=True))
             f.write("\n```\n\n")
-        if best_by_concurrency:
-            f.write("## Best By Concurrency\n\n")
-            for conc in sorted(best_by_concurrency.keys()):
+        if best_decode is not None:
+            f.write("## Best (overall, decode)\n\n")
+            f.write("```json\n")
+            f.write(json.dumps(best_decode, indent=2, sort_keys=True))
+            f.write("\n```\n\n")
+        if best_total is not None:
+            f.write("## Best (overall, total)\n\n")
+            f.write("```json\n")
+            f.write(json.dumps(best_total, indent=2, sort_keys=True))
+            f.write("\n```\n\n")
+
+        if best_prompt_by_concurrency:
+            f.write("## Best By Concurrency (prompt)\n\n")
+            for conc in sorted(best_prompt_by_concurrency.keys()):
                 f.write("### concurrency=%s\n\n" % str(conc))
                 f.write("```json\n")
-                f.write(json.dumps(best_by_concurrency[conc], indent=2, sort_keys=True))
+                f.write(json.dumps(best_prompt_by_concurrency[conc], indent=2, sort_keys=True))
                 f.write("\n```\n\n")
+
+        if best_decode_by_concurrency:
+            f.write("## Best By Concurrency (decode)\n\n")
+            for conc in sorted(best_decode_by_concurrency.keys()):
+                f.write("### concurrency=%s\n\n" % str(conc))
+                f.write("```json\n")
+                f.write(json.dumps(best_decode_by_concurrency[conc], indent=2, sort_keys=True))
+                f.write("\n```\n\n")
+
+        if best_total_by_concurrency:
+            f.write("## Best By Concurrency (total)\n\n")
+            for conc in sorted(best_total_by_concurrency.keys()):
+                f.write("### concurrency=%s\n\n" % str(conc))
+                f.write("```json\n")
+                f.write(json.dumps(best_total_by_concurrency[conc], indent=2, sort_keys=True))
+                f.write("\n```\n\n")
+
         f.write("| parallel | batch | ubatch | prompt_words | concurrency | repeats | ok | errors | wall_s | agg_prompt_tok_s | agg_gen_tok_s | fattn_disabled | fattn_backend0_only | multislot_sched_reserve_fail |\n")
         f.write("| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: |\n")
         for c in combos:
@@ -670,6 +711,12 @@ def main():
     summary_path = os.path.join(out_dir, "throughput_sweep.md")
     best_path = os.path.join(out_dir, "throughput_best.json")
     best_by_conc_path = os.path.join(out_dir, "throughput_best_by_concurrency.json")
+    best_prompt_path = os.path.join(out_dir, "throughput_best_prompt.json")
+    best_decode_path = os.path.join(out_dir, "throughput_best_decode.json")
+    best_total_path = os.path.join(out_dir, "throughput_best_total.json")
+    best_prompt_by_conc_path = os.path.join(out_dir, "throughput_best_prompt_by_concurrency.json")
+    best_decode_by_conc_path = os.path.join(out_dir, "throughput_best_decode_by_concurrency.json")
+    best_total_by_conc_path = os.path.join(out_dir, "throughput_best_total_by_concurrency.json")
     metrics_start_path = os.path.join(out_dir, "metrics_start.prom")
     metrics_end_path = os.path.join(out_dir, "metrics_end.prom")
 
@@ -704,8 +751,12 @@ def main():
         return proc, log_fp
 
     combos_out = []
-    best = None
-    best_by_concurrency = {}
+    best_prompt = None
+    best_decode = None
+    best_total = None
+    best_prompt_by_concurrency = {}
+    best_decode_by_concurrency = {}
+    best_total_by_concurrency = {}
 
     def stop_server(proc, log_fp):
         if log_fp is not None:
@@ -724,17 +775,37 @@ def main():
             except Exception:
                 pass
 
-    def score_row(row):
-        # Prefer max aggregate prompt throughput first; break ties with gen throughput.
+    def _rate_prompt(row):
         try:
             p = float(row.get("agg_prompt_tok_s") or 0.0)
         except Exception:
             p = 0.0
+        return p
+
+    def _rate_decode(row):
         try:
             g = float(row.get("agg_generated_tok_s") or 0.0)
         except Exception:
             g = 0.0
+        return g
+
+    def score_prompt(row):
+        # Prefer max prompt throughput; break ties with decode throughput.
+        p = _rate_prompt(row)
+        g = _rate_decode(row)
         return (p, g)
+
+    def score_decode(row):
+        # Prefer max decode throughput; break ties with prompt throughput.
+        p = _rate_prompt(row)
+        g = _rate_decode(row)
+        return (g, p)
+
+    def score_total(row):
+        # Prefer max total throughput; break ties with decode then prompt.
+        p = _rate_prompt(row)
+        g = _rate_decode(row)
+        return (p + g, g, p)
 
     if start_server != 0:
         if not llama_server or not model:
@@ -944,16 +1015,26 @@ def main():
                             rf.write(json.dumps(row, sort_keys=True) + "\n")
                             rf.flush()
                             combos_out.append(row)
-                            if best is None or score_row(row) > score_row(best):
-                                best = row
+                            if best_prompt is None or score_prompt(row) > score_prompt(best_prompt):
+                                best_prompt = row
+                            if best_decode is None or score_decode(row) > score_decode(best_decode):
+                                best_decode = row
+                            if best_total is None or score_total(row) > score_total(best_total):
+                                best_total = row
                             try:
                                 conc_key = int(row.get("concurrency"))
                             except Exception:
                                 conc_key = None
                             if conc_key is not None:
-                                prev = best_by_concurrency.get(conc_key)
-                                if prev is None or score_row(row) > score_row(prev):
-                                    best_by_concurrency[conc_key] = row
+                                prev = best_prompt_by_concurrency.get(conc_key)
+                                if prev is None or score_prompt(row) > score_prompt(prev):
+                                    best_prompt_by_concurrency[conc_key] = row
+                                prev = best_decode_by_concurrency.get(conc_key)
+                                if prev is None or score_decode(row) > score_decode(prev):
+                                    best_decode_by_concurrency[conc_key] = row
+                                prev = best_total_by_concurrency.get(conc_key)
+                                if prev is None or score_total(row) > score_total(prev):
+                                    best_total_by_concurrency[conc_key] = row
                             print(json.dumps(row, sort_keys=True), flush=True)
                         if start_server != 0 and restart_per_combo != 0:
                             stop_server(proc, log_fp)
@@ -962,18 +1043,40 @@ def main():
                                 global_server_log_fp = None
                                 global_server_log = None
                             time.sleep(max(0.0, float(restart_sleep_s)))
-        if best is not None:
+        if best_prompt is not None:
             try:
                 with open(best_path, "w", encoding="utf-8") as bf:
-                    json.dump(best, bf, indent=2, sort_keys=True)
+                    json.dump(best_prompt, bf, indent=2, sort_keys=True)
                 meta["best_json"] = best_path
             except Exception:
                 pass
-        if best_by_concurrency:
+        if best_prompt is not None:
+            try:
+                with open(best_prompt_path, "w", encoding="utf-8") as bf:
+                    json.dump(best_prompt, bf, indent=2, sort_keys=True)
+                meta["best_prompt_json"] = best_prompt_path
+            except Exception:
+                pass
+        if best_decode is not None:
+            try:
+                with open(best_decode_path, "w", encoding="utf-8") as bf:
+                    json.dump(best_decode, bf, indent=2, sort_keys=True)
+                meta["best_decode_json"] = best_decode_path
+            except Exception:
+                pass
+        if best_total is not None:
+            try:
+                with open(best_total_path, "w", encoding="utf-8") as bf:
+                    json.dump(best_total, bf, indent=2, sort_keys=True)
+                meta["best_total_json"] = best_total_path
+            except Exception:
+                pass
+
+        if best_prompt_by_concurrency:
             try:
                 with open(best_by_conc_path, "w", encoding="utf-8") as bf:
                     json.dump(
-                        {str(k): v for (k, v) in sorted(best_by_concurrency.items(), key=lambda kv: kv[0])},
+                        {str(k): v for (k, v) in sorted(best_prompt_by_concurrency.items(), key=lambda kv: kv[0])},
                         bf,
                         indent=2,
                         sort_keys=True,
@@ -981,13 +1084,70 @@ def main():
                 meta["best_by_concurrency_json"] = best_by_conc_path
             except Exception:
                 pass
-        write_summary(summary_path, combos_out, meta, best=best, best_by_concurrency=best_by_concurrency)
+        if best_prompt_by_concurrency:
+            try:
+                with open(best_prompt_by_conc_path, "w", encoding="utf-8") as bf:
+                    json.dump(
+                        {str(k): v for (k, v) in sorted(best_prompt_by_concurrency.items(), key=lambda kv: kv[0])},
+                        bf,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                meta["best_prompt_by_concurrency_json"] = best_prompt_by_conc_path
+            except Exception:
+                pass
+        if best_decode_by_concurrency:
+            try:
+                with open(best_decode_by_conc_path, "w", encoding="utf-8") as bf:
+                    json.dump(
+                        {str(k): v for (k, v) in sorted(best_decode_by_concurrency.items(), key=lambda kv: kv[0])},
+                        bf,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                meta["best_decode_by_concurrency_json"] = best_decode_by_conc_path
+            except Exception:
+                pass
+        if best_total_by_concurrency:
+            try:
+                with open(best_total_by_conc_path, "w", encoding="utf-8") as bf:
+                    json.dump(
+                        {str(k): v for (k, v) in sorted(best_total_by_concurrency.items(), key=lambda kv: kv[0])},
+                        bf,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                meta["best_total_by_concurrency_json"] = best_total_by_conc_path
+            except Exception:
+                pass
+
+        write_summary(
+            summary_path,
+            combos_out,
+            meta,
+            best_prompt=best_prompt,
+            best_decode=best_decode,
+            best_total=best_total,
+            best_prompt_by_concurrency=best_prompt_by_concurrency,
+            best_decode_by_concurrency=best_decode_by_concurrency,
+            best_total_by_concurrency=best_total_by_concurrency,
+        )
         print("summary=" + summary_path)
         print("results=" + results_path)
-        if best is not None:
+        if best_prompt is not None:
             print("best=" + best_path)
-        if best_by_concurrency:
+            print("best_prompt=" + best_prompt_path)
+        if best_decode is not None:
+            print("best_decode=" + best_decode_path)
+        if best_total is not None:
+            print("best_total=" + best_total_path)
+        if best_prompt_by_concurrency:
             print("best_by_concurrency=" + best_by_conc_path)
+            print("best_prompt_by_concurrency=" + best_prompt_by_conc_path)
+        if best_decode_by_concurrency:
+            print("best_decode_by_concurrency=" + best_decode_by_conc_path)
+        if best_total_by_concurrency:
+            print("best_total_by_concurrency=" + best_total_by_conc_path)
         return 0
     finally:
         if start_server != 0:

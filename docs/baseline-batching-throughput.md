@@ -18,8 +18,14 @@ When run via `scripts/run_baseline_existing_runtime.sh`, the fetched artifacts d
 
 - `throughput_sweep.jsonl`: one JSON row per concurrency “wave”
 - `throughput_sweep.md`: Markdown table summary
-- `throughput_best.json`: best-performing row (by aggregate prompt tok/s, then gen tok/s)
-- `throughput_best_by_concurrency.json`: best row per `concurrency` (same scoring)
+- `throughput_best.json`: best-performing row (scoring=`prompt`, for backward compatibility)
+- `throughput_best_by_concurrency.json`: best row per `concurrency` (scoring=`prompt`, for backward compatibility)
+- `throughput_best_prompt.json`: best row (maximize `agg_prompt_tok_s`)
+- `throughput_best_decode.json`: best row (maximize `agg_generated_tok_s`)
+- `throughput_best_total.json`: best row (maximize `agg_prompt_tok_s + agg_generated_tok_s`)
+- `throughput_best_prompt_by_concurrency.json`: best row per `concurrency` (prompt scoring)
+- `throughput_best_decode_by_concurrency.json`: best row per `concurrency` (decode scoring)
+- `throughput_best_total_by_concurrency.json`: best row per `concurrency` (total scoring)
 - Each JSON row also embeds compact reservation probes:
   - `fattn_probe` (Flash Attention reservation / placement summary)
   - `multislot_probe` (multi-slot `sched_reserve()` failure summary)
@@ -66,7 +72,7 @@ Choose the best configuration based on your target:
 
 - Prompt-heavy workloads → maximize `agg_prompt_tok_s`
 - Decode-heavy workloads → maximize `agg_generated_tok_s`
-- Mixed workloads → track both and report the Pareto frontier (do not hide tradeoffs)
+- Mixed workloads → track both and report the Pareto frontier (do not hide tradeoffs); `throughput_best_total*.json` is a coarse first pass.
 
 Always cross-check:
 
