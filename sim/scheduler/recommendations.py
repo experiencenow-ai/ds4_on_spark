@@ -52,8 +52,18 @@ def run_runtime_trace_mtp_ablation(
     expert_queue_max: int = 128,
     expert_parallelism: int = 1,
     service_ms: float = 1.0,
+    starvation_ms: float = 50.0,
+    trace_derive_cost_scale: str = "none",
+    trace_speedup: float = 1.0,
+    dflash_draft_len: int = -1,
+    dflash_draft_cost_scale: Optional[float] = None,
 ) -> Dict[str, Any]:
     meta = dict(trace_meta or {})
+
+    if trace_derive_cost_scale.strip().lower() != "none":
+        trace = scheduler_sim.derive_trace_cost_scale(trace, trace_derive_cost_scale, meta_out=meta)
+    if float(trace_speedup) != 1.0:
+        trace = scheduler_sim.scale_trace_speedup(trace, float(trace_speedup))
 
     inferred_num_experts = scheduler_sim.infer_num_experts_from_trace(trace, meta)
     if inferred_num_experts is None or int(inferred_num_experts) <= 0:
@@ -61,6 +71,11 @@ def run_runtime_trace_mtp_ablation(
 
     any_mtp = any((r.mtp_accept_len is not None or r.accepted_mtp is not None or r.rejected_mtp is not None) for r in trace)
     any_dflash = any((r.dflash_accept_len is not None or r.accepted_dflash is not None or r.rejected_dflash is not None) for r in trace)
+    if any_dflash and int(dflash_draft_len) != -1:
+        meta["dflash_draft_len"] = int(dflash_draft_len)
+    if any_dflash and dflash_draft_cost_scale is not None:
+        meta["dflash_draft_cost_scale"] = float(dflash_draft_cost_scale)
+
     mtp_draft_len = 0
     if any_mtp:
         inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
@@ -69,12 +84,19 @@ def run_runtime_trace_mtp_ablation(
         mtp_draft_len = int(inferred_mtp_draft_len)
 
     k_mode = "trace" if _trace_has_full_k(trace) else "controller"
+    dflash_cost_scale = 0.0
+    if any_dflash:
+        if isinstance(meta.get("dflash_draft_cost_scale"), (int, float)):
+            dflash_cost_scale = float(meta["dflash_draft_cost_scale"])
+        if dflash_cost_scale < 0.0:
+            raise ValueError("meta.dflash_draft_cost_scale must be >= 0")
+
     base_cfg = scheduler_sim.SimConfig(
         num_experts=int(inferred_num_experts),
         expert_parallelism=int(expert_parallelism),
         expert_queue_max=int(expert_queue_max),
         service_ms=float(service_ms),
-        starvation_ms=50.0,
+        starvation_ms=float(starvation_ms),
         hi_burst=0,
         promote_ms=0.0,
         adaptive_k=scheduler_sim.AdaptiveKConfig(
@@ -89,6 +111,8 @@ def run_runtime_trace_mtp_ablation(
         k_signal="global",
         sim_seed=123,
         mtp_draft_len=int(mtp_draft_len),
+        dflash_draft_len=int(meta.get("dflash_draft_len", -1)) if any_dflash else -1,
+        dflash_draft_cost_scale=float(dflash_cost_scale) if any_dflash else 0.0,
     )
 
     trace_summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=int(mtp_draft_len), meta=meta)
@@ -108,12 +132,15 @@ def run_runtime_trace_mtp_ablation(
             base_summary = scheduler_sim.compare_summary_jsonable(base_metrics)
             denom = float(base_summary.get("service_slot_ms_per_output_token", 0.0))
             numer = float(base_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+            numer_adj = float(base_summary.get("dflash_service_slot_ms_per_output_token_adjusted", 0.0))
             ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+            ratio_adj = (numer_adj / denom) if denom > 0.0 and numer_adj > 0.0 else 0.0
             out["dflash_comparator"] = {
                 "present": True,
-                "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. Draft compute for the comparator is not modeled; treat efficiency ratios as upper bounds.",
+                "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. If dflash_draft_cost_scale is 0 or omitted, the adjusted comparator metrics equal the unadjusted values (treat as an optimistic upper bound).",
                 "summary": base_summary,
                 "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
+                "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted": float(ratio_adj),
             }
         return(out)
 
@@ -126,12 +153,15 @@ def run_runtime_trace_mtp_ablation(
         mtp_off_summary = out["results"]["arrival_units_steps"]["variants"]["mtp_off"]["summary"]
         denom = float(mtp_off_summary.get("service_slot_ms_per_output_token", 0.0))
         numer = float(mtp_off_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+        numer_adj = float(mtp_off_summary.get("dflash_service_slot_ms_per_output_token_adjusted", 0.0))
         ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+        ratio_adj = (numer_adj / denom) if denom > 0.0 and numer_adj > 0.0 else 0.0
         out["dflash_comparator"] = {
             "present": True,
-            "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. Draft compute for the comparator is not modeled; treat efficiency ratios as upper bounds.",
+            "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. If dflash_draft_cost_scale is 0 or omitted, the adjusted comparator metrics equal the unadjusted values (treat as an optimistic upper bound).",
             "summary": mtp_off_summary,
             "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
+            "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted": float(ratio_adj),
         }
     return(out)
 
@@ -1021,6 +1051,14 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--trace-default-cls", type=str, default="", help="When --trace-jsonl records omit latency class, force all extracted records to this cls (interactive or batch).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace time field mode: t_ms (default) or dt_ms.")
     p.add_argument("--max-tokens", type=int, default=0, help="Optional cap on number of trace records to read (0 = no cap).")
+    p.add_argument("--trace-derive-cost-scale", type=str, default="none", choices=("none", "kv_tokens_p50", "decode_ms_p50"))
+    p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace time by 1/speedup (>= 1 makes arrivals faster).")
+    p.add_argument("--expert-queue-max", type=int, default=128)
+    p.add_argument("--expert-parallelism", type=int, default=1)
+    p.add_argument("--service-ms", type=float, default=1.0)
+    p.add_argument("--starvation-ms", type=float, default=50.0)
+    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Optional: override/inject meta.dflash_draft_len for runtime-trace comparator accounting (-1 = keep/infer).")
+    p.add_argument("--dflash-draft-cost-scale", type=float, default=-1.0, help="Optional: draft-cost multiplier for the speculative-decoding comparator (-1 = use meta if present, 0 = disable overhead adjustment).")
     return(p.parse_args(argv))
 
 
@@ -1039,7 +1077,21 @@ def main(argv: List[str] | None = None) -> int:
         )
         if int(args.max_tokens) > 0:
             trace = list(trace[: int(args.max_tokens)])
-        out = run_runtime_trace_mtp_ablation(trace=trace, trace_meta=meta)
+        dflash_cost_scale: Optional[float] = None
+        if float(args.dflash_draft_cost_scale) >= 0.0:
+            dflash_cost_scale = float(args.dflash_draft_cost_scale)
+        out = run_runtime_trace_mtp_ablation(
+            trace=trace,
+            trace_meta=meta,
+            expert_queue_max=int(args.expert_queue_max),
+            expert_parallelism=int(args.expert_parallelism),
+            service_ms=float(args.service_ms),
+            starvation_ms=float(args.starvation_ms),
+            trace_derive_cost_scale=str(args.trace_derive_cost_scale),
+            trace_speedup=float(args.trace_speedup),
+            dflash_draft_len=int(args.dflash_draft_len),
+            dflash_draft_cost_scale=dflash_cost_scale,
+        )
     else:
         out = run_recommendations(quick=bool(args.quick))
     print(json.dumps(out, sort_keys=True))

@@ -8,6 +8,7 @@ import json
 import sys
 
 from sim.scheduler import scheduler_sim
+from sim.scheduler import recommendations
 from sim.scheduler import trace_extract
 
 
@@ -238,6 +239,101 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    def test_trace_summary_accept_len_histogram_is_emitted_and_validates_range(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=1),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=2),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,), mtp_accept_len=3),
+            scheduler_sim.TokenRoute(t_ms=3.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,), mtp_accept_len=10),
+        ]
+        summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=2, meta={})
+        hist = summary.get("mtp_accept_len_hist")
+        self.assertIsNotNone(hist)
+        if not isinstance(hist, dict):
+            return
+        self.assertEqual(hist.get("draft_len"), 2)
+        self.assertEqual(hist.get("accept_len_values"), [1, 2, 3])
+        self.assertEqual(hist.get("counts"), [1, 1, 1])
+        self.assertEqual(hist.get("total"), 3)
+        self.assertEqual(hist.get("invalid"), 1)
+        derived = summary.get("mtp_accept_derived")
+        self.assertIsNotNone(derived)
+        if not isinstance(derived, dict):
+            return
+        self.assertEqual(derived.get("draft_len"), 2)
+        self.assertEqual(derived.get("total"), 3)
+        self.assertAlmostEqual(float(derived.get("mean_accept_len", 0.0)), 2.0, places=6)
+        self.assertAlmostEqual(float(derived.get("mean_accepted_tokens", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(derived.get("accept_rate", 0.0)), 0.5, places=6)
+        self.assertAlmostEqual(float(derived.get("reject_frac", 0.0)), (1.0 / 3.0), places=6)
+        self.assertAlmostEqual(float(derived.get("bonus_frac", 0.0)), (1.0 / 3.0), places=6)
+
+    def test_trace_extract_runtime_separates_mtp_and_dflash_accept_counters(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0, 1]},
+            "mtp": {"accept_len": 2, "accepted": 1, "rejected": 0},
+            "dflash": {"accept_len": 4, "accepted": 3, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        if rec is None:
+            return
+        self.assertEqual(rec.get("mtp_accept_len"), 2)
+        self.assertEqual(rec.get("accepted_mtp"), 1)
+        self.assertEqual(rec.get("rejected_mtp"), 0)
+        self.assertEqual(rec.get("dflash_accept_len"), 4)
+        self.assertEqual(rec.get("accepted_dflash"), 3)
+        self.assertEqual(rec.get("rejected_dflash"), 0)
+
+    def test_trace_extract_does_not_treat_dflash_accept_len_as_mtp(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0]},
+            "dflash": {"accept_len": 3, "accepted": 2, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        if rec is None:
+            return
+        self.assertNotIn("mtp_accept_len", rec)
+        self.assertNotIn("accepted_mtp", rec)
+        self.assertNotIn("rejected_mtp", rec)
+        self.assertEqual(rec.get("dflash_accept_len"), 3)
+
+    def test_runtime_trace_ablation_applies_dflash_cost_scale_from_meta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                dflash_accept_len=3,
+                accepted_dflash=2,
+                rejected_dflash=0,
+            )
+        ]
+        out = recommendations.run_runtime_trace_mtp_ablation(
+            trace=trace,
+            trace_meta={"num_experts": 1, "dflash_draft_cost_scale": 0.5},
+            expert_queue_max=10_000,
+            expert_parallelism=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+        )
+        dflash = out.get("dflash_comparator")
+        self.assertIsInstance(dflash, dict)
+        if not isinstance(dflash, dict):
+            return
+        summary = dflash.get("summary")
+        self.assertIsInstance(summary, dict)
+        if not isinstance(summary, dict):
+            return
+        self.assertAlmostEqual(float(summary.get("dflash_draft_cost_scale", 0.0)), 0.5, places=6)
+        ratio_adj = float(dflash.get("service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0))
+        self.assertGreater(ratio_adj, 0.0)
 
     def test_summary_json_emits_per_layer_stage_skip_fractions(self) -> None:
         trace = [
@@ -1276,6 +1372,28 @@ class SchedulerSimTest(unittest.TestCase):
             scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), accepted_mtp=0, rejected_mtp=2),
         ]
         self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
+
+    def test_infer_mtp_draft_len_from_trace_from_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=3),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=1),
+        ]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
+
+    def test_infer_mtp_draft_len_from_trace_accept_len_all_rejects_defaults_to_one(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=1)]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 1)
+
+    def test_infer_dflash_draft_len_from_trace_from_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=4),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=1),
+        ]
+        self.assertEqual(scheduler_sim.infer_dflash_draft_len_from_trace(trace), 3)
+
+    def test_infer_dflash_draft_len_from_trace_accept_len_all_rejects_defaults_to_one(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=1)]
+        self.assertEqual(scheduler_sim.infer_dflash_draft_len_from_trace(trace), 1)
 
     def test_trace_replay_auto_num_experts_and_mtp_draft_len(self) -> None:
         tmp_path = ""
