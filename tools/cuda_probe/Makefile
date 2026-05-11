@@ -25,6 +25,8 @@ CUBLASLT_FP4_SMOKE := $(BIN_DIR)/cuda_cublaslt_fp4_smoke
 CUBLASLT_FP4_SWEEP := $(BIN_DIR)/cuda_cublaslt_fp4_sweep
 SM121_ARCH_REPORT := $(BIN_DIR)/cuda_sm121_arch_report
 SM121_ARCH_LIST_REPORT := $(BIN_DIR)/cuda_sm121_arch_list_report
+SM121A_ARCH_LIST_REPORT := $(BIN_DIR)/cuda_sm121a_arch_list_report
+SM121F_ARCH_LIST_REPORT := $(BIN_DIR)/cuda_sm121f_arch_list_report
 SM121_SMEM_OPTIN := $(BIN_DIR)/cuda_sm121_smem_optin
 SM121_DEVATTRS := $(BIN_DIR)/cuda_sm121_devattrs
 SM121_FP8_CONV := $(BIN_DIR)/cuda_sm121_fp8_conv
@@ -115,6 +117,12 @@ $(SM121_ARCH_REPORT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_arch_report.cu $(SRC_DIR)
 
 $(SM121_ARCH_LIST_REPORT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_arch_list_report.cu
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_arch_list_report.cu $(LDFLAGS)
+
+$(SM121A_ARCH_LIST_REPORT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_arch_list_report.cu
+	$(NVCC) $(CXXFLAGS) -arch=sm_121a -o $@ $(SRC_DIR)/cuda_sm121_arch_list_report.cu $(LDFLAGS)
+
+$(SM121F_ARCH_LIST_REPORT): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_arch_list_report.cu
+	$(NVCC) $(CXXFLAGS) -arch=sm_121f -o $@ $(SRC_DIR)/cuda_sm121_arch_list_report.cu $(LDFLAGS)
 
 $(SM121_SMEM_OPTIN): $(BIN_DIR) $(SRC_DIR)/cuda_sm121_smem_optin.cu $(SRC_DIR)/cuda_probe_util.h
 	$(NVCC) $(CXXFLAGS) -arch=sm_121 -o $@ $(SRC_DIR)/cuda_sm121_smem_optin.cu $(LDFLAGS)
