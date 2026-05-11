@@ -97,6 +97,33 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 	try_variant sm_121f
 
 	echo
+	echo \"== nvcc: sm_121 variant compile via --gpu-architecture (best-effort) ==\"
+	try_variant_gpuarch() {
+		arch=\"\$1\"
+		advertised=\"unknown\"
+		if [ \"\${list_gpu_code}\" != \"\" ]; then
+			if echo \"\${list_gpu_code}\" | grep -q \"\${arch}\"; then
+				advertised=\"yes\"
+			else
+				advertised=\"no\"
+			fi
+		fi
+		echo \"-- \${arch} (best-effort; advertised=\${advertised})\"
+		set +e
+		\$NVCC -O2 -std=c++17 --gpu-architecture=\${arch} -c -o bin/cuda_gpuarch_\${arch}_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_gpuarch_\${arch}_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"variant_gpuarch_\${arch}: OK\"
+		else
+			echo \"variant_gpuarch_\${arch}: FAILED rc=\$rc\"
+			head -n 40 bin/cuda_gpuarch_\${arch}_compile_probe.err || true
+		fi
+	}
+	try_variant_gpuarch sm_121a
+	try_variant_gpuarch sm_121f
+
+	echo
 	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
 	cat > bin/cuda_sm121_arch_list_probe.cu <<'EOF'
 #define STR1(x) #x
