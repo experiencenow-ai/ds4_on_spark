@@ -46,6 +46,26 @@ git --git-dir=.codex_git --work-tree=. reset --hard origin/main
 # git --git-dir=.codex_git/.git --work-tree=. reset --hard origin/main
 ```
 
+If the shim setup fails with an error like:
+
+- `error: The following untracked working tree files would be overwritten by checkout/reset`
+
+it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”). In that case, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
+
+```bash
+# Seed `.codex_git/` from the current checkout worktree metadata.
+# This avoids the “untracked would be overwritten” trap when the worktree already has files.
+worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p')"
+cp "$worktree_gitdir/index" .codex_git/index
+cp "$worktree_gitdir/HEAD" .codex_git/HEAD
+
+# Ensure the shim treats this as a worktree-backed repo, then sync to origin/main.
+git --git-dir=.codex_git config core.bare false
+git --git-dir=.codex_git config core.worktree "$PWD"
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+```
+
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
 
 ```bash

@@ -5,8 +5,8 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` is not reachable yet (as of the 02:52Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0252Z.md`, `docs/spark0-probe-2026-05-11T0252Z.md`.
+- `spark1.local` is not reachable yet (as of the 03:25Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0325Z.md`, `docs/spark0-probe-2026-05-11T0325Z.md`.
 
 ## Goals
 

@@ -403,11 +403,12 @@ fi
 
 	smi_q_pcie_warn()
 	{
-		bus="$1"
-		q_gen_max="$2"
-		q_gen_cur="$3"
-		q_width_max="$4"
-		q_width_cur="$5"
+		src="$1"
+		bus="$2"
+		q_gen_max="$3"
+		q_gen_cur="$4"
+		q_width_max="$5"
+		q_width_cur="$6"
 		[ "$bus" = "" ] && return 0
 		[ "$smi_q" = "" ] && return 0
 		block="$(printf "%s\n" "$smi_q" | awk -v bus="$bus" "BEGIN{inblk=0;count=0} \$0 ~ /^[[:space:]]*Bus Id[[:space:]]*:[[:space:]]*/ { if ( \$0 ~ bus ) { inblk=1; next } if ( inblk==1 ) { exit } } inblk==1 { print; count++; if ( count >= 140 ) exit }")"
@@ -417,14 +418,17 @@ fi
 		dev_cur_gen="$(printf "%s\n" "$block" | sed -nE "s/^[[:space:]]*Device Current[[:space:]]*:[[:space:]]*([0-9]+).*/\\1/p" | head -n 1 || true)"
 		q_max_gen="$(printf "%s" "$q_gen_max" | sed -E "s/[^0-9]//g")"
 		q_cur_gen="$(printf "%s" "$q_gen_cur" | sed -E "s/[^0-9]//g")"
+		if [ "$src" = "" ]; then
+			src="pcie"
+		fi
 		if [ "$q_max_gen" != "" ] && [ "$dev_max_gen" != "" ] && [ "$host_max_gen" != "" ]; then
 			if [ "$q_max_gen" -lt "$dev_max_gen" ] && [ "$q_max_gen" -lt "$host_max_gen" ]; then
-				echo "warning: nvidia-smi query pcie.gen.max=$q_max_gen but -q shows device_max=$dev_max_gen host_max=$host_max_gen (bus $bus)"
+				echo "warning: $src pcie.gen.max=$q_max_gen but -q shows device_max=$dev_max_gen host_max=$host_max_gen (bus $bus)"
 			fi
 		fi
 		if [ "$q_cur_gen" != "" ] && [ "$dev_cur_gen" != "" ]; then
 			if [ "$q_cur_gen" -ne "$dev_cur_gen" ]; then
-				echo "note: nvidia-smi query pcie.gen.current=$q_cur_gen but -q device_current=$dev_cur_gen (bus $bus)"
+				echo "note: $src pcie.gen.current=$q_cur_gen but -q device_current=$dev_cur_gen (bus $bus)"
 			fi
 		fi
 		q_max_width="$(printf "%s" "$q_width_max" | sed -E "s/[^0-9]//g")"
@@ -433,12 +437,12 @@ fi
 		dev_cur_width="$(printf "%s\n" "$block" | awk "BEGIN{inw=0} \$0 ~ /^[[:space:]]*Link Width[[:space:]]*$/ {inw=1;next} inw==1 && \$0 ~ /^[[:space:]]*Current[[:space:]]*:/ {v=\$0; sub(/.*:/,\"\",v); gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",v); sub(/x.*/,\"\",v); gsub(/[^0-9]/,\"\",v); if(v!=\"\"){print v; exit}}")"
 		if [ "$q_max_width" != "" ] && [ "$dev_max_width" != "" ]; then
 			if [ "$q_max_width" -ne "$dev_max_width" ]; then
-				echo "note: nvidia-smi query pcie.width.max=$q_max_width but -q width_max=$dev_max_width (bus $bus)"
+				echo "note: $src pcie.width.max=$q_max_width but -q width_max=$dev_max_width (bus $bus)"
 			fi
 		fi
 		if [ "$q_cur_width" != "" ] && [ "$dev_cur_width" != "" ]; then
 			if [ "$q_cur_width" -ne "$dev_cur_width" ]; then
-				echo "note: nvidia-smi query pcie.width.current=$q_cur_width but -q width_current=$dev_cur_width (bus $bus)"
+				echo "note: $src pcie.width.current=$q_cur_width but -q width_current=$dev_cur_width (bus $bus)"
 			fi
 		fi
 		return 0
@@ -458,7 +462,7 @@ fi
 					echo "columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current"
 					echo "$pcie_q"
 					printf "%s\n" "$pcie_q" | awk -F"," "{ b=\$2; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", b); gmax=\$3; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", gmax); gcur=\$4; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", gcur); wmax=\$5; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", wmax); wcur=\$6; gsub(/^[[:space:]]+|[[:space:]]+$/, \"\", wcur); printf \"%s\\t%s\\t%s\\t%s\\t%s\\n\", b,gmax,gcur,wmax,wcur; }" | while IFS="$(printf \"\\t\")" read -r bus gmax gcur wmax wcur; do
-						smi_q_pcie_warn "$bus" "$gmax" "$gcur" "$wmax" "$wcur"
+						smi_q_pcie_warn "nvidia-smi" "$bus" "$gmax" "$gcur" "$wmax" "$wcur"
 					done
 					extra_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pcie.link.gen.gpucurrent,pcie.link.gen.gpumax,pcie.link.gen.hostmax,pcie.link.width.current,pcie.link.width.max --format=csv,noheader,nounits 2>/dev/null || true)"
 					if [ "$extra_q" != "" ] && ! printf "%s" "$extra_q" | grep -qi "not a valid field"; then
@@ -477,14 +481,29 @@ fi
 	return 0
 }
 
-emit_sysfs_pcie_link()
-{
-	label="$1"
-	echo "== pci link (sysfs, current/max${label}) =="
-	if [ -d /sys/bus/pci/devices ]; then
-		bus_ids=""
-		if [ "$q" != "" ]; then
-			bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
+	emit_sysfs_pcie_link()
+	{
+		label="$1"
+		echo "== pci link (sysfs, current/max${label}) =="
+		pcie_speed_to_gen()
+		{
+			s="$1"
+			n="$(printf "%s" "$s" | awk "{print \\$1}" 2>/dev/null || true)"
+			case "$n" in
+				2.5) echo 1 ;;
+				5|5.0) echo 2 ;;
+				8|8.0) echo 3 ;;
+				16|16.0) echo 4 ;;
+				32|32.0) echo 5 ;;
+				64|64.0) echo 6 ;;
+				*) echo "" ;;
+			esac
+			return 0
+		}
+		if [ -d /sys/bus/pci/devices ]; then
+			bus_ids=""
+			if [ "$q" != "" ]; then
+				bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
 		fi
 		if [ "$bus_ids" != "" ]; then
 			for bus in $bus_ids; do
@@ -494,6 +513,10 @@ emit_sysfs_pcie_link()
 				sys="/sys/bus/pci/devices/$short_bus"
 				echo "-- $bus -> $short_bus --"
 				if [ -d "$sys" ]; then
+					sys_cur_speed="$(cat "$sys/current_link_speed" 2>/dev/null || true)"
+					sys_cur_width="$(cat "$sys/current_link_width" 2>/dev/null || true)"
+					sys_max_speed="$(cat "$sys/max_link_speed" 2>/dev/null || true)"
+					sys_max_width="$(cat "$sys/max_link_width" 2>/dev/null || true)"
 					if command -v readlink >/dev/null 2>&1; then
 						devpath="$(readlink -f "$sys" 2>/dev/null || true)"
 						if [ "$devpath" != "" ]; then
@@ -525,10 +548,15 @@ emit_sysfs_pcie_link()
 					[ -r "$sys/subsystem_vendor" ] && echo "subsystem_vendor: $(cat "$sys/subsystem_vendor" 2>/dev/null || true)"
 					[ -r "$sys/subsystem_device" ] && echo "subsystem_device: $(cat "$sys/subsystem_device" 2>/dev/null || true)"
 					[ -r "$sys/class" ] && echo "class: $(cat "$sys/class" 2>/dev/null || true)"
-					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
-					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
-					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
-					[ -r "$sys/max_link_width" ] && echo "max_link_width: $(cat "$sys/max_link_width" 2>/dev/null || true)"
+					[ "$sys_cur_speed" != "" ] && echo "current_link_speed: $sys_cur_speed"
+					[ "$sys_cur_width" != "" ] && echo "current_link_width: $sys_cur_width"
+					[ "$sys_max_speed" != "" ] && echo "max_link_speed: $sys_max_speed"
+					[ "$sys_max_width" != "" ] && echo "max_link_width: $sys_max_width"
+					sys_gen_cur="$(pcie_speed_to_gen "$sys_cur_speed")"
+					sys_gen_max="$(pcie_speed_to_gen "$sys_max_speed")"
+					if [ "$sys_gen_cur" != "" ] || [ "$sys_gen_max" != "" ]; then
+						smi_q_pcie_warn "sysfs" "$bus" "${sys_gen_max:-}" "${sys_gen_cur:-}" "${sys_max_width:-}" "${sys_cur_width:-}"
+					fi
 				else
 					echo "sysfs device not found: $sys"
 				fi
@@ -559,13 +587,28 @@ emit_smi_q_pci_link()
 	return 0
 }
 
-emit_sysfs_pcie_link_summary()
-{
-	label="$1"
-	echo "== pci link (sysfs, gpu endpoints, current/max${label}) =="
-	if [ -d /sys/bus/pci/devices ]; then
-		bus_ids=""
-		if [ "$q" != "" ]; then
+	emit_sysfs_pcie_link_summary()
+	{
+		label="$1"
+		echo "== pci link (sysfs, gpu endpoints, current/max${label}) =="
+		pcie_speed_to_gen()
+		{
+			s="$1"
+			n="$(printf "%s" "$s" | awk "{print \\$1}" 2>/dev/null || true)"
+			case "$n" in
+				2.5) echo 1 ;;
+				5|5.0) echo 2 ;;
+				8|8.0) echo 3 ;;
+				16|16.0) echo 4 ;;
+				32|32.0) echo 5 ;;
+				64|64.0) echo 6 ;;
+				*) echo "" ;;
+			esac
+			return 0
+		}
+		if [ -d /sys/bus/pci/devices ]; then
+			bus_ids=""
+			if [ "$q" != "" ]; then
 			bus_ids="$(printf "%s\n" "$q" | cut -d"," -f3 | sed -E "s/^[[:space:]]+|[[:space:]]+\\$//g" | sort -u | paste -sd " " - 2>/dev/null || true)"
 		fi
 		if [ "$bus_ids" != "" ]; then
@@ -576,10 +619,19 @@ emit_sysfs_pcie_link_summary()
 				sys="/sys/bus/pci/devices/$short_bus"
 				echo "-- $bus -> $short_bus --"
 				if [ -d "$sys" ]; then
-					[ -r "$sys/current_link_speed" ] && echo "current_link_speed: $(cat "$sys/current_link_speed" 2>/dev/null || true)"
-					[ -r "$sys/current_link_width" ] && echo "current_link_width: $(cat "$sys/current_link_width" 2>/dev/null || true)"
-					[ -r "$sys/max_link_speed" ] && echo "max_link_speed: $(cat "$sys/max_link_speed" 2>/dev/null || true)"
-					[ -r "$sys/max_link_width" ] && echo "max_link_width: $(cat "$sys/max_link_width" 2>/dev/null || true)"
+					sys_cur_speed="$(cat "$sys/current_link_speed" 2>/dev/null || true)"
+					sys_cur_width="$(cat "$sys/current_link_width" 2>/dev/null || true)"
+					sys_max_speed="$(cat "$sys/max_link_speed" 2>/dev/null || true)"
+					sys_max_width="$(cat "$sys/max_link_width" 2>/dev/null || true)"
+					[ "$sys_cur_speed" != "" ] && echo "current_link_speed: $sys_cur_speed"
+					[ "$sys_cur_width" != "" ] && echo "current_link_width: $sys_cur_width"
+					[ "$sys_max_speed" != "" ] && echo "max_link_speed: $sys_max_speed"
+					[ "$sys_max_width" != "" ] && echo "max_link_width: $sys_max_width"
+					sys_gen_cur="$(pcie_speed_to_gen "$sys_cur_speed")"
+					sys_gen_max="$(pcie_speed_to_gen "$sys_max_speed")"
+					if [ "$sys_gen_cur" != "" ] || [ "$sys_gen_max" != "" ]; then
+						smi_q_pcie_warn "sysfs" "$bus" "${sys_gen_max:-}" "${sys_gen_cur:-}" "${sys_max_width:-}" "${sys_cur_width:-}"
+					fi
 				else
 					echo "sysfs device not found: $sys"
 				fi
