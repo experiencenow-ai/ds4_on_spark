@@ -114,7 +114,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 		return;
 	if ( argv0 == 0 )
 		argv0 = "ds4_cli";
-	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--log-ring-entries N] [--dump-config] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
+	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--cuda-arena-size BYTES] [--log-ring-entries N] [--dump-config] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
 	fprintf(fp,"  --config PATH     Load key=value config file (PATH or '-')\n");
 	fprintf(fp,"                  (or set DS4_CONFIG for inline config text, DS4_CONFIG_PATH for a default config path)\n");
 	fprintf(fp,"  --strict-config   Reject unknown keys in config file\n");
@@ -124,6 +124,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --no-cuda         Set enable_cuda=0\n");
 	fprintf(fp,"  --cuda-device D   Override cuda_device (-1=auto, >=0 fixed)\n");
 	fprintf(fp,"  --arena-size B    Override arena_size (bytes)\n");
+	fprintf(fp,"  --cuda-arena-size B Override cuda_arena_size (bytes)\n");
 	fprintf(fp,"  --log-ring-entries N Override log_ring_entries (entries)\n");
 	fprintf(fp,"  --dump-config     Print effective config to stdout\n");
 	fprintf(fp,"  --version         Print ds4 version\n");
@@ -132,7 +133,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --help            Show this help\n");
 }
 
-static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
+static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **cuda_arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
 {
 	int32_t i;
 	const char *a;
@@ -148,12 +149,14 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		return(-5);
 	if ( arena_size == 0 )
 		return(-6);
-	if ( log_ring_entries == 0 )
+	if ( cuda_arena_size == 0 )
 		return(-7);
-	if ( dump_cfg == 0 )
+	if ( log_ring_entries == 0 )
 		return(-8);
-	if ( print_ver == 0 )
+	if ( dump_cfg == 0 )
 		return(-9);
+	if ( print_ver == 0 )
+		return(-10);
 	if ( smoke_ctx == 0 )
 		return(-18);
 	if ( smoke_cuda == 0 )
@@ -164,6 +167,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 	*enable_cuda = 0;
 	*cuda_device = 0;
 	*arena_size = 0;
+	*cuda_arena_size = 0;
 	*log_ring_entries = 0;
 	*dump_cfg = 0;
 	*print_ver = 0;
@@ -228,6 +232,14 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 			if ( (i + 1) >= argc )
 				return(-15);
 			*arena_size = argv[i + 1];
+			i += 1;
+			continue;
+		}
+		if ( strcmp(a,"--cuda-arena-size") == 0 )
+		{
+			if ( (i + 1) >= argc )
+				return(-20);
+			*cuda_arena_size = argv[i + 1];
 			i += 1;
 			continue;
 		}
@@ -304,7 +316,7 @@ static void ds4_cli_print_config_diag(const ds4_config_diag_t *d,int32_t strict_
 int main(int argc,char **argv)
 {
 	ds4_config_t cfg;
-	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*log_ring_entries;
+	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*cuda_arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
 	ds4_config_diag_t diag;
 	int32_t dump_cfg,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
@@ -319,8 +331,9 @@ int main(int argc,char **argv)
 	enable_cuda = 0;
 	cuda_device = 0;
 	arena_size = 0;
+	cuda_arena_size = 0;
 	log_ring_entries = 0;
-	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&log_ring_entries,&dump_cfg,&print_ver,&smoke_ctx,&smoke_cuda);
+	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&cuda_arena_size,&log_ring_entries,&dump_cfg,&print_ver,&smoke_ctx,&smoke_cuda);
 	if ( err != 0 )
 	{
 		if ( err > 0 )
@@ -366,11 +379,22 @@ int main(int argc,char **argv)
 		if ( err != 0 )
 			return(1);
 	}
+	if ( cuda_arena_size != 0 )
+	{
+		err = ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size",cuda_arena_size);
+		if ( err != 0 )
+			return(1);
+	}
 	if ( log_ring_entries != 0 )
 	{
 		err = ds4_config_parse_kv_cstr(&cfg,"log_ring_entries",log_ring_entries);
 		if ( err != 0 )
 			return(1);
+	}
+	if ( ds4_config_validate(&cfg) < 0 )
+	{
+		fprintf(stderr,"ds4_cli: invalid config\n");
+		return(1);
 	}
 	if ( smoke_ctx != 0 )
 	{

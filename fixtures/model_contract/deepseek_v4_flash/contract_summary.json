@@ -315,6 +315,40 @@
     },
     "weight_map_keys_sha256": "f010f0041b4630a335fcf2368134154c4e7c1e17a04e750baa62a1ffe0a4f87a",
     "weight_map_num_tensors": 69187,
+    "weight_map_prefix_fingerprints": {
+      "embed": {
+        "count": 1,
+        "keys_sha256": "acf578a8bb1d904fe7e55b31c99bd84cd59e3edd1a66ddda7e0689d5b183b8ad"
+      },
+      "hc_head_base": {
+        "count": 1,
+        "keys_sha256": "c5182905c29b7ab1698ea6cd5f1a1ba5c879b5d785465ba699b7567220927fd3"
+      },
+      "hc_head_fn": {
+        "count": 1,
+        "keys_sha256": "2d3db9c796531c22509d98707a4a714e2bcabda5e89e4ab5a24f32eefd351690"
+      },
+      "hc_head_scale": {
+        "count": 1,
+        "keys_sha256": "c3a24882990dfa7b77e630996a77e0ec82d0e3f6d1a810ecfc8b469b919e33d1"
+      },
+      "head": {
+        "count": 1,
+        "keys_sha256": "ec3156bdb31fc93968681938bb5e2e1a08dbe81481a398d1412f03ec3dc26a66"
+      },
+      "layers": {
+        "count": 67606,
+        "keys_sha256": "a1bdd3ff48fc96f5ef8ee3e4b13fbfbb8b6d07096803c7af34f911c3953cab57"
+      },
+      "mtp": {
+        "count": 1575,
+        "keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62"
+      },
+      "norm": {
+        "count": 1,
+        "keys_sha256": "14109a40d47d1f284fdf3c644ea81582c1f144f7bd4762d2220c3e565c6a4a3d"
+      }
+    },
     "weight_map_unique_files": 46
   },
   "compat": {

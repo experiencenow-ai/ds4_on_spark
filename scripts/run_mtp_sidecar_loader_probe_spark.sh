@@ -19,7 +19,7 @@ echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
-if [ -d "$repo_root/.git" ]; then
+if [ -e "$repo_root/.git" ]; then
 	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
@@ -54,7 +54,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "Set Spark-side env vars via REMOTE_MTP_SIDECAR_ENV:"
 	echo
 	echo "- ALLOW_RUN=1"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)"
 	echo
 	echo "Remote contract probe env (recorded):"
 	echo
@@ -78,7 +78,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "- ALLOW_PATCH=1 (apply the sidecar probe patch)"
 	echo "- ALLOW_BUILD=1 (build llama-ds4-mtp-sidecar-probe)"
 	echo "- ALLOW_RUN=1 (run the probe against an already-staged sidecar GGUF)"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (file path; loader probe does not accept URLs)"
 	echo
 	echo "Optional Spark-side env vars:"
 	echo
@@ -110,14 +110,21 @@ if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
   exit 0
 fi
 if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\"
+  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)\"
   exit 0
 fi
-if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
-  echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
-  exit 0
-fi
-python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+case \"${MTP_SIDECAR_GGUF}\" in
+  http://*|https://*)
+    python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+    ;;
+  *)
+    if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
+      echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
+      exit 0
+    fi
+    python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+    ;;
+esac
 ' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
 	>"$OUT_DIR/remote_contract_probe_stdout.txt" 2>"$OUT_DIR/remote_contract_probe_stderr.txt" || true
 

@@ -119,6 +119,28 @@ fi
 echo "ok"
 echo
 
+echo "== systemd unit syntax (best effort) =="
+if command -v systemd-analyze >/dev/null 2>&1; then
+    units="$systemd_dir/ds4@.service $systemd_dir/ds4-strict@.service $systemd_dir/ds4-preflight@.service $systemd_dir/ds4-preflight-strict@.service $systemd_dir/ds4-support-bundle@.service"
+    if [ -f "$systemd_dir/ds4-preflight@.timer" ]; then
+        units="$units $systemd_dir/ds4-preflight@.timer"
+    fi
+    if [ -f "$systemd_dir/ds4-preflight-strict@.timer" ]; then
+        units="$units $systemd_dir/ds4-preflight-strict@.timer"
+    fi
+    if [ -f "$systemd_dir/ds4-support-bundle@.timer" ]; then
+        units="$units $systemd_dir/ds4-support-bundle@.timer"
+    fi
+    if systemd-analyze verify $units >/dev/null 2>&1; then
+        echo "systemd-analyze verify: ok"
+    else
+        echo "systemd-analyze verify: reported issues (review output by re-running without redirection)" >&2
+    fi
+else
+    echo "skip (missing: systemd-analyze)"
+fi
+echo
+
 echo "== /etc/ds4 env/config =="
 if [ -f "$config_dir/ds4.env" ]; then
     need_file "$config_dir/ds4.env"

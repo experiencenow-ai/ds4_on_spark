@@ -3734,6 +3734,10 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     drop_frac_batch = (dropped_batch / denom_batch) if denom_batch > 0.0 else 0.0
     sla_violation_frac_interactive = (float(metrics.token_sla_violations_interactive) / float(len(metrics.token_lat_ms_interactive))) if len(metrics.token_lat_ms_interactive) != 0 else 0.0
     sla_violation_frac_batch = (float(metrics.token_sla_violations_batch) / float(len(metrics.token_lat_ms_batch))) if len(metrics.token_lat_ms_batch) != 0 else 0.0
+    k_update_frac_interactive = (float(metrics.k_updates_interactive) / denom_interactive) if denom_interactive > 0.0 else 0.0
+    k_update_frac_batch = (float(metrics.k_updates_batch) / denom_batch) if denom_batch > 0.0 else 0.0
+    k_change_frac_interactive = (float(metrics.k_changes_interactive) / denom_interactive) if denom_interactive > 0.0 else 0.0
+    k_change_frac_batch = (float(metrics.k_changes_batch) / denom_batch) if denom_batch > 0.0 else 0.0
     stages_total = float(metrics.stages_total)
     stages_total_interactive = float(metrics.stages_total_interactive)
     stages_total_batch = float(metrics.stages_total_batch)
@@ -3817,6 +3821,16 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "expert_saturation_p95": float(_p_or_zero(metrics.saturated_time_frac_per_expert, 0.95)),
             "expert_tasks_started_gini": float(expert_tasks_started_gini),
             "expert_tasks_started_top1_frac": float(expert_tasks_started_top1_frac),
+            "pending_signal_p50_interactive": float(_p_or_zero(metrics.pending_signal_interactive, 0.50)),
+            "pending_signal_p95_interactive": float(_p_or_zero(metrics.pending_signal_interactive, 0.95)),
+            "pending_signal_p50_batch": float(_p_or_zero(metrics.pending_signal_batch, 0.50)),
+            "pending_signal_p95_batch": float(_p_or_zero(metrics.pending_signal_batch, 0.95)),
+            "k_updates": float(metrics.k_updates_interactive + metrics.k_updates_batch),
+            "k_update_frac_tokens_interactive": float(k_update_frac_interactive),
+            "k_update_frac_tokens_batch": float(k_update_frac_batch),
+            "k_changes": float(metrics.k_changes_interactive + metrics.k_changes_batch),
+            "k_change_frac_tokens_interactive": float(k_change_frac_interactive),
+            "k_change_frac_tokens_batch": float(k_change_frac_batch),
             "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),

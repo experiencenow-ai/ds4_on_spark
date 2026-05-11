@@ -46,7 +46,7 @@ When strict parsing fails due to unknown keys, `ds4_cli` reports how many were s
 Override config fields from the command line:
 
 ```bash
-./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --arena-size 4096 --log-ring-entries 64 --dump-config
+./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --arena-size 4096 --cuda-arena-size 256m --log-ring-entries 64 --dump-config
 ```
 
 Smoke-test ctx init and log-ring capture (static arena, one log line):

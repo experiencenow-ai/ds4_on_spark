@@ -9,6 +9,7 @@ Type=oneshot
 User=root
 Group=root
 WorkingDirectory=/opt/ds4
+SyslogIdentifier=ds4-support-bundle-%i
 Environment=DS4_INSTANCE=%i
 EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env

@@ -8,6 +8,7 @@ typedef struct
 	int32_t enable_cuda;
 	int32_t cuda_device;
 	int32_t arena_size;
+	int32_t cuda_arena_size;
 	int32_t log_ring_entries;
 } ds4_config_t;
 

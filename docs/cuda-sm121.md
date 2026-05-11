@@ -25,6 +25,8 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, and best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both.
 
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `cuobjdump --dump-ptx` reports embedded PTX for binaries built via `-arch=sm_121a` / `-arch=sm_121f`, and the first PTX `.target` line is still `.target sm_121` (treat the `a`/`f` variants as “toolchain accepts and runs them”, not as a distinct PTX target for portability planning).
+
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
 When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
@@ -80,6 +82,8 @@ The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and ru
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.
 
 Some build systems use the long-form `nvcc --gpu-architecture=...` flag instead of `-arch=...`. The compile-only object `make bin/cuda_sm121_gpuarch_compile_probe.o` is the same source compiled via `--gpu-architecture=sm_121` as a compatibility gate. For an end-to-end link/run smoke check using the long-form flag, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also compiles and runs the minimal probe via `nvcc --gpu-architecture=sm_121`.
+
+For a compile-only “C++20 + flags” toolchain gate (no link, no run), `make bin/cuda_sm121_cxx20_flags_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_cxx20_flags_compile_probe.cu` with `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210` (and if `nvcc` does not define the expected flag macros). `make bin/cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` is the same source compiled via `nvcc --gpu-architecture=sm_121` for build-system compatibility.
 
 When diagnosing toolchain issues, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also prints `ptxas --version` and `nvlink --version` (when present) and emits a small `-Xptxas=-v` compile-only snippet for `-arch=sm_121` so you can confirm which assembler/linker is actually being used on Spark0.
 

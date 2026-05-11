@@ -27,6 +27,8 @@ int main(void)
 		err = -9;
 	if ( test_log_ring() < 0 )
 		err = -10;
+	if ( test_cuda_arena() < 0 )
+		err = -11;
 	if ( err < 0 )
 	{
 		fprintf(stderr,"ds4_tests failed (%d)\n",err);

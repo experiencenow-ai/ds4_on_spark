@@ -23,7 +23,8 @@ This repo’s build-skeleton track provides a conservative C/CUDA foundation for
 The build skeleton avoids heap allocation in core paths. The primary pattern is:
 
 - `ds4_arena_t`: Caller-provided arena backing (`include/ds4/arena.h`, `src/ds4_arena.c`)
-- `ds4_ctx_t`: One “context” object that carries config, arena, and optional log capture (`include/ds4/ds4.h`, `src/ds4.c`)
+- `ds4_cuda_arena_t`: Optional bump allocator for a single `cudaMalloc` region (`include/ds4/cuda_arena.h`, `src/ds4_cuda_arena.c`)
+- `ds4_ctx_t`: One “context” object that carries config, arena, optional log capture, and an optional CUDA arena (`include/ds4/ds4.h`, `src/ds4.c`)
 
 `ds4_ctx_init()` expects an arena memory region supplied by the caller; `ds4_ctx_init_auto()` can optionally allocate a log ring from that arena when `cfg->log_ring_entries > 0`.
 

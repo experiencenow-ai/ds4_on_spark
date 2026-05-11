@@ -240,7 +240,7 @@ fi
 echo
 echo \"== compile-only (tiny) ==\"
 make clean
-make bin/cuda_sm121_compile_probe.o bin/cuda_sm121_gpuarch_compile_probe.o
+make bin/cuda_sm121_compile_probe.o bin/cuda_sm121_gpuarch_compile_probe.o bin/cuda_sm121_cxx20_flags_compile_probe.o bin/cuda_sm121_cxx20_flags_gpuarch_compile_probe.o
 
 	echo
 	echo \"== nvcc: -arch=sm_121 emits embedded PTX (best-effort) ==\"

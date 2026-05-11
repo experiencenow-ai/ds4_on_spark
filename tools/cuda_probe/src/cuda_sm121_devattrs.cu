@@ -41,6 +41,8 @@ static int32_t print_device(int32_t dev)
 	print_attr_i32(dev,"cudaDevAttrMaxRegistersPerBlock",cudaDevAttrMaxRegistersPerBlock);
 	print_attr_i32(dev,"cudaDevAttrMaxRegistersPerMultiprocessor",cudaDevAttrMaxRegistersPerMultiprocessor);
 	print_attr_i32(dev,"cudaDevAttrL2CacheSize_bytes",cudaDevAttrL2CacheSize);
+	print_attr_i32(dev,"cudaDevAttrReservedSharedMemoryPerBlock_bytes",cudaDevAttrReservedSharedMemoryPerBlock);
+	print_attr_i32(dev,"cudaDevAttrMemoryPoolsSupported",cudaDevAttrMemoryPoolsSupported);
 	print_attr_i32(dev,"cudaDevAttrConcurrentKernels",cudaDevAttrConcurrentKernels);
 	print_attr_i32(dev,"cudaDevAttrCooperativeLaunch",cudaDevAttrCooperativeLaunch);
 	print_attr_i32(dev,"cudaDevAttrClusterLaunch",cudaDevAttrClusterLaunch);

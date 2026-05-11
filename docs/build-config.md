@@ -28,6 +28,7 @@ Supported keys:
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
 - `cuda_device`: integer `-1` (auto / leave default device) or `>= 0` (force device index)
 - `arena_size`: integer bytes (advisory; for callers that want to size arena allocations). Supports `k`/`m`/`g` suffixes (powers of 1024), e.g. `64k`, `2m`.
+- `cuda_arena_size`: integer bytes (advisory; for callers that want `ds4_ctx_apply_config` to allocate a `ds4_cuda_arena_t` via `cudaMalloc`). Supports `k`/`m`/`g` suffixes. Requires `enable_cuda=1`.
 - `log_ring_entries`: integer entries (advisory; for callers that size log capture rings; when a `ds4_ctx_t` has a log ring initialized, `ds4_ctx_apply_config` attaches it when this value is > 0). Supports `k`/`m`/`g` suffixes, e.g. `4k`.
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
@@ -35,6 +36,8 @@ Supported keys:
 ## Validation helper
 
 For callers that populate a `ds4_config_t` directly (not via the parser), `ds4_config_validate` checks basic range/shape constraints (log level range, booleans are `0/1`, non-negative sizes).
+
+In addition, `ds4_config_validate` enforces that `cuda_arena_size > 0` implies `enable_cuda=1`.
 
 ## C string helpers
 
@@ -56,6 +59,7 @@ You can also override config fields from the environment with `ds4_config_parse_
 - `DS4_ENABLE_CUDA`
 - `DS4_CUDA_DEVICE`
 - `DS4_ARENA_SIZE` (supports `k`/`m`/`g` suffixes, e.g. `512k`)
+- `DS4_CUDA_ARENA_SIZE` (supports `k`/`m`/`g` suffixes, e.g. `256m`)
 - `DS4_LOG_RING_ENTRIES` (supports `k`/`m`/`g` suffixes, e.g. `4k`)
 
 Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "`) are treated as unset and ignored; surrounding whitespace is trimmed before parsing.

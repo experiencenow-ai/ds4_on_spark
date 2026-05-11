@@ -80,6 +80,17 @@ int32_t test_config(void)
 	if ( ds4_config_validate(&cfg) >= 0 )
 		return(-1805);
 	cfg.log_ring_entries = 0;
+	cfg.cuda_arena_size = -1;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1807);
+	cfg.cuda_arena_size = 1;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1808);
+	cfg.enable_cuda = 1;
+	if ( ds4_config_validate(&cfg) < 0 )
+		return(-1809);
+	cfg.enable_cuda = 0;
+	cfg.cuda_arena_size = 0;
 	if ( ds4_config_validate(0) >= 0 )
 		return(-1806);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_level","debug") != 0 )
@@ -98,6 +109,10 @@ int32_t test_config(void)
 		return(-170);
 	if ( cfg.arena_size != 65536 )
 		return(-171);
+	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","256") != 0 )
+		return(-1810);
+	if ( cfg.cuda_arena_size != 256 )
+		return(-1811);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","9") != 0 )
 		return(-142);
 	if ( cfg.log_ring_entries != 9 )
@@ -215,6 +230,8 @@ int32_t test_config(void)
 		return(-115);
 	if ( setenv("DS4_ARENA_SIZE","512k",1) != 0 )
 		return(-148);
+	if ( setenv("DS4_CUDA_ARENA_SIZE","256k",1) != 0 )
+		return(-1520);
 	if ( setenv("DS4_LOG_RING_ENTRIES","4k",1) != 0 )
 		return(-149);
 	if ( ds4_config_parse_env(&cfg) < 0 )
@@ -227,12 +244,15 @@ int32_t test_config(void)
 		return(-116);
 	if ( cfg.arena_size != 524288 )
 		return(-150);
+	if ( cfg.cuda_arena_size != 262144 )
+		return(-1521);
 	if ( cfg.log_ring_entries != 4096 )
 		return(-151);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	unsetenv("DS4_CUDA_DEVICE");
 	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_CUDA_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-153);
@@ -244,6 +264,8 @@ int32_t test_config(void)
 		return(-156);
 	if ( setenv("DS4_ARENA_SIZE","",1) != 0 )
 		return(-157);
+	if ( setenv("DS4_CUDA_ARENA_SIZE","",1) != 0 )
+		return(-1522);
 	if ( setenv("DS4_LOG_RING_ENTRIES","",1) != 0 )
 		return(-158);
 	if ( ds4_config_parse_env(&cfg) < 0 )
@@ -256,12 +278,15 @@ int32_t test_config(void)
 		return(-162);
 	if ( cfg.arena_size != 0 )
 		return(-163);
+	if ( cfg.cuda_arena_size != 0 )
+		return(-1523);
 	if ( cfg.log_ring_entries != 0 )
 		return(-164);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	unsetenv("DS4_CUDA_DEVICE");
 	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_CUDA_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-165);
@@ -273,6 +298,8 @@ int32_t test_config(void)
 		return(-168);
 	if ( setenv("DS4_ARENA_SIZE"," \t ",1) != 0 )
 		return(-169);
+	if ( setenv("DS4_CUDA_ARENA_SIZE"," \t ",1) != 0 )
+		return(-1524);
 	if ( setenv("DS4_LOG_RING_ENTRIES"," \t ",1) != 0 )
 		return(-170);
 	if ( ds4_config_parse_env(&cfg) < 0 )
@@ -285,12 +312,15 @@ int32_t test_config(void)
 		return(-174);
 	if ( cfg.arena_size != 0 )
 		return(-175);
+	if ( cfg.cuda_arena_size != 0 )
+		return(-1525);
 	if ( cfg.log_ring_entries != 0 )
 		return(-176);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	unsetenv("DS4_CUDA_DEVICE");
 	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_CUDA_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-177);
@@ -302,6 +332,8 @@ int32_t test_config(void)
 		return(-180);
 	if ( setenv("DS4_ARENA_SIZE"," 512 ",1) != 0 )
 		return(-181);
+	if ( setenv("DS4_CUDA_ARENA_SIZE"," 256 ",1) != 0 )
+		return(-1526);
 	if ( setenv("DS4_LOG_RING_ENTRIES"," 7 ",1) != 0 )
 		return(-182);
 	if ( ds4_config_parse_env(&cfg) < 0 )
@@ -314,12 +346,15 @@ int32_t test_config(void)
 		return(-186);
 	if ( cfg.arena_size != 512 )
 		return(-187);
+	if ( cfg.cuda_arena_size != 256 )
+		return(-1527);
 	if ( cfg.log_ring_entries != 7 )
 		return(-188);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	unsetenv("DS4_CUDA_DEVICE");
 	unsetenv("DS4_ARENA_SIZE");
+	unsetenv("DS4_CUDA_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-107);
@@ -449,7 +484,7 @@ int32_t test_config(void)
 		return(-29);
 	}
 	n = ds4_cstr_len_i32(out);
-	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\ncuda_device=-1\narena_size=0\nlog_ring_entries=0\n") == 0 )
+	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\ncuda_device=-1\narena_size=0\ncuda_arena_size=0\nlog_ring_entries=0\n") == 0 )
 	{
 		unlink(path);
 		return(-49);

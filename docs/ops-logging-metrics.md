@@ -21,6 +21,7 @@ Human runbook:
 
 ```bash
 journalctl -u ds4@spark0.service --since "1 hour ago" --no-pager
+journalctl -t ds4-spark0 -n 200 --no-pager
 journalctl -u ds4@spark0.service -o json | head
 ```
 

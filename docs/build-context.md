@@ -5,10 +5,14 @@ The build skeleton includes a conservative context handle, `ds4_ctx_t`, intended
 - A copy of the effective config (`ds4_config_t`)
 - A caller-provided arena (`ds4_arena_t`)
 - An optional caller-provided log capture ring (`ds4_log_ring_t`)
+- An optional CUDA device bump arena (`ds4_cuda_arena_t`) when `enable_cuda=1` and `cuda_arena_size > 0`
 
 ## Static allocation
 
-`ds4_ctx_t` does not allocate. Callers supply fixed buffers up front:
+`ds4_ctx_t` does not allocate from the host heap. Callers supply fixed buffers up front:
+
+- CPU arena memory is always caller-provided.
+- CUDA device memory is optional and only allocated when `enable_cuda=1` and `cuda_arena_size > 0` (via `cudaMalloc`).
 
 ```c
 #include "ds4/ds4.h"

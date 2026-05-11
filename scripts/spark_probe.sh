@@ -24,7 +24,7 @@ Environment:
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
-  DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+  DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
@@ -120,6 +120,12 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	if command -v git >/dev/null 2>&1; then
 		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
 		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git" ] && [ -r "$git_worktree/.codex_git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git/.git" ] && [ -r "$git_worktree/.codex_git/.git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git/.git"
+		fi
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
 			git_dir="$git_worktree/.git-codex"
 		fi
@@ -293,13 +299,19 @@ if [ "$have_smi" = "1" ]; then
 			echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
 		fi
 	fi
-else
-	echo "nvidia-smi not found"
-fi
-echo
-echo "== nvidia-smi pci ids (optional) =="
-if command -v nvidia-smi >/dev/null 2>&1; then
-	ids_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.device_id,pci.sub_device_id --format=csv,noheader,nounits 2>/dev/null || true)"
+	else
+		echo "nvidia-smi not found"
+	fi
+	if [ "$q" != "" ]; then
+		smi_mem_total_any_na="$(printf "%s\n" "$q" | awk -F"," '"'"'{ v=$NF; gsub(/^[ \t]+|[ \t]+$/, "", v); if ( v == "[N/A]" ) { print "1"; exit } }'"'"')"
+		if [ "$smi_mem_total_any_na" = "1" ]; then
+			echo "note: nvidia-smi memory.total is [N/A] (unified memory); use == memory == and the cuda runtime probe global mem bytes"
+		fi
+	fi
+	echo
+	echo "== nvidia-smi pci ids (optional) =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		ids_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.device_id,pci.sub_device_id --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$ids_q" != "" ]; then
 		if printf "%s" "$ids_q" | grep -qi "not a valid field"; then
 			echo "pci id query not supported"

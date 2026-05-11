@@ -109,6 +109,14 @@ If the runtime trace does not tag `cls`, force a default for replay:
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
 ```
 
+If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/`rejected_mtp`), generate an MTP-on vs MTP-off replay report (includes both `arrival_units=steps` and `arrival_units=output_tokens`) with:
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
+```
+
+If the same runtime trace also includes speculative-decoding comparator counters (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the report includes a separate `dflash_comparator` block and keeps those counters isolated from DeepSeek MTP acceptance assumptions.
+
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
 
 ```bash
@@ -227,7 +235,7 @@ Initial scope:
     - Treat `structural_complete_untrusted` as “MTP weights appear complete, but still requires an MTP logits oracle (`--include-mtp`) before enabling speculative decoding.”
 - expose draft logits/tokens from the runtime or a sidecar path
 - when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
-  - Spark-only runner (local sidecar file already staged; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh`
+  - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh`
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load): `scripts/run_mtp_sidecar_loader_probe_spark.sh`
 - recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-9cb905d-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`

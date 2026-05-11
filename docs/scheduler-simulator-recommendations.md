@@ -186,3 +186,11 @@ These are synthetic signals only. The next gating artifact for scheduler work is
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --summary-json
 ```
+
+If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/`rejected_mtp`), you can run a quick MTP-on vs MTP-off ablation report (includes both `arrival_units=steps` and `arrival_units=output_tokens`) via:
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
+```
+
+If the trace also includes a speculative-decoding comparator like Qwen+DFlash (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the same report includes a separate `dflash_comparator` block that summarizes acceptance and reports a `service_slot_ms_per_output_token_ratio_vs_target_only` upper-bound efficiency ratio (comparator draft compute is not modeled).

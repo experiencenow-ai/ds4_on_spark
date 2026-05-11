@@ -11,9 +11,9 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - Spark0 snapshot (2026-05-11, via `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
   - `cuda drv=13000 rt=13000` (CUDA 13.0 driver/runtime ABI)
   - `mp=48`, `l2=25165824` (24 MiB), `mem=128518373376` (~119.7 GiB), `clock_khz=2418000`, `mem_clock_khz=8533000`
-  - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`
+  - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `smem_reserved_block=1024`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`, `mem_pools=1`
   - If any `cudaDeviceGetAttribute` query is unavailable, the one-line schema uses `-1` for that field (to avoid silently reporting `0`).
-- `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
+- `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support)
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints the same one-line limits schema without shipping `tools/cuda_probe/` (useful when repo transfer is blocked)
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` also includes a best-effort compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr` (CUTLASS/DeepGEMM-style nvcc flags) for `sm_121` (and `compute_121` when advertised)
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` validates that CMake (>= 3.18) can configure/build a minimal CUDA project with `CMAKE_CUDA_ARCHITECTURES="121"` and run it on GB10 (`__CUDA_ARCH__=1210`) without shipping the repo
@@ -22,6 +22,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - CUDA 13 “variant targets”:
   - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` / `sm_121f`.
   - Best-effort compile-only and build+run for `-arch=sm_121a` and `-arch=sm_121f` both succeed on Spark0 (treat as “optional compatibility”; do not rely on `nvcc --list-gpu-code` advertising them).
+  - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `cuobjdump --dump-ptx` reports embedded PTX for `-arch=sm_121a` / `-arch=sm_121f` builds, and the first PTX `.target` line remains `.target sm_121` (so the variant suffix does not imply a distinct PTX target for portability planning).
   - Spark0’s toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 - For a small “kernel plumbing” bring-up gate set (no cuBLASLt), run `./scripts/cuda_probe_kernel_tiny_spark0.sh` from the Mac; it validates C++20 + template flags, inline PTX (`ldmatrix`), pipeline/bulk async copy plumbing, TMA tensor-map encode + `cp.async.bulk.tensor`, and NVRTC/nvJitLink JIT paths for `sm_121`.
 - `./scripts/cuda_probe_capability_spark0.sh` includes the kernel-plumbing gates by default; set `WITH_KERNEL_TINY=0` to skip them for a faster sweep.
@@ -109,6 +110,7 @@ Implication:
 - When `compute_121` is advertised, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also does a best-effort end-to-end build+run via `-gencode arch=compute_121,code=[sm_121,compute_121]` and includes it in the `cuobjdump --dump-ptx` embedded-PTX report.
 - For artifacts expected to run across multiple GPU variants, prefer explicit `-gencode` with both SASS and PTX (for example: `-gencode arch=compute_121,code=sm_121 -gencode arch=compute_121,code=compute_121`, or `-gencode arch=compute_121,code=[sm_121,compute_121]`) and add additional `sm_*` entries as needed for your fleet.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is a tiny “fatbin portability” gate that builds via `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX) and runs the same sanity kernel as the `-arch=sm_121` probe.
+- For CUTLASS-style template libraries and dispatch tables that are still catching up to explicit `sm_121`, it can be safer to include a family fallback (`sm_120`) alongside any `sm_121`-specific build during bring-up; `tools/cuda_probe/bin/cuda_sm120_compat_probe` provides a direct “`sm_120` SASS runs on GB10 (`sm_121`)” signal, and `cuda_sm121_fatbin_probe` is a concrete “`sm_120`+`sm_121`+PTX” packaging reference.
 
 ## DeepGEMM
 
