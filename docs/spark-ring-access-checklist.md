@@ -46,14 +46,15 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 | Node | SSH target | SSH path | Wired ifname | Wired MTU | Wi‑Fi ifname | Wi‑Fi MTU | Notes |
 |------|------------|----------|--------------|----------:|--------------|----------:|-------|
-| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | — |
+| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | 10GbE link expected |
 | spark1 | `spark1.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 | spark2 | `spark2.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 
 ## 5) MTU Consistency
 
 - Ensure the intended fabric (wired vs Wi‑Fi) uses consistent MTU across nodes for tests that care about latency/bandwidth.
-- The ring probe prints `ip -br link` which includes MTU; use it to spot mismatches quickly.
+- Use the ring probe `== network (mtu, compact) ==` section (from `ip -br link`) to spot mismatches quickly.
+- The Mac discovery snapshot also records `mtu` for `en0`/`en1` via `ifconfig` for context.
 - Optional: validate MTU end-to-end with DF pings from each host to its peers:
   - `SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_mtu.sh --topology full aitopatom-9ab9.local spark1.local spark2.local || true`
   - Override payload sizes (comma-separated, no spaces): `MTU_PAYLOADS=1472,8972`
@@ -62,7 +63,15 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 - Use ping RTT as the minimum viable latency check:
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
+- The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
+- Optional (no installs): quick Mac→Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
+  - `dd if=/dev/zero bs=1m count=256 2>/dev/null | ssh -o BatchMode=yes spark0@aitopatom-9ab9.local 'cat >/dev/null'`
+  - Use `/usr/bin/time -p ...` around the command if you want a simple MB/s estimate; do not run this in tight loops.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
+- If `iperf3` is already present on all nodes, you can do a quick throughput check (do not commit raw IPs; summarize results or redact manually):
+  - On receiver: `iperf3 -s`
+  - On sender: `iperf3 -c <receiver-ip> -t 10 -P 4`
+- If `ib_write_bw` / `ib_write_lat` (perftest) is already installed, you can validate RDMA/RoCE fabric performance similarly; this is higher risk (active traffic), so keep it human-run and outside automation loops.
 
 ## 7) Safe GPU/Storage Metadata Capture
 
