@@ -6,6 +6,7 @@ REV="main"
 OUT_DIR="fixtures/model_contract/deepseek_v4_flash"
 
 FILES=(
+  "DeepSeek_V4.pdf"
   "config.json"
   "generation_config.json"
   "model.safetensors.index.json"

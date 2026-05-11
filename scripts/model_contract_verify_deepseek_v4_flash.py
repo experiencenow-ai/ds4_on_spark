@@ -91,6 +91,7 @@ def main() -> int:
 				if not isinstance(fixture_sha, dict):
 					fixture_sha = {}
 				expected_sha_keys = [
+					"DeepSeek_V4.pdf",
 					"encoding/tests/test_input_1.json",
 					"encoding/tests/test_output_1.txt",
 					"encoding/tests/test_input_4.json",

@@ -10,6 +10,7 @@ Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1
 
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
+- `DeepSeek_V4.pdf` (technical report; helps define intended CSA/HCA/Flash semantics)
 - `config.json` (top-level architecture + per-layer `compress_ratios`)
 - `upstream_commit.txt` (pinned upstream git commit hash)
 - `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
