@@ -13,3 +13,4 @@ upstreams/
 .codex_git/
 .codex_git_intake*/
 .git_local/
+.git-codex-*/
