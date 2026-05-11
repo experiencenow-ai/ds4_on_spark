@@ -15,25 +15,18 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
-If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids instance-name mistakes and can run an optional mesh check first):
+For staging an ordered Spark inventory, prefer the inventory-driven ring wrapper.
+The argument order defines `spark0`, `spark1`, and so on; add another host
+argument when another Spark joins the ring:
 
 ```bash
-./scripts/ops_stage_spark0_spark1.sh spark0@<spark0-host> spark1@<spark1-host>
-# optional: add --mesh-check and/or --tcp <port>
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
+# optional: add --tcp <port> and/or --instance<N> <name>
 ```
 
-If you're staging Spark0/Spark1/Spark2, prefer the three-host wrapper:
+The older two-host and three-host wrappers remain for compatibility, but new
+docs and automation should use `ops_stage_spark_ring.sh`.
 
-```bash
-./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
-# optional: add --tcp <port>
-```
-
-If you're staging Spark0..Spark3, prefer the ring wrapper (optional mesh check and ring/full topology):
-
-```bash
-./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
-```
 
 ## Validation Helpers
 
