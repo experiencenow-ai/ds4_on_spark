@@ -555,6 +555,8 @@ Optional fields should be added when available:
 - `decode_ms`: measured decode latency for this token
 - `kv_tokens`: KV/cache token count at this step
 
+If your runtime logs already contain stable `accepted_mtp`+`rejected_mtp` (or `accepted_dflash`+`rejected_dflash`) counters, `sim/scheduler/trace_extract.py` can infer `mtp_draft_len` / `dflash_draft_len` and emit them in the extracted trace meta header so replay can use `--mtp-draft-len -1` (and `--dflash-draft-len -1`) without hand-editing.
+
 The first useful runtime patch can be instrumentation-only. Expert queueing
 should be enabled only after replay shows a throughput win without unacceptable
 interactive p95, starvation, or partial-admit regressions.

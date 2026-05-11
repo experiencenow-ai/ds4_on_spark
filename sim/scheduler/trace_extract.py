@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 def _as_dict(obj: object) -> Optional[Dict[str, object]]:
@@ -440,6 +440,50 @@ def extract_jsonl_lines(
     return(out)
 
 
+def infer_meta_from_extracted_routes(routes: Sequence[Dict[str, object]]) -> Dict[str, object]:
+    inferred: Dict[str, object] = {}
+    max_expert: Optional[int] = None
+    mtp_draft_len: Optional[int] = None
+    dflash_draft_len: Optional[int] = None
+
+    for r in routes:
+        cands = r.get("candidates")
+        if isinstance(cands, list):
+            for e in cands:
+                if not isinstance(e, int) or e < 0:
+                    continue
+                max_expert = int(e) if max_expert is None else max(max_expert, int(e))
+
+        accepted_mtp = r.get("accepted_mtp")
+        rejected_mtp = r.get("rejected_mtp")
+        if isinstance(accepted_mtp, int) and isinstance(rejected_mtp, int) and accepted_mtp >= 0 and rejected_mtp >= 0:
+            dl = int(accepted_mtp + rejected_mtp)
+            if dl > 0:
+                if mtp_draft_len is None:
+                    mtp_draft_len = dl
+                elif int(mtp_draft_len) != dl:
+                    mtp_draft_len = 0
+
+        accepted_dflash = r.get("accepted_dflash")
+        rejected_dflash = r.get("rejected_dflash")
+        if isinstance(accepted_dflash, int) and isinstance(rejected_dflash, int) and accepted_dflash >= 0 and rejected_dflash >= 0:
+            dl = int(accepted_dflash + rejected_dflash)
+            if dl > 0:
+                if dflash_draft_len is None:
+                    dflash_draft_len = dl
+                elif int(dflash_draft_len) != dl:
+                    dflash_draft_len = 0
+
+    if max_expert is not None:
+        inferred["num_experts"] = int(max_expert) + 1
+    if mtp_draft_len is not None and int(mtp_draft_len) > 0:
+        inferred["mtp_draft_len"] = int(mtp_draft_len)
+    if dflash_draft_len is not None and int(dflash_draft_len) > 0:
+        inferred["dflash_draft_len"] = int(dflash_draft_len)
+
+    return(inferred)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Extract scheduler-simulator route records from loosely shaped/mixed JSONL logs (optionally skipping non-JSON lines).")
     p.add_argument("--in-jsonl", type=str, default="-", help="Input JSONL path ('-' for stdin).")
@@ -466,6 +510,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     meta: Dict[str, object] = {"extracted_routes": len(recs)}
     if args.route_type.strip() != "":
         meta["route_type"] = args.route_type.strip()
+    inferred = infer_meta_from_extracted_routes(recs)
+    if len(inferred) != 0:
+        for k, v in inferred.items():
+            if k not in meta:
+                meta[k] = v
+        meta["inferred"] = inferred
 
     f_out = sys.stdout if args.out_jsonl == "-" else open(args.out_jsonl, "w", encoding="utf-8")
     try:

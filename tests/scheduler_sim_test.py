@@ -3948,6 +3948,24 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["candidates"], [0])
 
+    def test_trace_extract_infer_meta_reports_num_experts_and_draft_lens(self) -> None:
+        routes = [
+            {"t_ms": 0.0, "cls": "batch", "candidates": [0, 3], "accepted_mtp": 2, "rejected_mtp": 1, "accepted_dflash": 1, "rejected_dflash": 0},
+            {"t_ms": 1.0, "cls": "batch", "candidates": [2], "accepted_mtp": 2, "rejected_mtp": 1},
+        ]
+        inferred = trace_extract.infer_meta_from_extracted_routes(routes)
+        self.assertEqual(inferred.get("num_experts"), 4)
+        self.assertEqual(inferred.get("mtp_draft_len"), 3)
+        self.assertEqual(inferred.get("dflash_draft_len"), 1)
+
+    def test_trace_extract_infer_meta_ignores_inconsistent_draft_len(self) -> None:
+        routes = [
+            {"t_ms": 0.0, "cls": "batch", "candidates": [0], "accepted_mtp": 2, "rejected_mtp": 1},
+            {"t_ms": 1.0, "cls": "batch", "candidates": [1], "accepted_mtp": 3, "rejected_mtp": 1},
+        ]
+        inferred = trace_extract.infer_meta_from_extracted_routes(routes)
+        self.assertNotIn("mtp_draft_len", inferred)
+
     def test_trace_extract_default_cls_fills_missing_cls(self) -> None:
         obj = {"t_ms": 0.0, "candidates": [0]}
         self.assertIsNone(trace_extract.extract_route_record(obj))
