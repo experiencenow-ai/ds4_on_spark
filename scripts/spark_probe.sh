@@ -488,7 +488,7 @@ fi
 		pcie_speed_to_gen()
 		{
 			s="$1"
-			n="$(printf "%s" "$s" | awk "{print \\$1}" 2>/dev/null || true)"
+			n="${s%% *}"
 			case "$n" in
 				2.5) echo 1 ;;
 				5|5.0) echo 2 ;;
@@ -594,7 +594,7 @@ emit_smi_q_pci_link()
 		pcie_speed_to_gen()
 		{
 			s="$1"
-			n="$(printf "%s" "$s" | awk "{print \\$1}" 2>/dev/null || true)"
+			n="${s%% *}"
 			case "$n" in
 				2.5) echo 1 ;;
 				5|5.0) echo 2 ;;
