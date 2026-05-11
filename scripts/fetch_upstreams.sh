@@ -43,6 +43,10 @@ Targets:
   gemma_4_26b_a4b_it_dflash_hf         (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gemma_4_31b_it_hf                    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gemma_4_31b_it_dflash_hf             (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gpt_oss_20b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gpt_oss_20b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gpt_oss_120b_hf                      (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  gpt_oss_120b_dflash_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_quant_bleysg  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -362,6 +366,26 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/z-lab/gemma-4-31B-it-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "gemma_4_31b_it_dflash_hf" "https://huggingface.co/z-lab/gemma-4-31B-it-DFlash" "${ref}" "${expected}"
+			;;
+		gpt_oss_20b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/openai/gpt-oss-20b"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gpt_oss_20b_hf" "https://huggingface.co/openai/gpt-oss-20b" "${ref}" "${expected}"
+			;;
+		gpt_oss_20b_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/gpt-oss-20b-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gpt_oss_20b_dflash_hf" "https://huggingface.co/z-lab/gpt-oss-20b-DFlash" "${ref}" "${expected}"
+			;;
+		gpt_oss_120b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/openai/gpt-oss-120b"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gpt_oss_120b_hf" "https://huggingface.co/openai/gpt-oss-120b" "${ref}" "${expected}"
+			;;
+		gpt_oss_120b_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/gpt-oss-120b-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "gpt_oss_120b_dflash_hf" "https://huggingface.co/z-lab/gpt-oss-120b-DFlash" "${ref}" "${expected}"
 			;;
 		sglang)
 			upstream="sgl-project/sglang"; ref="refs/tags/v0.5.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
