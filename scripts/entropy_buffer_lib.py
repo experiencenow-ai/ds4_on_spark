@@ -12,8 +12,9 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tupl
 
 _WORD_RE = re.compile(r"[A-Za-z0-9]+")
 _WS_RE = re.compile(r"\s+")
-_ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*([A-D])\s*$")
-_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer)\s*[:=]\s*([A-D])\b")
+_ANSWER_NUMERIC_RE = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*$")
+_ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*[\(\[]?([A-Z])[\)\].]?\s*$")
+_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
 
 
 @dataclass
@@ -108,6 +109,8 @@ def _extract_label(obj: Dict[str, Any]) -> str:
 
 
 def extract_answer(text: str) -> str:
+    if _ANSWER_NUMERIC_RE.match(text) is not None:
+        return(text.strip())
     m = _ANSWER_STANDALONE_RE.match(text)
     if m is not None:
         return(m.group(1).upper())
@@ -138,7 +141,7 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
             rtype = "unknown"
 
     run_id = _get_str(obj, "run_id", "run", "run_name", "variant")
-    judge_id = _get_str(obj, "judge_id", "judge", "rater_id")
+    judge_id = _get_str(obj, "judge_id", "judge", "rater_id", "judge_model")
     item_id = _get_str(obj, "item_id", "pair_id", "comparison_id", "id")
 
     task_id = _get_str(obj, "task_id", "task", "task_name")

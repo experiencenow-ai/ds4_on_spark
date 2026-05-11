@@ -12,6 +12,30 @@ def _repo_root() -> str:
 
 
 class EntropyBufferMetricsTest(unittest.TestCase):
+    def test_canonicalize_extracts_numeric_answer_and_judge_model(self) -> None:
+        c = lib.canonicalize_record({
+            "type": "task_run",
+            "task_id": "math.add.999",
+            "task_family": "math",
+            "prompt_template_id": "plain.v1",
+            "prompt": "Add 1+1",
+            "output": "2",
+        })
+        self.assertEqual(c.rtype, "task_run")
+        self.assertEqual(c.answer, "2")
+
+        j = lib.canonicalize_record({
+            "schema": "ds4_pairwise_judge_record_v1",
+            "pair_id": "pair.test.001",
+            "judge_model": "judge.vX",
+            "model_a": "mA",
+            "model_b": "mB",
+            "winner": "A",
+            "parse_valid": True,
+        })
+        self.assertEqual(j.rtype, "judge_pair")
+        self.assertEqual(j.judge_id, "judge.vX")
+
     def test_metrics_from_mini_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")
@@ -57,7 +81,12 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         scored = recommend._score(history, candidates)
         self.assertGreaterEqual(len(scored), 1)
         self.assertEqual(scored[0].seen_task_id, 0)
-        self.assertIn(scored[0].task_family, ("code",))
+        self.assertEqual(scored[0].task_family, "code")
+
+        top = recommend._select(scored, history, limit=10, max_per_family=0, max_per_template=0, avoid_seen_task_id=True)
+        self.assertGreaterEqual(len(top), 1)
+        self.assertEqual(top[0].task_family, "code")
+        self.assertFalse(any(c.task_id == "math.add.001" and c.prompt_template_id == "cot.v2" for c in top))
 
 
 if __name__ == "__main__":

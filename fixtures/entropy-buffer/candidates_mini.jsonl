@@ -5,3 +5,4 @@
 {"task_id":"format.yaml.001","task_family":"format","prompt_template_id":"yaml.strict.v1","tags":["formatting"]}
 {"task_id":"format.json.002","task_family":"format","prompt_template_id":"json.strict.v1","tags":["formatting"]}
 {"task_id":"code.py.001","task_family":"code","prompt_template_id":"code.eval.v1","tags":["python"]}
+{"task_id":"math.add.001","task_family":"math","prompt_template_id":"cot.v2","tags":["arith","seen_task"]}
