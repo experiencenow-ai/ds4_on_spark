@@ -33,7 +33,7 @@ Recommended (stages all 4 Sparks, avoids instance-name mistakes):
 Or stage each host individually:
 
 ```bash
-./scripts/ops_stage_deploy_assets.sh spark2@<spark2-host> spark2
+DS4_ENV_VARIANT=tp4 ./scripts/ops_stage_deploy_assets.sh spark2@<spark2-host> spark2
 ```
 
 ## On Each Spark: Install Systemd + Config
@@ -47,7 +47,8 @@ sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spa
 Notes:
 
 - By default the installer is idempotent and does **not** overwrite existing `/etc/ds4/ds4-*.env` or `ds4-*.conf`. Use `--overwrite-config` only if you intentionally want to replace an existing env/config file.
-- `deploy/config/ds4-spark2.env.example` and `deploy/config/ds4-spark3.env.example` are TP=4 placeholders. For Spark0/Spark1, start from the existing env examples and update `DS4_WORLD_SIZE=4` and `DS4_RANK` when you are ready to attempt TP=4.
+- `scripts/ops_stage_spark_ring.sh` stages TP=4 env variants by default (`deploy/config/ds4-spark*.tp4.env.example`) by setting `DS4_ENV_VARIANT=tp4` per host during staging.
+- If you stage hosts manually, set `DS4_ENV_VARIANT=tp4` to swap `ds4-<instance>.tp4.env.example` into `ds4-<instance>.env.example` on the Spark (see `deploy/README.md`).
 
 ## TP=4 Preflight (Optional)
 
@@ -81,4 +82,3 @@ Details: `docs/ops-tp4-readiness.md`.
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - Ring network + ports: `docs/ops-spark-ring-network-ports.md`
 - Four-node operating checklist: `docs/spark-ring-ops-checklist.md`
-
