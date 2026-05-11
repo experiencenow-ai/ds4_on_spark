@@ -8,20 +8,43 @@ LS_REMOTE_TIMEOUT_SEC="${UPSTREAM_LS_REMOTE_TIMEOUT_SEC:-20}"
 usage()
 {
 	cat <<'EOF'
-Usage: ./scripts/upstream_verify_pins.sh
+Usage: ./scripts/upstream_verify_pins.sh [--quiet] [--summary]
 
 Verifies that the pinned refs/commits in docs/upstream-manifest.md still resolve
 upstream (without cloning).
+
+Options:
+  --quiet    Only print failures (suppresses per-row OK lines).
+  --summary  Print a final OK/FAIL count summary.
+  -h, --help Show this help.
 
 Environment:
   UPSTREAM_LS_REMOTE_TIMEOUT_SEC  Per-upstream `git ls-remote` timeout (default: 20).
 EOF
 }
 
-if [ "${#}" -ne 0 ]; then
-	usage >&2
-	exit 2
-fi
+quiet=0
+summary=0
+
+while [ "${#}" -gt 0 ]; do
+	case "$1" in
+		--quiet)
+			quiet=1
+			;;
+		--summary)
+			summary=1
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			usage >&2
+			exit 2
+			;;
+	esac
+	shift
+done
 
 check_ref()
 {
@@ -45,7 +68,9 @@ check_ref()
 				echo "FAIL ${name}: expected ${expected}, got ${got}" >&2
 				return 1
 			fi
-			echo "OK   ${name}"
+			if [ "${quiet}" -eq 0 ]; then
+				echo "OK   ${name}"
+			fi
 			return 0
 		fi
 		# For non-default refs (e.g. HF PR refs), use the git transport.
@@ -75,7 +100,9 @@ check_ref()
 		return 1
 	fi
 
-	echo "OK   ${name}"
+	if [ "${quiet}" -eq 0 ]; then
+		echo "OK   ${name}"
+	fi
 	return 0
 }
 
@@ -116,10 +143,21 @@ upstream_url()
 }
 
 fail=0
+ok_count=0
+fail_count=0
 
 while IFS=$'\t' read -r name upstream ref commit; do
 	url="$(upstream_url "${upstream}")"
-	check_ref "${name}" "${upstream}" "${url}" "${ref}" "${commit}" || fail=1
+	if check_ref "${name}" "${upstream}" "${url}" "${ref}" "${commit}"; then
+		ok_count=$((ok_count + 1))
+	else
+		fail=1
+		fail_count=$((fail_count + 1))
+	fi
 done < <(manifest_rows)
+
+if [ "${summary}" -ne 0 ]; then
+	echo "SUMMARY ok=${ok_count} fail=${fail_count}"
+fi
 
 exit "${fail}"
