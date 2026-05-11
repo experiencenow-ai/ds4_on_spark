@@ -85,6 +85,7 @@ sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-spark0.conf.example /etc/ds4/ds4
 sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_config_check.sh /opt/ds4/scripts/ops_ds4_config_check.sh
 sudo systemctl daemon-reload
 ```
 

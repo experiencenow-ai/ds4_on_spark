@@ -158,6 +158,22 @@ __global__ void cuda_featureset_macros_compile_only(uint32_t *out)
 }
 EOF
 
+cat > \"$REMOTE_DIR\"/cuda_nvcc_arch_list_probe.cu <<'EOF'
+#define STR1(x) #x
+#define STR(x) STR1(x)
+
+#if defined(__CUDA_ARCH_LIST__)
+#pragma message(\"CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
+#else
+#pragma message(\"CUDA_ARCH_LIST=(missing)\")
+#endif
+
+int cuda_arch_list_probe_dummy(void)
+{
+	return(0);
+}
+EOF
+
 	try_compile_only() {
 		tag=\"\$1\"
 		arch=\"\$2\"
@@ -252,6 +268,32 @@ try_gencode_only() {
 	try_compile_only variant_sm_121f sm_121f
 	try_compile_only_featureset_macros featureset_compute_121a compute_121a \"-DEXPECT_SPECIFIC=1 -DEXPECT_FAMILY=1\"
 	try_compile_only_featureset_macros featureset_compute_121f compute_121f \"-DEXPECT_FAMILY=1\"
+	echo
+	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
+	try_arch_list() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_arch_list_probe.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			arch_list=\$(grep -E \"CUDA_ARCH_LIST=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*CUDA_ARCH_LIST=//' | tr -cd '0-9,')
+			if [ \"\${arch_list}\" = \"\" ]; then
+				arch_list=\"(missing)\"
+			fi
+			echo \"\${tag}: OK __CUDA_ARCH_LIST__=\${arch_list}\"
+		else
+			echo \"\${tag}: FAILED rc=\${rc}\"
+			head -n 40 \"\${err_path}\" || true
+		fi
+	}
+
+	try_arch_list arch_list_sm_121 sm_121
+	try_arch_list arch_list_sm_121a sm_121a
+	try_arch_list arch_list_sm_121f sm_121f
 	echo
 	echo \"== nvcc: ptxas -v (sm_121 compile-only, best-effort) ==\"
 	if [ -x \"\$PTXAS\" ]; then

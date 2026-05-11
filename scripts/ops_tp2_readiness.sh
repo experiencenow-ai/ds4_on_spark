@@ -219,6 +219,15 @@ strict_validate()
         elif [ ! -r "$DS4_CONFIG_PATH" ]; then
             echo "strict: config unreadable: $DS4_CONFIG_PATH" >&2
             fail=1
+        else
+            scripts_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+            if [ -x "$scripts_dir/ops_ds4_config_check.sh" ]; then
+                if ! "$scripts_dir/ops_ds4_config_check.sh" --strict-unknown "$DS4_CONFIG_PATH" >/dev/null 2>&1; then
+                    echo "strict: invalid ds4 config: $DS4_CONFIG_PATH" >&2
+                    "$scripts_dir/ops_ds4_config_check.sh" --strict-unknown "$DS4_CONFIG_PATH" >&2 || true
+                    fail=1
+                fi
+            fi
         fi
     fi
 
