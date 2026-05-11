@@ -22,7 +22,9 @@ tokenizer/chat format, and memory envelope are real.
   - When available, also record `tensor_type_profile` (best-effort expert vs dense split for known DeepSeek-V4 GGUF naming), since it captures whether MoE experts appear to be `MXFP4` (Flash-leaning) vs primarily FP8.
   - When the repo-default `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, this output also includes:
     - `tensor_key_namespace_guess` + `first_tensor_keys` (quick signal for whether the artifact appears to preserve upstream tensor key namespaces; many GGUF conversions are `llama.cpp`)
-    - `trunk_contract` (upstream tensor-key completeness for top-level + `layers.{i}.*`)
+    - `trunk_contract` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
+      - `kind="deepseek-upstream"` checks `layers.{i}.*` (only applies if the artifact preserves upstream tensor names)
+      - `kind="llama.cpp"` checks `blk.{i}.*` (compat-only structural signal for DeepSeek4 GGUFs)
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
     - `mtp_preservation` (structural “preserves upstream `mtp.0.*`?” status derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (structural “complete vs incomplete” status derived from the upstream MTP contract + explicit trust gates; still requires a logits oracle before enabling MTP)
@@ -115,7 +117,7 @@ Interpreting the result:
   actually loads and uses those tensors. Still require correctness oracles
   before trusting MTP outputs.
 - If `tensor_key_namespace_guess != deepseek-upstream`, assume the artifact does **not** preserve upstream tensor key namespaces by default. In that case:
-  - `trunk_contract.checked` is expected to be `false` (it only applies when `layers.{i}.*` keys are preserved).
+- `trunk_contract.checked` is expected to be `true` for most DeepSeek4 GGUF conversions (`kind="llama.cpp"`), and `false` for arbitrary GGUFs that don’t follow the deepseek4 `blk.{i}.*` naming.
   - The absence of `mtp.0.*` keys (`mtp_present == false`) means upstream MTP preservation is *not* proven; treat MTP as disabled/untrusted.
 - For GGUF, record `tensor_type_counts` (and `mtp_tensor_type_counts` when present) to capture the exact quant formats the runtime must support (e.g. `Q2_K`, `Q3_K`, `BF16`, `MXFP4`).
   - When available, also record `tensor_type_profile` so the report captures the expert-vs-dense quant split (useful for spotting Flash-leaning `MXFP4` experts in “native FP4/FP8” GGUFs).

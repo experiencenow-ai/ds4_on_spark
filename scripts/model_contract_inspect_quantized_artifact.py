@@ -550,24 +550,129 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 	if len(compress_ratios) < n_layers_i:
 		return {"checked": False, "reason": "contract_summary compress_ratios shorter than num_hidden_layers"}
 
+	def note_missing_factory(missing_sample_limit: int = 20):
+		missing_count = 0
+		missing_sample: list[str] = []
+
+		def note_missing(key: str) -> None:
+			nonlocal missing_count
+			missing_count += 1
+			if len(missing_sample) < missing_sample_limit:
+				missing_sample.append(key)
+
+		return note_missing, lambda: missing_count, lambda: missing_sample
+
+	def compute_llamacpp_trunk_contract() -> dict[str, Any]:
+		# llama.cpp DeepSeek-V4 GGUFs typically use:
+		# - token_embd.weight / output.weight / output_norm.weight
+		# - per-block tensors under blk.{i}.*
+		# These names are not part of the upstream safetensors contract; they are a
+		# compatibility signal for interpreting quantized single-Spark artifacts.
+		block_ids: set[int] = set()
+		for k in weight_keys:
+			if not k.startswith("blk."):
+				continue
+			parts = k.split(".", 2)
+			if len(parts) < 2:
+				continue
+			try:
+				block_ids.add(int(parts[1]))
+			except ValueError:
+				continue
+
+		if not block_ids:
+			return {"checked": False, "reason": "no blk.{i}.* tensors present (llama.cpp deepseek4 namespace not detected)"}
+
+		need_top_level = [
+			"token_embd.weight",
+			"output.weight",
+			"output_norm.weight",
+		]
+		# These HC head tensors are present in many deepseek4 GGUF conversions; treat
+		# them as optional soft-signal rather than hard requirements.
+		optional_top_level = [
+			"hc_head_base",
+			"hc_head_fn",
+			"hc_head_scale",
+		]
+
+		need_block_suffixes = [
+			"attn_norm.weight",
+			"attn_q_a.weight",
+			"attn_q_a_norm.weight",
+			"attn_q_b.weight",
+			"attn_kv_a_norm.weight",
+			"attn_output_a.weight",
+			"attn_output_b.weight",
+			"ffn_norm.weight",
+			"ffn_gate_inp.weight",
+			"ffn_gate_exps.weight",
+			"ffn_gate_shexp.weight",
+			"ffn_up_exps.weight",
+			"ffn_up_shexp.weight",
+			"ffn_down_exps.weight",
+			"ffn_down_shexp.weight",
+		]
+
+		note_missing, get_missing_count, get_missing_sample = note_missing_factory()
+
+		for k in need_top_level:
+			if k not in weight_keys:
+				note_missing(k)
+
+		optional_missing = []
+		for k in optional_top_level:
+			if k not in weight_keys:
+				optional_missing.append(k)
+
+		for i in range(n_layers_i):
+			prefix = f"blk.{i}."
+			for suffix in need_block_suffixes:
+				need = prefix + suffix
+				if need not in weight_keys:
+					note_missing(need)
+
+		present_sorted = sorted(block_ids)
+		expected_block_ids = list(range(n_layers_i))
+		missing_blocks = [i for i in expected_block_ids if i not in block_ids]
+		extra_blocks = [i for i in present_sorted if i not in set(expected_block_ids)]
+
+		notes = []
+		if optional_missing:
+			notes.append(f"optional_top_level_missing={optional_missing}")
+		if missing_blocks:
+			notes.append(f"missing_block_ids={missing_blocks[:20]}")
+		if extra_blocks:
+			notes.append(f"extra_block_ids={extra_blocks[:20]}")
+
+		missing_count = int(get_missing_count())
+		forbidden_sorted: list[str] = []
+		return {
+			"checked": True,
+			"kind": "llama.cpp",
+			"complete": (missing_count == 0 and len(forbidden_sorted) == 0 and not missing_blocks),
+			"n_layers_checked": n_layers_i,
+			"block_ids_present_sample": present_sorted[:20],
+			"missing_required_count": missing_count,
+			"missing_required_sample": get_missing_sample(),
+			"forbidden_present": forbidden_sorted,
+			"notes": notes,
+		}
+
 	# Most GGUF conversion toolchains rename layer tensor keys; only run this
 	# check when the artifact appears to preserve the upstream `layers.{i}.*`
 	# namespace.
 	if not any(k.startswith("layers.") for k in weight_keys):
+		if any(k.startswith("blk.") for k in weight_keys):
+			return compute_llamacpp_trunk_contract()
 		return {
 			"checked": False,
 			"reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable",
 		}
 
-	missing_count = 0
-	missing_sample: list[str] = []
 	forbidden_present: set[str] = set()
 
-	def note_missing(key: str) -> None:
-		nonlocal missing_count
-		missing_count += 1
-		if len(missing_sample) < 20:
-			missing_sample.append(key)
+	note_missing, get_missing_count, get_missing_sample = note_missing_factory()
 
 	for k in required_top_level:
 		if not isinstance(k, str) or not k:
@@ -628,12 +733,14 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 						note_missing(need)
 
 	forbidden_sorted = sorted(forbidden_present)[:20]
+	missing_count = int(get_missing_count())
 	return {
 		"checked": True,
+		"kind": "deepseek-upstream",
 		"complete": (missing_count == 0 and len(forbidden_sorted) == 0),
 		"n_layers_checked": n_layers_i,
 		"missing_required_count": missing_count,
-		"missing_required_sample": missing_sample,
+		"missing_required_sample": get_missing_sample(),
 		"forbidden_present": forbidden_sorted,
 	}
 

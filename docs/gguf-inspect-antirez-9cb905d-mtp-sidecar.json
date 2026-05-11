@@ -89,6 +89,14 @@
     ]
   },
   "mtp_present": true,
+  "mtp_preservation": {
+    "checked": true,
+    "preserves": false,
+    "reasons": [
+      "mtp_contract.complete != true"
+    ],
+    "status": "incomplete"
+  },
   "mtp_tensor_count": 32,
   "mtp_tensor_type_counts": {
     "F32": 19,

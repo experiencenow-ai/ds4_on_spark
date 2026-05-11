@@ -54,6 +54,19 @@ When interpreting quantized single-Spark external-runtime results, prefer the co
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf --json
 ```
 
+## Execution contract checklist (DS4 implementers)
+
+Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior:
+
+- Encoding gate: `oracle.encoding_oracle.required == true` and the pinned vectors under `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` must pass via `scripts/model_contract_verify_deepseek_v4_flash.py`.
+- Topology gate: `topology.*` must match (`n_layers=43`, `hidden_size=4096`, `n_heads=64`, `head_dim=512`, `vocab_size=129280`).
+- Attention schedule gate: `attention_schedule.compress_ratios` must match exactly (2 sliding, then CSA/HCA alternation), and MTP trailing ratios must satisfy `mtp.compress_ratio_rule`.
+- Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask_rule`.
+- MoE routing gate: hash routing (`ffn.gate.tid2eid`, `int32`) applies only to layers `0..n_hash_layers-1`; score routing uses `ffn.gate.bias` for selection only (`moe.hash_routing.*`, `moe.semantics.*`).
+- Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
+- Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
+- MTP gate: treat MTP as **disabled/untrusted** unless the artifact preserves the upstream `mtp.0.*` namespace and satisfies `mtp.trust_gates.*` (including `mtp_contract.complete == true`) **and** a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`).
+
 ## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280
@@ -626,7 +639,9 @@ For each quantized artifact tested, record:
     - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
     - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
-    - `trunk_contract` (`checked`, `complete`) when tensor keys preserve `layers.{i}.*`
+    - `trunk_contract` (`checked`, `complete`) with `trunk_contract.kind`:
+      - `kind="deepseek-upstream"`: upstream-style `layers.{i}.*` keys preserved
+      - `kind="llama.cpp"`: DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only structural signal)
     - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract
@@ -707,8 +722,8 @@ As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scrip
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
 - When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make trust gates explicit in JSON (including namespace failures like `namespace_incomplete` / `namespace_missing_mtp0`).
 - Also record and review:
-  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
-  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
+  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; interpret `trunk_contract` via its `kind`)
+  - `trunk_contract.complete == true` (structural trunk key completeness; for GGUF conversions this is a compatibility signal only and does not replace an oracle)
   - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
 
 MTP acceptance gates (high-performance / quantized path):

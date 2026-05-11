@@ -38,6 +38,9 @@ Pinned GGUF inspections (metadata-only; no full downloads):
 
 - Pinned inspection JSON outputs live under `docs/gguf-inspect-*.json` and are produced by `scripts/model_contract_inspect_quantized_artifact.py --url ... --json` using HTTP Range reads (header + tensor table only).
 - Refresh the pinned outputs reproducibly (Range reads only; refuses servers that don’t honor Range):
+  - When `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, the inspector emits a `trunk_contract` structural check:
+    - `kind="deepseek-upstream"` checks upstream `layers.{i}.*` keys (rare for GGUF conversions)
+    - `kind="llama.cpp"` checks DeepSeek4 `blk.{i}.*` keys (compat-only signal for quantized artifacts; still requires an oracle for semantic correctness)
 
 ```bash
 scripts/model_contract_refresh_v4flash_gguf_inspects.sh
