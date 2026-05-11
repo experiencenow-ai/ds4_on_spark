@@ -1,0 +1,20 @@
+# run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
+# Fill in absolute Spark paths. Leave draft_model_dir blank for target-only.
+#
+# Recommended scopes (keep mechanisms separate in MODEL_RUNS_CSV):
+# - ling_target, qwen_target, qwen_dflash, other_dflash
+#
+# After any Ling result, ensure this INT4 target-only row is present (staged or explicitly approved download).
+ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4	
+#
+# Cheap paired DFlash plumbing checks (use when 27B artifacts are not staged yet).
+qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B-DFlash
+qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B-DFlash
+#
+# Primary base-Qwen 27B ladder (run target-only first, then paired DFlash).
+qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B-DFlash
+qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B-DFlash
+#
+# Post-27B paired probes.
+qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-DFlash
+qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-DFlash

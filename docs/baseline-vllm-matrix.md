@@ -13,6 +13,13 @@ The entrypoint is:
 scripts/run_baseline_vllm_matrix.sh <spark-ssh-target> <matrix.tsv>
 ```
 
+If you want a single local output directory with per-row reports plus a single
+scored summary, use:
+
+```sh
+scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
+```
+
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
 
@@ -34,6 +41,17 @@ PROMPT='Explain Redis streams in one paragraph.' \
 MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
 ALLOW_RUN=1 ALLOW_FETCH=0 \
 scripts/run_baseline_vllm_matrix.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
+```
+
+Bundle (recommended for multi-row comparisons; creates its own `model_runs.csv`
+inside the bundle dir):
+
+```sh
+BUNDLE_LABEL=qwen-ling-ladder \
+PROMPT='Explain Redis streams in one paragraph.' \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+ALLOW_RUN=1 ALLOW_FETCH=0 \
+scripts/run_baseline_vllm_matrix_bundle.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
 ```
 
 Notes:
@@ -72,6 +90,8 @@ qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/ab
 qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-DFlash
 qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-DFlash
 ```
+
+Repo template file: `fixtures/baseline/vllm_matrix_template.tsv`.
 
 ## Recommended measurement order
 
