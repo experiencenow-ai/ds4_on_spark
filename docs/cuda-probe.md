@@ -157,6 +157,12 @@ When you want a small, focused “kernel plumbing” gate set (no cuBLASLt) that
 ./scripts/cuda_probe_kernel_tiny_spark0.sh
 ```
 
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_kernel_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_kernel_tiny_spark0.sh
+```
+
 This builds and runs a curated subset of probes (all `sm_121` unless noted):
 
 - `cuda_device_props_tiny`
