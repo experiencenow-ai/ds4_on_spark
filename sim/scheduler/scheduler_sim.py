@@ -2936,8 +2936,8 @@ def run_simulation(
         raise ValueError("k_mode must be 'controller' or 'trace'")
 
     k_signal = cfg.k_signal.strip().lower()
-    if k_signal not in ("global", "candidates", "class"):
-        raise ValueError("k_signal must be 'global', 'candidates', or 'class'")
+    if k_signal not in ("global", "candidates", "class", "global_mean", "candidates_mean", "class_mean"):
+        raise ValueError("k_signal must be one of: global, candidates, class, global_mean, candidates_mean, class_mean")
 
     pending_units = cfg.pending_units.strip().lower()
     if pending_units not in ("tasks", "work"):
@@ -3543,6 +3543,57 @@ def run_simulation(
                     metrics.k_changes_batch += 1
         return(cs.k)
 
+    def pending_signal_for_state(cls: LatencyClass, candidates: Sequence[int]) -> float:
+        ks = k_signal
+        use_mean = False
+        if ks.endswith("_mean"):
+            use_mean = True
+            ks = ks[: -len("_mean")]
+
+        if ks == "candidates":
+            idxs: Sequence[int] = candidates
+        else:
+            idxs = range(cfg.num_experts)
+        if ks == "candidates" and len(idxs) == 0:
+            return(0.0)
+
+        if pending_units == "work":
+            if ks == "class":
+                if use_mean:
+                    total = 0.0
+                    count = 0
+                    for e in idxs:
+                        total += float(experts[e].pending_work_for_queue(cls))
+                        count += 1
+                    return((total / float(count)) if count != 0 else 0.0)
+                return(float(max(experts[e].pending_work_for_queue(cls) for e in idxs)))
+            if use_mean:
+                total = 0.0
+                count = 0
+                for e in idxs:
+                    total += float(experts[e].pending_work())
+                    count += 1
+                return((total / float(count)) if count != 0 else 0.0)
+            return(float(max(experts[e].pending_work() for e in idxs)))
+
+        if ks == "class":
+            if use_mean:
+                total = 0.0
+                count = 0
+                for e in idxs:
+                    total += float(expert_pending_for_class(experts[e], cls))
+                    count += 1
+                return((total / float(count)) if count != 0 else 0.0)
+            return(float(max(expert_pending_for_class(experts[e], cls) for e in idxs)))
+        if use_mean:
+            total = 0.0
+            count = 0
+            for e in idxs:
+                total += float(experts[e].pending())
+                count += 1
+            return((total / float(count)) if count != 0 else 0.0)
+        return(float(max(experts[e].pending() for e in idxs)))
+
     while len(evq) != 0:
         ev = heapq.heappop(evq)
         now_ms = ev.t_ms
@@ -3557,20 +3608,7 @@ def run_simulation(
 
             layers = _route_layers(route)
 
-            if pending_units == "work":
-                if k_signal == "global":
-                    pending_signal = float(max(experts[e].pending_work() for e in range(cfg.num_experts)))
-                elif k_signal == "candidates":
-                    pending_signal = float(max(experts[e].pending_work() for e in route.candidates))
-                else:
-                    pending_signal = float(max(experts[e].pending_work_for_queue(route.cls) for e in range(cfg.num_experts)))
-            else:
-                if k_signal == "global":
-                    pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                elif k_signal == "candidates":
-                    pending_signal = float(max(experts[e].pending() for e in route.candidates))
-                else:
-                    pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
+            pending_signal = pending_signal_for_state(route.cls, route.candidates)
 
             if route.cls == LatencyClass.INTERACTIVE:
                 metrics.pending_signal_interactive.append(pending_signal)
@@ -3596,20 +3634,7 @@ def run_simulation(
                     layer_ks = [k for _ in range(len(layers))]
                 else:
                     for li, lr in enumerate(layers):
-                        if pending_units == "work":
-                            if k_signal == "global":
-                                layer_pending_signal = float(max(experts[e].pending_work() for e in range(cfg.num_experts)))
-                            elif k_signal == "candidates":
-                                layer_pending_signal = float(max(experts[e].pending_work() for e in lr.candidates))
-                            else:
-                                layer_pending_signal = float(max(experts[e].pending_work_for_queue(route.cls) for e in range(cfg.num_experts)))
-                        else:
-                            if k_signal == "global":
-                                layer_pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                            elif k_signal == "candidates":
-                                layer_pending_signal = float(max(experts[e].pending() for e in lr.candidates))
-                            else:
-                                layer_pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
+                        layer_pending_signal = pending_signal_for_state(route.cls, lr.candidates)
                         cs = k_ctrl_layer.get((route.cls, li))
                         if cs is None:
                             cs = KControllerState()
@@ -4436,7 +4461,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--k-signal",
         type=str,
         default="global",
-        help="Adaptive-K congestion signal: global (max total pending across all experts), candidates (max total pending among this token's candidates), or class (max pending in this token's latency-class queue + in-flight across all experts).",
+        help="Adaptive-K congestion signal: global/candidates/class use max pending; *_mean variants use mean pending (global_mean, candidates_mean, class_mean).",
     )
     p.add_argument("--pending-units", type=str, default="tasks", help="Adaptive-K pending units: tasks (default) uses outstanding task counts; work uses sum(cost_scale) of queued + in-flight work per expert.")
     p.add_argument(

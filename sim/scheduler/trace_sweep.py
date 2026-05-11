@@ -127,6 +127,9 @@ def run_trace_sweeps(
         ("k_signal_global", {"k_signal": "global"}),
         ("k_signal_candidates", {"k_signal": "candidates"}),
         ("k_signal_class", {"k_signal": "class"}),
+        ("k_signal_global_mean", {"k_signal": "global_mean"}),
+        ("k_signal_candidates_mean", {"k_signal": "candidates_mean"}),
+        ("k_signal_class_mean", {"k_signal": "class_mean"}),
     ]
     scenarios["k_signal_policy"] = {
         "name": "k_signal_policy",
