@@ -537,7 +537,7 @@ new file mode 100644
 index 0000000..00ef001
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,363 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -554,7 +554,7 @@ index 0000000..00ef001
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --model <trunk.gguf> --sidecar <mtp_sidecar.gguf> [--prompt <text>] [--seed N] [--json]\n", prog);
++    std::fprintf(stderr, "usage: %s --model <trunk.gguf> --sidecar <mtp_sidecar.gguf> [--prompt <text>] [--seed N] [--json] [--load-sidecar-weights]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -725,6 +725,7 @@ index 0000000..00ef001
 +    std::string prompt = "Hello.";
 +    int32_t seed = 1234;
 +    bool json = false;
++    bool load_sidecar_weights = false;
 +
 +    for (int i = 1; i < argc; i++) {
 +        if (std::strcmp(argv[i], "--model") == 0) {
@@ -753,6 +754,8 @@ index 0000000..00ef001
 +            seed = (int32_t) std::strtol(argv[++i], nullptr, 10);
 +        } else if (std::strcmp(argv[i], "--json") == 0) {
 +            json = true;
++        } else if (std::strcmp(argv[i], "--load-sidecar-weights") == 0) {
++            load_sidecar_weights = true;
 +        } else {
 +            usage(argv[0]);
 +            return 1;
@@ -849,7 +852,7 @@ index 0000000..00ef001
 +
 +    struct ggml_context * sidecar_ctx = nullptr;
 +    struct gguf_init_params params = {
-+        /*no_alloc=*/ true,
++        /*no_alloc=*/ !load_sidecar_weights,
 +        /*ctx=*/ &sidecar_ctx,
 +    };
 +
