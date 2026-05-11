@@ -172,6 +172,26 @@ scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
 
 If `VLLM_DRAFT_MODEL` is omitted, the wrapper runs target-only and exits.
 
+Recommended first comparison order (after DeepSeek V4 Flash can generate on Spark0):
+
+- Ling target-only (ensure `Ling-2.6-flash-int4` exists first if staged/approved)
+- Qwen3.5-27B target-only, then its exact `*-DFlash` paired run
+- Qwen3.6-27B target-only, then its exact `*-DFlash` paired run (watch the engine-support warning)
+- Qwen3-Coder-30B-A3B-Instruct-FP8 target-only, then paired DFlash
+- Qwen3.6-35B-A3B-FP8 target-only, then paired DFlash
+
+Example: Ling target-only (no DFlash drafter known as of 2026-05-11):
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+RUN_LABEL=ling26-int4 \
+VLLM_SCOPE_TARGET=ling_target \
+VLLM_TARGET_ID=inclusionAI/Ling-2.6-flash-int4 \
+VLLM_TARGET_MODEL=/abs/path/to/Ling-2.6-flash-int4 \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
+```
+
 Use `docs/model-quality-speed.md` and `scripts/model_quality_speed_score.py`
 when comparing multiple model families. Speed claims should include
 `quality_score`, `quality_adjusted_decode_tps`, and Pareto status once local
