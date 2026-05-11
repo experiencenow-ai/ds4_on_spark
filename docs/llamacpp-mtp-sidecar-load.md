@@ -47,10 +47,10 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Fl
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
-This runner also accepts an `https://` URL for `MTP_SIDECAR_GGUF` and will validate the sidecar using HTTP range reads (no full download):
+This runner can also accept an `https://` URL for `MTP_SIDECAR_GGUF` (Spark-side opt-in via `ALLOW_URL=1`) and will validate the sidecar using HTTP range reads (no full download):
 
 ```bash
-REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=https://host/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 ALLOW_URL=1 MTP_SIDECAR_GGUF=https://host/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 

@@ -54,7 +54,8 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "Set Spark-side env vars via REMOTE_MTP_SIDECAR_ENV:"
 	echo
 	echo "- ALLOW_RUN=1"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf"
+	echo "- (optional) ALLOW_URL=1 + MTP_SIDECAR_GGUF=https://... to range-read a remote header (still refuses full downloads)"
 	echo
 	echo "Remote contract probe env (recorded):"
 	echo
@@ -115,6 +116,10 @@ if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
 fi
 case \"${MTP_SIDECAR_GGUF}\" in
   http://*|https://*)
+    if [ \"${ALLOW_URL:-0}\" != \"1\" ]; then
+      echo \"run skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-reads\"
+      exit 0
+    fi
     python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
     ;;
   *)
