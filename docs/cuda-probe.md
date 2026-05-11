@@ -39,7 +39,6 @@ Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` in
 
 Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
 
-- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1 schema=1`
 - `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1 tma_map=1 schema=2`
 - `__CUDA_ARCH__=1210`
 
