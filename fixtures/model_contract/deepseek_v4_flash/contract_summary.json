@@ -935,12 +935,32 @@
       "tensor_key_count": 1575
     },
     "mtp_embed_present": false,
+    "mtp_expected_tensor_key_count_breakdown": {
+      "experts": 1536,
+      "required_layer_suffixes": 28,
+      "required_mtp_additional_suffixes": 10,
+      "score_gate_bias": 1
+    },
+    "mtp_expected_tensor_key_count_by_layer_id_ok": {
+      "0": true
+    },
+    "mtp_expected_tensor_key_count_per_layer": 1575,
+    "mtp_forbidden_key_suffixes": [
+      "attn.compressor.",
+      "attn.indexer.",
+      "ffn.gate.tid2eid",
+      "embed.weight",
+      "head.weight"
+    ],
     "mtp_head_present": false,
     "mtp_layer_ids": [
       0
     ],
     "mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
     "mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
+    "mtp_tensor_key_count_by_layer_id": {
+      "0": 1575
+    },
     "namespaces": [
       "embed",
       "hc_head_base",

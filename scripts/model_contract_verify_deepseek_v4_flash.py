@@ -311,6 +311,35 @@ def main() -> int:
 				mtp_add = tk.get("required_mtp_additional_suffixes", None)
 				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
 					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
+				else:
+					mtp_expected = tk.get("mtp_expected_tensor_key_count_per_layer", None)
+					try:
+						exp_experts = int(tk.get("expected_expert_key_count_per_layer"))
+						exp_layersuf = int(len(tk.get("required_layer_suffixes", [])))
+						exp_mtpadd = int(len(mtp_add))
+						exp_total = int(exp_experts + exp_layersuf + exp_mtpadd + 1)
+					except Exception:
+						exp_total = None
+					if exp_total is not None and mtp_expected != exp_total:
+						failures.append(Failure(106, f"contract summary tensor_keys.mtp_expected_tensor_key_count_per_layer mismatch (got {mtp_expected!r} expected {exp_total}): {contract_summary}"))
+
+					mtp_counts = tk.get("mtp_tensor_key_count_by_layer_id", None)
+					mtp_ok = tk.get("mtp_expected_tensor_key_count_by_layer_id_ok", None)
+					if not isinstance(mtp_counts, dict) or not isinstance(mtp_ok, dict):
+						failures.append(Failure(107, f"contract summary missing tensor_keys mtp per-layer count objects (mtp_tensor_key_count_by_layer_id / mtp_expected_tensor_key_count_by_layer_id_ok): {contract_summary}"))
+					else:
+						mtp_layer_ids = find_mtp_layer_ids(weight_keys)
+						for mtp_id in mtp_layer_ids:
+							prefix = f"mtp.{mtp_id}."
+							want = sum(1 for k in weight_keys if k.startswith(prefix))
+							got = mtp_counts.get(str(mtp_id))
+							ok = mtp_ok.get(str(mtp_id))
+							if got != want:
+								failures.append(Failure(108, f"contract summary tensor_keys.mtp_tensor_key_count_by_layer_id[{mtp_id}] mismatch (got {got!r} expected {want}): {contract_summary}"))
+								break
+							if ok is not True:
+								failures.append(Failure(109, f"contract summary tensor_keys.mtp_expected_tensor_key_count_by_layer_id_ok[{mtp_id}] must be true: {contract_summary}"))
+								break
 
 				mtp = summary.get("mtp", {})
 				trust = mtp.get("trust_gates", {}) if isinstance(mtp, dict) else {}

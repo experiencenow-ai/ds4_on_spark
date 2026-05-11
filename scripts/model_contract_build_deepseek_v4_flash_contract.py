@@ -782,6 +782,8 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 	mtp0_key_count = sum(1 for k in weight_keys if k.startswith("mtp.0."))
 	mtp_embed_present = any(k.startswith("mtp.") and ".embed." in k for k in weight_keys)
 	mtp_head_present = any(k.startswith("mtp.") and ".head." in k for k in weight_keys)
+	mtp_layer_ids = find_mtp_layer_ids(weight_keys)
+	expected_expert_key_count_per_layer = int(n_routed_experts) * 6
 
 	def layer_ids_matching(suffix: str) -> list[int]:
 		ids = set()
@@ -801,6 +803,99 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 				ids.add(i)
 		return sorted(ids)
 
+	required_top_level = [
+		"embed.weight",
+		"norm.weight",
+		"head.weight",
+		"hc_head_fn",
+		"hc_head_base",
+		"hc_head_scale",
+	]
+
+	required_layer_suffixes = [
+		"attn.attn_sink",
+		"attn.wq_a.weight",
+		"attn.wq_a.scale",
+		"attn.q_norm.weight",
+		"attn.wq_b.weight",
+		"attn.wq_b.scale",
+		"attn.wkv.weight",
+		"attn.wkv.scale",
+		"attn.kv_norm.weight",
+		"attn.wo_a.weight",
+		"attn.wo_a.scale",
+		"attn.wo_b.weight",
+		"attn.wo_b.scale",
+		"attn_norm.weight",
+		"ffn.gate.weight",
+		"ffn.shared_experts.w1.weight",
+		"ffn.shared_experts.w1.scale",
+		"ffn.shared_experts.w2.weight",
+		"ffn.shared_experts.w2.scale",
+		"ffn.shared_experts.w3.weight",
+		"ffn.shared_experts.w3.scale",
+		"ffn_norm.weight",
+		"hc_attn_fn",
+		"hc_attn_base",
+		"hc_attn_scale",
+		"hc_ffn_fn",
+		"hc_ffn_base",
+		"hc_ffn_scale",
+	]
+
+	required_layer_suffixes_compress_ratio_nonzero = [
+		"attn.compressor.ape",
+		"attn.compressor.norm.weight",
+		"attn.compressor.wgate.weight",
+		"attn.compressor.wkv.weight",
+	]
+
+	required_layer_suffixes_compress_ratio_4 = [
+		"attn.indexer.wq_b.weight",
+		"attn.indexer.wq_b.scale",
+		"attn.indexer.weights_proj.weight",
+		"attn.indexer.compressor.ape",
+		"attn.indexer.compressor.norm.weight",
+		"attn.indexer.compressor.wgate.weight",
+		"attn.indexer.compressor.wkv.weight",
+	]
+
+	required_mtp_additional_suffixes = [
+		"e_proj.weight",
+		"e_proj.scale",
+		"h_proj.weight",
+		"h_proj.scale",
+		"enorm.weight",
+		"hnorm.weight",
+		"norm.weight",
+		"hc_head_fn",
+		"hc_head_base",
+		"hc_head_scale",
+	]
+
+	mtp_score_gate_tensor_key_suffix = "ffn.gate.bias"
+	hash_gate_tensor_key_suffix = "ffn.gate.tid2eid"
+	score_gate_tensor_key_suffix = "ffn.gate.bias"
+
+	mtp_expected_tensor_key_count_per_layer = (
+		expected_expert_key_count_per_layer + len(required_layer_suffixes) + len(required_mtp_additional_suffixes) + 1
+	)
+	mtp_key_count_by_layer_id: dict[str, int] = {}
+	mtp_expected_key_count_by_layer_id_ok: dict[str, bool] = {}
+	for mtp_id in mtp_layer_ids:
+		prefix = f"mtp.{mtp_id}."
+		c = sum(1 for k in weight_keys if k.startswith(prefix))
+		mtp_key_count_by_layer_id[str(mtp_id)] = int(c)
+		mtp_expected_key_count_by_layer_id_ok[str(mtp_id)] = (int(c) == int(mtp_expected_tensor_key_count_per_layer))
+
+	mtp_forbidden_key_suffixes = [
+		"attn.compressor.",
+		"attn.indexer.",
+		"ffn.gate.tid2eid",
+		"embed.weight",
+		"head.weight",
+	]
+
 	return {
 		"tensor_key_count": len(weight_keys),
 		"namespaces": sorted(top.keys()),
@@ -812,80 +907,30 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
 		"mtp_embed_present": mtp_embed_present,
 		"mtp_head_present": mtp_head_present,
-		"mtp_layer_ids": find_mtp_layer_ids(weight_keys),
+		"mtp_layer_ids": mtp_layer_ids,
 		"layer_gate": {
 			"tid2eid_layer_ids": layer_ids_matching("ffn.gate.tid2eid"),
 			"gate_bias_layer_ids": layer_ids_matching("ffn.gate.bias"),
 		},
-		"expected_expert_key_count_per_layer": int(n_routed_experts) * 6,
-		"required_top_level": [
-			"embed.weight",
-			"norm.weight",
-			"head.weight",
-			"hc_head_fn",
-			"hc_head_base",
-			"hc_head_scale",
-		],
-		"required_layer_suffixes": [
-			"attn.attn_sink",
-			"attn.wq_a.weight",
-			"attn.wq_a.scale",
-			"attn.q_norm.weight",
-			"attn.wq_b.weight",
-			"attn.wq_b.scale",
-			"attn.wkv.weight",
-			"attn.wkv.scale",
-			"attn.kv_norm.weight",
-			"attn.wo_a.weight",
-			"attn.wo_a.scale",
-			"attn.wo_b.weight",
-			"attn.wo_b.scale",
-			"attn_norm.weight",
-			"ffn.gate.weight",
-			"ffn.shared_experts.w1.weight",
-			"ffn.shared_experts.w1.scale",
-			"ffn.shared_experts.w2.weight",
-			"ffn.shared_experts.w2.scale",
-			"ffn.shared_experts.w3.weight",
-			"ffn.shared_experts.w3.scale",
-			"ffn_norm.weight",
-			"hc_attn_fn",
-			"hc_attn_base",
-			"hc_attn_scale",
-			"hc_ffn_fn",
-			"hc_ffn_base",
-			"hc_ffn_scale",
-		],
-		"required_layer_suffixes_compress_ratio_nonzero": [
-			"attn.compressor.ape",
-			"attn.compressor.norm.weight",
-			"attn.compressor.wgate.weight",
-			"attn.compressor.wkv.weight",
-		],
-		"required_layer_suffixes_compress_ratio_4": [
-			"attn.indexer.wq_b.weight",
-			"attn.indexer.wq_b.scale",
-			"attn.indexer.weights_proj.weight",
-			"attn.indexer.compressor.ape",
-			"attn.indexer.compressor.norm.weight",
-			"attn.indexer.compressor.wgate.weight",
-			"attn.indexer.compressor.wkv.weight",
-		],
-		"required_mtp_additional_suffixes": [
-			"e_proj.weight",
-			"e_proj.scale",
-			"h_proj.weight",
-			"h_proj.scale",
-			"enorm.weight",
-			"hnorm.weight",
-			"norm.weight",
-			"hc_head_fn",
-			"hc_head_base",
-			"hc_head_scale",
-		],
-		"mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
-		"hash_gate_tensor_key_suffix": "ffn.gate.tid2eid",
-		"score_gate_tensor_key_suffix": "ffn.gate.bias",
+		"expected_expert_key_count_per_layer": expected_expert_key_count_per_layer,
+		"required_top_level": required_top_level,
+		"required_layer_suffixes": required_layer_suffixes,
+		"required_layer_suffixes_compress_ratio_nonzero": required_layer_suffixes_compress_ratio_nonzero,
+		"required_layer_suffixes_compress_ratio_4": required_layer_suffixes_compress_ratio_4,
+		"required_mtp_additional_suffixes": required_mtp_additional_suffixes,
+		"mtp_score_gate_tensor_key_suffix": mtp_score_gate_tensor_key_suffix,
+		"hash_gate_tensor_key_suffix": hash_gate_tensor_key_suffix,
+		"score_gate_tensor_key_suffix": score_gate_tensor_key_suffix,
+		"mtp_expected_tensor_key_count_per_layer": int(mtp_expected_tensor_key_count_per_layer),
+		"mtp_expected_tensor_key_count_breakdown": {
+			"experts": int(expected_expert_key_count_per_layer),
+			"required_layer_suffixes": int(len(required_layer_suffixes)),
+			"required_mtp_additional_suffixes": int(len(required_mtp_additional_suffixes)),
+			"score_gate_bias": 1,
+		},
+		"mtp_tensor_key_count_by_layer_id": mtp_key_count_by_layer_id,
+		"mtp_expected_tensor_key_count_by_layer_id_ok": mtp_expected_key_count_by_layer_id_ok,
+		"mtp_forbidden_key_suffixes": mtp_forbidden_key_suffixes,
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
 
