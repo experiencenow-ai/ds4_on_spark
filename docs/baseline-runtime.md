@@ -47,7 +47,7 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
-- `ds4_on_spark` commit hash (best-effort; uses `.git2/.git` when present)
+- `ds4_on_spark` commit hash (best-effort; uses `.codex_git` or `.git2/.git` when present)
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
 
