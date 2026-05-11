@@ -56,7 +56,7 @@ The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 `scripts/judge_elo_update.py`:
 - validates input JSONL (optional strict mode)
 - filters to `parse_valid=true`
-- performs deterministic Elo updates (order = input order; optionally sorted by `pair_id`)
+- performs deterministic Elo updates (order = input order; optionally stable-sorted by `pair_id` only)
 - writes JSON/CSV/Markdown leaderboard summaries
 
 Elo math:
@@ -68,4 +68,3 @@ Elo math:
 ## Baseline Integration Notes
 
 The leaderboard CSV emitted by `scripts/judge_elo_update.py` contains an Elo-derived `quality_score` (0..100) **derived only from judge results** (no speed fields). The baseline runtime loop can join this `quality_score` onto its speed measurements and compute quality-adjusted tok/s without mixing speed signals into judge quality.
-
