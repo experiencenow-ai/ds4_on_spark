@@ -161,6 +161,9 @@ Notes:
 
 - If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
 - If candidate records include an `answer`/`final_answer` (or an `output` with an extractable answer), the recommender can reward **answer-option diversity** via `--answer-weight` (set to `0` to disable).
+- If candidate records include `prompt`, the recommender can reward **input lexical diversity** (approx) via:
+  - `--prompt-word-weight` (word unigram entropy gain) and `--prompt-trigram-weight` (word 3-gram entropy gain).
+  - `--prompt-word-limit` / `--prompt-trigram-limit` to cap per-record feature fanout (set to `0` to disable limits).
 - If candidate records include `buffer_item_id`, the recommender can reward **new buffer items** to avoid reuse concentration:
   - Use `--avoid-seen-buffer-item-id` to hard-exclude previously-used `buffer_item_id`s.
   - Tune weighting with `--buffer-id-weight` / `--buffer-item-weight` (set to `0` to disable).

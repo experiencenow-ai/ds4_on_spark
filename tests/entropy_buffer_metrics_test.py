@@ -234,6 +234,18 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].answer, "C")
 
+    def test_recommendations_prefer_prompt_lexical_diversity_when_enabled(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_prompt_ngrams_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_prompt_ngrams_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates, prompt_trigram_weight=2.0)
+        top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, prompt_trigram_weight=2.0)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].task_id, "math.prompt.aaa")
+
 
 if __name__ == "__main__":
     unittest.main()
