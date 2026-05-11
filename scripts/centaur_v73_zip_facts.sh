@@ -55,7 +55,7 @@ echo "== centaur v73 zip facts =="
 echo "zip: $zip"
 ls -la "$zip" | sed -n '1p'
 
-sha256="$(python3 - <<'PY'
+sha256="$(python3 - "$zip" <<'PY'
 import hashlib,sys
 p=sys.argv[1]
 h=hashlib.sha256()
@@ -64,10 +64,30 @@ with open(p,'rb') as f:
         h.update(chunk)
 print(h.hexdigest())
 PY
-"$zip")"
+)"
 echo "zip_sha256: $sha256"
 
-decomposer_version="$(unzip -p "$zip" centaur_spec_impl_v73/centaur.py 2>/dev/null | sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' | sed -n '1p')"
+decomposer_version="$(python3 - "$zip" <<'PY'
+import re
+import sys
+import zipfile
+
+zip_path=sys.argv[1]
+try:
+    with zipfile.ZipFile(zip_path) as z:
+        data=z.read("centaur_spec_impl_v73/centaur.py").decode("utf-8","replace").splitlines()
+except Exception:
+    print("")
+    sys.exit(0)
+
+for line in data:
+    m=re.match(r'^DECOMPOSER_VERSION\s*=\s*"([^"]+)"', line)
+    if m:
+        print(m.group(1))
+        sys.exit(0)
+print("")
+PY
+)"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi
@@ -78,4 +98,3 @@ unzip -p "$zip" centaur_spec_impl_v73/requirements.txt 2>/dev/null || echo "(mis
 
 echo "zip entries:"
 unzip -l "$zip" | sed -n '4,$p' | awk '{print $4}' | sed -n '1,200p'
-

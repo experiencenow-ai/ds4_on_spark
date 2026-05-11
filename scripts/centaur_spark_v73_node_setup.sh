@@ -144,15 +144,16 @@ else
 	fi
 fi
 
-sha256="$(python3 - <<PY
+sha256="$(python3 - "$zip" <<'PY'
 import hashlib,sys
 p=sys.argv[1]
 h=hashlib.sha256()
 with open(p,'rb') as f:
-    h.update(f.read())
+    for chunk in iter(lambda: f.read(1<<20), b''):
+        h.update(chunk)
 print(h.hexdigest())
 PY
-"$zip")"
+)"
 echo "zip_sha256: $sha256"
 
 echo "== pip freeze (sanitized) =="
@@ -165,4 +166,3 @@ echo "== centaur selftest =="
 echo "== done =="
 echo "centaur_root: $pkgdir"
 echo "centaur_venv: $venvdir"
-

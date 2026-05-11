@@ -58,6 +58,8 @@ If you also have Spark3, use:
 
 ## Scripts (what’s where)
 
+- Zip facts (Mac-side helper for bug reports):
+  - `scripts/centaur_v73_zip_facts.sh`
 - Spark0 smoke:
   - `scripts/centaur_spark0_v73_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark0_v73_stage.sh` (stages zip + fixture)

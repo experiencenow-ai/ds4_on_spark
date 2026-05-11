@@ -126,7 +126,24 @@ fi
 
 echo "== centaur package facts =="
 ls -la "$pkgdir" | sed -n '1,20p'
-decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$pkgdir/centaur.py" | sed -n '1p')"
+decomposer_version="$(python3 - "$pkgdir/centaur.py" <<'PY'
+import re
+import sys
+
+p=sys.argv[1]
+try:
+    data=open(p,"r",encoding="utf-8",errors="replace").read().splitlines()
+except Exception:
+    print("")
+    sys.exit(0)
+for line in data:
+    m=re.match(r'^DECOMPOSER_VERSION\s*=\s*"([^"]+)"', line)
+    if m:
+        print(m.group(1))
+        sys.exit(0)
+print("")
+PY
+)"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi
@@ -155,15 +172,16 @@ else
 	fi
 fi
 
-sha256="$(python3 - <<PY
+sha256="$(python3 - "$zip" <<'PY'
 import hashlib,sys
 p=sys.argv[1]
 h=hashlib.sha256()
 with open(p,'rb') as f:
-    h.update(f.read())
+    for chunk in iter(lambda: f.read(1<<20), b''):
+        h.update(chunk)
 print(h.hexdigest())
 PY
-"$zip")"
+)"
 echo "zip_sha256: $sha256"
 
 echo "== pip freeze (sanitized) =="

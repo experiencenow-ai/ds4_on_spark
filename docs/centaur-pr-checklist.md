@@ -46,6 +46,7 @@ sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-ho
 - Status: PASS | FAIL | NOT RUN
 - Run id: `<CENTAUR_RUN_ID>`
 - Zip facts: `zip_sha256`, zip `mtime`, `decomposer_version`
+- Optional (Mac-side): `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip`
 - Deps: `python3 -V`, `pip freeze` excerpt (at least numpy/scipy/scikit-learn)
 - Artifacts: `effective_manifests/`, `hyor_effective/`, `hyor_dashboard/`, `smoke.log`
 

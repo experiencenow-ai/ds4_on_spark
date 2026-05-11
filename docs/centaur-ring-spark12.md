@@ -4,6 +4,23 @@ Goal: prepare repeatable Spark1/Spark2 ring steps **without needing a shared fil
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
+## Quickstart (recommended): Spark0-orchestrated rsync ring-step
+
+This uses Spark0 as the orchestrator: it rsync-stages peer roots locally, runs `hyor-ring-step`, then rsyncs the updated roots back to Spark1/2.
+
+From your Mac (repo root):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Prereq: run the Spark0 v73 smoke first so Spark0 has an extracted Centaur tree + venv:
+
+- `docs/centaur-spark0-v73-smoke.md`
+
 ## Spark1/Spark2 bring-up checklist (when hardware exists)
 
 Before attempting a real ring on Spark1/2, ensure each node has a local Centaur v73 install footprint (no sudo required):
