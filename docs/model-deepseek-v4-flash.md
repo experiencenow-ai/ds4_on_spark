@@ -6,7 +6,7 @@ This document is **source-derived** from upstream DeepSeek V4 Flash configs and 
 
 Upstream repo: `deepseek-ai/DeepSeek-V4-Flash`
 
-Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
+Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`; `scripts/model_contract_fetch_deepseek_v4_flash.sh` pins all downloads to this immutable commit to avoid mixed snapshots): `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
 
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
@@ -752,7 +752,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 
 - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
 - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
-- `docs/gguf-inspect-antirez-c198a70-iq2xxs-chat-v2.json`
+- `docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json`
 - The nsparks “native FP4/FP8” GGUF includes DeepSeek4 fork `ggml_type` tensors like `F8_E4M3_B128` (commonly type code `42`) and MoE experts as `MXFP4`, but the pinned artifact is still a **mixed** type set (many `F32`/`BF16` tensors). Treat this as non-authoritative for “Flash-native” quant semantics unless `quantization_contract.{dense_fp8_like,expert_fp4_like}` is satisfied.
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
@@ -763,8 +763,8 @@ Pinned GGUF MTP status snapshot (as of 2026-05-11; derived from the JSON probe o
 |---|---|---:|---:|---:|---|
 | Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
 | nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
-| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-c198a70-iq2xxs-chat-v2.json` | false | false | — | absent |
-| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-c198a70-mtp-sidecar.json` | true | true | false | incomplete |
+| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json` | false | false | — | absent |
+| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json` | true | true | false | incomplete |
 
 For external/quantized artifacts:
 
@@ -805,11 +805,12 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
 ```
 
-Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-c198a70.json`.
-Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-c198a70-mtp-sidecar.json`.
+Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-b0c3326.json`.
+Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json`.
 
 As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
 - The same inspection reports `mtp_namespace.has_mtp0=true` and `mtp_trust.status=incomplete` (the `mtp.0.*` prefix exists, but the tensor set does not satisfy the upstream MTP contract).
+- The same inspection also records `mtp_keys_sha256 != fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`, i.e. these compact sidecars do **not** match the official MTP key subset fingerprint.
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
@@ -821,6 +822,7 @@ As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scrip
 
 MTP acceptance gates (high-performance / quantized path):
 
+- Fingerprint gate: when `mtp_present==true`, require `mtp_keys_sha256 == fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256` (otherwise the artifact is not the official `mtp.0.*` tensor key subset).
 - Structural gate: `mtp_contract.complete == true` (and `mtp_namespace.has_mtp0 == true`) is necessary to claim the artifact preserves upstream `mtp.0.*`.
 - Oracle gate: even if structurally complete, treat MTP as **untrusted** until a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`; compare both prefill + decode; top-k IDs must match exactly; see `contract_summary.json` `mtp.trust_gates`).
 

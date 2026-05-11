@@ -84,7 +84,7 @@ Recommended: use the staged installer wrapper (human-run; review first):
 
 ```bash
 sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1> --start-preflight
-# optional: add --install-timers, --install-spark-units, and/or --strict
+# optional: add --preflight tp2|tp3|tp4, --install-timers, --install-spark-units, and/or --strict
 ```
 
 Manual step-by-step (equivalent):

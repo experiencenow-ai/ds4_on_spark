@@ -43,7 +43,7 @@ When staging assets to a Spark via `scripts/ops_stage_deploy_assets.sh`, the rep
 - `ops_validate_installed_assets.sh`: checks installed assets under `/etc` + `/opt` then runs preflight (no sudo; use `--strict` for fail-fast gating)
 - Optional installer wrapper: `ops_install_staged_assets.sh` (human-run; installs staged assets into `/etc` + `/opt`, then reloads systemd)
 
-Timer templates (`ds4-preflight@.timer`, `ds4-preflight-strict@.timer`) are optional and are not required for `ops_validate_installed_assets.sh`.
+Timer templates (`ds4-preflight@.timer`, `ds4-preflight-strict@.timer`, `ds4-preflight-tp3@.timer`, `ds4-preflight-tp3-strict@.timer`, `ds4-preflight-tp4@.timer`, `ds4-preflight-tp4-strict@.timer`) are optional and are not required for `ops_validate_installed_assets.sh`.
 
 See `docs/ops-deploy-asset-validation.md` for the full workflow.
 
@@ -60,6 +60,10 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 - `ds4-support-bundle@.service`: oneshot support bundle collector (safe; see `docs/ops-support-bundle.md`); wired via `OnFailure=`
 - Optional: `ds4-preflight@.timer`: periodic non-destructive preflight
 - Optional: `ds4-preflight-strict@.timer`: periodic strict preflight
+- Optional: `ds4-preflight-tp3@.timer`: periodic TP=3 preflight
+- Optional: `ds4-preflight-tp3-strict@.timer`: periodic strict TP=3 preflight
+- Optional: `ds4-preflight-tp4@.timer`: periodic TP=4 preflight
+- Optional: `ds4-preflight-tp4-strict@.timer`: periodic strict TP=4 preflight
 - Optional Spark standalone helpers: `spark-master@.service`, `spark-worker@.service` (see `docs/deployment-spark-standalone-systemd.md`)
 
 ## Instance Naming

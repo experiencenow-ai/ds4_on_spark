@@ -38,7 +38,7 @@
   },
   "missing_tensors": [],
   "ok": true,
-  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c198a70525f1856f1bf50448f163471692c881f8/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
   "tensor_count": 32,
   "tensors": [
     {

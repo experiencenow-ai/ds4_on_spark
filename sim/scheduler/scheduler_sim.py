@@ -357,11 +357,17 @@ class SimMetrics:
     skipped_stages_backpressure_batch: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    skipped_stages_backpressure_per_layer: List[int] = dataclasses.field(default_factory=list)
+    skipped_stages_backpressure_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
+    skipped_stages_backpressure_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
     stages_total: int = 0
     stages_total_interactive: int = 0
     stages_total_batch: int = 0
     stages_total_verify: int = 0
     stages_total_draft: int = 0
+    stages_total_per_layer: List[int] = dataclasses.field(default_factory=list)
+    stages_total_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
+    stages_total_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -700,6 +706,18 @@ class SimMetrics:
                     "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
                     "skipped_backpressure_verify": self.skipped_stages_backpressure_verify,
                     "skipped_backpressure_draft": self.skipped_stages_backpressure_draft,
+                    "per_layer": [
+                        {
+                            "layer": int(li),
+                            "total": int(self.stages_total_per_layer[li]),
+                            "total_verify": int(self.stages_total_per_layer_verify[li]),
+                            "total_draft": int(self.stages_total_per_layer_draft[li]),
+                            "skipped_backpressure": int(self.skipped_stages_backpressure_per_layer[li]),
+                            "skipped_backpressure_verify": int(self.skipped_stages_backpressure_per_layer_verify[li]),
+                            "skipped_backpressure_draft": int(self.skipped_stages_backpressure_per_layer_draft[li]),
+                        }
+                        for li in range(len(self.stages_total_per_layer))
+                    ],
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -3201,6 +3219,9 @@ def run_simulation(
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
+    max_layers_seen = 1
+    for route in trace:
+        max_layers_seen = max(max_layers_seen, len(_route_layers(route)))
     hist_len = 0
     if cfg.pending_hist_max_depth > 0:
         hist_len = min(cfg.pending_hist_max_depth, cfg.expert_queue_max) + 1
@@ -3244,6 +3265,12 @@ def run_simulation(
         pending_depth_hist_mtp_draft_overflow=0.0,
         pending_depth_hist_mtp_verify=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_depth_hist_mtp_verify_overflow=0.0,
+        skipped_stages_backpressure_per_layer=[0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer_verify=[0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer_draft=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer_verify=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer_draft=[0 for _ in range(max_layers_seen)],
     )
     rng = random.Random(cfg.sim_seed)
     metrics.dflash_draft_cost_scale = float(cfg.dflash_draft_cost_scale)
@@ -3627,6 +3654,12 @@ def run_simulation(
                     metrics.stages_total_verify += 1
                 else:
                     metrics.stages_total_draft += 1
+                if stage.layer_index < len(metrics.stages_total_per_layer):
+                    metrics.stages_total_per_layer[stage.layer_index] += 1
+                    if stage.is_verify:
+                        metrics.stages_total_per_layer_verify[stage.layer_index] += 1
+                    else:
+                        metrics.stages_total_per_layer_draft[stage.layer_index] += 1
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
                 metrics.skipped_stages_backpressure += 1
@@ -3638,6 +3671,12 @@ def run_simulation(
                     metrics.skipped_stages_backpressure_verify += 1
                 else:
                     metrics.skipped_stages_backpressure_draft += 1
+                if stage.layer_index < len(metrics.skipped_stages_backpressure_per_layer):
+                    metrics.skipped_stages_backpressure_per_layer[stage.layer_index] += 1
+                    if stage.is_verify:
+                        metrics.skipped_stages_backpressure_per_layer_verify[stage.layer_index] += 1
+                    else:
+                        metrics.skipped_stages_backpressure_per_layer_draft[stage.layer_index] += 1
                 ts.skipped_stages_backpressure += 1
                 if stage.is_verify:
                     ts.skipped_stages_backpressure_verify += 1
@@ -4112,8 +4151,29 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     skipped_stage_frac_batch = (float(metrics.skipped_stages_backpressure_batch) / stages_total_batch) if stages_total_batch > 0.0 else 0.0
     skipped_stage_frac_verify = (float(metrics.skipped_stages_backpressure_verify) / stages_total_verify) if stages_total_verify > 0.0 else 0.0
     skipped_stage_frac_draft = (float(metrics.skipped_stages_backpressure_draft) / stages_total_draft) if stages_total_draft > 0.0 else 0.0
-    return(
-        {
+    trace_expert_batch_size_present_frac_interactive = (float(len(metrics.trace_expert_batch_size_interactive)) / denom_interactive) if denom_interactive > 0.0 else 0.0
+    trace_expert_batch_size_present_frac_batch = (float(len(metrics.trace_expert_batch_size_batch)) / denom_batch) if denom_batch > 0.0 else 0.0
+    trace_expert_batch_size_leq1_frac_interactive = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_interactive if float(x) <= 1.0)) / float(len(metrics.trace_expert_batch_size_interactive)))
+        if len(metrics.trace_expert_batch_size_interactive) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq1_frac_batch = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_batch if float(x) <= 1.0)) / float(len(metrics.trace_expert_batch_size_batch)))
+        if len(metrics.trace_expert_batch_size_batch) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq4_frac_interactive = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_interactive if float(x) <= 4.0)) / float(len(metrics.trace_expert_batch_size_interactive)))
+        if len(metrics.trace_expert_batch_size_interactive) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq4_frac_batch = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_batch if float(x) <= 4.0)) / float(len(metrics.trace_expert_batch_size_batch)))
+        if len(metrics.trace_expert_batch_size_batch) != 0
+        else 0.0
+    )
+    out: Dict[str, float] = {
             "makespan_ms": float(makespan_ms),
             "token_throughput_tps": float(token_tps),
             "task_throughput_tps": float(task_tps),
@@ -4139,8 +4199,14 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "service_batch_size_p95_batch": float(_p_or_zero(metrics.service_batch_size_batch, 0.95)),
             "trace_expert_batch_size_p50_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.50)),
             "trace_expert_batch_size_p95_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.95)),
+            "trace_expert_batch_size_present_frac_interactive": float(trace_expert_batch_size_present_frac_interactive),
+            "trace_expert_batch_size_leq1_frac_interactive": float(trace_expert_batch_size_leq1_frac_interactive),
+            "trace_expert_batch_size_leq4_frac_interactive": float(trace_expert_batch_size_leq4_frac_interactive),
             "trace_expert_batch_size_p50_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.50)),
             "trace_expert_batch_size_p95_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.95)),
+            "trace_expert_batch_size_present_frac_batch": float(trace_expert_batch_size_present_frac_batch),
+            "trace_expert_batch_size_leq1_frac_batch": float(trace_expert_batch_size_leq1_frac_batch),
+            "trace_expert_batch_size_leq4_frac_batch": float(trace_expert_batch_size_leq4_frac_batch),
             "trace_decode_ms_p50_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.50)),
             "trace_decode_ms_p95_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.95)),
             "trace_decode_ms_p50_batch": float(_p_or_zero(metrics.trace_decode_ms_batch, 0.50)),
@@ -4249,7 +4315,25 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "skipped_stage_frac_verify": float(skipped_stage_frac_verify),
             "skipped_stage_frac_draft": float(skipped_stage_frac_draft),
         }
-    )
+
+    for li in range(len(metrics.stages_total_per_layer)):
+        total = float(metrics.stages_total_per_layer[li])
+        skipped = float(metrics.skipped_stages_backpressure_per_layer[li])
+        out[f"stages_total_layer{li}"] = float(total)
+        out[f"skipped_stages_backpressure_layer{li}"] = float(skipped)
+        out[f"skipped_stage_frac_layer{li}"] = float((skipped / total) if total > 0.0 else 0.0)
+
+        total_verify = float(metrics.stages_total_per_layer_verify[li])
+        skipped_verify = float(metrics.skipped_stages_backpressure_per_layer_verify[li])
+        if total_verify > 0.0 or skipped_verify > 0.0:
+            out[f"skipped_stage_frac_layer{li}_verify"] = float((skipped_verify / total_verify) if total_verify > 0.0 else 0.0)
+
+        total_draft = float(metrics.stages_total_per_layer_draft[li])
+        skipped_draft = float(metrics.skipped_stages_backpressure_per_layer_draft[li])
+        if total_draft > 0.0 or skipped_draft > 0.0:
+            out[f"skipped_stage_frac_layer{li}_draft"] = float((skipped_draft / total_draft) if total_draft > 0.0 else 0.0)
+
+    return(out)
 
 
 def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> SimConfig:

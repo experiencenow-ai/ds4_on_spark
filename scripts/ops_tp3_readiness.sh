@@ -212,6 +212,11 @@ validate_port()
     return 0
 }
 
+trim_ws()
+{
+    printf '%s' "${1:-}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
 is_ipv4()
 {
     v="${1:-}"
@@ -427,6 +432,17 @@ tcp_probe_best_effort()
     return 0
 }
 
+hosts_unique()
+{
+    h0="$1"
+    h1="$2"
+    h2="$3"
+    if [ "$h0" = "$h1" ] || [ "$h0" = "$h2" ] || [ "$h1" = "$h2" ]; then
+        return 1
+    fi
+    return 0
+}
+
 strict_validate()
 {
     fail=0
@@ -475,10 +491,31 @@ strict_validate()
     if [ "${DS4_METRICS_PORT:-}" != "" ]; then
         validate_port "DS4_METRICS_PORT" "$DS4_METRICS_PORT" || fail=1
     fi
+    if [ "${DS4_MASTER_PORT:-}" != "" ] && [ "${DS4_METRICS_PORT:-}" != "" ]; then
+        if [ "$DS4_MASTER_PORT" = "$DS4_METRICS_PORT" ]; then
+            echo "strict: DS4_MASTER_PORT and DS4_METRICS_PORT must differ: $DS4_MASTER_PORT" >&2
+            fail=1
+        fi
+    fi
 
     if [ "$hosts_csv" = "" ] && [ "${DS4_RING_HOSTS:-}" = "" ]; then
         echo "strict: provide --hosts or DS4_RING_HOSTS (comma-separated h0,h1,h2)" >&2
         fail=1
+    else
+        csv="$hosts_csv"
+        if [ "$csv" = "" ]; then
+            csv="${DS4_RING_HOSTS:-}"
+        fi
+        set -- $(parse_hosts_csv "$csv" 2>/dev/null || true)
+        if [ "$#" -ne 3 ]; then
+            echo "strict: invalid DS4_RING_HOSTS/--hosts (expected h0,h1,h2): $csv" >&2
+            fail=1
+        else
+            if ! hosts_unique "$1" "$2" "$3"; then
+                echo "strict: DS4_RING_HOSTS entries must be unique: $csv" >&2
+                fail=1
+            fi
+        fi
     fi
 
     if [ "${DS4_CONFIG_PATH:-}" = "" ]; then
@@ -520,17 +557,23 @@ parse_hosts_csv()
         return 1
     fi
 
-    h0="${csv%%,*}"
+    h0="$(trim_ws "${csv%%,*}")"
     rest="${csv#*,}"
     if [ "$rest" = "$csv" ]; then
         return 1
     fi
-    h1="${rest%%,*}"
+    h1="$(trim_ws "${rest%%,*}")"
     rest="${rest#*,}"
     if [ "$rest" = "$h1" ]; then
         return 1
     fi
-    h2="$rest"
+    h2="$(trim_ws "$rest")"
+
+    case "$h2" in
+        *,*)
+            return 1
+            ;;
+    esac
 
     if [ "$h0" = "" ] || [ "$h1" = "" ] || [ "$h2" = "" ]; then
         return 1
@@ -538,6 +581,23 @@ parse_hosts_csv()
 
     echo "$h0" "$h1" "$h2"
     return 0
+}
+
+self_host_from_rank()
+{
+    h0="$1"
+    h1="$2"
+    h2="$3"
+    r="${DS4_RANK:-}"
+    if ! is_uint "$r"; then
+        return 1
+    fi
+    case "$r" in
+        0) echo "$h0"; return 0 ;;
+        1) echo "$h1"; return 0 ;;
+        2) echo "$h2"; return 0 ;;
+    esac
+    return 1
 }
 
 ring_neighbors()
@@ -673,10 +733,12 @@ else
                 peers="$1 $2"
             fi
         else
+            self_host="$(self_host_from_rank "$h0" "$h1" "$h2" 2>/dev/null || true)"
             for h in "$h0" "$h1" "$h2"; do
-                if [ "$h" != "$self" ]; then
-                    peers="$peers $h"
+                if [ "$self_host" != "" ] && [ "$h" = "$self_host" ]; then
+                    continue
                 fi
+                peers="$peers $h"
             done
         fi
 
@@ -702,4 +764,3 @@ fi
 peer_master_backcheck_best_effort
 
 echo "== OK =="
-

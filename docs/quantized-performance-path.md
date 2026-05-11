@@ -184,7 +184,7 @@ Trace JSONL fields:
 - `scores`: optional per-candidate router scores (when `layers` is present, use `layers[].scores`; top-level `scores` are not valid when `layers` is present)
 - `mtp_accept_len`: optional accept length for MTP replay
 - `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
-- `dflash_accept_len`: optional accept length for a Qwen+DFlash speculative-decoding comparator trace (kept separate from DeepSeek MTP). The simulator reports separate comparator metrics (for example: `dflash_output_tokens`, `dflash_mean_accept_len`, `dflash_accept_rate`, `dflash_bonus_tokens`, `dflash_service_slot_ms_per_output_token`) in `--summary-json` without mixing them into DS4 MTP assumptions.
+- `dflash_accept_len`: optional accept length for a speculative-decoding comparator trace (kept separate from DeepSeek MTP). The simulator reports separate comparator metrics (for example: `dflash_output_tokens`, `dflash_mean_accept_len`, `dflash_accept_rate`, `dflash_bonus_tokens`, `dflash_service_slot_ms_per_output_token`) in `--summary-json` without mixing them into DS4 MTP assumptions.
 - `accepted_dflash` / `rejected_dflash`: optional comparator counters (kept separate from MTP). When `dflash_accept_len` is omitted but `accepted_dflash` is present, canonicalization derives `dflash_accept_len = accepted_dflash + 1`. When only `rejected_dflash` is present, canonicalization can also derive `dflash_accept_len` if `dflash_draft_len` is known (from `meta.dflash_draft_len` or consistent `accepted_dflash+rejected_dflash` elsewhere in the trace).
 - `cost_scale`: optional per-token cost multiplier
 - `decode_ms`: optional observed per-token decode latency (the simulator reports `trace.decode_ms` and `trace.decode_error_ms` vs modeled latency when present)
@@ -239,7 +239,7 @@ Initial scope:
   - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load) + pinned payload fingerprint gate: `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Local combined runner (no fetch/build; requires a prebuilt `llama-ds4-mtp-sidecar-probe`): `scripts/run_mtp_sidecar_loader_probe_local.sh`
-- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-c198a70-mtp-sidecar.json`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

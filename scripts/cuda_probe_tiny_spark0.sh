@@ -75,6 +75,20 @@ echo
 	cd \"$REMOTE_DIR\"
 	make clean
 	make tiny
+	echo
+	echo \"== build (sm_121 variant arch_list_report; best-effort) ==\"
+	try_make_optional() {
+		target=\"\$1\"
+		set +e
+		make \"\${target}\"
+		rc=\$?
+		set -e
+		if [ \${rc} -ne 0 ]; then
+			echo \"(\${target} build failed; nvcc may not accept that arch spelling)\"
+		fi
+	}
+	try_make_optional bin/cuda_sm121a_arch_list_report
+	try_make_optional bin/cuda_sm121f_arch_list_report
 	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
 		echo
 		echo \"== build (tiny link probes) ==\"
@@ -103,10 +117,16 @@ echo
 	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
 		run_retry cuda_sm121_rdc_probe \"$REMOTE_DIR\"/bin/cuda_sm121_rdc_probe
 		run_retry cuda_sm121_dlto_probe \"$REMOTE_DIR\"/bin/cuda_sm121_dlto_probe
-		fi
-		run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
-		run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
-		"
+			fi
+			run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+			run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+			if [ -x \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report ]; then
+				run_retry cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
+			fi
+			if [ -x \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report ]; then
+				run_retry cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
+			fi
+			"
 	}
 
 if [ "$log_path" = "" ]; then

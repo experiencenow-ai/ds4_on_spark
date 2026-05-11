@@ -152,6 +152,16 @@ ping -c 2 <peer-ip-or-hostname>
 ss -lntp | head
 ```
 
+## Non-Root Bring-Up (`systemd --user`) With Staged Assets (Optional)
+
+If you staged deploy assets via `scripts/ops_stage_deploy_assets.sh` (Mac-side), you can install user units without sudo (Spark-side):
+
+```bash
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight
+/tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance spark0 --strict
+systemctl --user enable --now ds4@spark0.service
+```
+
 ## If Networking Looks Wrong: Capture A Support Bundle
 
 To capture `ip route` / `ip route get` output + systemd/journald context in one place (non-destructive):

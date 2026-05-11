@@ -85,6 +85,10 @@ need_file "$systemd_dir/ds4-preflight-tp4-strict@.service"
 need_file "$systemd_dir/ds4-support-bundle@.service"
 need_file "$systemd_dir/ds4-preflight@.timer"
 need_file "$systemd_dir/ds4-preflight-strict@.timer"
+need_file "$systemd_dir/ds4-preflight-tp3@.timer"
+need_file "$systemd_dir/ds4-preflight-tp3-strict@.timer"
+need_file "$systemd_dir/ds4-preflight-tp4@.timer"
+need_file "$systemd_dir/ds4-preflight-tp4-strict@.timer"
 need_file "$systemd_dir/ds4-support-bundle@.timer"
 
 need_file "$systemd_user_dir/ds4@.service"
@@ -95,6 +99,12 @@ need_file "$systemd_user_dir/ds4-preflight-tp3@.service"
 need_file "$systemd_user_dir/ds4-preflight-tp3-strict@.service"
 need_file "$systemd_user_dir/ds4-preflight-tp4@.service"
 need_file "$systemd_user_dir/ds4-preflight-tp4-strict@.service"
+need_file "$systemd_user_dir/ds4-preflight@.timer"
+need_file "$systemd_user_dir/ds4-preflight-strict@.timer"
+need_file "$systemd_user_dir/ds4-preflight-tp3@.timer"
+need_file "$systemd_user_dir/ds4-preflight-tp3-strict@.timer"
+need_file "$systemd_user_dir/ds4-preflight-tp4@.timer"
+need_file "$systemd_user_dir/ds4-preflight-tp4-strict@.timer"
 need_file "$systemd_user_dir/ds4-support-bundle@.service"
 need_file "$systemd_user_dir/ds4-support-bundle@.timer"
 
@@ -162,6 +172,10 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         "$systemd_dir/ds4-support-bundle@.service" \
         "$systemd_dir/ds4-preflight@.timer" \
         "$systemd_dir/ds4-preflight-strict@.timer" \
+        "$systemd_dir/ds4-preflight-tp3@.timer" \
+        "$systemd_dir/ds4-preflight-tp3-strict@.timer" \
+        "$systemd_dir/ds4-preflight-tp4@.timer" \
+        "$systemd_dir/ds4-preflight-tp4-strict@.timer" \
         "$systemd_dir/ds4-support-bundle@.timer" \
         >/dev/null 2>&1; then
         echo "systemd-analyze verify: ok"
