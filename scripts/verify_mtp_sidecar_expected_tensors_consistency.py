@@ -48,15 +48,44 @@ def _extract_python_expected_names(py_path: Path) -> list[str]:
 
 
 def _extract_cpp_expected_names_from_patch(patch_path: Path) -> list[str]:
+	return _extract_expected_names_from_patch(patch_path, patch_kind="auto")
+
+
+def _extract_expected_names_from_patch(patch_path: Path, patch_kind: str) -> list[str]:
 	patch_text = _read_text(patch_path)
 
-	needle = (
+	if patch_kind not in ("auto", "sidecar-probe", "one-token-binder"):
+		_die(f"unknown patch kind: {patch_kind!r}")
+
+	sidecar_needle = (
 		"diff --git a/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp "
 		"b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp"
 	)
-	pos = patch_text.find(needle)
-	if pos < 0:
-		_die(f"missing ds4-mtp-sidecar-probe.cpp diff header in {patch_path}")
+	one_token_needle = (
+		"diff --git a/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp "
+		"b/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp"
+	)
+
+	pos = -1
+	mode = patch_kind
+	if patch_kind == "sidecar-probe":
+		pos = patch_text.find(sidecar_needle)
+		mode = "sidecar-probe"
+	elif patch_kind == "one-token-binder":
+		pos = patch_text.find(one_token_needle)
+		mode = "one-token-binder"
+	else:
+		pos = patch_text.find(sidecar_needle)
+		if pos >= 0:
+			mode = "sidecar-probe"
+		else:
+			pos = patch_text.find(one_token_needle)
+			if pos >= 0:
+				mode = "one-token-binder"
+			else:
+				_die(
+					f"unable to detect patch kind for {patch_path}; expected one of: ds4-mtp-sidecar-probe.cpp or deepseek4_mtp_sidecar.hpp"
+				)
 
 	after = patch_text[pos:]
 	lines = after.splitlines()
@@ -80,17 +109,25 @@ def _extract_cpp_expected_names_from_patch(patch_path: Path) -> list[str]:
 
 	cpp = "\n".join(added) + "\n"
 
-	k_start = cpp.find("static const std::vector<std::string> k = {")
-	if k_start < 0:
-		_die("unable to locate expected tensor vector initializer in patch cpp hunk")
-	k_end = cpp.find("};", k_start)
-	if k_end < 0:
-		_die("unable to locate end of expected tensor vector initializer in patch cpp hunk")
+	names: list[str] = []
+	if mode == "sidecar-probe":
+		k_start = cpp.find("static const std::vector<std::string> k = {")
+		if k_start < 0:
+			_die("unable to locate expected tensor vector initializer in patch cpp hunk")
+		k_end = cpp.find("};", k_start)
+		if k_end < 0:
+			_die("unable to locate end of expected tensor vector initializer in patch cpp hunk")
 
-	block = cpp[k_start:k_end]
-	names = re.findall(r'"(mtp\.0\.[^"]+)"', block)
-	if not names:
-		_die("no mtp.0.* tensor names found in patch cpp expected list")
+		block = cpp[k_start:k_end]
+		names = re.findall(r'"(mtp\.0\.[^"]+)"', block)
+		if not names:
+			_die("no mtp.0.* tensor names found in patch cpp expected list")
+	else:
+		# Binder header: extract tensor names from ggml_get_tensor(ctx,"...") calls.
+		all_names = re.findall(r'ggml_get_tensor\(\s*ctx\s*,\s*"([^"]+)"\s*\)', cpp)
+		names = [n for n in all_names if n.startswith("mtp.0.")]
+		if not names:
+			_die("no mtp.0.* tensor names found in patch binder header")
 
 	# Preserve order but drop duplicates if any show up due to formatting glitches.
 	out: list[str] = []
@@ -110,13 +147,19 @@ def main() -> None:
 		"--patch",
 		default="docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch",
 	)
+	ap.add_argument(
+		"--patch-kind",
+		default="auto",
+		choices=("auto", "sidecar-probe", "one-token-binder"),
+		help="Which patch format to parse (default: auto).",
+	)
 	args = ap.parse_args()
 
 	py_path = Path(args.python_probe)
 	patch_path = Path(args.patch)
 
 	py_names = _extract_python_expected_names(py_path)
-	cpp_names = _extract_cpp_expected_names_from_patch(patch_path)
+	cpp_names = _extract_expected_names_from_patch(patch_path, patch_kind=str(args.patch_kind))
 
 	py_set = set(py_names)
 	cpp_set = set(cpp_names)
@@ -144,4 +187,3 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
-
