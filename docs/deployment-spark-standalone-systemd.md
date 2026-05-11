@@ -15,6 +15,7 @@ Config examples under `deploy/config/`:
 
 - `spark-spark0.env.example`
 - `spark-spark1.env.example`
+- `spark-spark2.env.example`
 
 Safe checker script:
 
@@ -27,9 +28,17 @@ From this repo root (on the Mac):
 ```bash
 ./scripts/ops_stage_deploy_assets.sh spark0@<spark0-host> spark0
 ./scripts/ops_stage_deploy_assets.sh spark1@<spark1-host> spark1
+./scripts/ops_stage_deploy_assets.sh spark2@<spark2-host> spark2
 ```
 
 This stages Spark templates under `/tmp/ds4-systemd/` and env examples under `/tmp/ds4-config/`.
+
+If you're already staging Spark0/Spark1/Spark2 for TP=3, you can use the three-host wrapper and then install Spark units via the staged installer:
+
+```bash
+./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --install-spark-units
+```
 
 ## Install (Spark Side, Human Runbook)
 

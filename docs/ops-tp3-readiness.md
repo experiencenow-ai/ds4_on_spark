@@ -29,6 +29,12 @@ Strict gating (fails non-zero if required TP=3 inputs are missing/invalid):
 sudo -u ds4 /opt/ds4/scripts/ops_tp3_readiness.sh --strict --self spark2 --topology ring --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark2.env
 ```
 
+Deeper debug (checks all peers, not just ring neighbors; still non-destructive):
+
+```bash
+sudo -u ds4 /opt/ds4/scripts/ops_tp3_readiness.sh --strict --self spark2 --topology full --tcp 29500 --tcp 9090 --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark2.env
+```
+
 What the script checks (best-effort, safe):
 
 - `DS4_WORLD_SIZE==3` and `DS4_RANK in 0..2` (strict mode)

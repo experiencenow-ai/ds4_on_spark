@@ -80,7 +80,7 @@ sudo systemd-tmpfiles --create || true
 - `ssh_config.ds4.spark012.example` : optional Mac-side `ssh_config` convenience (Spark0/Spark1/Spark2)
 - `ssh_config.ds4.spark_ring.example` : optional Mac-side `ssh_config` convenience (Spark0..Spark3)
 - `sysctl.ds4.conf.example` : optional sysctl network tuning drop-in (host-wide; review first)
-- `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
+- `spark-spark0.env.example`, `spark-spark1.env.example`, `spark-spark2.env.example` : optional Spark standalone env starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
 
