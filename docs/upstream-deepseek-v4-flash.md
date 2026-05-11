@@ -116,7 +116,7 @@ Flash vs Flash-Base (important runtime semantic):
 
 ## Config field stability (watch)
 
-The official HF repos are actively edited. As of 2026-05-10, there is a draft HF PR (`refs/pr/14`, commit `6c858e71890b508e4f3fd6491f45b325580ba934`) that removes `expert_dtype` from `config.json` while keeping `inference/config.json` `expert_dtype="fp4"`. vLLM (and our docs) currently treat `expert_dtype` as the canonical Flash vs Flash-Base switch, so pin updates must re-validate this assumption.
+The official HF repos are actively edited. As of 2026-05-11, there is a draft HF PR (`refs/pr/14`, commit `6c858e71890b508e4f3fd6491f45b325580ba934`) that removes `expert_dtype` from `config.json` while keeping `inference/config.json` `expert_dtype="fp4"`. vLLM (and our docs) currently treat `expert_dtype` as the canonical Flash vs Flash-Base switch, so pin updates must re-validate this assumption. This PR ref is pinned in [`docs/upstream-manifest.md`](upstream-manifest.md) for reproducible inspection.
 
 Practical contract rule:
 
@@ -126,6 +126,7 @@ Re-check quickly (metadata-only fetch; no weights):
 
 ```bash
 ./scripts/upstream_feature_probe.sh --fetch
+./scripts/fetch_upstreams.sh deepseek_v4_flash_hf_pr14
 ```
 
 ## Transformers references
