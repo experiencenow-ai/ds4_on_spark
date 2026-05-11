@@ -36,7 +36,7 @@ ds4_cuda_status_t ds4_cuda_get_device(int32_t *out_dev)
 {
 	if ( out_dev == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	*out_dev = 0;
+	*out_dev = -1;
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }
 

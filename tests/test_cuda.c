@@ -29,6 +29,12 @@ int32_t test_cuda(void)
 	s = ds4_cuda_errstr(st0);
 	if ( s == 0 )
 		return(-60);
+#if !DS4_HAS_CUDA
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-63);
+	if ( cur_dev != -1 )
+		return(-64);
+#endif
 	st0 = ds4_cuda_set_device(-1);
 	if ( st0.code != DS4_CUDA_ERR_INVALID_ARG )
 		return(-61);
