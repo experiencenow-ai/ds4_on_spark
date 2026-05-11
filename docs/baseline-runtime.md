@@ -84,6 +84,11 @@ MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/mo
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
+By default, `scripts/run_quantized_single_spark.sh` enables the read-only
+llama.cpp patch-status probes (`LLAMA_FATTN_PATCH_PROBE=1` and
+`LLAMA_MULTISLOT_PATCH_PROBE=1`) and includes their summaries in the baseline
+report. Set either env var to `0` to skip.
+
 Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 `REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime. See
 `docs/quantized-single-spark.md` for the milestone definition and failure

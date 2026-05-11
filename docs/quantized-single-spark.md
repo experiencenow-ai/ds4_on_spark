@@ -196,6 +196,23 @@ Attention schedule node executed instead of falling back to a slow path. Always
 preserve `remote_llamacpp_stdout.txt` / `remote_llamacpp_stderr.txt` so the
 fallback reason is visible.
 
+### Patch-status probes (read-only; recommended)
+
+To track the current Spark-side runtime state for the DSv4 Flash Attention
+pad-to-256 reservation fix and the multi-slot reserve/SWA fixes, enable the
+read-only source probes in the baseline runner:
+
+- `LLAMA_FATTN_PATCH_PROBE=1` (pad-to-256 reservation fix probe)
+- `LLAMA_MULTISLOT_PATCH_PROBE=1` (multi-slot reserve/SWA fix probe)
+
+`scripts/run_quantized_single_spark.sh` enables both probes by default. Set
+either env var to `0` to skip.
+
+The probes scan `LLAMA_DIR` on Spark. If your `LLAMA_CLI` looks like
+`.../build*/bin/llama-cli`, the milestone wrapper infers `LLAMA_DIR` from that
+path. Otherwise, set `LLAMA_DIR=/abs/path/to/llama.cpp/tree` (Spark path) in the
+Mac environment so the probes scan the right runtime tree.
+
 If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
 it forwards the same CSV/quality env vars:
 
