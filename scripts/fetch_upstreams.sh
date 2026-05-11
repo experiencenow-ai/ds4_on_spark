@@ -37,6 +37,10 @@ Targets:
   qwen3_5_35b_a3b_dflash_hf            (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_9b_hf                        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_9b_dflash_hf                 (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_8b_hf                          (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_8b_dflash_b16_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_4b_hf                          (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_4b_dflash_b16_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_4b_hf                        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_4b_dflash_hf                 (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_next_fp8_hf              (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -71,8 +75,10 @@ Targets:
   deepseek_v4_gguf_teamblobfish  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
+  vllm_dflash_pr
   transformers
   sglang
+  sglang_dflash_pr
   llama_cpp
   llama_cpp_deepseek_v4_flash
   llama_cpp_deepseek_v4_support_wip
@@ -83,6 +89,8 @@ Targets:
   spark_v4_bringup_entrpi
   spark_v4_bringup_bigs
   spark_v4_gb10_runtime_devid791
+  deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul
+  deepseek_v4_flash_vllm_ampere_patch_lasimeri
   deepseek_v4_flash_sm120_patch
   all
 EOF
@@ -282,6 +290,10 @@ fetch_one()
 			upstream="vllm-project/vllm"; ref="refs/tags/v0.20.2"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "vllm" "https://github.com/vllm-project/vllm.git" "${ref}" "${expected}"
 			;;
+		vllm_dflash_pr)
+			upstream="vllm-project/vllm"; ref="refs/pull/40898/head"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "vllm_dflash_pr" "https://github.com/vllm-project/vllm.git" "${ref}" "${expected}"
+			;;
 		transformers)
 			upstream="huggingface/transformers"; ref="refs/tags/v5.8.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
@@ -349,6 +361,26 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/z-lab/Qwen3.5-9B-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_5_9b_dflash_hf" "https://huggingface.co/z-lab/Qwen3.5-9B-DFlash" "${ref}" "${expected}"
+			;;
+		qwen3_8b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/Qwen/Qwen3-8B"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_8b_hf" "https://huggingface.co/Qwen/Qwen3-8B" "${ref}" "${expected}"
+			;;
+		qwen3_8b_dflash_b16_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/Qwen3-8B-DFlash-b16"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_8b_dflash_b16_hf" "https://huggingface.co/z-lab/Qwen3-8B-DFlash-b16" "${ref}" "${expected}"
+			;;
+		qwen3_4b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/Qwen/Qwen3-4B"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_4b_hf" "https://huggingface.co/Qwen/Qwen3-4B" "${ref}" "${expected}"
+			;;
+		qwen3_4b_dflash_b16_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/Qwen3-4B-DFlash-b16"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_4b_dflash_b16_hf" "https://huggingface.co/z-lab/Qwen3-4B-DFlash-b16" "${ref}" "${expected}"
 			;;
 		qwen3_5_4b_hf)
 			# HF metadata/config only: do not download weights.
@@ -464,6 +496,10 @@ fetch_one()
 			upstream="sgl-project/sglang"; ref="refs/tags/v0.5.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
+		sglang_dflash_pr)
+			upstream="sgl-project/sglang"; ref="refs/pull/20547/head"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "sglang_dflash_pr" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
+			;;
 		llama_cpp)
 			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9102"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
@@ -503,6 +539,14 @@ fetch_one()
 		spark_v4_gb10_runtime_devid791)
 			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/tags/v0.1.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_gb10_runtime_devid791" "https://github.com/devid791/dsv4-flash-gb10-runtime.git" "${ref}" "${expected}"
+			;;
+		deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul)
+			upstream="pasta-paul/dsv4-flash-w4a16-fp8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul" "https://github.com/pasta-paul/dsv4-flash-w4a16-fp8.git" "${ref}" "${expected}"
+			;;
+		deepseek_v4_flash_vllm_ampere_patch_lasimeri)
+			upstream="Lasimeri/vllm-dsv4-ampere"; ref="refs/heads/master"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "deepseek_v4_flash_vllm_ampere_patch_lasimeri" "https://github.com/Lasimeri/vllm-dsv4-ampere.git" "${ref}" "${expected}"
 			;;
 		deepseek_v4_flash_sm120_patch)
 			upstream="0xSero/deepseek-v4-flash-sm120"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
@@ -552,6 +596,8 @@ main()
 		fetch_one spark_v4_bringup_entrpi
 		fetch_one spark_v4_bringup_bigs
 		fetch_one spark_v4_gb10_runtime_devid791
+		fetch_one deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul
+		fetch_one deepseek_v4_flash_vllm_ampere_patch_lasimeri
 		fetch_one deepseek_v4_flash_sm120_patch
 		echo "Fetched: ${UPSTREAM_DIR}"
 		return 0

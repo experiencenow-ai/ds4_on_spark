@@ -8,7 +8,7 @@ DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Fa
   - Ref: `refs/heads/main`
   - Commit: `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
   - License: MIT (see HF `LICENSE`)
-  - Note (as of 2026-05-10): we treat this HF repo as the canonical public “official configs” source; `deepseek-ai`’s GitHub org does not list a dedicated DeepSeek-V4(-Flash) code/config repo (checked via `gh repo list deepseek-ai --limit 100 | rg -i v4`).
+  - Note (as of 2026-05-11): we treat this HF repo as the canonical public “official configs” source; `deepseek-ai`’s GitHub org does not list a dedicated DeepSeek-V4(-Flash) code/config repo (checked via `gh repo list deepseek-ai --limit 200 | rg -i 'v4|flash'` and `gh search repos "DeepSeek-V4" --owner deepseek-ai --limit 20`).
 
 Related checkpoint (same “official configs” approach):
 

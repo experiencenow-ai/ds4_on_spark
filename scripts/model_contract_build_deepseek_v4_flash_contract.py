@@ -67,6 +67,7 @@ def build_oracle_contract() -> dict:
 			"note": "Tokenizer/chat rendering must match upstream encoding vectors before any logit comparison is meaningful.",
 		},
 		"logits_oracle": {
+			"required": True,
 			"weights_required": True,
 			"prompts_fixture": "oracle/prompts.json",
 			"generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
@@ -79,6 +80,7 @@ def build_oracle_contract() -> dict:
 			"note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
 		},
 		"mtp": {
+			"required": True,
 			"weights_required": True,
 			"generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
 			"acceptance": {
@@ -1041,8 +1043,14 @@ def build_contract() -> dict:
 	layer_types = [layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
 	transformers_layer_types = [transformers_layer_type_from_ratio(int(r)) for r in compress_ratios[:n_layers]]
 	transformers_mtp_layer_types = [transformers_layer_type_from_ratio(int(r)) for r in mtp_ratios]
+	layer_ids_by_type = {t: [i for i, v in enumerate(layer_types) if v == t] for t in ("sliding", "csa", "hca")}
+	layer_ids_by_compress_ratio: dict[str, list[int]] = {}
+	for i, r in enumerate(compress_ratios[:n_layers]):
+		layer_ids_by_compress_ratio.setdefault(str(int(r)), []).append(int(i))
+	transformers_layer_types_full = list(transformers_layer_types) + list(transformers_mtp_layer_types)
 	type_counts = {t: layer_types.count(t) for t in ("sliding", "csa", "hca")}
 	transformers_mlp_layer_types = [("hash_moe" if i < int(cfg["num_hash_layers"]) else "moe") for i in range(n_layers)]
+	moe_score_layer_ids = [int(i) for i in range(int(cfg["num_hash_layers"]), n_layers)]
 
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
@@ -1163,7 +1171,10 @@ def build_contract() -> dict:
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
 			"main_layer_types": layer_types,
+			"main_layer_ids_by_type": layer_ids_by_type,
+			"main_layer_ids_by_compress_ratio": layer_ids_by_compress_ratio,
 			"transformers_main_layer_types": transformers_layer_types,
+			"transformers_layer_types": transformers_layer_types_full,
 			"transformers_compress_rates": {
 				"compressed_sparse_attention": 4,
 				"heavily_compressed_attention": 128,
@@ -1225,6 +1236,7 @@ def build_contract() -> dict:
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
 			"n_hash_layers": int(cfg["num_hash_layers"]),
+			"score_layer_ids": moe_score_layer_ids,
 			"transformers_mlp_layer_types": transformers_mlp_layer_types,
 			"hash_gate_tensor_key": "layers.{i}.ffn.gate.tid2eid",
 			"score_gate_tensor_key": "layers.{i}.ffn.gate.bias",

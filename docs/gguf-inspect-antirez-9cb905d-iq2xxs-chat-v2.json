@@ -218,5 +218,6 @@
       "optional_top_level_missing=['hc_head_base', 'hc_head_fn', 'hc_head_scale']"
     ]
   },
-  "url_prefix_bytes": 8388608
+  "url_prefix_bytes": 8388608,
+  "weight_keys_sha256": "0d7226bd7c13c2cfa43a16a04b4b9a69b9b0940df4c859030e1de0e74c5c5ddc"
 }

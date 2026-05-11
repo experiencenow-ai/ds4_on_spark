@@ -71,6 +71,7 @@ And then exercises, for Spark1/Spark2/Spark3:
 - `hyor-sync-init` with left/right peer roots
 - `hyor-ring-step --scope metadata`
 - `hyor-ring-step --scope effective`
+- `hyor-sync-effective` manifests to `~/centaur-smoke/v73/ring_sim/effective_manifests/hyor_effective_manifest_spark{1,2,3}.json`
 - `hyor-sync-apply` materialization to `~/centaur-smoke/v73/ring_sim/effective/spark{1,2,3}`
 
 ## What to record for “ring readiness”
@@ -80,6 +81,7 @@ Capture these outputs (sanitized) after the sim:
 - `ls -la ~/centaur-smoke/v73/ring_sim/effective/spark1`
 - `ls -la ~/centaur-smoke/v73/ring_sim/effective/spark2`
 - `ls -la ~/centaur-smoke/v73/ring_sim/effective/spark3`
+- `ls -la ~/centaur-smoke/v73/ring_sim/effective_manifests`
 - `python3 -u centaur.py hyor-sync-status` for each root (controller + spark0..spark3)
 
 ## Next step (when Spark1/2/3 hardware exists)
@@ -101,7 +103,8 @@ This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/
 
 1. Pulls `hyor/node_spark{1,2,3}` roots from the remote Sparks into a local workdir
 2. Runs `hyor-sync-init` + `hyor-sync-publish` + `hyor-ring-step` (metadata + effective) locally across those roots
-3. Pushes the mutated node roots back to the remote Sparks
+3. Captures `hyor-sync-effective` manifests under `RING_WORKDIR/effective_manifests/`
+4. Pushes the mutated node roots back to the remote Sparks (and optionally effective dirs when `RING_APPLY=1`)
 
 From your Mac repo root (stream-run on Spark0, passing Spark1/2/3 SSH targets as args):
 
