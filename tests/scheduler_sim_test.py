@@ -3669,6 +3669,19 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_accepts_single_expert_aliases(self) -> None:
+        obj = {"t_ms": 0.0, "cls": "batch", "expert_id": 7}
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [7])
+
+        obj2 = {"t_ms": 0.0, "cls": "batch", "route": {"chosen_expert": 3}}
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2["candidates"], [3])
+
     def test_trace_extract_maps_numeric_cls_to_latency_class(self) -> None:
         obj = {"t_ms": 0.0, "cls": 0, "candidates": [7, 3, 19]}
         rec = trace_extract.extract_route_record(obj)

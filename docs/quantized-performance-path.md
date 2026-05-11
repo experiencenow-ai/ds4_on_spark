@@ -192,7 +192,7 @@ Trace JSONL fields:
 - `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - Runtime traces may emit microsecond/nanosecond variants (`t_us` / `t_ns` or `dt_us` / `dt_ns`); `--trace-input-format runtime` (or `trace_extract.py`) normalizes them into millisecond `t_ms` / `dt_ms` fields.
 - `cls`: `"interactive"` or `"batch"` (runtime input format also accepts integer class IDs `0` (interactive) and `1` (batch), normalized by `--trace-input-format runtime` / `trace_extract.py`)
-- `candidates`: ordered expert candidates for that token
+- `candidates`: ordered expert candidates for that token. For minimal router logs, `--trace-input-format runtime` (or `trace_extract.py`) also accepts a single chosen expert alias like `expert_id` / `chosen_expert` and normalizes it into `candidates=[expert_id]`.
 - `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
   - `candidates`: ordered expert candidates for that layer (required)
   - `scores`: optional per-candidate scores (same length as that layer's `candidates`)
