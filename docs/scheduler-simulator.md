@@ -354,7 +354,7 @@ JSONL reads one JSON object per line (use `--trace-jsonl -` to read from stdin) 
   - `{"meta":{...}}` when no other routing fields are present
   - You can also pass a sidecar metadata JSON via `--trace-meta-json` (its keys are merged into the trace summary; inline records override it).
 
-If you have a raw runtime trace that uses `dt_ms` deltas (or emits `accepted_mtp` / `rejected_mtp` but not `mtp_accept_len`), you can canonicalize it into the simulator’s preferred strict JSONL form (writes a meta header plus derived `t_ms`/`mtp_accept_len`):
+If you have a raw runtime trace that uses `dt_ms` deltas (or emits `accepted_mtp` / `rejected_mtp` but not `mtp_accept_len`), you can canonicalize it into the simulator’s preferred strict JSONL form (writes a meta header plus derived `t_ms`/`mtp_accept_len`). For rejected-only counters, include `meta.mtp_draft_len` (or consistent `accepted_mtp+rejected_mtp`) so canonicalization can derive the per-step accept length:
 
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-time-mode dt_ms --canonicalize-trace-jsonl /tmp/route.canon.jsonl
