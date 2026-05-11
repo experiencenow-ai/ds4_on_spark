@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_pairwise_judge_decision_v1",
+  "description": "Compact DSv4 pairwise judge decision object. reason/train_hint are intended to be <= 18 words each (enforced by scripts/judge_elo_schema.py).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "winner",
+    "margin",
+    "score_a",
+    "score_b",
+    "reason",
+    "train_hint",
+    "tags"
+  ],
+  "properties": {
+    "winner": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "tie"
+      ]
+    },
+    "margin": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "score_a": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "score_b": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "reason": {
+      "type": "string"
+    },
+    "train_hint": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 24
+      }
+    }
+  }
+}

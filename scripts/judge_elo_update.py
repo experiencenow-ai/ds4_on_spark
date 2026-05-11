@@ -177,6 +177,13 @@ def compute_budget(paths: Sequence[str]) -> Dict[str, Any]:
                     if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
                         latency[k].append(int(v))
 
+    judge_out_vals = tokens.get("judge_out", [])
+    judge_out_target = 64
+    judge_out_le_target = 0
+    for v in judge_out_vals:
+        if int(v) <= judge_out_target:
+            judge_out_le_target += 1
+
     out: Dict[str, Any] = {
         "schema": "ds4_judge_elo_budget_v1",
         "records": int(total),
@@ -184,6 +191,12 @@ def compute_budget(paths: Sequence[str]) -> Dict[str, Any]:
         "parse_valid_false": int(parse_bad),
         "tokens": {k: _int_stats(v) for k, v in tokens.items()},
         "latency_ms": {k: _int_stats(v) for k, v in latency.items()},
+        "judge_out_budget": {
+            "target_tokens": int(judge_out_target),
+            "count_with_tokens": int(len(judge_out_vals)),
+            "count_le_target": int(judge_out_le_target),
+            "fraction_le_target": (float(judge_out_le_target) / float(len(judge_out_vals))) if len(judge_out_vals) != 0 else 0.0,
+        },
     }
     return out
 

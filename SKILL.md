@@ -73,12 +73,12 @@ Pointer style: `type *name` (space after type, `*` with name).
 ```c
 int32_t funcname(type1 arg1,type2 arg2)
 {
-    type1 local1,local2;
-    type2 local3 = init;
-    if ( condition != 0 )
-        return(-1);
-    // body with no blank lines
-    return(0);
+	type1 local1,local2;
+	type2 local3 = init;
+	if ( condition != 0 )
+		return(-1);
+	// body with no blank lines
+	return(0);
 }
 ```
 
@@ -98,9 +98,9 @@ Opening brace on own line, vertically aligned with closing brace.
 
 ```c
 if ( x != 0 )
-    do_thing();
+	do_thing();
 for (i=0; i<n; i++)
-    process(i);
+	process(i);
 ```
 
 **Multi-statement**: Braces required.
@@ -108,8 +108,8 @@ for (i=0; i<n; i++)
 ```c
 if ( x != 0 )
 {
-    do_thing();
-    do_other();
+	do_thing();
+	do_other();
 }
 ```
 
@@ -138,13 +138,13 @@ Unique negative values per error path — the code itself identifies the line:
 ```c
 int32_t process(data_t *d)
 {
-    if ( d == 0 )
-        return(-1);
-    if ( d->len > MAX )
-        return(-2);
-    if ( validate(d) < 0 )
-        return(-3);
-    return(0);
+	if ( d == 0 )
+		return(-1);
+	if ( d->len > MAX )
+		return(-2);
+	if ( validate(d) < 0 )
+		return(-3);
+	return(0);
 }
 ```
 
@@ -171,14 +171,14 @@ Wire structs with `#pragma pack(1)` (set globally in `_valis.h`). Use bitfields 
 ```c
 typedef struct
 {
-    uint32_t utime;
-    uint16_t numtx;
-    uint16_t rawvanid;
-    uint8_t is_vip : 1;
-    uint8_t lastvan : 1;
-    uint8_t coldvan : 1;
-    uint8_t reserved : 5;
-    uint8_t nodeid;
+	uint32_t utime;
+	uint16_t numtx;
+	uint16_t rawvanid;
+	uint8_t is_vip : 1;
+	uint8_t lastvan : 1;
+	uint8_t coldvan : 1;
+	uint8_t reserved : 5;
+	uint8_t nodeid;
 } van_header_t;
 ```
 

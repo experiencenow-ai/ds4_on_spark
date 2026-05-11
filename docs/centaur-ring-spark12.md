@@ -132,25 +132,42 @@ ls -la ~/centaur-smoke/v73/ring_node/effective_spark1 | sed -n '1,40p'
 
 ### Optional: HTTP transport for agents (no shared filesystem)
 
-If you want Spark1/2 to run `hyor-agent-step` without a shared controller filesystem, use Centaur’s HTTP transport:
+If you want Spark1/2 to run `hyor-agent-step` without a shared controller filesystem, use Centaur’s HTTP transport.
 
-1) On the controller host (typically Spark0), run the HTTP endpoint (human-run, no system service):
+Important: the controller runs `hyor-controller-http` (controller API). Each node runs `hyor-agent-http` (node agent endpoint). These are different commands.
 
-```bash
-"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-http ~/centaur-smoke/v73/run/hyor/controller --host 0.0.0.0 --port 8777
-```
-
-2) On each node, write an HTTP-configured agent config into the node root:
+1) On the controller host (typically Spark0), run the controller HTTP endpoint (human-run, no system service):
 
 ```bash
-"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-config-write "$NODE_ROOT" --node-id spark1 --node-type default --transport http --controller-url http://<spark0-host>:8777 --allow-no-executor --no-internet --force
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-controller-http ~/centaur-smoke/v73/run/hyor/controller --host 0.0.0.0 --port 8765
 ```
 
-3) Then run one agent step on-node (it reads the local config):
+2) On each node, write an HTTP-configured agent config into the node root and start the node agent HTTP endpoint:
+
+```bash
+export CONTROLLER_URL="http://<spark0-host>:8765"
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-config-write "$NODE_ROOT" --node-id spark1 --node-type default --transport http --controller-url "$CONTROLLER_URL" --allow-no-executor --no-internet --force
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-http "$NODE_ROOT" --host 0.0.0.0 --port 8766
+
+# On Spark2 (example port):
+# export NODE_ROOT=~/centaur-smoke/v73/ring_node/hyor/node_spark2
+# "$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-config-write "$NODE_ROOT" --node-id spark2 --node-type default --transport http --controller-url "$CONTROLLER_URL" --allow-no-executor --no-internet --force
+# "$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-http "$NODE_ROOT" --host 0.0.0.0 --port 8767
+```
+
+3) On the controller, discover the nodes via their agent HTTP endpoints (this registers them in controller state):
+
+```bash
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-node-discover ~/centaur-smoke/v73/run/hyor/controller --seed-url http://<spark1-host>:8766 --seed-url http://<spark2-host>:8767
+```
+
+4) Then run one agent step on each node (it reads the local config and uses `controller_url`):
 
 ```bash
 "$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-step "$NODE_ROOT"
 ```
+
+Convenience wrappers for the three commands above (easy to stream over SSH): `scripts/centaur_spark_hyor_controller_http_v73.sh`, `scripts/centaur_spark_hyor_agent_http_v73.sh`, `scripts/centaur_spark_hyor_node_discover_v73.sh`.
 
 Keep this strictly as a smoke: no secrets, no large model downloads, and stop if you hit network/auth surprises.
 
