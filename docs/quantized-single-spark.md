@@ -241,6 +241,10 @@ The probes scan `LLAMA_DIR` on Spark. If your `LLAMA_CLI` looks like
 path. Otherwise, set `LLAMA_DIR=/abs/path/to/llama.cpp/tree` (Spark path) in the
 Mac environment so the probes scan the right runtime tree.
 
+`scripts/run_baseline_existing_runtime.sh` also forwards `LLAMA_DIR` into the
+Spark-side llama.cpp runner so the printed `== llama.cpp revision ==` line
+matches the tree that `LLAMA_CLI` points at.
+
 If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
 it forwards the same CSV/quality env vars:
 
