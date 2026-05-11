@@ -163,6 +163,8 @@ Notes:
   - Tune weighting with `--buffer-id-weight` / `--buffer-item-weight` (set to `0` to disable).
 - The recommender also applies a small **penalty** for candidates whose `prompt_template_id` (or `task_family|prompt_template_id`) has a high historical useful-novelty flagged rate or a high historical normalized-output duplicate rate.
   - Tune with `--noise-weight` / `--dup-weight`, or hard-filter with `--max-noise-rate` / `--max-dup-rate`.
+- If history includes `judge_pair` / `ds4_pairwise_judge_record_v1` records with `task_family` + `prompt_template_id`, the recommender can optionally penalize slices that are historically unstable for judging:
+  - Tune with `--judge-disagree-weight`, `--judge-invalid-weight`, `--judge-tie-weight`, and `--judge-imbalance-weight` (all default to `0`/disabled).
 - The output JSON includes a `predicted` block showing:
   - `coverage_before` / `coverage_after`: entropy stats if you add the selected batch to history (count-only; deterministic).
   - `coverage_delta`: entropy deltas per dimension (useful for comparing parameter sweeps).

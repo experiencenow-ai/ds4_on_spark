@@ -165,6 +165,17 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].prompt_template_id, "clean.v1")
 
+    def test_recommendations_penalize_unstable_judge_slices(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_judge_instability_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_judge_instability_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates, judge_disagree_weight=2.0, judge_invalid_weight=1.0)
+        self.assertGreaterEqual(len(scored), 2)
+        self.assertEqual(scored[0].prompt_template_id, "stable.v1")
+
     def test_judge_slice_summaries_exist(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")
