@@ -169,10 +169,20 @@ int cuda_arch_list_probe_dummy(void)
 }
 EOF
 
-	try_compile_only() {
-		tag=\"\$1\"
-		arch=\"\$2\"
-		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+cat > \"$REMOTE_DIR\"/cuda_nvcc_ptx_target_probe.cu <<'EOF'
+#include <stdint.h>
+
+__global__ void cuda_ptx_target_probe(uint32_t *out)
+{
+	if ( out != 0 )
+		out[0] = 0;
+}
+EOF
+
+		try_compile_only() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- compile-only: \${tag} (-arch=\${arch})\"
 		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
 		set +e
 		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
@@ -267,13 +277,40 @@ try_gencode_only() {
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
 	try_compile_only variant_sm_121a sm_121a
-	try_compile_only variant_sm_121f sm_121f
-		try_compile_only_featureset_macros featureset_compute_121a compute_121a
-		try_compile_only_featureset_macros featureset_compute_121f compute_121f
-	echo
-	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
-	try_arch_list() {
-		tag=\"\$1\"
+		try_compile_only variant_sm_121f sm_121f
+			try_compile_only_featureset_macros featureset_compute_121a compute_121a
+			try_compile_only_featureset_macros featureset_compute_121f compute_121f
+		echo
+		echo \"== nvcc: PTX .target probe (best-effort) ==\"
+		try_ptx_target() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- ptx: \${tag} (-arch=\${arch})\"
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -ptx -o \"$REMOTE_DIR\"/\"\${tag}\".ptx \"$REMOTE_DIR\"/cuda_nvcc_ptx_target_probe.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"$REMOTE_DIR\"/\"\${tag}\".err
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				target_line=\$(grep \"^\\\\.target\" \"$REMOTE_DIR\"/\"\${tag}\".ptx | head -n 1 || true)
+				if [ \"\${target_line}\" = \"\" ]; then
+					target_line=\"(missing)\"
+				fi
+				echo \"\${tag}: OK ptx_target=\${target_line}\"
+			else
+				echo \"\${tag}: FAILED rc=\${rc}\"
+				head -n 40 \"$REMOTE_DIR\"/\"\${tag}\".err || true
+			fi
+		}
+		try_ptx_target ptx_target_sm_121 sm_121
+		try_ptx_target ptx_target_sm_121a sm_121a
+		try_ptx_target ptx_target_sm_121f sm_121f
+		try_ptx_target ptx_target_compute_121 compute_121
+		try_ptx_target ptx_target_compute_121a compute_121a
+		try_ptx_target ptx_target_compute_121f compute_121f
+		echo
+		echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
+		try_arch_list() {
+			tag=\"\$1\"
 		arch=\"\$2\"
 		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
 		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
