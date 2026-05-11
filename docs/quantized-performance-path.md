@@ -72,7 +72,7 @@ Tip: when comparing MTP on/off against a replay trace that already includes `mtp
 
 Tip: use `--num-layers > 1` to approximate multi-MoE-layer routing (more realistic for V4-class models) before real quantized-runtime traces are available.
 
-Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work`.
+Tip: to exercise score-aware admission before real traces, use `--synthetic-score-mode random` with `--admit-policy score_desc`. To explore work-weighted congestion signals on synthetic traces, emit `cost_scale` with `--synthetic-cost-scale-mode lognormal` and run with `--pending-units work` (summary includes `{pending,hi_queue,lo_queue}_work_depth_time_weighted_p95`).
 
 Tip: when `cost_scale` is meaningful (synthetic or replayed), consider `--backpressure-units work` so backpressure reflects weighted expert work instead of raw task counts.
 

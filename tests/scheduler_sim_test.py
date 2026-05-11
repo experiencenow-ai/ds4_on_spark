@@ -1372,6 +1372,35 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(m.max_pending_work_per_expert[0], 3.0, places=6)
         self.assertAlmostEqual(m.mean_pending_work_per_expert[0], (7.0 / 3.0), places=6)
 
+    def test_pending_work_depth_time_weighted_p95_tracks_peak_backlog(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=2.0),
+            scheduler_sim.TokenRoute(t_ms=5.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), cost_scale=2.0),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            service_base_ms=0.0,
+            service_per_task_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertEqual(s["pending_work_depth_time_weighted_p95"], 4.0)
+        self.assertEqual(s["lo_queue_work_depth_time_weighted_p95"], 2.0)
+
     def test_compare_variants_reports_delta(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
