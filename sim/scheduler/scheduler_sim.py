@@ -137,6 +137,10 @@ class AdaptiveKConfig:
     k_max_batch: int
     q_low: int
     q_high: int
+    q_low_interactive: int = -1
+    q_high_interactive: int = -1
+    q_low_batch: int = -1
+    q_high_batch: int = -1
     ema_alpha: float = 1.0
     update_ms: float = 0.0
     k_slew: int = 0
@@ -2537,6 +2541,21 @@ def expert_pending_for_class(eq: ExpertQueue, cls: LatencyClass) -> int:
         return(eq.in_flight_tasks_hi + len(eq.hi))
     return(eq.in_flight_tasks_lo + len(eq.lo))
 
+def _adaptive_q_thresholds(adapt: AdaptiveKConfig, cls: LatencyClass) -> Tuple[int, int]:
+    q_low = int(adapt.q_low)
+    q_high = int(adapt.q_high)
+    if cls == LatencyClass.INTERACTIVE:
+        if int(adapt.q_low_interactive) >= 0:
+            q_low = int(adapt.q_low_interactive)
+        if int(adapt.q_high_interactive) >= 0:
+            q_high = int(adapt.q_high_interactive)
+    else:
+        if int(adapt.q_low_batch) >= 0:
+            q_low = int(adapt.q_low_batch)
+        if int(adapt.q_high_batch) >= 0:
+            q_high = int(adapt.q_high_batch)
+    return(q_low, q_high)
+
 
 def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
     if cls == LatencyClass.INTERACTIVE:
@@ -2544,15 +2563,16 @@ def choose_k(adapt: AdaptiveKConfig, cls: LatencyClass, pending: float) -> int:
     else:
         k_min, k_max = adapt.k_min_batch, adapt.k_max_batch
 
-    if pending <= float(adapt.q_low):
+    q_low, q_high = _adaptive_q_thresholds(adapt, cls)
+    if pending <= float(q_low):
         return(k_max)
-    if pending >= float(adapt.q_high):
+    if pending >= float(q_high):
         return(k_min)
 
-    span_q = (adapt.q_high - adapt.q_low)
+    span_q = (q_high - q_low)
     if span_q <= 0:
         return(_clamp_i32(k_min, k_min, k_max))
-    frac = (pending - float(adapt.q_low)) / float(span_q)
+    frac = (pending - float(q_low)) / float(span_q)
     k = int(round(float(k_max) - (frac * float(k_max - k_min))))
     return(_clamp_i32(k, k_min, k_max))
 
@@ -2978,6 +2998,24 @@ def run_simulation(
         raise ValueError("k_min_interactive must be <= k_max_interactive")
     if cfg.adaptive_k.k_min_batch > cfg.adaptive_k.k_max_batch:
         raise ValueError("k_min_batch must be <= k_max_batch")
+    if cfg.adaptive_k.q_low < 0 or cfg.adaptive_k.q_high < 0:
+        raise ValueError("q_low and q_high must be >= 0")
+    if cfg.adaptive_k.q_low > cfg.adaptive_k.q_high:
+        raise ValueError("q_low must be <= q_high")
+    for v, name in (
+        (cfg.adaptive_k.q_low_interactive, "q_low_interactive"),
+        (cfg.adaptive_k.q_high_interactive, "q_high_interactive"),
+        (cfg.adaptive_k.q_low_batch, "q_low_batch"),
+        (cfg.adaptive_k.q_high_batch, "q_high_batch"),
+    ):
+        if int(v) < -1:
+            raise ValueError(f"{name} must be >= 0 or -1")
+    for cls in (LatencyClass.INTERACTIVE, LatencyClass.BATCH):
+        q_low, q_high = _adaptive_q_thresholds(cfg.adaptive_k, cls)
+        if q_low < 0 or q_high < 0:
+            raise ValueError("adaptive_k q thresholds must be >= 0")
+        if q_low > q_high:
+            raise ValueError("adaptive_k q thresholds must satisfy q_low <= q_high")
     if cfg.adaptive_k.ema_alpha <= 0.0 or cfg.adaptive_k.ema_alpha > 1.0:
         raise ValueError("ema_alpha must be within (0,1]")
     if cfg.adaptive_k.update_ms < 0.0:
@@ -4477,6 +4515,10 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--k-max-batch", type=int, default=2)
     p.add_argument("--q-low", type=int, default=16)
     p.add_argument("--q-high", type=int, default=128)
+    p.add_argument("--q-low-interactive", type=int, default=-1, help="Adaptive-K control: optional interactive q_low override (>=0). -1 uses --q-low.")
+    p.add_argument("--q-high-interactive", type=int, default=-1, help="Adaptive-K control: optional interactive q_high override (>=0). -1 uses --q-high.")
+    p.add_argument("--q-low-batch", type=int, default=-1, help="Adaptive-K control: optional batch q_low override (>=0). -1 uses --q-low.")
+    p.add_argument("--q-high-batch", type=int, default=-1, help="Adaptive-K control: optional batch q_high override (>=0). -1 uses --q-high.")
     p.add_argument("--k-ema-alpha", type=float, default=1.0, help="Adaptive-K control: EMA smoothing alpha over pending signal ((0,1], 1 = no smoothing).")
     p.add_argument("--k-update-ms", type=float, default=0.0, help="Adaptive-K control: minimum time between K updates (0 = per-token).")
     p.add_argument("--k-slew", type=int, default=0, help="Adaptive-K control: max |delta K| per controller update (0 = unlimited).")
@@ -4742,6 +4784,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_max_batch=args.k_max_batch,
         q_low=args.q_low,
         q_high=args.q_high,
+        q_low_interactive=args.q_low_interactive,
+        q_high_interactive=args.q_high_interactive,
+        q_low_batch=args.q_low_batch,
+        q_high_batch=args.q_high_batch,
         ema_alpha=args.k_ema_alpha,
         update_ms=args.k_update_ms,
         k_slew=args.k_slew,

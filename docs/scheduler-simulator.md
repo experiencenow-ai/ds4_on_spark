@@ -110,8 +110,11 @@ produces one `K` per trace entry or one `K` per layer:
 
 Then:
 
-- if `max_pending <= --q-low` then `K = K_max`
-- if `max_pending >= --q-high` then `K = K_min`
+- define per-class thresholds:
+  - interactive uses `--q-low/--q-high` unless `--q-low-interactive/--q-high-interactive` are set
+  - batch uses `--q-low/--q-high` unless `--q-low-batch/--q-high-batch` are set
+- if `max_pending <= q_low(class)` then `K = K_max`
+- if `max_pending >= q_high(class)` then `K = K_min`
 - otherwise linearly interpolate between `K_max` and `K_min`
 
 ### Control Loop Knobs
@@ -506,7 +509,7 @@ The simulator prints a JSON object with:
 - `task_queue_wait_ms.{interactive,batch}`: queue wait before service starts (count/mean/p50/p95/p99/max)
 - `chosen_k.{interactive,batch}`: mean/min/max (over tokens)
   - also includes controller update/change counts when `--k-update-ms` / `--k-slew` are used
-- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates,class}`); useful for choosing `--q-low/--q-high`
+- `pending_signal.{interactive,batch}`: per-token distribution (count/mean/p50/p95/p99/max) of the controller's congestion signal (max pending depth, using `--k-signal {global,candidates,class}`); useful for choosing `--q-low/--q-high` (or per-class `--q-*-interactive` / `--q-*-batch`)
 - `effective_k.{interactive,batch}`: distribution of actually admitted tasks per admitted token (captures backpressure shortfalls)
 - `effective_k_total.{interactive,batch}`: like `effective_k`, but summed across all routing layers when `layers` is present
 - `tasks`: total + per-latency-class admitted/dropped/starved counters

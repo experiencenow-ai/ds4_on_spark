@@ -239,6 +239,24 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_adaptive_k_per_class_q_threshold_overrides(self) -> None:
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=10,
+            q_high=20,
+            q_low_interactive=0,
+            q_high_interactive=0,
+            q_low_batch=-1,
+            q_high_batch=-1,
+        )
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.INTERACTIVE, 0.0), 4)
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.INTERACTIVE, 5.0), 1)
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.BATCH, 5.0), 4)
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.BATCH, 25.0), 1)
+
     def test_admit_policy_least_pending_work_prefers_lower_pending_work(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), k=1, cost_scale=10.0),
