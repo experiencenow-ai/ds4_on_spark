@@ -5,6 +5,7 @@ Date: 2026-05-11
 This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
 - expert queue reservation (protect interactive under batch load)
+- backpressure units (tasks vs work when cost_scale is meaningful)
 - expert batching (microbatch batch-class work to amortize per-batch overhead)
 - adaptive K (throttle batch admission under congestion)
 - MTP draft/accept (speculative decode efficiency threshold + safety under overload)
@@ -37,6 +38,28 @@ Recommendation (synthetic): keep a **reservation-style mechanism** available in 
 Notes:
 
 - Tail latency comparisons are not meaningful when one variant drops a large fraction of interactive work; use drop/starvation and depth metrics first.
+
+## Backpressure Units (Tasks vs Work)
+
+Scenario: two-stream overload with a variable per-task `cost_scale` (lognormal; service time scales by `sum(cost_scale)` per started expert batch). Baseline uses `backpressure_units=tasks` but still tracks congestion in `pending_units=work`. Compare:
+
+- baseline: `backpressure_units=tasks`
+- variant: `backpressure_units=work`
+
+Key signals (from the report JSON):
+
+- `drop_frac_tokens_interactive`: `0.0` for both variants in this scenario
+- `token_p95_interactive_ms`:
+  - tasks backpressure: `12.97394817019374`
+  - work backpressure: `9.73394870584012`
+- `starved_task_queue_wait_ms_p95_batch`:
+  - tasks backpressure: `262.02197346359674`
+  - work backpressure: `164.73410103379825`
+- `service_slot_ms_per_output_token`:
+  - tasks backpressure: `1.932410530923247`
+  - work backpressure: `1.8696613553483787`
+
+Recommendation (synthetic): keep a **work-weighted backpressure** option available for real trace replay when `cost_scale` is meaningful (or derivable from `kv_tokens` / `decode_ms`). Do not default to work backpressure until real quantized-runtime traces show it improves starvation and interactive tail without an unacceptable drop/partial-admit tradeoff.
 
 ## Expert Batching (Per-Expert Microbatching)
 
@@ -178,6 +201,7 @@ Compare:
 Key signals to inspect (from the report JSON):
 
 - `starved_task_frac_batch` (batch starvation)
+- `starved_task_queue_wait_ms_p95_batch` (how severe the starvation is)
 - `token_p95_interactive_ms` (interactive tail cost)
 
 Recommendation (synthetic): keep **`hi_burst`** as a default anti-starvation safety valve; treat `promote_ms` as an opt-in knob that can reduce starvation further but may inflate interactive tail latency.

@@ -691,6 +691,69 @@ def _batch_starvation_knobs_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _backpressure_units_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 8000 if quick else 40000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=500.0,
+        batch_arrival_rate_tps=20000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+        synthetic_cost_scale_mode="lognormal",
+        synthetic_cost_scale_log_sigma=1.0,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=2,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="class",
+        pending_units="work",
+        backpressure_units="tasks",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("backpressure_work", {"backpressure_units": "work"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "backpressure_units",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "support_backpressure_units_work": True,
+                "reason": "Synthetic variable-cost traces: task-count backpressure can hide large work spikes; work-unit backpressure better matches service-time scaling when cost_scale is meaningful. Validate against real quantized-runtime traces before defaulting to work units.",
+            },
+        }
+    )
+
+
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
         "expert_queue_reserve": _expert_queue_reserve_scenario(quick),
@@ -701,6 +764,7 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
+        "backpressure_units": _backpressure_units_scenario(quick),
     }
     return({"scenarios": scenarios})
 
