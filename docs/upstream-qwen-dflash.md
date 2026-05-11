@@ -94,6 +94,28 @@ No Ling-2.6-flash DFlash drafter was found in the checked Z Lab/Hugging Face
 search results as of 2026-05-11. Keep Ling in the target-only comparison set and
 watch for a paired drafter later.
 
+## Qwen DFlash draft artifacts in GGUF (metadata-only)
+
+These are community GGUF conversions of the *official* Z Lab DFlash draft
+checkpoints (`z-lab/*-DFlash`). They are **draft-only** artifacts (not target
+models), and they are not evidence that llama.cpp supports DFlash. Track them as
+possible future single-Spark artifact candidates if/when a GGUF-capable runtime
+gains DFlash support or if we need to inspect draft weights outside vLLM.
+
+| Draft GGUF repo | Commit / SHA | License | Base model | GGUF bytes (sum) | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `spiritbuun/Qwen3.5-27B-DFlash-GGUF` | `3fa59f082214838d36d01d5d1276758efb1f3b3c` | `mit` | `z-lab/Qwen3.5-27B-DFlash` | 0.96 GiB | Single-file `dflash-draft-q4_k_m.gguf`; smallest Qwen 27B-class draft GGUF found so far. |
+| `spiritbuun/Qwen3.6-27B-DFlash-GGUF` | `5e4442a299deb9282b3dfe179de6e8330b19d9de` | `mit` | `z-lab/Qwen3.6-27B-DFlash` | 2.68 GiB | Two GGUFs: `dflash-draft-3.6-q8_0.gguf` + `dflash-draft-3.6-q4_k_m.gguf`. |
+| `Ardenzard/Qwen3.6-27B-DFlash-GGUF` | `0b249ff557371b11c582f2d9cf1b0e7d99c2f06d` | `mit` | `z-lab/Qwen3.6-27B-DFlash` | 10.18 GiB | Includes an F16 draft GGUF; keep as provenance unless a smaller quant is needed. |
+
+Metadata-only size checks used to populate this table:
+
+```bash
+./scripts/upstream_hf_api_report.sh spiritbuun/Qwen3.5-27B-DFlash-GGUF --sum-gguf
+./scripts/upstream_hf_api_report.sh spiritbuun/Qwen3.6-27B-DFlash-GGUF --sum-gguf
+./scripts/upstream_hf_api_report.sh Ardenzard/Qwen3.6-27B-DFlash-GGUF --sum-gguf
+```
+
 ## Public quality prior (model cards, metadata-only)
 
 These priors are taken from **vendor/author model cards** and are not directly comparable across different benchmark harnesses. Use them only to decide what to stage first; prefer local Spark quality runs for decisions.
