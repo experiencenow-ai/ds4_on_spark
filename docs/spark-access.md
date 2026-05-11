@@ -173,6 +173,14 @@ SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh spark1.local
 
 If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
 
+## Spark Ring (Spark0–Spark3) Readiness
+
+For the four-node ring bring-up, use:
+
+- Checklist: `docs/spark-ring-access-checklist.md`
+- Runbook: `docs/spark-ring-probe-runbook.md`
+- Script: `scripts/spark_ring_probe.sh` (compact, ring-focused)
+
 ## Diagnosis
 
 `ssh spark0@aitopatom-9ab9.local` reaches the Spark SSH server.
