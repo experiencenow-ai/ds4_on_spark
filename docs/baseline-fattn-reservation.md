@@ -3,11 +3,9 @@
 This note codifies a narrow probe for a **llama.cpp DeepSeek V4 Flash** failure mode where CUDA Flash Attention is **globally disabled** after a graph-reservation fallback on `__fattn__` nodes.
 
 Status note: this document and the companion probe scripts were rescued from
-the superseded baseline-runtime PR #27 as standalone artifacts. The current
-baseline wrapper may not yet invoke `LLAMA_SERVER_SWEEP=1` or
-`LLAMA_FATTN_PATCH_PROBE=1`; if those hooks are absent, copy the relevant script
-to Spark and run it with the same env vars, then attach the output JSON/Markdown
-to the baseline report.
+the superseded baseline-runtime PR #27 as standalone artifacts. The baseline
+wrapper now supports `LLAMA_SERVER_SWEEP=1` and `LLAMA_FATTN_PATCH_PROBE=1` and
+records the fetched artifacts under the local report directory.
 
 ## Symptom
 
