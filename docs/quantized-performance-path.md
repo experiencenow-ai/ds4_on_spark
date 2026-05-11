@@ -137,6 +137,18 @@ python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --tr
 
 If the same runtime trace also includes speculative-decoding comparator counters (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the report includes a separate `dflash_comparator` block and keeps those counters isolated from DeepSeek MTP acceptance assumptions.
 
+If the runtime trace omits `cost_scale` but includes `kv_tokens` or `decode_ms`, you can ask the ablation tool to derive a simple proxy cost_scale before replay (helps explore work-weighted pending/backpressure signals later):
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-derive-cost-scale kv_tokens_p50 > /tmp/runtime_mtp_ablation.json
+```
+
+If the trace includes a speculative-decoding comparator and you have (or want to assume) a draft-overhead multiplier for it, set `--dflash-draft-cost-scale` so the report’s `dflash_*_adjusted` metrics include that crude overhead model:
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --dflash-draft-cost-scale 0.25 > /tmp/runtime_mtp_ablation.json
+```
+
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
 
 ```bash

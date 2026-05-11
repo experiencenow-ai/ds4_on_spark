@@ -8,6 +8,7 @@ import json
 import sys
 
 from sim.scheduler import scheduler_sim
+from sim.scheduler import recommendations
 from sim.scheduler import trace_extract
 
 
@@ -238,6 +239,72 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    def test_trace_extract_runtime_separates_mtp_and_dflash_accept_counters(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0, 1]},
+            "mtp": {"accept_len": 2, "accepted": 1, "rejected": 0},
+            "dflash": {"accept_len": 4, "accepted": 3, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        if rec is None:
+            return
+        self.assertEqual(rec.get("mtp_accept_len"), 2)
+        self.assertEqual(rec.get("accepted_mtp"), 1)
+        self.assertEqual(rec.get("rejected_mtp"), 0)
+        self.assertEqual(rec.get("dflash_accept_len"), 4)
+        self.assertEqual(rec.get("accepted_dflash"), 3)
+        self.assertEqual(rec.get("rejected_dflash"), 0)
+
+    def test_trace_extract_does_not_treat_dflash_accept_len_as_mtp(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0]},
+            "dflash": {"accept_len": 3, "accepted": 2, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        if rec is None:
+            return
+        self.assertNotIn("mtp_accept_len", rec)
+        self.assertNotIn("accepted_mtp", rec)
+        self.assertNotIn("rejected_mtp", rec)
+        self.assertEqual(rec.get("dflash_accept_len"), 3)
+
+    def test_runtime_trace_ablation_applies_dflash_cost_scale_from_meta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                dflash_accept_len=3,
+                accepted_dflash=2,
+                rejected_dflash=0,
+            )
+        ]
+        out = recommendations.run_runtime_trace_mtp_ablation(
+            trace=trace,
+            trace_meta={"num_experts": 1, "dflash_draft_cost_scale": 0.5},
+            expert_queue_max=10_000,
+            expert_parallelism=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+        )
+        dflash = out.get("dflash_comparator")
+        self.assertIsInstance(dflash, dict)
+        if not isinstance(dflash, dict):
+            return
+        summary = dflash.get("summary")
+        self.assertIsInstance(summary, dict)
+        if not isinstance(summary, dict):
+            return
+        self.assertAlmostEqual(float(summary.get("dflash_draft_cost_scale", 0.0)), 0.5, places=6)
+        ratio_adj = float(dflash.get("service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0))
+        self.assertGreater(ratio_adj, 0.0)
 
     def test_summary_json_emits_per_layer_stage_skip_fractions(self) -> None:
         trace = [
