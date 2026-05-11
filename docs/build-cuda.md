@@ -31,6 +31,12 @@ For a concrete example of `DS4_CUDA_KERNEL_LAUNCH` usage, DS4 provides a tiny wr
 
 - `ds4_cuda_fill_u8(dst,value,bytes,stream)`
 
+## Device allocation patterns
+
+To avoid many small `cudaMalloc`/`cudaFree` calls in a hot path, DS4 provides a simple bump arena:
+
+- `ds4_cuda_arena_t` (`include/ds4/cuda_arena.h`, `src/ds4_cuda_arena.c`)
+
 ## Async helpers
 
 When sequencing copies or memset with a stream, use:
