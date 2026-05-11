@@ -83,8 +83,39 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(report.judge["decided_rate_ab"], 0.60)
         self.assertAlmostEqual(report.judge["label_balance_ab"], 0.0)
         self.assertAlmostEqual(report.judge["label_imbalance_ab"], 1.0)
+        self.assertEqual(int(report.judge.get("parse_valid_true", 0)), 0)
+        self.assertEqual(int(report.judge.get("parse_valid_false", 0)), 1)
+        self.assertAlmostEqual(float(report.judge.get("parse_valid_rate", 0.0)), 0.0)
+        self.assertEqual(int((report.judge.get("judge_in_tokens") or {}).get("count", 0)), 0)
+        self.assertEqual(int((report.judge.get("judge_out_tokens") or {}).get("count", 0)), 0)
+        self.assertEqual(int((report.judge.get("judge_latency_ms") or {}).get("count", 0)), 0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)
+        flagged_model_top = report.useful_novelty.get("flagged_rate_by_model_id_top", [])
+        self.assertGreaterEqual(len(flagged_model_top), 1)
+        self.assertEqual(flagged_model_top[0].get("model_id"), "bad-model")
+        self.assertAlmostEqual(float(flagged_model_top[0].get("flagged_rate", 0.0)), 1.0)
+
+        dup_model_top = report.duplicates.get("output_norm_dup_rate_by_model_id_top", [])
+        self.assertGreaterEqual(len(dup_model_top), 1)
+        by_model = {str(js.get("model_id", "")): js for js in dup_model_top}
+        self.assertIn("dsv4-flash", by_model)
+        self.assertAlmostEqual(float(by_model["dsv4-flash"].get("dup_rate", 1.0)), 0.0)
+
+    def test_judge_budget_metrics_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_judge_budget_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        self.assertEqual(report.totals["judge_pair_records"], 2)
+        self.assertEqual(int(report.judge.get("parse_valid_true", 0)), 2)
+        self.assertEqual(int(report.judge.get("parse_valid_false", 0)), 0)
+        self.assertAlmostEqual(float(report.judge.get("parse_valid_rate", 0.0)), 1.0)
+        self.assertEqual(int((report.judge.get("judge_in_tokens") or {}).get("count", 0)), 2)
+        self.assertEqual(int((report.judge.get("judge_out_tokens") or {}).get("count", 0)), 2)
+        self.assertEqual(int((report.judge.get("judge_latency_ms") or {}).get("count", 0)), 2)
+        self.assertGreaterEqual(float(report.judge.get("judge_out_budget_le_target_rate", 0.0)), 0.5)
 
     def test_recommendations_prioritize_unseen_pairs(self) -> None:
         root = _repo_root()
