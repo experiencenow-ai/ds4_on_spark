@@ -39,6 +39,7 @@ if [ "$RUN_LABEL" != "" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
+RUN_IDS_TSV="$OUT_DIR/model_run_ids.tsv"
 
 echo "writing report to: $OUT_DIR"
 
@@ -152,6 +153,7 @@ append_model_runs_csv()
     if [ "$RUN_LABEL" != "" ]; then
         run_id="$ts-$RUN_LABEL-$scope"
     fi
+    printf '%s\t%s\t%s\n' "$run_id" "$scope" "$model" >>"$RUN_IDS_TSV" 2>/dev/null || true
     python3 - "$MODEL_RUNS_CSV" "$model" "$run_id" "$scope" "$PUBLIC_QUALITY_PRIOR" "$PUBLIC_QUALITY_BASIS" "$PUBLIC_QUALITY_SOURCE" "$PASSED_TASKS" "$TOTAL_TASKS" "$LOCAL_QUALITY_SCORE" "$QUALITY_SCORE" "$summary_path" 2>/dev/null <<'PY' || true
 import csv
 import os
@@ -274,6 +276,81 @@ score_model_runs_csv()
     fi
     python3 "$repo_root/scripts/model_quality_speed_score.py" "$MODEL_RUNS_CSV" >"$OUT_DIR/model_quality_speed_score.md" 2>"$OUT_DIR/model_quality_speed_score_stderr.txt" || true
     python3 "$repo_root/scripts/model_quality_speed_score.py" "$MODEL_RUNS_CSV" --json >"$OUT_DIR/model_quality_speed_score.json" 2>>"$OUT_DIR/model_quality_speed_score_stderr.txt" || true
+}
+
+emit_scored_run_summaries()
+{
+    if [ "$MODEL_RUNS_CSV" = "" ] || [ ! -r "$OUT_DIR/model_quality_speed_score.json" ] || [ ! -r "$RUN_IDS_TSV" ]; then
+        return 0
+    fi
+    python3 - "$OUT_DIR/model_quality_speed_score.json" "$RUN_IDS_TSV" >"$OUT_DIR/model_quality_speed_scored_summary.txt" 2>/dev/null <<'PY' || true
+import json
+import sys
+
+score_json_path = sys.argv[1]
+run_ids_path = sys.argv[2]
+
+try:
+    rows = json.load(open(score_json_path, "r", encoding="utf-8"))
+except OSError:
+    rows = []
+except json.JSONDecodeError:
+    rows = []
+
+by_run = {}
+for r in rows:
+    rid = str(r.get("run_id", "") or "")
+    if rid:
+        by_run[rid] = r
+
+def _fmt(v):
+    if v is None:
+        return ""
+    try:
+        fv = float(v)
+    except Exception:
+        return str(v)
+    return f"{fv:.6f}"
+
+for raw_line in open(run_ids_path, "r", encoding="utf-8").read().splitlines():
+    parts = raw_line.split("\t")
+    run_id = parts[0].strip() if len(parts) > 0 else ""
+    scope = parts[1].strip() if len(parts) > 1 else ""
+    model = parts[2].strip() if len(parts) > 2 else ""
+    if not run_id:
+        continue
+    r = by_run.get(run_id, {})
+    print(f"== scored summary ({scope}) ==")
+    if model:
+        print(f"model={model}")
+    print(f"run_id={run_id}")
+    for k in [
+        "public_quality_prior",
+        "public_quality_basis",
+        "public_quality_source",
+        "passed_tasks",
+        "total_tasks",
+        "local_quality_score",
+        "quality_score",
+        "decode_tps",
+        "total_wall_s",
+        "output_tokens",
+        "quality_adjusted_decode_tps",
+        "correct_task_rate",
+        "correct_tasks_per_s",
+        "tokens_per_success",
+        "dominated_by",
+    ]:
+        v = r.get(k, "")
+        if v is None:
+            v = ""
+        if isinstance(v, (int, float)):
+            v = _fmt(v)
+        else:
+            v = str(v)
+        print(f"{k}={v}")
+    print("")
+PY
 }
 
 {
@@ -636,6 +713,7 @@ else
 fi
 
 score_model_runs_csv
+emit_scored_run_summaries
 
 if [ "$MODEL_RUNS_CSV" != "" ]; then
 {
@@ -644,12 +722,23 @@ if [ "$MODEL_RUNS_CSV" != "" ]; then
     echo "- model_runs_csv: $MODEL_RUNS_CSV"
     echo "- score_md: $OUT_DIR/model_quality_speed_score.md"
     echo "- score_json: $OUT_DIR/model_quality_speed_score.json"
+    if [ -r "$OUT_DIR/model_quality_speed_scored_summary.txt" ]; then
+        echo "- scored_summary: $OUT_DIR/model_quality_speed_scored_summary.txt"
+    fi
     echo
     if [ -r "$OUT_DIR/model_quality_speed_score.md" ]; then
         echo "Summary (best-effort):"
         echo
         echo '```'
         sed -n '1,20p' "$OUT_DIR/model_quality_speed_score.md" || true
+        echo '```'
+        echo
+    fi
+    if [ -r "$OUT_DIR/model_quality_speed_scored_summary.txt" ]; then
+        echo "Scored summary (best-effort):"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/model_quality_speed_scored_summary.txt" || true
         echo '```'
         echo
     fi

@@ -71,6 +71,7 @@ quality/speed scoring artifacts derived from the full CSV:
 
 - `model_quality_speed_score.md` (markdown table)
 - `model_quality_speed_score.json` (machine-readable rows, including Pareto `dominated_by`)
+- `model_quality_speed_scored_summary.txt` (key=value block per run_id, for copy/paste into baseline reports)
 
 To run a quantized V4 Flash smoke test through a V4-capable llama.cpp-compatible
 binary that already exists on Spark:
