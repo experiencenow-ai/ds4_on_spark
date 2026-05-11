@@ -108,6 +108,43 @@ known_hosts_for_target()
 	return 0
 }
 
+bw_annotate_dd_line()
+{
+	line="$1"
+	bytes=""
+	secs=""
+	bps=""
+	if printf "%s\n" "$line" | grep -q "bytes transferred in"; then
+		bytes="$(printf "%s\n" "$line" | awk "{ print \$1 }" | head -n 1 || true)"
+		secs="$(printf "%s\n" "$line" | awk "{
+			for (i=1; i<=NF; i++)
+			{
+				if ( \$i == \"in\" )
+				{
+					print \$(i+1);
+					exit;
+				}
+			}
+		}" | head -n 1 || true)"
+		bps="$(printf "%s\n" "$line" | sed -nE 's/.*\\(([0-9]+)[[:space:]]+bytes\\/sec\\).*/\\1/p' | head -n 1 || true)"
+	fi
+	if [ "$bytes" = "" ] && printf "%s\n" "$line" | grep -q " copied,"; then
+		bytes="$(printf "%s\n" "$line" | awk "{ print \$1 }" | head -n 1 || true)"
+		secs="$(printf "%s\n" "$line" | sed -nE 's/.*copied,[[:space:]]*([0-9.]+)[[:space:]]*s,.*/\\1/p' | head -n 1 || true)"
+		if [ "$bytes" != "" ] && [ "$secs" != "" ]; then
+			bps="$(awk -v b="$bytes" -v s="$secs" 'BEGIN{ if (s > 0) printf "%.0f", (b / s); }')"
+		fi
+	fi
+	if [ "$bps" != "" ]; then
+		mib_s="$(awk -v v="$bps" 'BEGIN{ printf "%.1f", (v / 1048576.0); }')"
+		mbit_s="$(awk -v v="$bps" 'BEGIN{ printf "%.1f", ((v * 8.0) / 1000000.0); }')"
+		printf "%s [MiB/s=%s Mbit/s=%s]" "$line" "$mib_s" "$mbit_s"
+	else
+		printf "%s" "$line"
+	fi
+	return 0
+}
+
 tmp="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
@@ -165,7 +202,8 @@ REMOTE
 			dd_line="$(cat "$dd_line_tmp" 2>/dev/null || true)"
 			bytes="$(printf "%s\n" "$dd_line" | awk '{ print $1 }' || true)"
 			if [ "$bytes" != "" ] && [ "$bytes" != "0" ]; then
-				echo "$dd_line"
+				bw_annotate_dd_line "$dd_line"
+				echo
 			else
 				[ "$dd_line" != "" ] && echo "$dd_line"
 				ssh_err_line="$(head -n 2 "$ssh_err" 2>/dev/null | tr '\n' ' ' | sed -E 's/[[:space:]]+$//' || true)"
@@ -179,9 +217,10 @@ REMOTE
 
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "up" ]; then
 			printf "up (mac->remote) %s MiB: " "$BW_MB"
-			if dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>/dev/null
-			then
-				:
+			up_line="$(dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>/dev/null || true)"
+			if [ "$up_line" != "" ]; then
+				bw_annotate_dd_line "$up_line"
+				echo
 			else
 				echo "failed"
 				ssh_fail=$((ssh_fail + 1))
