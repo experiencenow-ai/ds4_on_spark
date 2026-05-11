@@ -45,6 +45,21 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(b"\n")
 	return h.hexdigest()
 
+def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+	prefix_to_keys: dict[str, list[str]] = {}
+	for k in weight_keys:
+		prefix = k.split(".", 1)[0]
+		prefix_to_keys.setdefault(prefix, []).append(k)
+
+	out: dict[str, dict] = {}
+	for prefix in sorted(prefix_to_keys.keys()):
+		keys = sorted(prefix_to_keys[prefix])
+		out[prefix] = {
+			"count": int(len(keys)),
+			"keys_sha256": sha256_lines(keys),
+		}
+	return out
+
 def main() -> int:
 	failures: list[Failure] = []
 
@@ -280,6 +295,12 @@ def main() -> int:
 					failures.append(Failure(19, f"contract summary checkpoint_index.weight_map_num_tensors mismatch (expected {len(weight_keys)}): {contract_summary}"))
 				if chk.get("weight_map_keys_sha256") != expected_key_sha:
 					failures.append(Failure(27, f"contract summary checkpoint_index.weight_map_keys_sha256 mismatch (expected {expected_key_sha}): {contract_summary}"))
+				expected_prefix = build_weight_key_prefix_fingerprints(sorted(weight_keys))
+				got_prefix = chk.get("weight_map_prefix_fingerprints", None)
+				if not isinstance(got_prefix, dict):
+					failures.append(Failure(91, f"contract summary checkpoint_index.weight_map_prefix_fingerprints must be an object: {contract_summary}"))
+				elif got_prefix != expected_prefix:
+					failures.append(Failure(92, f"contract summary checkpoint_index.weight_map_prefix_fingerprints mismatch (expected prefixes {sorted(expected_prefix.keys())}): {contract_summary}"))
 
 				tk = summary.get("tensor_keys", {})
 				if tk.get("mtp_embed_present") is not False:

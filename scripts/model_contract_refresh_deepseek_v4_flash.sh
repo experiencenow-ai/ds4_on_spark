@@ -28,6 +28,7 @@ jq -r '.quantization.inference_config | "  expert_dtype=" + (.expert_dtype|tostr
 jq -r '.quantization.linear_tensor_contract | "  fp8_block_size=" + (.fp8.block_size|tostring) + " fp8_scale_dtype=" + (.fp8.scale_dtype|tostring) + " fp4_block_size=" + (.fp4.fp4_block_size|tostring) + " fp4_scale_dtype=" + (.fp4.scale_dtype|tostring)' "$SUMMARY_PATH"
 echo "Checkpoint keyset:"
 jq -r '.checkpoint_index | "  weight_map_num_tensors=" + (.weight_map_num_tensors|tostring) + " weight_map_keys_sha256=" + .weight_map_keys_sha256' "$SUMMARY_PATH"
+jq -r '.checkpoint_index.weight_map_prefix_fingerprints as $p | "  prefix_fingerprints.prefixes=" + ($p|keys|sort|join(",")) + " mtp.keys_sha256=" + ($p.mtp.keys_sha256 // "n/a")' "$SUMMARY_PATH"
 echo "MTP:"
 jq -r '.mtp | "  n_mtp_layers=" + (.n_mtp_layers|tostring) + " namespace_prefix=" + .namespace_prefix + " compress_ratio_rule=" + .compress_ratio_rule' "$SUMMARY_PATH"
 jq -r '.tensor_keys | "  mtp_present=" + (.mtp0.present|tostring) + " mtp_tensor_key_count=" + (.mtp0.tensor_key_count|tostring)' "$SUMMARY_PATH"

@@ -43,6 +43,21 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(b"\n")
 	return h.hexdigest()
 
+def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+	prefix_to_keys: dict[str, list[str]] = {}
+	for k in weight_keys:
+		prefix = k.split(".", 1)[0]
+		prefix_to_keys.setdefault(prefix, []).append(k)
+
+	out: dict[str, dict] = {}
+	for prefix in sorted(prefix_to_keys.keys()):
+		keys = sorted(prefix_to_keys[prefix])
+		out[prefix] = {
+			"count": int(len(keys)),
+			"keys_sha256": sha256_lines(keys),
+		}
+	return out
+
 def build_oracle_contract() -> dict:
 	return {
 		"encoding_oracle": {
@@ -969,6 +984,7 @@ def build_contract() -> dict:
 	weight_map_files = [str(v) for v in weight_map.values()]
 	weight_map_file_counts = Counter(weight_map_files)
 	weight_map_keys_sha256 = sha256_lines(weight_keys)
+	weight_map_prefix_fingerprints = build_weight_key_prefix_fingerprints(weight_keys)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1230,6 +1246,7 @@ def build_contract() -> dict:
 				"checkpoint_index": {
 					"weight_map_num_tensors": int(len(weight_keys)),
 					"weight_map_keys_sha256": weight_map_keys_sha256,
+					"weight_map_prefix_fingerprints": weight_map_prefix_fingerprints,
 					"weight_map_unique_files": int(len(weight_map_file_counts)),
 					"weight_map_file_counts": dict(weight_map_file_counts),
 					"metadata": idx.get("metadata", {}),
