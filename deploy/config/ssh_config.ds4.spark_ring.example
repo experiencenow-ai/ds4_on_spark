@@ -1,0 +1,18 @@
+# Example ssh_config for Spark0..Spark3 (Mac-side convenience).
+#
+# Usage:
+#   cp deploy/config/ssh_config.ds4.spark_ring.example /private/tmp/ds4_ssh_config
+#   ssh -F /private/tmp/ds4_ssh_config spark0@<spark0-host> hostname
+#   SSH_OPTS='-F /private/tmp/ds4_ssh_config' ./scripts/ops_stage_deploy_assets.sh spark0@<spark0-host> spark0
+#
+# Notes:
+#   - Keeps host keys out of ~/.ssh/known_hosts for reproducible ops runs.
+#   - Edit/enable IdentityFile if you want passwordless key auth.
+
+Host spark0 spark0.local spark1 spark1.local spark2 spark2.local spark3 spark3.local
+    BatchMode yes
+    ConnectTimeout 10
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile /private/tmp/ds4_spark_known_hosts
+    #IdentityFile /private/tmp/ds4_spark_ed25519
+

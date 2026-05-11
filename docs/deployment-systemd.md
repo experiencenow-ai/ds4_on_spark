@@ -7,6 +7,8 @@ Templates live in `deploy/systemd/` and are meant to be copied to:
 They are **examples**. Adjust flags and sandboxing once the runtime interface is
 stable.
 
+Optional developer path: user-service templates exist under `deploy/systemd-user/` (see `docs/deployment-systemd-user.md`).
+
 Optional (recommended): validate deploy assets + ops scripts before staging:
 
 ```bash
@@ -18,6 +20,12 @@ If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids in
 ```bash
 ./scripts/ops_stage_spark0_spark1.sh spark0@<spark0-host> spark1@<spark1-host>
 # optional: add --mesh-check and/or --tcp <port>
+```
+
+If you're staging Spark0..Spark3, prefer the ring wrapper (optional mesh check and ring/full topology):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
 ```
 
 ## Validation Helpers
@@ -38,6 +46,8 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 - `ds4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails)
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly); triggers `ds4-support-bundle@%i.service` on failure
 - `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`); triggers `ds4-support-bundle@%i.service` on failure
+- Optional: `ds4-preflight-tp4@.service`: oneshot TP=4 readiness checks (see `docs/ops-tp4-readiness.md`)
+- Optional: `ds4-preflight-tp4-strict@.service`: strict TP=4 readiness gating (see `docs/ops-tp4-readiness.md`)
 - `ds4-support-bundle@.service`: oneshot support bundle collector (safe; see `docs/ops-support-bundle.md`); wired via `OnFailure=`
 - Optional: `ds4-preflight@.timer`: periodic non-destructive preflight
 - Optional: `ds4-preflight-strict@.timer`: periodic strict preflight
