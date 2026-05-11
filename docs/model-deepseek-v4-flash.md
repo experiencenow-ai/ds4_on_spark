@@ -48,6 +48,12 @@ Refresh + verify the pinned contract:
 scripts/model_contract_refresh_deepseek_v4_flash.sh
 ```
 
+When interpreting quantized single-Spark external-runtime results, prefer the contract-aware inspectors:
+
+```bash
+python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf --json
+```
+
 ## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280
