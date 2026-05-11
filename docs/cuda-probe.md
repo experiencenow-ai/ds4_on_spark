@@ -29,7 +29,7 @@ This builds and runs only:
 - `cuda_sm121_dlto_probe` (device LTO (`-dlto`) smoke test for `sm_121`)
 - `cuda_sm121_arch_report` (prints runtime device CC plus compiled `__CUDA_ARCH__` from an `sm_121` build; expected `1210`)
 - `cuda_sm121_arch_list_report` (prints compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined; used to sanity-check which virtual-arch list `nvcc` believes it is compiling for)
-- `cuda_sm121a_arch_list_report` / `cuda_sm121f_arch_list_report` (optional; built+run only when `nvcc --list-gpu-code` advertises `sm_121a` / `sm_121f`; captures whether CUDA defines `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` for those variant arch spellings)
+- `cuda_sm121a_arch_list_report` / `cuda_sm121f_arch_list_report` (optional; best-effort build+run to observe CUDA 13 “variant arch spelling” behavior; may succeed even when `nvcc --list-gpu-code` does not advertise `sm_121a` / `sm_121f`)
 
 To skip the separate-compilation and device-LTO link gates (faster / toolchain-only check), run:
 
