@@ -710,7 +710,13 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--json", action="store_true", help="Print JSON only (default).")
     p.add_argument("--quick", action="store_true", help="Run a reduced-size scenario set (intended for unit tests).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Optional: run runtime-trace MTP ablation on this JSONL trace path ('-' for stdin) instead of synthetic scenarios.")
-    p.add_argument("--trace-input-format", type=str, default="runtime", help="Trace parser input format for --trace-jsonl (default: runtime).")
+    p.add_argument(
+        "--trace-input-format",
+        type=str,
+        default="runtime",
+        choices=("strict", "runtime"),
+        help="Trace parser input format for --trace-jsonl: strict expects the simulator contract; runtime maps common runtime-field aliases (and with --trace-non-route skip scans non-JSON lines for embedded JSON objects).",
+    )
     p.add_argument("--trace-non-route", type=str, default="skip", help="When --trace-jsonl contains non-route records, skip or error (default: skip).")
     p.add_argument("--trace-default-cls", type=str, default="", help="When --trace-jsonl records omit latency class, force all extracted records to this cls (interactive or batch).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace time field mode: t_ms (default) or dt_ms.")
