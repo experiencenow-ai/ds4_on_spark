@@ -49,25 +49,40 @@ On Spark0:
 ```bash
 export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
 export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
-sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
+
+# Recommended: isolate outputs per-run and capture a log
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_LOG=~/centaur-smoke/v73/ring_sim_spark12/run/"$RING_RUN_ID"/ring_sim.log
+sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh
+
+# Alternative: pipe to tee (no RING_RUN_ID isolation)
+# sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
 ```
 
 For exact command capture in the log, add `export RING_TRACE=1` before running.
 
-This creates three Centaur roots under:
+This creates three Centaur roots under `.../`:
 
-- `~/centaur-smoke/v73/ring_sim_spark12/controller`
-- `~/centaur-smoke/v73/ring_sim_spark12/spark0`
-- `~/centaur-smoke/v73/ring_sim_spark12/spark1`
-- `~/centaur-smoke/v73/ring_sim_spark12/spark2`
+- `.../controller`
+- `.../spark0`
+- `.../spark1`
+- `.../spark2`
 
 And then exercises, for Spark1/Spark2:
 
 - `hyor-sync-init` with left/right peer roots
 - `hyor-ring-step --scope metadata`
 - `hyor-ring-step --scope effective`
-- `hyor-sync-effective` manifests to `~/centaur-smoke/v73/ring_sim_spark12/effective_manifests/hyor_effective_manifest_spark{1,2}.json`
-- `hyor-sync-apply` materialization to `~/centaur-smoke/v73/ring_sim_spark12/effective/spark{1,2}`
+- `hyor-sync-effective` manifests to `.../effective_manifests/hyor_effective_manifest_spark{1,2}.json`
+- `hyor-sync-apply` materialization to `.../effective/spark{1,2}`
+
+If `RING_RUN_ID` is set, the `...` prefix above is:
+
+- `~/centaur-smoke/v73/ring_sim_spark12/run/<run_id>/`
+
+Otherwise it is:
+
+- `~/centaur-smoke/v73/ring_sim_spark12/`
 
 ## What to record for “ring readiness”
 
@@ -113,6 +128,7 @@ ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/
 Notes:
 
 - For exact command capture, add `export RING_TRACE=1` on the orchestrator host before running.
+- Recommended: add `export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"` and `export RING_LOG=~/centaur-smoke/v73/ring_rsync_spark12/run/"$RING_RUN_ID"/ring_rsync.log` on the orchestrator host so logs/manifests are per-run.
 - Use a dedicated `remote_base_dir` (3rd arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
 - This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2, but it is not a shared-root deployment model.
 

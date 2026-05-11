@@ -14,6 +14,8 @@ Environment:
   CENTAUR_ROOT     Extracted Centaur dir containing centaur.py (required)
   CENTAUR_VENV     Centaur venv dir containing bin/python3 (required)
   RING_WORKDIR     Base workdir (default: ~/centaur-smoke/v73/ring_sim_spark12)
+  RING_RUN_ID      Optional run id to avoid clobbering prior runs (writes under RING_WORKDIR/run/<run_id>)
+  RING_LOG         Optional log path (duplicates stdout/stderr via tee)
   NODE_TYPE        Node type label (default: default)
   RING_TRACE       Set to 1 to enable shell tracing (prints exact commands)
 
@@ -48,8 +50,39 @@ if [ ! -x "$py" ]; then
 	exit 2
 fi
 
-workdir="${RING_WORKDIR:-$HOME/centaur-smoke/v73/ring_sim_spark12}"
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
+base_workdir="${RING_WORKDIR:-$HOME/centaur-smoke/v73/ring_sim_spark12}"
+run_id="${RING_RUN_ID:-}"
+if [ "$run_id" = "" ]; then
+	workdir="$base_workdir"
+else
+	workdir="$base_workdir/run/$run_id"
+fi
 node_type="${NODE_TYPE:-default}"
+
+log="${RING_LOG:-}"
+if [ "$log" != "" ]; then
+	need_cmd tee
+	need_cmd mkfifo
+	need_cmd dirname
+	mkdir -p "$(dirname -- "$log")"
+	fifo="$workdir/.centaur_ring_sim_log.fifo"
+	rm -f "$fifo"
+	mkdir -p "$workdir"
+	mkfifo "$fifo"
+	tee "$log" <"$fifo" &
+	teepid="$!"
+	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	exec >"$fifo" 2>&1
+fi
 
 if [ "${RING_TRACE:-0}" = "1" ]; then
 	set -x
