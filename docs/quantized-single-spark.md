@@ -232,6 +232,10 @@ read-only source probes in the baseline runner:
 `scripts/run_quantized_single_spark.sh` enables both probes by default. Set
 either env var to `0` to skip.
 
+The wrapper also defaults to `SKIP_MTP_SIDECAR=1` and `SKIP_VLLM=1` so a
+milestone run only does: GGUF metadata inspection (optional), llama.cpp run, and
+the read-only patch probes. Set either to `0` to include those extra probes.
+
 The probes scan `LLAMA_DIR` on Spark. If your `LLAMA_CLI` looks like
 `.../build*/bin/llama-cli`, the milestone wrapper infers `LLAMA_DIR` from that
 path. Otherwise, set `LLAMA_DIR=/abs/path/to/llama.cpp/tree` (Spark path) in the
