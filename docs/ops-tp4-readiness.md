@@ -60,3 +60,21 @@ journalctl -t ds4-preflight-tp4-spark0 -n 200 --no-pager
 
 If strict preflight fails and you have `ds4-support-bundle@.service` installed, systemd triggers a non-destructive support bundle. See `docs/ops-support-bundle.md`.
 
+## Optional: Periodic TP=4 Preflight (Systemd Timer)
+
+If you want readiness checks to run automatically on boot and periodically after,
+install and enable the timer template (human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-tp4@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-tp4@spark0.timer
+```
+
+Strict variant (fails non-zero on missing/invalid TP=4 inputs; human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-tp4-strict@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-tp4-strict@spark0.timer
+```
