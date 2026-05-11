@@ -2608,13 +2608,17 @@ def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue]
         ranked = [(experts[e].pending(), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _p, _i, e in ranked])
+    if admit_policy == "least_pending_work":
+        ranked = [(float(experts[e].pending_work()), i, e) for i, e in enumerate(candidates)]
+        ranked.sort()
+        return([e for _p, _i, e in ranked])
     if admit_policy == "score_desc":
         if scores is None:
             raise ValueError("admit_policy score_desc requires per-candidate scores")
         ranked = [(-float(scores[i]), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _s, _i, e in ranked])
-    raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
+    raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
 
 
 def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
@@ -2952,8 +2956,8 @@ def run_simulation(
         raise ValueError("k_scope must be 'token' or 'layer'")
 
     admit_policy = cfg.admit_policy.strip().lower()
-    if admit_policy not in ("ordered", "least_pending", "score_desc"):
-        raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
+    if admit_policy not in ("ordered", "least_pending", "least_pending_work", "score_desc"):
+        raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
 
     if cfg.pending_hist_max_depth < 0:
         raise ValueError("pending_hist_max_depth must be >= 0")
@@ -4473,7 +4477,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
     )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
-    p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
+    p.add_argument(
+        "--admit-policy",
+        type=str,
+        default="ordered",
+        help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts by task count), least_pending_work (pick least pending experts by pending_work), or score_desc (order candidates by descending trace scores).",
+    )
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
 
     p.add_argument("--compare", action="append", default=[], help="Run labeled variant(s) vs the baseline config. Format: label:JSON, with optional keys like mtp_draft_len or adaptive_k.q_high.")
