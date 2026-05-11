@@ -635,6 +635,11 @@ def main() -> int:
 				else:
 					expected = {
 						"num_nextn_predict_layers": "mtp.n_mtp_layers",
+						"layer_types": "attention_schedule.transformers_main_layer_types",
+						"compress_rates": "attention_schedule.transformers_compress_rates",
+						"compress_rate_csa": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
+						"compress_rate_hca": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
+						"mlp_layer_types": "moe.transformers_mlp_layer_types",
 						"expert_dtype": "quantization.inference_config.expert_dtype",
 						"quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
 						"quantization_config.fmt": "quantization.config_quantization_config.fmt",
