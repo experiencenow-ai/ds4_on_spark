@@ -66,6 +66,8 @@ section to make it harder to forget which quality numbers were used for a compar
 
 For vLLM runs, you can also set `SMOKE_EVAL=1` (and optionally `SMOKE_MAX_TOKENS_PER_TASK=64`) to run a tiny deterministic smoke-eval task set that emits `passed_tasks`, `total_tasks`, and `local_quality_score` into the remote baseline summary block; the baseline wrapper will ingest those values into `MODEL_RUNS_CSV` when the corresponding env vars are not set. See `docs/baseline-smoke-eval.md`.
 
+When the remote baseline summary includes speculative-decoding metadata (for example from vLLM DFlash runs), the wrapper also records `speculative_method`, `speculative_draft_model`, and `speculative_num_speculative_tokens` into `MODEL_RUNS_CSV`.
+
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
 
