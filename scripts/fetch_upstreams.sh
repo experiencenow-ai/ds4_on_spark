@@ -24,6 +24,7 @@ Targets:
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_hf_pr14  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_hf_pr16  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_flash_hf_pr18  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_fp8_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   dflash_code
@@ -244,6 +245,11 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/deepseek-ai/DeepSeek-V4-Flash"; ref="refs/pr/16"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_flash_hf_pr16" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash" "${ref}" "${expected}"
+			;;
+		deepseek_v4_flash_hf_pr18)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/deepseek-ai/DeepSeek-V4-Flash"; ref="refs/pr/18"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "deepseek_v4_flash_hf_pr18" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash" "${ref}" "${expected}"
 			;;
 		deepseek_v4_flash_base_hf)
 			# HF metadata/config only: do not download weights.
