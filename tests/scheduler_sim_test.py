@@ -257,6 +257,17 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(hist.get("counts"), [1, 1, 1])
         self.assertEqual(hist.get("total"), 3)
         self.assertEqual(hist.get("invalid"), 1)
+        derived = summary.get("mtp_accept_derived")
+        self.assertIsNotNone(derived)
+        if not isinstance(derived, dict):
+            return
+        self.assertEqual(derived.get("draft_len"), 2)
+        self.assertEqual(derived.get("total"), 3)
+        self.assertAlmostEqual(float(derived.get("mean_accept_len", 0.0)), 2.0, places=6)
+        self.assertAlmostEqual(float(derived.get("mean_accepted_tokens", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(derived.get("accept_rate", 0.0)), 0.5, places=6)
+        self.assertAlmostEqual(float(derived.get("reject_frac", 0.0)), (1.0 / 3.0), places=6)
+        self.assertAlmostEqual(float(derived.get("bonus_frac", 0.0)), (1.0 / 3.0), places=6)
 
     def test_trace_extract_runtime_separates_mtp_and_dflash_accept_counters(self) -> None:
         obj = {

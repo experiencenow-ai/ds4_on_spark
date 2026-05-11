@@ -2371,6 +2371,50 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             }
         )
 
+    def accept_len_derived_rates(accept_lens_in: Sequence[float], draft_len: int) -> Optional[Dict[str, object]]:
+        hist = accept_len_histogram(accept_lens_in, draft_len)
+        if hist is None:
+            return(None)
+        if not isinstance(hist.get("counts"), list):
+            return(None)
+        counts = hist.get("counts")
+        if not isinstance(counts, list):
+            return(None)
+        dl = int(hist.get("draft_len", 0))
+        if dl <= 0:
+            return(None)
+        total = int(hist.get("total", 0))
+        if total <= 0:
+            return(None)
+
+        accept_tokens = 0
+        accept_len_sum = 0
+        for i, c in enumerate(counts):
+            if not isinstance(c, int):
+                return(None)
+            if c <= 0:
+                continue
+            al = (i + 1)
+            accept_len_sum += (al * int(c))
+            accept_tokens += ((al - 1) * int(c))
+
+        mean_accept_len = float(accept_len_sum) / float(total)
+        mean_accepted_tokens = float(accept_tokens) / float(total)
+        accept_rate = mean_accepted_tokens / float(dl)
+        reject_frac = float(counts[0]) / float(total) if len(counts) >= 1 else 0.0
+        bonus_frac = float(counts[dl]) / float(total) if len(counts) >= (dl + 1) else 0.0
+        return(
+            {
+                "draft_len": int(dl),
+                "total": int(total),
+                "mean_accept_len": float(mean_accept_len),
+                "mean_accepted_tokens": float(mean_accepted_tokens),
+                "accept_rate": float(accept_rate),
+                "reject_frac": float(reject_frac),
+                "bonus_frac": float(bonus_frac),
+            }
+        )
+
     num_i = 0
     num_b = 0
     t_ms: List[float] = []
@@ -2515,11 +2559,17 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
                 hist = accept_len_histogram(accept_lens, int(inferred_mtp_draft_len))
         if hist is not None:
             out["mtp_accept_len_hist"] = hist
+            rates = accept_len_derived_rates(accept_lens, int(hist.get("draft_len", 0)))
+            if rates is not None:
+                out["mtp_accept_derived"] = rates
     if len(dflash_accept_lens) != 0:
         out["dflash_accept_len_derived"] = summarize(dflash_accept_lens)
         hist = accept_len_histogram(dflash_accept_lens, int(dflash_draft_len))
         if hist is not None:
             out["dflash_accept_len_hist"] = hist
+            rates = accept_len_derived_rates(dflash_accept_lens, int(hist.get("draft_len", 0)))
+            if rates is not None:
+                out["dflash_accept_derived"] = rates
     if len(decode_ms) != 0:
         out["decode_ms"] = summarize(decode_ms)
     if len(token_index_vals) != 0:
