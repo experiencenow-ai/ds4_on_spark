@@ -186,14 +186,14 @@ if [ -r /etc/os-release ]; then
 fi
 echo
 echo "== cpu =="
-if [ "$spark_probe_facts" = "1" ]; then
+if [ "$spark_probe_facts" = "1" ] || [ "$spark_probe_summary" = "1" ]; then
 	lscpu 2>/dev/null | grep -E "^(Architecture:|Byte Order:|CPU\\(s\\):|Model name:|Thread\\(s\\) per core:|Core\\(s\\) per socket:|Socket\\(s\\):|NUMA node\\(s\\):)" || lscpu || true
 else
 	lscpu || true
 fi
 echo
 echo "== memory =="
-if [ "$spark_probe_facts" = "1" ]; then
+if [ "$spark_probe_facts" = "1" ] || [ "$spark_probe_summary" = "1" ]; then
 	free -h 2>/dev/null | awk '"'"'NR==1 || $1=="Mem:" || $1=="Swap:" {print}'"'"' || free -h || true
 else
 	free -h || true
