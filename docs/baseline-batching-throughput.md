@@ -3,10 +3,9 @@
 Goal: for DeepSeek V4 Flash-family runs on Spark0, identify which batching level maximizes **aggregate** throughput under load.
 
 Status note: this document and the companion sweep scripts were rescued from
-the superseded baseline-runtime PR #27 as standalone artifacts. The current
-baseline wrapper may not yet invoke `LLAMA_SERVER_THROUGHPUT_SWEEP=1` directly;
-if that hook is absent, copy the script to Spark and run it with the same env
-vars shown below, then attach the output directory to the baseline report.
+the superseded baseline-runtime PR #27 as standalone artifacts. The baseline
+wrapper now supports `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and will fetch a tarball
+of the sweep output into the local report directory.
 
 This complements the prompt-size sweep (`scripts/benchmark_llamacpp_server_sweep.py`) by treating these knobs as **first-class** experiment variables:
 
