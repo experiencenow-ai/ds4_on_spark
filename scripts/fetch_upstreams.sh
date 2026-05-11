@@ -28,6 +28,9 @@ Targets:
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_fp8_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   dflash_code
+  aeon_qwen36_dflash_ops
+  aeon_vllm_dflash_ops
+  aeon_qwen36_mmtp_xs_hf                  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_30b_a3b_instruct_fp8_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_30b_a3b_dflash_hf        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_35b_a3b_fp8_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -323,6 +326,18 @@ fetch_one()
 		dflash_code)
 			upstream="z-lab/dflash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "dflash_code" "https://github.com/z-lab/dflash.git" "${ref}" "${expected}"
+			;;
+		aeon_qwen36_dflash_ops)
+			upstream="AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "aeon_qwen36_dflash_ops" "https://github.com/AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-DFlash.git" "${ref}" "${expected}"
+			;;
+		aeon_vllm_dflash_ops)
+			upstream="AEON-7/vllm-dflash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "aeon_vllm_dflash_ops" "https://github.com/AEON-7/vllm-dflash.git" "${ref}" "${expected}"
+			;;
+		aeon_qwen36_mmtp_xs_hf)
+			upstream="huggingface.co/AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-Multimodal-NVFP4-MTP-XS"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "aeon_qwen36_mmtp_xs_hf" "https://huggingface.co/AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-Multimodal-NVFP4-MTP-XS" "${ref}" "${expected}"
 			;;
 		qwen3_coder_30b_a3b_instruct_fp8_hf)
 			# HF metadata/config only: do not download weights.

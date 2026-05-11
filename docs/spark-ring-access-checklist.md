@@ -1,8 +1,6 @@
-# Spark Ring Access Checklist (Spark0..Spark2)
+# Spark Ring Access Checklist (Ordered Spark Inventory)
 
-This is a **human-run** access + probe checklist for a 3-node Spark ring. It is safe-by-default (no `sudo`, no service changes, no writes outside `/private/tmp` on the Mac).
-
-If you have 4 nodes (Spark0..Spark3), use the same checklist but add Spark3 to every matrix and command line.
+This is a **human-run** access + probe checklist for the current Spark ring. It is safe-by-default (no `sudo`, no service changes, no writes outside `/private/tmp` on the Mac). Treat the ordered host list as the inventory; when a Spark is added, append it to the list used by the probe commands.
 
 ## 1) Hostnames + Resolution
 

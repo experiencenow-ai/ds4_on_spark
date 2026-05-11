@@ -1,4 +1,4 @@
-# Ops: SSH + Network Runbook (Spark0/Spark1/Spark2 + Spark Ring)
+# Ops: SSH + Network Runbook (Ordered Spark Inventory)
 
 This is a **human-run** checklist for keeping Spark connectivity stable.
 
@@ -69,25 +69,23 @@ If you want to run a mesh check *and* stage deploy assets in one flow, use:
 ./scripts/ops_stage_spark0_spark1.sh --mesh-check spark0@<spark0-host> spark1@<spark1-host>
 ```
 
-For Spark0/Spark1/Spark2 (TP=3 prep):
+For any ordered Spark ring, pass every active host in rank order. Add or remove
+hosts only in this command line/inventory, not inside the helper script:
 
 ```bash
-./scripts/ops_spark012_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
-./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
 ```
 
-For Spark0..Spark3:
+Legacy fixed-name wrappers remain for older docs/scripts, but they delegate to
+the inventory-driven helpers above.
 
-```bash
-./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
-./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
-```
-
-Optional: add a best-effort TCP probe to the peer (only meaningful if something is listening):
+Optional: add a best-effort TCP probe to each ring peer (only meaningful if
+something is listening):
 
 ```bash
 SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts' \
-./scripts/ops_spark01_mesh_check.sh --tcp 29500 --tcp 9090 spark0@<spark0-host> spark1@<spark1-host>
+./scripts/ops_spark_ring_mesh_check.sh --topology ring --tcp 29500 --tcp 9090 spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
 ```
 
 ## Peer SSH From DS4 Preflight (Optional)

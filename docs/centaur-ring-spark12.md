@@ -93,7 +93,7 @@ After the smoke, you should have:
 - `~/centaur-smoke/v73/run/centaur_spec_impl_v73/centaur.py`
 - `~/centaur-smoke/v73/run/venv/bin/python3`
 
-## Run the Spark0-local ring sim (Spark0/1/2)
+## Run the Spark0-local ring sim (example: Spark0/1/2)
 
 On Spark0:
 
@@ -104,10 +104,12 @@ export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
 # Recommended: isolate outputs per-run and capture a log
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 export RING_LOG=~/centaur-smoke/v73/ring_sim_spark12/run/"$RING_RUN_ID"/ring_sim.log
-sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh
+SPARK_NODE_COUNT=3 RING_WORKDIR=~/centaur-smoke/v73/ring_sim_spark12 \
+  sh ./scripts/centaur_spark_ring_sim_v73.sh
 
 # Alternative: pipe to tee (no RING_RUN_ID isolation)
-# sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
+# SPARK_NODE_COUNT=3 RING_WORKDIR=~/centaur-smoke/v73/ring_sim_spark12 \
+#   sh ./scripts/centaur_spark_ring_sim_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
 ```
 
 For exact command capture in the log, add `export RING_TRACE=1` before running.
@@ -165,7 +167,7 @@ Until one of those exists, treat the ring sim as “API/format readiness”, not
 
 If Spark1/Spark2 hardware exists but there is still **no shared filesystem**, use:
 
-- `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
+- `scripts/centaur_spark_ring_rsync_v73.sh`
 
 This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/2) and:
 
@@ -196,14 +198,14 @@ export RING_TRACE=1
 Alternative (direct SSH stream, no wrapper):
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host>" < ./scripts/centaur_spark_ring_rsync_spark12_v73.sh
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host>" < ./scripts/centaur_spark_ring_rsync_v73.sh
 ```
 
 Notes:
 
 - For exact command capture, add `export RING_TRACE=1` on the orchestrator host before running.
 - Recommended: add `export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"` and `export RING_LOG=~/centaur-smoke/v73/ring_rsync_spark12/run/"$RING_RUN_ID"/ring_rsync.log` on the orchestrator host so logs/manifests are per-run.
-- Use a dedicated `remote_base_dir` (3rd arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
+- Use `--remote-base <dir>` if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
 - This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2, but it is not a shared-root deployment model.
 
 After a wrapper run, you can fetch a small artifact bundle (log + manifests) back to your Mac:

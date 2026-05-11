@@ -1,10 +1,21 @@
-# Spark Ring Ops Checklist (Spark0..Spark3)
+# Example Spark Ring Ops Checklist (Spark0..Spark3)
+
+Prefer inventory-driven helpers for new work:
+
+- `scripts/ops_spark_ring_mesh_check.sh <spark0> <spark1> [spark2 ...]`
+- `scripts/ops_stage_spark_ring.sh <spark0> <spark1> [spark2 ...]`
+
+The current 3-node checklist remains:
+
+- `docs/spark-ring-ops-checklist-tp3.md`
+
+This file is retained as a 4-node example, not as a source of truth for the active inventory.
 
 This is a **human-run** checklist for operating a 4-node ring layout safely.
 
 ## Bring-up (Once)
 
-- Pick stable hostnames for Spark0..Spark3 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark_ring.example`).
+- Pick stable hostnames for the example four-node ring and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark_ring.example`).
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring ...` (stages TP=4 env variants via `DS4_ENV_VARIANT=tp4`)
 - Install staged templates on each Spark:

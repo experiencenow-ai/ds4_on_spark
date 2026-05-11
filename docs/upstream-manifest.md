@@ -26,6 +26,9 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | DFlash (code) | `z-lab/dflash` | `refs/heads/main` | `94e4abc5e0c31b67bc1a9d30f1cc34ece28a8756` | MIT | DFlash block diffusion speculative decoding reference; model cards pin vLLM/SGLang PR refs; see `docs/upstream-qwen-dflash.md`. |
 | vLLM (DFlash PR ref) | `vllm-project/vllm` | `refs/pull/40898/head` | `23002d3f368a5a24641301bc71e4ae15dae89a24` | Apache-2.0 | Z Lab DFlash model cards reference this PR ref for speculative decoding support; pin it separately from release tags for reproducible inspection. |
 | SGLang (DFlash PR ref) | `sgl-project/sglang` | `refs/pull/20547/head` | `e67a0d488d905661e621342912874bc7893f1d94` | Apache-2.0 | Z Lab DFlash model cards reference this PR ref; pin it separately from the release-tag SGLang row for reproducible inspection. |
+| AEON Qwen3.6 27B DFlash ops | `AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-DFlash` | `refs/heads/main` | `67be1e0e8450a8f1ba68793563a1266ab7197363` | Apache-2.0 | DGX Spark Qwen3.6 27B XS + DFlash deployment/benchmark reference; no weights; see `docs/upstream-aeon-qwen36-dflash.md`. |
+| AEON vLLM DFlash ops | `AEON-7/vllm-dflash` | `refs/heads/main` | `4efa0929a01f06a96fe7a10bd74652b1e2380f19` | Apache-2.0 | Older Qwen3.5 27B DFlash Spark deployment/benchmark reference with useful acceptance/concurrency notes; no weights; see `docs/upstream-aeon-qwen36-dflash.md`. |
+| AEON Qwen3.6 27B MTP-XS (HF) | `huggingface.co/AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-Multimodal-NVFP4-MTP-XS` | `refs/heads/main` | `6394b93fa092dcbfbf09e952f56f30337509d17c` | Apache-2.0 | Spark-sized Qwen3.6 27B XS modelopt body used by AEON's DFlash recipe (19.15 GiB safetensors); do not download without human approval. |
 | GPT-OSS-20B (HF) | `huggingface.co/openai/gpt-oss-20b` | `refs/heads/main` | `6cee5e81ee83917806bbde320786a8fb61efebee` | Apache-2.0 | Open target with official Z Lab DFlash drafter (25.63 GiB safetensors); HF repo also includes large LFS blobs (e.g. `metal/model.bin`); do not download without human approval; see `docs/upstream-dflash.md`. |
 | GPT-OSS-20B-DFlash (HF) | `huggingface.co/z-lab/gpt-oss-20b-DFlash` | `refs/heads/main` | `d53f6551543204c859e8bbaaddbd15d11b447af9` | MIT | Paired DFlash draft checkpoint (1.46 GiB safetensors); must match the exact target; do not download weights without human approval; see `docs/upstream-dflash.md`. |
 | Llama-3.1-8B-Instruct (HF) | `huggingface.co/meta-llama/Llama-3.1-8B-Instruct` | `refs/heads/main` | `0e9e39f249a16976918f6564b8830bc894c89659` | llama3.1 | Small target with an official Z Lab DFlash drafter (14.96 GiB safetensors); repo also includes large LFS “original” blobs; do not download weights without human approval; see `docs/upstream-dflash.md`. |
@@ -164,6 +167,7 @@ For sharded GGUF repos, use the grouped report to sum shard sizes:
 - [`docs/upstream-single-spark-v4-flash.md`](upstream-single-spark-v4-flash.md)
 - [`docs/upstream-spark-v4-bringup.md`](upstream-spark-v4-bringup.md)
 - [`docs/upstream-qwen-dflash.md`](upstream-qwen-dflash.md)
+- [`docs/upstream-aeon-qwen36-dflash.md`](upstream-aeon-qwen36-dflash.md)
 - [`docs/upstream-dflash.md`](upstream-dflash.md)
 - [`docs/upstream-ling-2.6-flash.md`](upstream-ling-2.6-flash.md)
 - [`docs/model-quality-speed.md`](model-quality-speed.md)
