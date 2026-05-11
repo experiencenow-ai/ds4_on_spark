@@ -20,8 +20,8 @@ Environment:
 
 Examples:
   ./scripts/mac_spark_discovery.sh
-  REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
-  DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+  REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local
+  DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local
   ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
   ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local
 EOF
@@ -37,7 +37,7 @@ esac
 if [ "$#" -gt 0 ]; then
 	targets="$*"
 else
-	targets="aitopatom-9ab9.local spark1.local"
+	targets="aitopatom-9ab9.local spark1.local spark2.local"
 fi
 
 tmp="$(mktemp /private/tmp/ds4_mac_spark_discovery.XXXXXX)"

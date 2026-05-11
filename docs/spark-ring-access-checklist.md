@@ -64,9 +64,9 @@ Optional: write down the matrix (fill with redacted values as needed):
 - Use ping RTT as the minimum viable latency check:
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
 - The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
-- Optional (no installs): quick Mac→Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
-  - `dd if=/dev/zero bs=1m count=256 2>/dev/null | ssh -o BatchMode=yes spark0@aitopatom-9ab9.local 'cat >/dev/null'`
-  - Use `/usr/bin/time -p ...` around the command if you want a simple MB/s estimate; do not run this in tight loops.
+- Optional (no installs): quick Mac<->Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
+  - `BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true`
+  - The probe reports one-way best-effort throughput for `down` (remote→mac) and `up` (mac→remote). Keep `BW_MB` small (e.g. `8` or `16`) and do not run this in tight loops.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
 - If `iperf3` is already present on all nodes, you can do a quick throughput check (do not commit raw IPs; summarize results or redact manually):
   - On receiver: `iperf3 -s`
