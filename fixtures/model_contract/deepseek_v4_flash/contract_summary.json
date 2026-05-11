@@ -249,6 +249,7 @@
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_mask_value": -1,
     "update_semantics": {
+      "compressed_segment_view_expr": "self.compressor.kv_cache = self.kv_cache[:, win:]",
       "compressor_decode_should_compress_expr": "should_compress = (start_pos + 1) % self.compress_ratio == 0",
       "compressor_decode_write_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
       "compressor_freqs_cis_decode_expr": "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)",
@@ -257,7 +258,10 @@
       "compressor_prefill_write_expr": "self.kv_cache[:bsz, :seqlen // ratio] = kv",
       "decode_compressed_update_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
       "decode_sliding_ring_update_expr": "self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
-      "prefill_sliding_wrap_expr": "cutoff = seqlen % win"
+      "prefill_sliding_wrap_expr": "cutoff = seqlen % win",
+      "prefill_sliding_write_seqlen_gt_win_expr": "self.kv_cache[:bsz, cutoff: win], self.kv_cache[:bsz, :cutoff] = kv[:, -win:].split([win - cutoff, cutoff], dim=1)",
+      "prefill_sliding_write_seqlen_le_win_expr": "self.kv_cache[:bsz, :seqlen] = kv",
+      "topk_offset_expr": "offset = kv.size(1) if start_pos == 0 else win"
     },
     "window_size": 128
   },

@@ -216,6 +216,21 @@ def main() -> int:
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
 					failures.append(Failure(17, f"contract summary missing decode sliding-ring update expression containing 'start_pos % win': {contract_summary}"))
+				prefill_wrap_expr = cache_update.get("prefill_sliding_wrap_expr")
+				if not (isinstance(prefill_wrap_expr, str) and "cutoff = seqlen % win" in prefill_wrap_expr):
+					failures.append(Failure(91, f"contract summary missing prefill sliding-window wrap expression containing 'cutoff = seqlen % win': {contract_summary}"))
+				prefill_le_expr = cache_update.get("prefill_sliding_write_seqlen_le_win_expr")
+				if not (isinstance(prefill_le_expr, str) and ":seqlen] = kv" in prefill_le_expr):
+					failures.append(Failure(92, f"contract summary missing prefill sliding-window write expression for seqlen<=win containing ':seqlen] = kv': {contract_summary}"))
+				prefill_gt_expr = cache_update.get("prefill_sliding_write_seqlen_gt_win_expr")
+				if not (isinstance(prefill_gt_expr, str) and "kv[:, -win:].split" in prefill_gt_expr and "win - cutoff" in prefill_gt_expr):
+					failures.append(Failure(93, f"contract summary missing prefill sliding-window wrap write expression for seqlen>win (expected kv[:, -win:].split([...])): {contract_summary}"))
+				seg_view_expr = cache_update.get("compressed_segment_view_expr")
+				if not (isinstance(seg_view_expr, str) and "self.compressor.kv_cache = self.kv_cache[:, win:]" in seg_view_expr):
+					failures.append(Failure(94, f"contract summary missing compressor compressed-segment view expression 'self.compressor.kv_cache = self.kv_cache[:, win:]': {contract_summary}"))
+				topk_offset_expr = cache_update.get("topk_offset_expr")
+				if not (isinstance(topk_offset_expr, str) and "offset = kv.size(1) if start_pos == 0 else win" in topk_offset_expr):
+					failures.append(Failure(95, f"contract summary missing top-k offset selection expression 'offset = kv.size(1) if start_pos == 0 else win': {contract_summary}"))
 				compress_gate_prefill = cache_update.get("compressor_prefill_should_compress_expr")
 				if not (isinstance(compress_gate_prefill, str) and "should_compress = seqlen >= ratio" in compress_gate_prefill):
 					failures.append(Failure(19, f"contract summary missing compressor prefill gate expression 'should_compress = seqlen >= ratio': {contract_summary}"))

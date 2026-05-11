@@ -456,6 +456,10 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	kv_decode_ring = find_first_line_containing(text, "start_pos % win")
 	kv_decode_compress = find_first_line_containing(text, "start_pos // ratio")
 	kv_prefill_wrap = find_first_line_containing(text, "cutoff = seqlen % win")
+	kv_prefill_write_le_win = find_first_line_containing(text, "self.kv_cache[:bsz, :seqlen] = kv")
+	kv_prefill_write_gt_win = find_first_line_containing(text, "self.kv_cache[:bsz, cutoff: win], self.kv_cache[:bsz, :cutoff] = kv[:, -win:].split([win - cutoff, cutoff], dim=1)")
+	kv_compressed_segment_view = find_first_line_containing(text, "self.compressor.kv_cache = self.kv_cache[:, win:]")
+	topk_offset_expr = find_first_line_containing(text, "offset = kv.size(1) if start_pos == 0 else win")
 	compress_prefill_gate = find_first_line_containing(text, "should_compress = seqlen >= ratio")
 	compress_decode_gate = find_first_line_containing(text, "should_compress = (start_pos + 1) % self.compress_ratio == 0")
 	compress_prefill_write = find_first_line_containing(text, "self.kv_cache[:bsz, :seqlen // ratio] = kv")
@@ -477,6 +481,10 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"decode_sliding_ring_update_expr": kv_decode_ring,
 			"decode_compressed_update_expr": kv_decode_compress,
 			"prefill_sliding_wrap_expr": kv_prefill_wrap,
+			"prefill_sliding_write_seqlen_le_win_expr": kv_prefill_write_le_win,
+			"prefill_sliding_write_seqlen_gt_win_expr": kv_prefill_write_gt_win,
+			"compressed_segment_view_expr": kv_compressed_segment_view,
+			"topk_offset_expr": topk_offset_expr,
 			"compressor_prefill_should_compress_expr": compress_prefill_gate,
 			"compressor_decode_should_compress_expr": compress_decode_gate,
 			"compressor_prefill_write_expr": compress_prefill_write,

@@ -258,6 +258,7 @@ Runtime update rules:
     - RoPE is applied to the compressed KV using `freqs_cis` slices derived from the upstream expressions (recorded in the contract summary; see below).
 
 These compressor/update semantics are extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.update_semantics.*` so DS4 can enforce them without re-parsing upstream Python.
+In particular, the contract pins the exact prefill sliding-window ring-buffer writes for both `seqlen <= window_size` and the wrap case (`prefill_sliding_write_seqlen_{le,gt}_win_expr`), plus the compressor’s view of the compressed segment (`compressed_segment_view_expr`) and the prefill/decode top-k offset selection (`topk_offset_expr`).
 
 Sparse attention index selection:
 
