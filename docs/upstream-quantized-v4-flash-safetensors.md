@@ -45,5 +45,8 @@ Note: the config’s `expert_dtype` is `fp8` (this should be treated as a runtim
 
 ## Runtime status (single Spark)
 
-- **Plausible by size** for Spark0-class memory (≈82 GiB artifact), but **blocked** until we pin a runtime that can load this specific `quantization_config` safetensors layout.
-- This project should not attempt to load or download these weights without explicit human approval.
+- **Plausible by size** for Spark0-class memory (≈82 GiB artifact).
+- Intended runtime (pinned upstream): `Entrpi/ds4-spark-vllm` (see `docs/upstream-spark-v4-bringup.md` + `docs/upstream-manifest.md`).
+  - The model card states it must be served via vLLM with `--quantization deepseek_v4_hybrid_iq2` (registered by the `ds4_hybrid_quant` overlay/plugin from `Entrpi/ds4-spark-vllm`).
+  - The model card also calls out `VLLM_TRITON_MLA_SPARSE_MATMUL_DECODE=0` as correctness-critical on SM121 for layers with `compress_ratio>=4`.
+- This repo should still treat the checkpoint as a **human-approved fixture only** (no automated downloads or local load attempts).

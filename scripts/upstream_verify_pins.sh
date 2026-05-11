@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_MD="${ROOT_DIR}/docs/upstream-manifest.md"
+LS_REMOTE_TIMEOUT_SEC="${UPSTREAM_LS_REMOTE_TIMEOUT_SEC:-20}"
 
 usage()
 {
@@ -11,6 +12,9 @@ Usage: ./scripts/upstream_verify_pins.sh
 
 Verifies that the pinned refs/commits in docs/upstream-manifest.md still resolve
 upstream (without cloning).
+
+Environment:
+  UPSTREAM_LS_REMOTE_TIMEOUT_SEC  Per-upstream `git ls-remote` timeout (default: 20).
 EOF
 }
 
@@ -48,9 +52,11 @@ check_ref()
 		return 0
 	fi
 
-	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+	local out
+	out="$(GIT_TERMINAL_PROMPT=0 timeout "${LS_REMOTE_TIMEOUT_SEC}s" git ls-remote "${url}" "${ref}" 2>/dev/null || true)"
+	got="$(awk '{print $1}' <<<"${out}" | head -n 1 || true)"
 	if [ -z "${got}" ]; then
-		echo "FAIL ${name}: ref not found: ${ref}" >&2
+		echo "FAIL ${name}: ls-remote timed out or ref missing: ${ref}" >&2
 		return 1
 	fi
 
@@ -58,7 +64,8 @@ check_ref()
 		# Annotated tags return the tag object hash unless dereferenced; always
 		# prefer the dereferenced commit when available.
 		local deref
-		deref="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
+		out="$(GIT_TERMINAL_PROMPT=0 timeout "${LS_REMOTE_TIMEOUT_SEC}s" git ls-remote "${url}" "${ref}^{}" 2>/dev/null || true)"
+		deref="$(awk '{print $1}' <<<"${out}" | head -n 1 || true)"
 		if [ -n "${deref}" ]; then
 			got="${deref}"
 		fi

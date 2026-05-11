@@ -26,6 +26,8 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - License: MIT (see upstream `LICENSE`)
 - What it is (from upstream README, summarized):
   - A Spark-focused bring-up that runs DeepSeek-V4-Flash through a **vLLM** stack while applying ds4-style hybrid quantization ideas (as opposed to the pure llama.cpp GGUF path).
+  - The bring-up targets the quantized safetensors checkpoint `bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target` and registers vLLM `--quantization deepseek_v4_hybrid_iq2` via the `ds4_hybrid_quant` overlay/plugin.
+  - Upstream model card calls out a correctness knob for SM121: `VLLM_TRITON_MLA_SPARSE_MATMUL_DECODE=0` (switches away from the default triton compressed-decode kernel path for `compress_ratio>=4` layers).
 - Why we track it:
   - Useful as a “vLLM-first” reference when a GGUF path is not viable, and as a cross-check against ds4/llama.cpp behavior for the same prompts.
 - Risk notes:
