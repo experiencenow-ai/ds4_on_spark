@@ -5,9 +5,15 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 with_kernel_tiny="${WITH_KERNEL_TINY:-1}"
+with_cmake_minimal="${WITH_CMAKE_MINIMAL:-1}"
 
 echo "== cuda probe capability: nvcc minimal (no repo transfer) =="
 "$repo_root/scripts/cuda_probe_nvcc_minimal_spark0.sh" "$target"
+
+if [ "${with_cmake_minimal}" = "1" ]; then
+	echo "== cuda probe capability: cmake minimal (no repo transfer) =="
+	"$repo_root/scripts/cuda_probe_cmake_minimal_spark0.sh" "$target"
+fi
 
 echo "== cuda probe capability: tiny build+run =="
 "$repo_root/scripts/cuda_probe_tiny_spark0.sh" "$target"
