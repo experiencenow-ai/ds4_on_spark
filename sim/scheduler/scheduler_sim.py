@@ -2338,6 +2338,83 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             }
         )
 
+    def accept_len_histogram(accept_lens_in: Sequence[float], draft_len: int) -> Optional[Dict[str, object]]:
+        if len(accept_lens_in) == 0 or int(draft_len) <= 0:
+            return(None)
+        dl = int(draft_len)
+        counts: List[int] = [0 for _ in range(dl + 1)]
+        invalid = 0
+        for v in accept_lens_in:
+            if isinstance(v, (int, float)) == False:
+                invalid += 1
+                continue
+            al = int(v)
+            if float(al) != float(v):
+                invalid += 1
+                continue
+            if al < 1 or al > (dl + 1):
+                invalid += 1
+                continue
+            counts[al - 1] += 1
+        total = int(sum(counts))
+        prob: List[float] = [0.0 for _ in range(dl + 1)]
+        if total > 0:
+            prob = [float(c) / float(total) for c in counts]
+        return(
+            {
+                "draft_len": int(dl),
+                "total": int(total),
+                "invalid": int(invalid),
+                "accept_len_values": [i + 1 for i in range(dl + 1)],
+                "counts": counts,
+                "prob": prob,
+            }
+        )
+
+    def accept_len_derived_rates(accept_lens_in: Sequence[float], draft_len: int) -> Optional[Dict[str, object]]:
+        hist = accept_len_histogram(accept_lens_in, draft_len)
+        if hist is None:
+            return(None)
+        if not isinstance(hist.get("counts"), list):
+            return(None)
+        counts = hist.get("counts")
+        if not isinstance(counts, list):
+            return(None)
+        dl = int(hist.get("draft_len", 0))
+        if dl <= 0:
+            return(None)
+        total = int(hist.get("total", 0))
+        if total <= 0:
+            return(None)
+
+        accept_tokens = 0
+        accept_len_sum = 0
+        for i, c in enumerate(counts):
+            if not isinstance(c, int):
+                return(None)
+            if c <= 0:
+                continue
+            al = (i + 1)
+            accept_len_sum += (al * int(c))
+            accept_tokens += ((al - 1) * int(c))
+
+        mean_accept_len = float(accept_len_sum) / float(total)
+        mean_accepted_tokens = float(accept_tokens) / float(total)
+        accept_rate = mean_accepted_tokens / float(dl)
+        reject_frac = float(counts[0]) / float(total) if len(counts) >= 1 else 0.0
+        bonus_frac = float(counts[dl]) / float(total) if len(counts) >= (dl + 1) else 0.0
+        return(
+            {
+                "draft_len": int(dl),
+                "total": int(total),
+                "mean_accept_len": float(mean_accept_len),
+                "mean_accepted_tokens": float(mean_accepted_tokens),
+                "accept_rate": float(accept_rate),
+                "reject_frac": float(reject_frac),
+                "bonus_frac": float(bonus_frac),
+            }
+        )
+
     num_i = 0
     num_b = 0
     t_ms: List[float] = []
@@ -2475,8 +2552,24 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["k"] = summarize(k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
+        hist = accept_len_histogram(accept_lens, int(mtp_draft_len))
+        if hist is None and meta is not None:
+            inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+            if inferred_mtp_draft_len is not None:
+                hist = accept_len_histogram(accept_lens, int(inferred_mtp_draft_len))
+        if hist is not None:
+            out["mtp_accept_len_hist"] = hist
+            rates = accept_len_derived_rates(accept_lens, int(hist.get("draft_len", 0)))
+            if rates is not None:
+                out["mtp_accept_derived"] = rates
     if len(dflash_accept_lens) != 0:
         out["dflash_accept_len_derived"] = summarize(dflash_accept_lens)
+        hist = accept_len_histogram(dflash_accept_lens, int(dflash_draft_len))
+        if hist is not None:
+            out["dflash_accept_len_hist"] = hist
+            rates = accept_len_derived_rates(dflash_accept_lens, int(hist.get("draft_len", 0)))
+            if rates is not None:
+                out["dflash_accept_derived"] = rates
     if len(decode_ms) != 0:
         out["decode_ms"] = summarize(decode_ms)
     if len(token_index_vals) != 0:
@@ -2531,7 +2624,22 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
             gamma = g
         elif gamma != g:
             return(None)
-    return(gamma)
+    if gamma is not None:
+        return(gamma)
+
+    max_accept_len = 0
+    for r in trace:
+        if r.mtp_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.mtp_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+
+    # mtp_accept_len is the output-token count per verify step (>=1). A draft length of gamma implies:
+    #   1 <= accept_len <= (gamma + 1)
+    # If a trace only includes accept_len=1 (all rejects), gamma is underdetermined; pick gamma=1 so we can
+    # still run an MTP-on replay without violating bounds.
+    return(max(1, int(max_accept_len) - 1))
 
 
 def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
@@ -2549,7 +2657,17 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
             gamma = g
         elif gamma != g:
             return(None)
-    return(gamma)
+    if gamma is not None:
+        return(gamma)
+
+    max_accept_len = 0
+    for r in trace:
+        if r.dflash_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.dflash_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+    return(max(1, int(max_accept_len) - 1))
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -4849,7 +4967,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--sla-interactive-ms", type=float, default=0.0, help="Token SLA: count interactive tokens with latency > this (0 = disabled).")
     p.add_argument("--sla-batch-ms", type=float, default=0.0, help="Token SLA: count batch tokens with latency > this (0 = disabled).")
     p.add_argument("--sim-seed", type=int, default=1, help="Simulation seed (used for MTP accept/reject sampling).")
-    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (requires accepted_mtp+rejected_mtp or meta.mtp_draft_len).")
+    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (uses mtp_accept_len, accepted_mtp+rejected_mtp, or meta.mtp_draft_len).")
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
     p.add_argument(
@@ -4868,7 +4986,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
-    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from meta.dflash_draft_len or consistent accepted_dflash+rejected_dflash.")
+    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from dflash_accept_len, meta.dflash_draft_len, or consistent accepted_dflash+rejected_dflash.")
     p.add_argument(
         "--dflash-draft-cost-scale",
         type=float,

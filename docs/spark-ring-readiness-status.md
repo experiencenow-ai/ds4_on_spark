@@ -1,14 +1,14 @@
 # Spark Ring Readiness Status (Spark0..Spark2)
 
-Status as of `2026-05-11T2124Z` (UTC).
+Status as of `2026-05-11T2326Z` (UTC).
 
 ## Latest commit-safe snapshots
 
-- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-11T2124Z.md`
-- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-11T2124Z.md`
-- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-11T2124Z.md`
-- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T2124Z.md`
-- Spark0 facts-only probe: `docs/spark0-probe-facts-2026-05-11T2124Z.md`
+- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-11T2326Z.md`
+- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-11T2326Z.md`
+- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-11T2326Z.md`
+- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T2326Z.md`
+- Spark0 facts-only probe: `docs/spark0-probe-facts-2026-05-11T2326Z.md`
 
 ## Ring readiness matrix
 
@@ -30,10 +30,7 @@ From the Mac repo root:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local > "docs/spark-ring-mac-discovery-${stamp}.md"
-(SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
-(SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true) > "docs/spark-ring-spark1-probe-facts-${stamp}.md"
-(SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark2.local || true) > "docs/spark-ring-spark2-probe-facts-${stamp}.md"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
 ```
 
 Then refresh MTU + bandwidth snapshots if needed:

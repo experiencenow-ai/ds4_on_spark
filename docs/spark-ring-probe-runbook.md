@@ -10,6 +10,22 @@ This runbook produces **commit-safe** (redacted) snapshots for ring bring-up. It
 - Do not write Spark host keys into `~/.ssh/known_hosts`:
   - Prefer `SPARK_KNOWN_HOSTS_PER_HOST=1` (per-target files under `/private/tmp`).
 
+## Quickstart: one-shot snapshot set (recommended)
+
+This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts):
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+If you only have Spark0 online, pass a single target:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local
+```
+
 ## 1) Mac-side discovery snapshot
 
 ```bash

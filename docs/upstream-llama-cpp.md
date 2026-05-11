@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/tags/b9109`
-- Commit: `68e7ea3eabef29a3e222681c81e0cc7ed070c09d`
+- Ref: `refs/tags/b9110`
+- Commit: `ef22b3e4ac9444d1dca1c44164861e0317b5579d`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -52,7 +52,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 
 - Repo: `https://github.com/ssweens/llama.cpp-deepseek-v4`
 - Ref: `refs/heads/main`
-- Commit: `bb648b31e137a44b1ee72907e20ad8fb1f21d644`
+- Commit: `1815221b810bea459e7f0b7e65d9df3f01b54bbd`
 - License: MIT
 - Notes: Fork required by `ssweens/DeepSeek-V4-Flash-GGUF-YMMV` (IQ1_M + IQ2_XXS GGUFs); upstream README claims it is tested on CPU/CUDA/ROCm/Vulkan and supports pipeline-parallel runs.
 
@@ -60,7 +60,7 @@ DeepSeek-V4-Flash support is not merged into the pinned `ggml-org/llama.cpp` rel
 
 - Repo: `https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark`
 - Ref: `refs/heads/master`
-- Commit: `9222e55c13c965ccb7e9104fda58796edd84a732`
+- Commit: `94073e2e2c1f7df4fa69642f39a8e7c69228e53b`
 - License: MIT
 - Notes: Community fork reportedly running DeepSeek-V4-Flash IQ2XXS GGUF on a single DGX Spark/GB10; validate performance and memory headroom on the actual Spark target.
   - Provenance (report, 2026-05-05): `https://forums.developer.nvidia.com/t/deepseek-v4-flash-iq2xxs-on-a-single-gb10/368970`
@@ -73,15 +73,15 @@ Spark/CUDA llama.cpp forks may reject the sidecar if treated as a normal model (
 
 - `docs/llamacpp-mtp-sidecar-probe.md`
 
-Patch asset (for the pinned Spark fork):
+Patch asset (prepared against older pinned commit `9222e55`; refresh if needed for `94073e2`):
 
 - `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
 
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9109/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9109/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9109/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 
