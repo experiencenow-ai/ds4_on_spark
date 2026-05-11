@@ -85,7 +85,10 @@ The entropy tools also accept the compact record envelope used by the judge-ELO 
   "model_b": "ling-2.6",
   "parse_valid": true,
   "winner": "A",
-  "margin": 2
+  "margin": 2,
+  "judge_model": "judge.v1",
+  "tokens": { "judge_in": 128, "judge_out": 64 },
+  "latency_ms": { "judge": 1500 }
 }
 ```
 
@@ -94,6 +97,11 @@ Mapping:
 - `pair_id` -> `item_id`
 - `model_a` / `model_b` -> `a_model_id` / `b_model_id`
 - `parse_valid=false` -> `label="invalid"`
+
+Optional but recommended:
+
+- `task_id`, `task_family`, `prompt_template_id` (improves slice reports; disagreement-by-task is otherwise coarse)
+- `tokens.judge_in` / `tokens.judge_out` and `latency_ms.judge` (tracks judge budget compliance + latency distribution)
 
 ## Entropy metrics
 
@@ -111,10 +119,15 @@ The scripts compute:
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
   - The report also includes `tie_rate` and `invalid_rate` to help debug judge stability.
+- **Judge budget / stability stats** (when present): `parse_valid_rate`, `judge_in_tokens`, `judge_out_tokens`, `judge_latency_ms`, plus `judge_out_budget_le_target_rate` (default target = 64).
 - **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates.
+- **Duplicate-output concentration**: top normalized-output dup rates by `prompt_template_id` and by `task_family|prompt_template_id` to spot template-level collapse.
+- **Per-model degeneracy**: top normalized-output duplicate rates and useful-novelty flagged rates by `model_id`.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
 - **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
   - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
+  - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
+- **Run slices** (optional): if `run_id` is present on `task_run` records, the report includes per-run coverage/duplicate/noise summaries and “top runs” to quickly spot regressions.
 
 ## Tools
 
@@ -142,6 +155,8 @@ python3 scripts/entropy_buffer_recommend.py \
 Notes:
 
 - If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
+- The recommender also applies a small **penalty** for candidates whose `prompt_template_id` (or `task_family|prompt_template_id`) has a high historical useful-novelty flagged rate or a high historical normalized-output duplicate rate.
+  - Tune with `--noise-weight` / `--dup-weight`, or hard-filter with `--max-noise-rate` / `--max-dup-rate`.
 
 ## Integration notes
 

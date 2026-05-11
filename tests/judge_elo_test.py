@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from scripts import judge_elo_schema as schema
+from scripts import judge_elo_join_quality as joiner
 from scripts import judge_elo_update as updater
 from scripts import pairwise_judge_record as record_wrap
 
@@ -71,6 +72,51 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(int(budget.get("records", 0)), 4)
         self.assertIn("tokens", budget)
         self.assertIn("latency_ms", budget)
+        self.assertIn("judge_out_budget", budget)
+
+    def test_budget_target_is_configurable(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        budget = updater.compute_budget([path], judge_out_target=42)
+        j = budget.get("judge_out_budget", {})
+        self.assertEqual(int(j.get("target_tokens", 0)), 42)
+
+    def test_meta_computed(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        meta = updater.compute_meta([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+        self.assertEqual(meta.get("schema"), "ds4_judge_elo_meta_v1")
+        self.assertEqual(int(meta.get("records", 0)), 4)
+        self.assertGreaterEqual(int(meta.get("matches_used", 0)), 3)
+
+    def test_elo_expected_values(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        ratings, _stats = updater.compute_elo([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+        self.assertAlmostEqual(float(ratings.get("model_slow", 0.0)), 1008.736, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_mid", 0.0)), 999.899, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_fast", 0.0)), 991.364, places=3)
+
+    def test_join_quality_rows(self) -> None:
+        rows = [
+            {"model": "model_fast", "decode_tps": "100.0"},
+            {"model": "model_mid", "decode_tps": "80.0", "quality_score": ""},
+            {"model": "missing_model", "decode_tps": "50.0"},
+        ]
+        qmap = {"model_fast": 70.0, "model_mid": 55.5}
+        joined, missing = joiner.join_quality_rows(
+            rows=rows,
+            quality_map=qmap,
+            quality_source="testsrc",
+            model_field="model",
+            overwrite=True,
+            require_all=False,
+        )
+        self.assertEqual(missing, 1)
+        self.assertEqual(joined[0].get("quality_score"), "70.000")
+        self.assertEqual(joined[0].get("quality_source"), "testsrc")
+        self.assertEqual(joined[1].get("quality_score"), "55.500")
+        self.assertEqual(joined[2].get("quality_score", ""), "")
 
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
@@ -97,6 +143,52 @@ class JudgeEloTest(unittest.TestCase):
             latency_ms=None,
         )
         self.assertFalse(rec.get("parse_valid", True))
+
+    def test_parse_json_object_loose_extracts_first_object(self) -> None:
+        decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+        text = "NOTE {not json}\n" + json.dumps(decision, separators=(",", ":"), ensure_ascii=False) + "\nTRAILING"
+        obj, perr = schema.parse_json_object_loose(text)
+        self.assertEqual(perr, "")
+        self.assertIsInstance(obj, dict)
+        self.assertEqual(obj.get("winner"), "tie")
+
+    def test_decision_reason_char_limit(self) -> None:
+        decision = {
+            "winner": "A",
+            "margin": 1,
+            "score_a": 7,
+            "score_b": 6,
+            "reason": ("x" * 201),
+            "train_hint": "",
+            "tags": [],
+        }
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("<= 200 chars" in e for e in errs))
+
+    def test_record_raw_char_limit(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V1,
+            "pair_id": "p0",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": False,
+            "raw": ("y" * 513),
+            "parse_error": "oops",
+        }
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("raw must be <= 512 chars" in e for e in errs))
+
+    def test_json_schema_files_present(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
+        rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
+        for path in (dec_path, rec_path):
+            with open(path, "r", encoding="utf-8") as f:
+                obj = json.load(f)
+            self.assertIsInstance(obj, dict)
+            self.assertEqual(obj.get("type"), "object")
+            self.assertIn("properties", obj)
 
 
 if __name__ == "__main__":

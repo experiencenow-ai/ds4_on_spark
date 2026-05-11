@@ -70,6 +70,7 @@
       0
     ]
   },
+  "mtp_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
   "mtp_layer_ids": [
     0
   ],
@@ -176,5 +177,6 @@
     "checked": false,
     "reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable"
   },
-  "url_prefix_bytes": 262144
+  "url_prefix_bytes": 262144,
+  "weight_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f"
 }

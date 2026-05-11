@@ -44,6 +44,15 @@ Notes:
 - The output includes `known_hosts:` mapping for reproducibility.
 - The `== peer ping ==` section includes packet loss and RTT summary when available.
 
+## 2b) MTU probe snapshot (optional; DF jumbo payload test)
+
+When you need a quick end-to-end MTU sanity check (without installing tools):
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+(SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_mtu.sh --topology full aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-mtu-probe-${stamp}.md"
+```
+
 Optional (no installs): quick Mac→Spark throughput smoke test (single stream, no writes):
 
 ```bash

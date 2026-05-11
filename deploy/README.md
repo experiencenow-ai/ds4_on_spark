@@ -57,7 +57,11 @@ sudo systemd-tmpfiles --create || true
 
 - `ds4.env.example` : base env keys (single-Spark and dual-Spark placeholders)
 - `ds4-spark0.env.example`, `ds4-spark1.env.example` : per-host starting points
-- `ds4-spark2.env.example`, `ds4-spark3.env.example` : TP=4 placeholder starting points
+- `ds4-spark2.env.example`, `ds4-spark3.env.example` : generic placeholders (see TP-specific variants below)
+- TP=3 (Spark0/Spark1/Spark2) starting points:
+  - `ds4-spark0.tp3.env.example`, `ds4-spark1.tp3.env.example`, `ds4-spark2.tp3.env.example`
+- TP=4 (Spark0..Spark3) starting points:
+  - `ds4-spark0.tp4.env.example`, `ds4-spark1.tp4.env.example`, `ds4-spark2.tp4.env.example`, `ds4-spark3.tp4.env.example`
 - `ds4-spark0.conf.example`, `ds4-spark1.conf.example`, `ds4-spark2.conf.example`, `ds4-spark3.conf.example` : runtime config placeholders (key=value)
 - `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
 - `logrotate.ds4.conf.example` : optional logrotate config for file logs (skip if journald-only)
@@ -79,6 +83,11 @@ If you want shared defaults across instances, copy `ds4.env.example` to `/etc/ds
 
 `scripts/ops_stage_deploy_assets.sh` rsyncs templates to `/tmp` on a Spark and
 prints the next `sudo` commands to apply them. By default it only installs `ds4*.service` units; Spark units are staged but optional.
+
+Optional: when staging, you can ask it to swap a TP-specific env example into place on the Spark:
+
+- `DS4_ENV_VARIANT=tp3` uses `ds4-<instance>.tp3.env.example` when present
+- `DS4_ENV_VARIANT=tp4` uses `ds4-<instance>.tp4.env.example` when present
 
 If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids instance-name mistakes and can run an optional mesh check first):
 

@@ -2,8 +2,9 @@
 set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
+SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe}"
+log_path="${LOG_PATH:-}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 probe_dir="$repo_root/tools/cuda_probe"
@@ -12,21 +13,22 @@ if tar --version 2>/dev/null | grep -qi "bsdtar"; then
 	tar_no_mac_metadata="--no-mac-metadata"
 fi
 
-if [ ! -d "$probe_dir" ]; then
-	echo "missing $probe_dir" >&2
-	exit 2
-fi
+main() {
+	if [ ! -d "$probe_dir" ]; then
+		echo "missing $probe_dir" >&2
+		exit 2
+	fi
 
-ssh $SSH_OPTS "$target" "set -eu
-rm -rf \"$REMOTE_DIR\"
-mkdir -p \"$REMOTE_DIR\"
-"
+	ssh $SSH_OPTS "$target" "set -eu
+	rm -rf \"$REMOTE_DIR\"
+	mkdir -p \"$REMOTE_DIR\"
+	"
 
-LC_ALL=C env COPYFILE_DISABLE=1 tar --no-xattrs $tar_no_mac_metadata -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
-LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
-"
+	LC_ALL=C env COPYFILE_DISABLE=1 tar --no-xattrs $tar_no_mac_metadata -C "$probe_dir" -cf - . | ssh $SSH_OPTS "$target" "set -eu
+	LC_ALL=C LANG=C tar -C \"$REMOTE_DIR\" -xf -
+	"
 
-ssh $SSH_OPTS "$target" "set -eu
+	ssh $SSH_OPTS "$target" "set -eu
 echo \"== nvcc ==\"
 	if [ -x /usr/local/cuda/bin/nvcc ]; then
 		/usr/local/cuda/bin/nvcc --version
@@ -128,6 +130,7 @@ else
 fi
 echo
 run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
 run_retry cuda_sm120_compat_probe \"$REMOTE_DIR\"/bin/cuda_sm120_compat_probe
 run_retry cuda_cublaslt_smoke \"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
 run_retry cuda_cublaslt_fp8_smoke \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp8_smoke
@@ -180,3 +183,21 @@ run_retry cuda_sm121_ldmatrix_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_ldmatrix_smok
 run_retry cuda_sm121_wmma_smoke \"$REMOTE_DIR\"/bin/cuda_sm121_wmma_smoke
 run_retry cuda_sm121_cluster_launch \"$REMOTE_DIR\"/bin/cuda_sm121_cluster_launch
 "
+}
+
+if [ "$log_path" = "" ]; then
+	main
+	exit 0
+fi
+
+mkdir -p "$(dirname "$log_path")"
+printf "== cuda_probe_spark0 log: %s ==\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$log_path"
+tmp_out="$(mktemp "/private/tmp/ds4_cuda_probe_spark0_out.XXXXXX")"
+set +e
+main >"$tmp_out" 2>&1
+rc=$?
+set -e
+cat "$tmp_out"
+cat "$tmp_out" >> "$log_path"
+rm -f "$tmp_out"
+exit $rc

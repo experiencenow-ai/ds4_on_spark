@@ -7,6 +7,7 @@ MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-$sidecar_arg}"
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_loader_probe_local}"
 MTP_SIDECAR_ARGS="${MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
 
+ALLOW_URL="${ALLOW_URL:-0}"
 ALLOW_LLAMA_RUN="${ALLOW_LLAMA_RUN:-0}"
 LLAMA_DIR="${LLAMA_DIR:-}"
 LLAMA_PROBE_BIN="${LLAMA_PROBE_BIN:-}"
@@ -33,17 +34,27 @@ if [ "$MTP_SIDECAR_GGUF" = "" ]; then
 	exit 2
 fi
 
+is_url="0"
 case "$MTP_SIDECAR_GGUF" in
 	http://*|https://*)
-		echo "refusing URL input for local runner (requires a readable local file): $MTP_SIDECAR_GGUF" 1>&2
-		echo "use: python3 scripts/model_contract_probe_mtp_sidecar.py --url ... --json" 1>&2
-		exit 3
+		is_url="1"
 		;;
 esac
 
-if [ ! -r "$MTP_SIDECAR_GGUF" ]; then
-	echo "sidecar not readable: $MTP_SIDECAR_GGUF" 1>&2
-	exit 4
+contract_src_flag="--path"
+contract_src_value="$MTP_SIDECAR_GGUF"
+if [ "$is_url" = "1" ]; then
+	contract_src_flag="--url"
+	if [ "$ALLOW_URL" != "1" ]; then
+		echo "refusing URL input for local runner unless ALLOW_URL=1: $MTP_SIDECAR_GGUF" 1>&2
+		echo "note: URL mode uses HTTP Range reads and refuses full downloads when Range is not honored." 1>&2
+		exit 3
+	fi
+else
+	if [ ! -r "$MTP_SIDECAR_GGUF" ]; then
+		echo "sidecar not readable: $MTP_SIDECAR_GGUF" 1>&2
+		exit 4
+	fi
 fi
 
 if [ "$LLAMA_PROBE_BIN" = "" ] && [ "$LLAMA_DIR" != "" ]; then
@@ -70,18 +81,20 @@ fi
 	echo "## Contract Probe Command"
 	echo
 	echo '```'
-	echo "python3 scripts/model_contract_probe_mtp_sidecar.py --path \"$MTP_SIDECAR_GGUF\" $MTP_SIDECAR_ARGS"
+	echo "python3 scripts/model_contract_probe_mtp_sidecar.py $contract_src_flag \"$contract_src_value\" $MTP_SIDECAR_ARGS"
 	echo '```'
 	echo
 	echo "## Loader Probe Gates (llama.cpp)"
 	echo
 	echo "- Set `ALLOW_LLAMA_RUN=1` to run the llama.cpp probe."
 	echo "- Provide `LLAMA_PROBE_BIN=/abs/path/to/llama-ds4-mtp-sidecar-probe` or `LLAMA_DIR=/path/to/llama.cpp-deepseek-v4-flash-cuda-spark`."
+	echo "- Note: the loader probe requires a local file; URL-only runs skip llama.cpp."
 	echo "- Optional: `PAYLOAD_SAMPLE_BYTES=64` and/or `LOAD_WEIGHTS=1`."
 	echo
 	echo "Recorded loader env:"
 	echo
 	echo '```'
+	echo "ALLOW_URL=$ALLOW_URL"
 	echo "ALLOW_LLAMA_RUN=$ALLOW_LLAMA_RUN"
 	echo "LLAMA_DIR=$LLAMA_DIR"
 	echo "LLAMA_PROBE_BIN=$LLAMA_PROBE_BIN"
@@ -92,7 +105,7 @@ fi
 } >"$REPORT_MD"
 
 echo "== running Python MTP sidecar contract probe (local) =="
-python3 "$repo_root/scripts/model_contract_probe_mtp_sidecar.py" --path "$MTP_SIDECAR_GGUF" $MTP_SIDECAR_ARGS \
+python3 "$repo_root/scripts/model_contract_probe_mtp_sidecar.py" $contract_src_flag "$contract_src_value" $MTP_SIDECAR_ARGS \
 	>"$OUT_DIR/contract_probe_stdout.txt" 2>"$OUT_DIR/contract_probe_stderr.txt" || true
 
 python3 - "$OUT_DIR/contract_probe_stdout.txt" >"$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY' || true
@@ -174,26 +187,31 @@ fi
 } >>"$REPORT_MD"
 
 echo "== running llama.cpp-side MTP sidecar loader probe (local; may be gated) =="
-if [ "$ALLOW_LLAMA_RUN" != "1" ]; then
-	printf '%s\n' "run skipped: set ALLOW_LLAMA_RUN=1 to enable" >"$OUT_DIR/loader_probe_stdout.txt"
+if [ "$is_url" = "1" ]; then
+	printf '%s\n' "run skipped: sidecar is a URL; loader probe requires a readable local file" >"$OUT_DIR/loader_probe_stdout.txt"
 	printf '%s\n' "" >"$OUT_DIR/loader_probe_stderr.txt"
 else
-	if [ "$LLAMA_PROBE_BIN" = "" ]; then
-		printf '%s\n' "run skipped: set LLAMA_PROBE_BIN=/abs/path/to/llama-ds4-mtp-sidecar-probe (or LLAMA_DIR=...)" >"$OUT_DIR/loader_probe_stdout.txt"
+	if [ "$ALLOW_LLAMA_RUN" != "1" ]; then
+		printf '%s\n' "run skipped: set ALLOW_LLAMA_RUN=1 to enable" >"$OUT_DIR/loader_probe_stdout.txt"
 		printf '%s\n' "" >"$OUT_DIR/loader_probe_stderr.txt"
 	else
-		if [ ! -x "$LLAMA_PROBE_BIN" ]; then
-			printf '%s\n' "run skipped: LLAMA_PROBE_BIN not executable: $LLAMA_PROBE_BIN" >"$OUT_DIR/loader_probe_stdout.txt"
+		if [ "$LLAMA_PROBE_BIN" = "" ]; then
+			printf '%s\n' "run skipped: set LLAMA_PROBE_BIN=/abs/path/to/llama-ds4-mtp-sidecar-probe (or LLAMA_DIR=...)" >"$OUT_DIR/loader_probe_stdout.txt"
 			printf '%s\n' "" >"$OUT_DIR/loader_probe_stderr.txt"
 		else
-			loader_args="--path \"$MTP_SIDECAR_GGUF\" --json"
-			if [ "$PAYLOAD_SAMPLE_BYTES" != "0" ]; then
-				loader_args="$loader_args --payload-sample-bytes $PAYLOAD_SAMPLE_BYTES"
+			if [ ! -x "$LLAMA_PROBE_BIN" ]; then
+				printf '%s\n' "run skipped: LLAMA_PROBE_BIN not executable: $LLAMA_PROBE_BIN" >"$OUT_DIR/loader_probe_stdout.txt"
+				printf '%s\n' "" >"$OUT_DIR/loader_probe_stderr.txt"
+			else
+				loader_args="--path \"$MTP_SIDECAR_GGUF\" --json"
+				if [ "$PAYLOAD_SAMPLE_BYTES" != "0" ]; then
+					loader_args="$loader_args --payload-sample-bytes $PAYLOAD_SAMPLE_BYTES"
+				fi
+				if [ "$LOAD_WEIGHTS" = "1" ]; then
+					loader_args="$loader_args --load-weights"
+				fi
+				sh -lc "\"$LLAMA_PROBE_BIN\" $loader_args" >"$OUT_DIR/loader_probe_stdout.txt" 2>"$OUT_DIR/loader_probe_stderr.txt" || true
 			fi
-			if [ "$LOAD_WEIGHTS" = "1" ]; then
-				loader_args="$loader_args --load-weights"
-			fi
-			sh -lc "\"$LLAMA_PROBE_BIN\" $loader_args" >"$OUT_DIR/loader_probe_stdout.txt" 2>"$OUT_DIR/loader_probe_stderr.txt" || true
 		fi
 	fi
 fi
@@ -224,11 +242,16 @@ print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
 echo "== cross-checking Python contract probe JSON vs llama.cpp probe JSON (local) =="
-python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
-	--contract-probe-json "$OUT_DIR/contract_probe.json" \
-	--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
-	--json \
-	>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+if [ "$is_url" = "1" ]; then
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"sidecar is URL (no llama.cpp probe)\",\"errors\":[]}" >"$OUT_DIR/contract_vs_loader_probe_parse.json"
+	printf '%s\n' "" >"$OUT_DIR/contract_vs_loader_probe_stderr.txt"
+else
+	python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
+		--contract-probe-json "$OUT_DIR/contract_probe.json" \
+		--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
+		--json \
+		>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+fi
 
 {
 	echo "## Loader Probe Results (llama.cpp)"
@@ -283,4 +306,3 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.p
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
-

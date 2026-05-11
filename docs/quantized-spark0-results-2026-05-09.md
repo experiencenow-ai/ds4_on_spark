@@ -279,10 +279,23 @@ Summary:
 - Max RSS: `87038730240` bytes
 - Failure: `unknown model architecture: 'deepseek4_mtp_support'`
 
-The MTP sidecar is valid and small enough to stage, but the CUDA Spark fork does
-not yet register or execute the DS4-specific MTP architecture. The native
-`antirez/ds4` code has the expected MTP tensor bindings and `--mtp` flow, but
-that implementation is currently Metal-first.
+This failure is expected: the `antirez/deepseek-v4-gguf` MTP artifact is a **sidecar**
+GGUF (a compact 32‑tensor `mtp.0.*` table) and is **not** a full trunk model GGUF. If
+the sidecar is treated as a normal llama.cpp model, Spark/CUDA forks typically reject
+it early with `unknown model architecture: deepseek4_mtp_support`.
+
+Validate the staged sidecar file without loading the trunk GGUF using the repo’s
+contract/probe tooling:
+
+- **Contract probe (metadata-only, Spark-safe)**:
+  - `REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>`
+- **Combined loader probe (contract + llama.cpp-side probe patch; still no trunk load)**:
+  - `REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1' scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>`
+
+These probes establish that the sidecar file is structurally valid (exact 32 tensor
+names + dims/types) and can be loaded as a **sidecar weight blob**. They do not imply
+that the CUDA Spark fork can run DeepSeek V4 MTP draft/verify (that remains
+unimplemented as of `kamnxt@9222e55`).
 
 ## Next Work
 
@@ -295,5 +308,8 @@ that implementation is currently Metal-first.
    - For resident runs, add a `/metrics` snapshot when available (for example: run the server with `--metrics` and set `LLAMA_SERVER_SWEEP_SCRAPE_METRICS=1` so the sweep captures `metrics_start.prom` / `metrics_end.prom`).
 3. Port or implement `deepseek4_mtp_support` loading for the CUDA Spark path,
    using `antirez/ds4` as the tensor-contract reference.
+   - After sidecar contract validation passes, gate correctness by implementing the
+     one-verify-step `gamma=1` wiring check described in `docs/mtp-one-token-draft-probe.md`
+     and run it on Spark via `scripts/run_mtp_one_token_draft_probe_spark.sh`.
 4. Add larger context probes only after deciding whether the memory and time
    budget justify `ctx=65536` and above as separate long-load runs.

@@ -11,6 +11,7 @@ Usage:
 
 Environment (optional overrides):
   DS4_STAGED_SYSTEMD_DIR   Default: /tmp/ds4-systemd
+  DS4_STAGED_SYSTEMD_USER_DIR Default: /tmp/ds4-systemd-user
   DS4_STAGED_CONFIG_DIR    Default: /tmp/ds4-config
   DS4_STAGED_SYSUSERS_DIR  Default: /tmp/ds4-sysusers
   DS4_STAGED_TMPFILES_DIR  Default: /tmp/ds4-tmpfiles
@@ -37,6 +38,7 @@ if [ "${1:-}" != "" ]; then
 fi
 
 systemd_dir="${DS4_STAGED_SYSTEMD_DIR:-/tmp/ds4-systemd}"
+systemd_user_dir="${DS4_STAGED_SYSTEMD_USER_DIR:-/tmp/ds4-systemd-user}"
 config_dir="${DS4_STAGED_CONFIG_DIR:-/tmp/ds4-config}"
 sysusers_dir="${DS4_STAGED_SYSUSERS_DIR:-/tmp/ds4-sysusers}"
 tmpfiles_dir="${DS4_STAGED_TMPFILES_DIR:-/tmp/ds4-tmpfiles}"
@@ -63,6 +65,7 @@ need_key_in_file()
 
 echo "== validate staged ds4 assets =="
 echo "systemd_dir=$systemd_dir"
+echo "systemd_user_dir=$systemd_user_dir"
 echo "config_dir=$config_dir"
 echo "sysusers_dir=$sysusers_dir"
 echo "tmpfiles_dir=$tmpfiles_dir"
@@ -84,11 +87,27 @@ need_file "$systemd_dir/ds4-preflight@.timer"
 need_file "$systemd_dir/ds4-preflight-strict@.timer"
 need_file "$systemd_dir/ds4-support-bundle@.timer"
 
+need_file "$systemd_user_dir/ds4@.service"
+need_file "$systemd_user_dir/ds4-strict@.service"
+need_file "$systemd_user_dir/ds4-preflight@.service"
+need_file "$systemd_user_dir/ds4-preflight-strict@.service"
+need_file "$systemd_user_dir/ds4-preflight-tp3@.service"
+need_file "$systemd_user_dir/ds4-preflight-tp3-strict@.service"
+need_file "$systemd_user_dir/ds4-preflight-tp4@.service"
+need_file "$systemd_user_dir/ds4-preflight-tp4-strict@.service"
+
 need_file "$config_dir/ds4.env.example"
 need_file "$config_dir/ds4-spark0.env.example"
 need_file "$config_dir/ds4-spark1.env.example"
 need_file "$config_dir/ds4-spark2.env.example"
 need_file "$config_dir/ds4-spark3.env.example"
+need_file "$config_dir/ds4-spark0.tp3.env.example"
+need_file "$config_dir/ds4-spark1.tp3.env.example"
+need_file "$config_dir/ds4-spark2.tp3.env.example"
+need_file "$config_dir/ds4-spark0.tp4.env.example"
+need_file "$config_dir/ds4-spark1.tp4.env.example"
+need_file "$config_dir/ds4-spark2.tp4.env.example"
+need_file "$config_dir/ds4-spark3.tp4.env.example"
 need_file "$config_dir/ds4-spark0.conf.example"
 need_file "$config_dir/ds4-spark1.conf.example"
 need_file "$config_dir/ds4-spark2.conf.example"
@@ -152,7 +171,20 @@ else
 fi
 
 echo "== env examples include required keys =="
-for env in "$config_dir/ds4.env.example" "$config_dir/ds4-spark0.env.example" "$config_dir/ds4-spark1.env.example" "$config_dir/ds4-spark2.env.example" "$config_dir/ds4-spark3.env.example"; do
+for env in \
+	"$config_dir/ds4.env.example" \
+	"$config_dir/ds4-spark0.env.example" \
+	"$config_dir/ds4-spark1.env.example" \
+	"$config_dir/ds4-spark2.env.example" \
+	"$config_dir/ds4-spark3.env.example" \
+	"$config_dir/ds4-spark0.tp3.env.example" \
+	"$config_dir/ds4-spark1.tp3.env.example" \
+	"$config_dir/ds4-spark2.tp3.env.example" \
+	"$config_dir/ds4-spark0.tp4.env.example" \
+	"$config_dir/ds4-spark1.tp4.env.example" \
+	"$config_dir/ds4-spark2.tp4.env.example" \
+	"$config_dir/ds4-spark3.tp4.env.example" \
+	; do
     need_key_in_file "DS4_INSTANCE" "$env"
     need_key_in_file "DS4_HOME" "$env"
     need_key_in_file "DS4_STATE_DIR" "$env"

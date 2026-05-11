@@ -44,26 +44,31 @@ Baseline type:
 
 Quality:
 
-- Public quality prior:
-- Public quality basis/source:
-- Local quality score:
-- Passed tasks:
-- Total tasks:
-- Quality score:
+- `public_quality_prior`:
+- `public_quality_basis` / `public_quality_source`:
+- `passed_tasks`:
+- `total_tasks`:
+- `local_quality_score`:
+- `quality_score`:
 
 TTFT:
 
-Prefill throughput:
+- `ttft_s`:
 
-Generation throughput:
+Speed:
 
-Quality-adjusted generation throughput:
+- `prefill_tps`:
+- `decode_tps`:
+- `total_wall_s`:
+- `output_tokens`:
 
-Correct task rate:
+Tradeoff:
 
-Tokens per success:
+- `quality_adjusted_decode_tps`:
+- `correct_task_rate`:
+- `tokens_per_success`:
 
-Pareto dominated by:
+- `dominated_by` (Pareto):
 
 Memory:
 

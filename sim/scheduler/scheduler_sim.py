@@ -321,6 +321,10 @@ class SimMetrics:
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_mtp_draft: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_mtp_verify: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_interactive: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_mtp_draft: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
     chosen_k_total_interactive: List[int] = dataclasses.field(default_factory=list)
@@ -2608,13 +2612,17 @@ def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue]
         ranked = [(experts[e].pending(), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _p, _i, e in ranked])
+    if admit_policy == "least_pending_work":
+        ranked = [(float(experts[e].pending_work()), i, e) for i, e in enumerate(candidates)]
+        ranked.sort()
+        return([e for _p, _i, e in ranked])
     if admit_policy == "score_desc":
         if scores is None:
             raise ValueError("admit_policy score_desc requires per-candidate scores")
         ranked = [(-float(scores[i]), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _s, _i, e in ranked])
-    raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
+    raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
 
 
 def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
@@ -2731,12 +2739,16 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
                 metrics.starved_tasks_started_per_expert[expert_id] += 1
                 if task.mtp_phase == MtpPhase.DRAFT:
                     metrics.starved_tasks_mtp_draft += 1
+                    metrics.starved_task_queue_wait_ms_mtp_draft.append(wait_ms)
                 elif task.mtp_phase == MtpPhase.VERIFY:
                     metrics.starved_tasks_mtp_verify += 1
+                    metrics.starved_task_queue_wait_ms_mtp_verify.append(wait_ms)
                 if task.cls == LatencyClass.INTERACTIVE:
                     metrics.starved_tasks_interactive += 1
+                    metrics.starved_task_queue_wait_ms_interactive.append(wait_ms)
                 else:
                     metrics.starved_tasks_batch += 1
+                    metrics.starved_task_queue_wait_ms_batch.append(wait_ms)
             if task.cls == LatencyClass.INTERACTIVE:
                 metrics.task_queue_wait_ms_interactive.append(wait_ms)
             else:
@@ -2936,8 +2948,8 @@ def run_simulation(
         raise ValueError("k_mode must be 'controller' or 'trace'")
 
     k_signal = cfg.k_signal.strip().lower()
-    if k_signal not in ("global", "candidates", "class"):
-        raise ValueError("k_signal must be 'global', 'candidates', or 'class'")
+    if k_signal not in ("global", "candidates", "class", "global_mean", "candidates_mean", "class_mean"):
+        raise ValueError("k_signal must be one of: global, candidates, class, global_mean, candidates_mean, class_mean")
 
     pending_units = cfg.pending_units.strip().lower()
     if pending_units not in ("tasks", "work"):
@@ -2952,8 +2964,8 @@ def run_simulation(
         raise ValueError("k_scope must be 'token' or 'layer'")
 
     admit_policy = cfg.admit_policy.strip().lower()
-    if admit_policy not in ("ordered", "least_pending", "score_desc"):
-        raise ValueError("admit_policy must be 'ordered', 'least_pending', or 'score_desc'")
+    if admit_policy not in ("ordered", "least_pending", "least_pending_work", "score_desc"):
+        raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
 
     if cfg.pending_hist_max_depth < 0:
         raise ValueError("pending_hist_max_depth must be >= 0")
@@ -3543,6 +3555,57 @@ def run_simulation(
                     metrics.k_changes_batch += 1
         return(cs.k)
 
+    def pending_signal_for_state(cls: LatencyClass, candidates: Sequence[int]) -> float:
+        ks = k_signal
+        use_mean = False
+        if ks.endswith("_mean"):
+            use_mean = True
+            ks = ks[: -len("_mean")]
+
+        if ks == "candidates":
+            idxs: Sequence[int] = candidates
+        else:
+            idxs = range(cfg.num_experts)
+        if ks == "candidates" and len(idxs) == 0:
+            return(0.0)
+
+        if pending_units == "work":
+            if ks == "class":
+                if use_mean:
+                    total = 0.0
+                    count = 0
+                    for e in idxs:
+                        total += float(experts[e].pending_work_for_queue(cls))
+                        count += 1
+                    return((total / float(count)) if count != 0 else 0.0)
+                return(float(max(experts[e].pending_work_for_queue(cls) for e in idxs)))
+            if use_mean:
+                total = 0.0
+                count = 0
+                for e in idxs:
+                    total += float(experts[e].pending_work())
+                    count += 1
+                return((total / float(count)) if count != 0 else 0.0)
+            return(float(max(experts[e].pending_work() for e in idxs)))
+
+        if ks == "class":
+            if use_mean:
+                total = 0.0
+                count = 0
+                for e in idxs:
+                    total += float(expert_pending_for_class(experts[e], cls))
+                    count += 1
+                return((total / float(count)) if count != 0 else 0.0)
+            return(float(max(expert_pending_for_class(experts[e], cls) for e in idxs)))
+        if use_mean:
+            total = 0.0
+            count = 0
+            for e in idxs:
+                total += float(experts[e].pending())
+                count += 1
+            return((total / float(count)) if count != 0 else 0.0)
+        return(float(max(experts[e].pending() for e in idxs)))
+
     while len(evq) != 0:
         ev = heapq.heappop(evq)
         now_ms = ev.t_ms
@@ -3557,20 +3620,7 @@ def run_simulation(
 
             layers = _route_layers(route)
 
-            if pending_units == "work":
-                if k_signal == "global":
-                    pending_signal = float(max(experts[e].pending_work() for e in range(cfg.num_experts)))
-                elif k_signal == "candidates":
-                    pending_signal = float(max(experts[e].pending_work() for e in route.candidates))
-                else:
-                    pending_signal = float(max(experts[e].pending_work_for_queue(route.cls) for e in range(cfg.num_experts)))
-            else:
-                if k_signal == "global":
-                    pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                elif k_signal == "candidates":
-                    pending_signal = float(max(experts[e].pending() for e in route.candidates))
-                else:
-                    pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
+            pending_signal = pending_signal_for_state(route.cls, route.candidates)
 
             if route.cls == LatencyClass.INTERACTIVE:
                 metrics.pending_signal_interactive.append(pending_signal)
@@ -3596,20 +3646,7 @@ def run_simulation(
                     layer_ks = [k for _ in range(len(layers))]
                 else:
                     for li, lr in enumerate(layers):
-                        if pending_units == "work":
-                            if k_signal == "global":
-                                layer_pending_signal = float(max(experts[e].pending_work() for e in range(cfg.num_experts)))
-                            elif k_signal == "candidates":
-                                layer_pending_signal = float(max(experts[e].pending_work() for e in lr.candidates))
-                            else:
-                                layer_pending_signal = float(max(experts[e].pending_work_for_queue(route.cls) for e in range(cfg.num_experts)))
-                        else:
-                            if k_signal == "global":
-                                layer_pending_signal = float(max(experts[e].pending() for e in range(cfg.num_experts)))
-                            elif k_signal == "candidates":
-                                layer_pending_signal = float(max(experts[e].pending() for e in lr.candidates))
-                            else:
-                                layer_pending_signal = float(max(expert_pending_for_class(experts[e], route.cls) for e in range(cfg.num_experts)))
+                        layer_pending_signal = pending_signal_for_state(route.cls, lr.candidates)
                         cs = k_ctrl_layer.get((route.cls, li))
                         if cs is None:
                             cs = KControllerState()
@@ -3877,6 +3914,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     starved_task_frac_batch = (float(metrics.starved_tasks_batch) / float(len(metrics.task_queue_wait_ms_batch))) if len(metrics.task_queue_wait_ms_batch) != 0 else 0.0
     starved_task_frac_mtp_draft = (float(metrics.starved_tasks_mtp_draft) / float(metrics.tasks_started_mtp_draft)) if metrics.tasks_started_mtp_draft > 0 else 0.0
     starved_task_frac_mtp_verify = (float(metrics.starved_tasks_mtp_verify) / float(metrics.tasks_started_mtp_verify)) if metrics.tasks_started_mtp_verify > 0 else 0.0
+    starved_task_queue_wait_ms_p95 = _p_or_zero((metrics.starved_task_queue_wait_ms_interactive + metrics.starved_task_queue_wait_ms_batch), 0.95)
+    starved_task_queue_wait_ms_p95_interactive = _p_or_zero(metrics.starved_task_queue_wait_ms_interactive, 0.95)
+    starved_task_queue_wait_ms_p95_batch = _p_or_zero(metrics.starved_task_queue_wait_ms_batch, 0.95)
+    starved_task_queue_wait_ms_p95_mtp_draft = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_draft, 0.95)
+    starved_task_queue_wait_ms_p95_mtp_verify = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_verify, 0.95)
     partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
     mtp_mean_accept_len = (float(metrics.mtp_output_tokens) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
@@ -3966,12 +4008,19 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "starved_task_frac_batch": float(starved_task_frac_batch),
             "starved_task_frac_mtp_draft": float(starved_task_frac_mtp_draft),
             "starved_task_frac_mtp_verify": float(starved_task_frac_mtp_verify),
+            "starved_task_queue_wait_ms_p95": float(starved_task_queue_wait_ms_p95),
+            "starved_task_queue_wait_ms_p95_interactive": float(starved_task_queue_wait_ms_p95_interactive),
+            "starved_task_queue_wait_ms_p95_batch": float(starved_task_queue_wait_ms_p95_batch),
+            "starved_task_queue_wait_ms_p95_mtp_draft": float(starved_task_queue_wait_ms_p95_mtp_draft),
+            "starved_task_queue_wait_ms_p95_mtp_verify": float(starved_task_queue_wait_ms_p95_mtp_verify),
             "dropped_tasks_backpressure": float(metrics.dropped_tasks_backpressure),
             "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
+            "expert_max_pending_tasks_p95": float(_p_or_zero(metrics.max_pending_per_expert, 0.95)),
             "expert_max_pending_tasks_max": float(max(metrics.max_pending_per_expert)) if len(metrics.max_pending_per_expert) != 0 else 0.0,
             "expert_mean_pending_tasks_p50": float(_p_or_zero(metrics.mean_pending_per_expert, 0.50)),
             "expert_mean_pending_tasks_p95": float(_p_or_zero(metrics.mean_pending_per_expert, 0.95)),
             "expert_max_pending_work_p50": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.50)),
+            "expert_max_pending_work_p95": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.95)),
             "expert_max_pending_work_max": float(max(metrics.max_pending_work_per_expert)) if len(metrics.max_pending_work_per_expert) != 0 else 0.0,
             "expert_mean_pending_work_p50": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.50)),
             "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
@@ -4436,7 +4485,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--k-signal",
         type=str,
         default="global",
-        help="Adaptive-K congestion signal: global (max total pending across all experts), candidates (max total pending among this token's candidates), or class (max pending in this token's latency-class queue + in-flight across all experts).",
+        help="Adaptive-K congestion signal: global/candidates/class use max pending; *_mean variants use mean pending (global_mean, candidates_mean, class_mean).",
     )
     p.add_argument("--pending-units", type=str, default="tasks", help="Adaptive-K pending units: tasks (default) uses outstanding task counts; work uses sum(cost_scale) of queued + in-flight work per expert.")
     p.add_argument(
@@ -4446,7 +4495,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
     )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
-    p.add_argument("--admit-policy", type=str, default="ordered", help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts among candidates), or score_desc (order candidates by descending trace scores).")
+    p.add_argument(
+        "--admit-policy",
+        type=str,
+        default="ordered",
+        help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts by task count), least_pending_work (pick least pending experts by pending_work), or score_desc (order candidates by descending trace scores).",
+    )
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
 
     p.add_argument("--compare", action="append", default=[], help="Run labeled variant(s) vs the baseline config. Format: label:JSON, with optional keys like mtp_draft_len or adaptive_k.q_high.")

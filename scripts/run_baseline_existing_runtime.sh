@@ -16,6 +16,10 @@ MODEL_RUNS_CSV="${MODEL_RUNS_CSV:-}"
 VLLM_MODEL_ID="${VLLM_MODEL_ID:-}"
 LLAMA_SCOPE="${LLAMA_SCOPE:-llamacpp}"
 VLLM_SCOPE="${VLLM_SCOPE:-vllm}"
+LLAMA_FATTN_PATCH_PROBE="${LLAMA_FATTN_PATCH_PROBE:-0}"
+LLAMA_MULTISLOT_PATCH_PROBE="${LLAMA_MULTISLOT_PATCH_PROBE:-0}"
+LLAMA_SERVER_SWEEP="${LLAMA_SERVER_SWEEP:-0}"
+LLAMA_SERVER_THROUGHPUT_SWEEP="${LLAMA_SERVER_THROUGHPUT_SWEEP:-0}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -54,6 +58,77 @@ extract_baseline_summary()
         }
         $0 == "== baseline summary (approx) ==" { found=1 }
     ' "$in" 2>/dev/null || true
+}
+
+sh_quote()
+{
+    v="${1:-}"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\''/g")"
+}
+
+remote_env_prefix()
+{
+    out=""
+    if [ "${LLAMA_DIR:-}" != "" ]; then
+        out="$out LLAMA_DIR=$(sh_quote "$LLAMA_DIR")"
+    fi
+    if [ "${LLAMA_SERVER:-}" != "" ]; then
+        out="$out LLAMA_SERVER=$(sh_quote "$LLAMA_SERVER")"
+    fi
+    if [ "${MODEL_GGUF:-}" != "" ]; then
+        out="$out MODEL_GGUF=$(sh_quote "$MODEL_GGUF")"
+    fi
+    printf "%s" "$out"
+}
+
+remote_server_sweep_env()
+{
+    base="$REMOTE_LLAMA_ENV $(remote_env_prefix)"
+    out="$base"
+    if [ "${LLAMA_SERVER_SWEEP_PORT:-}" != "" ]; then out="$out PORT=$(sh_quote "$LLAMA_SERVER_SWEEP_PORT")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_CTX:-}" != "" ]; then out="$out CTX=$(sh_quote "$LLAMA_SERVER_SWEEP_CTX")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_PROMPT_WORDS:-}" != "" ]; then out="$out PROMPT_WORDS=$(sh_quote "$LLAMA_SERVER_SWEEP_PROMPT_WORDS")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_N_PREDICT:-}" != "" ]; then out="$out N_PREDICT=$(sh_quote "$LLAMA_SERVER_SWEEP_N_PREDICT")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_REPEATS:-}" != "" ]; then out="$out REPEATS=$(sh_quote "$LLAMA_SERVER_SWEEP_REPEATS")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_START_SERVER:-}" != "" ]; then out="$out START_SERVER=$(sh_quote "$LLAMA_SERVER_SWEEP_START_SERVER")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_KEEP_SERVER:-}" != "" ]; then out="$out KEEP_SERVER=$(sh_quote "$LLAMA_SERVER_SWEEP_KEEP_SERVER")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_CACHE_PROMPT:-}" != "" ]; then out="$out CACHE_PROMPT=$(sh_quote "$LLAMA_SERVER_SWEEP_CACHE_PROMPT")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_SCRAPE_METRICS:-}" != "" ]; then out="$out SCRAPE_METRICS=$(sh_quote "$LLAMA_SERVER_SWEEP_SCRAPE_METRICS")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_METRICS_TIMEOUT_S:-}" != "" ]; then out="$out METRICS_TIMEOUT_S=$(sh_quote "$LLAMA_SERVER_SWEEP_METRICS_TIMEOUT_S")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S:-}" != "" ]; then out="$out WAIT_TIMEOUT_S=$(sh_quote "$LLAMA_SERVER_SWEEP_WAIT_TIMEOUT_S")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_POLL_S:-}" != "" ]; then out="$out POLL_S=$(sh_quote "$LLAMA_SERVER_SWEEP_POLL_S")"; fi
+    if [ "${LLAMA_SERVER_SWEEP_SERVER_ARGS:-}" != "" ]; then out="$out SERVER_ARGS=$(sh_quote "$LLAMA_SERVER_SWEEP_SERVER_ARGS")"; fi
+    printf "%s" "$out"
+}
+
+remote_throughput_sweep_env()
+{
+    base="$REMOTE_LLAMA_ENV $(remote_env_prefix)"
+    out="$base"
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_PORT:-}" != "" ]; then out="$out PORT=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_PORT")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_CTX:-}" != "" ]; then out="$out CTX=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_CTX")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_PROMPT_WORDS:-}" != "" ]; then out="$out PROMPT_WORDS=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_PROMPT_WORDS")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_N_PREDICT:-}" != "" ]; then out="$out N_PREDICT=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_N_PREDICT")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_CONCURRENCY:-}" != "" ]; then out="$out CONCURRENCY=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_CONCURRENCY")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_PARALLEL_VALUES:-}" != "" ]; then out="$out PARALLEL_VALUES=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_PARALLEL_VALUES")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_BATCH_VALUES:-}" != "" ]; then out="$out BATCH_VALUES=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_BATCH_VALUES")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_UBATCH_VALUES:-}" != "" ]; then out="$out UBATCH_VALUES=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_UBATCH_VALUES")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_PARALLEL_FLAG:-}" != "" ]; then out="$out PARALLEL_FLAG=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_PARALLEL_FLAG")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_BATCH_FLAG:-}" != "" ]; then out="$out BATCH_FLAG=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_BATCH_FLAG")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_UBATCH_FLAG:-}" != "" ]; then out="$out UBATCH_FLAG=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_UBATCH_FLAG")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO:-}" != "" ]; then out="$out RESTART_PER_COMBO=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_PER_COMBO")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S:-}" != "" ]; then out="$out RESTART_SLEEP_S=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_RESTART_SLEEP_S")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_START_SERVER:-}" != "" ]; then out="$out START_SERVER=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_START_SERVER")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_KEEP_SERVER:-}" != "" ]; then out="$out KEEP_SERVER=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_KEEP_SERVER")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_CACHE_PROMPT:-}" != "" ]; then out="$out CACHE_PROMPT=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_CACHE_PROMPT")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_SCRAPE_METRICS:-}" != "" ]; then out="$out SCRAPE_METRICS=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_SCRAPE_METRICS")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_METRICS_TIMEOUT_S:-}" != "" ]; then out="$out METRICS_TIMEOUT_S=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_METRICS_TIMEOUT_S")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_WAIT_TIMEOUT_S:-}" != "" ]; then out="$out WAIT_TIMEOUT_S=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_WAIT_TIMEOUT_S")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_POLL_S:-}" != "" ]; then out="$out POLL_S=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_POLL_S")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_REQUEST_TIMEOUT_S:-}" != "" ]; then out="$out REQUEST_TIMEOUT_S=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_REQUEST_TIMEOUT_S")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS:-}" != "" ]; then out="$out SERVER_ARGS=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_SERVER_ARGS")"; fi
+    if [ "${LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET:-}" != "" ]; then out="$out PRESET=$(sh_quote "$LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET")"; fi
+    printf "%s" "$out"
 }
 
 append_model_runs_csv()
@@ -290,6 +365,50 @@ python3 /tmp/model_contract_inspect_quantized_artifact.py --path \"\${MODEL_GGUF
     echo
 } >>"$REPORT_MD"
 
+REMOTE_PROBE_ENV="$(remote_env_prefix)"
+
+if [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
+    echo "== running llama.cpp fattn patch source probe on spark (read-only) =="
+    ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_fattn_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_fattn_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_fattn_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_fattn_patch_probe.py" \
+        >"$OUT_DIR/remote_fattn_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_fattn_patch_probe_stderr.txt" || true
+    {
+        echo "## llama.cpp fattn patch probe (Spark)"
+        echo
+        echo "Summary (best-effort):"
+        echo
+        echo "```"
+        sed -n "1,80p" "$OUT_DIR/remote_fattn_patch_probe_stdout.txt" || true
+        echo "```"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_fattn_patch_probe_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_fattn_patch_probe_stderr.txt"
+        echo
+    } >>"$REPORT_MD"
+fi
+
+if [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
+    echo "== running llama.cpp multislot patch source probe on spark (read-only) =="
+    ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_multislot_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_multislot_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_multislot_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_multislot_patch_probe.py" \
+        >"$OUT_DIR/remote_multislot_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_multislot_patch_probe_stderr.txt" || true
+    {
+        echo "## llama.cpp multislot patch probe (Spark)"
+        echo
+        echo "Summary (best-effort):"
+        echo
+        echo "```"
+        sed -n "1,100p" "$OUT_DIR/remote_multislot_patch_probe_stdout.txt" || true
+        echo "```"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_multislot_patch_probe_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_multislot_patch_probe_stderr.txt"
+        echo
+    } >>"$REPORT_MD"
+fi
+
 echo "== running llama.cpp benchmark script on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && $REMOTE_LLAMA_ENV /tmp/benchmark_llamacpp_spark.sh" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
     >"$OUT_DIR/remote_llamacpp_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_stderr.txt" || true
@@ -323,6 +442,61 @@ append_model_runs_csv "${LLAMA_SCOPE:-llamacpp}" "${MODEL_SOURCE:-llamacpp}" "$O
     echo '```'
     echo
 } >>"$REPORT_MD"
+
+fetch_remote_dir_tar()
+{
+    remote_dir="${1:-}"
+    local_tgz="${2:-}"
+    if [ "$remote_dir" = "" ] || [ "$local_tgz" = "" ]; then
+        return 0
+    fi
+    remote_name="${remote_dir##*/}"
+    ssh $SSH_OPTS "$target" "if [ -d $remote_dir ]; then tar -C /tmp -czf - $remote_name; fi" >"$local_tgz" 2>"$local_tgz.stderr" || true
+}
+
+if [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
+    echo "== running llama-server prompt sweep on spark (may be gated) =="
+    remote_dir="/tmp/ds4_llama_server_sweep_$ts"
+    ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_server_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_sweep.py && $(remote_server_sweep_env) OUT_DIR=$remote_dir python3 /tmp/benchmark_llamacpp_server_sweep.py" <"$repo_root/scripts/benchmark_llamacpp_server_sweep.py" \
+        >"$OUT_DIR/remote_llama_server_sweep_stdout.txt" 2>"$OUT_DIR/remote_llama_server_sweep_stderr.txt" || true
+    fetch_remote_dir_tar "$remote_dir" "$OUT_DIR/remote_llama_server_sweep.tgz"
+    if [ -s "$OUT_DIR/remote_llama_server_sweep.tgz" ]; then
+        mkdir -p "$OUT_DIR/llama_server_sweep"
+        tar -xzf "$OUT_DIR/remote_llama_server_sweep.tgz" -C "$OUT_DIR/llama_server_sweep" >/dev/null 2>&1 || true
+    fi
+    {
+        echo "## llama-server prompt sweep (Spark)"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_llama_server_sweep_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_llama_server_sweep_stderr.txt"
+        echo "- tarball: $OUT_DIR/remote_llama_server_sweep.tgz"
+        echo
+    } >>"$REPORT_MD"
+fi
+
+if [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
+    echo "== running llama-server throughput sweep on spark (may be gated) =="
+    remote_dir="/tmp/ds4_llama_server_throughput_sweep_$ts"
+    ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_server_throughput_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_throughput_sweep.py && $(remote_throughput_sweep_env) OUT_DIR=$remote_dir python3 /tmp/benchmark_llamacpp_server_throughput_sweep.py" <"$repo_root/scripts/benchmark_llamacpp_server_throughput_sweep.py" \
+        >"$OUT_DIR/remote_llama_server_throughput_sweep_stdout.txt" 2>"$OUT_DIR/remote_llama_server_throughput_sweep_stderr.txt" || true
+    fetch_remote_dir_tar "$remote_dir" "$OUT_DIR/remote_llama_server_throughput_sweep.tgz"
+    if [ -s "$OUT_DIR/remote_llama_server_throughput_sweep.tgz" ]; then
+        mkdir -p "$OUT_DIR/llama_server_throughput_sweep"
+        tar -xzf "$OUT_DIR/remote_llama_server_throughput_sweep.tgz" -C "$OUT_DIR/llama_server_throughput_sweep" >/dev/null 2>&1 || true
+    fi
+    {
+        echo "## llama-server throughput sweep (Spark)"
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_llama_server_throughput_sweep_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_llama_server_throughput_sweep_stderr.txt"
+        echo "- tarball: $OUT_DIR/remote_llama_server_throughput_sweep.tgz"
+        echo
+    } >>"$REPORT_MD"
+fi
 
 echo "== running MTP sidecar contract probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py && $REMOTE_MTP_SIDECAR_ENV sh -lc '

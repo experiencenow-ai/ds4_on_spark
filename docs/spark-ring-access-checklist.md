@@ -42,19 +42,22 @@ Record (for each node):
 - Wired interface name(s) and MTU (jumbo vs standard).
 - Wi‑Fi interface name(s) and MTU.
 
-Commit-safe address matrix template (redacted):
+Optional: write down the matrix (fill with redacted values as needed):
 
-| Node | SSH target | Primary fabric | Wired iface | Wired MTU | Wi‑Fi iface | Wi‑Fi MTU | Notes |
-|---|---|---|---|---:|---|---:|---|
-| spark0 | `spark0@aitopatom-9ab9.local` | wired | `enP7s7` | 9000 | `wlP9s9` | 1500 | 10GbE link speed expected |
-| spark1 | `spark0@spark1.local` | (tbd) | (tbd) | (tbd) | (tbd) | (tbd) | provision + validate mDNS |
-| spark2 | `spark0@spark2.local` | (tbd) | (tbd) | (tbd) | (tbd) | (tbd) | provision + validate mDNS |
+| Node | SSH target | SSH path | Wired ifname | Wired MTU | Wi‑Fi ifname | Wi‑Fi MTU | Notes |
+|------|------------|----------|--------------|----------:|--------------|----------:|-------|
+| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | 10GbE link expected |
+| spark1 | `spark1.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
+| spark2 | `spark2.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 
 ## 5) MTU Consistency
 
 - Ensure the intended fabric (wired vs Wi‑Fi) uses consistent MTU across nodes for tests that care about latency/bandwidth.
-- Use the ring probe `== network (mtu, compact) ==` section (from `ip link`) to spot mismatches quickly.
+- Use the ring probe `== network (mtu, compact) ==` section (from `ip -br link`) to spot mismatches quickly.
 - The Mac discovery snapshot also records `mtu` for `en0`/`en1` via `ifconfig` for context.
+- Optional: validate MTU end-to-end with DF pings from each host to its peers:
+  - `SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_mtu.sh --topology full aitopatom-9ab9.local spark1.local spark2.local || true`
+  - Override payload sizes (comma-separated, no spaces): `MTU_PAYLOADS=1472,8972`
 
 ## 6) Bandwidth/Latency (Safe, Non-Secret)
 

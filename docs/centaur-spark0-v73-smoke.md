@@ -18,12 +18,32 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
   - Zip contains `centaur_spec_impl_v73/` with `centaur.py`, `requirements.txt`, and tests.
   - Do **not** commit the zip or venvs into this repo.
 
+## Package facts (captured by the smoke)
+
+The smoke prints “package facts” early in the run so bug reports can include version/dep context even when later steps fail:
+
+- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (example observed in the May 11, 2026 zip: `centaur-impl-0.68`)
+- `requirements.txt`: currently:
+  - `numpy>=1.26`
+  - `scipy>=1.11`
+  - `scikit-learn>=1.4`
+
+If `pip install` falls back to building these from source (missing wheels for your Python/OS), treat that as a **DS4 runtime/host compatibility** issue for the purposes of triage (not a Centaur logic bug).
+
 ## Quickstart (recommended)
 
 If you don’t already have `SSH_OPTS` set, use a safe non-interactive default:
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+```
+
+### One-command run from your Mac (recommended)
+
+This stages the zip + fixture and then streams the smoke over SSH:
+
+```bash
+sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 ```
 
 From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
@@ -39,6 +59,12 @@ ssh $SSH_OPTS spark0@<spark0-host> "cd ~/centaur-smoke/v73 && sh -s" < ./scripts
 ```
 
 Artifacts are written under `~/centaur-smoke/v73/run/` on Spark0.
+
+Notable outputs:
+
+- `effective_manifests/hyor_effective_manifest_spark0.json` (from `hyor-sync-effective`)
+- `hyor_effective/spark0/` (materialized node view from `hyor-sync-apply`)
+- `hyor_dashboard/` (HTML/JSON dashboard output)
 
 ### Optional: faster/offline dependency install
 

@@ -26,6 +26,7 @@ class MetricsReport:
     judge: Dict[str, Any]
     reuse: Dict[str, Any]
     useful_novelty: Dict[str, Any]
+    runs: Dict[str, Any]
 
 
 def _inc(counts: Dict[str, int], key: str) -> None:
@@ -39,6 +40,95 @@ def _dup_rate(values: Sequence[str]) -> float:
         return(0.0)
     uniq = len(set(values))
     return(float(len(values) - uniq) / float(len(values)))
+
+def _run_key(run_id: str) -> str:
+    if run_id != "":
+        return(run_id)
+    return("<missing_run_id>")
+
+def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
+    task_id_counts: Dict[str, int] = {}
+    task_family_counts: Dict[str, int] = {}
+    template_counts: Dict[str, int] = {}
+    family_template_counts: Dict[str, int] = {}
+    model_counts: Dict[str, int] = {}
+    answer_counts: Dict[str, int] = {}
+    tag_counts: Dict[str, int] = {}
+    outputs_norm: List[str] = []
+    answers_nonempty: List[str] = []
+    novelty_flagged = 0
+
+    for c in task_runs:
+        _inc(task_id_counts, c.task_id)
+        _inc(task_family_counts, c.task_family)
+        _inc(template_counts, c.prompt_template_id)
+        if c.task_family != "" and c.prompt_template_id != "":
+            _inc(family_template_counts, f"{c.task_family}|{c.prompt_template_id}")
+        _inc(model_counts, c.model_id)
+        _inc(answer_counts, c.answer)
+        if c.answer != "":
+            answers_nonempty.append(c.answer)
+        for tag in lib.get_list(c.raw, "tags", "tag"):
+            _inc(tag_counts, tag)
+        if c.output != "":
+            outputs_norm.append(lib.normalize_text(c.output))
+        if len(lib.useful_novelty_flags(c.output, c.prompt)) != 0:
+            novelty_flagged += 1
+
+    count = len(task_runs)
+    return({
+        "count": count,
+        "diversity": {
+            "task_id": _div_stats(task_id_counts),
+            "task_family": _div_stats(task_family_counts),
+            "prompt_template_id": _div_stats(template_counts),
+            "task_family_template_pair": _div_stats(family_template_counts),
+            "model_id": _div_stats(model_counts),
+            "answer": _div_stats(answer_counts),
+            "tags": _div_stats(tag_counts),
+        },
+        "duplicates": {
+            "output_norm_dup_rate": _dup_rate(outputs_norm),
+            "answer_dup_rate": _dup_rate(answers_nonempty),
+        },
+        "useful_novelty": {
+            "flagged_task_runs": novelty_flagged,
+            "flagged_task_run_rate": 0.0 if count == 0 else (float(novelty_flagged) / float(count)),
+        },
+    })
+
+def _runs_block(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
+    by_run: Dict[str, List[lib.CanonicalRecord]] = {}
+    for c in task_runs:
+        by_run.setdefault(_run_key(c.run_id), []).append(c)
+
+    by_run_id: Dict[str, Any] = {}
+    dup_rate_top: List[Dict[str, Any]] = []
+    flagged_rate_top: List[Dict[str, Any]] = []
+    low_pair_entropy_top: List[Dict[str, Any]] = []
+
+    for run_id in sorted(by_run.keys()):
+        summary = _run_summary(by_run[run_id])
+        by_run_id[run_id] = summary
+        dup_rate = float(((summary.get("duplicates") or {}).get("output_norm_dup_rate")) or 0.0)
+        flagged_rate = float(((summary.get("useful_novelty") or {}).get("flagged_task_run_rate")) or 0.0)
+        pair_ent = float(((((summary.get("diversity") or {}).get("task_family_template_pair") or {}).get("entropy_norm")) or 0.0))
+        cnt = int(summary.get("count", 0) or 0)
+        dup_rate_top.append({"run_id": run_id, "count": cnt, "output_norm_dup_rate": dup_rate})
+        flagged_rate_top.append({"run_id": run_id, "count": cnt, "flagged_task_run_rate": flagged_rate})
+        low_pair_entropy_top.append({"run_id": run_id, "count": cnt, "task_family_template_pair_entropy_norm": pair_ent})
+
+    dup_rate_top.sort(key=lambda x: (-float(x.get("output_norm_dup_rate", 0.0)), -int(x.get("count", 0)), str(x.get("run_id", ""))))
+    flagged_rate_top.sort(key=lambda x: (-float(x.get("flagged_task_run_rate", 0.0)), -int(x.get("count", 0)), str(x.get("run_id", ""))))
+    low_pair_entropy_top.sort(key=lambda x: (float(x.get("task_family_template_pair_entropy_norm", 0.0)), -int(x.get("count", 0)), str(x.get("run_id", ""))))
+
+    return({
+        "run_id_unique": len([k for k in by_run_id.keys() if k != "<missing_run_id>"]),
+        "by_run_id": by_run_id,
+        "output_norm_dup_rate_by_run_id_top": dup_rate_top[:10],
+        "flagged_task_run_rate_by_run_id_top": flagged_rate_top[:10],
+        "low_pair_entropy_norm_by_run_id_top": low_pair_entropy_top[:10],
+    })
 
 
 def _majority_disagreement(labels: Sequence[str]) -> float:
@@ -168,61 +258,36 @@ def _distinct_ratio(counts: Dict[str, int]) -> float:
         return(0.0)
     return(float(len(counts)) / total)
 
+def _rate_top(totals: Dict[str, int], flagged: Dict[str, int], key_name: str, k: int = 10) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for key, total in totals.items():
+        if key == "" or total <= 0:
+            continue
+        bad = flagged.get(key, 0)
+        items.append({
+            key_name: key,
+            "count": total,
+            "flagged": bad,
+            "flagged_rate": float(bad) / float(total),
+        })
+    items.sort(key=lambda x: (-float(x.get("flagged_rate", 0.0)), -int(x.get("count", 0)), str(x.get(key_name, ""))))
+    return(items[:k])
 
-def _useful_novelty_flags(output: str, prompt: str) -> List[str]:
-    flags: List[str] = []
-    norm = lib.normalize_text(output)
-    if norm == "":
-        return(["empty_output"])
-    if lib.extract_answer(output) != "":
-        return([])
-    if norm.isdigit():
-        return([])
-    if norm.startswith("{") and norm.endswith("}"):
-        return([])
-    if norm.startswith("[") and norm.endswith("]"):
-        return([])
-    ws = lib.words(norm)
-    if len(ws) == 0:
-        return(["no_words"])
-    if len(norm) >= 4096:
-        flags.append("very_long_output_ge_4096_chars")
-    if len(ws) <= 2 and len(norm) <= 16:
-        flags.append("very_short_output_le_2_words")
-    if "as an ai" in norm or "as a language model" in norm:
-        flags.append("ai_disclaimer")
-    if "i can't" in norm or "i cannot" in norm or "unable to" in norm:
-        flags.append("refusal_like")
-    if len(ws) >= 8:
-        counts: Dict[str, int] = {}
-        for w in ws:
-            counts[w] = counts.get(w, 0) + 1
-        top = max(counts.values())
-        if float(top) / float(len(ws)) >= 0.65:
-            flags.append("word_repetition_ge_0.65")
-        uniq_frac = float(len(counts)) / float(len(ws))
-        if uniq_frac <= 0.25:
-            flags.append("word_unique_frac_le_0.25")
-    if len(norm) >= 200 and "http" in norm and norm.count("http") >= 3:
-        flags.append("many_urls")
-    if len(ws) >= 12 and prompt != "":
-        pws = lib.words(prompt)
-        if len(pws) >= 8:
-            pset = set(pws)
-            overlap = sum(1 for w in ws if w in pset)
-            if (float(overlap) / float(len(ws))) >= 0.90:
-                flags.append("echo_prompt_overlap_ge_0.90")
-    lines = [lib.normalize_text(x) for x in output.splitlines() if x.strip() != ""]
-    if len(lines) >= 12:
-        lcounts: Dict[str, int] = {}
-        for ln in lines:
-            lcounts[ln] = lcounts.get(ln, 0) + 1
-        top = max(lcounts.values())
-        if top >= 6:
-            flags.append("line_repetition_ge_6")
-        if len(lcounts) <= 4:
-            flags.append("few_unique_lines_le_4")
-    return(flags)
+def _dup_rate_top(totals: Dict[str, int], uniq: Dict[str, int], key_name: str, k: int = 10) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for key, total in totals.items():
+        if key == "" or total <= 0:
+            continue
+        u = uniq.get(key, 0)
+        rate = 0.0 if total <= 0 else (float(total - u) / float(total))
+        items.append({
+            key_name: key,
+            "count": total,
+            "unique": u,
+            "dup_rate": rate,
+        })
+    items.sort(key=lambda x: (-float(x.get("dup_rate", 0.0)), -int(x.get("count", 0)), str(x.get(key_name, ""))))
+    return(items[:k])
 
 
 def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
@@ -278,8 +343,39 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
 
     novelty_flag_counts: Dict[str, int] = {}
     novelty_flagged = 0
+    template_task_total: Dict[str, int] = {}
+    template_task_flagged: Dict[str, int] = {}
+    family_task_total: Dict[str, int] = {}
+    family_task_flagged: Dict[str, int] = {}
+    pair_task_total: Dict[str, int] = {}
+    pair_task_flagged: Dict[str, int] = {}
+    model_task_total: Dict[str, int] = {}
+    model_task_flagged: Dict[str, int] = {}
+
+    template_out_total: Dict[str, int] = {}
+    template_out_uniq: Dict[str, int] = {}
+    template_out_seen: Dict[str, set] = {}
+    pair_out_total: Dict[str, int] = {}
+    pair_out_uniq: Dict[str, int] = {}
+    pair_out_seen: Dict[str, set] = {}
+    model_out_total: Dict[str, int] = {}
+    model_out_uniq: Dict[str, int] = {}
+    model_out_seen: Dict[str, set] = {}
 
     for c in task_runs:
+        tmpl = c.prompt_template_id
+        fam = c.task_family
+        mid = c.model_id
+        pair_k = "" if (fam == "" or tmpl == "") else f"{fam}|{tmpl}"
+        if tmpl != "":
+            template_task_total[tmpl] = template_task_total.get(tmpl, 0) + 1
+        if fam != "":
+            family_task_total[fam] = family_task_total.get(fam, 0) + 1
+        if pair_k != "":
+            pair_task_total[pair_k] = pair_task_total.get(pair_k, 0) + 1
+        if mid != "":
+            model_task_total[mid] = model_task_total.get(mid, 0) + 1
+
         _inc(task_id_counts, c.task_id)
         _inc(task_family_counts, c.task_family)
         _inc(template_counts, c.prompt_template_id)
@@ -310,6 +406,20 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 total_tok = float(itok + otok)
                 total_tok_per_s.append((total_tok * 1000.0) / float(wms))
 
+        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        if len(flags) != 0:
+            novelty_flagged += 1
+            if tmpl != "":
+                template_task_flagged[tmpl] = template_task_flagged.get(tmpl, 0) + 1
+            if fam != "":
+                family_task_flagged[fam] = family_task_flagged.get(fam, 0) + 1
+            if pair_k != "":
+                pair_task_flagged[pair_k] = pair_task_flagged.get(pair_k, 0) + 1
+            if mid != "":
+                model_task_flagged[mid] = model_task_flagged.get(mid, 0) + 1
+            for f in flags:
+                novelty_flag_counts[f] = novelty_flag_counts.get(f, 0) + 1
+
         if c.output != "":
             outputs_exact.append(c.output)
             outputs_norm.append(lib.normalize_text(c.output))
@@ -323,11 +433,27 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 out_3grams[ng] = out_3grams.get(ng, 0) + 1
             for ng in _char_ngrams_norm(c.output, 3):
                 out_char3[ng] = out_char3.get(ng, 0) + 1
-            flags = _useful_novelty_flags(c.output, c.prompt)
-            if len(flags) != 0:
-                novelty_flagged += 1
-                for f in flags:
-                    novelty_flag_counts[f] = novelty_flag_counts.get(f, 0) + 1
+
+            out_norm = lib.normalize_text(c.output)
+            out_h = lib.text_sha1(out_norm)
+            if tmpl != "":
+                template_out_total[tmpl] = template_out_total.get(tmpl, 0) + 1
+                template_out_seen.setdefault(tmpl, set())
+                if out_h not in template_out_seen[tmpl]:
+                    template_out_seen[tmpl].add(out_h)
+                    template_out_uniq[tmpl] = template_out_uniq.get(tmpl, 0) + 1
+            if pair_k != "":
+                pair_out_total[pair_k] = pair_out_total.get(pair_k, 0) + 1
+                pair_out_seen.setdefault(pair_k, set())
+                if out_h not in pair_out_seen[pair_k]:
+                    pair_out_seen[pair_k].add(out_h)
+                    pair_out_uniq[pair_k] = pair_out_uniq.get(pair_k, 0) + 1
+            if mid != "":
+                model_out_total[mid] = model_out_total.get(mid, 0) + 1
+                model_out_seen.setdefault(mid, set())
+                if out_h not in model_out_seen[mid]:
+                    model_out_seen[mid].add(out_h)
+                    model_out_uniq[mid] = model_out_uniq.get(mid, 0) + 1
         if c.prompt != "":
             prompts_norm.append(lib.normalize_text(c.prompt))
             ws = lib.words(c.prompt)
@@ -350,6 +476,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     item_judge_ids: Dict[str, Dict[str, int]] = {}
     judge_id_counts: Dict[str, int] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
+    judge_in_tokens: List[float] = []
+    judge_out_tokens: List[float] = []
+    judge_latency_ms: List[float] = []
+    parse_valid_true = 0
+    parse_valid_false = 0
     for c in judge_pairs:
         _inc(label_counts, c.label)
         _inc(judge_id_counts, c.judge_id)
@@ -357,6 +488,25 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             pair_key = f"{c.a_model_id}|{c.b_model_id}"
             model_pair_label_counts.setdefault(pair_key, {})
             _inc(model_pair_label_counts[pair_key], c.label)
+        pv = c.raw.get("parse_valid", None)
+        if isinstance(pv, bool):
+            if pv:
+                parse_valid_true += 1
+            else:
+                parse_valid_false += 1
+        toks = c.raw.get("tokens", None)
+        if isinstance(toks, dict):
+            ji = lib.get_int(toks, "judge_in", "judge_input", "judge_prompt", "in")
+            jo = lib.get_int(toks, "judge_out", "judge_output", "judge_completion", "out")
+            if ji is not None:
+                judge_in_tokens.append(float(ji))
+            if jo is not None:
+                judge_out_tokens.append(float(jo))
+        lats = c.raw.get("latency_ms", None)
+        if isinstance(lats, dict):
+            jl = lib.get_float(lats, "judge", "judge_ms", "judge_latency_ms")
+            if jl is not None:
+                judge_latency_ms.append(float(jl))
         item = c.item_id
         if item == "":
             item = lib.make_item_id(c.task_id, c.prompt_template_id, c.a_model_id, c.b_model_id)
@@ -541,6 +691,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     model_pair_top.sort(key=lambda x: (-int(x.get("count", 0)), str(x.get("pair_key", ""))))
     model_pair_top = model_pair_top[:20]
 
+    judge_out_budget_target = 64.0
+    judge_out_budget_le_target = sum(1 for x in judge_out_tokens if x <= judge_out_budget_target)
+
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
@@ -554,6 +707,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "invalid_rate": _safe_div(float(invalid), float(len(judge_pairs))),
         "label_balance_ab": balance_ab,
         "label_imbalance_ab": imbalance_ab,
+        "parse_valid_true": parse_valid_true,
+        "parse_valid_false": parse_valid_false,
+        "parse_valid_rate": _safe_div(float(parse_valid_true), float(parse_valid_true + parse_valid_false)),
+        "judge_in_tokens": _num_stats(judge_in_tokens),
+        "judge_out_tokens": _num_stats(judge_out_tokens),
+        "judge_latency_ms": _num_stats(judge_latency_ms),
+        "judge_out_budget_target": judge_out_budget_target,
+        "judge_out_budget_le_target": judge_out_budget_le_target,
+        "judge_out_budget_le_target_rate": _safe_div(float(judge_out_budget_le_target), float(len(judge_out_tokens))),
         "judge_id_unique": len([k for k in judge_id_counts.keys() if k != ""]),
         "judge_id_top": lib.top_counts(judge_id_counts),
         "model_pair_count": len(pair_summary),
@@ -577,7 +739,17 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "flagged_task_runs": novelty_flagged,
         "flagged_task_run_rate": 0.0 if len(task_runs) == 0 else (float(novelty_flagged) / float(len(task_runs))),
         "flag_counts": dict(sorted(novelty_flag_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "flagged_rate_by_prompt_template_id_top": _rate_top(template_task_total, template_task_flagged, "prompt_template_id", k=10),
+        "flagged_rate_by_task_family_top": _rate_top(family_task_total, family_task_flagged, "task_family", k=10),
+        "flagged_rate_by_family_template_top": _rate_top(pair_task_total, pair_task_flagged, "task_family_template_pair", k=10),
+        "flagged_rate_by_model_id_top": _rate_top(model_task_total, model_task_flagged, "model_id", k=10),
     }
+
+    duplicates.update({
+        "output_norm_dup_rate_by_prompt_template_id_top": _dup_rate_top(template_out_total, template_out_uniq, "prompt_template_id", k=10),
+        "output_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_out_total, pair_out_uniq, "task_family_template_pair", k=10),
+        "output_norm_dup_rate_by_model_id_top": _dup_rate_top(model_out_total, model_out_uniq, "model_id", k=10),
+    })
 
     return(MetricsReport(
         totals=totals,
@@ -587,6 +759,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         judge=judge,
         reuse=reuse,
         useful_novelty=useful_novelty,
+        runs=_runs_block(task_runs),
     ))
 
 
@@ -628,6 +801,17 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("## Totals\n")
     for k, v in report.totals.items():
         parts.append(f"- `{k}`: {v}")
+    parts.append("\n## Runs\n")
+    parts.append(f"- `run_id_unique`: {int(report.runs.get('run_id_unique', 0) or 0)}")
+    parts.append("\n### low_pair_entropy_norm_by_run_id_top\n")
+    for js in (report.runs.get("low_pair_entropy_norm_by_run_id_top") or [])[:10]:
+        parts.append(f"- `{js.get('run_id')}`: entropy_norm={float(js.get('task_family_template_pair_entropy_norm', 0.0)):.6f} count={int(js.get('count', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_run_id_top\n")
+    for js in (report.runs.get("output_norm_dup_rate_by_run_id_top") or [])[:10]:
+        parts.append(f"- `{js.get('run_id')}`: dup_rate={float(js.get('output_norm_dup_rate', 0.0)):.6f} count={int(js.get('count', 0))}")
+    parts.append("\n### flagged_task_run_rate_by_run_id_top\n")
+    for js in (report.runs.get("flagged_task_run_rate_by_run_id_top") or [])[:10]:
+        parts.append(f"- `{js.get('run_id')}`: flagged_rate={float(js.get('flagged_task_run_rate', 0.0)):.6f} count={int(js.get('count', 0))}")
     parts.append("\n## Diversity\n")
     for field, js in report.diversity.items():
         parts.append(f"### {field}\n")
@@ -708,10 +892,21 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_list_top(report.tokens.get("output_char_3gram_top", [])))
     parts.append("\n## Duplicates\n")
     for k, v in report.duplicates.items():
+        if isinstance(v, list):
+            continue
         if isinstance(v, float):
             parts.append(f"- `{k}`: {v:.6f}")
         else:
             parts.append(f"- `{k}`: {v}")
+    parts.append("\n### output_norm_dup_rate_by_prompt_template_id_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_prompt_template_id_top", [])[:10]:
+        parts.append(f"- `{js.get('prompt_template_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_family_template_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_family_template_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family_template_pair')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_model_id_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_model_id_top", [])[:10]:
+        parts.append(f"- `{js.get('model_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
@@ -721,6 +916,33 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(f"- `tie_rate`: {report.judge.get('tie_rate'):.6f}")
     parts.append(f"- `invalid_rate`: {report.judge.get('invalid_rate'):.6f}")
     parts.append(f"- `label_balance_ab`: {report.judge.get('label_balance_ab'):.6f}")
+    parts.append(f"- `parse_valid_true`: {int(report.judge.get('parse_valid_true', 0) or 0)}")
+    parts.append(f"- `parse_valid_false`: {int(report.judge.get('parse_valid_false', 0) or 0)}")
+    parts.append(f"- `parse_valid_rate`: {float(report.judge.get('parse_valid_rate', 0.0) or 0.0):.6f}")
+    parts.append(f"- `judge_out_budget_target`: {float(report.judge.get('judge_out_budget_target', 0.0) or 0.0):.6f}")
+    parts.append(f"- `judge_out_budget_le_target`: {int(report.judge.get('judge_out_budget_le_target', 0) or 0)}")
+    parts.append(f"- `judge_out_budget_le_target_rate`: {float(report.judge.get('judge_out_budget_le_target_rate', 0.0) or 0.0):.6f}")
+    parts.append("\n### judge_in_tokens\n")
+    for sk in ("count", "min", "max", "mean", "p50", "p90"):
+        v = (report.judge.get("judge_in_tokens") or {}).get(sk)
+        if isinstance(v, float):
+            parts.append(f"- `{sk}`: {v:.6f}")
+        else:
+            parts.append(f"- `{sk}`: {v}")
+    parts.append("\n### judge_out_tokens\n")
+    for sk in ("count", "min", "max", "mean", "p50", "p90"):
+        v = (report.judge.get("judge_out_tokens") or {}).get(sk)
+        if isinstance(v, float):
+            parts.append(f"- `{sk}`: {v:.6f}")
+        else:
+            parts.append(f"- `{sk}`: {v}")
+    parts.append("\n### judge_latency_ms\n")
+    for sk in ("count", "min", "max", "mean", "p50", "p90"):
+        v = (report.judge.get("judge_latency_ms") or {}).get(sk)
+        if isinstance(v, float):
+            parts.append(f"- `{sk}`: {v:.6f}")
+        else:
+            parts.append(f"- `{sk}`: {v}")
     parts.append("\n### label_counts\n")
     for k, v in report.judge.get("label_counts", {}).items():
         parts.append(f"- `{k}`: {v}")
@@ -744,6 +966,18 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### flag_counts\n")
     for k, v in report.useful_novelty.get("flag_counts", {}).items():
         parts.append(f"- `{k}`: {v}")
+    parts.append("\n### flagged_rate_by_prompt_template_id_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_prompt_template_id_top", [])[:10]:
+        parts.append(f"- `{js.get('prompt_template_id')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
+    parts.append("\n### flagged_rate_by_task_family_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_task_family_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
+    parts.append("\n### flagged_rate_by_family_template_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_family_template_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family_template_pair')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
+    parts.append("\n### flagged_rate_by_model_id_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_model_id_top", [])[:10]:
+        parts.append(f"- `{js.get('model_id')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
     parts.append("")
     return("\n".join(parts))
 
@@ -771,6 +1005,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     report = summarize(records)
     js = {
         "totals": report.totals,
+        "runs": report.runs,
         "diversity": report.diversity,
         "tokens": report.tokens,
         "duplicates": report.duplicates,

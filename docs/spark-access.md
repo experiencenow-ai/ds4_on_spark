@@ -22,6 +22,7 @@ From the Mac repo root, use the scripts in `scripts/` to keep probes consistent 
 Some automation-provided macOS checkouts have a `.git` worktree that is readable but not writable (macOS provenance / sandbox restrictions). In that case:
 
 - You may not be able to `git fetch`, create branches, or commit using the checkout’s default `.git` metadata.
+- A common symptom is `git fetch origin` failing with `Operation not permitted` under `.git/worktrees/.../FETCH_HEAD`; use the shim gitdir for all git operations in that checkout.
 - The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir).
 
 Prefer a local shim repo at `.codex_git/` (gitignored by this repo). Older notes and runs may refer to `.git-codex/`; both layouts work.

@@ -93,10 +93,14 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
     reason = _as_str(obj.get("reason"), "reason", errs)
     if reason != "" and _words(reason) > 18:
         errs.append("reason must be <= 18 words")
+    if reason != "" and len(reason) > 200:
+        errs.append("reason must be <= 200 chars")
 
     train_hint = _as_str(obj.get("train_hint"), "train_hint", errs)
     if train_hint != "" and _words(train_hint) > 18:
         errs.append("train_hint must be <= 18 words")
+    if train_hint != "" and len(train_hint) > 200:
+        errs.append("train_hint must be <= 200 chars")
 
     tags_v = obj.get("tags")
     if not isinstance(tags_v, list):
@@ -153,9 +157,13 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         raw = obj.get("raw")
         if raw is not None and not isinstance(raw, str):
             errs.append("raw must be a string when present")
+        if isinstance(raw, str) and len(raw) > 512:
+            errs.append("raw must be <= 512 chars")
         parse_error = obj.get("parse_error")
         if parse_error is not None and not isinstance(parse_error, str):
             errs.append("parse_error must be a string when present")
+        if isinstance(parse_error, str) and len(parse_error) > 128:
+            errs.append("parse_error must be <= 128 chars")
 
     tokens = _as_obj(obj.get("tokens"), "tokens", errs)
     if tokens is not None:
@@ -233,26 +241,33 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
 
 def parse_json_object_loose(text: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Parse a JSON object even if the model wrapped it with extra text."""
+    s = text.strip()
     try:
-        obj = json.loads(text)
+        obj = json.loads(s)
         if isinstance(obj, dict):
             return obj, ""
         return None, "top-level JSON value must be an object"
     except json.JSONDecodeError:
         pass
 
-    start = text.find("{")
-    end = text.rfind("}")
-    if start < 0 or end < 0 or end <= start:
-        return None, "missing JSON object braces"
-    snippet = text[start : end + 1]
-    try:
-        obj = json.loads(snippet)
-        if not isinstance(obj, dict):
+    # Many judge models occasionally wrap the JSON in extra prose. Prefer the
+    # first parseable object rather than greedy-matching the last '}'.
+    dec = json.JSONDecoder()
+    i = 0
+    while True:
+        start = text.find("{", i)
+        if start < 0:
+            break
+        try:
+            obj2, _end = dec.raw_decode(text, start)
+            if isinstance(obj2, dict):
+                return obj2, ""
             return None, "top-level JSON value must be an object"
-        return obj, ""
-    except json.JSONDecodeError as e:
-        return None, f"json decode error: {e.msg}"
+        except json.JSONDecodeError:
+            i = start + 1
+            continue
+
+    return None, "missing JSON object braces"
 
 
 def iter_jsonl(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:

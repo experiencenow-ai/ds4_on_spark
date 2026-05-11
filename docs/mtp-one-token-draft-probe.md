@@ -14,6 +14,12 @@ This is intentionally narrow:
 - Trunk GGUF (DeepSeek V4 Flash): the main model artifact already used by the baseline runtime loop.
 - MTP sidecar GGUF (DS4-tuned 32‑tensor table): e.g. `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`.
   - Use `scripts/model_contract_probe_mtp_sidecar.py` first; it must return `ok=true`.
+  - Optional stronger integrity gate (recommended when using a staged sidecar): compare payload sample fingerprints against the pinned antirez reference:
+
+```bash
+python3 scripts/verify_mtp_sidecar_payload_fingerprint.py --probe-json /path/to/mtp_sidecar_probe.json --json
+```
+
   - Optional llama.cpp-side sanity check (local file): apply `docs/llamacpp-mtp-sidecar-probe.md` and run `llama-ds4-mtp-sidecar-probe --json` (must also return `ok=true`).
     - Optional stronger loader gate: add `--load-weights` to ensure the sidecar tensor blob actually loads and all 32 tensors have non-null payload pointers.
 
@@ -80,6 +86,16 @@ scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 This runner does not fetch/build. It only runs the provided command, validates the emitted JSON, and saves the report under `/private/tmp`.
 
 Note: the runner assumes the one-token command emits **exactly one JSON object** to stdout (no banners, no logs). Any validation output is written to stderr and captured in the report separately.
+
+Optional sidecar-gated runner: if you want this repo to perform a Spark-side sidecar contract probe first (metadata-only, no trunk load) and then cross-check `mtp_params` against the sidecar’s derived params automatically, use:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
+REMOTE_MTP_SIDECAR_ENV="ALLOW_RUN=1" \
+scripts/run_mtp_one_token_draft_probe_spark_with_sidecar_gate.sh spark0@<spark-host>
+```
+
+This runner also attempts (best-effort) to fetch `/tmp/mtp_sidecar_probe.json` back from Spark and run the same payload fingerprint gate locally, writing the result into the report directory as `sidecar_probe_fingerprint_gate.json`.
 
 ## Implementation checklist (Spark/CUDA llama.cpp fork)
 

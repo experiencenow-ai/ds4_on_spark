@@ -69,9 +69,10 @@ nodedir="$workdir/hyor/node_spark0"
 publish_baseline="$workdir/hyor_publish/baseline"
 publish_type="$workdir/hyor_publish/node_type_default"
 effective_out="$workdir/hyor_effective/spark0"
+effective_manifests="$workdir/effective_manifests"
 catalog_json="${CENTAUR_CATALOG_JSON:-}"
 
-mkdir -p "$workdir" "$ctrldir" "$nodedir" "$publish_baseline" "$publish_type" "$effective_out"
+mkdir -p "$workdir" "$ctrldir" "$nodedir" "$publish_baseline" "$publish_type" "$effective_out" "$effective_manifests"
 
 echo "== centaur v73 smoke (spark0) =="
 echo "zip: $zip"
@@ -88,6 +89,16 @@ if [ ! -f "$pkgdir/centaur.py" ]; then
 	echo "expected $pkgdir/centaur.py after unzip" >&2
 	exit 2
 fi
+
+echo "== centaur package facts =="
+ls -la "$pkgdir" | sed -n '1,20p'
+decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$pkgdir/centaur.py" | sed -n '1p')"
+if [ "$decomposer_version" = "" ]; then
+	decomposer_version="(unknown)"
+fi
+echo "decomposer_version: $decomposer_version"
+echo "requirements.txt:"
+sed -n '1,40p' "$pkgdir/requirements.txt"
 
 echo "== venv =="
 python3 -m venv "$venvdir"
@@ -110,8 +121,6 @@ else
 	fi
 fi
 
-echo "== centaur package facts =="
-ls -la "$pkgdir" | sed -n '1,20p'
 sha256="$(python3 - <<PY
 import hashlib,sys
 p=sys.argv[1]
@@ -156,7 +165,7 @@ centaur hyor-ring-step "$ctrldir" --node-id spark0 --node-type default --right-p
 centaur hyor-ring-step "$nodedir" --node-id spark0 --node-type default --left-peer-root "$ctrldir" --scope effective
 
 echo "== hyor: effective + apply (node view) =="
-centaur hyor-sync-effective "$nodedir" spark0 --node-type default --output "$workdir/hyor_effective_manifest_spark0.json"
+centaur hyor-sync-effective "$nodedir" spark0 --node-type default --output "$effective_manifests/hyor_effective_manifest_spark0.json"
 centaur hyor-sync-apply "$nodedir" spark0 --node-type default --output-dir "$effective_out" --clean
 ls -la "$effective_out" | sed -n '1,40p'
 

@@ -22,3 +22,7 @@ SGLang is a high-performance serving framework that includes explicit DeepSeek-V
 ```
 
 - This repo’s automation loop does **not** run SGLang builds or GPU tests; treat upstream as a reference unless a human approves Spark time + fixtures.
+
+## DFlash model-card PR pin (reference)
+
+Z Lab DFlash model cards reference SGLang at `refs/pull/20547/head` (`e67a0d488d905661e621342912874bc7893f1d94`). We pin this PR ref separately in `docs/upstream-manifest.md` for reproducible inspection.
