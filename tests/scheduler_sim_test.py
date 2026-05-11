@@ -306,6 +306,7 @@ class SchedulerSimTest(unittest.TestCase):
             starvation_ms=1e9,
             hi_burst=0,
             promote_ms=0.0,
+            dflash_draft_cost_scale=0.5,
             adaptive_k=scheduler_sim.AdaptiveKConfig(
                 k_min_interactive=1,
                 k_max_interactive=1,
@@ -325,6 +326,8 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(s["dflash_accept_len_p95"]), 3.0, places=6)
         self.assertAlmostEqual(float(s["dflash_accept_rate"]), 1.0, places=6)
         self.assertAlmostEqual(float(s["dflash_service_slot_ms_per_output_token"]), (1.0 / 3.0), places=6)
+        self.assertAlmostEqual(float(s["dflash_draft_cost_scale"]), 0.5, places=6)
+        self.assertAlmostEqual(float(s["dflash_service_slot_ms_per_output_token_adjusted"]), 0.5, places=6)
 
     def test_summary_includes_mtp_accept_len_percentiles(self) -> None:
         trace = [
