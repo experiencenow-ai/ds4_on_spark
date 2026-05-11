@@ -67,6 +67,8 @@ need_file "deploy/systemd-user/ds4-preflight-tp3@.service"
 need_file "deploy/systemd-user/ds4-preflight-tp3-strict@.service"
 need_file "deploy/systemd-user/ds4-preflight-tp4@.service"
 need_file "deploy/systemd-user/ds4-preflight-tp4-strict@.service"
+need_file "deploy/systemd-user/ds4-support-bundle@.service"
+need_file "deploy/systemd-user/ds4-support-bundle@.timer"
 
 need_file "deploy/config/ds4.env.example"
 need_file "deploy/config/ds4-spark0.env.example"

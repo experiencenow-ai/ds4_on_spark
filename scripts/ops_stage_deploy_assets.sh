@@ -215,6 +215,11 @@ cat <<'EOF'
 # Staged for reference under:
 #   /tmp/ds4-systemd-user/
 #
+# Optional support bundle collector (no sudo):
+#   systemctl --user start ds4-support-bundle@<instance>.service
+# Optional weekly timer:
+#   systemctl --user enable --now ds4-support-bundle@<instance>.timer
+#
 # If you are doing a non-root bring-up with a user-space DS4 checkout, see:
 #   docs/deployment-systemd-user.md
 EOF

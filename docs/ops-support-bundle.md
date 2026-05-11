@@ -30,6 +30,16 @@ sudo systemctl start ds4-support-bundle@spark0.service
 
 `ds4-preflight@.service` and `ds4-preflight-strict@.service` are wired to trigger `ds4-support-bundle@%i.service` automatically on failure.
 
+### Optional: Systemd --user Unit (Human Run)
+
+If you install the user-service templates from `deploy/systemd-user/` (see `docs/deployment-systemd-user.md`), you can capture a support bundle without sudo:
+
+```bash
+systemctl --user start ds4-support-bundle@spark0.service
+```
+
+The user preflight templates in `deploy/systemd-user/` also trigger `ds4-support-bundle@%i.service` automatically on failure.
+
 ### Optional: Periodic Systemd Timer (Human Run)
 
 If you want periodic bundles (for trend debugging), install + enable the timer template:
