@@ -26,6 +26,25 @@ Default local output directory:
 
 - `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)
 
+## Recommended workflow (Spark1/Spark2 ring rsync)
+
+1) Run the rsync-staged ring-step with a run id so artifacts are isolated:
+
+```bash
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+2) Fetch a small artifact bundle back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Default local output directory:
+
+- `/private/tmp/centaur-ring/spark12-v73/<ring_run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)
+
 ## What to include (both bug types)
 
 - `CENTAUR_RUN_ID` and Spark host (sanitized)
@@ -51,6 +70,13 @@ The fetch script pulls (when present):
 - `hyor_dashboard/` (HTML/JSON dashboard output)
 
 These are generally safe to share after sanitizing hostnames and private paths.
+
+## Artifact bundle contents (Spark1/Spark2 ring rsync)
+
+The fetch script pulls (when present):
+
+- `ring_rsync.log`
+- `effective_manifests/` (includes `hyor_effective_manifest_spark1.json` and `..._spark2.json`)
 
 ## Sanitization checklist
 
