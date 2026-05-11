@@ -119,9 +119,16 @@ if [ "$log" != "" ]; then
 	rm -f "$fifo"
 	mkdir -p "$workdir"
 	mkfifo "$fifo"
+	exec 3>&1 4>&2
 	tee "$log" <"$fifo" &
 	teepid="$!"
-	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	cleanup_log()
+	{
+		exec >&3 2>&4
+		rm -f "$fifo"
+		wait "$teepid" 2>/dev/null || true
+	}
+	trap 'cleanup_log' EXIT INT TERM
 	exec >"$fifo" 2>&1
 fi
 
@@ -171,6 +178,17 @@ echo "node_type: $node_type"
 echo "remote_base: $remote_base"
 echo "spark1: $spark1"
 echo "spark2: $spark2"
+
+echo "== centaur package facts =="
+"$py" -V
+decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$centaur_root/centaur.py" | sed -n '1p')"
+if [ "$decomposer_version" = "" ]; then
+	decomposer_version="(unknown)"
+fi
+echo "decomposer_version: $decomposer_version"
+
+echo "== pip freeze (sanitized) =="
+"$py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'
 
 echo "== ensure remote dirs =="
 ssh_run "$spark1" "mkdir -p $remote_s1"

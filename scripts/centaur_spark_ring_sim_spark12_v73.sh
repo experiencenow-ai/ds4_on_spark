@@ -78,9 +78,16 @@ if [ "$log" != "" ]; then
 	rm -f "$fifo"
 	mkdir -p "$workdir"
 	mkfifo "$fifo"
+	exec 3>&1 4>&2
 	tee "$log" <"$fifo" &
 	teepid="$!"
-	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	cleanup_log()
+	{
+		exec >&3 2>&4
+		rm -f "$fifo"
+		wait "$teepid" 2>/dev/null || true
+	}
+	trap 'cleanup_log' EXIT INT TERM
 	exec >"$fifo" 2>&1
 fi
 
@@ -102,6 +109,17 @@ centaur()
 
 echo "== ring sim (spark12) workdir =="
 echo "$workdir"
+
+echo "== centaur package facts =="
+"$py" -V
+decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$centaur_root/centaur.py" | sed -n '1p')"
+if [ "$decomposer_version" = "" ]; then
+	decomposer_version="(unknown)"
+fi
+echo "decomposer_version: $decomposer_version"
+
+echo "== pip freeze (sanitized) =="
+"$py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'
 
 echo "== init roots =="
 centaur hyor-sync-init "$ctrl" --node-id spark0 --node-type "$node_type" --left-peer-root "$s2" --right-peer-root "$s1" --broadcast-peer-root "$s1" --broadcast-peer-root "$s2"

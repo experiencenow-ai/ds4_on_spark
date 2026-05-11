@@ -82,9 +82,16 @@ if [ "$log" != "" ]; then
 	fifo="$workdir/.centaur_node_setup_log.fifo"
 	rm -f "$fifo"
 	mkfifo "$fifo"
+	exec 3>&1 4>&2
 	tee "$log" <"$fifo" &
 	teepid="$!"
-	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	cleanup_log()
+	{
+		exec >&3 2>&4
+		rm -f "$fifo"
+		wait "$teepid" 2>/dev/null || true
+	}
+	trap 'cleanup_log' EXIT INT TERM
 	exec >"$fifo" 2>&1
 fi
 
