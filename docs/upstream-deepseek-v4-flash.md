@@ -2,6 +2,9 @@
 
 DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Face model repo. This project **must not** download or vendor large model artifacts; treat the HF repo as metadata/config only.
 
+- Pinned-at: 2026-05-11 (UTC)
+- Safety policy: use `GIT_LFS_SKIP_SMUDGE=1`, Hugging Face API metadata, or local Spark paths first; large weight fetches require explicit human approval.
+
 ## Sources
 
 - Hugging Face repo: `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash`
@@ -38,6 +41,23 @@ These are tracked as optional GPU-kernel reference points for Spark:
 - `encoding/` (tokenizer-related assets)
 - `inference/` (reference scripts; small, but do not vendor)
 - `DeepSeek_V4.pdf` (technical report)
+
+## Public quality prior (model card, metadata-only)
+
+Record public priors for DeepSeek V4 Flash as a *staging signal* only (benchmark harnesses and evaluation modes differ across vendors and labs, so do not turn these into a “winner” claim without comparability notes).
+
+From the pinned `deepseek-ai/DeepSeek-V4-Flash` model card (`README.md` at commit `6976c7ff1b30a1b2cb7805021b8ba4684041f136`, HF API `last_modified=2026-05-06T04:18:09Z`):
+
+- Benchmarks explicitly named in the “Evaluation Results” tables include: `MMLU`, `MMLU-Redux`, `MMLU-Pro`, `MMMLU`, `CMMLU`, `HumanEval`, `GSM8K`, `MATH`, `LongBench-V2`, `LiveCodeBench`, `SWE Verified`, `SWE Pro`, `SWE Multilingual`, `MCPAtlas Public` / `MCPAtlas`, `Toolathlon`.
+
+Additional public references (non-pinned, URLs only):
+
+- Hugging Face blog post “DeepSeek-V4: a million-token context that agents can actually use” (published 2026-04-24): `https://huggingface.co/blog/deepseekv4`
+- Transformers architecture docs: `https://huggingface.co/docs/transformers/model_doc/deepseek_v4` (notes DeepSeek-V4 was added to Transformers on 2026-05-02).
+
+Sources (pinned revisions):
+
+- `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash/raw/6976c7ff1b30a1b2cb7805021b8ba4684041f136/README.md`
 
 ## Weight footprint (HF API, no downloads)
 
