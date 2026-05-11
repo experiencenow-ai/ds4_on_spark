@@ -164,17 +164,30 @@ def _last_float_before(haystack: str, needle: str):
         return None
     return float(floats[-1])
 
+def _tokens_after_slash(haystack: str):
+    m = re.search(r"/\s*([0-9]+)\s*(?:tokens|runs)\b", haystack)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
 prefill_tps = None
 prefill_ms_per_tok = None
+prefill_tokens = None
 gen_tps = None
 gen_ms_per_tok = None
+gen_tokens = None
 for tl in timings_lines:
     if "prompt eval time" in tl:
         prefill_tps = _last_float_before(tl, "tokens per second")
         prefill_ms_per_tok = _last_float_before(tl, "ms per token")
+        prefill_tokens = _tokens_after_slash(tl)
     elif tl.startswith("eval time") or " eval time" in tl:
         gen_tps = _last_float_before(tl, "tokens per second")
         gen_ms_per_tok = _last_float_before(tl, "ms per token")
+        gen_tokens = _tokens_after_slash(tl)
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
@@ -195,10 +208,14 @@ if prefill_tps is not None:
     summary_lines.append("prefill_tps=%.6f" % prefill_tps)
 if prefill_ms_per_tok is not None:
     summary_lines.append("prefill_ms_per_token=%.6f" % prefill_ms_per_tok)
+if prefill_tokens is not None:
+    summary_lines.append("prompt_tokens=%d" % int(prefill_tokens))
 if gen_tps is not None:
     summary_lines.append("generation_tps=%.6f" % gen_tps)
 if gen_ms_per_tok is not None:
     summary_lines.append("generation_ms_per_token=%.6f" % gen_ms_per_tok)
+if gen_tokens is not None:
+    summary_lines.append("output_tokens=%d" % int(gen_tokens))
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

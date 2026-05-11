@@ -138,6 +138,28 @@ REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-re
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+Optional: append a best-effort scoring row to a local CSV so you can run
+`scripts/model_quality_speed_score.py` as soon as you have multiple runs:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+The CSV row is derived from the `== baseline summary (approx) ==` block emitted
+by the remote runner. For llama.cpp it now includes `output_tokens` (best-effort
+count from the llama.cpp `eval time = ... / <tokens>` timing line).
+
+If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
+it forwards the same CSV/quality env vars:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
 If it loads and generates, rerun with:
 
 - `CTX=4096`, then `CTX=8192`

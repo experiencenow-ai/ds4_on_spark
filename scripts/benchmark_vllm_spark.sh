@@ -106,6 +106,7 @@ utc_start = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 rc = 0
 load_s = None
 generate_wall_s = None
+total_wall_s = None
 generated_tokens = 0
 
 raw_lines = []
@@ -144,6 +145,7 @@ try:
     outs = llm.generate([prompt], sampling)
     end = time.monotonic()
     generate_wall_s = end - loaded
+    total_wall_s = end - start
 
     try:
         o0 = outs[0].outputs[0]
@@ -171,7 +173,9 @@ summary.append("exit_code=%d" % rc)
 summary.append("ttft_first_output_s=NA")
 summary.append("load_s=" + _fmt_float(load_s))
 summary.append("generate_wall_s=" + _fmt_float(generate_wall_s))
+summary.append("total_wall_s=" + _fmt_float(total_wall_s))
 summary.append("generated_tokens=%d" % int(generated_tokens))
+summary.append("output_tokens=%d" % int(generated_tokens))
 if generate_wall_s is not None and generate_wall_s > 0 and generated_tokens > 0:
     summary.append("generation_tps=%.6f" % (generated_tokens / max(1e-9, generate_wall_s)))
 summary.append("max_rss_native=%d" % max_rss_native)

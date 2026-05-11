@@ -106,7 +106,7 @@ row = {
     "prefill_tps": _get("prefill_tps"),
     "ttft_s": _get("ttft_first_output_s", "ttft_s"),
     "total_wall_s": _get("wall_s", "total_wall_s"),
-    "output_tokens": _get("token_trace_events", "output_tokens", "n_tokens"),
+    "output_tokens": _get("output_tokens", "generated_tokens", "token_trace_events", "n_tokens"),
 }
 
 header = [
