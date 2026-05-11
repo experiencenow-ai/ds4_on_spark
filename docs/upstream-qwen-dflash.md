@@ -15,11 +15,11 @@ while preparing this document.
 
 | Priority | Target | Target ref | Target commit / SHA | Target license | Target safetensors | Draft / accelerator | Draft commit / SHA | Draft license | Draft safetensors | Single Spark? | Why test |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | `refs/heads/main` | `dcaee4d4dfc5ee71ad501f01f530e5652438fde0` | `apache-2.0` | 29.03 GiB | `z-lab/Qwen3-Coder-30B-A3B-DFlash` | `98ca0e3e2e6a372f2789d3a5e146566194084317` | `mit` | 0.88 GiB | likely | Smallest strong coding target with an official DFlash drafter. Good first Qwen smoke test. |
-| 2 | `Qwen/Qwen3.6-35B-A3B-FP8` | `refs/heads/main` | `95a723d08a9490559dae23d0cff1d9466213d989` | `apache-2.0` | 34.89 GiB | `z-lab/Qwen3.6-35B-A3B-DFlash` | `42d3b34d588423cdae7ba8f53a8cf7789346a719` | `mit` | 0.88 GiB | likely | Spark-sized FP8 target, 3B active params, and DFlash pair. Best near-term latency/throughput comparison. |
-| 3 | `Qwen/Qwen3.5-27B` | `refs/heads/main` | `fc05daec18b0a78c049392ed2e771dde82bdf654` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.5-27B-DFlash` | `b0400439c04be32c24e04d9dce3821b582c1a68a` | `mit` | 3.22 GiB | likely | User-requested Qwen 27B comparator; DFlash card says it is paired with this exact target and trained at 4096 context. |
-| 4 | `Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.6-27B-DFlash` | `0919688658996800f86b895034249700e9481106` | `mit` | 3.22 GiB | likely | Newer 27B comparator; DFlash card warns inference support may still be incomplete because of architecture changes. |
-| 5 | `inclusionAI/Ling-2.6-flash-int4` | `refs/heads/main` | `1bff63aa1f869e89499d52363790a119fd282edf` | `mit` | 60.38 GiB | none found | n/a | n/a | n/a | maybe | Ling 2.6 comparison baseline; smallest official Ling-2.6-flash precision found so far. |
+| 1 | `inclusionAI/Ling-2.6-flash-int4` | `refs/heads/main` | `1bff63aa1f869e89499d52363790a119fd282edf` | `mit` | 60.38 GiB | none found | n/a | n/a | n/a | maybe | Ling 2.6 baseline: first non-DeepSeek target-only comparator. After any Ling result, ensure this INT4 target-only row exists on Spark0 before other Ling/Qwen variants. |
+| 2 | `Qwen/Qwen3.5-27B` | `refs/heads/main` | `fc05daec18b0a78c049392ed2e771dde82bdf654` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.5-27B-DFlash` | `b0400439c04be32c24e04d9dce3821b582c1a68a` | `mit` | 3.22 GiB | likely | Primary Qwen 27B comparator; run target-only first, then the exact paired DFlash drafter under the same prompt/context/token settings. |
+| 3 | `Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | `apache-2.0` | 51.75 GiB | `z-lab/Qwen3.6-27B-DFlash` | `0919688658996800f86b895034249700e9481106` | `mit` | 3.22 GiB | likely | Newer 27B comparator; DFlash card warns inference support may be incomplete due to architecture changes (treat runtime support as unproven until a clean target-only run passes). |
+| 4 | `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` | `refs/heads/main` | `dcaee4d4dfc5ee71ad501f01f530e5652438fde0` | `apache-2.0` | 29.03 GiB | `z-lab/Qwen3-Coder-30B-A3B-DFlash` | `98ca0e3e2e6a372f2789d3a5e146566194084317` | `mit` | 0.88 GiB | likely | Smaller strong coding target with an official DFlash drafter; good post-27B paired probe. |
+| 5 | `Qwen/Qwen3.6-35B-A3B-FP8` | `refs/heads/main` | `95a723d08a9490559dae23d0cff1d9466213d989` | `apache-2.0` | 34.89 GiB | `z-lab/Qwen3.6-35B-A3B-DFlash` | `42d3b34d588423cdae7ba8f53a8cf7789346a719` | `mit` | 0.88 GiB | likely | A3B target with paired DFlash; run after 27B + 30B-A3B to keep the staging ladder monotonic. |
 | 6 | `inclusionAI/Ling-2.6-flash-fp8` | `refs/heads/main` | `8bc416b60fe28be33303d57bb77dd826445a1eb1` | `mit` | 101.48 GiB | none found | n/a | n/a | n/a | maybe | Higher-precision Ling 2.6 comparator if Spark0 has enough memory headroom (tight); test after INT4. |
 | 7 | `Qwen/Qwen3-Coder-Next-FP8` | `refs/heads/main` | `da6e2ed27304dd39abadd9c82ef50e8de67bdd4c` | `apache-2.0` | 74.86 GiB | `z-lab/Qwen3-Coder-Next-DFlash` | `6d741db11b89d7ea80a423b109f0424817ce8f1b` | `mit` | 0.88 GiB | maybe | Larger 80B/3B-active coding-agent target; plausible on Spark0, but should run after the smaller candidates. |
 | 8 | `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | `refs/heads/main` | `003f183a92fbe5b9a8325aaa8b2ae797c91dd90f` | `apache-2.0` | not measured here | none selected | n/a | n/a | n/a | no | Dual-Spark or future reference only unless a smaller local quantized artifact appears. |
@@ -99,6 +99,10 @@ Treat these as sources for later manual prior extraction (do not cherry-pick ven
 
 ## Measurement Order
 
+Staging ladder note (cost control):
+
+- If the Qwen 27B target artifacts are **not** already staged on Spark0, run a cheap paired DFlash plumbing check first (for example `Qwen/Qwen3.5-4B` or `Qwen/Qwen3.5-9B` plus the exact `z-lab/*-DFlash` drafter from the expansion table below) before approving any large download.
+
 1. Run a no-download vLLM package/CUDA probe on Spark0.
 2. If a target is already present on Spark0, run a short target-only generation
    probe first: fixed prompt, `MAX_TOKENS=64`, `TENSOR_PARALLEL_SIZE=1`.
@@ -108,6 +112,15 @@ Treat these as sources for later manual prior extraction (do not cherry-pick ven
    same target, prompt, context, and token count.
 5. Compare target-only vs DFlash on the same software stack before changing
    quantization, runtime branch, or prompt length.
+
+Metric separation (recommended `scope` labels for `MODEL_RUNS_CSV`):
+
+- DeepSeek V4 Flash (target-only runtime baseline): `deepseek_v4_flash`
+- DeepSeek V4 Flash MTP (draft/accept metrics): `deepseek_v4_flash_mtp`
+- Ling target-only: `ling_target`
+- Qwen target-only: `qwen_target`
+- Qwen DFlash (paired): `qwen_dflash`
+- Other non-Qwen DFlash (paired): `other_dflash`
 
 ## vLLM Probe Examples
 
