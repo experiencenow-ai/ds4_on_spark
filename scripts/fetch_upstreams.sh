@@ -60,6 +60,8 @@ Targets:
   gemma_4_31b_it_dflash_hf             (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_20b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_20b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  llama3_1_8b_instruct_hf              (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  llama3_1_8b_instruct_dflash_hf        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_120b_hf                      (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_120b_dflash_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   kimi_k2_5_hf                         (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -481,6 +483,16 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/z-lab/gpt-oss-20b-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "gpt_oss_20b_dflash_hf" "https://huggingface.co/z-lab/gpt-oss-20b-DFlash" "${ref}" "${expected}"
+			;;
+		llama3_1_8b_instruct_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/meta-llama/Llama-3.1-8B-Instruct"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "llama3_1_8b_instruct_hf" "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct" "${ref}" "${expected}"
+			;;
+		llama3_1_8b_instruct_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "llama3_1_8b_instruct_dflash_hf" "https://huggingface.co/z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat" "${ref}" "${expected}"
 			;;
 		gpt_oss_120b_hf)
 			# HF metadata/config only: do not download weights.
