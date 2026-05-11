@@ -220,6 +220,8 @@ Logs:
 ```bash
 journalctl -u ds4@spark0.service -n 200 --no-pager
 journalctl -u ds4-preflight@spark0.service -n 200 --no-pager
+# If your unit templates include SyslogIdentifier=ds4-%i:
+journalctl -t ds4-spark0 -n 200 --no-pager
 ```
 
 ## Conventions + Runbooks

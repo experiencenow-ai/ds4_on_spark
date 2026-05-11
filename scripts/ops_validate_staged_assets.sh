@@ -109,6 +109,26 @@ sh -n "$scripts_dir/ops_validate_staged_assets.sh"
 sh -n "$scripts_dir/ops_validate_installed_assets.sh"
 sh -n "$scripts_dir/ops_install_staged_assets.sh"
 
+echo "== systemd unit syntax (best effort) =="
+if command -v systemd-analyze >/dev/null 2>&1; then
+    if systemd-analyze verify \
+        "$systemd_dir/ds4@.service" \
+        "$systemd_dir/ds4-strict@.service" \
+        "$systemd_dir/ds4-preflight@.service" \
+        "$systemd_dir/ds4-preflight-strict@.service" \
+        "$systemd_dir/ds4-support-bundle@.service" \
+        "$systemd_dir/ds4-preflight@.timer" \
+        "$systemd_dir/ds4-preflight-strict@.timer" \
+        "$systemd_dir/ds4-support-bundle@.timer" \
+        >/dev/null 2>&1; then
+        echo "systemd-analyze verify: ok"
+    else
+        echo "systemd-analyze verify: reported issues (review output by re-running without redirection)" >&2
+    fi
+else
+    echo "skip (missing: systemd-analyze)"
+fi
+
 echo "== env examples include required keys =="
 for env in "$config_dir/ds4.env.example" "$config_dir/ds4-spark0.env.example" "$config_dir/ds4-spark1.env.example"; do
     need_key_in_file "DS4_INSTANCE" "$env"
