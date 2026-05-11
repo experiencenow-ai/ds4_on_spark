@@ -26,6 +26,14 @@ If you don’t already have `SSH_OPTS` set, use a safe non-interactive default:
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 ```
 
+### One-command run from your Mac (recommended)
+
+This stages the zip + fixture and then streams the smoke over SSH:
+
+```bash
+sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
+```
+
 From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 
 ```bash

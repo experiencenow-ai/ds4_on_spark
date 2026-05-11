@@ -12,6 +12,12 @@ Before attempting a real ring on Spark1/2, ensure each node has a local Centaur 
 - `unzip` available
 - A Centaur v73 extraction + venv under a user-writable dir (recommended: `~/centaur-smoke/v73/run/`)
 
+From your Mac repo root, you can stage the zip (and optional tiny catalog fixture) to both nodes:
+
+```bash
+sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
+```
+
 One minimal per-node setup (run on Spark{1,2}):
 
 ```bash
