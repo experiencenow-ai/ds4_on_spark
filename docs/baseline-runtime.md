@@ -144,9 +144,11 @@ Per-script useful env vars:
 - `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`
 - `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL_ID` (CSV label override; avoids absolute Spark paths)
+- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
+- `scripts/run_baseline_vllm_dflash_pair.sh`: `VLLM_SCOPE_TARGET`, `VLLM_SCOPE_DFLASH` (CSV `scope` labels for target-only vs DFlash)
 
 See `docs/upstream-qwen-dflash.md` for Ling, Qwen, and DFlash candidate order,
 artifact sizes, and example vLLM env strings.
@@ -160,6 +162,8 @@ budget, and CSV labeling:
 ```sh
 MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
 RUN_LABEL=qwen35-27b \
+VLLM_SCOPE_TARGET=qwen_target \
+VLLM_SCOPE_DFLASH=qwen_dflash \
 VLLM_TARGET_ID=Qwen/Qwen3.5-27B \
 VLLM_TARGET_MODEL=/abs/path/to/Qwen3.5-27B \
 VLLM_DRAFT_MODEL=/abs/path/to/Qwen3.5-27B-DFlash \

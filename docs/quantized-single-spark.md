@@ -198,6 +198,8 @@ MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/mo
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
+Note: `scripts/run_quantized_single_spark.sh` sets `LLAMA_SCOPE=deepseek_v4_flash` by default when appending CSV rows, so DeepSeek V4 Flash runs do not get mixed into generic `llamacpp` scopes.
+
 If it loads and generates, rerun with:
 
 - `CTX=4096`, then `CTX=8192`

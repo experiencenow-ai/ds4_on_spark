@@ -14,6 +14,8 @@ REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-
 RUN_LABEL="${RUN_LABEL:-}"
 MODEL_RUNS_CSV="${MODEL_RUNS_CSV:-}"
 VLLM_MODEL_ID="${VLLM_MODEL_ID:-}"
+LLAMA_SCOPE="${LLAMA_SCOPE:-llamacpp}"
+VLLM_SCOPE="${VLLM_SCOPE:-vllm}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -180,6 +182,11 @@ score_model_runs_csv()
     if [ "$RUN_LABEL" != "" ]; then
         echo "- run_label: $RUN_LABEL"
     fi
+    if [ "$MODEL_RUNS_CSV" != "" ]; then
+        echo "- model_runs_csv: $MODEL_RUNS_CSV"
+        echo "- llama_scope: ${LLAMA_SCOPE:-llamacpp}"
+        echo "- vllm_scope: ${VLLM_SCOPE:-vllm}"
+    fi
     echo
     echo "## Safety Gates"
     echo
@@ -287,7 +294,7 @@ echo "== running llama.cpp benchmark script on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && $REMOTE_LLAMA_ENV /tmp/benchmark_llamacpp_spark.sh" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
     >"$OUT_DIR/remote_llamacpp_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_stderr.txt" || true
 
-append_model_runs_csv "llamacpp" "${MODEL_SOURCE:-llamacpp}" "$OUT_DIR/remote_llamacpp_stdout.txt"
+append_model_runs_csv "${LLAMA_SCOPE:-llamacpp}" "${MODEL_SOURCE:-llamacpp}" "$OUT_DIR/remote_llamacpp_stdout.txt"
 
 {
     echo "## llama.cpp (Spark)"
@@ -363,7 +370,7 @@ vllm_model_label="$VLLM_MODEL"
 if [ "$VLLM_MODEL_ID" != "" ]; then
     vllm_model_label="$VLLM_MODEL_ID"
 fi
-append_model_runs_csv "vllm" "${vllm_model_label:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
+append_model_runs_csv "${VLLM_SCOPE:-vllm}" "${vllm_model_label:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
 
 {
     echo "## vLLM (Spark)"
