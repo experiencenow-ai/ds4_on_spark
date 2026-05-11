@@ -120,6 +120,7 @@ The probe is designed to capture non-secret OS/CPU/GPU/network/storage data with
 If the driver-side `nvidia-smi` compute capability query is unavailable, the `nvcc` runtime probe is the fallback source for compute capability (`device0 cc:`). The runtime probe also prints `runtime max cc: ...` as a quick sanity-check on multi-GPU hosts.
 When `REDACT=1`, the probe also scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 The `nvidia-smi` inventory section includes per-GPU `index` and `pci.bus_id` to make multi-GPU hosts easier to compare across reboots.
+On unified-memory hosts (like Spark0), `nvidia-smi` may report `memory.total` as `[N/A]`; use the probe’s `== memory ==` section (`free -h`) and the CUDA runtime probe’s `device0 global mem (bytes)` instead.
 
 For quick smoke checks (especially when Spark1 is flaky/not-yet-provisioned), use summary mode:
 

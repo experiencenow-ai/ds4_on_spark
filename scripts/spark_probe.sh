@@ -293,13 +293,19 @@ if [ "$have_smi" = "1" ]; then
 			echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
 		fi
 	fi
-else
-	echo "nvidia-smi not found"
-fi
-echo
-echo "== nvidia-smi pci ids (optional) =="
-if command -v nvidia-smi >/dev/null 2>&1; then
-	ids_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.device_id,pci.sub_device_id --format=csv,noheader,nounits 2>/dev/null || true)"
+	else
+		echo "nvidia-smi not found"
+	fi
+	if [ "$q" != "" ]; then
+		smi_mem_total_any_na="$(printf "%s\n" "$q" | awk -F"," '"'"'{ v=$NF; gsub(/^[ \t]+|[ \t]+$/, "", v); if ( v == "[N/A]" ) { print "1"; exit } }'"'"')"
+		if [ "$smi_mem_total_any_na" = "1" ]; then
+			echo "note: nvidia-smi memory.total is [N/A] (unified memory); use == memory == and the cuda runtime probe global mem bytes"
+		fi
+	fi
+	echo
+	echo "== nvidia-smi pci ids (optional) =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		ids_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.device_id,pci.sub_device_id --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$ids_q" != "" ]; then
 		if printf "%s" "$ids_q" | grep -qi "not a valid field"; then
 			echo "pci id query not supported"
