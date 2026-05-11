@@ -51,7 +51,7 @@ Notes:
 Recommended: use the staged installer wrapper (human-run; review first):
 
 ```bash
-sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spark2> --start-preflight
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spark2> --start-preflight --preflight tp3
 ```
 
 Notes:
