@@ -145,6 +145,27 @@ Key signals (from the report JSON):
 
 Recommendation (synthetic): keep an **adaptive batch-K controller** available; fixed high batch K can sharply inflate backpressure drops under overload. Tune thresholds against real traces once available.
 
+## Adaptive K Controller Smoothing (EMA + Update Interval)
+
+Scenario: two-stream arrivals with bursty inter-arrival deltas (both classes), moderate queue capacity (`expert_queue_max=512`), and adaptive K enabled. Compare:
+
+- baseline (no smoothing): `ema_alpha=1.0`, `update_ms=0.0`, `k_slew=0`
+- EMA smoothing: `ema_alpha=0.2`, `update_ms=0.0`, `k_slew=1`
+- EMA + rate-limited updates: `ema_alpha=0.2`, `update_ms=2.0`, `k_slew=1`
+
+Key signals (from the report JSON):
+
+- `k_change_frac_tokens_batch`:
+  - baseline: `0.000225`
+  - EMA: `7.5e-05`
+  - EMA + update_ms: `7.5e-05`
+- `k_update_frac_tokens_batch`:
+  - baseline: `1.0`
+  - EMA: `1.0`
+  - EMA + update_ms: `0.137625`
+
+Recommendation (synthetic): keep **controller smoothing knobs** available in the runtime design (EMA, update interval, and optional slew). They reduce controller churn in bursty regimes without changing drop behavior here; tune against real quantized-runtime traces before committing to defaults.
+
 ## Adaptive K Signal Choice (Global vs Candidates vs Class)
 
 Scenario: two-stream overload with non-trivial interactive demand (`interactive_arrival_rate_tps=2000`) plus saturated batch demand (`batch_arrival_rate_tps=20000`), small expert queue (`expert_queue_max=128`), and adaptive K enabled.
