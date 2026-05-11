@@ -3649,8 +3649,13 @@ def run_simulation(
     def _retry_stalled(now_ms: float) -> None:
         if len(stalled_tokens) == 0:
             return
-        n = len(stalled_tokens)
-        for _ in range(n):
+        # Avoid O(N^2) retry storms under sustained overload (stall policy can accumulate many blocked tokens).
+        # We retry a bounded number per TASK_DONE event; blocked tokens stay in the deque until they can admit.
+        retry_budget = len(stalled_tokens)
+        max_retry = max(32, int(cfg.num_experts) * max(1, int(cfg.expert_parallelism)))
+        if retry_budget > max_retry:
+            retry_budget = max_retry
+        for _ in range(retry_budget):
             tid = stalled_tokens.popleft()
             stalled_set.discard(tid)
             ts = tokens.get(tid)

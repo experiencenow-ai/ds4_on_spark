@@ -3934,6 +3934,17 @@ class SchedulerSimTest(unittest.TestCase):
         stop = row0["mtp_stop_at_reject"]
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
 
+    def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["backpressure_zero_admit_policy"]
+        base = scenario["results"]["baseline"]["summary"]
+        stall = scenario["results"]["variants"]["stall"]["summary"]
+        self.assertLess(float(stall["drop_frac_tokens"]), float(base["drop_frac_tokens"]))
+        self.assertGreater(float(stall["blocked_stages_backpressure_attempts"]), 0.0)
+        self.assertGreater(float(stall["token_p95_batch_ms"]), float(base["token_p95_batch_ms"]))
+
     def test_recommendations_runtime_trace_mtp_ablation_runs(self) -> None:
         from sim.scheduler import recommendations
         from sim.scheduler import scheduler_sim
