@@ -543,7 +543,7 @@ __global__ void cuda_arch_probe(uint32_t *out)
 		return(rc);
 		if ( count <= 0 )
 		{
-			printf(\"cuda drv=%d rt=%d count=%d bus_width_bits=%d async_engines=%d max_persisting_l2=%d max_apw=%d tma_map=%d schema=3\\n\",driver_v,runtime_v,count,bus_width_bits,async_engines,max_persisting_l2,max_apw_bytes,tma_map);
+			printf(\"cuda drv=%d rt=%d count=%d bus_width_bits=%d async_engines=%d max_persisting_l2=%d max_apw=%d tma_map=%d cuda_arch=0 schema=4\\n\",driver_v,runtime_v,count,bus_width_bits,async_engines,max_persisting_l2,max_apw_bytes,tma_map);
 			return(0);
 		}
 		rc = ck(cudaGetDeviceProperties(&prop,0),-3,\"cudaGetDeviceProperties(0)\");
@@ -573,10 +573,6 @@ __global__ void cuda_arch_probe(uint32_t *out)
 	#else
 		tma_map = -1;
 	#endif
-		mem_bytes = (uint64_t)prop.totalGlobalMem;
-		smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-		printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d schema=3\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map);
-
 	rc = ck(cudaMalloc((void **)&dout,sizeof(out)),-4,\"cudaMalloc\");
 	if ( rc != 0 )
 		return(rc);
@@ -585,35 +581,52 @@ __global__ void cuda_arch_probe(uint32_t *out)
 	if ( rc != 0 )
 		return(rc);
 	rc = ck(cudaMemcpy(&out,dout,sizeof(out),cudaMemcpyDeviceToHost),-6,\"cudaMemcpy\");
+	(void)cudaFree(dout);
 	if ( rc != 0 )
 		return(rc);
-	printf(\"__CUDA_ARCH__=%u\\n\",out);
-	(void)cudaFree(dout);
+	mem_bytes = (uint64_t)prop.totalGlobalMem;
+	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
+		printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d cuda_arch=%u schema=4\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map,out);
 	return(0);
 }
 EOF
 
+run_retry() {
+	name=\"\$1\"
+	shift
+	set +e
+	\"\$@\"
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		return 0
+	fi
+	echo \"(\${name} failed rc=\${rc}; retrying once)\" >&2
+	sleep 1
+	\"\$@\"
+}
+
 echo \"-- build: -arch=sm_121\"
 \$NVCC -O2 -std=c++17 -arch=sm_121 -o \"$REMOTE_DIR\"/nvcc_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_sm121_minimal\"
-\"$REMOTE_DIR\"/nvcc_sm121_minimal
+run_retry nvcc_sm121_minimal \"$REMOTE_DIR\"/nvcc_sm121_minimal
 echo
 echo \"-- build: --gpu-architecture=sm_121\"
 \$NVCC -O2 -std=c++17 --gpu-architecture=sm_121 -o \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_gpuarch_sm121_minimal\"
-\"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal
+run_retry nvcc_gpuarch_sm121_minimal \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal
 echo
 echo \"-- build: -arch=native\"
 \$NVCC -O2 -std=c++17 -arch=native -o \"$REMOTE_DIR\"/nvcc_native_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_native_minimal\"
-\"$REMOTE_DIR\"/nvcc_native_minimal
+run_retry nvcc_native_minimal \"$REMOTE_DIR\"/nvcc_native_minimal
 
 if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 	echo
 	echo \"-- build: -arch=compute_121 (PTX; JIT at runtime)\"
 	\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/nvcc_compute121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 	echo \"-- run: nvcc_compute121_minimal\"
-	\"$REMOTE_DIR\"/nvcc_compute121_minimal
+	run_retry nvcc_compute121_minimal \"$REMOTE_DIR\"/nvcc_compute121_minimal
 fi
 
 try_gencode_build_run() {
