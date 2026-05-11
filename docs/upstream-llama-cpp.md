@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/tags/b9109`
-- Commit: `68e7ea3eabef29a3e222681c81e0cc7ed070c09d`
+- Ref: `refs/tags/b9110`
+- Commit: `ef22b3e4ac9444d1dca1c44164861e0317b5579d`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -79,9 +79,9 @@ Patch asset (for the pinned Spark fork):
 
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9109/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9109/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9109/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 

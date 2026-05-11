@@ -260,6 +260,7 @@ print_head_report()
 	print_ref "Ling-2.6-flash (HF)" "https://huggingface.co/inclusionAI/Ling-2.6-flash"
 	print_ref "Ling-2.6-flash-fp8 (HF)" "https://huggingface.co/inclusionAI/Ling-2.6-flash-fp8"
 	print_ref "Ling-2.6-flash-int4 (HF)" "https://huggingface.co/inclusionAI/Ling-2.6-flash-int4"
+	print_ref "Ling-2.6-flash GGUF (ljupco, HF)" "https://huggingface.co/ljupco/Ling-2.6-flash-GGUF"
 	print_ref "Gemma-4-26B-A4B-it (HF)" "https://huggingface.co/google/gemma-4-26B-A4B-it"
 	print_ref "Gemma-4-26B-A4B-it-DFlash (HF)" "https://huggingface.co/z-lab/gemma-4-26B-A4B-it-DFlash"
 	print_ref "Gemma-4-31B-it (HF)" "https://huggingface.co/google/gemma-4-31B-it"
