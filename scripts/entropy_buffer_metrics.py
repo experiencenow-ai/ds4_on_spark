@@ -26,6 +26,7 @@ class MetricsReport:
     judge: Dict[str, Any]
     reuse: Dict[str, Any]
     useful_novelty: Dict[str, Any]
+    runs: Dict[str, Any]
 
 
 def _inc(counts: Dict[str, int], key: str) -> None:
@@ -39,6 +40,95 @@ def _dup_rate(values: Sequence[str]) -> float:
         return(0.0)
     uniq = len(set(values))
     return(float(len(values) - uniq) / float(len(values)))
+
+def _run_key(run_id: str) -> str:
+    if run_id != "":
+        return(run_id)
+    return("<missing_run_id>")
+
+def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
+    task_id_counts: Dict[str, int] = {}
+    task_family_counts: Dict[str, int] = {}
+    template_counts: Dict[str, int] = {}
+    family_template_counts: Dict[str, int] = {}
+    model_counts: Dict[str, int] = {}
+    answer_counts: Dict[str, int] = {}
+    tag_counts: Dict[str, int] = {}
+    outputs_norm: List[str] = []
+    answers_nonempty: List[str] = []
+    novelty_flagged = 0
+
+    for c in task_runs:
+        _inc(task_id_counts, c.task_id)
+        _inc(task_family_counts, c.task_family)
+        _inc(template_counts, c.prompt_template_id)
+        if c.task_family != "" and c.prompt_template_id != "":
+            _inc(family_template_counts, f"{c.task_family}|{c.prompt_template_id}")
+        _inc(model_counts, c.model_id)
+        _inc(answer_counts, c.answer)
+        if c.answer != "":
+            answers_nonempty.append(c.answer)
+        for tag in lib.get_list(c.raw, "tags", "tag"):
+            _inc(tag_counts, tag)
+        if c.output != "":
+            outputs_norm.append(lib.normalize_text(c.output))
+        if len(lib.useful_novelty_flags(c.output, c.prompt)) != 0:
+            novelty_flagged += 1
+
+    count = len(task_runs)
+    return({
+        "count": count,
+        "diversity": {
+            "task_id": _div_stats(task_id_counts),
+            "task_family": _div_stats(task_family_counts),
+            "prompt_template_id": _div_stats(template_counts),
+            "task_family_template_pair": _div_stats(family_template_counts),
+            "model_id": _div_stats(model_counts),
+            "answer": _div_stats(answer_counts),
+            "tags": _div_stats(tag_counts),
+        },
+        "duplicates": {
+            "output_norm_dup_rate": _dup_rate(outputs_norm),
+            "answer_dup_rate": _dup_rate(answers_nonempty),
+        },
+        "useful_novelty": {
+            "flagged_task_runs": novelty_flagged,
+            "flagged_task_run_rate": 0.0 if count == 0 else (float(novelty_flagged) / float(count)),
+        },
+    })
+
+def _runs_block(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
+    by_run: Dict[str, List[lib.CanonicalRecord]] = {}
+    for c in task_runs:
+        by_run.setdefault(_run_key(c.run_id), []).append(c)
+
+    by_run_id: Dict[str, Any] = {}
+    dup_rate_top: List[Dict[str, Any]] = []
+    flagged_rate_top: List[Dict[str, Any]] = []
+    low_pair_entropy_top: List[Dict[str, Any]] = []
+
+    for run_id in sorted(by_run.keys()):
+        summary = _run_summary(by_run[run_id])
+        by_run_id[run_id] = summary
+        dup_rate = float(((summary.get("duplicates") or {}).get("output_norm_dup_rate")) or 0.0)
+        flagged_rate = float(((summary.get("useful_novelty") or {}).get("flagged_task_run_rate")) or 0.0)
+        pair_ent = float(((((summary.get("diversity") or {}).get("task_family_template_pair") or {}).get("entropy_norm")) or 0.0))
+        cnt = int(summary.get("count", 0) or 0)
+        dup_rate_top.append({"run_id": run_id, "count": cnt, "output_norm_dup_rate": dup_rate})
+        flagged_rate_top.append({"run_id": run_id, "count": cnt, "flagged_task_run_rate": flagged_rate})
+        low_pair_entropy_top.append({"run_id": run_id, "count": cnt, "task_family_template_pair_entropy_norm": pair_ent})
+
+    dup_rate_top.sort(key=lambda x: (-float(x.get("output_norm_dup_rate", 0.0)), -int(x.get("count", 0)), str(x.get("run_id", ""))))
+    flagged_rate_top.sort(key=lambda x: (-float(x.get("flagged_task_run_rate", 0.0)), -int(x.get("count", 0)), str(x.get("run_id", ""))))
+    low_pair_entropy_top.sort(key=lambda x: (float(x.get("task_family_template_pair_entropy_norm", 0.0)), -int(x.get("count", 0)), str(x.get("run_id", ""))))
+
+    return({
+        "run_id_unique": len([k for k in by_run_id.keys() if k != "<missing_run_id>"]),
+        "by_run_id": by_run_id,
+        "output_norm_dup_rate_by_run_id_top": dup_rate_top[:10],
+        "flagged_task_run_rate_by_run_id_top": flagged_rate_top[:10],
+        "low_pair_entropy_norm_by_run_id_top": low_pair_entropy_top[:10],
+    })
 
 
 def _majority_disagreement(labels: Sequence[str]) -> float:
@@ -615,6 +705,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         judge=judge,
         reuse=reuse,
         useful_novelty=useful_novelty,
+        runs=_runs_block(task_runs),
     ))
 
 
@@ -656,6 +747,17 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("## Totals\n")
     for k, v in report.totals.items():
         parts.append(f"- `{k}`: {v}")
+    parts.append("\n## Runs\n")
+    parts.append(f"- `run_id_unique`: {int(report.runs.get('run_id_unique', 0) or 0)}")
+    parts.append("\n### low_pair_entropy_norm_by_run_id_top\n")
+    for js in (report.runs.get("low_pair_entropy_norm_by_run_id_top") or [])[:10]:
+        parts.append(f"- `{js.get('run_id')}`: entropy_norm={float(js.get('task_family_template_pair_entropy_norm', 0.0)):.6f} count={int(js.get('count', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_run_id_top\n")
+    for js in (report.runs.get("output_norm_dup_rate_by_run_id_top") or [])[:10]:
+        parts.append(f"- `{js.get('run_id')}`: dup_rate={float(js.get('output_norm_dup_rate', 0.0)):.6f} count={int(js.get('count', 0))}")
+    parts.append("\n### flagged_task_run_rate_by_run_id_top\n")
+    for js in (report.runs.get("flagged_task_run_rate_by_run_id_top") or [])[:10]:
+        parts.append(f"- `{js.get('run_id')}`: flagged_rate={float(js.get('flagged_task_run_rate', 0.0)):.6f} count={int(js.get('count', 0))}")
     parts.append("\n## Diversity\n")
     for field, js in report.diversity.items():
         parts.append(f"### {field}\n")
@@ -816,6 +918,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     report = summarize(records)
     js = {
         "totals": report.totals,
+        "runs": report.runs,
         "diversity": report.diversity,
         "tokens": report.tokens,
         "duplicates": report.duplicates,
