@@ -46,6 +46,8 @@ This stages the zip + fixture and then streams the smoke over SSH:
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 ```
 
+This auto-generates a UTC `CENTAUR_RUN_ID` and writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/`.
+
 From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 
 ```bash
@@ -58,13 +60,17 @@ Then run the smoke on Spark0 (the stage script prints the exact command). The sm
 ssh $SSH_OPTS spark0@<spark0-host> "cd ~/centaur-smoke/v73 && sh -s" < ./scripts/centaur_spark0_v73_smoke.sh
 ```
 
-Artifacts are written under `~/centaur-smoke/v73/run/` on Spark0.
+Artifacts are written under:
+
+- `~/centaur-smoke/v73/run/<run_id>/` when `CENTAUR_RUN_ID` is set (recommended), or
+- `~/centaur-smoke/v73/run/` otherwise.
 
 Notable outputs:
 
 - `effective_manifests/hyor_effective_manifest_spark0.json` (from `hyor-sync-effective`)
 - `hyor_effective/spark0/` (materialized node view from `hyor-sync-apply`)
 - `hyor_dashboard/` (HTML/JSON dashboard output)
+- `smoke.log` (if `CENTAUR_LOG` is set; `centaur_spark0_v73_run.sh` sets it automatically)
 
 ### Optional: faster/offline dependency install
 
@@ -83,8 +89,8 @@ Or to skip install entirely (when re-running in the same venv):
 See `scripts/centaur_spark0_v73_smoke.sh` for the fully reproducible command sequence.
 Highlights:
 
-- `python3 -m venv ~/centaur-smoke/v73/run/venv`
-- `pip install -r centaur_spec_impl_v73/requirements.txt` (numpy/scipy/scikit-learn)
+- `python3 -m venv "$CENTAUR_WORKDIR/venv"`
+- `pip install -r "$CENTAUR_WORKDIR/centaur_spec_impl_v73/requirements.txt"` (numpy/scipy/scikit-learn)
 - `python3 -m py_compile centaur.py tests/test_centaur.py`
 - `python3 -u centaur.py selftest --json`
 - `python3 -u centaur.py hyor-sync-init ...`
