@@ -131,6 +131,9 @@ Compare `k_signal` policies:
 - `global`: congestion signal is max pending across all experts
 - `candidates`: congestion signal is max pending among this token’s candidate experts
 - `class`: congestion signal is max pending in this token’s latency-class queue only
+- `global_mean`: congestion signal is mean pending across all experts (less sensitive to single hot experts)
+- `candidates_mean`: congestion signal is mean pending among this token’s candidate experts
+- `class_mean`: congestion signal is mean pending in this token’s latency-class queue only
 
 Key signals to inspect (from the report JSON):
 
