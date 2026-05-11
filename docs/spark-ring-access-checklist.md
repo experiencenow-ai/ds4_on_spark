@@ -89,4 +89,4 @@ Use `REDACT=1` for any committed output.
 
 - Always generate snapshot docs with `REDACT=1`.
 - Treat hostnames, OS/kernel/toolchain versions, GPU model names, disk model names, and interface names as non-secret.
-- Treat IP addresses, MAC addresses, GPU UUID tokens, and any host keys as sensitive; the probe scripts redact them automatically when `REDACT=1`.
+- Treat IP addresses (including CIDR), MAC addresses, GPU UUID tokens, and any host keys as sensitive; the probe scripts redact them automatically when `REDACT=1`.
