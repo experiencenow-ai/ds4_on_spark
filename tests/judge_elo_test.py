@@ -137,6 +137,33 @@ class JudgeEloTest(unittest.TestCase):
         self.assertIsInstance(obj, dict)
         self.assertEqual(obj.get("winner"), "tie")
 
+    def test_decision_reason_char_limit(self) -> None:
+        decision = {
+            "winner": "A",
+            "margin": 1,
+            "score_a": 7,
+            "score_b": 6,
+            "reason": ("x" * 201),
+            "train_hint": "",
+            "tags": [],
+        }
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("<= 200 chars" in e for e in errs))
+
+    def test_record_raw_char_limit(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V1,
+            "pair_id": "p0",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": False,
+            "raw": ("y" * 513),
+            "parse_error": "oops",
+        }
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("raw must be <= 512 chars" in e for e in errs))
+
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")

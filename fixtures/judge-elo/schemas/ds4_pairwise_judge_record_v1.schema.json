@@ -64,10 +64,12 @@
       "maximum": 10
     },
     "reason": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 200
     },
     "train_hint": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 200
     },
     "tags": {
       "type": "array",
@@ -79,10 +81,12 @@
       }
     },
     "raw": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 512
     },
     "parse_error": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 128
     },
     "tokens": {
       "type": "object",

@@ -17,6 +17,7 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `score_b`: integer `0..10`
 - `reason`: string, **≤ 18 words**
 - `train_hint`: string, **≤ 18 words** (actionable improvement hint for the loser; empty allowed)
+- `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8); e.g. `["format","factuality"]`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
@@ -44,6 +45,7 @@ Optional but recommended (for speed/quality separation and budgeting):
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
 - `parse_error`: short string when `parse_valid=false`
+  - `raw` is capped at 512 chars; `parse_error` at 128 chars.
 
 For baseline-quality joins, treat `tokens` and `latency_ms` as required and validate with:
 
