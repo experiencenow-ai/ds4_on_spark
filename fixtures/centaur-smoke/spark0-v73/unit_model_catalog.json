@@ -1,0 +1,19 @@
+{
+  "models": [
+    {
+      "model_id": "unit/test-model",
+      "display_name": "unit test model (no weights)",
+      "model_class": "code",
+      "access_mode": "download",
+      "context_tokens": 1024,
+      "strengths": [
+        "code_edit"
+      ],
+      "weaknesses": [],
+      "install_methods": [
+        "manual"
+      ],
+      "notes": "Synthetic catalog entry for Spark0 Centaur v73 smoke; no downloads."
+    }
+  ]
+}
