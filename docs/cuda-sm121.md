@@ -100,6 +100,8 @@ The Spark0 tiny scripts treat missing `compute_121` / `sm_121` entries as errors
 
 The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and runs `cuda_sm121_arch_report` plus the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates as part of the fast-path validation.
 
+When `nvcc --list-gpu-arch` is supported and advertises `compute_121`, that same fast-path script also runs an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate so “fatbin PTX+SASS packaging” regressions show up quickly.
+
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.
 
 Some build systems use the long-form `nvcc --gpu-architecture=...` flag instead of `-arch=...`. The compile-only object `make bin/cuda_sm121_gpuarch_compile_probe.o` is the same source compiled via `--gpu-architecture=sm_121` as a compatibility gate. For an end-to-end link/run smoke check using the long-form flag, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also compiles and runs the minimal probe via `nvcc --gpu-architecture=sm_121`.

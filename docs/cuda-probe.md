@@ -10,6 +10,12 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 ./scripts/cuda_probe_tiny_spark0.sh
 ```
 
+When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” gate:
+
+```bash
+./scripts/cuda_probe_cublaslt_tiny_spark0.sh
+```
+
 To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
 
 ```bash
@@ -24,6 +30,7 @@ This builds and runs only:
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cluster_dims_attr_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `-arch=sm_121`; cluster/CUTLASS-style toolchain gate)
+- `nvcc -gencode arch=compute_121,code=[sm_121,compute_121]` compile-only gate (runs when `nvcc --list-gpu-arch` is supported and advertises `compute_121`; fails if multi-code `-gencode` packaging is broken)
 - `cuda_sm121_probe`
 - `cuda_sm121_rdc_probe` (separate compilation + device link smoke test for `sm_121`)
 - `cuda_sm121_dlto_probe` (device LTO (`-dlto`) smoke test for `sm_121`)
