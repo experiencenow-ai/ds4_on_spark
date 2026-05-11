@@ -15,6 +15,7 @@ Environment:
   CENTAUR_VENV     Centaur venv dir containing bin/python3 (required)
   RING_WORKDIR     Base workdir (default: ~/centaur-smoke/v73/ring_sim_spark12)
   NODE_TYPE        Node type label (default: default)
+  RING_TRACE       Set to 1 to enable shell tracing (prints exact commands)
 
 Example:
   export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
@@ -49,6 +50,10 @@ fi
 
 workdir="${RING_WORKDIR:-$HOME/centaur-smoke/v73/ring_sim_spark12}"
 node_type="${NODE_TYPE:-default}"
+
+if [ "${RING_TRACE:-0}" = "1" ]; then
+	set -x
+fi
 
 ctrl="$workdir/controller"
 s0="$workdir/spark0"

@@ -233,7 +233,7 @@ try:
     summary_lines.append("model_size_bytes=%d" % int(os.path.getsize(model)))
 except OSError:
     summary_lines.append("model_size_bytes=NA")
-if first_output_s is None:
+if first_output_s is None or rc != 0:
     summary_lines.append("ttft_first_output_s=NA")
 else:
     summary_lines.append("ttft_first_output_s=%.6f" % first_output_s)

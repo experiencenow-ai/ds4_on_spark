@@ -32,6 +32,7 @@ Environment:
   NODE_TYPE        Node type label (default: default)
   RING_APPLY       If set to 1, also run `hyor-sync-apply` locally for Spark1/2
                   and rsync the materialized `effective_spark{1,2}` dirs back.
+  RING_TRACE       Set to 1 to enable shell tracing (prints exact commands)
   SSH_OPTS         Optional ssh options override (default includes BatchMode + temp known_hosts)
 
 Notes:
@@ -63,6 +64,10 @@ centaur_root="${CENTAUR_ROOT:-$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}
 venv_dir="${CENTAUR_VENV:-$HOME/centaur-smoke/v73/run/venv}"
 workdir="${RING_WORKDIR:-$HOME/centaur-smoke/v73/ring_rsync_spark12}"
 node_type="${NODE_TYPE:-default}"
+
+if [ "${RING_TRACE:-0}" = "1" ]; then
+	set -x
+fi
 
 need_cmd()
 {

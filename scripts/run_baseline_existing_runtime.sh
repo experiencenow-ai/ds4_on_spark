@@ -14,6 +14,7 @@ REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-
 RUN_LABEL="${RUN_LABEL:-}"
 MODEL_RUNS_CSV="${MODEL_RUNS_CSV:-}"
 VLLM_MODEL_ID="${VLLM_MODEL_ID:-}"
+VLLM_MODEL="${VLLM_MODEL:-}"
 LLAMA_SCOPE="${LLAMA_SCOPE:-llamacpp}"
 VLLM_SCOPE="${VLLM_SCOPE:-vllm}"
 LLAMA_FATTN_PATCH_PROBE="${LLAMA_FATTN_PATCH_PROBE:-0}"
@@ -263,6 +264,20 @@ score_model_runs_csv()
         echo "- vllm_scope: ${VLLM_SCOPE:-vllm}"
     fi
     echo
+    if [ "$MODEL_RUNS_CSV" != "" ] || [ "$PUBLIC_QUALITY_PRIOR" != "" ] || [ "$PUBLIC_QUALITY_BASIS" != "" ] || [ "$PUBLIC_QUALITY_SOURCE" != "" ] || [ "$PASSED_TASKS" != "" ] || [ "$TOTAL_TASKS" != "" ] || [ "$LOCAL_QUALITY_SCORE" != "" ] || [ "$QUALITY_SCORE" != "" ]; then
+        echo "## Quality Metadata (Local)"
+        echo
+        echo "These fields are recorded into `MODEL_RUNS_CSV` when enabled, and should be copied into committed baseline reports when doing multi-model comparisons."
+        echo
+        echo "- public_quality_prior: ${PUBLIC_QUALITY_PRIOR:-NA}"
+        echo "- public_quality_basis: ${PUBLIC_QUALITY_BASIS:-NA}"
+        echo "- public_quality_source: ${PUBLIC_QUALITY_SOURCE:-NA}"
+        echo "- passed_tasks: ${PASSED_TASKS:-NA}"
+        echo "- total_tasks: ${TOTAL_TASKS:-NA}"
+        echo "- local_quality_score: ${LOCAL_QUALITY_SCORE:-NA}"
+        echo "- quality_score: ${QUALITY_SCORE:-NA}"
+        echo
+    fi
     echo "## Safety Gates"
     echo
     echo "This run script only executes what the remote benchmark scripts allow."

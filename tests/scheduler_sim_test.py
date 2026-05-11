@@ -239,6 +239,24 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_adaptive_k_per_class_q_threshold_overrides(self) -> None:
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=10,
+            q_high=20,
+            q_low_interactive=0,
+            q_high_interactive=0,
+            q_low_batch=-1,
+            q_high_batch=-1,
+        )
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.INTERACTIVE, 0.0), 4)
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.INTERACTIVE, 5.0), 1)
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.BATCH, 5.0), 4)
+        self.assertEqual(scheduler_sim.choose_k(adapt, scheduler_sim.LatencyClass.BATCH, 25.0), 1)
+
     def test_admit_policy_least_pending_work_prefers_lower_pending_work(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), k=1, cost_scale=10.0),
@@ -3958,6 +3976,63 @@ class SchedulerSimTest(unittest.TestCase):
         scenarios = out.get("scenarios", {})
         self.assertIn("mtp_attempt_policy", scenarios)
         self.assertNotIn("mtp_accept_prob_sweep", scenarios)
+
+    def test_summary_reports_forced_batch_starts(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=64,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=1,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertEqual(float(s.get("forced_batch_starts", -1.0)), 1.0)
+        self.assertAlmostEqual(float(s.get("forced_batch_start_frac", -1.0)), 1.0 / 3.0, places=9)
+
+    def test_summary_reports_promoted_tasks(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=3.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=64,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=5.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertEqual(float(s.get("promoted_tasks", -1.0)), 1.0)
+        self.assertAlmostEqual(float(s.get("promoted_task_frac", -1.0)), 0.25, places=9)
 
     def test_recommendations_quick_expert_batching_reduces_service_per_output_token(self) -> None:
         from sim.scheduler import recommendations

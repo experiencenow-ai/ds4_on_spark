@@ -8,6 +8,8 @@ in `docs/quantized-performance-path.md`. A slow or low-quality first token
 stream is useful if it proves the model artifact, runtime, CUDA path,
 tokenizer/chat format, and memory envelope are real.
 
+Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-11.md`.
+
 ## Definition of Done
 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family
@@ -159,7 +161,7 @@ Acceptance checks before DS4 can trust MTP:
 Start with the least ambitious command that still proves real generation:
 
 ```sh
-REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=512 N_TOKENS=8 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
@@ -168,7 +170,7 @@ Optional: append a best-effort scoring row to a local CSV so you can run
 
 ```sh
 MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
-REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=512 N_TOKENS=8 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
@@ -203,7 +205,7 @@ MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/mo
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
-Note: `scripts/run_quantized_single_spark.sh` sets `LLAMA_SCOPE=deepseek_v4_flash` by default when appending CSV rows, so DeepSeek V4 Flash runs do not get mixed into generic `llamacpp` scopes.
+Note: `scripts/run_quantized_single_spark.sh` sets `LLAMA_SCOPE=deepseek_v4_flash` by default when appending CSV rows, so DeepSeek V4 Flash runs do not get mixed into generic `llamacpp` scopes. When you start recording DeepSeek speculative metrics (MTP draft/accept/reject counters), switch the label to `LLAMA_SCOPE=deepseek_v4_flash_mtp` so those rows stay separate from the target-only baseline.
 
 If it loads and generates, rerun with:
 

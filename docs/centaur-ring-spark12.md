@@ -52,6 +52,8 @@ export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
 sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
 ```
 
+For exact command capture in the log, add `export RING_TRACE=1` before running.
+
 This creates three Centaur roots under:
 
 - `~/centaur-smoke/v73/ring_sim_spark12/controller`
@@ -110,6 +112,7 @@ ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/
 
 Notes:
 
+- For exact command capture, add `export RING_TRACE=1` on the orchestrator host before running.
 - Use a dedicated `remote_base_dir` (3rd arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
 - This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2, but it is not a shared-root deployment model.
 
@@ -191,3 +194,7 @@ Then classify:
 
 - **Centaur bug**: parser/schema/state failures inside `centaur.py` commands
 - **DS4 runtime bug**: missing `python3`/`unzip`, permissions, filesystem layout, or other host setup unrelated to Centaur logic
+
+For the shared checklist + sanitization rules, see:
+
+- `docs/centaur-bug-report.md`
