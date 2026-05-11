@@ -1,14 +1,14 @@
 # Spark Ring Readiness Status (Spark0..Spark2)
 
-Status as of `2026-05-11T1627Z` (UTC).
+Status as of `2026-05-11T1656Z` (UTC).
 
 ## Latest commit-safe snapshots
 
-- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-11T1627Z.md`
-- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-11T1627Z.md`
-- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-11T1627Z.md`
-- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T1627Z.md`
-- Spark0 facts-only probe: `docs/spark0-probe-facts-2026-05-11T1627Z.md`
+- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-11T1656Z.md`
+- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-11T1656Z.md`
+- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-11T1656Z.md`
+- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T1656Z.md`
+- Spark0 facts-only probe: `docs/spark0-probe-facts-2026-05-11T1656Z.md`
 
 ## Ring readiness matrix
 
