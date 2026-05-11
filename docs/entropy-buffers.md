@@ -146,6 +146,18 @@ python3 scripts/entropy_buffer_metrics.py \
   --out-md /tmp/entropy_metrics.md
 ```
 
+### Diff two JSONL corpora (before/after)
+
+Use this when you want to measure how a new batch changes coverage/degeneracy without re-reading full reports.
+
+```bash
+python3 scripts/entropy_buffer_diff.py \
+  --before-jsonl fixtures/entropy-buffer/records_diff_before_mini.jsonl \
+  --after-jsonl fixtures/entropy-buffer/records_diff_after_mini.jsonl \
+  --out-json /tmp/entropy_diff.json \
+  --out-md /tmp/entropy_diff.md
+```
+
 ### Recommend next tasks (coverage maximization)
 
 ```bash

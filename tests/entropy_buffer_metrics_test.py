@@ -3,6 +3,7 @@ import os
 import unittest
 
 from scripts import entropy_buffer_lib as lib
+from scripts import entropy_buffer_diff as diff
 from scripts import entropy_buffer_metrics as metrics
 from scripts import entropy_buffer_recommend as recommend
 
@@ -260,6 +261,38 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, prompt_trigram_weight=2.0)
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].task_id, "math.prompt.aaa")
+
+    def test_diff_key_metrics_from_before_after_fixtures(self) -> None:
+        root = _repo_root()
+        before_path = os.path.join(root, "fixtures", "entropy-buffer", "records_diff_before_mini.jsonl")
+        after_path = os.path.join(root, "fixtures", "entropy-buffer", "records_diff_after_mini.jsonl")
+
+        before = diff._report_dict(lib.load_jsonl([before_path]))
+        after = diff._report_dict(lib.load_jsonl([after_path]))
+
+        rows = diff._diff_paths(before, after, [
+            "diversity.task_id.unique",
+            "diversity.task_family.unique",
+            "duplicates.output_norm_dup_rate",
+            "reuse.buffer_item_reuse_event_rate",
+        ])
+        by_path = {r.get("path"): r for r in rows}
+
+        self.assertEqual(by_path["diversity.task_id.unique"]["before"], 2.0)
+        self.assertEqual(by_path["diversity.task_id.unique"]["after"], 3.0)
+        self.assertEqual(by_path["diversity.task_id.unique"]["delta"], 1.0)
+
+        self.assertEqual(by_path["diversity.task_family.unique"]["before"], 1.0)
+        self.assertEqual(by_path["diversity.task_family.unique"]["after"], 2.0)
+        self.assertEqual(by_path["diversity.task_family.unique"]["delta"], 1.0)
+
+        self.assertAlmostEqual(by_path["duplicates.output_norm_dup_rate"]["before"], 0.0)
+        self.assertAlmostEqual(by_path["duplicates.output_norm_dup_rate"]["after"], 0.25)
+        self.assertAlmostEqual(by_path["duplicates.output_norm_dup_rate"]["delta"], 0.25)
+
+        self.assertAlmostEqual(by_path["reuse.buffer_item_reuse_event_rate"]["before"], 0.0)
+        self.assertAlmostEqual(by_path["reuse.buffer_item_reuse_event_rate"]["after"], 0.25)
+        self.assertAlmostEqual(by_path["reuse.buffer_item_reuse_event_rate"]["delta"], 0.25)
 
 
 if __name__ == "__main__":
