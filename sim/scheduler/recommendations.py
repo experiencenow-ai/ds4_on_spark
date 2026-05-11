@@ -6,13 +6,108 @@ import dataclasses
 import json
 import os
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from sim.scheduler import scheduler_sim  # noqa: E402
+
+
+def _trace_has_full_k(trace: Sequence[scheduler_sim.TokenRoute]) -> bool:
+    for r in trace:
+        if r.k is not None:
+            continue
+        if r.layers is not None and all(lr.k is not None for lr in r.layers):
+            continue
+        return(False)
+    return(True)
+
+
+def _infer_mtp_draft_len_for_trace(trace: Sequence[scheduler_sim.TokenRoute], meta: Dict[str, object]) -> Optional[int]:
+    inferred = scheduler_sim.infer_mtp_draft_len_from_trace(trace, meta)
+    if inferred is not None:
+        return(int(inferred))
+
+    max_accept_len = 0
+    for r in trace:
+        if r.mtp_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.mtp_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+
+    # mtp_accept_len is the output-token count per verify step (>=1). A draft length of gamma implies:
+    #   1 <= accept_len <= (gamma + 1)
+    # If a trace only includes accept_len=1 (all rejects), gamma is underdetermined; pick gamma=1 so we can
+    # still run an MTP-on replay without violating bounds.
+    return(max(1, int(max_accept_len) - 1))
+
+
+def run_runtime_trace_mtp_ablation(
+    *,
+    trace: Sequence[scheduler_sim.TokenRoute],
+    trace_meta: Optional[Dict[str, object]] = None,
+    expert_queue_max: int = 128,
+    expert_parallelism: int = 1,
+    service_ms: float = 1.0,
+) -> Dict[str, Any]:
+    meta = dict(trace_meta or {})
+
+    inferred_num_experts = scheduler_sim.infer_num_experts_from_trace(trace, meta)
+    if inferred_num_experts is None or int(inferred_num_experts) <= 0:
+        raise ValueError("runtime trace ablation requires a trace (or meta.num_experts) with valid expert IDs")
+
+    any_mtp = any((r.mtp_accept_len is not None or r.accepted_mtp is not None or r.rejected_mtp is not None) for r in trace)
+    mtp_draft_len = 0
+    if any_mtp:
+        inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
+        if inferred_mtp_draft_len is None or int(inferred_mtp_draft_len) <= 0:
+            raise ValueError("runtime trace ablation requires meta.mtp_draft_len, accepted_mtp+rejected_mtp, or mtp_accept_len in the trace")
+        mtp_draft_len = int(inferred_mtp_draft_len)
+
+    k_mode = "trace" if _trace_has_full_k(trace) else "controller"
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=int(inferred_num_experts),
+        expert_parallelism=int(expert_parallelism),
+        expert_queue_max=int(expert_queue_max),
+        service_ms=float(service_ms),
+        starvation_ms=50.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        ),
+        k_mode=str(k_mode),
+        k_signal="global",
+        sim_seed=123,
+        mtp_draft_len=int(mtp_draft_len),
+    )
+
+    trace_summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=int(mtp_draft_len), meta=meta)
+    out: Dict[str, Any] = {
+        "name": "runtime_trace_mtp_ablation",
+        "trace_summary": trace_summary,
+        "base_cfg": dataclasses.asdict(base_cfg),
+        "results": {},
+    }
+
+    if int(mtp_draft_len) <= 0:
+        out["note"] = "Trace has no MTP counters; skipping mtp_off ablation."
+        return(out)
+
+    variants: List[Tuple[str, Dict[str, object]]] = [("mtp_off", {"mtp_draft_len": 0})]
+    out["results"] = {
+        "arrival_units_steps": scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants, arrival_units="steps"),
+        "arrival_units_output_tokens": scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants, arrival_units="output_tokens"),
+    }
+    return(out)
 
 
 def _expert_queue_reserve_scenario(quick: bool) -> Dict[str, Any]:
@@ -585,15 +680,36 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
 
 
 def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Scheduler simulator recommendation harness (synthetic scenarios).")
+    p = argparse.ArgumentParser(description="Scheduler simulator recommendation harness (synthetic scenarios, plus optional runtime-trace MTP ablation).")
     p.add_argument("--json", action="store_true", help="Print JSON only (default).")
     p.add_argument("--quick", action="store_true", help="Run a reduced-size scenario set (intended for unit tests).")
+    p.add_argument("--trace-jsonl", type=str, default="", help="Optional: run runtime-trace MTP ablation on this JSONL trace path ('-' for stdin) instead of synthetic scenarios.")
+    p.add_argument("--trace-input-format", type=str, default="runtime", help="Trace parser input format for --trace-jsonl (default: runtime).")
+    p.add_argument("--trace-non-route", type=str, default="skip", help="When --trace-jsonl contains non-route records, skip or error (default: skip).")
+    p.add_argument("--trace-default-cls", type=str, default="", help="When --trace-jsonl records omit latency class, force all extracted records to this cls (interactive or batch).")
+    p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace time field mode: t_ms (default) or dt_ms.")
+    p.add_argument("--max-tokens", type=int, default=0, help="Optional cap on number of trace records to read (0 = no cap).")
     return(p.parse_args(argv))
 
 
 def main(argv: List[str] | None = None) -> int:
     args = _parse_args(argv)
-    out = run_recommendations(quick=bool(args.quick))
+    if args.trace_jsonl.strip() != "":
+        meta: Dict[str, object] = {}
+        trace = scheduler_sim.load_trace_jsonl(
+            args.trace_jsonl.strip(),
+            time_mode=args.trace_time_mode.strip().lower(),
+            meta_out=meta,
+            non_route_policy=args.trace_non_route.strip().lower(),
+            input_format=args.trace_input_format.strip().lower(),
+            route_type="",
+            default_cls=args.trace_default_cls,
+        )
+        if int(args.max_tokens) > 0:
+            trace = list(trace[: int(args.max_tokens)])
+        out = run_runtime_trace_mtp_ablation(trace=trace, trace_meta=meta)
+    else:
+        out = run_recommendations(quick=bool(args.quick))
     print(json.dumps(out, sort_keys=True))
     return(0)
 
