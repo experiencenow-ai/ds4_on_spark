@@ -11,7 +11,13 @@
 #   - log_level   (error|warn|info|debug or 0..3)
 #   - enable_cuda (0/1, true/false, yes/no, on/off)
 #   - cuda_device (-1=auto, >=0 fixed)
+#   - arena_size (bytes; supports K/M/G suffix; non-negative)
+#   - cuda_arena_size (bytes; supports K/M/G suffix; non-negative; requires enable_cuda=1 when >0)
+#   - log_ring_entries (count; supports K/M/G suffix; non-negative)
 #
 #log_level=info
 #enable_cuda=1
 #cuda_device=-1
+#arena_size=0
+#cuda_arena_size=0
+#log_ring_entries=0

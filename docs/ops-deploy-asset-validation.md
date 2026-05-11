@@ -46,7 +46,7 @@ Note: the periodic preflight timers (`ds4-preflight@.timer`, `ds4-preflight-stri
   - `deploy/sysusers.d/`, `deploy/tmpfiles.d/`
 - All `scripts/ops*.sh` pass `sh -n` syntax checks
 - Env examples include the keys required by `scripts/ops_ds4_env_check.sh`
-  - On-host, it also runs `ops_ds4_env_check.sh` + `ops_tp2_readiness.sh` against `/etc/ds4/`
+  - On-host, it also runs `ops_ds4_env_check.sh` (which validates `DS4_CONFIG_PATH` via `ops_ds4_config_check.sh` when present) + `ops_tp2_readiness.sh` against `/etc/ds4/`
 
 ## When To Use It
 

@@ -231,12 +231,14 @@ echo
 
 echo "== /opt/ds4 scripts =="
 run install -d -m 0755 /opt/ds4 "$scripts_dir"
-need_file "$staged_scripts_dir/ops_tp2_readiness.sh"
-need_file "$staged_scripts_dir/ops_ds4_env_check.sh"
-need_file "$staged_scripts_dir/ops_collect_support_bundle.sh"
-run install -m 0755 "$staged_scripts_dir/ops_tp2_readiness.sh" "$scripts_dir/ops_tp2_readiness.sh"
-run install -m 0755 "$staged_scripts_dir/ops_ds4_env_check.sh" "$scripts_dir/ops_ds4_env_check.sh"
-run install -m 0755 "$staged_scripts_dir/ops_collect_support_bundle.sh" "$scripts_dir/ops_collect_support_bundle.sh"
+	need_file "$staged_scripts_dir/ops_tp2_readiness.sh"
+	need_file "$staged_scripts_dir/ops_ds4_env_check.sh"
+	need_file "$staged_scripts_dir/ops_ds4_config_check.sh"
+	need_file "$staged_scripts_dir/ops_collect_support_bundle.sh"
+	run install -m 0755 "$staged_scripts_dir/ops_tp2_readiness.sh" "$scripts_dir/ops_tp2_readiness.sh"
+	run install -m 0755 "$staged_scripts_dir/ops_ds4_env_check.sh" "$scripts_dir/ops_ds4_env_check.sh"
+	run install -m 0755 "$staged_scripts_dir/ops_ds4_config_check.sh" "$scripts_dir/ops_ds4_config_check.sh"
+	run install -m 0755 "$staged_scripts_dir/ops_collect_support_bundle.sh" "$scripts_dir/ops_collect_support_bundle.sh"
 if [ -f "$staged_scripts_dir/ops_validate_installed_assets.sh" ]; then
     run install -m 0755 "$staged_scripts_dir/ops_validate_installed_assets.sh" "$scripts_dir/ops_validate_installed_assets.sh"
 fi

@@ -70,6 +70,7 @@ need_file "deploy/config/sysctl.ds4.conf.example"
 need_file "scripts/ops_stage_deploy_assets.sh"
 need_file "scripts/ops_stage_spark0_spark1.sh"
 need_file "scripts/ops_ds4_env_check.sh"
+need_file "scripts/ops_ds4_config_check.sh"
 need_file "scripts/ops_tp2_readiness.sh"
 need_file "scripts/ops_spark_standalone_check.sh"
 need_file "scripts/ops_spark01_mesh_check.sh"
@@ -82,6 +83,7 @@ echo "== sh -n (ops scripts) =="
 sh -n scripts/ops_stage_deploy_assets.sh
 sh -n scripts/ops_stage_spark0_spark1.sh
 sh -n scripts/ops_ds4_env_check.sh
+sh -n scripts/ops_ds4_config_check.sh
 sh -n scripts/ops_tp2_readiness.sh
 sh -n scripts/ops_spark_standalone_check.sh
 sh -n scripts/ops_spark01_mesh_check.sh
