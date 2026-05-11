@@ -1019,7 +1019,20 @@ def build_compat_mappings() -> dict:
 		if isinstance(ik, str) and ik:
 			by_inference_key[ik] = cp
 
-	return {"fields": fields, "by_transformers_key": by_transformers_key, "by_inference_key": by_inference_key}
+	return {
+		"fields": fields,
+		"by_transformers_key": by_transformers_key,
+		"by_inference_key": by_inference_key,
+		"transformers_cache_layers": {
+			"reference_source": "https://huggingface.co/docs/transformers/main/model_doc/deepseek_v4 (Cache layers; accessed 2026-05-11)",
+			"dynamic_cache_note": "Transformers uses DynamicCache(config=...) to select cache layer classes per config.layer_types[i].",
+			"layer_type_to_cache_class": {
+				"compressed_sparse_attention": "DeepseekV4CSACache",
+				"heavily_compressed_attention": "DeepseekV4HCACache",
+			},
+			"note": "This mapping is for interpreting Transformers runtime behavior/logs; upstream DeepSeek-V4-Flash reference code derives layer types from compress_ratios instead of shipping config.layer_types[].",
+		},
+	}
 
 
 def build_contract() -> dict:
