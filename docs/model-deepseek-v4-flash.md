@@ -568,6 +568,7 @@ Per-layer required suffixes (`tensor_keys.required_layer_suffixes`, appended und
 Expert-key completeness expectation (`contract_summary.json` `tensor_keys.expected_expert_key_count_per_layer`):
 
 - For each layer, there must be `256 experts × 3 linears × 2 tensors (weight+scale) = 1536` expert keys of the form `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` with `eid ∈ [0,255]`.
+- The expert key templates are also recorded as `tensor_keys.expert_tensor_key_templates` (with `{eid}` placeholders) so contract consumers don’t need to re-derive the exact tensor-name patterns.
 
 Cache-compression required suffixes:
 
@@ -595,6 +596,7 @@ MTP block (`mtp.0.*`):
   - `mtp.0.e_proj.{weight,scale}`, `mtp.0.h_proj.{weight,scale}`
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
+- The full non-expert MTP suffix set (required layer suffixes + MTP-only suffixes + score gate bias) is recorded as `tensor_keys.mtp_required_nonexpert_suffixes` for quick contract checks.
 - Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
 - `contract_summary.json` also records the expected per-MTP-layer tensor-key count (`tensor_keys.mtp_expected_tensor_key_count_per_layer`) and the observed counts in the official safetensors index (`tensor_keys.mtp_tensor_key_count_by_layer_id`) so tooling can sanity-check “full upstream `mtp.0.*` preserved?” quickly.
 

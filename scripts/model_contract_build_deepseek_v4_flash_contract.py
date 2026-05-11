@@ -792,6 +792,14 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 	mtp_head_present = any(k.startswith("mtp.") and ".head." in k for k in weight_keys)
 	mtp_layer_ids = find_mtp_layer_ids(weight_keys)
 	expected_expert_key_count_per_layer = int(n_routed_experts) * 6
+	expert_tensor_key_templates = [
+		"ffn.experts.{eid}.w1.weight",
+		"ffn.experts.{eid}.w1.scale",
+		"ffn.experts.{eid}.w2.weight",
+		"ffn.experts.{eid}.w2.scale",
+		"ffn.experts.{eid}.w3.weight",
+		"ffn.experts.{eid}.w3.scale",
+	]
 
 	def layer_ids_matching(suffix: str) -> list[int]:
 		ids = set()
@@ -884,6 +892,9 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 	mtp_score_gate_tensor_key_suffix = "ffn.gate.bias"
 	hash_gate_tensor_key_suffix = "ffn.gate.tid2eid"
 	score_gate_tensor_key_suffix = "ffn.gate.bias"
+	mtp_required_nonexpert_suffixes = list(required_layer_suffixes) + list(required_mtp_additional_suffixes) + [
+		mtp_score_gate_tensor_key_suffix
+	]
 
 	mtp_expected_tensor_key_count_per_layer = (
 		expected_expert_key_count_per_layer + len(required_layer_suffixes) + len(required_mtp_additional_suffixes) + 1
@@ -908,6 +919,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"tensor_key_count": len(weight_keys),
 		"namespaces": sorted(top.keys()),
 		"top_level_prefix_counts": dict(top),
+		"expert_tensor_key_templates": expert_tensor_key_templates,
 		"mtp0": {
 			"present": mtp0_key_count > 0,
 			"tensor_key_count": mtp0_key_count,
@@ -926,6 +938,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"required_layer_suffixes_compress_ratio_nonzero": required_layer_suffixes_compress_ratio_nonzero,
 		"required_layer_suffixes_compress_ratio_4": required_layer_suffixes_compress_ratio_4,
 		"required_mtp_additional_suffixes": required_mtp_additional_suffixes,
+		"mtp_required_nonexpert_suffixes": mtp_required_nonexpert_suffixes,
 		"mtp_score_gate_tensor_key_suffix": mtp_score_gate_tensor_key_suffix,
 		"hash_gate_tensor_key_suffix": hash_gate_tensor_key_suffix,
 		"score_gate_tensor_key_suffix": score_gate_tensor_key_suffix,
