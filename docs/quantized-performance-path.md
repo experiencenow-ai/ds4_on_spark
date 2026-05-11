@@ -31,6 +31,7 @@ Required report fields:
 - model HF repo/revision or local fixture provenance
 - quant, size, sha256, context length, and prompt format
 - TTFT, generation tokens/sec, memory snapshots, stdout/stderr
+- attention scheduling signal when available (`fattn_unique_nodes`, `fattn_log_lines`)
 - whether the runtime exposes routing, expert, logits, or MTP hooks
 
 If the runtime cannot expose hooks, record the missing hook as the blocker. Do

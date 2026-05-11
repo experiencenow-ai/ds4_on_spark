@@ -33,6 +33,19 @@ tokenizer/chat format, and memory envelope are real.
 - No automation downloads large model files unless a human explicitly approves
   the exact command and target path.
 
+### Inspector wiring (Mac → Spark)
+
+`scripts/run_baseline_existing_runtime.sh` can run a metadata-only GGUF inspection
+on Spark before the llama.cpp run:
+
+- Set `ALLOW_MODEL_INSPECT=1` on Spark (via `REMOTE_LLAMA_ENV` or `REMOTE_GGUF_INSPECT_ENV`).
+- Provide `MODEL_GGUF=/abs/path/to/model.gguf` (same as the llama.cpp run).
+
+The inspector output is written into the local report directory as:
+
+- `remote_gguf_inspect_stdout.txt` (JSON; full output)
+- `remote_gguf_inspect_stderr.txt`
+
 ## Candidate Artifacts
 
 As of 2026-05-10, the practical first target is a community GGUF using a
@@ -134,7 +147,7 @@ Acceptance checks before DS4 can trust MTP:
 Start with the least ambitious command that still proves real generation:
 
 ```sh
-REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
@@ -143,13 +156,31 @@ Optional: append a best-effort scoring row to a local CSV so you can run
 
 ```sh
 MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
-REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
 The CSV row is derived from the `== baseline summary (approx) ==` block emitted
 by the remote runner. For llama.cpp it now includes `output_tokens` (best-effort
 count from the llama.cpp `eval time = ... / <tokens>` timing line).
+
+Compatibility notes (llama.cpp forks):
+
+- Some V4-capable forks expose `--show-timings` + `--perf` instead of `--timings`. The Spark-side probe auto-detects the supported flags via `llama-cli --help` and parses either the classic `eval time = ... / <tokens>` lines or the fork-style `[ Prompt: <t/s> | Generation: <t/s> ]` summary.
+- The milestone wrapper now shell-quotes values in `REMOTE_LLAMA_ENV` so `MODEL_SOURCE` can include spaces/parentheses without breaking the remote command.
+
+### Flash-attention scheduling signal (best-effort)
+
+When the V4-capable runtime emits `__fattn__-*` log lines, the Spark-side runner
+summarizes them as:
+
+- `fattn_log_lines=<n>`: number of log lines containing `__fattn__`
+- `fattn_unique_nodes=<n>`: count of distinct `__fattn__-<id>` nodes observed
+
+This is **not** a correctness proof, but it is a coarse signal that a Flash
+Attention schedule node executed instead of falling back to a slow path. Always
+preserve `remote_llamacpp_stdout.txt` / `remote_llamacpp_stderr.txt` so the
+fallback reason is visible.
 
 If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
 it forwards the same CSV/quality env vars:
@@ -168,6 +199,13 @@ If it loads and generates, rerun with:
 - a second run after process restart to separate cold-load time from generation
 - runtime instrumentation enabled if available: routing trace, expert batch
   sizes, per-token latency, memory snapshots, and MTP accept/reject counters
+
+## Example Baseline Report
+
+- `docs/baseline-quantized-single-spark0-2026-05-11.md` records a Spark0 run that:
+  - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
+  - captures `scripts/model_contract_inspect_quantized_artifact.py --json` output (MTP absent)
+  - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)
 
 ## Failure Triage
 
