@@ -5,11 +5,11 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` and `spark2.local` are not reachable yet (as of the 13:25Z refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted snapshots: `docs/spark0-probe-facts-2026-05-11T1325Z.md`.
-- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-11T1325Z.md`, `docs/spark-ring-probe-2026-05-11T1325Z.md`.
-- Latest ring bandwidth snapshot (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T1325Z.md`.
-- Latest ring MTU snapshot: `docs/spark-ring-mtu-probe-2026-05-11T1325Z.md`.
+- `spark1.local` and `spark2.local` are not reachable yet (as of the `2026-05-11T1426Z` refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-probe-facts-2026-05-11T1426Z.md`.
+- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-11T1426Z.md`, `docs/spark-ring-probe-2026-05-11T1426Z.md`.
+- Latest ring bandwidth snapshot (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T1434Z.md`.
+- Latest ring MTU snapshot: `docs/spark-ring-mtu-probe-2026-05-11T1426Z.md`.
 
 ## Goals
 

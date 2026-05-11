@@ -88,3 +88,5 @@ Minimum “ready for multi-node bring-up” bar:
 - MTU is consistent on the intended fabric (wired vs Wi‑Fi).
 - Ping is successful for the intended topology (ring neighbors or full mesh).
 - GPU inventory and CUDA toolkit facts are captured per node (commit-safe redacted output).
+
+For a single place to track “what’s missing” and link the latest snapshot files, keep `docs/spark-ring-readiness-status.md` up to date.
