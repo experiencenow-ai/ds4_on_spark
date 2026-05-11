@@ -24,7 +24,7 @@ If `nvcc --list-gpu-arch` is supported, the script treats a missing `compute_121
 
 If `nvcc --list-gpu-code` is supported, the script treats a missing `sm_121` entry as an error (fast “toolchain cannot target GB10” signal).
 
-Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` includes `compute_121`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`; `-gencode arch=compute_121,code=[sm_121,compute_121]` compile+run succeeds and embeds PTX (`cuobjdump --dump-ptx` reports `.target sm_121`).
+Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` includes `compute_121`; `nvcc --list-gpu-code` includes `sm_121`; `cuda_sm121_arch_report` prints `__CUDA_ARCH__=1210`; `-gencode arch=compute_121,code=[sm_121,compute_121]` compile+run succeeds and embeds PTX (`cuobjdump --dump-ptx` reports `.target sm_121`).
 
 Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
 
@@ -44,6 +44,7 @@ When you want to run the key “is `sm_121` supported end-to-end?” checks in o
 This runs, in order:
 
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
+- `scripts/cuda_probe_cmake_minimal_spark0.sh` (no repo transfer; CMake build-system gate)
 - `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
 - `scripts/cuda_probe_kernel_tiny_spark0.sh` (kernel plumbing gates; no cuBLASLt)
@@ -52,6 +53,12 @@ To skip the “kernel plumbing” bring-up gates (faster), run:
 
 ```bash
 WITH_KERNEL_TINY=0 ./scripts/cuda_probe_capability_spark0.sh
+```
+
+To skip the CMake build-system gate (faster), run:
+
+```bash
+WITH_CMAKE_MINIMAL=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
 ## Spark0: Tiny Compile-Only `sm_121`
@@ -149,7 +156,7 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 
 The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
 
-Observed on Spark0 (2026-05-10): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed, but best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed); feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
+Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed, but best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed); feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
 
 ## Spark0: Compile + Run
 

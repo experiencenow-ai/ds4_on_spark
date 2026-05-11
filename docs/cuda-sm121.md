@@ -23,7 +23,7 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 `scripts/cuda_probe_compile_only_tiny_spark0.sh` always attempts best-effort compile-only builds for `sm_121a` and `sm_121f`, and reports whether each target was advertised by `nvcc --list-gpu-code` (`advertised=yes/no/unknown`) plus `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure).
 
-Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, and best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both.
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, and best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both.
 
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
@@ -42,7 +42,7 @@ CUDA 13 adds architecture-specific (`a`) and family-specific (`f`) feature-set t
 
 These probes are informational; the hard failure for GB10 targeting remains “missing `sm_121` support”.
 
-Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 
 ### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
 
@@ -115,7 +115,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit`:
 
 If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATION`, treat it as “NVRTC cannot target `compute_121` on this host/toolkit” even if `nvcc -arch=sm_121` works.
 
-Observed on Spark0 (2026-05-10): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
+Observed on Spark0 (2026-05-11): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
 
 ### NVRTC `--std=c++20` Gate (DeepGEMM-style JIT)
 
@@ -128,7 +128,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_cxx20_jit` is a tiny compile/ru
 
 If this probe fails, treat it as “NVRTC cannot compile C++20 for `compute_121` on this toolkit”, even if `nvcc -arch=sm_121 -std=c++20` works.
 
-Observed on Spark0 (2026-05-10): probe prints `nvrtc_cxx20_jit ok out=0x1234567a`.
+Observed on Spark0 (2026-05-11): probe prints `nvrtc_cxx20_jit ok out=0x1234567a`.
 
 ## nvcc Extended Lambda + Relaxed Constexpr Gate
 
@@ -143,7 +143,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` is a tiny compile/r
 - uses a device lambda in a kernel (exercises `--extended-lambda`)
 - runs a one-word sanity writeback (`0x12345679`)
 
-Observed on Spark0 (2026-05-10): probe prints `nvcc_flags_probe ok out=0x12345679`.
+Observed on Spark0 (2026-05-11): probe prints `nvcc_flags_probe ok out=0x12345679`.
 
 ## nvJitLink JIT Link For `sm_121` (PTX → CUBIN)
 
@@ -157,7 +157,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit`:
 
 If this probe fails with `NVJITLINK_ERROR_MISSING_ARCH` or linker errors, treat it as “nvJitLink cannot target `sm_121` on this host/toolkit” even if `nvcc -arch=sm_121` works.
 
-Observed on Spark0 (2026-05-10): probe prints `nvJitLinkVersion=13.0` and `nvjitlink_jit ok`.
+Observed on Spark0 (2026-05-11): probe prints `nvJitLinkVersion=13.0` and `nvjitlink_jit ok`.
 
 ## CUDA Graph Stream Capture / Launch
 

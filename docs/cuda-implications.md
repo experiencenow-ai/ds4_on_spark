@@ -7,8 +7,8 @@ This file records near-term engineering implications from the CUDA probe track.
 From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/`:
 
 - Device is `NVIDIA GB10`, compute capability `12.1` (`sm_121`)
-- CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0; observed `V13.0.88` on 2026-05-10)
-- Spark0 snapshot (2026-05-10, via `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
+- CUDA toolkit is installed and `nvcc` works (CUDA 13.0 on Spark0; observed `V13.0.88` on 2026-05-11)
+- Spark0 snapshot (2026-05-11, via `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
   - `cuda drv=13000 rt=13000` (CUDA 13.0 driver/runtime ABI)
   - `mp=48`, `l2=25165824` (24 MiB), `mem=128518373376` (~119.7 GiB), `clock_khz=2418000`, `mem_clock_khz=8533000`
   - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`
@@ -20,7 +20,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o` is a compile-only toolchain gate for build systems that use `nvcc --gpu-architecture=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
 - CUDA 13 “variant targets”:
-  - Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` / `sm_121f`.
+  - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` / `sm_121f`.
   - Best-effort compile-only and build+run for `-arch=sm_121a` and `-arch=sm_121f` both succeed on Spark0 (treat as “optional compatibility”; do not rely on `nvcc --list-gpu-code` advertising them).
   - Spark0’s toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 - For a small “kernel plumbing” bring-up gate set (no cuBLASLt), run `./scripts/cuda_probe_kernel_tiny_spark0.sh` from the Mac; it validates C++20 + template flags, inline PTX (`ldmatrix`), pipeline/bulk async copy plumbing, TMA tensor-map encode + `cp.async.bulk.tensor`, and NVRTC/nvJitLink JIT paths for `sm_121`.
@@ -60,7 +60,7 @@ Implication:
 - FP8 matmul is verified via cuBLASLt on `sm_121` for E4M3 (see `cuda_cublaslt_fp8_smoke`), which de-risks early FP8 bring-up for DeepGEMM-style paths.
 - The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (observed 2026-05-10: `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
 - FP4 conversion helpers exist in CUDA 13 (`cuda_fp4.h`), but FP4 matmul support and packing/scale semantics are cuBLASLt-stack dependent; use `cuda_cublaslt_fp4_smoke` / `cuda_cublaslt_fp4_sweep` as the first “does FP4 GEMM exist?” gate before investing in FP4 kernels.
-- Observed on Spark0 (2026-05-10 / CUDA 13.0 `V13.0.88` / `cublasLtGetVersion=130101`):
+- Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88` / `cublasLtGetVersion=130101`):
   - `cuda_cublaslt_fp4_sweep` reports `heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0` for BF16 output (`CUBLAS_COMPUTE_32F`), which suggests an FP4 matmul execution path exists in cuBLASLt on GB10.
   - `cuda_cublaslt_fp4_smoke` currently prints `max_abs_err_vs_one=1` for a naive “identity×ones” check (so treat this as “matmul runs” not “numeric validated” until we wire a correct NVFP4 pack+scale recipe).
 
