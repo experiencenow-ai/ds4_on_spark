@@ -935,20 +935,20 @@ CU
 				echo "warning: compute_cap $compute_cap != runtime device0 cc $cc0"
 			fi
 		fi
-			echo
-			emit_pcie_link ", post-load"
-			echo
-			if [ "$spark_probe_summary" != "1" ]; then
-				emit_sysfs_pcie_link ", post-load"
-			else
-				emit_sysfs_pcie_link_summary ", post-load"
-			fi
-			echo
+		echo
+		emit_pcie_link ", post-load"
+		echo
+		if [ "$spark_probe_summary" != "1" ]; then
+			emit_sysfs_pcie_link ", post-load"
 		else
-			echo "nvcc compile failed:"
-			sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
-			if [ "$nvcc_extra" != "" ]; then
-				echo "retry: nvcc without -arch (fallback)"
+			emit_sysfs_pcie_link_summary ", post-load"
+		fi
+		echo
+	else
+		echo "nvcc compile failed:"
+		sed -n "1,80p" "$nvcc_log" 2>/dev/null || true
+		if [ "$nvcc_extra" != "" ]; then
+			echo "retry: nvcc without -arch (fallback)"
 			if "$nvcc_bin" -O2 -lineinfo "$cu_src" -o "$cu_bin" >"$nvcc_log" 2>&1; then
 				"$cu_bin" 2>/dev/null || true
 			else
