@@ -17,6 +17,11 @@ Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-
 - The run records exact runtime source, runtime commit, model source, quant,
   file size, sha256, command line, context length, token count, TTFT, tokens/sec
   where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+- The run preserves the baseline-summary key/value block (so `decode_tps`,
+  `total_wall_s`, and `output_tokens` are recoverable for later scoring), plus
+  the read-only patch probes when enabled (`LLAMA_FATTN_PATCH_PROBE=1`,
+  `LLAMA_MULTISLOT_PATCH_PROBE=1`) so the report says whether the runtime likely
+  contains the FA pad-to-256 reservation fix and the multi-slot reserve/SWA fixes.
 - Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
@@ -70,6 +75,23 @@ llama.cpp should be treated as unproven for V4 Flash until verified.
 For any community artifact, record provenance rather than trusting the model
 card summary: HF repo, revision, file list, file sizes, sha256, declared base
 model, declared license, required runtime fork, and any conversion command.
+
+### Staged artifact discovery (no downloads)
+
+If multiple V4 Flash GGUFs are already staged on Spark0, pick the smallest
+credible one (usually `Q2_K`) for the first token-producing run.
+
+No-download discovery commands (Mac → Spark0; metadata only):
+
+```sh
+ssh spark0@aitopatom-9ab9.local "ls -lh /home/spark0/models/ds4/*.gguf 2>/dev/null | sort -k5 -h"
+```
+
+If you want an exact byte count (better for comparing near-ties), prefer `wc -c`:
+
+```sh
+ssh spark0@aitopatom-9ab9.local "for f in /home/spark0/models/ds4/*.gguf; do [ -r \"$f\" ] || continue; wc -c \"$f\"; done | sort -n | head"
+```
 
 ## MTP (multi-token prediction) expectations
 

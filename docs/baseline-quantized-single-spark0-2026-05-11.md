@@ -85,11 +85,16 @@ Generation throughput:
 
 Wall time:
 
-- `total_wall_s=NA` (not recorded in this report; re-run required)
+- `total_wall_s=NA` (not recorded in this committed report; re-run required to capture the baseline-summary block)
 
 Flash Attention scheduling signal:
 
 - `fattn_unique_nodes=43` (nonzero `__fattn__-*` schedule lines observed)
+
+Patch probes (read-only; wrapper now runs these by default):
+
+- `fattn_patch_probe=NA` (not recorded in this committed report; re-run required)
+- `multislot_patch_probe=NA` (not recorded in this committed report; re-run required)
 
 Memory:
 
