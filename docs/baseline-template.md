@@ -66,6 +66,7 @@ Tradeoff:
 
 - `quality_adjusted_decode_tps`:
 - `correct_task_rate`:
+- `correct_tasks_per_s`:
 - `tokens_per_success`:
 
 - `dominated_by` (Pareto):
