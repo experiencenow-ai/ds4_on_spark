@@ -90,6 +90,16 @@ if [ ! -f "$pkgdir/centaur.py" ]; then
 	exit 2
 fi
 
+echo "== centaur package facts =="
+ls -la "$pkgdir" | sed -n '1,20p'
+decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$pkgdir/centaur.py" | sed -n '1p')"
+if [ "$decomposer_version" = "" ]; then
+	decomposer_version="(unknown)"
+fi
+echo "decomposer_version: $decomposer_version"
+echo "requirements.txt:"
+sed -n '1,40p' "$pkgdir/requirements.txt"
+
 echo "== venv =="
 python3 -m venv "$venvdir"
 venv_py="$venvdir/bin/python3"
@@ -111,8 +121,6 @@ else
 	fi
 fi
 
-echo "== centaur package facts =="
-ls -la "$pkgdir" | sed -n '1,20p'
 sha256="$(python3 - <<PY
 import hashlib,sys
 p=sys.argv[1]

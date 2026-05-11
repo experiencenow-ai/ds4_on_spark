@@ -349,6 +349,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     family_task_flagged: Dict[str, int] = {}
     pair_task_total: Dict[str, int] = {}
     pair_task_flagged: Dict[str, int] = {}
+    model_task_total: Dict[str, int] = {}
+    model_task_flagged: Dict[str, int] = {}
 
     template_out_total: Dict[str, int] = {}
     template_out_uniq: Dict[str, int] = {}
@@ -356,10 +358,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     pair_out_total: Dict[str, int] = {}
     pair_out_uniq: Dict[str, int] = {}
     pair_out_seen: Dict[str, set] = {}
+    model_out_total: Dict[str, int] = {}
+    model_out_uniq: Dict[str, int] = {}
+    model_out_seen: Dict[str, set] = {}
 
     for c in task_runs:
         tmpl = c.prompt_template_id
         fam = c.task_family
+        mid = c.model_id
         pair_k = "" if (fam == "" or tmpl == "") else f"{fam}|{tmpl}"
         if tmpl != "":
             template_task_total[tmpl] = template_task_total.get(tmpl, 0) + 1
@@ -367,6 +373,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             family_task_total[fam] = family_task_total.get(fam, 0) + 1
         if pair_k != "":
             pair_task_total[pair_k] = pair_task_total.get(pair_k, 0) + 1
+        if mid != "":
+            model_task_total[mid] = model_task_total.get(mid, 0) + 1
 
         _inc(task_id_counts, c.task_id)
         _inc(task_family_counts, c.task_family)
@@ -407,6 +415,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 family_task_flagged[fam] = family_task_flagged.get(fam, 0) + 1
             if pair_k != "":
                 pair_task_flagged[pair_k] = pair_task_flagged.get(pair_k, 0) + 1
+            if mid != "":
+                model_task_flagged[mid] = model_task_flagged.get(mid, 0) + 1
             for f in flags:
                 novelty_flag_counts[f] = novelty_flag_counts.get(f, 0) + 1
 
@@ -438,6 +448,12 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 if out_h not in pair_out_seen[pair_k]:
                     pair_out_seen[pair_k].add(out_h)
                     pair_out_uniq[pair_k] = pair_out_uniq.get(pair_k, 0) + 1
+            if mid != "":
+                model_out_total[mid] = model_out_total.get(mid, 0) + 1
+                model_out_seen.setdefault(mid, set())
+                if out_h not in model_out_seen[mid]:
+                    model_out_seen[mid].add(out_h)
+                    model_out_uniq[mid] = model_out_uniq.get(mid, 0) + 1
         if c.prompt != "":
             prompts_norm.append(lib.normalize_text(c.prompt))
             ws = lib.words(c.prompt)
@@ -460,6 +476,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     item_judge_ids: Dict[str, Dict[str, int]] = {}
     judge_id_counts: Dict[str, int] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
+    judge_in_tokens: List[float] = []
+    judge_out_tokens: List[float] = []
+    judge_latency_ms: List[float] = []
+    parse_valid_true = 0
+    parse_valid_false = 0
     for c in judge_pairs:
         _inc(label_counts, c.label)
         _inc(judge_id_counts, c.judge_id)
@@ -467,6 +488,25 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             pair_key = f"{c.a_model_id}|{c.b_model_id}"
             model_pair_label_counts.setdefault(pair_key, {})
             _inc(model_pair_label_counts[pair_key], c.label)
+        pv = c.raw.get("parse_valid", None)
+        if isinstance(pv, bool):
+            if pv:
+                parse_valid_true += 1
+            else:
+                parse_valid_false += 1
+        toks = c.raw.get("tokens", None)
+        if isinstance(toks, dict):
+            ji = lib.get_int(toks, "judge_in", "judge_input", "judge_prompt", "in")
+            jo = lib.get_int(toks, "judge_out", "judge_output", "judge_completion", "out")
+            if ji is not None:
+                judge_in_tokens.append(float(ji))
+            if jo is not None:
+                judge_out_tokens.append(float(jo))
+        lats = c.raw.get("latency_ms", None)
+        if isinstance(lats, dict):
+            jl = lib.get_float(lats, "judge", "judge_ms", "judge_latency_ms")
+            if jl is not None:
+                judge_latency_ms.append(float(jl))
         item = c.item_id
         if item == "":
             item = lib.make_item_id(c.task_id, c.prompt_template_id, c.a_model_id, c.b_model_id)
@@ -651,6 +691,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     model_pair_top.sort(key=lambda x: (-int(x.get("count", 0)), str(x.get("pair_key", ""))))
     model_pair_top = model_pair_top[:20]
 
+    judge_out_budget_target = 64.0
+    judge_out_budget_le_target = sum(1 for x in judge_out_tokens if x <= judge_out_budget_target)
+
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
@@ -664,6 +707,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "invalid_rate": _safe_div(float(invalid), float(len(judge_pairs))),
         "label_balance_ab": balance_ab,
         "label_imbalance_ab": imbalance_ab,
+        "parse_valid_true": parse_valid_true,
+        "parse_valid_false": parse_valid_false,
+        "parse_valid_rate": _safe_div(float(parse_valid_true), float(parse_valid_true + parse_valid_false)),
+        "judge_in_tokens": _num_stats(judge_in_tokens),
+        "judge_out_tokens": _num_stats(judge_out_tokens),
+        "judge_latency_ms": _num_stats(judge_latency_ms),
+        "judge_out_budget_target": judge_out_budget_target,
+        "judge_out_budget_le_target": judge_out_budget_le_target,
+        "judge_out_budget_le_target_rate": _safe_div(float(judge_out_budget_le_target), float(len(judge_out_tokens))),
         "judge_id_unique": len([k for k in judge_id_counts.keys() if k != ""]),
         "judge_id_top": lib.top_counts(judge_id_counts),
         "model_pair_count": len(pair_summary),
@@ -690,11 +742,13 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "flagged_rate_by_prompt_template_id_top": _rate_top(template_task_total, template_task_flagged, "prompt_template_id", k=10),
         "flagged_rate_by_task_family_top": _rate_top(family_task_total, family_task_flagged, "task_family", k=10),
         "flagged_rate_by_family_template_top": _rate_top(pair_task_total, pair_task_flagged, "task_family_template_pair", k=10),
+        "flagged_rate_by_model_id_top": _rate_top(model_task_total, model_task_flagged, "model_id", k=10),
     }
 
     duplicates.update({
         "output_norm_dup_rate_by_prompt_template_id_top": _dup_rate_top(template_out_total, template_out_uniq, "prompt_template_id", k=10),
         "output_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_out_total, pair_out_uniq, "task_family_template_pair", k=10),
+        "output_norm_dup_rate_by_model_id_top": _dup_rate_top(model_out_total, model_out_uniq, "model_id", k=10),
     })
 
     return(MetricsReport(
@@ -850,6 +904,9 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### output_norm_dup_rate_by_family_template_top\n")
     for js in report.duplicates.get("output_norm_dup_rate_by_family_template_top", [])[:10]:
         parts.append(f"- `{js.get('task_family_template_pair')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_model_id_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_model_id_top", [])[:10]:
+        parts.append(f"- `{js.get('model_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
@@ -859,6 +916,33 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(f"- `tie_rate`: {report.judge.get('tie_rate'):.6f}")
     parts.append(f"- `invalid_rate`: {report.judge.get('invalid_rate'):.6f}")
     parts.append(f"- `label_balance_ab`: {report.judge.get('label_balance_ab'):.6f}")
+    parts.append(f"- `parse_valid_true`: {int(report.judge.get('parse_valid_true', 0) or 0)}")
+    parts.append(f"- `parse_valid_false`: {int(report.judge.get('parse_valid_false', 0) or 0)}")
+    parts.append(f"- `parse_valid_rate`: {float(report.judge.get('parse_valid_rate', 0.0) or 0.0):.6f}")
+    parts.append(f"- `judge_out_budget_target`: {float(report.judge.get('judge_out_budget_target', 0.0) or 0.0):.6f}")
+    parts.append(f"- `judge_out_budget_le_target`: {int(report.judge.get('judge_out_budget_le_target', 0) or 0)}")
+    parts.append(f"- `judge_out_budget_le_target_rate`: {float(report.judge.get('judge_out_budget_le_target_rate', 0.0) or 0.0):.6f}")
+    parts.append("\n### judge_in_tokens\n")
+    for sk in ("count", "min", "max", "mean", "p50", "p90"):
+        v = (report.judge.get("judge_in_tokens") or {}).get(sk)
+        if isinstance(v, float):
+            parts.append(f"- `{sk}`: {v:.6f}")
+        else:
+            parts.append(f"- `{sk}`: {v}")
+    parts.append("\n### judge_out_tokens\n")
+    for sk in ("count", "min", "max", "mean", "p50", "p90"):
+        v = (report.judge.get("judge_out_tokens") or {}).get(sk)
+        if isinstance(v, float):
+            parts.append(f"- `{sk}`: {v:.6f}")
+        else:
+            parts.append(f"- `{sk}`: {v}")
+    parts.append("\n### judge_latency_ms\n")
+    for sk in ("count", "min", "max", "mean", "p50", "p90"):
+        v = (report.judge.get("judge_latency_ms") or {}).get(sk)
+        if isinstance(v, float):
+            parts.append(f"- `{sk}`: {v:.6f}")
+        else:
+            parts.append(f"- `{sk}`: {v}")
     parts.append("\n### label_counts\n")
     for k, v in report.judge.get("label_counts", {}).items():
         parts.append(f"- `{k}`: {v}")
@@ -891,6 +975,9 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### flagged_rate_by_family_template_top\n")
     for js in report.useful_novelty.get("flagged_rate_by_family_template_top", [])[:10]:
         parts.append(f"- `{js.get('task_family_template_pair')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
+    parts.append("\n### flagged_rate_by_model_id_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_model_id_top", [])[:10]:
+        parts.append(f"- `{js.get('model_id')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
     parts.append("")
     return("\n".join(parts))
 

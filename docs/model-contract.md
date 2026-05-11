@@ -22,6 +22,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
   - Also records machine-readable **tensor-key invariants** (`tensor_keys.required_top_level` and the `tensor_keys.required_layer_suffixes*` sets) and MTP trust gates (`mtp.trust_gates`) so tooling can enforce “exact tensor names” and “MTP is trusted only if…” policies without re-parsing docs.
   - Compat mappings also cover MTP (`num_nextn_predict_layers`) and `config.json` quantization knobs (`quantization_config.*`) so external runtime configs can be normalized without guessing.
+  - Compat mappings also record a small Transformers-specific cache-layer note (`compat.transformers_cache_layers`) so external-runtime logs can be interpreted without guessing CSA vs HCA cache class behavior.
   - Tokenizer section also records a `tokenizer.tokenizer_json_summary` snapshot (BPE backend + exact pre-tokenizer `Split` regex patterns + `ByteLevel` flags) so external runtimes can reproduce tokenization without guessing.
     - Note: `tokenizer.json`’s `added_tokens[]` list can include tokens whose IDs are *within* the base BPE vocab range. Use `tokenizer.tokenizer_json_summary.*_ge_base_vocab` fields for the contiguous “extra token IDs above base vocab” range.
   - `scripts/model_contract_verify_deepseek_v4_flash.py` also cross-checks tokenizer invariants against the pinned fixtures (BOS/EOS token IDs, `add_bos_token/add_eos_token`, `model_max_length`, and “PAD is EOS”) so contract consumers can treat these as enforced facts, not just documentation.
@@ -90,6 +91,9 @@ MTP (multi-token prediction) oracle requirements:
     - Convenience runner (local file or `https://` URL, writes a small Markdown + JSON artifact bundle under `/private/tmp`): `scripts/run_mtp_sidecar_contract_probe_local.sh /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf`
     - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json --expect-deepseek-v4-flash`
     - The sidecar probe also computes `payload_bytes` per tensor (ggml row-size math for `F32`, `Q8_0`, `Q4_K`) and validates that tensor payload spans do not overlap and do not run past `file_size` when available.
+    - Stronger pinning gate (still no full download): compare per-tensor `--payload-sample-bytes 64` hashes against the pinned antirez reference:
+      - `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://.../DeepSeek-V4-Flash-MTP-*.gguf --json --expect-deepseek-v4-flash --payload-sample-bytes 64 > /tmp/mtp_sidecar_probe.json`
+      - `python3 scripts/verify_mtp_sidecar_payload_fingerprint.py --probe-json /tmp/mtp_sidecar_probe.json`
     - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-9cb905d.json`
     - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-9cb905d-mtp-sidecar.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`

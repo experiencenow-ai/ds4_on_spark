@@ -42,10 +42,21 @@ Record (for each node):
 - Wired interface name(s) and MTU (jumbo vs standard).
 - Wi‑Fi interface name(s) and MTU.
 
+Optional: write down the matrix (fill with redacted values as needed):
+
+| Node | SSH target | SSH path | Wired ifname | Wired MTU | Wi‑Fi ifname | Wi‑Fi MTU | Notes |
+|------|------------|----------|--------------|----------:|--------------|----------:|-------|
+| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | — |
+| spark1 | `spark1.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
+| spark2 | `spark2.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
+
 ## 5) MTU Consistency
 
 - Ensure the intended fabric (wired vs Wi‑Fi) uses consistent MTU across nodes for tests that care about latency/bandwidth.
 - The ring probe prints `ip -br link` which includes MTU; use it to spot mismatches quickly.
+- Optional: validate MTU end-to-end with DF pings from each host to its peers:
+  - `SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_mtu.sh --topology full aitopatom-9ab9.local spark1.local spark2.local || true`
+  - Override payload sizes (comma-separated, no spaces): `MTU_PAYLOADS=1472,8972`
 
 ## 6) Bandwidth/Latency (Safe, Non-Secret)
 

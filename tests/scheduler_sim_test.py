@@ -239,6 +239,36 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_admit_policy_least_pending_work_prefers_lower_pending_work(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), k=1, cost_scale=10.0),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), k=1, cost_scale=1.0),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), k=1, cost_scale=1.0),
+        ]
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=100.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+            backpressure_units="work",
+        )
+        m_count = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, admit_policy="least_pending"), trace)
+        m_work = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, admit_policy="least_pending_work"), trace)
+        self.assertEqual(m_count.tasks_started_per_expert, [2, 1])
+        self.assertEqual(m_work.tasks_started_per_expert, [1, 2])
+
     def test_summary_includes_dflash_comparator_metrics(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
@@ -1240,6 +1270,13 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m.tasks_started_per_expert, [3])
         self.assertEqual(m.starved_tasks_started_per_expert, [2])
         self.assertAlmostEqual(m.max_task_queue_wait_ms_per_expert[0], 20.0, places=6)
+        self.assertEqual(m.starved_task_queue_wait_ms_interactive, [])
+        self.assertEqual(m.starved_task_queue_wait_ms_batch, [10.0, 20.0])
+
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(s.get("starved_task_queue_wait_ms_p95", 0.0), 19.5, places=6)
+        self.assertAlmostEqual(s.get("starved_task_queue_wait_ms_p95_batch", 0.0), 19.5, places=6)
+        self.assertAlmostEqual(s.get("starved_task_queue_wait_ms_p95_interactive", 0.0), 0.0, places=6)
 
         out = m.to_jsonable()
         q = out.get("expert_queue", {})

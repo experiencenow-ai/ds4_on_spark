@@ -198,6 +198,21 @@ cat \"$out_json\"
 ' " <"$repo_root/scripts/model_contract_validate_mtp_one_token_draft_probe.py" \
 	>"$OUT_DIR/remote_mtp_one_token_stdout.txt" 2>"$OUT_DIR/remote_mtp_one_token_stderr.txt" || true
 
+echo "== fetching sidecar probe JSON from spark (best-effort) =="
+ssh $SSH_OPTS "$target" "cat /tmp/mtp_sidecar_probe.json" \
+	>"$OUT_DIR/sidecar_probe_remote.json" 2>"$OUT_DIR/sidecar_probe_remote_stderr.txt" || true
+
+echo "== verifying sidecar payload fingerprints against pinned antirez reference (local; best-effort) =="
+if [ -r "$OUT_DIR/sidecar_probe_remote.json" ]; then
+	python3 "$repo_root/scripts/verify_mtp_sidecar_payload_fingerprint.py" \
+		--probe-json "$OUT_DIR/sidecar_probe_remote.json" \
+		--json \
+		>"$OUT_DIR/sidecar_probe_fingerprint_gate.json" 2>"$OUT_DIR/sidecar_probe_fingerprint_gate_stderr.txt" || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"sidecar_probe_remote.json missing\"}" >"$OUT_DIR/sidecar_probe_fingerprint_gate.json"
+	printf '%s\n' "" >"$OUT_DIR/sidecar_probe_fingerprint_gate_stderr.txt"
+fi
+
 python3 - "$OUT_DIR/remote_mtp_one_token_stdout.txt" "$OUT_DIR/mtp_one_token_probe.json" >"$OUT_DIR/mtp_one_token_probe_parse.json" 2>/dev/null <<'PY' || true
 import json
 import sys
@@ -246,8 +261,11 @@ PY
 	echo "- stderr: $OUT_DIR/remote_mtp_one_token_stderr.txt"
 	echo "- probe JSON (if parseable): $OUT_DIR/mtp_one_token_probe.json"
 	echo "- parsed status: $OUT_DIR/mtp_one_token_probe_parse.json"
+	echo "- sidecar probe JSON (best-effort): $OUT_DIR/sidecar_probe_remote.json"
+	echo "- sidecar probe fetch stderr: $OUT_DIR/sidecar_probe_remote_stderr.txt"
+	echo "- sidecar fingerprint gate JSON (local): $OUT_DIR/sidecar_probe_fingerprint_gate.json"
+	echo "- sidecar fingerprint gate stderr (local): $OUT_DIR/sidecar_probe_fingerprint_gate_stderr.txt"
 	echo
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
-

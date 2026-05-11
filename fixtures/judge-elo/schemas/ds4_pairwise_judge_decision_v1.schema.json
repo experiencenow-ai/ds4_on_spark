@@ -38,10 +38,12 @@
       "maximum": 10
     },
     "reason": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 200
     },
     "train_hint": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 200
     },
     "tags": {
       "type": "array",
@@ -52,5 +54,23 @@
         "maxLength": 24
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "winner": {
+            "const": "tie"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "margin": {
+            "const": 0
+          }
+        }
+      }
+    }
+  ]
 }

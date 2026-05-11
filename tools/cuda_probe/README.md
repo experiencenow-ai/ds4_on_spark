@@ -49,6 +49,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe`: compile/run sanity kernel built with explicit `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX).
 - `tools/cuda_probe/bin/cuda_sm121_dlto_probe`: compile/run device LTO (`-dlto`) smoke test for `sm_121` (toolchain gate for some CUDA build systems).
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
+- `tools/cuda_probe/bin/cuda_sm121_arch_list_report`: print compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined (`__CUDA_ARCH_SPECIFIC__`, `__CUDA_ARCH_FAMILY_SPECIFIC__`); this is a convenient “what arch list did nvcc think we built?” sanity check for `sm_121` builds.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121` (TN format; BF16 output).
