@@ -695,6 +695,13 @@ MoE gate conditional keys:
 - Hash layers: require `ffn.gate.tid2eid` and forbid `ffn.gate.bias` (`tensor_keys.layer_gate.tid2eid_layer_ids == [0,1,2]`).
 - Score layers: require `ffn.gate.bias` and forbid `ffn.gate.tid2eid` (`tensor_keys.layer_gate.gate_bias_layer_ids == [3..42]`).
 
+Per-layer helper views (exact tensor-name + count contract):
+
+- `tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` records the full non-expert suffix list for each trunk layer ID (base + CSA/HCA conditionals + correct gate suffix).
+- `tensor_keys.layer_expected_tensor_key_count_by_layer_id` records the expected **total** per-layer tensor-key count (experts + non-expert suffixes).
+- `tensor_keys.layer_tensor_key_count_by_layer_id` records the observed official checkpoint per-layer tensor-key counts.
+- `tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok` is `true` for all trunk layers in the pinned official checkpoint (sanity check that the derived count formulas match reality).
+
 MTP block (`mtp.0.*`):
 
 - Includes the same attention/MoE/HC keys as a score-routed sliding-only layer, plus:

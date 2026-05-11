@@ -957,6 +957,69 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
 
+
+def augment_tensor_key_summary_with_trunk_layer_expectations(
+	tensor_keys: dict[str, Any],
+	weight_keys: list[str],
+	compress_ratios_main: list[int],
+	n_hash_layers: int,
+) -> None:
+	required_layer_suffixes = tensor_keys.get("required_layer_suffixes", None)
+	required_nonzero = tensor_keys.get("required_layer_suffixes_compress_ratio_nonzero", None)
+	required_ratio4 = tensor_keys.get("required_layer_suffixes_compress_ratio_4", None)
+	expected_expert = tensor_keys.get("expected_expert_key_count_per_layer", None)
+	hash_gate_suffix = tensor_keys.get("hash_gate_tensor_key_suffix", "ffn.gate.tid2eid")
+	score_gate_suffix = tensor_keys.get("score_gate_tensor_key_suffix", "ffn.gate.bias")
+
+	if not isinstance(required_layer_suffixes, list):
+		return
+	if not isinstance(required_nonzero, list) or not isinstance(required_ratio4, list):
+		return
+	if not isinstance(expected_expert, int) or expected_expert <= 0:
+		return
+
+	n_layers = len(compress_ratios_main)
+	required_by_layer_id: dict[str, list[str]] = {}
+	expected_count_by_layer_id: dict[str, int] = {}
+	for i in range(n_layers):
+		try:
+			ratio_i = int(compress_ratios_main[i])
+		except Exception:
+			ratio_i = 0
+		req = list(required_layer_suffixes)
+		if ratio_i != 0:
+			req += list(required_nonzero)
+		if ratio_i == 4:
+			req += list(required_ratio4)
+		req.append(str(hash_gate_suffix if i < int(n_hash_layers) else score_gate_suffix))
+		required_by_layer_id[str(i)] = req
+		expected_count_by_layer_id[str(i)] = int(expected_expert + len(req))
+
+	actual_counts = [0 for _ in range(n_layers)]
+	for k in weight_keys:
+		if not k.startswith("layers."):
+			continue
+		parts = k.split(".", 2)
+		if len(parts) < 3:
+			continue
+		try:
+			i = int(parts[1])
+		except Exception:
+			continue
+		if 0 <= i < n_layers:
+			actual_counts[i] += 1
+
+	actual_by_layer_id: dict[str, int] = {str(i): int(actual_counts[i]) for i in range(n_layers)}
+	ok_by_layer_id: dict[str, bool] = {}
+	for i in range(n_layers):
+		key = str(i)
+		ok_by_layer_id[key] = (int(actual_counts[i]) == int(expected_count_by_layer_id[key]))
+
+	tensor_keys["layer_required_nonexpert_suffixes_by_layer_id"] = required_by_layer_id
+	tensor_keys["layer_expected_tensor_key_count_by_layer_id"] = expected_count_by_layer_id
+	tensor_keys["layer_tensor_key_count_by_layer_id"] = actual_by_layer_id
+	tensor_keys["layer_expected_tensor_key_count_by_layer_id_ok"] = ok_by_layer_id
+
 def build_compat_mappings() -> dict:
 	# Source-derived aliases between:
 	# - Transformers-style config.json fields (fixtures/.../config.json)
@@ -1068,6 +1131,12 @@ def build_contract() -> dict:
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
 	tensor_keys = build_tensor_key_summary(weight_keys, n_layers, int(cfg["n_routed_experts"]))
+	augment_tensor_key_summary_with_trunk_layer_expectations(
+		tensor_keys,
+		weight_keys,
+		[int(x) for x in compress_ratios[:n_layers]],
+		int(cfg["num_hash_layers"]),
+	)
 	weight_map_files = [str(v) for v in weight_map.values()]
 	weight_map_file_counts = Counter(weight_map_files)
 	weight_map_keys_sha256 = sha256_lines(weight_keys)

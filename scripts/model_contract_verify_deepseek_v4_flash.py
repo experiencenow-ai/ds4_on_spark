@@ -410,6 +410,53 @@ def main() -> int:
 
 						if missing_required:
 							failures.append(Failure(115, f"official checkpoint missing tensor keys implied by tensor_keys.required_* lists (sample={sorted(missing_required)[:20]}): {contract_summary}"))
+						else:
+							# Enforce machine-readable per-layer suffix + count helpers for DS4 implementers.
+							layer_req = tk.get("layer_required_nonexpert_suffixes_by_layer_id", None)
+							layer_expected = tk.get("layer_expected_tensor_key_count_by_layer_id", None)
+							layer_counts = tk.get("layer_tensor_key_count_by_layer_id", None)
+							layer_ok = tk.get("layer_expected_tensor_key_count_by_layer_id_ok", None)
+							if not (isinstance(layer_req, dict) and isinstance(layer_expected, dict) and isinstance(layer_counts, dict) and isinstance(layer_ok, dict)):
+								failures.append(Failure(121, f"contract summary missing tensor_keys.layer_* per-layer helpers (required_nonexpert_suffixes / expected_counts / counts / ok): {contract_summary}"))
+							else:
+								try:
+									n_hash_layers_cfg = int(cfg.get("num_hash_layers", 0))
+								except Exception:
+									n_hash_layers_cfg = 0
+
+								for i in range(int(n_layers)):
+									key = str(i)
+									try:
+										ratio = int(compress_ratios[i])
+									except Exception:
+										ratio = 0
+									exp = list(req_layer)
+									if ratio != 0:
+										exp += list(req_nonzero)
+									if ratio == 4:
+										exp += list(req_csa)
+									exp.append(str(hash_gate_suffix if i < n_hash_layers_cfg else score_gate_suffix))
+
+									got_req = layer_req.get(key)
+									if got_req != exp:
+										failures.append(Failure(122, f"contract summary tensor_keys.layer_required_nonexpert_suffixes_by_layer_id[{i}] mismatch (got_len={len(got_req) if isinstance(got_req, list) else 'n/a'} expected_len={len(exp)}): {contract_summary}"))
+										break
+
+									got_count = layer_counts.get(key)
+									want_count = sum(1 for k in weight_keys if k.startswith(f"layers.{i}.")) if isinstance(weight_keys, set) else None
+									if got_count != want_count:
+										failures.append(Failure(123, f"contract summary tensor_keys.layer_tensor_key_count_by_layer_id[{i}] mismatch (got {got_count!r} expected {want_count}): {contract_summary}"))
+										break
+
+									got_expected_total = layer_expected.get(key)
+									want_expected_total = int(tk.get("expected_expert_key_count_per_layer", 0)) + len(exp)
+									if got_expected_total != want_expected_total:
+										failures.append(Failure(124, f"contract summary tensor_keys.layer_expected_tensor_key_count_by_layer_id[{i}] mismatch (got {got_expected_total!r} expected {want_expected_total}): {contract_summary}"))
+										break
+
+									if layer_ok.get(key) is not True:
+										failures.append(Failure(125, f"contract summary tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok[{i}] must be true: {contract_summary}"))
+										break
 				if tk.get("mtp_embed_present") is not False:
 					failures.append(Failure(28, f"contract summary expects no mtp.*.embed.* keys in official checkpoint (tensor_keys.mtp_embed_present=false): {contract_summary}"))
 				if tk.get("mtp_head_present") is not False:
