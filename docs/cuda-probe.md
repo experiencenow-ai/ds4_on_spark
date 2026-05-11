@@ -10,6 +10,26 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 ./scripts/cuda_probe_tiny_spark0.sh
 ```
 
+## Spark0: Device Props Minimal (No Repo Transfer)
+
+When you want the one-line `schema=4` device summary without shipping `tools/cuda_probe/` to Spark0:
+
+```bash
+./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+This compiles a single tiny `.cu` file directly on Spark0 with `nvcc -arch=native` and prints the same `cuda drv=... schema=4` line as `tools/cuda_probe/bin/cuda_device_props_tiny`.
+
+It also includes compile-only `-arch=sm_121` and `nvcc --gpu-architecture=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
+
+To make the “end-to-end link+run via `sm_121`” path explicit (not just compile-only), run:
+
+```bash
+WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+This additionally builds and runs the same tiny probe via `nvcc -arch=sm_121` and `nvcc --gpu-architecture=sm_121`.
+
 When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” gate:
 
 ```bash
