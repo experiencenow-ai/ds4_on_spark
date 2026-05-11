@@ -104,6 +104,7 @@ Expected outputs:
 
 - `cuda_sm121_probe` compiles for `-arch=sm_121` and should fail fast if `nvcc`
   or the installed toolkit does not recognize `sm_121`.
+- `scripts/cuda_probe_nvcc_minimal_spark0.sh` includes a best-effort cross-translation-unit `__global__` template explicit-instantiation probe and prints `template_stub_*` results; use it to diagnose CUDA 13 `-static-global-template-stub` behavior in CUTLASS/DeepGEMM-style builds.
 - `cuda_sm121_rdc_probe` is a compile/run check that `nvcc` can do separate compilation (`-dc`) plus device link (`-dlink`) for `sm_121`; this is a common requirement for multi-translation-unit CUDA codebases and build systems.
 - `cuda_sm121_fatbin_probe` compiles for multiple targets via `-gencode` so the
   output contains both `sm_120` + `sm_121` SASS, plus PTX for `compute_121`

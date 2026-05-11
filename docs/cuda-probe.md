@@ -118,6 +118,7 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 - If `compute_121` is advertised, also compiles and runs a PTX-targeted build via `-arch=compute_121` (verifies that driver/runtime JIT can execute `compute_121` PTX on GB10)
 - If `compute_121` is advertised, also does a best-effort compile+run via `-gencode arch=compute_121,code=[sm_121,compute_121]` and includes it in the embedded-PTX report (multi-target build-system syntax probe)
 - Always attempts best-effort compile+run for `-arch=sm_121a` and `-arch=sm_121f` (variant targets), and reports whether each target was advertised by `nvcc --list-gpu-code` (`advertised=yes/no/unknown`) (informational; missing `sm_121` remains the hard failure)
+- Runs a best-effort cross-translation-unit `__global__` template explicit-instantiation link probe and prints `template_stub_default` / `template_stub_stubfalse` / `template_stub_rdc` (CUDA 13 `-static-global-template-stub` behavior gate for CUTLASS/DeepGEMM-style builds)
 - Prints a `cuda_device_props_tiny`-schema one-line driver/runtime + key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
   - Includes driver-reserved shared memory per block (`cudaDevAttrReservedSharedMemoryPerBlock`) plus `cudaMallocAsync`/memory-pool support (`cudaDevAttrMemoryPoolsSupported`) when available.
 - Prints the device-observed `__CUDA_ARCH__`

@@ -104,6 +104,9 @@ Next probe step:
 Implication:
 
 - `-arch=native` is convenient for single-host bring-up, but `nvcc` generates SASS for the visible GPU(s) and (per CUDA 13 `nvcc` docs) does not embed PTX; this is not ideal for “ship one binary and run anywhere”.
+- CUDA 13 changes `nvcc` defaults for `__global__` templates and device symbol visibility:
+  - `-static-global-template-stub=true` (default in CUDA 13) can break “explicitly instantiate a `__global__` template in TU A, launch it from TU B” in whole-program compilation mode (`-rdc=false`); fixes include `-rdc=true` or `-static-global-template-stub=false` (see `scripts/cuda_probe_nvcc_minimal_spark0.sh` `template_stub_*` results; observed on Spark0 2026-05-11: default fails to link, `stubfalse`/`rdc` succeed).
+  - `-device-entity-has-hidden-visibility=true` (default in CUDA 13) can prevent `__global__` / device-variable symbols from being referenced across shared-library boundaries unless you opt out and ensure a single shared CUDART (relevant for plugin/shared-lib workflows; see NVIDIA’s CUDA 13 linkage/visibility notes).
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` and `scripts/cuda_probe_nvcc_minimal_spark0.sh` both include best-effort `cuobjdump --dump-ptx` checks to make the “PTX present vs missing” behavior observable on Spark0.
 - When PTX is present, those scripts also print the first PTX `.target` line (`ptx_target_*`) so logs capture the embedded PTX arch explicitly.
 - Those same scripts also attempt best-effort compile-only `-gencode` builds for `arch=compute_121,code=sm_121`, `arch=compute_121,code=compute_121`, and `arch=compute_121,code=[sm_121,compute_121]` (when `compute_121` is advertised) to validate multi-target build plumbing and the bracket-list syntax on the installed `nvcc`.
