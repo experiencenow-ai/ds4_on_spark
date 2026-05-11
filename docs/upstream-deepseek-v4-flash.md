@@ -164,6 +164,8 @@ Transformers publishes an architecture + integration reference for `deepseek_v4`
 
 The fetch script disables Git LFS smudge/filters (and sets `GIT_LFS_SKIP_SMUDGE=1`) so LFS weights are not downloaded.
 
+The fetch script also reads Hugging Face’s `X-Repo-Commit` header for `main` and pins all subsequent file downloads to that immutable commit hash. This avoids “mixed snapshots” if the HF `main` branch moves mid-fetch.
+
 ```bash
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf
 ```
