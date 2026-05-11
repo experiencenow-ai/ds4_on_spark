@@ -768,3 +768,21 @@ index 0000000..59d03d6
 +
 +    return ok ? 0 : 3;
 +}
+
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+index cfc2a97..eee7441 100644
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -698,6 +698,12 @@ void llama_model::load_stats(llama_model_loader & ml) {
+ void llama_model::load_arch(llama_model_loader & ml) {
+     arch = ml.get_arch();
+     if (arch == LLM_ARCH_UNKNOWN) {
++        if (ml.get_arch_name() == "deepseek4_mtp_support") {
++            throw std::runtime_error(
++                "deepseek4_mtp_support is an MTP sidecar GGUF (32 mtp.0.* tensors), not a full trunk model; "
++                "use llama-ds4-mtp-sidecar-probe --path <sidecar.gguf> --json"
++            );
++        }
+         throw std::runtime_error("unknown model architecture: '" + ml.get_arch_name() + "'");
+     }
+     if (!devices.empty() && devices[0].is_meta && !llm_arch_supports_sm_tensor(arch)) {

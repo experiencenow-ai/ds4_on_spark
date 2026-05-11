@@ -10,6 +10,8 @@ This patch adds a **metadata-only** probe binary to the Spark fork:
 
 - `llama-ds4-mtp-sidecar-probe`
 
+It also replaces the confusing `unknown model architecture: deepseek4_mtp_support` exception with a targeted message explaining that `deepseek4_mtp_support` is a **sidecar-only** GGUF and pointing at `llama-ds4-mtp-sidecar-probe` for validation.
+
 It validates:
 
 - `general.architecture == deepseek4_mtp_support`

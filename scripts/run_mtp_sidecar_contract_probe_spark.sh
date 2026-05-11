@@ -75,50 +75,55 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_probe_spark.md"
 } >"$REPORT_MD"
 
 echo "== running MTP sidecar contract probe on spark (may be gated) =="
-ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py && $REMOTE_MTP_SIDECAR_ENV sh -lc '
+ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py" \
+	<"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
+	>"$OUT_DIR/remote_mtp_sidecar_probe_upload_stdout.txt" 2>"$OUT_DIR/remote_mtp_sidecar_probe_upload_stderr.txt" || true
+
+ssh $SSH_OPTS "$target" "env $REMOTE_MTP_SIDECAR_ENV sh -s -- $REMOTE_MTP_SIDECAR_ARGS" \
+	>"$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" 2>"$OUT_DIR/remote_mtp_sidecar_probe_stderr.txt" <<'SH' || true
 set -eu
-if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
-  echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
-  exit 0
+REMOTE_MTP_SIDECAR_ARGS="$*"
+if [ "${ALLOW_RUN:-0}" != "1" ]; then
+	echo "run skipped: set ALLOW_RUN=1 on Spark to enable"
+	exit 0
 fi
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  for p in \
-    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
-  do
-    if [ -r \"$p\" ]; then
-      MTP_SIDECAR_GGUF=\"$p\"
-      export MTP_SIDECAR_GGUF
-      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
-      break
-    fi
-  done
+if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
+	for p in \
+		/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+	do
+		if [ -r "$p" ]; then
+			MTP_SIDECAR_GGUF="$p"
+			export MTP_SIDECAR_GGUF
+			echo "defaulted MTP_SIDECAR_GGUF=$p" 1>&2
+			break
+		fi
+	done
 fi
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\" 1>&2
-  exit 0
+if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
+	echo "run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf" 1>&2
+	exit 0
 fi
-case \"${MTP_SIDECAR_GGUF}\" in
-  http://*|https://*)
-    if [ \"${ALLOW_URL:-0}\" != \"1\" ]; then
-      echo \"run skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-read probe\"
-      exit 0
-    fi
-    python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
-    ;;
-  *)
-    if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
-      echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
-      exit 0
-    fi
-    python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
-    ;;
+case "${MTP_SIDECAR_GGUF}" in
+	http://*|https://*)
+		if [ "${ALLOW_URL:-0}" != "1" ]; then
+			echo "run skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-read probe"
+			exit 0
+		fi
+		python3 /tmp/model_contract_probe_mtp_sidecar.py --url "${MTP_SIDECAR_GGUF}" ${REMOTE_MTP_SIDECAR_ARGS}
+		;;
+	*)
+		if [ ! -r "${MTP_SIDECAR_GGUF}" ]; then
+			echo "run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}"
+			exit 0
+		fi
+		python3 /tmp/model_contract_probe_mtp_sidecar.py --path "${MTP_SIDECAR_GGUF}" ${REMOTE_MTP_SIDECAR_ARGS}
+		;;
 esac
-' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
-	>"$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" 2>"$OUT_DIR/remote_mtp_sidecar_probe_stderr.txt" || true
+SH
 
 python3 - "$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" >"$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY' || true
 import json
@@ -187,7 +192,7 @@ fi
 {
 	echo "## Results"
 	echo
-	echo "This is a metadata-only sanity check for DS4-tuned MTP sidecars (e.g. `general.architecture=deepseek4_mtp_support` + 32 `mtp.0.*` tensors)."
+	echo 'This is a metadata-only sanity check for DS4-tuned MTP sidecars (e.g. `general.architecture=deepseek4_mtp_support` + 32 `mtp.0.*` tensors).'
 	echo "It does not require loading the trunk GGUF or reading tensor payloads into RAM."
 	echo
 	echo "Stdout (prefix):"
