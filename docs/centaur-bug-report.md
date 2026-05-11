@@ -22,6 +22,12 @@ sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+Alternative: pack a single tarball on Spark0 (then fetch with `scp`):
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_RUN_ID=\"$CENTAUR_RUN_ID\"; sh -s" < ./scripts/centaur_spark0_v73_pack_artifacts.sh
+```
+
 Default local output directory:
 
 - `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)
@@ -39,6 +45,12 @@ sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Alternative: pack a single tarball on Spark0 (then fetch with `scp`):
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s" < ./scripts/centaur_spark12_v73_pack_ring_artifacts.sh
 ```
 
 Default local output directory:

@@ -143,6 +143,14 @@ If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact b
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+If `rsync`/fetch is inconvenient, you can instead pack a single tarball on Spark0 and then fetch it with `scp`:
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_RUN_ID=\"$CENTAUR_RUN_ID\"; sh -s" < ./scripts/centaur_spark0_v73_pack_artifacts.sh
+# tarball path on Spark0:
+#   ~/centaur-smoke/v73/run/<run_id>/artifacts.tgz
+```
+
 For a fuller bug-report checklist and sanitization guidance, see:
 
 - `docs/centaur-bug-report.md`

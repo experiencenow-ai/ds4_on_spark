@@ -59,12 +59,14 @@ If you also have Spark3, use:
   - `scripts/centaur_spark0_v73_smoke.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_validate_artifacts.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark0_v73_pack_artifacts.sh` (packs a small tarball on Spark0)
 - Spark1/2 ring:
   - `scripts/centaur_spark12_v73_stage.sh`
   - `scripts/centaur_spark_ring_sim_spark12_v73.sh`
   - `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_rsync_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_pack_ring_artifacts.sh` (packs a small tarball on Spark0)
   - `scripts/centaur_spark12_v73_validate_ring_artifacts.sh` (runs on orchestrator host)
 - Optional HTTP transport helpers:
   - `scripts/centaur_spark_hyor_controller_http_v73.sh`

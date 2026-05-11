@@ -34,6 +34,14 @@ ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
+Optional: pack a single tarball on Spark0 for sharing (then fetch with `scp`):
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s" < ./scripts/centaur_spark12_v73_pack_ring_artifacts.sh
+# tarball path on Spark0:
+#   ~/centaur-smoke/v73/ring_rsync_spark12/run/<ring_run_id>/ring_artifacts.tgz
+```
+
 Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
 
 ## Spark1/Spark2 bring-up checklist (when hardware exists)
