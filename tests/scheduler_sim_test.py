@@ -1886,6 +1886,87 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(m_full.work_units_mtp_draft, float(len(trace) * 4) * 0.25, places=6)
         self.assertAlmostEqual(m_stop.work_units_mtp_draft, float(len(trace) * 1) * 0.25, places=6)
 
+    def test_mtp_accept_model_hist_can_force_bonus_tokens(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i) * 0.01,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+            for i in range(20)
+        ]
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.01,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            mtp_draft_len=2,
+            mtp_accept_model="hist",
+            mtp_accept_hist=(0.0, 0.0, 1.0),
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            mtp_draft_attempt_policy="full",
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.mtp_bonus_tokens, len(trace))
+        self.assertTrue(all(al == 3 for al in m.mtp_accept_len_per_step))
+
+    def test_expected_mtp_accept_len_hist_is_weighted_mean(self) -> None:
+        exp = scheduler_sim.expected_mtp_accept_len(
+            2,
+            0.0,
+            1.0,
+            mtp_accept_model="hist",
+            mtp_accept_hist=(0.0, 0.25, 0.75),
+        )
+        self.assertAlmostEqual(exp, (2.0 * 0.25) + (3.0 * 0.75), places=6)
+
+    def test_mtp_accept_model_hist_requires_len_draft_plus_one(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+            )
+        ]
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.01,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            mtp_draft_len=2,
+            mtp_accept_model="hist",
+            mtp_accept_hist=(1.0, 0.0),
+            mtp_draft_cost_scale=0.25,
+        )
+        with self.assertRaises(ValueError):
+            scheduler_sim.run_simulation(cfg, trace)
+
     def test_starvation_counts_queue_wait(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(

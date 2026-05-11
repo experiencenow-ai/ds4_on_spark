@@ -161,7 +161,8 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
-  - Draft position `i` is accepted with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
+  - Default `--mtp-accept-model geom` accepts draft position `i` with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
+  - `--mtp-accept-model hist` samples `accept_len` directly from `--mtp-accept-hist` (comma-separated probabilities for `accept_len=1..draft_len+1`, auto-normalized).
   - If all draft tokens are accepted, the simulator counts one extra **bonus token** (accept length `= draft_len + 1`).
 
 Notes:
@@ -177,7 +178,7 @@ Notes:
 By default `--arrival-rate-tps` is interpreted as **verify steps per second** (one trace entry per step).
 When exploring MTP, it is often more useful to hold **output tokens per second** constant instead.
 
-For synthetic traces, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from `--mtp-accept-prob/--mtp-accept-decay`.
+For synthetic traces, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from the configured accept model (`--mtp-accept-model geom` uses `--mtp-accept-prob/--mtp-accept-decay`; `hist` uses `--mtp-accept-hist`).
 
 Notes:
 
