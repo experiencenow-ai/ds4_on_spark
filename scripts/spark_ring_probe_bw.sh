@@ -155,10 +155,10 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "down" ]; then
 			printf "down (remote->mac) %s MiB: " "$BW_MB"
-			if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$BW_MB" 2>/dev/null <<'REMOTE' | dd of=/dev/null bs=1m 2>&1 | tail -n 1
+			if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$BW_MB" 2>/dev/null <<'REMOTE' | dd of=/dev/null bs=1M 2>&1 | tail -n 1
 set -eu
 mb="${1:-64}"
-dd if=/dev/zero bs=1m count="$mb" 2>/dev/null
+dd if=/dev/zero bs=1M count="$mb" 2>/dev/null
 REMOTE
 			then
 				:
@@ -170,7 +170,7 @@ REMOTE
 
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "up" ]; then
 			printf "up (mac->remote) %s MiB: " "$BW_MB"
-			if dd if=/dev/zero bs=1m count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1m 2>&1 | tail -n 1' 2>/dev/null
+			if dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>/dev/null
 			then
 				:
 			else
@@ -201,4 +201,3 @@ fi
 if [ "${ssh_fail:-0}" != "0" ]; then
 	exit 1
 fi
-
