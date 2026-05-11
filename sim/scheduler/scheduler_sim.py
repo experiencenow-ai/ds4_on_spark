@@ -174,6 +174,7 @@ class SimConfig:
     mtp_verify_per_draft_cost_scale: float = 0.0
     mtp_draft_attempt_policy: str = "full"
     dflash_draft_len: int = -1
+    dflash_draft_cost_scale: float = 0.0
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     batch_wait_interactive_ms: float = 0.0
@@ -437,6 +438,7 @@ class SimMetrics:
     mtp_accept_len_clamped_backpressure: int = 0
     dflash_steps: int = 0
     dflash_output_tokens: int = 0
+    dflash_draft_cost_scale: float = 0.0
     dflash_draft_tokens_total: int = 0
     dflash_draft_tokens_accepted: int = 0
     dflash_draft_tokens_rejected: int = 0
@@ -3036,6 +3038,8 @@ def run_simulation(
         raise ValueError("sim_seed must be >= 0")
     if cfg.mtp_draft_len < 0:
         raise ValueError("mtp_draft_len must be >= 0")
+    if cfg.dflash_draft_cost_scale < 0.0:
+        raise ValueError("dflash_draft_cost_scale must be >= 0")
     if cfg.mtp_draft_len > 0:
         mtp_draft_attempt_policy = cfg.mtp_draft_attempt_policy.strip().lower()
         if mtp_draft_attempt_policy not in ("full", "stop_at_reject"):
@@ -3148,6 +3152,7 @@ def run_simulation(
         pending_depth_hist_mtp_verify_overflow=0.0,
     )
     rng = random.Random(cfg.sim_seed)
+    metrics.dflash_draft_cost_scale = float(cfg.dflash_draft_cost_scale)
     if cfg.mtp_draft_len > 0:
         metrics.mtp_verify_steps = len(trace)
         metrics.mtp_draft_len = cfg.mtp_draft_len
@@ -3950,11 +3955,20 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     dflash_bonus_tokens = float(metrics.dflash_bonus_tokens)
     dflash_accept_rate = (float(metrics.dflash_draft_tokens_accepted) / float(metrics.dflash_draft_tokens_total)) if metrics.dflash_draft_tokens_total > 0 else 0.0
     dflash_accept_lens = [float(al) for al in metrics.dflash_accept_len_per_step if al > 0]
+    dflash_draft_cost_scale = float(metrics.dflash_draft_cost_scale) if float(metrics.dflash_draft_cost_scale) > 0.0 else 0.0
+    dflash_draft_overhead_scale = 0.0
+    if metrics.num_tokens > 0 and dflash_steps > 0.0 and dflash_draft_cost_scale > 0.0:
+        dflash_draft_overhead_scale = ((dflash_steps / float(metrics.num_tokens)) * dflash_draft_cost_scale)
     dropped = float(metrics.dropped_tokens_backpressure)
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
     dflash_service_per_output_token = (float(metrics.service_slot_ms_total) / dflash_output_tokens) if dflash_output_tokens > 0.0 else 0.0
+    dflash_service_per_output_token_adjusted = (
+        (float(metrics.service_slot_ms_total) * (1.0 + dflash_draft_overhead_scale) / dflash_output_tokens) if dflash_output_tokens > 0.0 else 0.0
+    )
+    dflash_makespan_ms_adjusted = (float(makespan_ms) * (1.0 + dflash_draft_overhead_scale)) if makespan_ms > 0.0 else 0.0
+    dflash_output_tps_adjusted = (dflash_output_tokens * 1000.0 / dflash_makespan_ms_adjusted) if dflash_makespan_ms_adjusted > 0.0 else 0.0
     tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
     expert_tasks_started_gini = _gini_nonneg([float(v) for v in metrics.tasks_started_per_expert])
     expert_utilization_gini = _gini_nonneg([float(v) for v in metrics.mean_utilization_per_expert])
@@ -4018,6 +4032,9 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "dflash_accept_len_p95": float(_p_or_zero(dflash_accept_lens, 0.95)),
             "dflash_accept_rate": float(dflash_accept_rate),
             "dflash_service_slot_ms_per_output_token": float(dflash_service_per_output_token),
+            "dflash_draft_cost_scale": float(dflash_draft_cost_scale),
+            "dflash_output_token_throughput_tps_adjusted": float(dflash_output_tps_adjusted),
+            "dflash_service_slot_ms_per_output_token_adjusted": float(dflash_service_per_output_token_adjusted),
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
             "service_batch_size_p50_interactive": float(_p_or_zero(metrics.service_batch_size_interactive, 0.50)),
@@ -4532,6 +4549,12 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from meta.dflash_draft_len or consistent accepted_dflash+rejected_dflash.")
+    p.add_argument(
+        "--dflash-draft-cost-scale",
+        type=float,
+        default=0.0,
+        help="Heuristic: draft overhead for the dflash_* speculative-decoding comparator, as a fraction of baseline per-step service cost. Used only for adjusted dflash_* summary metrics (0 = no adjustment).",
+    )
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -4849,6 +4872,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
         mtp_draft_attempt_policy=args.mtp_draft_attempt_policy,
         dflash_draft_len=args.dflash_draft_len,
+        dflash_draft_cost_scale=args.dflash_draft_cost_scale,
     )
 
     replay_mode = (args.trace_jsonl != "" or args.trace_csv != "")
