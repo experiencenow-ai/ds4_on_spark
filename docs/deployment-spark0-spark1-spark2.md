@@ -62,6 +62,13 @@ Notes:
 - For TP=3, prefer a rank-ordered host list in the env file (example):
   `DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local`
 
+If you want strict TP=3 gating on start (recommended for early bring-up), enable the topology-specific strict unit:
+
+```bash
+sudo systemctl enable ds4-tp3-strict@spark0.service
+sudo systemctl start  ds4-tp3-strict@spark0.service
+```
+
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`

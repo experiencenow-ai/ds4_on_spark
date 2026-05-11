@@ -47,6 +47,10 @@ systemctl --user enable --now ds4@spark0.service
 # strict DS4 start (requires ds4-preflight-strict@%i):
 # systemctl --user enable --now ds4-strict@spark0.service
 
+# strict DS4 start (TP=3 / TP=4; requires the matching strict topology preflight):
+# systemctl --user enable --now ds4-tp3-strict@spark0.service
+# systemctl --user enable --now ds4-tp4-strict@spark0.service
+
 # optional (collect a support bundle on preflight failure or by hand):
 systemctl --user start ds4-support-bundle@spark0.service
 

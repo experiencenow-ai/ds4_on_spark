@@ -76,6 +76,8 @@ need_file "$tmpfiles_dir/ds4.conf"
 
 need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
+need_file "$systemd_dir/ds4-tp3-strict@.service"
+need_file "$systemd_dir/ds4-tp4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
 need_file "$systemd_dir/ds4-preflight-strict@.service"
 need_file "$systemd_dir/ds4-preflight-tp3@.service"
@@ -93,6 +95,8 @@ need_file "$systemd_dir/ds4-support-bundle@.timer"
 
 need_file "$systemd_user_dir/ds4@.service"
 need_file "$systemd_user_dir/ds4-strict@.service"
+need_file "$systemd_user_dir/ds4-tp3-strict@.service"
+need_file "$systemd_user_dir/ds4-tp4-strict@.service"
 need_file "$systemd_user_dir/ds4-preflight@.service"
 need_file "$systemd_user_dir/ds4-preflight-strict@.service"
 need_file "$systemd_user_dir/ds4-preflight-tp3@.service"
@@ -163,6 +167,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     if systemd-analyze verify \
         "$systemd_dir/ds4@.service" \
         "$systemd_dir/ds4-strict@.service" \
+        "$systemd_dir/ds4-tp3-strict@.service" \
+        "$systemd_dir/ds4-tp4-strict@.service" \
         "$systemd_dir/ds4-preflight@.service" \
         "$systemd_dir/ds4-preflight-strict@.service" \
         "$systemd_dir/ds4-preflight-tp3@.service" \

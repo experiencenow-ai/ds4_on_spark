@@ -106,6 +106,8 @@ echo
 echo "== systemd templates =="
 need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
+need_file "$systemd_dir/ds4-tp3-strict@.service"
+need_file "$systemd_dir/ds4-tp4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
 need_file "$systemd_dir/ds4-preflight-strict@.service"
 need_file "$systemd_dir/ds4-support-bundle@.service"
@@ -123,7 +125,7 @@ echo
 
 echo "== systemd unit syntax (best effort) =="
 if command -v systemd-analyze >/dev/null 2>&1; then
-    units="$systemd_dir/ds4@.service $systemd_dir/ds4-strict@.service $systemd_dir/ds4-preflight@.service $systemd_dir/ds4-preflight-strict@.service $systemd_dir/ds4-support-bundle@.service"
+    units="$systemd_dir/ds4@.service $systemd_dir/ds4-strict@.service $systemd_dir/ds4-tp3-strict@.service $systemd_dir/ds4-tp4-strict@.service $systemd_dir/ds4-preflight@.service $systemd_dir/ds4-preflight-strict@.service $systemd_dir/ds4-support-bundle@.service"
     if [ -f "$systemd_dir/ds4-preflight@.timer" ]; then
         units="$units $systemd_dir/ds4-preflight@.timer"
     fi
