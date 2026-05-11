@@ -1,11 +1,24 @@
 {
-  "generated_at_utc": "2026-05-11T20:06:41Z",
+  "generated_at_utc": "2026-05-11T20:30:32Z",
   "items": [
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
       "mtp_contract": null,
       "mtp_keys_sha256": null,
+      "mtp_layer_ids": [],
+      "mtp_namespace": {
+        "expected_complete": false,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": false,
+        "missing_expected_layer_ids": [
+          0
+        ],
+        "present_layer_ids": [],
+        "present_prefixes": []
+      },
       "mtp_present": false,
       "mtp_preservation": {
         "preserves": false,
@@ -31,10 +44,16 @@
           "scale_fmt": "ue8m0"
         },
         "expert_fp4_like": false,
+        "notes_sample": [
+          "expected Flash experts fp4; artifact expert primary type is 'Q4_K' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
         "observed": {
           "dense_primary_type": "F32",
           "expert_primary_type": "Q4_K"
-        }
+        },
+        "status": "mismatch"
       },
       "tensor_key_namespace_guess": "llama.cpp",
       "topology_contract": {
@@ -49,6 +68,19 @@
       "doc_path": "docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
       "mtp_contract": null,
       "mtp_keys_sha256": null,
+      "mtp_layer_ids": [],
+      "mtp_namespace": {
+        "expected_complete": false,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": false,
+        "missing_expected_layer_ids": [
+          0
+        ],
+        "present_layer_ids": [],
+        "present_prefixes": []
+      },
       "mtp_present": false,
       "mtp_preservation": {
         "preserves": false,
@@ -74,10 +106,15 @@
           "scale_fmt": "ue8m0"
         },
         "expert_fp4_like": true,
+        "notes_sample": [
+          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
         "observed": {
           "dense_primary_type": "F32",
           "expert_primary_type": "MXFP4"
-        }
+        },
+        "status": "mismatch"
       },
       "tensor_key_namespace_guess": "llama.cpp",
       "topology_contract": {
@@ -92,6 +129,19 @@
       "doc_path": "docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json",
       "mtp_contract": null,
       "mtp_keys_sha256": null,
+      "mtp_layer_ids": [],
+      "mtp_namespace": {
+        "expected_complete": false,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": false,
+        "missing_expected_layer_ids": [
+          0
+        ],
+        "present_layer_ids": [],
+        "present_prefixes": []
+      },
       "mtp_present": false,
       "mtp_preservation": {
         "preserves": false,
@@ -117,10 +167,16 @@
           "scale_fmt": "ue8m0"
         },
         "expert_fp4_like": false,
+        "notes_sample": [
+          "expected Flash experts fp4; artifact expert primary type is 'IQ2_XXS' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
         "observed": {
           "dense_primary_type": "F32",
           "expert_primary_type": "IQ2_XXS"
-        }
+        },
+        "status": "mismatch"
       },
       "tensor_key_namespace_guess": "llama.cpp",
       "topology_contract": {
@@ -139,6 +195,23 @@
         "missing_required_count": 1568
       },
       "mtp_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
+      "mtp_layer_ids": [
+        0
+      ],
+      "mtp_namespace": {
+        "expected_complete": true,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": true,
+        "missing_expected_layer_ids": [],
+        "present_layer_ids": [
+          0
+        ],
+        "present_prefixes": [
+          "mtp.0."
+        ]
+      },
       "mtp_present": true,
       "mtp_preservation": {
         "preserves": false,
@@ -165,10 +238,15 @@
           "scale_fmt": "ue8m0"
         },
         "expert_fp4_like": null,
+        "notes_sample": [
+          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
         "observed": {
           "dense_primary_type": "F32",
           "expert_primary_type": null
-        }
+        },
+        "status": "mismatch"
       },
       "tensor_key_namespace_guess": "deepseek-upstream-mtp-only",
       "topology_contract": {
@@ -187,6 +265,23 @@
         "missing_required_count": 1568
       },
       "mtp_keys_union_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
+      "mtp_layer_ids": [
+        0
+      ],
+      "mtp_namespace": {
+        "expected_complete": true,
+        "expected_layer_ids": [
+          0
+        ],
+        "has_mtp0": true,
+        "missing_expected_layer_ids": [],
+        "present_layer_ids": [
+          0
+        ],
+        "present_prefixes": [
+          "mtp.0."
+        ]
+      },
       "mtp_present": true,
       "mtp_preservation": {
         "preserves": false,
@@ -215,10 +310,16 @@
           "scale_fmt": "ue8m0"
         },
         "expert_fp4_like": false,
+        "notes_sample": [
+          "expected Flash experts fp4; artifact expert primary type is 'IQ2_XXS' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+        ],
         "observed": {
           "dense_primary_type": "F32",
           "expert_primary_type": "IQ2_XXS"
-        }
+        },
+        "status": "mismatch"
       },
       "topology_contract": {
         "block_count_ok": true,

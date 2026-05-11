@@ -64,11 +64,23 @@ def _get_int(obj: Any, key: str) -> Optional[int]:
 def summarize_quantization_contract(qc: Any) -> Optional[dict[str, Any]]:
 	if not isinstance(qc, dict) or qc.get("checked") is not True:
 		return None
+	notes = qc.get("notes", [])
+	if not isinstance(notes, list):
+		notes = []
+	dense_fp8_like = _get_bool(qc, "dense_fp8_like")
+	expert_fp4_like = _get_bool(qc, "expert_fp4_like")
+	status = "unknown"
+	if dense_fp8_like is True and expert_fp4_like is True:
+		status = "native_like"
+	elif dense_fp8_like is False or expert_fp4_like is False:
+		status = "mismatch"
 	return {
-		"dense_fp8_like": _get_bool(qc, "dense_fp8_like"),
-		"expert_fp4_like": _get_bool(qc, "expert_fp4_like"),
+		"status": status,
+		"dense_fp8_like": dense_fp8_like,
+		"expert_fp4_like": expert_fp4_like,
 		"observed": qc.get("observed"),
 		"expected": qc.get("expected"),
+		"notes_sample": list(notes)[:10],
 	}
 
 
@@ -120,6 +132,30 @@ def summarize_mtp_preservation(mp: Any) -> Optional[dict[str, Any]]:
 		"reasons_sample": list(reasons)[:10],
 	}
 
+def summarize_mtp_namespace(mn: Any) -> Optional[dict[str, Any]]:
+	if not isinstance(mn, dict) or mn.get("checked") is not True:
+		return None
+	present_prefixes = mn.get("present_prefixes", [])
+	if not isinstance(present_prefixes, list):
+		present_prefixes = []
+	expected_layer_ids = mn.get("expected_layer_ids", [])
+	if not isinstance(expected_layer_ids, list):
+		expected_layer_ids = []
+	present_layer_ids = mn.get("present_layer_ids", [])
+	if not isinstance(present_layer_ids, list):
+		present_layer_ids = []
+	missing_expected_layer_ids = mn.get("missing_expected_layer_ids", [])
+	if not isinstance(missing_expected_layer_ids, list):
+		missing_expected_layer_ids = []
+	return {
+		"expected_complete": _get_bool(mn, "expected_complete"),
+		"expected_layer_ids": list(expected_layer_ids),
+		"present_layer_ids": list(present_layer_ids),
+		"missing_expected_layer_ids": list(missing_expected_layer_ids),
+		"present_prefixes": list(present_prefixes),
+		"has_mtp0": _get_bool(mn, "has_mtp0"),
+	}
+
 
 def summarize_single_doc(doc_obj: dict[str, Any], rel_path: str) -> dict[str, Any]:
 	return {
@@ -129,6 +165,8 @@ def summarize_single_doc(doc_obj: dict[str, Any], rel_path: str) -> dict[str, An
 		"tensor_key_namespace_guess": _get_str(doc_obj, "tensor_key_namespace_guess"),
 		"weight_keys_sha256": _get_str(doc_obj, "weight_keys_sha256"),
 		"mtp_present": _get_bool(doc_obj, "mtp_present"),
+		"mtp_layer_ids": doc_obj.get("mtp_layer_ids"),
+		"mtp_namespace": summarize_mtp_namespace(doc_obj.get("mtp_namespace")),
 		"mtp_tensor_count": _get_int(doc_obj, "mtp_tensor_count"),
 		"mtp_keys_sha256": _get_str(doc_obj, "mtp_keys_sha256"),
 		"mtp_contract": summarize_mtp_contract(doc_obj.get("mtp_contract")),
@@ -149,6 +187,8 @@ def summarize_combined_doc(doc_obj: dict[str, Any], rel_path: str) -> dict[str, 
 		"paths": combined.get("paths"),
 		"weight_keys_union_sha256": _get_str(combined, "weight_keys_union_sha256"),
 		"mtp_present": _get_bool(combined, "mtp_present"),
+		"mtp_layer_ids": combined.get("mtp_layer_ids"),
+		"mtp_namespace": summarize_mtp_namespace(combined.get("mtp_namespace")),
 		"mtp_keys_union_sha256": _get_str(combined, "mtp_keys_union_sha256"),
 		"mtp_contract": summarize_mtp_contract(combined.get("mtp_contract")),
 		"mtp_preservation": summarize_mtp_preservation(combined.get("mtp_preservation")),
