@@ -21,6 +21,7 @@ tokenizer/chat format, and memory envelope are real.
 - The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
   - Always record `weight_keys_sha256` (stable fingerprint of the artifact’s tensor key set). When `mtp_present=true`, also record `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
   - When available, also record `tensor_type_profile` (best-effort expert vs dense split for known DeepSeek-V4 GGUF naming), since it captures whether MoE experts appear to be `MXFP4` (Flash-leaning) vs primarily FP8.
+  - When available, also record `quantization_contract` (contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `quantization.inference_config`).
   - When the repo-default `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, this output also includes:
     - `tensor_key_namespace_guess` + `first_tensor_keys` (quick signal for whether the artifact appears to preserve upstream tensor key namespaces; many GGUF conversions are `llama.cpp`)
     - `trunk_contract` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
