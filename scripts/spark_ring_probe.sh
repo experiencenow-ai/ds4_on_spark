@@ -193,7 +193,7 @@ fi
 echo
 echo "== mtu (all links) =="
 if command -v ip >/dev/null 2>&1; then
-	ip -o link 2>/dev/null | awk '"'"'{for(i=1;i<=NF;i++){if($i=="mtu"){print $(2) " mtu " $(i+1)}}}'"'"' | head -n 200 || true
+	ip -o link 2>/dev/null | awk '"'"'{iface=$2; sub(/:$/,"",iface); for(i=1;i<=NF;i++){if($i=="mtu"){print iface " mtu " $(i+1)}}}'"'"' | head -n 200 || true
 fi
 echo
 echo "== storage (non-secret) =="
