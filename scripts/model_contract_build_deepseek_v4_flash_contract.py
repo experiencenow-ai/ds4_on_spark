@@ -91,7 +91,7 @@ def build_oracle_contract() -> dict:
 		},
 	}
 
-def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
+def build_tensor_shapes(cfg: dict, inf: dict, inf_model: dict) -> dict:
 	dim = int(cfg["hidden_size"])
 	vocab_size = int(cfg["vocab_size"])
 	n_heads = int(cfg["num_attention_heads"])
@@ -110,6 +110,25 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 	index_n_heads = int(inf["index_n_heads"])
 	index_head_dim = int(inf["index_head_dim"])
 
+	inf_consts = inf_model.get("inference_model_constants", {}) if isinstance(inf_model, dict) else {}
+	block_size = inf_consts.get("block_size", None) if isinstance(inf_consts, dict) else None
+	fp4_block_size = inf_consts.get("fp4_block_size", None) if isinstance(inf_consts, dict) else None
+	if not isinstance(block_size, int):
+		block_size = None
+	if not isinstance(fp4_block_size, int):
+		fp4_block_size = None
+
+	def fp8_scale_shape(out_features: int, in_features: int) -> list[int]:
+		assert block_size is not None
+		return [
+			(int(out_features) + int(block_size) - 1) // int(block_size),
+			(int(in_features) + int(block_size) - 1) // int(block_size),
+		]
+
+	def fp4_scale_shape(out_features: int, in_features: int) -> list[int]:
+		assert fp4_block_size is not None
+		return [int(out_features), int(in_features) // int(fp4_block_size)]
+
 	return {
 		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (logical/unsharded shapes)",
 		"top_level": {
@@ -124,12 +143,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			"attn": {
 				"attn_sink": [n_heads],
 				"wq_a.weight": [q_lora_rank, dim],
+				"wq_a.scale": fp8_scale_shape(q_lora_rank, dim) if block_size is not None else None,
 				"q_norm.weight": [q_lora_rank],
 				"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+				"wq_b.scale": fp8_scale_shape(n_heads * head_dim, q_lora_rank) if block_size is not None else None,
 				"wkv.weight": [head_dim, dim],
+				"wkv.scale": fp8_scale_shape(head_dim, dim) if block_size is not None else None,
 				"kv_norm.weight": [head_dim],
 				"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+				"wo_a.scale": fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups) if block_size is not None else None,
 				"wo_b.weight": [dim, o_groups * o_lora_rank],
+				"wo_b.scale": fp8_scale_shape(dim, o_groups * o_lora_rank) if block_size is not None else None,
 				"attn_norm.weight": [dim],
 			},
 			"compressor": {
@@ -143,6 +167,7 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			"indexer": {
 				"note": "Indexer tensors exist only for CSA layers (compress_ratio==4).",
 				"wq_b.weight": [index_n_heads * index_head_dim, q_lora_rank],
+				"wq_b.scale": fp8_scale_shape(index_n_heads * index_head_dim, q_lora_rank) if block_size is not None else None,
 				"weights_proj.weight": [index_n_heads, dim],
 				"compressor": {
 					"ape.shape_formula": "[compress_ratio, (1+overlap)*index_head_dim]",
@@ -156,11 +181,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"gate.tid2eid": [vocab_size, n_activated_experts],
 				"gate.bias": [n_routed_experts],
 				"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+				"experts.{eid}.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 				"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"shared_experts.w1.weight": [moe_inter_dim, dim],
+				"shared_experts.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"shared_experts.w2.weight": [dim, moe_inter_dim],
+				"shared_experts.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 				"shared_experts.w3.weight": [moe_inter_dim, dim],
+				"shared_experts.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 			},
 			"hyper_connections": {
 				"hc_mult": hc_mult,
@@ -180,12 +211,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"attn": {
 					"attn_sink": [n_heads],
 					"wq_a.weight": [q_lora_rank, dim],
+					"wq_a.scale": fp8_scale_shape(q_lora_rank, dim) if block_size is not None else None,
 					"q_norm.weight": [q_lora_rank],
 					"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+					"wq_b.scale": fp8_scale_shape(n_heads * head_dim, q_lora_rank) if block_size is not None else None,
 					"wkv.weight": [head_dim, dim],
+					"wkv.scale": fp8_scale_shape(head_dim, dim) if block_size is not None else None,
 					"kv_norm.weight": [head_dim],
 					"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+					"wo_a.scale": fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups) if block_size is not None else None,
 					"wo_b.weight": [dim, o_groups * o_lora_rank],
+					"wo_b.scale": fp8_scale_shape(dim, o_groups * o_lora_rank) if block_size is not None else None,
 					"attn_norm.weight": [dim],
 				},
 				"compressor": {
@@ -196,11 +232,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 					"gate.tid2eid": [vocab_size, n_activated_experts],
 					"gate.bias": [n_routed_experts],
 					"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+					"experts.{eid}.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 					"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"shared_experts.w1.weight": [moe_inter_dim, dim],
+					"shared_experts.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"shared_experts.w2.weight": [dim, moe_inter_dim],
+					"shared_experts.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 					"shared_experts.w3.weight": [moe_inter_dim, dim],
+					"shared_experts.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				},
 				"hyper_connections": {
 					"hc_mult": hc_mult,
@@ -222,7 +264,9 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 		},
 		"mtp": {
 			"e_proj.weight": [dim, dim],
+			"e_proj.scale": fp8_scale_shape(dim, dim) if block_size is not None else None,
 			"h_proj.weight": [dim, dim],
+			"h_proj.scale": fp8_scale_shape(dim, dim) if block_size is not None else None,
 			"enorm.weight": [dim],
 			"hnorm.weight": [dim],
 			"norm.weight": [dim],
@@ -1236,7 +1280,7 @@ def build_contract() -> dict:
 			"o_lora_rank": int(cfg["o_lora_rank"]),
 			"sliding_window": int(cfg["sliding_window"]),
 		},
-		"tensor_shapes": build_tensor_shapes(cfg, inf),
+		"tensor_shapes": build_tensor_shapes(cfg, inf, inf_model),
 		"yarn_rope": {
 			"rope_theta": float(cfg.get("rope_theta", 10000)),
 			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),

@@ -249,6 +249,11 @@ Per-layer attention (`layers.{i}.attn.*`):
 - `wo_a.weight`: `[o_groups*o_lora_rank, (num_attention_heads*head_dim)/o_groups]` (grouped low-rank O factor A)
 - `wo_b.weight`: `[hidden_size, o_groups*o_lora_rank]` (low-rank O factor B)
 
+Scale tensors for FP8 trunk linears:
+
+- The official checkpoint includes `*.scale` tensors for the FP8 trunk linears above (`wq_a`, `wq_b`, `wkv`, `wo_a`, `wo_b`).
+- Their logical shapes are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tensor_shapes.per_layer.attn.*.scale` (derived from the upstream `Linear` scale rule in `inference/model.py` with `block_size=128`).
+
 Per-layer MoE (`layers.{i}.ffn.*`):
 
 - `gate.weight`: `[n_routed_experts, hidden_size]`
@@ -258,6 +263,11 @@ Per-layer MoE (`layers.{i}.ffn.*`):
   - `w1`: `[moe_inter_dim, hidden_size]`
   - `w2`: `[hidden_size, moe_inter_dim]`
   - `w3`: `[moe_inter_dim, hidden_size]`
+
+Expert scale tensors (FP4):
+
+- The official checkpoint includes `experts.{eid}.w{1,2,3}.scale` and `shared_experts.w{1,2,3}.scale` (FP4 expert linears).
+- Their logical shapes are recorded in `contract_summary.json` under `tensor_shapes.per_layer.moe` and follow the upstream FP4 rule: `[out_features, in_features//32]` (`fp4_block_size=32`).
 
 MTP (`mtp.{j}.*`):
 

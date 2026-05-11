@@ -707,6 +707,88 @@ def main() -> int:
 						if phc.get("hc_attn_scale") != [3] or phc.get("hc_ffn_scale") != [3]:
 							failures.append(Failure(98, f"contract summary tensor_shapes.per_layer.hyper_connections hc_*_scale must be [3]: {contract_summary}"))
 
+					# Quantized linear scale tensors: shapes are part of the execution contract.
+					try:
+						dim = int(cfg.get("hidden_size"))
+						vocab_size = int(cfg.get("vocab_size"))
+						n_heads = int(cfg.get("num_attention_heads"))
+						head_dim = int(cfg.get("head_dim"))
+						q_lora_rank = int(cfg.get("q_lora_rank"))
+						o_groups = int(cfg.get("o_groups"))
+						o_lora_rank = int(cfg.get("o_lora_rank"))
+						moe_inter_dim = int(cfg.get("moe_intermediate_size"))
+					except Exception:
+						dim = None
+						vocab_size = None
+						n_heads = None
+						head_dim = None
+						q_lora_rank = None
+						o_groups = None
+						o_lora_rank = None
+						moe_inter_dim = None
+
+					lt = summary.get("quantization", {}).get("linear_tensor_contract", {}) if isinstance(summary, dict) else {}
+					fp8 = lt.get("fp8", {}) if isinstance(lt, dict) else {}
+					fp4 = lt.get("fp4", {}) if isinstance(lt, dict) else {}
+					block_size = fp8.get("block_size") if isinstance(fp8, dict) else None
+					fp4_block_size = fp4.get("fp4_block_size") if isinstance(fp4, dict) else None
+
+					def fp8_scale_shape(out_features: int, in_features: int) -> list[int]:
+						return [
+							(int(out_features) + int(block_size) - 1) // int(block_size),
+							(int(in_features) + int(block_size) - 1) // int(block_size),
+						]
+
+					def fp4_scale_shape(out_features: int, in_features: int) -> list[int]:
+						return [int(out_features), int(in_features) // int(fp4_block_size)]
+
+					attn = ts.get("per_layer", {}).get("attn", {})
+					if isinstance(attn, dict) and isinstance(block_size, int) and dim is not None and q_lora_rank is not None and n_heads is not None and head_dim is not None and o_groups is not None and o_lora_rank is not None:
+						want = fp8_scale_shape(q_lora_rank, dim)
+						if attn.get("wq_a.scale") != want:
+							failures.append(Failure(101, f"contract summary tensor_shapes.per_layer.attn wq_a.scale mismatch (got {attn.get('wq_a.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(n_heads * head_dim, q_lora_rank)
+						if attn.get("wq_b.scale") != want:
+							failures.append(Failure(102, f"contract summary tensor_shapes.per_layer.attn wq_b.scale mismatch (got {attn.get('wq_b.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(head_dim, dim)
+						if attn.get("wkv.scale") != want:
+							failures.append(Failure(103, f"contract summary tensor_shapes.per_layer.attn wkv.scale mismatch (got {attn.get('wkv.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups)
+						if attn.get("wo_a.scale") != want:
+							failures.append(Failure(104, f"contract summary tensor_shapes.per_layer.attn wo_a.scale mismatch (got {attn.get('wo_a.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(dim, o_groups * o_lora_rank)
+						if attn.get("wo_b.scale") != want:
+							failures.append(Failure(105, f"contract summary tensor_shapes.per_layer.attn wo_b.scale mismatch (got {attn.get('wo_b.scale')!r} expected {want!r}): {contract_summary}"))
+
+					moe = ts.get("per_layer", {}).get("moe", {})
+					if isinstance(moe, dict) and isinstance(fp4_block_size, int) and dim is not None and moe_inter_dim is not None:
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("experts.{eid}.w1.scale") != want:
+							failures.append(Failure(106, f"contract summary tensor_shapes.per_layer.moe experts.w1.scale mismatch (got {moe.get('experts.{eid}.w1.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(dim, moe_inter_dim)
+						if moe.get("experts.{eid}.w2.scale") != want:
+							failures.append(Failure(107, f"contract summary tensor_shapes.per_layer.moe experts.w2.scale mismatch (got {moe.get('experts.{eid}.w2.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("experts.{eid}.w3.scale") != want:
+							failures.append(Failure(108, f"contract summary tensor_shapes.per_layer.moe experts.w3.scale mismatch (got {moe.get('experts.{eid}.w3.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("shared_experts.w1.scale") != want:
+							failures.append(Failure(109, f"contract summary tensor_shapes.per_layer.moe shared_experts.w1.scale mismatch (got {moe.get('shared_experts.w1.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(dim, moe_inter_dim)
+						if moe.get("shared_experts.w2.scale") != want:
+							failures.append(Failure(110, f"contract summary tensor_shapes.per_layer.moe shared_experts.w2.scale mismatch (got {moe.get('shared_experts.w2.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("shared_experts.w3.scale") != want:
+							failures.append(Failure(111, f"contract summary tensor_shapes.per_layer.moe shared_experts.w3.scale mismatch (got {moe.get('shared_experts.w3.scale')!r} expected {want!r}): {contract_summary}"))
+
+					mtp = ts.get("mtp", {})
+					if isinstance(mtp, dict) and isinstance(block_size, int) and dim is not None:
+						want = fp8_scale_shape(dim, dim)
+						if mtp.get("e_proj.scale") != want:
+							failures.append(Failure(112, f"contract summary tensor_shapes.mtp e_proj.scale mismatch (got {mtp.get('e_proj.scale')!r} expected {want!r}): {contract_summary}"))
+						if mtp.get("h_proj.scale") != want:
+							failures.append(Failure(113, f"contract summary tensor_shapes.mtp h_proj.scale mismatch (got {mtp.get('h_proj.scale')!r} expected {want!r}): {contract_summary}"))
+
 				top = summary.get("topology", {})
 				if isinstance(top, dict):
 					expected_top = {
