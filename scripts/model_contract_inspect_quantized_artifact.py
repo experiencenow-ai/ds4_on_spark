@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from collections import Counter
+import hashlib
 import io
 import json
 import struct
@@ -35,6 +36,13 @@ class InspectResult:
 def load_json(path: Path) -> Any:
 	with path.open("r", encoding="utf-8") as f:
 		return json.load(f)
+
+def sha256_lines(lines: list[str]) -> str:
+	h = hashlib.sha256()
+	for s in lines:
+		h.update(str(s).encode("utf-8"))
+		h.update(b"\n")
+	return str(h.hexdigest())
 
 
 def read_u32_le(f: BinaryIO) -> int:
@@ -1274,6 +1282,7 @@ def main() -> int:
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
 		mtp_namespace = compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary)
+		weight_keys_sha256 = sha256_lines(sorted(res.weight_keys_all))
 		out = {
 			"path": res.path,
 			"artifact_type": res.artifact_type,
@@ -1283,6 +1292,7 @@ def main() -> int:
 			"tensor_count": res.tensor_count,
 			"tensor_type_counts": res.tensor_type_counts,
 			"first_tensor_keys": res.weight_keys_all[:20],
+			"weight_keys_sha256": weight_keys_sha256,
 			"tensor_key_namespace_guess": namespace_guess,
 			"tensor_key_namespace_evidence": namespace_evidence,
 			"mtp_present": res.mtp_present,
@@ -1292,6 +1302,8 @@ def main() -> int:
 			"mtp_namespace": mtp_namespace,
 			"first_mtp_keys": res.first_mtp_keys,
 		}
+		if res.mtp_present:
+			out["mtp_keys_sha256"] = sha256_lines(sorted(res.mtp_keys_all))
 		if res.tensor_type_profile is not None:
 			out["tensor_type_profile"] = res.tensor_type_profile
 			qh = compute_quantization_contract_hint(res.tensor_type_profile, contract_summary)
@@ -1327,6 +1339,8 @@ def main() -> int:
 		topology_contract = None
 		quantization_contract = None
 		mtp_namespace = compute_mtp_namespace_status(sorted(mtp_layer_ids), contract_summary)
+		weight_keys_union_sha256 = sha256_lines(sorted(weight_keys_union))
+		mtp_keys_union_sha256 = (None if not mtp_keys_union else sha256_lines(sorted(mtp_keys_union)))
 		if contract_summary is not None:
 			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
@@ -1341,6 +1355,7 @@ def main() -> int:
 			"artifact_types": [r.artifact_type for r in results],
 			"tensor_count": sum(r.tensor_count for r in results),
 			"tensor_type_counts": dict(sorted(type_counts.items())),
+			"weight_keys_union_sha256": weight_keys_union_sha256,
 			"mtp_present": any(r.mtp_present for r in results),
 			"mtp_paths": [r.path for r in results if r.mtp_present],
 			"mtp_tensor_count": sum(r.mtp_tensor_count for r in results),
@@ -1348,6 +1363,7 @@ def main() -> int:
 			"mtp_layer_ids": sorted(mtp_layer_ids),
 			"mtp_namespace": mtp_namespace,
 			"first_mtp_keys": first_mtp_keys,
+			"mtp_keys_union_sha256": mtp_keys_union_sha256,
 			"mtp_contract": mtp_contract,
 			"mtp_trust": mtp_trust,
 			"mtp_preservation": mtp_preservation,

@@ -216,5 +216,6 @@
     "n_layers_checked": 43,
     "notes": []
   },
-  "url_prefix_bytes": 8388608
+  "url_prefix_bytes": 8388608,
+  "weight_keys_sha256": "77fa28612383dbd157f5a765749ead1665240ce21c78d8b30479a19e5958802a"
 }

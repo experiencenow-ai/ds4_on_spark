@@ -697,12 +697,13 @@ For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` ca
 python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, `mtp_preservation`, and `mtp_trust`.
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, `mtp_preservation`, and `mtp_trust`. Always record `weight_keys_sha256` (stable fingerprint of the artifact tensor-key set) and, when `mtp_present==true`, `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
 
 When multiple `--path` values are provided, the tool emits both:
 
 - per-artifact `topology_contract` (computed from that artifact's captured GGUF header metadata, when present)
 - a `combined.topology_contract` computed from the GGUF path with the most tensors (`combined.topology_contract_source_path` records which)
+- a stable fingerprint of the union key set across the artifact set (`combined.weight_keys_union_sha256` and, when present, `combined.mtp_keys_union_sha256`)
 
 Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published as a compact 32‑tensor `mtp.0.*` table with `general.architecture=deepseek4_mtp_support` (not a full official `mtp.0.*` checkpoint). Validate these sidecars explicitly before trying to load them in external runtimes:
 
