@@ -4112,6 +4112,28 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     skipped_stage_frac_batch = (float(metrics.skipped_stages_backpressure_batch) / stages_total_batch) if stages_total_batch > 0.0 else 0.0
     skipped_stage_frac_verify = (float(metrics.skipped_stages_backpressure_verify) / stages_total_verify) if stages_total_verify > 0.0 else 0.0
     skipped_stage_frac_draft = (float(metrics.skipped_stages_backpressure_draft) / stages_total_draft) if stages_total_draft > 0.0 else 0.0
+    trace_expert_batch_size_present_frac_interactive = (float(len(metrics.trace_expert_batch_size_interactive)) / denom_interactive) if denom_interactive > 0.0 else 0.0
+    trace_expert_batch_size_present_frac_batch = (float(len(metrics.trace_expert_batch_size_batch)) / denom_batch) if denom_batch > 0.0 else 0.0
+    trace_expert_batch_size_leq1_frac_interactive = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_interactive if float(x) <= 1.0)) / float(len(metrics.trace_expert_batch_size_interactive)))
+        if len(metrics.trace_expert_batch_size_interactive) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq1_frac_batch = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_batch if float(x) <= 1.0)) / float(len(metrics.trace_expert_batch_size_batch)))
+        if len(metrics.trace_expert_batch_size_batch) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq4_frac_interactive = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_interactive if float(x) <= 4.0)) / float(len(metrics.trace_expert_batch_size_interactive)))
+        if len(metrics.trace_expert_batch_size_interactive) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq4_frac_batch = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_batch if float(x) <= 4.0)) / float(len(metrics.trace_expert_batch_size_batch)))
+        if len(metrics.trace_expert_batch_size_batch) != 0
+        else 0.0
+    )
     return(
         {
             "makespan_ms": float(makespan_ms),
@@ -4139,8 +4161,14 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "service_batch_size_p95_batch": float(_p_or_zero(metrics.service_batch_size_batch, 0.95)),
             "trace_expert_batch_size_p50_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.50)),
             "trace_expert_batch_size_p95_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.95)),
+            "trace_expert_batch_size_present_frac_interactive": float(trace_expert_batch_size_present_frac_interactive),
+            "trace_expert_batch_size_leq1_frac_interactive": float(trace_expert_batch_size_leq1_frac_interactive),
+            "trace_expert_batch_size_leq4_frac_interactive": float(trace_expert_batch_size_leq4_frac_interactive),
             "trace_expert_batch_size_p50_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.50)),
             "trace_expert_batch_size_p95_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.95)),
+            "trace_expert_batch_size_present_frac_batch": float(trace_expert_batch_size_present_frac_batch),
+            "trace_expert_batch_size_leq1_frac_batch": float(trace_expert_batch_size_leq1_frac_batch),
+            "trace_expert_batch_size_leq4_frac_batch": float(trace_expert_batch_size_leq4_frac_batch),
             "trace_decode_ms_p50_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.50)),
             "trace_decode_ms_p95_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.95)),
             "trace_decode_ms_p50_batch": float(_p_or_zero(metrics.trace_decode_ms_batch, 0.50)),

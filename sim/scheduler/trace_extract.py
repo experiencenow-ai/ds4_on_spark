@@ -342,7 +342,7 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     if isinstance(rejected_mtp, int) and rejected_mtp >= 0:
         out["rejected_mtp"] = int(rejected_mtp)
 
-    # Qwen+DFlash speculative-decoding comparator stats (kept separate from MTP).
+    # Speculative-decoding comparator stats (kept separate from MTP).
     dflash_has_mtp_keys = False
     if dflash is not None:
         for k in ("mtp_accept_len", "mtp_len", "accepted_mtp", "mtp_accepted", "rejected_mtp", "mtp_rejected"):
