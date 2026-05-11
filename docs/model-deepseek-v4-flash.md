@@ -25,6 +25,38 @@ Notes on config sources:
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
 
+## Source trace (official → pinned fixtures → DS4 contract)
+
+This contract is intentionally **source-traceable**: every claim is either taken directly from a pinned upstream file in `fixtures/model_contract/deepseek_v4_flash/` or is a deterministic derivation recorded in `contract_summary.json`.
+
+High-signal mapping (where to look upstream, and where DS4 reads it):
+
+- **Topology + per-layer compress ratios**:
+  - Upstream source: `config.json` (`num_hidden_layers`, `hidden_size`, `num_attention_heads`, `head_dim`, `compress_ratios`, `vocab_size`, MoE shape knobs).
+  - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/config.json`.
+  - DS4 contract: `contract_summary.json` `topology.*` and `attention_schedule.compress_ratios`.
+- **Sliding/CSA/HCA schedule + cache update semantics**:
+  - Upstream source: `inference/model.py` (`Attention.forward`, `Compressor`, `Indexer`, and the `compress_ratio`-driven branching).
+  - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/model.py`.
+  - DS4 contract: `contract_summary.json` `attention_schedule.*` and `cache.update_semantics.*` (extracted expressions).
+- **Sparse-attn sentinel masking rule**:
+  - Upstream source: `inference/kernel.py` (`sparse_attn`; `idx == -1` must behave as `score=-inf` and `kv=0`).
+  - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/kernel.py`.
+  - DS4 contract: `contract_summary.json` `cache.topk_mask_value` + `cache.sparse_attn_mask_rule`.
+- **MoE routing + gate tensor semantics**:
+  - Upstream source: `inference/model.py` (MoE forward/routing; hash-gated vs score-gated layers).
+  - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/model.py`.
+  - DS4 contract: `contract_summary.json` `moe.*` and the tensor-name invariants under `tensor_keys.layer_gate.*`.
+- **MTP execution path + tensor namespace expectations**:
+  - Upstream source: `inference/model.py` (`MTPBlock` and how it binds to `mtp.0.*` weights) plus the official checkpoint key set.
+  - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json`.
+  - DS4 contract: `contract_summary.json` `mtp.*` and `tensor_keys.mtp0` / `checkpoint_index.weight_map_prefix_fingerprints.mtp`.
+  - Quantized/MTP artifact note: `docs/quantized-single-spark.md` and `scripts/model_contract_inspect_quantized_artifact.py` treat “preserves upstream `mtp.0.*`” as a structural gate; an MTP logits oracle is still required before trusting speculative decode.
+- **Tokenizer backend + chat encoding**:
+  - Upstream sources: `tokenizer.json`, `tokenizer_config.json`, and `encoding/encoding_dsv4.py` + `encoding/tests/*`.
+  - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/tokenizer*.json` and `fixtures/model_contract/deepseek_v4_flash/encoding/*`.
+  - DS4 contract: `contract_summary.json` `tokenizer.*` / `tokenizer.tokenizer_json_summary.*` / `encoding_constants.*` plus the machine-pinned vector hashes under `upstream.fixtures_sha256.encoding/tests/*`.
+
 ## Contract map (machine-readable `contract_summary.json`)
 
 DS4 tooling should treat `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` as the machine-readable contract and use this document as the human explanation.

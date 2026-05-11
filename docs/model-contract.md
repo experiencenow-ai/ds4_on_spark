@@ -17,6 +17,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Contract doc: `docs/model-deepseek-v4-flash.md`
 - Upstream metadata source (HF configs only; no weights): `docs/upstream-deepseek-v4-flash.md`
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
+  - Source trace: see `docs/model-deepseek-v4-flash.md` “Source trace (official → pinned fixtures → DS4 contract)” for where each contract fact is derived (config vs reference code vs checkpoint key set vs tokenizer/encoding).
   - Includes `DeepSeek_V4.pdf` (technical report; metadata-only) as an additional official reference alongside `config.json` and `inference/*`.
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings for interpreting external runtimes, Transformers-compatible derived schedules (`attention_schedule.transformers_*` and `moe.transformers_mlp_layer_types`), and machine-readable oracle requirements (`oracle.*.required` + `oracle.*.weights_required`))
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
