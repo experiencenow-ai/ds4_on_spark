@@ -1,6 +1,6 @@
 # Deploy Assets
 
-This folder contains **templates and examples** for deploying DS4 on Spark0/Spark1.
+This folder contains **templates and examples** for deploying DS4 on Spark0/Spark1 and preparing a Spark0..Spark3 ring layout.
 
 Nothing here is applied automatically. A human should copy files onto the Sparks,
 edit host-specific values, then enable services with `systemctl`.
@@ -25,12 +25,17 @@ edit host-specific values, then enable services with `systemctl`.
 - Optional: `ds4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails).
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional: `ds4-preflight-strict@.timer` runs strict preflight on boot and periodically after.
+- Optional TP=4 helpers:
+  - `ds4-preflight-tp4@.service`
+  - `ds4-preflight-tp4-strict@.service`
 - Optional: `ds4-support-bundle@.service` collects a non-destructive support bundle (triggered automatically when `ds4-preflight-strict@.service` fails; can also be started manually).
 - Optional Spark standalone examples:
   - `spark-master@.service`
   - `spark-worker@.service`
 
 The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
+
+Optional: `deploy/systemd-user/` contains user-service templates for `systemd --user` (developer bring-up). See `docs/deployment-systemd-user.md`.
 
 ## Sysusers + Tmpfiles
 
@@ -52,12 +57,15 @@ sudo systemd-tmpfiles --create || true
 
 - `ds4.env.example` : base env keys (single-Spark and dual-Spark placeholders)
 - `ds4-spark0.env.example`, `ds4-spark1.env.example` : per-host starting points
-- `ds4-spark0.conf.example`, `ds4-spark1.conf.example` : runtime config placeholders (key=value)
+- `ds4-spark2.env.example`, `ds4-spark3.env.example` : TP=4 placeholder starting points
+- `ds4-spark0.conf.example`, `ds4-spark1.conf.example`, `ds4-spark2.conf.example`, `ds4-spark3.conf.example` : runtime config placeholders (key=value)
 - `journald.ds4.conf.example` : optional journald persistence/tuning drop-in
 - `logrotate.ds4.conf.example` : optional logrotate config for file logs (skip if journald-only)
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
 - `hosts.ds4.spark01.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1
+- `hosts.ds4.spark_ring.example` : optional `/etc/hosts` pinning for wired Spark0..Spark3
 - `ssh_config.ds4.spark01.example` : optional Mac-side `ssh_config` convenience (stable SSH_OPTS)
+- `ssh_config.ds4.spark_ring.example` : optional Mac-side `ssh_config` convenience (Spark0..Spark3)
 - `sysctl.ds4.conf.example` : optional sysctl network tuning drop-in (host-wide; review first)
 - `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
 
@@ -75,6 +83,13 @@ If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids in
 ```bash
 ./scripts/ops_stage_spark0_spark1.sh spark0@<spark0-host> spark1@<spark1-host>
 # optional: add --mesh-check and/or --tcp <port>
+```
+
+If you're staging Spark0..Spark3, prefer the ring wrapper:
+
+```bash
+./scripts/ops_stage_spark_ring.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
+# optional: add --mesh-check --topology ring and/or --tcp <port>
 ```
 
 Optional: on the Spark, use the staged installer wrapper to apply the staged assets in one command (human-run; review first):

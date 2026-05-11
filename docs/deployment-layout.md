@@ -8,6 +8,8 @@ as **human-run** instructions and templates.
 - Spark0: initial single-box development + eventual TP=2 rank 0
 - Spark1: TP=2 rank 1 (bring-up later)
 
+For Spark2/Spark3 (TP=4 ring prep), see `docs/deployment-spark-ring.md`.
+
 Keep hostnames stable. Prefer mDNS (`*.local`) early; switch to wired IPv4 once
 the wired subnet is standardized.
 

@@ -52,6 +52,11 @@ Best-effort snapshots of:
 - Systemd: `systemctl status/show` for `ds4@<instance>`, preflight, strict variants
 - Logs: `journalctl -u ... --since "<since>"`
 - A small allowlist of DS4 env keys (not the full env files)
+- DS4 config/env validation output when available:
+  - `ops_ds4_config_check.sh --strict-unknown $DS4_CONFIG_PATH`
+  - `ops_ds4_env_check.sh ...env...`
+- A TP=2 readiness snapshot when env paths are provided (e.g. via the systemd unit):
+  - `ops_tp2_readiness.sh --self <instance> --env ... [--peer <DS4_PEER_HOST>]`
 
 ## Redaction Guidance
 

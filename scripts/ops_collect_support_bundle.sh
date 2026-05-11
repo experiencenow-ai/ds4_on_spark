@@ -215,11 +215,12 @@ env_summary="$work_dir/ds4_env_allowlist.txt"
 } >"$env_summary"
 
 DS4_CONFIG_PATH=""
-DS4_MASTER_ADDR=""
-DS4_MASTER_PORT=""
-DS4_PEER_HOST=""
-DS4_METRICS_ADDR=""
-DS4_METRICS_PORT=""
+	DS4_MASTER_ADDR=""
+	DS4_MASTER_PORT=""
+	DS4_PEER_HOST=""
+	DS4_PEER_SSH=""
+	DS4_METRICS_ADDR=""
+	DS4_METRICS_PORT=""
 
 if [ "$env_paths" != "" ]; then
 	for raw in $env_paths; do
@@ -252,31 +253,64 @@ if [ "$env_paths" != "" ]; then
 		if [ "$v" != "" ]; then DS4_MASTER_ADDR="$v"; fi
 		v="$(extract_env_value DS4_MASTER_PORT "$env_path")"
 		if [ "$v" != "" ]; then DS4_MASTER_PORT="$v"; fi
-		v="$(extract_env_value DS4_PEER_HOST "$env_path")"
-		if [ "$v" != "" ]; then DS4_PEER_HOST="$v"; fi
-		v="$(extract_env_value DS4_METRICS_ADDR "$env_path")"
-		if [ "$v" != "" ]; then DS4_METRICS_ADDR="$v"; fi
-		v="$(extract_env_value DS4_METRICS_PORT "$env_path")"
-		if [ "$v" != "" ]; then DS4_METRICS_PORT="$v"; fi
+			v="$(extract_env_value DS4_PEER_HOST "$env_path")"
+			if [ "$v" != "" ]; then DS4_PEER_HOST="$v"; fi
+			v="$(extract_env_value DS4_PEER_SSH "$env_path")"
+			if [ "$v" != "" ]; then DS4_PEER_SSH="$v"; fi
+			v="$(extract_env_value DS4_METRICS_ADDR "$env_path")"
+			if [ "$v" != "" ]; then DS4_METRICS_ADDR="$v"; fi
+			v="$(extract_env_value DS4_METRICS_PORT "$env_path")"
+			if [ "$v" != "" ]; then DS4_METRICS_PORT="$v"; fi
 	done
 fi
 
 {
 	maybe_put_env_key "DS4_CONFIG_PATH" "$DS4_CONFIG_PATH"
-	maybe_put_env_key "DS4_MASTER_ADDR" "$DS4_MASTER_ADDR"
-	maybe_put_env_key "DS4_MASTER_PORT" "$DS4_MASTER_PORT"
-	maybe_put_env_key "DS4_PEER_HOST" "$DS4_PEER_HOST"
-	maybe_put_env_key "DS4_METRICS_ADDR" "$DS4_METRICS_ADDR"
-	maybe_put_env_key "DS4_METRICS_PORT" "$DS4_METRICS_PORT"
-} >>"$env_summary"
+		maybe_put_env_key "DS4_MASTER_ADDR" "$DS4_MASTER_ADDR"
+		maybe_put_env_key "DS4_MASTER_PORT" "$DS4_MASTER_PORT"
+		maybe_put_env_key "DS4_PEER_HOST" "$DS4_PEER_HOST"
+		maybe_put_env_key "DS4_PEER_SSH" "$DS4_PEER_SSH"
+		maybe_put_env_key "DS4_METRICS_ADDR" "$DS4_METRICS_ADDR"
+		maybe_put_env_key "DS4_METRICS_PORT" "$DS4_METRICS_PORT"
+	} >>"$env_summary"
 
-if [ "$DS4_CONFIG_PATH" != "" ]; then
-	run_cmd "ds4/config_stat.txt" sh -c "ls -l \"$DS4_CONFIG_PATH\" 2>/dev/null || true"
-	run_cmd "ds4/config_head.txt" sh -c "sed -n '1,120p' \"$DS4_CONFIG_PATH\" 2>/dev/null || true"
-fi
+	local_scripts_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
-if have_cmd systemctl; then
-	run_cmd "systemd/systemctl_status_ds4.txt" systemctl --no-pager status "ds4@${instance}.service"
+	if [ "$DS4_CONFIG_PATH" != "" ]; then
+		run_cmd "ds4/config_stat.txt" sh -c "ls -l \"$DS4_CONFIG_PATH\" 2>/dev/null || true"
+		run_cmd "ds4/config_head.txt" sh -c "sed -n '1,120p' \"$DS4_CONFIG_PATH\" 2>/dev/null || true"
+		if [ -x "$local_scripts_dir/ops_ds4_config_check.sh" ]; then
+			run_cmd "ds4/config_check.txt" "$local_scripts_dir/ops_ds4_config_check.sh" --strict-unknown "$DS4_CONFIG_PATH"
+		fi
+	fi
+
+	if [ "$env_paths" != "" ]; then
+		if [ -x "$local_scripts_dir/ops_ds4_env_check.sh" ]; then
+			(
+				set -- "$local_scripts_dir/ops_ds4_env_check.sh"
+				for raw in $env_paths; do
+					set -- "$@" "$raw"
+				done
+				run_cmd "ds4/env_check.txt" "$@"
+			)
+		fi
+
+		if [ -x "$local_scripts_dir/ops_tp2_readiness.sh" ]; then
+			(
+				set -- "$local_scripts_dir/ops_tp2_readiness.sh" --self "$instance"
+				for raw in $env_paths; do
+					set -- "$@" --env "$raw"
+				done
+				if [ "$DS4_PEER_HOST" != "" ]; then
+					set -- "$@" --peer "$DS4_PEER_HOST"
+				fi
+				run_cmd "ds4/tp2_readiness.txt" "$@"
+			)
+		fi
+	fi
+
+	if have_cmd systemctl; then
+		run_cmd "systemd/systemctl_status_ds4.txt" systemctl --no-pager status "ds4@${instance}.service"
 	run_cmd "systemd/systemctl_status_ds4_strict.txt" systemctl --no-pager status "ds4-strict@${instance}.service"
 	run_cmd "systemd/systemctl_status_preflight.txt" systemctl --no-pager status "ds4-preflight@${instance}.service"
 	run_cmd "systemd/systemctl_status_preflight_strict.txt" systemctl --no-pager status "ds4-preflight-strict@${instance}.service"
