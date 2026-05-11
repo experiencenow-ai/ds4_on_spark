@@ -23,9 +23,12 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - CUDA 13 “variant targets”:
   - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` / `sm_121f`.
   - Best-effort compile-only and build+run for `-arch=sm_121a` and `-arch=sm_121f` both succeed on Spark0 (treat as “optional compatibility”; do not rely on `nvcc --list-gpu-code` advertising them).
-  - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `cuobjdump --dump-ptx` reports embedded PTX for `-arch=sm_121a` / `-arch=sm_121f` builds, and the first PTX `.target` line remains `.target sm_121` (so the variant suffix does not imply a distinct PTX target for portability planning).
+  - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc -ptx -arch=sm_121a` / `sm_121f` emits PTX whose `.target` line is `.target sm_121a` / `.target sm_121f`, but `cuobjdump --dump-ptx` on the resulting `-arch=sm_121a` / `sm_121f` binaries reports embedded PTX whose first `.target` line remains `.target sm_121` (so the variant suffix does not currently imply a distinct embedded-PTX target for portability planning).
   - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `__CUDA_ARCH_LIST__` is `1210` for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` (so the variant suffix does not show up in the virtual-arch list).
 - Spark0’s toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, and the compile-report probe currently reports `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
+- Reference: NVIDIA documents the `compute_121{,a,f}` / `sm_121{,a,f}` targets in the CUDA 13 nvcc docs, and describes the intent of family-specific (`*f`) vs arch-specific (`*a`) targets in the CUDA Programming Guide compute-capability appendix.
+  - https://docs.nvidia.com/cuda/archive/13.0.0/cuda-compiler-driver-nvcc/index.html
+  - https://docs.nvidia.com/cuda/archive/13.1.1/cuda-programming-guide/05-appendices/compute-capabilities.html
 - For a small “kernel plumbing” bring-up gate set (no cuBLASLt), run `./scripts/cuda_probe_kernel_tiny_spark0.sh` from the Mac; it validates C++20 + template flags, inline PTX (`ldmatrix`), pipeline/bulk async copy plumbing, TMA tensor-map encode + `cp.async.bulk.tensor`, and NVRTC/nvJitLink JIT paths for `sm_121`.
 - `./scripts/cuda_probe_capability_spark0.sh` includes the kernel-plumbing gates by default; set `WITH_KERNEL_TINY=0` to skip them for a faster sweep.
 - CUDA 13 developer tooling (`cuobjdump --dump-sass`, `nvdisasm`) can decode `sm_121` binaries on Spark0 (validated via `scripts/cuda_probe_disasm_spark0.sh`: 2026-05-09)
