@@ -48,6 +48,12 @@ ssh $SSH_OPTS spark0@<spark0-host> "cd ~/centaur-smoke/v73 && sh -s" < ./scripts
 
 Artifacts are written under `~/centaur-smoke/v73/run/` on Spark0.
 
+Notable outputs:
+
+- `effective_manifests/hyor_effective_manifest_spark0.json` (from `hyor-sync-effective`)
+- `hyor_effective/spark0/` (materialized node view from `hyor-sync-apply`)
+- `hyor_dashboard/` (HTML/JSON dashboard output)
+
 ### Optional: faster/offline dependency install
 
 Centaur v73 `requirements.txt` includes `numpy/scipy/scikit-learn`. On Spark0, install can be slow without cached wheels.
