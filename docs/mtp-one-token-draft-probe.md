@@ -81,6 +81,14 @@ This runner does not fetch/build. It only runs the provided command, validates t
 
 Note: the runner assumes the one-token command emits **exactly one JSON object** to stdout (no banners, no logs). Any validation output is written to stderr and captured in the report separately.
 
+Optional sidecar-gated runner: if you want this repo to perform a Spark-side sidecar contract probe first (metadata-only, no trunk load) and then cross-check `mtp_params` against the sidecar’s derived params automatically, use:
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1 MTP_ONE_TOKEN_CMD='...'" \
+REMOTE_MTP_SIDECAR_ENV="ALLOW_RUN=1" \
+scripts/run_mtp_one_token_draft_probe_spark_with_sidecar_gate.sh spark0@<spark-host>
+```
+
 ## Implementation checklist (Spark/CUDA llama.cpp fork)
 
 Before running this probe, the Spark/CUDA fork needs a **real** one-token MTP command (the runner only executes what you provide as `MTP_ONE_TOKEN_CMD`):
