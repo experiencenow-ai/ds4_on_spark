@@ -65,10 +65,11 @@ Stage skips (layer-local residual-path drops) are summarized under `stages.skipp
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.
-Two policies are supported:
+Policies supported:
 
 - `--admit-policy ordered` (default): admit in router-provided order
 - `--admit-policy least_pending`: admit the least-pending experts among the candidates (ties broken by router order)
+- `--admit-policy least_pending_work`: admit the least-pending experts by `pending_work` (queued+in-flight sum of `cost_scale`; ties broken by router order)
 - `--admit-policy score_desc`: order candidates by descending `scores` from trace replay (ties broken by router order). Requires `scores` for every trace entry.
 
 ### Per-Expert Service Discipline
@@ -92,6 +93,9 @@ congestion signal derived from expert pending depth:
 - `--k-signal class`: `max_pending` is max pending in this token’s latency-class
   queue (interactive or batch) plus in-flight work, across all experts (helps
   decouple interactive K from batch backlog under strict priority)
+- `--k-signal global_mean`: mean pending across all experts
+- `--k-signal candidates_mean`: mean pending among this token’s candidates
+- `--k-signal class_mean`: mean pending in this token’s latency-class queue (interactive or batch) plus in-flight work, across all experts
 
 You can also choose whether pending depth is measured in **task counts** or **work units**:
 

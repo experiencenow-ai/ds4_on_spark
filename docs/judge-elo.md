@@ -17,6 +17,7 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `score_b`: integer `0..10`
 - `reason`: string, **≤ 18 words**
 - `train_hint`: string, **≤ 18 words** (actionable improvement hint for the loser; empty allowed)
+- `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8); e.g. `["format","factuality"]`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
@@ -44,6 +45,7 @@ Optional but recommended (for speed/quality separation and budgeting):
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
 - `parse_error`: short string when `parse_valid=false`
+  - `raw` is capped at 512 chars; `parse_error` at 128 chars.
 
 For baseline-quality joins, treat `tokens` and `latency_ms` as required and validate with:
 
@@ -63,6 +65,7 @@ Use a strict system instruction:
 - Keep the JSON short: target `judge_out <= ~64 tokens` (reason/hint are the budget drivers).
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
+It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
 
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 
@@ -78,8 +81,12 @@ python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b 
 - performs deterministic Elo updates (order = input order; optionally stable-sorted by `pair_id` only)
 - writes JSON/CSV/Markdown leaderboard summaries plus:
   - `quality_map.json` (model -> `quality_score`)
+  - `meta.json` (record/match counts and updater parameters)
   - `budget.json` (token/latency/parse-validity summary over the input JSONL)
     - includes `judge_out_budget` (how often judge outputs meet the compact token target)
+    - compact target is configurable via `--judge-out-target` (default 64)
+
+Quality mapping defaults to `--quality-mode logistic` (anchored: Elo 1000 -> quality_score 50). Use `--quality-mode minmax` only for quick relative comparisons within a single closed set of models.
 
 Elo math:
 - expected score: `E_A = 1 / (1 + 10^((R_B - R_A)/400))`
@@ -90,3 +97,11 @@ Elo math:
 ## Baseline Integration Notes
 
 The leaderboard CSV emitted by `scripts/judge_elo_update.py` contains an Elo-derived `quality_score` (0..100) **derived only from judge results** (no speed fields). The baseline runtime loop can join this `quality_score` onto its speed measurements and compute quality-adjusted tok/s without mixing speed signals into judge quality.
+
+For a CSV-first workflow, use `scripts/judge_elo_join_quality.py` to attach `quality_score` onto baseline rows before scoring:
+
+```bash
+python3 scripts/judge_elo_update.py --in <judge_records.jsonl> --out-dir <elo_out_dir> --strict
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
+python3 scripts/model_quality_speed_score.py --in <baseline_with_quality.csv> --out-md <scored.md>
+```
