@@ -37,6 +37,10 @@ Targets:
   qwen3_5_35b_a3b_dflash_hf            (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_9b_hf                        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_9b_dflash_hf                 (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_8b_hf                          (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_8b_dflash_b16_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_4b_hf                          (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_4b_dflash_b16_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_4b_hf                        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_4b_dflash_hf                 (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_coder_next_fp8_hf              (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -351,6 +355,26 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/z-lab/Qwen3.5-9B-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_5_9b_dflash_hf" "https://huggingface.co/z-lab/Qwen3.5-9B-DFlash" "${ref}" "${expected}"
+			;;
+		qwen3_8b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/Qwen/Qwen3-8B"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_8b_hf" "https://huggingface.co/Qwen/Qwen3-8B" "${ref}" "${expected}"
+			;;
+		qwen3_8b_dflash_b16_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/Qwen3-8B-DFlash-b16"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_8b_dflash_b16_hf" "https://huggingface.co/z-lab/Qwen3-8B-DFlash-b16" "${ref}" "${expected}"
+			;;
+		qwen3_4b_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/Qwen/Qwen3-4B"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_4b_hf" "https://huggingface.co/Qwen/Qwen3-4B" "${ref}" "${expected}"
+			;;
+		qwen3_4b_dflash_b16_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/Qwen3-4B-DFlash-b16"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_4b_dflash_b16_hf" "https://huggingface.co/z-lab/Qwen3-4B-DFlash-b16" "${ref}" "${expected}"
 			;;
 		qwen3_5_4b_hf)
 			# HF metadata/config only: do not download weights.
