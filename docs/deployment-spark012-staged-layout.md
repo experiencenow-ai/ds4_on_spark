@@ -51,17 +51,19 @@ Repeat for `spark1` and `spark2`.
 
 ## Three-Node Ring Ops Checklist
 
-Use the canonical operating checklist:
-
-- `docs/spark-ring-ops-checklist.md`
-
-For the TP=3-specific checklist variant (when relevant):
+Use the canonical operating checklist for Spark0/Spark1/Spark2:
 
 - `docs/spark-ring-ops-checklist-tp3.md`
 
+For the 4-node ring checklist (Spark0..Spark3 / TP=4):
+
+- `docs/spark-ring-ops-checklist.md`
+
 ## Readiness Checks (Safe)
 
-Run these from a system context:
+For a 3-node ring, TP=3 readiness is the primary gate; TP=2 readiness is still useful as a Spark0/Spark1-only baseline check.
+
+Run these from a system context (manual debugging; the `ds4-preflight*` units run the same checks automatically):
 
 ```bash
 /opt/ds4/scripts/ops_tp2_readiness.sh --self spark0 --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --strict
@@ -76,4 +78,3 @@ $HOME/ds4/scripts/ops_tp3_readiness.sh --self spark0 --env -$HOME/.config/ds4/ds
 ```
 
 Do not change Spark networking as part of automation loops; record proposed firewall/routing changes for human approval.
-
