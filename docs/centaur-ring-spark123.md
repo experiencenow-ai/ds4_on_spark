@@ -1,5 +1,9 @@
 # Centaur HyoR ring rehearsal: Spark1/Spark2/Spark3 (prep + runbook)
 
+If you only have Spark1/Spark2 (3-node ring total), start with:
+
+- `docs/centaur-ring-spark12.md`
+
 Goal: prepare repeatable Spark1/Spark2/Spark3 ring steps **without needing extra hardware yet**, then provide a first “real ring” path once Spark1/2/3 exist.
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
@@ -92,6 +96,10 @@ This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/
 3. Pushes the mutated node roots back to the remote Sparks
 
 From your Mac repo root (stream-run on Spark0, passing Spark1/2/3 SSH targets as args):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+```
 
 ```bash
 ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>" < ./scripts/centaur_spark_ring_rsync_v73.sh
