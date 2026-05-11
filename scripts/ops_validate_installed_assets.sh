@@ -20,6 +20,7 @@ Notes:
   - Validates installed unit templates + env/config readability, then runs:
       - ops_ds4_env_check.sh (env sanity)
       - ops_tp2_readiness.sh (preflight; add --strict to fail fast) when DS4_WORLD_SIZE != 4
+      - ops_tp3_readiness.sh (preflight; add --strict to fail fast) when DS4_WORLD_SIZE == 3 and the script is installed
       - ops_tp4_readiness.sh (preflight; add --strict to fail fast) when DS4_WORLD_SIZE == 4 and the script is installed
   - systemd timer templates are optional; this script does not require them.
 EOF
@@ -154,6 +155,9 @@ echo "== /opt/ds4 scripts =="
 need_exec "$scripts_dir/ops_ds4_env_check.sh"
 need_exec "$scripts_dir/ops_ds4_config_check.sh"
 need_exec "$scripts_dir/ops_tp2_readiness.sh"
+if [ -x "$scripts_dir/ops_tp3_readiness.sh" ]; then
+    need_exec "$scripts_dir/ops_tp3_readiness.sh"
+fi
 if [ -x "$scripts_dir/ops_tp4_readiness.sh" ]; then
     need_exec "$scripts_dir/ops_tp4_readiness.sh"
 fi
@@ -172,6 +176,13 @@ if [ "$world_size" = "4" ] && [ -x "$scripts_dir/ops_tp4_readiness.sh" ]; then
         "$scripts_dir/ops_tp4_readiness.sh" --strict --self "$instance" --topology ring --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
     else
         "$scripts_dir/ops_tp4_readiness.sh" --self "$instance" --topology ring --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    fi
+elif [ "$world_size" = "3" ] && [ -x "$scripts_dir/ops_tp3_readiness.sh" ]; then
+    echo "== ds4 tp=3 preflight =="
+    if [ "$strict" -ne 0 ]; then
+        "$scripts_dir/ops_tp3_readiness.sh" --strict --self "$instance" --topology ring --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    else
+        "$scripts_dir/ops_tp3_readiness.sh" --self "$instance" --topology ring --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
     fi
 else
     echo "== ds4 tp=2 preflight =="

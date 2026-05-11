@@ -637,6 +637,100 @@ fi
 	try_variant_build_run sm_121f sm_121f \"\${adv_sm121f}\"
 
 	echo
+	echo \"== nvcc: CUDA 13 static-global-template-stub cross-TU (best-effort) ==\"
+	cat > \"$REMOTE_DIR\"/cuda_nvcc_template_stub_first.cu <<'EOF'
+#include <stdint.h>
+
+template <typename T>
+__global__ void cuda_template_stub_kernel(uint32_t *out)
+{
+#if defined(__CUDA_ARCH__)
+	if ( ((int32_t)threadIdx.x) == 0 )
+		out[0] = (uint32_t)(T)0x12345678;
+#else
+	(void)out;
+#endif
+}
+
+template __global__ void cuda_template_stub_kernel<int>(uint32_t *out);
+EOF
+
+	cat > \"$REMOTE_DIR\"/cuda_nvcc_template_stub_second.cu <<'EOF'
+#include <stdint.h>
+#include <stdio.h>
+
+#include <cuda_runtime.h>
+
+template <typename T>
+__global__ void cuda_template_stub_kernel(uint32_t *out);
+
+int main(int argc,char **argv)
+{
+	uint32_t *dout = 0,hout = 0;
+	cudaError_t err;
+	(void)argc;
+	(void)argv;
+	err = cudaMalloc((void **)&dout,(size_t)sizeof(uint32_t));
+	if ( err != cudaSuccess )
+		return(11);
+	err = cudaMemset(dout,0,(size_t)sizeof(uint32_t));
+	if ( err != cudaSuccess )
+	{
+		cudaFree(dout);
+		return(12);
+	}
+	cuda_template_stub_kernel<int><<<1,32>>>(dout);
+	err = cudaGetLastError();
+	if ( err != cudaSuccess )
+	{
+		cudaFree(dout);
+		return(13);
+	}
+	err = cudaDeviceSynchronize();
+	if ( err != cudaSuccess )
+	{
+		cudaFree(dout);
+		return(14);
+	}
+	err = cudaMemcpy(&hout,dout,(size_t)sizeof(uint32_t),cudaMemcpyDeviceToHost);
+	cudaFree(dout);
+	if ( err != cudaSuccess )
+		return(15);
+	printf(\"template_stub ok out=0x%08x\\n\",hout);
+	return(0);
+}
+EOF
+
+	try_template_stub_build_run() {
+		tag=\"\$1\"
+		extra_flags=\"\$2\"
+		out_bin=\"$REMOTE_DIR\"/\"nvcc_\${tag}_template_stub\"
+		echo \"-- template_stub: \${tag} (\${extra_flags})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 \${extra_flags} -o \"\${out_bin}\" \"$REMOTE_DIR\"/cuda_nvcc_template_stub_first.cu \"$REMOTE_DIR\"/cuda_nvcc_template_stub_second.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_template_stub.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_template_stub.err\"
+		rc=\$?
+		if [ \$rc -ne 0 ]; then
+			echo \"template_stub_\${tag}: BUILD FAILED rc=\${rc}\"
+			head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_template_stub.err\" || true
+			set -e
+			return 0
+		fi
+		\"\${out_bin}\"
+		rc=\$?
+		if [ \$rc -eq 0 ]; then
+			echo \"template_stub_\${tag}: OK\"
+		else
+			echo \"template_stub_\${tag}: RUN FAILED rc=\${rc}\"
+		fi
+		set -e
+		return 0
+	}
+
+	try_template_stub_build_run default \"\"
+	try_template_stub_build_run stubfalse \"-static-global-template-stub=false\"
+	try_template_stub_build_run rdc \"-rdc=true\"
+
+	echo
 	echo \"== cuobjdump: embedded PTX (best-effort) ==\"
 	CUOBJDUMP=\"\"
 if [ -x /usr/local/cuda/bin/cuobjdump ]; then

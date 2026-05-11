@@ -1,0 +1,47 @@
+[Unit]
+Description=DS4 TP=3 preflight checks (%i)
+Wants=network-online.target
+After=network-online.target
+OnFailure=ds4-support-bundle@%i.service
+ConditionPathIsExecutable=/opt/ds4/scripts/ops_ds4_env_check.sh
+ConditionPathIsExecutable=/opt/ds4/scripts/ops_tp3_readiness.sh
+
+[Service]
+Type=oneshot
+User=ds4
+Group=ds4
+WorkingDirectory=/opt/ds4
+SyslogIdentifier=ds4-preflight-tp3-%i
+Environment=DS4_INSTANCE=%i
+Environment=DS4_CONFIG_PATH=/etc/ds4/ds4-%i.conf
+EnvironmentFile=-/etc/ds4/ds4.env
+EnvironmentFile=/etc/ds4/ds4-%i.env
+
+# Provide the script on-host at /opt/ds4/scripts/ops_ds4_env_check.sh.
+ExecStartPre=/opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-%i.env
+
+# Provide the script on-host at /opt/ds4/scripts/ops_tp3_readiness.sh.
+ExecStart=/opt/ds4/scripts/ops_tp3_readiness.sh --self %i
+
+StandardOutput=journal
+StandardError=journal
+
+RemainAfterExit=yes
+TimeoutStartSec=180
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+StateDirectory=ds4 ds4/ssh ds4/models ds4/cache
+
+[Install]
+WantedBy=multi-user.target
+

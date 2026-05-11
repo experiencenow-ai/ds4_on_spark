@@ -75,6 +75,8 @@ need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
 need_file "$systemd_dir/ds4-preflight-strict@.service"
+need_file "$systemd_dir/ds4-preflight-tp3@.service"
+need_file "$systemd_dir/ds4-preflight-tp3-strict@.service"
 need_file "$systemd_dir/ds4-preflight-tp4@.service"
 need_file "$systemd_dir/ds4-preflight-tp4-strict@.service"
 need_file "$systemd_dir/ds4-support-bundle@.service"
@@ -95,14 +97,17 @@ need_file "$config_dir/journald.ds4.conf.example"
 need_file "$config_dir/logrotate.ds4.conf.example"
 need_file "$config_dir/prometheus-scrape.ds4.yml.example"
 need_file "$config_dir/hosts.ds4.spark01.example"
+need_file "$config_dir/hosts.ds4.spark012.example"
 need_file "$config_dir/hosts.ds4.spark_ring.example"
 need_file "$config_dir/ssh_config.ds4.spark01.example"
+need_file "$config_dir/ssh_config.ds4.spark012.example"
 need_file "$config_dir/ssh_config.ds4.spark_ring.example"
 need_file "$config_dir/sysctl.ds4.conf.example"
 
 need_file "$scripts_dir/ops_ds4_env_check.sh"
 need_file "$scripts_dir/ops_ds4_config_check.sh"
 need_file "$scripts_dir/ops_tp2_readiness.sh"
+need_file "$scripts_dir/ops_tp3_readiness.sh"
 need_file "$scripts_dir/ops_tp4_readiness.sh"
 need_file "$scripts_dir/ops_spark_standalone_check.sh"
 need_file "$scripts_dir/ops_collect_support_bundle.sh"
@@ -114,6 +119,7 @@ echo "== sh -n (staged ops scripts) =="
 sh -n "$scripts_dir/ops_ds4_env_check.sh"
 sh -n "$scripts_dir/ops_ds4_config_check.sh"
 sh -n "$scripts_dir/ops_tp2_readiness.sh"
+sh -n "$scripts_dir/ops_tp3_readiness.sh"
 sh -n "$scripts_dir/ops_tp4_readiness.sh"
 sh -n "$scripts_dir/ops_spark_standalone_check.sh"
 sh -n "$scripts_dir/ops_collect_support_bundle.sh"
@@ -128,6 +134,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         "$systemd_dir/ds4-strict@.service" \
         "$systemd_dir/ds4-preflight@.service" \
         "$systemd_dir/ds4-preflight-strict@.service" \
+        "$systemd_dir/ds4-preflight-tp3@.service" \
+        "$systemd_dir/ds4-preflight-tp3-strict@.service" \
         "$systemd_dir/ds4-preflight-tp4@.service" \
         "$systemd_dir/ds4-preflight-tp4-strict@.service" \
         "$systemd_dir/ds4-support-bundle@.service" \

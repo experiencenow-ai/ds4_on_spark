@@ -57,7 +57,7 @@ def _safe_div(num: float, den: float) -> float:
     return(num / den)
 
 
-def _percentile(values: Sequence[int], p: float) -> float:
+def _percentile(values: Sequence[float], p: float) -> float:
     if len(values) == 0:
         return(0.0)
     if p <= 0.0:
@@ -88,6 +88,26 @@ def _len_stats(values: Sequence[int]) -> Dict[str, Any]:
         "count": len(values),
         "min": int(min(values)),
         "max": int(max(values)),
+        "mean": (s / float(len(values))),
+        "p50": _percentile(values, 0.50),
+        "p90": _percentile(values, 0.90),
+    })
+
+def _num_stats(values: Sequence[float]) -> Dict[str, Any]:
+    if len(values) == 0:
+        return({
+            "count": 0,
+            "min": 0.0,
+            "max": 0.0,
+            "mean": 0.0,
+            "p50": 0.0,
+            "p90": 0.0,
+        })
+    s = float(sum(values))
+    return({
+        "count": len(values),
+        "min": float(min(values)),
+        "max": float(max(values)),
         "mean": (s / float(len(values))),
         "p50": _percentile(values, 0.50),
         "p90": _percentile(values, 0.90),
@@ -149,7 +169,7 @@ def _distinct_ratio(counts: Dict[str, int]) -> float:
     return(float(len(counts)) / total)
 
 
-def _useful_novelty_flags(output: str) -> List[str]:
+def _useful_novelty_flags(output: str, prompt: str) -> List[str]:
     flags: List[str] = []
     norm = lib.normalize_text(output)
     if norm == "":
@@ -185,6 +205,23 @@ def _useful_novelty_flags(output: str) -> List[str]:
             flags.append("word_unique_frac_le_0.25")
     if len(norm) >= 200 and "http" in norm and norm.count("http") >= 3:
         flags.append("many_urls")
+    if len(ws) >= 12 and prompt != "":
+        pws = lib.words(prompt)
+        if len(pws) >= 8:
+            pset = set(pws)
+            overlap = sum(1 for w in ws if w in pset)
+            if (float(overlap) / float(len(ws))) >= 0.90:
+                flags.append("echo_prompt_overlap_ge_0.90")
+    lines = [lib.normalize_text(x) for x in output.splitlines() if x.strip() != ""]
+    if len(lines) >= 12:
+        lcounts: Dict[str, int] = {}
+        for ln in lines:
+            lcounts[ln] = lcounts.get(ln, 0) + 1
+        top = max(lcounts.values())
+        if top >= 6:
+            flags.append("line_repetition_ge_6")
+        if len(lcounts) <= 4:
+            flags.append("few_unique_lines_le_4")
     return(flags)
 
 
@@ -229,6 +266,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     output_len_chars: List[int] = []
     output_len_words: List[int] = []
 
+    input_tokens: List[float] = []
+    output_tokens: List[float] = []
+    wall_ms: List[float] = []
+    ms_per_output_token: List[float] = []
+    output_tok_per_s: List[float] = []
+    total_tok_per_s: List[float] = []
+
+    answers_nonempty: List[str] = []
+
     novelty_flag_counts: Dict[str, int] = {}
     novelty_flagged = 0
 
@@ -240,8 +286,26 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             _inc(family_template_counts, f"{c.task_family}|{c.prompt_template_id}")
         _inc(model_counts, c.model_id)
         _inc(answers, c.answer)
+        if c.answer != "":
+            answers_nonempty.append(c.answer)
         _inc(buffer_ids, c.buffer_id)
         _inc(buffer_items, c.buffer_item_id)
+
+        itok = lib.get_int(c.raw, "input_tokens", "prompt_tokens", "input_token_count")
+        otok = lib.get_int(c.raw, "output_tokens", "completion_tokens", "output_token_count")
+        wms = lib.get_float(c.raw, "wall_ms", "latency_ms", "duration_ms", "elapsed_ms")
+        if itok is not None:
+            input_tokens.append(float(itok))
+        if otok is not None:
+            output_tokens.append(float(otok))
+        if wms is not None:
+            wall_ms.append(float(wms))
+        if wms is not None and wms > 0.0 and otok is not None and otok > 0:
+            ms_per_output_token.append(float(wms) / float(otok))
+            output_tok_per_s.append((float(otok) * 1000.0) / float(wms))
+            if itok is not None:
+                total_tok = float(itok + otok)
+                total_tok_per_s.append((total_tok * 1000.0) / float(wms))
 
         if c.output != "":
             outputs_exact.append(c.output)
@@ -256,7 +320,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 out_3grams[ng] = out_3grams.get(ng, 0) + 1
             for ng in _char_ngrams_norm(c.output, 3):
                 out_char3[ng] = out_char3.get(ng, 0) + 1
-            flags = _useful_novelty_flags(c.output)
+            flags = _useful_novelty_flags(c.output, c.prompt)
             if len(flags) != 0:
                 novelty_flagged += 1
                 for f in flags:
@@ -279,6 +343,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
 
     label_counts: Dict[str, int] = {}
     item_labels: Dict[str, List[str]] = {}
+    item_labels_decided_ab: Dict[str, List[str]] = {}
     judge_id_counts: Dict[str, int] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
     for c in judge_pairs:
@@ -292,12 +357,20 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         if item == "":
             item = lib.make_item_id(c.task_id, c.prompt_template_id, c.a_model_id, c.b_model_id)
         item_labels.setdefault(item, []).append(c.label)
+        if c.label in ("a", "b"):
+            item_labels_decided_ab.setdefault(item, []).append(c.label)
 
     item_disagreements: List[float] = []
     for labs in item_labels.values():
         if len(labs) >= 2:
             item_disagreements.append(_majority_disagreement(labs))
     disagreement_rate = 0.0 if len(item_disagreements) == 0 else (sum(item_disagreements) / float(len(item_disagreements)))
+
+    item_disagreements_decided_ab: List[float] = []
+    for labs in item_labels_decided_ab.values():
+        if len(labs) >= 2:
+            item_disagreements_decided_ab.append(_majority_disagreement(labs))
+    disagreement_rate_decided_ab = 0.0 if len(item_disagreements_decided_ab) == 0 else (sum(item_disagreements_decided_ab) / float(len(item_disagreements_decided_ab)))
 
     reuse_count = sum(1 for v in buffer_items.values() if v >= 2)
     reuse_events = sum(max(0, v - 1) for v in buffer_items.values())
@@ -334,6 +407,12 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "prompt_words": _len_stats(prompt_len_words),
         "output_chars": _len_stats(output_len_chars),
         "output_words": _len_stats(output_len_words),
+        "input_tokens": _num_stats(input_tokens),
+        "output_tokens": _num_stats(output_tokens),
+        "wall_ms": _num_stats(wall_ms),
+        "ms_per_output_token": _num_stats(ms_per_output_token),
+        "output_tok_per_s": _num_stats(output_tok_per_s),
+        "total_tok_per_s": _num_stats(total_tok_per_s),
         "prompt_words_total": len(prompt_words),
         "prompt_words_unique": len(prompt_word_counts),
         "prompt_distinct_1": _distinct_ratio(prompt_word_counts),
@@ -382,6 +461,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "output_exact_dup_rate": _dup_rate(outputs_exact),
         "output_norm_dup_rate": _dup_rate(outputs_norm),
         "prompt_norm_dup_rate": _dup_rate(prompts_norm),
+        "answer_dup_rate": _dup_rate(answers_nonempty),
     }
 
     task_template_dup_rates: List[float] = []
@@ -405,14 +485,20 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     wins_a = label_counts.get("a", 0)
     wins_b = label_counts.get("b", 0)
     decided = wins_a + wins_b
+    ties = label_counts.get("tie", 0)
+    invalid = label_counts.get("invalid", 0)
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
         "pair_item_count": len(item_labels),
         "disagreement_rate": disagreement_rate,
+        "disagreement_rate_decided_ab": disagreement_rate_decided_ab,
         "decided_count_ab": decided,
         "decided_rate_ab": _safe_div(float(decided), float(len(judge_pairs))),
+        "tie_rate": _safe_div(float(ties), float(len(judge_pairs))),
+        "invalid_rate": _safe_div(float(invalid), float(len(judge_pairs))),
         "label_balance_ab": 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided)),
+        "label_imbalance_ab": 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided)),
         "judge_id_unique": len([k for k in judge_id_counts.keys() if k != ""]),
         "judge_id_top": lib.top_counts(judge_id_counts),
         "model_pair_count": len(pair_summary),
@@ -470,9 +556,9 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `effective_num`: {js.get('effective_num'):.6f}")
         top = js.get("top") or []
         parts.append(_md_list_top(top))
-        parts.append("")
+    parts.append("")
     parts.append("\n## Tokens\n")
-    for k in ("prompt_chars", "prompt_words", "output_chars", "output_words"):
+    for k in ("prompt_chars", "prompt_words", "output_chars", "output_words", "input_tokens", "output_tokens", "wall_ms", "ms_per_output_token", "output_tok_per_s", "total_tok_per_s"):
         stats = report.tokens.get(k) or {}
         parts.append(f"### {k}\n")
         for sk in ("count", "min", "max", "mean", "p50", "p90"):
@@ -549,7 +635,10 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
     parts.append(f"- `disagreement_rate`: {report.judge.get('disagreement_rate'):.6f}")
+    parts.append(f"- `disagreement_rate_decided_ab`: {report.judge.get('disagreement_rate_decided_ab'):.6f}")
     parts.append(f"- `decided_rate_ab`: {report.judge.get('decided_rate_ab'):.6f}")
+    parts.append(f"- `tie_rate`: {report.judge.get('tie_rate'):.6f}")
+    parts.append(f"- `invalid_rate`: {report.judge.get('invalid_rate'):.6f}")
     parts.append(f"- `label_balance_ab`: {report.judge.get('label_balance_ab'):.6f}")
     parts.append("\n### label_counts\n")
     for k, v in report.judge.get("label_counts", {}).items():
