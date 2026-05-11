@@ -2,9 +2,10 @@
 set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
+SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_tiny}"
 WITH_LINK_PROBES="${WITH_LINK_PROBES:-1}"
+log_path="${LOG_PATH:-}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 probe_dir="$repo_root/tools/cuda_probe"
@@ -13,6 +14,7 @@ if tar --version 2>/dev/null | grep -qi "bsdtar"; then
 	tar_no_mac_metadata="--no-mac-metadata"
 fi
 
+main() {
 if [ ! -d "$probe_dir" ]; then
 	echo "missing $probe_dir" >&2
 	exit 2
@@ -104,3 +106,21 @@ echo
 	fi
 	run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 	"
+}
+
+if [ "$log_path" = "" ]; then
+	main
+	exit 0
+fi
+
+mkdir -p "$(dirname "$log_path")"
+printf "== cuda_probe_tiny_spark0 log: %s ==\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$log_path"
+tmp_out="$(mktemp "/private/tmp/ds4_cuda_probe_tiny_out.XXXXXX")"
+set +e
+main >"$tmp_out" 2>&1
+rc=$?
+set -e
+cat "$tmp_out"
+cat "$tmp_out" >> "$log_path"
+rm -f "$tmp_out"
+exit $rc

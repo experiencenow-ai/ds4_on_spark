@@ -12,6 +12,10 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 To capture deterministic logs on the Mac without relying on `tee`/`pipefail`, set `LOG_PATH`:
 
 ```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_nvcc_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_nvcc_minimal_spark0.sh
+LOG_PATH=/private/tmp/ds4_cuda_probe_cmake_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_cmake_minimal_spark0.sh
+LOG_PATH=/private/tmp/ds4_cuda_probe_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_tiny_spark0.sh
+LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_capability_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_kernel_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_kernel_tiny_spark0.sh
 ```

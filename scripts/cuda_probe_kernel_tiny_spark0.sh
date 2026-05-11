@@ -2,7 +2,7 @@
 set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
+SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_kernel_tiny}"
 log_path="${LOG_PATH:-}"
 
