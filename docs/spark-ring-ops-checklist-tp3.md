@@ -13,6 +13,14 @@ This is a **human-run** checklist for operating a 3-node ring layout safely.
   - `/etc/systemd/system/ds4*.service`
   - `/opt/ds4/scripts/ops_tp3_readiness.sh`
 
+## Developer Path (`systemd --user`) (Optional)
+
+If you are doing a non-root bring-up (developer path), follow `docs/deployment-staged-systemd-user.md` and prefer the TP=3 strict-start unit:
+
+- Preflight (safe gating): `systemctl --user start ds4-preflight-tp3-strict@spark0.service`
+- Start DS4 (gated on strict preflight): `systemctl --user enable --now ds4-tp3-strict@spark0.service`
+- Logs: `journalctl --user -u ds4-tp3-strict@spark0.service -n 200 --no-pager`
+
 ## Before A TP=3 Attempt (Repeatable)
 
 - On all 3 Sparks: confirm GPU visibility/health, kernel/driver versions, and time sanity (`timedatectl status`).
@@ -50,8 +58,8 @@ Until DS4 documents a safe rolling restart for TP=3, treat restarts as a coordin
   - `sudo systemctl start ds4-preflight-tp3-strict@spark2.service`
 - Start DS4 again (example):
   - `sudo systemctl start ds4@spark0.service ds4@spark1.service ds4@spark2.service`
-- If you use the strict-start template, prefer `ds4-strict@%i.service` and keep preflight strict:
-  - `sudo systemctl start ds4-strict@spark0.service`
+- If you use the strict-start template, prefer `ds4-tp3-strict@%i.service` (TP=3-gated) rather than `ds4-strict@%i.service` (TP=2-gated):
+  - `sudo systemctl start ds4-tp3-strict@spark0.service`
 
 ## After A TP=3 Attempt (Repeatable)
 
