@@ -25,6 +25,39 @@ Notes on config sources:
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
 
+## Quick constants (from pinned fixtures)
+
+These are the most frequently referenced **execution-contract** constants, extracted from `fixtures/model_contract/deepseek_v4_flash/config.json` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` so DS4 implementers can sanity-check topology/schedule quickly.
+
+Topology:
+
+- `num_hidden_layers=43`, `hidden_size=4096`
+- `num_attention_heads=64`, `num_key_value_heads=1`
+- `head_dim=512` (MLA: `rope_head_dim=64`, `nope_head_dim=448`)
+- `sliding_window=128`
+- `vocab_size=129280`
+
+MoE:
+
+- `n_routed_experts=256`, `n_shared_experts=1`
+- `n_activated_experts=6` (`num_experts_per_tok`)
+- `moe_inter_dim=2048`
+- Hash-gated layers (`ffn.gate.tid2eid`): layer IDs `[0,1,2]` (`num_hash_layers=3`)
+- Score-gated layers (`ffn.gate.bias`): layer IDs `[3..42]`
+
+Attention schedule (main trunk; derived from `compress_ratios`):
+
+- Layer-type counts: `sliding=2`, `csa=21` (`compress_ratio=4`), `hca=20` (`compress_ratio=128`)
+- Sliding-only layer IDs: `[0,1]`
+- CSA layer IDs: `[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42]`
+- HCA layer IDs: `[3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41]`
+- Main compress-ratio schedule (length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
+
+MTP:
+
+- `num_nextn_predict_layers=1` (`mtp.0.*` namespace exists in the official checkpoint key set)
+- MTP compress ratios (length `1`): `[0]` (MTP is sliding-only; no CSA/HCA compressor/indexer tensors should exist under `mtp.0.*`)
+
 ## Source trace (official → pinned fixtures → DS4 contract)
 
 This contract is intentionally **source-traceable**: every claim is either taken directly from a pinned upstream file in `fixtures/model_contract/deepseek_v4_flash/` or is a deterministic derivation recorded in `contract_summary.json`.
