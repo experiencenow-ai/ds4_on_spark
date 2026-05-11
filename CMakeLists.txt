@@ -68,6 +68,7 @@ if(DS4_ENABLE_CUDA)
 	ds4_target_cuda(ds4)
 else()
 	target_sources(ds4 PRIVATE src/ds4_cuda_stub.c)
+	target_compile_definitions(ds4 PUBLIC DS4_HAS_CUDA=0)
 endif()
 
 if(DS4_ENABLE_CLI)

@@ -5,7 +5,7 @@ DS4 wraps the CUDA Runtime API behind `include/ds4/cuda.h` so CPU-only builds ca
 ## Build-time toggle
 
 - `DS4_ENABLE_CUDA=ON`: builds `src/ds4_cuda.cu`, links `CUDA::cudart`, and defines `DS4_HAS_CUDA=1`.
-- `DS4_ENABLE_CUDA=OFF`: builds `src/ds4_cuda_stub.c` and `ds4_cuda_is_enabled_build()` returns `0`.
+- `DS4_ENABLE_CUDA=OFF`: builds `src/ds4_cuda_stub.c`, defines `DS4_HAS_CUDA=0`, and `ds4_cuda_is_enabled_build()` returns `0`.
 
 macOS defaults to `DS4_ENABLE_CUDA=OFF`.
 
