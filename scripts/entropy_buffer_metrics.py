@@ -140,6 +140,63 @@ def _majority_disagreement(labels: Sequence[str]) -> float:
     maxc = max(counts.values())
     return(1.0 - (float(maxc) / float(len(labels))))
 
+def _judge_slice_stats(label_counts: Dict[str, int], item_labels: Dict[str, List[str]], item_labels_decided_ab: Dict[str, List[str]]) -> Dict[str, Any]:
+    total = int(sum(label_counts.values()))
+    wins_a = int(label_counts.get("a", 0))
+    wins_b = int(label_counts.get("b", 0))
+    ties = int(label_counts.get("tie", 0))
+    invalid = int(label_counts.get("invalid", 0))
+    decided = wins_a + wins_b
+    imbalance = 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided))
+    balance = 1.0 - imbalance
+
+    item_disagreements: List[float] = []
+    for labs in item_labels.values():
+        if len(labs) >= 2:
+            item_disagreements.append(_majority_disagreement(labs))
+    disagreement_rate = 0.0 if len(item_disagreements) == 0 else (sum(item_disagreements) / float(len(item_disagreements)))
+
+    item_disagreements_decided_ab: List[float] = []
+    for labs in item_labels_decided_ab.values():
+        if len(labs) >= 2:
+            item_disagreements_decided_ab.append(_majority_disagreement(labs))
+    disagreement_rate_decided_ab = 0.0 if len(item_disagreements_decided_ab) == 0 else (sum(item_disagreements_decided_ab) / float(len(item_disagreements_decided_ab)))
+
+    return({
+        "count": total,
+        "pair_item_count": len(item_labels),
+        "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "label_entropy_bits": lib.shannon_entropy(label_counts),
+        "decided_count_ab": decided,
+        "decided_rate_ab": 0.0 if total == 0 else (float(decided) / float(total)),
+        "tie_rate": 0.0 if total == 0 else (float(ties) / float(total)),
+        "invalid_rate": 0.0 if total == 0 else (float(invalid) / float(total)),
+        "label_balance_ab": balance,
+        "label_imbalance_ab": imbalance,
+        "disagreement_rate": disagreement_rate,
+        "disagreement_rate_decided_ab": disagreement_rate_decided_ab,
+    })
+
+def _judge_slice_top(items: Sequence[Dict[str, Any]], key_name: str, sort_key: str, k: int = 10) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for js in items:
+        key = str(js.get(key_name, ""))
+        if key == "":
+            continue
+        out.append(js)
+    out.sort(key=lambda x: (-float(x.get(sort_key, 0.0)), -int(x.get("count", 0) or 0), str(x.get(key_name, ""))))
+    return(out[:k])
+
+def _judge_slice_low(items: Sequence[Dict[str, Any]], key_name: str, sort_key: str, k: int = 10) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for js in items:
+        key = str(js.get(key_name, ""))
+        if key == "":
+            continue
+        out.append(js)
+    out.sort(key=lambda x: (float(x.get(sort_key, 0.0)), -int(x.get("count", 0) or 0), str(x.get(key_name, ""))))
+    return(out[:k])
+
 
 def _safe_div(num: float, den: float) -> float:
     if den == 0.0:
@@ -476,6 +533,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     item_judge_ids: Dict[str, Dict[str, int]] = {}
     judge_id_counts: Dict[str, int] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
+    tmpl_label_counts: Dict[str, Dict[str, int]] = {}
+    fam_label_counts: Dict[str, Dict[str, int]] = {}
+    pair_label_counts: Dict[str, Dict[str, int]] = {}
+    tmpl_item_labels: Dict[str, Dict[str, List[str]]] = {}
+    fam_item_labels: Dict[str, Dict[str, List[str]]] = {}
+    pair_item_labels: Dict[str, Dict[str, List[str]]] = {}
+    tmpl_item_labels_decided_ab: Dict[str, Dict[str, List[str]]] = {}
+    fam_item_labels_decided_ab: Dict[str, Dict[str, List[str]]] = {}
+    pair_item_labels_decided_ab: Dict[str, Dict[str, List[str]]] = {}
     judge_in_tokens: List[float] = []
     judge_out_tokens: List[float] = []
     judge_latency_ms: List[float] = []
@@ -516,6 +582,34 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             item_judge_ids[item][c.judge_id] = item_judge_ids[item].get(c.judge_id, 0) + 1
         if c.label in ("a", "b"):
             item_labels_decided_ab.setdefault(item, []).append(c.label)
+
+        tmpl = c.prompt_template_id
+        fam = c.task_family
+        fam_tmpl = "" if (fam == "" or tmpl == "") else f"{fam}|{tmpl}"
+        if tmpl != "":
+            tmpl_label_counts.setdefault(tmpl, {})
+            _inc(tmpl_label_counts[tmpl], c.label)
+            tmpl_item_labels.setdefault(tmpl, {})
+            tmpl_item_labels[tmpl].setdefault(item, []).append(c.label)
+            if c.label in ("a", "b"):
+                tmpl_item_labels_decided_ab.setdefault(tmpl, {})
+                tmpl_item_labels_decided_ab[tmpl].setdefault(item, []).append(c.label)
+        if fam != "":
+            fam_label_counts.setdefault(fam, {})
+            _inc(fam_label_counts[fam], c.label)
+            fam_item_labels.setdefault(fam, {})
+            fam_item_labels[fam].setdefault(item, []).append(c.label)
+            if c.label in ("a", "b"):
+                fam_item_labels_decided_ab.setdefault(fam, {})
+                fam_item_labels_decided_ab[fam].setdefault(item, []).append(c.label)
+        if fam_tmpl != "":
+            pair_label_counts.setdefault(fam_tmpl, {})
+            _inc(pair_label_counts[fam_tmpl], c.label)
+            pair_item_labels.setdefault(fam_tmpl, {})
+            pair_item_labels[fam_tmpl].setdefault(item, []).append(c.label)
+            if c.label in ("a", "b"):
+                pair_item_labels_decided_ab.setdefault(fam_tmpl, {})
+                pair_item_labels_decided_ab[fam_tmpl].setdefault(item, []).append(c.label)
 
     item_disagreements: List[float] = []
     for labs in item_labels.values():
@@ -691,6 +785,47 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     model_pair_top.sort(key=lambda x: (-int(x.get("count", 0)), str(x.get("pair_key", ""))))
     model_pair_top = model_pair_top[:20]
 
+    tmpl_summ: List[Dict[str, Any]] = []
+    for tmpl, counts in tmpl_label_counts.items():
+        stats = _judge_slice_stats(counts, tmpl_item_labels.get(tmpl, {}), tmpl_item_labels_decided_ab.get(tmpl, {}))
+        stats["prompt_template_id"] = tmpl
+        tmpl_summ.append(stats)
+    tmpl_summ.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("prompt_template_id", ""))))
+
+    fam_summ: List[Dict[str, Any]] = []
+    for fam, counts in fam_label_counts.items():
+        stats = _judge_slice_stats(counts, fam_item_labels.get(fam, {}), fam_item_labels_decided_ab.get(fam, {}))
+        stats["task_family"] = fam
+        fam_summ.append(stats)
+    fam_summ.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("task_family", ""))))
+
+    fam_tmpl_summ: List[Dict[str, Any]] = []
+    for fam_tmpl, counts in pair_label_counts.items():
+        stats = _judge_slice_stats(counts, pair_item_labels.get(fam_tmpl, {}), pair_item_labels_decided_ab.get(fam_tmpl, {}))
+        stats["task_family_template_pair"] = fam_tmpl
+        fam_tmpl_summ.append(stats)
+    fam_tmpl_summ.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("task_family_template_pair", ""))))
+
+    judge_slices = {
+        "by_prompt_template_id": {
+            "count_top": tmpl_summ[:20],
+            "imbalance_ab_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "label_imbalance_ab", k=10),
+            "low_balance_ab_top": _judge_slice_low(tmpl_summ, "prompt_template_id", "label_balance_ab", k=10),
+            "disagreement_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "disagreement_rate", k=10),
+        },
+        "by_task_family": {
+            "count_top": fam_summ[:20],
+            "imbalance_ab_top": _judge_slice_top(fam_summ, "task_family", "label_imbalance_ab", k=10),
+            "low_balance_ab_top": _judge_slice_low(fam_summ, "task_family", "label_balance_ab", k=10),
+            "disagreement_top": _judge_slice_top(fam_summ, "task_family", "disagreement_rate", k=10),
+        },
+        "by_task_family_template_pair": {
+            "count_top": fam_tmpl_summ[:20],
+            "imbalance_ab_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "label_imbalance_ab", k=10),
+            "low_balance_ab_top": _judge_slice_low(fam_tmpl_summ, "task_family_template_pair", "label_balance_ab", k=10),
+            "disagreement_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "disagreement_rate", k=10),
+        },
+    }
     judge_out_budget_target = 64.0
     judge_out_budget_le_target = sum(1 for x in judge_out_tokens if x <= judge_out_budget_target)
 
@@ -721,6 +856,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "model_pair_count": len(pair_summary),
         "model_pair_summary": pair_summary,
         "model_pair_top": model_pair_top,
+        "slices": judge_slices,
     }
 
     reuse = {
@@ -792,6 +928,22 @@ def _md_item_disagreement_top(items: Sequence[Dict[str, Any]], k: int = 10) -> s
         decided_ab = int(js.get("decided_count_ab", 0))
         counts = js.get("label_counts") or {}
         lines.append(f"- `{item_id}`: count={count} judges={judges} disagree={dis:.6f} disagree_ab={dis_ab:.6f} decided_ab={decided_ab} labels={counts}")
+    return("\n".join(lines))
+
+def _md_judge_slice_top(items: Sequence[Dict[str, Any]], key_name: str, k: int = 10) -> str:
+    lines: List[str] = []
+    for js in list(items)[:k]:
+        key = str(js.get(key_name, ""))
+        if key == "":
+            continue
+        count = int(js.get("count", 0) or 0)
+        bal = float(js.get("label_balance_ab", 0.0) or 0.0)
+        imb = float(js.get("label_imbalance_ab", 0.0) or 0.0)
+        dis = float(js.get("disagreement_rate", 0.0) or 0.0)
+        dis_ab = float(js.get("disagreement_rate_decided_ab", 0.0) or 0.0)
+        decided = float(js.get("decided_rate_ab", 0.0) or 0.0)
+        counts = js.get("label_counts") or {}
+        lines.append(f"- `{key}`: count={count} balance_ab={bal:.6f} imbalance_ab={imb:.6f} disagree={dis:.6f} disagree_ab={dis_ab:.6f} decided_rate_ab={decided:.6f} labels={counts}")
     return("\n".join(lines))
 
 
@@ -952,6 +1104,18 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_model_pair_top(report.judge.get("model_pair_top", [])))
     parts.append("\n### item_disagreement_top\n")
     parts.append(_md_item_disagreement_top(report.judge.get("item_disagreement_top", [])))
+    slices = report.judge.get("slices") or {}
+    by_tmpl = (slices.get("by_prompt_template_id") or {})
+    by_fam = (slices.get("by_task_family") or {})
+    by_pair = (slices.get("by_task_family_template_pair") or {})
+    parts.append("\n### slices.by_prompt_template_id.imbalance_ab_top\n")
+    parts.append(_md_judge_slice_top(by_tmpl.get("imbalance_ab_top", []), "prompt_template_id"))
+    parts.append("\n### slices.by_prompt_template_id.disagreement_top\n")
+    parts.append(_md_judge_slice_top(by_tmpl.get("disagreement_top", []), "prompt_template_id"))
+    parts.append("\n### slices.by_task_family_template_pair.imbalance_ab_top\n")
+    parts.append(_md_judge_slice_top(by_pair.get("imbalance_ab_top", []), "task_family_template_pair"))
+    parts.append("\n### slices.by_task_family_template_pair.disagreement_top\n")
+    parts.append(_md_judge_slice_top(by_pair.get("disagreement_top", []), "task_family_template_pair"))
     parts.append("\n## Buffer reuse\n")
     for k in ("buffer_id_unique", "buffer_item_id_unique", "buffer_item_id_reused_unique", "buffer_item_reuse_rate_unique", "buffer_item_reuse_events", "buffer_item_reuse_event_rate", "buffer_item_hhi", "buffer_item_entropy_bits"):
         v = report.reuse.get(k)
