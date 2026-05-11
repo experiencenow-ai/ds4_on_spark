@@ -26,12 +26,14 @@ This is a **human-run** access + probe checklist for the current Spark ring. It 
 
 - Verify each node’s UTC time is sane and NTP is synchronized (or at least consistent):
   - Use `./scripts/spark_ring_probe.sh` output `== clock ==` (prints UTC + epoch + `timedatectl` fields when available).
-- If skew is large, treat it as a blocker for distributed experiments (TP>1) until a human fixes time sync.
+- Rule of thumb: if `skew_s (remote-local)` exceeds about `±1s`, treat it as a blocker for distributed experiments (TP>1) until a human fixes time sync.
 
 ## 4) Address Matrix (Wired + Wi‑Fi + v4/v6)
 
 Capture a non-secret identity snapshot suitable for commit:
 
+- One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts):
+  - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
 - Mac-side interface + route snapshot:
   - `REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local`
 - Per-node interface + address snapshot (redacted):

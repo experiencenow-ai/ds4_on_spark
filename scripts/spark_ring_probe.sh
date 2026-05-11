@@ -330,15 +330,20 @@ else
 fi
 echo
 echo "== storage (df, lsblk model/size) =="
-df -h 2>/dev/null | head -n 60 || true
-if command -v lsblk >/dev/null 2>&1; then
-	echo "== disks (summary) =="
-	lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null | head -n 40 || true
-	echo
-	echo "== lsblk (mounts, no loop, capped) =="
-	lsblk_out="$(lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT,FSTYPE 2>/dev/null || true)"
-	if [ "$lsblk_out" != "" ]; then
-		printf "%s\n" "$lsblk_out" | awk 'NR==1{print;next} $1 !~ /^loop[0-9]+$/ {print}' | head -n 120 || true
+	df -h 2>/dev/null | head -n 60 || true
+	if command -v lsblk >/dev/null 2>&1; then
+		echo "== disks (summary) =="
+		lsblk_out="$(lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null || true)"
+		if [ "$lsblk_out" != "" ]; then
+			printf "%s\n" "$lsblk_out" | awk 'NR==1{print;next} $1 !~ /^loop[0-9]+$/ {print}' | head -n 40 || true
+		else
+			echo "lsblk: (no output)"
+		fi
+		echo
+		echo "== lsblk (mounts, no loop, capped) =="
+		lsblk_out="$(lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT,FSTYPE 2>/dev/null || true)"
+		if [ "$lsblk_out" != "" ]; then
+			printf "%s\n" "$lsblk_out" | awk 'NR==1{print;next} $1 !~ /^loop[0-9]+$/ {print}' | head -n 120 || true
 	fi
 fi
 echo
