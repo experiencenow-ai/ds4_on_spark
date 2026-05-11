@@ -135,6 +135,34 @@ Important invariant:
 
 - the sidecar does **not** ship a token embedding table; the MTP draft uses the trunk embedding (or `inputs_embeds` supplied by the trunk caller).
 
+## DS4 `gamma=1` draft sequence (concrete reference)
+
+When implementing the one-token probe in the Spark/CUDA fork, use DS4 as the source of truth for **operation order** and which weights participate in the draft step.
+
+Pinned DS4 implementation locations (see `docs/mtp-ds4-reference.md` for the upstream pin and additional context):
+
+- `upstreams/ds4/ds4.c:12612`: `metal_graph_eval_mtp_draft_from_hc(...)` (draft-step orchestration; embed/proj + MTP block + logits readback)
+- `upstreams/ds4/ds4.c:9962`: `metal_graph_encode_output_head_mtp(...)` (MTP output head + trunk vocab projection)
+
+High-level DS4 sequence (for `gamma=1`) that the llama.cpp probe should mirror:
+
+1) **Trunk embed**: embed the draft input token using the trunk embedding table (sidecar does not provide embeddings).
+2) **`enorm` + `e_proj`**: RMSNorm with `mtp.0.enorm.weight`, then project via `mtp.0.e_proj.weight`.
+3) **Repeat to HC**: broadcast the `n_embd` vector across `n_hc` to form `eproj_hc` (`hc_dim = n_embd * n_hc`).
+4) **`hnorm` + `h_proj`**: RMSNorm rows on `prev_hc` (the target hidden buffer, pre-`hc_head`) with `mtp.0.hnorm.weight`, then project each row via `mtp.0.h_proj.weight`.
+5) **Add**: `mtp_input_hc = eproj_hc + hproj_hc`.
+6) **MTP block**: run one decode block using the `mtp.0.{attn_*,hc_attn_*,ffn_*,hc_ffn_*}` weights, against a **separate** MTP KV/raw-cache frontier (not the trunk KV cache).
+7) **Output head (MTP) + trunk logits**:
+   - apply the MTP head `mtp.0.hc_head_*` + `mtp.0.norm.weight` to produce a normalized `n_embd` stream
+   - project to logits using the trunk vocab matrix (`base_weights->output`)
+8) **Select token**: deterministic `argmax` for the probe (`temperature=0.0`, `top_k=1`, `top_p=1.0`).
+
+Mapping to the current skeleton patch in this repo:
+
+- `base_next_token_id` is already computed from trunk logits and then **committed** (mirrors DS4’s “accept 1 target token, then draft” sequencing).
+- `result_pre_hc_head` capture is intended to correspond to DS4’s `prev_hc` input (the “target hidden buffer”, pre-`hc_head`).
+- The remaining TODO is to implement steps (1)-(8) above inside the fork (including a distinct MTP cache), then emit `mtp_draft_token_id` with `ok=true`.
+
 ## Spark runner wiring
 
 Once the fork exposes the probe command, run it on Spark using the repo runner:
