@@ -126,10 +126,20 @@ The scorer emits:
 
 - `quality_score`
 - `quality_source`
+- `scope` (pass-through, when present)
+- `public_quality_prior` (pass-through)
+- `public_quality_basis` (pass-through)
+- `public_quality_source` (pass-through)
+- `local_quality_score`
+- `passed_tasks`
+- `total_tasks`
+- `decode_tps`
+- `total_wall_s`
+- `output_tokens`
 - `quality_adjusted_decode_tps`
 - `correct_task_rate`
 - `tokens_per_success`
-- Pareto dominated-by status
+- Pareto `dominated_by` status
 
 ## Reporting Rule
 

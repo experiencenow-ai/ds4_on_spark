@@ -17,9 +17,12 @@ class ScoreRow:
     raw: Dict[str, str]
     model: str
     run_id: str
+    scope: str
     quality_score: Optional[float]
     quality_source: str
     public_quality_prior: Optional[float]
+    public_quality_basis: str
+    public_quality_source: str
     local_quality_score: Optional[float]
     decode_tps: Optional[float]
     prefill_tps: Optional[float]
@@ -96,7 +99,10 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
         if model == "":
             raise ValueError(f"row {idx + 1}: model is required")
         run_id = _get(row, "run_id", "run", "variant")
+        scope = _get(row, "scope")
         quality_score, quality_source, public_prior, local_score = _quality(row)
+        public_quality_basis = _get(row, "public_quality_basis", "public_basis")
+        public_quality_source = _get(row, "public_quality_source", "public_source")
         decode_tps = _float(row, "decode_tps", "generation_tps", "output_tps")
         prefill_tps = _float(row, "prefill_tps", "prompt_tps")
         ttft_s = _float(row, "ttft_s", "ttft_first_output_s")
@@ -114,9 +120,12 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
             raw=dict(row),
             model=model,
             run_id=run_id,
+            scope=scope,
             quality_score=quality_score,
             quality_source=quality_source,
             public_quality_prior=public_prior,
+            public_quality_basis=public_quality_basis,
+            public_quality_source=public_quality_source,
             local_quality_score=local_score,
             decode_tps=decode_tps,
             prefill_tps=prefill_tps,
@@ -178,13 +187,20 @@ def rows_to_dicts(rows: Sequence[ScoreRow]) -> List[Dict[str, Any]]:
         d = {
             "model": row.model,
             "run_id": row.run_id,
+            "scope": row.scope,
             "quality_score": row.quality_score,
             "quality_source": row.quality_source,
             "public_quality_prior": row.public_quality_prior,
+            "public_quality_basis": row.public_quality_basis,
+            "public_quality_source": row.public_quality_source,
             "local_quality_score": row.local_quality_score,
             "decode_tps": row.decode_tps,
             "prefill_tps": row.prefill_tps,
             "ttft_s": row.ttft_s,
+            "total_wall_s": row.total_wall_s,
+            "output_tokens": row.output_tokens,
+            "passed_tasks": row.passed_tasks,
+            "total_tasks": row.total_tasks,
             "correct_task_rate": row.correct_task_rate,
             "quality_adjusted_decode_tps": row.quality_adjusted_decode_tps,
             "quality_adjusted_prefill_tps": row.quality_adjusted_prefill_tps,
@@ -198,16 +214,23 @@ def rows_to_dicts(rows: Sequence[ScoreRow]) -> List[Dict[str, Any]]:
 
 def print_markdown(rows: Sequence[ScoreRow]) -> None:
     ordered = sorted(rows, key=lambda r: (r.quality_adjusted_decode_tps is not None, r.quality_adjusted_decode_tps or -1.0), reverse=True)
-    print("| model | run | quality | source | decode t/s | quality-adjusted t/s | correct tasks/s | tokens/success | Pareto |")
-    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    print("| model | run | scope | quality | source | passed/total | decode t/s | wall s | out tok | quality-adjusted t/s | correct tasks/s | tokens/success | Pareto |")
+    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for row in ordered:
         pareto = "yes" if row.dominated_by == "" and row.quality_score is not None else f"no: {row.dominated_by}"
-        print("| %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+        passed_total = ""
+        if row.passed_tasks is not None and row.total_tasks is not None:
+            passed_total = f"{int(row.passed_tasks)}/{int(row.total_tasks)}"
+        print("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
             row.model,
             row.run_id,
+            row.scope,
             _fmt(row.quality_score),
             row.quality_source,
+            passed_total,
             _fmt(row.decode_tps),
+            _fmt(row.total_wall_s),
+            _fmt(row.output_tokens),
             _fmt(row.quality_adjusted_decode_tps),
             _fmt(row.correct_task_rate),
             _fmt(row.tokens_per_success),
