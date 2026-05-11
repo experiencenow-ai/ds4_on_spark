@@ -376,6 +376,18 @@ def main() -> int:
 							failures.append(Failure(69, f"contract summary mtp.trust_gates[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
 							break
 
+				if isinstance(mtp, dict):
+					try:
+						want_layers = int(cfg.get("num_nextn_predict_layers", 0))
+					except Exception:
+						want_layers = 0
+					got_layers = mtp.get("n_mtp_layers", None)
+					if got_layers != want_layers:
+						failures.append(Failure(110, f"contract summary mtp.n_mtp_layers mismatch (got {got_layers!r} expected {want_layers}): {contract_summary}"))
+					got_alias = mtp.get("num_nextn_predict_layers", None)
+					if got_alias != want_layers:
+						failures.append(Failure(111, f"contract summary mtp.num_nextn_predict_layers mismatch (got {got_alias!r} expected {want_layers}): {contract_summary}"))
+
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):
 					failures.append(Failure(70, f"contract summary mtp.semantics must be an object: {contract_summary}"))

@@ -1225,6 +1225,7 @@ def build_contract() -> dict:
 			},
 				"mtp": {
 					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
+					"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
 					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
 					"namespace_prefix": "mtp.{j}.",
 					"semantics": mtp_sem,

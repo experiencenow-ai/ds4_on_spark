@@ -755,6 +755,7 @@
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
     "namespace_prefix": "mtp.{j}.",
+    "num_nextn_predict_layers": 1,
     "semantics": {
       "assert_embed_head_expr": "assert self.embed is not None and self.head is not None",
       "combine_e_and_h_expr": "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)",

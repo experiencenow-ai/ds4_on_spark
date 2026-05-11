@@ -86,7 +86,7 @@ python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
-  - `num_nextn_predict_layers`: 1
+  - `num_nextn_predict_layers`: 1 (recorded in `contract_summary.json` as `mtp.n_mtp_layers` and `mtp.num_nextn_predict_layers`)
 - YaRN / RoPE scaling (from `config.json` `rope_scaling` and `compress_rope_theta`, plus `inference/config.json`):
   - `rope_theta`: 10000
   - `compress_rope_theta`: 160000
@@ -619,6 +619,12 @@ For each quantized artifact tested, record:
   - `tensor_type_counts` (overall GGUF tensor types present)
   - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
   - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`)
+  - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
+    - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
+    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
+    - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
+    - `trunk_contract` (`checked`, `complete`) when tensor keys preserve `layers.{i}.*`
+    - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
