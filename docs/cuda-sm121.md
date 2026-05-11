@@ -85,7 +85,7 @@ If your toolkit supports it, `nvcc --list-gpu-arch` and `nvcc --list-gpu-code` s
 
 The Spark0 tiny scripts treat missing `compute_121` / `sm_121` entries as errors when those `nvcc --list-*` commands are supported.
 
-The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and runs `cuda_sm121_arch_report` as part of the fast-path validation.
+The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and runs `cuda_sm121_arch_report` plus the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates as part of the fast-path validation.
 
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.
 
@@ -107,13 +107,15 @@ The probe `tools/cuda_probe/bin/cuda_sm121_rdc_probe` is a tiny multi-translatio
 
 If this probe fails to link for `sm_121`, treat it as a toolchain/blocker for any multi-file CUDA components (even if single-file `-arch=sm_121` probes compile and run).
 
-Observed on Spark0 (2026-05-09): `rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de`.
+Observed on Spark0 (2026-05-11): `rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de`.
 
 ## Device LTO (`-dlto`)
 
 Some CUDA build systems enable device link-time optimization (LTO) to reduce register pressure and improve kernel inlining across translation units.
 
 The probe `tools/cuda_probe/bin/cuda_sm121_dlto_probe` is a tiny compile/run gate that builds with `nvcc -arch=sm_121 -dlto` and validates a one-word kernel writeback.
+
+Observed on Spark0 (2026-05-11): `dlto_probe in=0x12345678 out=0xce5cb9c3 expect=0xce5cb9c3`.
 
 ## NVRTC JIT Compile For `compute_121`
 
