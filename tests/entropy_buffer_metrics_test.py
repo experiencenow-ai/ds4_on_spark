@@ -169,6 +169,21 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(flags.get("echo_prompt_overlap_ge_0.90", 0), 1)
         self.assertGreaterEqual(flags.get("line_repetition_ge_6", 0), 1)
 
+    def test_task_template_duplicate_top_exists(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_task_template_dup_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        self.assertEqual(report.diversity["task_id_template_pair"]["unique"], 2)
+        top = report.duplicates.get("task_template_output_norm_dup_rate_top", [])
+        self.assertGreaterEqual(len(top), 1)
+        self.assertEqual(top[0].get("task_id"), "dup.task.001")
+        self.assertEqual(top[0].get("prompt_template_id"), "plain.v1")
+        self.assertEqual(int(top[0].get("count", 0)), 3)
+        self.assertEqual(int(top[0].get("unique", 0)), 1)
+        self.assertAlmostEqual(float(top[0].get("dup_rate", 0.0)), (2.0 / 3.0))
+
     def test_recommendations_penalize_noisy_templates(self) -> None:
         root = _repo_root()
         hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_noise_mini.jsonl")

@@ -51,6 +51,7 @@ def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
     task_family_counts: Dict[str, int] = {}
     template_counts: Dict[str, int] = {}
     family_template_counts: Dict[str, int] = {}
+    task_template_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answer_counts: Dict[str, int] = {}
     tag_counts: Dict[str, int] = {}
@@ -64,6 +65,8 @@ def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
         _inc(template_counts, c.prompt_template_id)
         if c.task_family != "" and c.prompt_template_id != "":
             _inc(family_template_counts, f"{c.task_family}|{c.prompt_template_id}")
+        if c.task_id != "" and c.prompt_template_id != "":
+            _inc(task_template_counts, f"{c.task_id}|{c.prompt_template_id}")
         _inc(model_counts, c.model_id)
         _inc(answer_counts, c.answer)
         if c.answer != "":
@@ -83,6 +86,7 @@ def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
             "task_family": _div_stats(task_family_counts),
             "prompt_template_id": _div_stats(template_counts),
             "task_family_template_pair": _div_stats(family_template_counts),
+            "task_id_template_pair": _div_stats(task_template_counts),
             "model_id": _div_stats(model_counts),
             "answer": _div_stats(answer_counts),
             "tags": _div_stats(tag_counts),
@@ -346,6 +350,35 @@ def _dup_rate_top(totals: Dict[str, int], uniq: Dict[str, int], key_name: str, k
     items.sort(key=lambda x: (-float(x.get("dup_rate", 0.0)), -int(x.get("count", 0)), str(x.get(key_name, ""))))
     return(items[:k])
 
+def _split_pair_key(key: str) -> Tuple[str, str]:
+    if "|" not in key:
+        return(key, "")
+    a, b = key.split("|", 1)
+    return(a, b)
+
+def _task_template_dup_rate_top(task_template_outputs_norm: Dict[str, List[str]], k: int = 10) -> List[Dict[str, Any]]:
+    totals: Dict[str, int] = {}
+    uniq: Dict[str, int] = {}
+    for key, outs in task_template_outputs_norm.items():
+        if key == "" or len(outs) < 2:
+            continue
+        totals[key] = len(outs)
+        uniq[key] = len(set(outs))
+    items = _dup_rate_top(totals, uniq, "task_id_template_pair", k=k)
+    out: List[Dict[str, Any]] = []
+    for js in items:
+        key = str(js.get("task_id_template_pair", ""))
+        task_id, tmpl = _split_pair_key(key)
+        out.append({
+            "task_id_template_pair": key,
+            "task_id": task_id,
+            "prompt_template_id": tmpl,
+            "count": int(js.get("count", 0) or 0),
+            "unique": int(js.get("unique", 0) or 0),
+            "dup_rate": float(js.get("dup_rate", 0.0) or 0.0),
+        })
+    return(out)
+
 
 def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     canon: List[lib.CanonicalRecord] = []
@@ -363,6 +396,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     task_family_counts: Dict[str, int] = {}
     template_counts: Dict[str, int] = {}
     family_template_counts: Dict[str, int] = {}
+    task_template_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answers: Dict[str, int] = {}
     tag_counts: Dict[str, int] = {}
@@ -446,6 +480,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         _inc(template_counts, c.prompt_template_id)
         if c.task_family != "" and c.prompt_template_id != "":
             _inc(family_template_counts, f"{c.task_family}|{c.prompt_template_id}")
+        if c.task_id != "" and c.prompt_template_id != "":
+            _inc(task_template_counts, f"{c.task_id}|{c.prompt_template_id}")
         _inc(model_counts, c.model_id)
         _inc(answers, c.answer)
         if c.answer != "":
@@ -689,6 +725,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "task_family": _div_stats(task_family_counts),
         "prompt_template_id": _div_stats(template_counts),
         "task_family_template_pair": _div_stats(family_template_counts),
+        "task_id_template_pair": _div_stats(task_template_counts),
         "model_id": _div_stats(model_counts),
         "answer": _div_stats(answers),
         "tags": _div_stats(tag_counts),
@@ -792,6 +829,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "task_template_groups_ge2": sum(1 for outs in task_template_outputs_norm.values() if len(outs) >= 2),
         "task_template_output_norm_dup_rate_mean": 0.0 if len(task_template_dup_rates) == 0 else (sum(task_template_dup_rates) / float(len(task_template_dup_rates))),
         "task_template_output_norm_dup_rate_max": 0.0 if len(task_template_dup_rates) == 0 else max(task_template_dup_rates),
+        "task_template_output_norm_dup_rate_top": _task_template_dup_rate_top(task_template_outputs_norm, k=20),
     })
 
     pair_summary: Dict[str, Any] = {}
@@ -1120,6 +1158,9 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### output_norm_dup_rate_by_family_template_top\n")
     for js in report.duplicates.get("output_norm_dup_rate_by_family_template_top", [])[:10]:
         parts.append(f"- `{js.get('task_family_template_pair')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### task_template_output_norm_dup_rate_top\n")
+    for js in report.duplicates.get("task_template_output_norm_dup_rate_top", [])[:10]:
+        parts.append(f"- `{js.get('task_id')}` `{js.get('prompt_template_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n### output_norm_dup_rate_by_model_id_top\n")
     for js in report.duplicates.get("output_norm_dup_rate_by_model_id_top", [])[:10]:
         parts.append(f"- `{js.get('model_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
