@@ -18,7 +18,7 @@ make
 
 Subset builds:
 
-- `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh`.
+- `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh` (the script also builds the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates on top).
 - `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
 
 Expected outputs:

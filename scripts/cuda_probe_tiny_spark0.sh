@@ -4,6 +4,7 @@ set -eu
 target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_tiny}"
+WITH_LINK_PROBES="${WITH_LINK_PROBES:-1}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 probe_dir="$repo_root/tools/cuda_probe"
@@ -68,13 +69,18 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 	fi
 
 echo
-echo \"== build (tiny) ==\"
-cd \"$REMOTE_DIR\"
-make clean
-make tiny
-
-echo
-run_retry() {
+	echo \"== build (tiny) ==\"
+	cd \"$REMOTE_DIR\"
+	make clean
+	make tiny
+	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
+		echo
+		echo \"== build (tiny link probes) ==\"
+		make bin/cuda_sm121_rdc_probe bin/cuda_sm121_dlto_probe
+	fi
+	
+	echo
+	run_retry() {
 	name=\"\$1\"
 	shift
 	echo \"== run: \${name} ==\"
@@ -90,7 +96,11 @@ run_retry() {
 	fi
 }
 
-run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
-run_retry cuda_sm121_probe \"$REMOTE_DIR\"/bin/cuda_sm121_probe
-run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
-"
+	run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
+	run_retry cuda_sm121_probe \"$REMOTE_DIR\"/bin/cuda_sm121_probe
+	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
+		run_retry cuda_sm121_rdc_probe \"$REMOTE_DIR\"/bin/cuda_sm121_rdc_probe
+		run_retry cuda_sm121_dlto_probe \"$REMOTE_DIR\"/bin/cuda_sm121_dlto_probe
+	fi
+	run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+	"
