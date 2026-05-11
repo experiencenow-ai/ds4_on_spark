@@ -6,6 +6,7 @@ if [ "$target" = "" ]; then
     echo "usage: ops_stage_deploy_assets.sh <user@host> [instance]" >&2
     echo "note: if instance omitted, inferred from host prefix (e.g. spark0.local -> spark0)" >&2
     echo "env: SSH_OPTS (optional ssh options override)" >&2
+    echo "env: DS4_ENV_VARIANT (optional; tp3|tp4 swaps ds4-<instance>.<variant>.env.example into ds4-<instance>.env.example on the Spark)" >&2
     exit 2
 fi
 
@@ -25,6 +26,8 @@ fi
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 echo "== staging deploy assets to $target (instance=$instance) =="
+
+env_variant="${DS4_ENV_VARIANT:-}"
 
 if [ "${DS4_SKIP_VALIDATE:-}" = "" ]; then
     if [ -x "$root/scripts/ops_validate_deploy_assets.sh" ]; then
@@ -53,8 +56,10 @@ rsync_run()
 }
 
 ssh_run "$target" "mkdir -p /tmp/ds4-systemd /tmp/ds4-config /tmp/ds4-sysusers /tmp/ds4-tmpfiles /tmp/ds4-scripts"
+ssh_run "$target" "mkdir -p /tmp/ds4-systemd-user"
 
 rsync_run "$root/deploy/systemd/" "$target:/tmp/ds4-systemd/"
+rsync_run "$root/deploy/systemd-user/" "$target:/tmp/ds4-systemd-user/"
 rsync_run "$root/deploy/config/" "$target:/tmp/ds4-config/"
 rsync_run "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
 rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
@@ -68,6 +73,20 @@ rsync_run "$root/scripts/ops_collect_support_bundle.sh" "$target:/tmp/ds4-script
 rsync_run "$root/scripts/ops_validate_staged_assets.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_installed_assets.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_install_staged_assets.sh" "$target:/tmp/ds4-scripts/"
+
+if [ "$env_variant" != "" ]; then
+    case "$env_variant" in
+        tp3|tp4)
+            ;;
+        *)
+            echo "warning: unknown DS4_ENV_VARIANT=$env_variant (expected tp3|tp4); ignoring" >&2
+            env_variant=""
+            ;;
+    esac
+fi
+if [ "$env_variant" != "" ]; then
+    ssh_run "$target" "if [ -f \"/tmp/ds4-config/ds4-${instance}.${env_variant}.env.example\" ]; then cp \"/tmp/ds4-config/ds4-${instance}.${env_variant}.env.example\" \"/tmp/ds4-config/ds4-${instance}.env.example\"; else echo \"warning: missing env variant: /tmp/ds4-config/ds4-${instance}.${env_variant}.env.example\" >&2; fi"
+fi
 
 cat <<EOF
 
@@ -188,4 +207,14 @@ cat <<EOF
 # Use only if you are NOT relying on mDNS (`*.local`) and you have a stable wired subnet.
 # Review, then append to /etc/hosts on each Spark:
 cat /tmp/ds4-config/hosts.ds4.spark012.example
+EOF
+
+cat <<'EOF'
+
+== optional (systemd --user templates, human-run) ==
+# Staged for reference under:
+#   /tmp/ds4-systemd-user/
+#
+# If you are doing a non-root bring-up with a user-space DS4 checkout, see:
+#   docs/deployment-systemd-user.md
 EOF
