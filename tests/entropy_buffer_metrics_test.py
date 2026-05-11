@@ -104,6 +104,18 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(flags.get("echo_prompt_overlap_ge_0.90", 0), 1)
         self.assertGreaterEqual(flags.get("line_repetition_ge_6", 0), 1)
 
+    def test_recommendations_penalize_noisy_templates(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_noise_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_noise_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates)
+        top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].prompt_template_id, "clean.v1")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -168,61 +168,36 @@ def _distinct_ratio(counts: Dict[str, int]) -> float:
         return(0.0)
     return(float(len(counts)) / total)
 
+def _rate_top(totals: Dict[str, int], flagged: Dict[str, int], key_name: str, k: int = 10) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for key, total in totals.items():
+        if key == "" or total <= 0:
+            continue
+        bad = flagged.get(key, 0)
+        items.append({
+            key_name: key,
+            "count": total,
+            "flagged": bad,
+            "flagged_rate": float(bad) / float(total),
+        })
+    items.sort(key=lambda x: (-float(x.get("flagged_rate", 0.0)), -int(x.get("count", 0)), str(x.get(key_name, ""))))
+    return(items[:k])
 
-def _useful_novelty_flags(output: str, prompt: str) -> List[str]:
-    flags: List[str] = []
-    norm = lib.normalize_text(output)
-    if norm == "":
-        return(["empty_output"])
-    if lib.extract_answer(output) != "":
-        return([])
-    if norm.isdigit():
-        return([])
-    if norm.startswith("{") and norm.endswith("}"):
-        return([])
-    if norm.startswith("[") and norm.endswith("]"):
-        return([])
-    ws = lib.words(norm)
-    if len(ws) == 0:
-        return(["no_words"])
-    if len(norm) >= 4096:
-        flags.append("very_long_output_ge_4096_chars")
-    if len(ws) <= 2 and len(norm) <= 16:
-        flags.append("very_short_output_le_2_words")
-    if "as an ai" in norm or "as a language model" in norm:
-        flags.append("ai_disclaimer")
-    if "i can't" in norm or "i cannot" in norm or "unable to" in norm:
-        flags.append("refusal_like")
-    if len(ws) >= 8:
-        counts: Dict[str, int] = {}
-        for w in ws:
-            counts[w] = counts.get(w, 0) + 1
-        top = max(counts.values())
-        if float(top) / float(len(ws)) >= 0.65:
-            flags.append("word_repetition_ge_0.65")
-        uniq_frac = float(len(counts)) / float(len(ws))
-        if uniq_frac <= 0.25:
-            flags.append("word_unique_frac_le_0.25")
-    if len(norm) >= 200 and "http" in norm and norm.count("http") >= 3:
-        flags.append("many_urls")
-    if len(ws) >= 12 and prompt != "":
-        pws = lib.words(prompt)
-        if len(pws) >= 8:
-            pset = set(pws)
-            overlap = sum(1 for w in ws if w in pset)
-            if (float(overlap) / float(len(ws))) >= 0.90:
-                flags.append("echo_prompt_overlap_ge_0.90")
-    lines = [lib.normalize_text(x) for x in output.splitlines() if x.strip() != ""]
-    if len(lines) >= 12:
-        lcounts: Dict[str, int] = {}
-        for ln in lines:
-            lcounts[ln] = lcounts.get(ln, 0) + 1
-        top = max(lcounts.values())
-        if top >= 6:
-            flags.append("line_repetition_ge_6")
-        if len(lcounts) <= 4:
-            flags.append("few_unique_lines_le_4")
-    return(flags)
+def _dup_rate_top(totals: Dict[str, int], uniq: Dict[str, int], key_name: str, k: int = 10) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for key, total in totals.items():
+        if key == "" or total <= 0:
+            continue
+        u = uniq.get(key, 0)
+        rate = 0.0 if total <= 0 else (float(total - u) / float(total))
+        items.append({
+            key_name: key,
+            "count": total,
+            "unique": u,
+            "dup_rate": rate,
+        })
+    items.sort(key=lambda x: (-float(x.get("dup_rate", 0.0)), -int(x.get("count", 0)), str(x.get(key_name, ""))))
+    return(items[:k])
 
 
 def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
@@ -278,8 +253,31 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
 
     novelty_flag_counts: Dict[str, int] = {}
     novelty_flagged = 0
+    template_task_total: Dict[str, int] = {}
+    template_task_flagged: Dict[str, int] = {}
+    family_task_total: Dict[str, int] = {}
+    family_task_flagged: Dict[str, int] = {}
+    pair_task_total: Dict[str, int] = {}
+    pair_task_flagged: Dict[str, int] = {}
+
+    template_out_total: Dict[str, int] = {}
+    template_out_uniq: Dict[str, int] = {}
+    template_out_seen: Dict[str, set] = {}
+    pair_out_total: Dict[str, int] = {}
+    pair_out_uniq: Dict[str, int] = {}
+    pair_out_seen: Dict[str, set] = {}
 
     for c in task_runs:
+        tmpl = c.prompt_template_id
+        fam = c.task_family
+        pair_k = "" if (fam == "" or tmpl == "") else f"{fam}|{tmpl}"
+        if tmpl != "":
+            template_task_total[tmpl] = template_task_total.get(tmpl, 0) + 1
+        if fam != "":
+            family_task_total[fam] = family_task_total.get(fam, 0) + 1
+        if pair_k != "":
+            pair_task_total[pair_k] = pair_task_total.get(pair_k, 0) + 1
+
         _inc(task_id_counts, c.task_id)
         _inc(task_family_counts, c.task_family)
         _inc(template_counts, c.prompt_template_id)
@@ -310,6 +308,18 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 total_tok = float(itok + otok)
                 total_tok_per_s.append((total_tok * 1000.0) / float(wms))
 
+        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        if len(flags) != 0:
+            novelty_flagged += 1
+            if tmpl != "":
+                template_task_flagged[tmpl] = template_task_flagged.get(tmpl, 0) + 1
+            if fam != "":
+                family_task_flagged[fam] = family_task_flagged.get(fam, 0) + 1
+            if pair_k != "":
+                pair_task_flagged[pair_k] = pair_task_flagged.get(pair_k, 0) + 1
+            for f in flags:
+                novelty_flag_counts[f] = novelty_flag_counts.get(f, 0) + 1
+
         if c.output != "":
             outputs_exact.append(c.output)
             outputs_norm.append(lib.normalize_text(c.output))
@@ -323,11 +333,21 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 out_3grams[ng] = out_3grams.get(ng, 0) + 1
             for ng in _char_ngrams_norm(c.output, 3):
                 out_char3[ng] = out_char3.get(ng, 0) + 1
-            flags = _useful_novelty_flags(c.output, c.prompt)
-            if len(flags) != 0:
-                novelty_flagged += 1
-                for f in flags:
-                    novelty_flag_counts[f] = novelty_flag_counts.get(f, 0) + 1
+
+            out_norm = lib.normalize_text(c.output)
+            out_h = lib.text_sha1(out_norm)
+            if tmpl != "":
+                template_out_total[tmpl] = template_out_total.get(tmpl, 0) + 1
+                template_out_seen.setdefault(tmpl, set())
+                if out_h not in template_out_seen[tmpl]:
+                    template_out_seen[tmpl].add(out_h)
+                    template_out_uniq[tmpl] = template_out_uniq.get(tmpl, 0) + 1
+            if pair_k != "":
+                pair_out_total[pair_k] = pair_out_total.get(pair_k, 0) + 1
+                pair_out_seen.setdefault(pair_k, set())
+                if out_h not in pair_out_seen[pair_k]:
+                    pair_out_seen[pair_k].add(out_h)
+                    pair_out_uniq[pair_k] = pair_out_uniq.get(pair_k, 0) + 1
         if c.prompt != "":
             prompts_norm.append(lib.normalize_text(c.prompt))
             ws = lib.words(c.prompt)
@@ -577,7 +597,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "flagged_task_runs": novelty_flagged,
         "flagged_task_run_rate": 0.0 if len(task_runs) == 0 else (float(novelty_flagged) / float(len(task_runs))),
         "flag_counts": dict(sorted(novelty_flag_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "flagged_rate_by_prompt_template_id_top": _rate_top(template_task_total, template_task_flagged, "prompt_template_id", k=10),
+        "flagged_rate_by_task_family_top": _rate_top(family_task_total, family_task_flagged, "task_family", k=10),
+        "flagged_rate_by_family_template_top": _rate_top(pair_task_total, pair_task_flagged, "task_family_template_pair", k=10),
     }
+
+    duplicates.update({
+        "output_norm_dup_rate_by_prompt_template_id_top": _dup_rate_top(template_out_total, template_out_uniq, "prompt_template_id", k=10),
+        "output_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_out_total, pair_out_uniq, "task_family_template_pair", k=10),
+    })
 
     return(MetricsReport(
         totals=totals,
@@ -708,10 +736,18 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_list_top(report.tokens.get("output_char_3gram_top", [])))
     parts.append("\n## Duplicates\n")
     for k, v in report.duplicates.items():
+        if isinstance(v, list):
+            continue
         if isinstance(v, float):
             parts.append(f"- `{k}`: {v:.6f}")
         else:
             parts.append(f"- `{k}`: {v}")
+    parts.append("\n### output_norm_dup_rate_by_prompt_template_id_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_prompt_template_id_top", [])[:10]:
+        parts.append(f"- `{js.get('prompt_template_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_family_template_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_family_template_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family_template_pair')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
@@ -744,6 +780,15 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### flag_counts\n")
     for k, v in report.useful_novelty.get("flag_counts", {}).items():
         parts.append(f"- `{k}`: {v}")
+    parts.append("\n### flagged_rate_by_prompt_template_id_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_prompt_template_id_top", [])[:10]:
+        parts.append(f"- `{js.get('prompt_template_id')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
+    parts.append("\n### flagged_rate_by_task_family_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_task_family_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
+    parts.append("\n### flagged_rate_by_family_template_top\n")
+    for js in report.useful_novelty.get("flagged_rate_by_family_template_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family_template_pair')}`: flagged_rate={float(js.get('flagged_rate', 0.0)):.6f} count={int(js.get('count', 0))} flagged={int(js.get('flagged', 0))}")
     parts.append("")
     return("\n".join(parts))
 

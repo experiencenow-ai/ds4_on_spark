@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import re
 from dataclasses import dataclass
@@ -227,6 +228,62 @@ def get_list(obj: Dict[str, Any], *names: str) -> List[str]:
             if isinstance(v, str) and v.strip() != "":
                 return([x.strip() for x in v.split(",") if x.strip() != ""])
     return([])
+
+def text_sha1(s: str) -> str:
+    return(hashlib.sha1(s.encode("utf-8")).hexdigest())
+
+def useful_novelty_flags(output: str, prompt: str) -> List[str]:
+    flags: List[str] = []
+    norm = normalize_text(output)
+    if norm == "":
+        return(["empty_output"])
+    if extract_answer(output) != "":
+        return([])
+    if norm.startswith("{") and norm.endswith("}"):
+        return([])
+    if norm.startswith("[") and norm.endswith("]"):
+        return([])
+    ws = words(norm)
+    if len(ws) == 0:
+        return(["no_words"])
+    if len(norm) >= 4096:
+        flags.append("very_long_output_ge_4096_chars")
+    if len(ws) <= 2 and len(norm) <= 16:
+        flags.append("very_short_output_le_2_words")
+    if "as an ai" in norm or "as a language model" in norm:
+        flags.append("ai_disclaimer")
+    if "i can't" in norm or "i cannot" in norm or "unable to" in norm:
+        flags.append("refusal_like")
+    if len(ws) >= 8:
+        counts: Dict[str, int] = {}
+        for w in ws:
+            counts[w] = counts.get(w, 0) + 1
+        top = max(counts.values())
+        if float(top) / float(len(ws)) >= 0.65:
+            flags.append("word_repetition_ge_0.65")
+        uniq_frac = float(len(counts)) / float(len(ws))
+        if uniq_frac <= 0.25:
+            flags.append("word_unique_frac_le_0.25")
+    if len(norm) >= 200 and "http" in norm and norm.count("http") >= 3:
+        flags.append("many_urls")
+    if len(ws) >= 12 and prompt != "":
+        pws = words(prompt)
+        if len(pws) >= 8:
+            pset = set(pws)
+            overlap = sum(1 for w in ws if w in pset)
+            if (float(overlap) / float(len(ws))) >= 0.90:
+                flags.append("echo_prompt_overlap_ge_0.90")
+    lines = [normalize_text(x) for x in output.splitlines() if x.strip() != ""]
+    if len(lines) >= 12:
+        lcounts: Dict[str, int] = {}
+        for ln in lines:
+            lcounts[ln] = lcounts.get(ln, 0) + 1
+        top = max(lcounts.values())
+        if top >= 6:
+            flags.append("line_repetition_ge_6")
+        if len(lcounts) <= 4:
+            flags.append("few_unique_lines_le_4")
+    return(flags)
 
 
 def _to_float(v: Any) -> Optional[float]:

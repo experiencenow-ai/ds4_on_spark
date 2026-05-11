@@ -25,6 +25,8 @@ class CandidateScore:
     family_count: int
     template_count: int
     pair_count: int
+    history_noise_rate: float = 0.0
+    history_dup_rate: float = 0.0
     score: float = 0.0
     delta_entropy_bits: Dict[str, float] = field(default_factory=dict)
 
@@ -62,13 +64,93 @@ def _inv_freq_bonus(count: int) -> float:
 def _candidate_sort_key(score: float, seen_task_id: int, task_family: str, prompt_template_id: str, task_id: str) -> Tuple[float, int, str, str, str]:
     return(score, -int(seen_task_id), task_family, prompt_template_id, task_id)
 
+def _safe_div(num: float, den: float) -> float:
+    if den == 0.0:
+        return(0.0)
+    return(num / den)
 
-def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> List[CandidateScore]:
+def _dup_rate(total: int, uniq: int) -> float:
+    if total <= 0:
+        return(0.0)
+    return(float(max(0, total - uniq)) / float(total))
+
+def _history_rates(history: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float], Dict[str, float]]:
+    tmpl_total: Dict[str, int] = {}
+    tmpl_flagged: Dict[str, int] = {}
+    pair_total: Dict[str, int] = {}
+    pair_flagged: Dict[str, int] = {}
+
+    tmpl_out_total: Dict[str, int] = {}
+    tmpl_out_uniq: Dict[str, int] = {}
+    tmpl_out_seen: Dict[str, set] = {}
+    pair_out_total: Dict[str, int] = {}
+    pair_out_uniq: Dict[str, int] = {}
+    pair_out_seen: Dict[str, set] = {}
+
+    for obj in history:
+        c = lib.canonicalize_record(obj)
+        if c.rtype != "task_run":
+            continue
+        tmpl = c.prompt_template_id
+        fam = c.task_family
+        pair_k = "" if (fam == "" or tmpl == "") else f"{fam}|{tmpl}"
+        if tmpl != "":
+            tmpl_total[tmpl] = tmpl_total.get(tmpl, 0) + 1
+        if pair_k != "":
+            pair_total[pair_k] = pair_total.get(pair_k, 0) + 1
+
+        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        if len(flags) != 0:
+            if tmpl != "":
+                tmpl_flagged[tmpl] = tmpl_flagged.get(tmpl, 0) + 1
+            if pair_k != "":
+                pair_flagged[pair_k] = pair_flagged.get(pair_k, 0) + 1
+
+        if c.output != "" and tmpl != "":
+            out_h = lib.text_sha1(lib.normalize_text(c.output))
+            tmpl_out_total[tmpl] = tmpl_out_total.get(tmpl, 0) + 1
+            tmpl_out_seen.setdefault(tmpl, set())
+            if out_h not in tmpl_out_seen[tmpl]:
+                tmpl_out_seen[tmpl].add(out_h)
+                tmpl_out_uniq[tmpl] = tmpl_out_uniq.get(tmpl, 0) + 1
+            if pair_k != "":
+                pair_out_total[pair_k] = pair_out_total.get(pair_k, 0) + 1
+                pair_out_seen.setdefault(pair_k, set())
+                if out_h not in pair_out_seen[pair_k]:
+                    pair_out_seen[pair_k].add(out_h)
+                    pair_out_uniq[pair_k] = pair_out_uniq.get(pair_k, 0) + 1
+
+    tmpl_noise: Dict[str, float] = {}
+    pair_noise: Dict[str, float] = {}
+    for key, total in tmpl_total.items():
+        tmpl_noise[key] = _safe_div(float(tmpl_flagged.get(key, 0)), float(total))
+    for key, total in pair_total.items():
+        pair_noise[key] = _safe_div(float(pair_flagged.get(key, 0)), float(total))
+
+    tmpl_dup: Dict[str, float] = {}
+    pair_dup: Dict[str, float] = {}
+    for key, total in tmpl_out_total.items():
+        tmpl_dup[key] = _dup_rate(total, tmpl_out_uniq.get(key, 0))
+    for key, total in pair_out_total.items():
+        pair_dup[key] = _dup_rate(total, pair_out_uniq.get(key, 0))
+
+    return(tmpl_noise, pair_noise, tmpl_dup, pair_dup)
+
+def _candidate_history_rate(template_rates: Dict[str, float], pair_rates: Dict[str, float], task_family: str, prompt_template_id: str) -> float:
+    pair_k = "" if (task_family == "" or prompt_template_id == "") else f"{task_family}|{prompt_template_id}"
+    if pair_k != "" and pair_k in pair_rates:
+        return(float(pair_rates.get(pair_k, 0.0)))
+    return(float(template_rates.get(prompt_template_id, 0.0)))
+
+
+def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0) -> List[CandidateScore]:
     hist_task_ids: Dict[str, int] = {}
     hist_family: Dict[str, int] = {}
     hist_template: Dict[str, int] = {}
     hist_pair: Dict[str, int] = {}
     hist_tags: Dict[str, int] = {}
+
+    tmpl_noise, pair_noise, tmpl_dup, pair_dup = _history_rates(history)
 
     for obj in history:
         c = lib.canonicalize_record(obj)
@@ -97,6 +179,12 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
         tmpl_c = hist_template.get(prompt_template_id, 0)
         pair_k = f"{task_family}|{prompt_template_id}"
         pair_c = hist_pair.get(pair_k, 0)
+        noise_rate = _candidate_history_rate(tmpl_noise, pair_noise, task_family, prompt_template_id)
+        dup_rate = _candidate_history_rate(tmpl_dup, pair_dup, task_family, prompt_template_id)
+        if max_noise_rate < 1.0 and noise_rate > max_noise_rate:
+            continue
+        if max_dup_rate < 1.0 and dup_rate > max_dup_rate:
+            continue
         delta = {
             "task_family": _delta_entropy_for_add(hist_family, task_family),
             "prompt_template_id": _delta_entropy_for_add(hist_template, prompt_template_id),
@@ -111,6 +199,8 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
         score += (0.10 * _inv_freq_bonus(fam_c))
         score += (0.05 * _inv_freq_bonus(tmpl_c))
         score += (0.05 * _inv_freq_bonus(pair_c))
+        score -= (float(noise_weight) * float(noise_rate))
+        score -= (float(dup_weight) * float(dup_rate))
         if len(tags) != 0:
             tag_bonus = sum(_inv_freq_bonus(hist_tags.get(t, 0)) for t in tags) / float(len(tags))
             score += (0.05 * tag_bonus)
@@ -125,6 +215,8 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
             family_count=fam_c,
             template_count=tmpl_c,
             pair_count=pair_c,
+            history_noise_rate=noise_rate,
+            history_dup_rate=dup_rate,
             score=score,
             delta_entropy_bits=delta,
         ))
@@ -133,13 +225,15 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
     return(scored)
 
 
-def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool) -> List[CandidateScore]:
+def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0) -> List[CandidateScore]:
     if limit <= 0:
         return([])
     if max_per_family < 0:
         max_per_family = 0
     if max_per_template < 0:
         max_per_template = 0
+
+    tmpl_noise, pair_noise, tmpl_dup, pair_dup = _history_rates(history)
 
     hist_task_ids: Dict[str, int] = {}
     hist_family: Dict[str, int] = {}
@@ -180,6 +274,12 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                 continue
 
             pair_k = f"{c.task_family}|{c.prompt_template_id}"
+            noise_rate = _candidate_history_rate(tmpl_noise, pair_noise, c.task_family, c.prompt_template_id)
+            dup_rate = _candidate_history_rate(tmpl_dup, pair_dup, c.task_family, c.prompt_template_id)
+            if max_noise_rate < 1.0 and noise_rate > max_noise_rate:
+                continue
+            if max_dup_rate < 1.0 and dup_rate > max_dup_rate:
+                continue
             delta = {
                 "task_family": _delta_entropy_for_add(hist_family, c.task_family),
                 "prompt_template_id": _delta_entropy_for_add(hist_template, c.prompt_template_id),
@@ -194,6 +294,8 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             score += (0.10 * _inv_freq_bonus(hist_family.get(c.task_family, 0)))
             score += (0.05 * _inv_freq_bonus(hist_template.get(c.prompt_template_id, 0)))
             score += (0.05 * _inv_freq_bonus(hist_pair.get(pair_k, 0)))
+            score -= (float(noise_weight) * float(noise_rate))
+            score -= (float(dup_weight) * float(dup_rate))
             if len(c.tags) != 0:
                 tag_bonus = sum(_inv_freq_bonus(hist_tags.get(t, 0)) for t in c.tags) / float(len(c.tags))
                 score += (0.05 * tag_bonus)
@@ -212,6 +314,8 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                     family_count=c.family_count,
                     template_count=c.template_count,
                     pair_count=c.pair_count,
+                    history_noise_rate=noise_rate,
+                    history_dup_rate=dup_rate,
                     score=score,
                     delta_entropy_bits=delta,
                 )
@@ -245,6 +349,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--max-per-family", type=int, default=0, help="Hard cap per task_family (0 disables).")
     p.add_argument("--max-per-template", type=int, default=0, help="Hard cap per prompt_template_id (0 disables).")
     p.add_argument("--avoid-seen-task-id", action="store_true", help="Exclude candidates whose task_id already appears in history.")
+    p.add_argument("--noise-weight", type=float, default=0.75, help="Penalty multiplier for historical useful-novelty flag rate.")
+    p.add_argument("--dup-weight", type=float, default=0.50, help="Penalty multiplier for historical normalized-output duplicate rate.")
+    p.add_argument("--max-noise-rate", type=float, default=1.0, help="Drop candidates above this historical noise rate (1.0 disables).")
+    p.add_argument("--max-dup-rate", type=float, default=1.0, help="Drop candidates above this historical dup rate (1.0 disables).")
     p.add_argument("--out-json", type=str, default="", help="Write recommendations JSON to this path.")
     p.add_argument("--json", action="store_true", help="Print JSON to stdout.")
     args = p.parse_args(list(argv) if argv is not None else None)
@@ -256,8 +364,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     history = lib.load_jsonl(args.history_jsonl)
     candidates = lib.load_jsonl(args.candidates_jsonl)
-    scored = _score(history, candidates)
-    top = _select(scored, history, max(0, args.limit), args.max_per_family, args.max_per_template, bool(args.avoid_seen_task_id))
+    scored = _score(history, candidates, float(args.noise_weight), float(args.dup_weight), float(args.max_noise_rate), float(args.max_dup_rate))
+    top = _select(scored, history, max(0, args.limit), args.max_per_family, args.max_per_template, bool(args.avoid_seen_task_id), float(args.noise_weight), float(args.dup_weight), float(args.max_noise_rate), float(args.max_dup_rate))
 
     recs: List[Dict[str, Any]] = []
     for c in top:
@@ -268,6 +376,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "tags": c.tags,
             "score": c.score,
             "delta_entropy_bits": dict(c.delta_entropy_bits),
+            "penalties": {
+                "history_noise_rate": c.history_noise_rate,
+                "history_dup_rate": c.history_dup_rate,
+                "noise_weight": float(args.noise_weight),
+                "dup_weight": float(args.dup_weight),
+            },
             "reasons": {
                 "seen_task_id": bool(c.seen_task_id),
                 "history_family_count": c.family_count,
@@ -285,6 +399,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "max_per_family": args.max_per_family,
             "max_per_template": args.max_per_template,
             "avoid_seen_task_id": bool(args.avoid_seen_task_id),
+            "noise_weight": float(args.noise_weight),
+            "dup_weight": float(args.dup_weight),
+            "max_noise_rate": float(args.max_noise_rate),
+            "max_dup_rate": float(args.max_dup_rate),
         },
     }
 
