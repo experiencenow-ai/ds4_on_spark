@@ -226,6 +226,8 @@ The official `deepseek-ai/DeepSeek-V4-Flash` `config.json` shipped on HF does no
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_compress_rates` records the canonical compression-rate mapping used by the Transformers nomenclature (`CSA→4`, `HCA→128`, `sliding→0`).
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `moe.transformers_mlp_layer_types` derives `mlp_layer_types[]` from `num_hash_layers` (`0..num_hash_layers-1 → hash_moe`, remainder → moe).
 
+For external-runtime interpretation, `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `compat.by_transformers_key` also maps Transformers-style config keys (`layer_types`, `compress_rates` / legacy `compress_rate_{csa,hca}`, and `mlp_layer_types`) onto these canonical DS4 contract paths so logs/configs can be normalized without guessing.
+
 Cache note (Transformers naming): Transformers documents two cache layer classes for non-sliding blocks — `DeepseekV4CSACache` (CSA) and `DeepseekV4HCACache` (HCA) — selected per `config.layer_types[i]` via `DynamicCache(config=...)`. This is recorded (for external-runtime interpretation only) under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `compat.transformers_cache_layers` (source: [HF Transformers DeepSeek-V4 model doc](https://huggingface.co/docs/transformers/main/model_doc/deepseek_v4)).
 
 ## Logical parameter shapes (from `inference/model.py` + configs)
@@ -249,6 +251,11 @@ Per-layer attention (`layers.{i}.attn.*`):
 - `wo_a.weight`: `[o_groups*o_lora_rank, (num_attention_heads*head_dim)/o_groups]` (grouped low-rank O factor A)
 - `wo_b.weight`: `[hidden_size, o_groups*o_lora_rank]` (low-rank O factor B)
 
+Scale tensors for FP8 trunk linears:
+
+- The official checkpoint includes `*.scale` tensors for the FP8 trunk linears above (`wq_a`, `wq_b`, `wkv`, `wo_a`, `wo_b`).
+- Their logical shapes are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tensor_shapes.per_layer.attn.*.scale` (derived from the upstream `Linear` scale rule in `inference/model.py` with `block_size=128`).
+
 Per-layer MoE (`layers.{i}.ffn.*`):
 
 - `gate.weight`: `[n_routed_experts, hidden_size]`
@@ -258,6 +265,11 @@ Per-layer MoE (`layers.{i}.ffn.*`):
   - `w1`: `[moe_inter_dim, hidden_size]`
   - `w2`: `[hidden_size, moe_inter_dim]`
   - `w3`: `[moe_inter_dim, hidden_size]`
+
+Expert scale tensors (FP4):
+
+- The official checkpoint includes `experts.{eid}.w{1,2,3}.scale` and `shared_experts.w{1,2,3}.scale` (FP4 expert linears).
+- Their logical shapes are recorded in `contract_summary.json` under `tensor_shapes.per_layer.moe` and follow the upstream FP4 rule: `[out_features, in_features//32]` (`fp4_block_size=32`).
 
 MTP (`mtp.{j}.*`):
 
