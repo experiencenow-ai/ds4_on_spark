@@ -30,6 +30,9 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 (SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
 ```
 
+The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.
+It also includes a compact link speed/duplex summary (`== network (link speed, compact) ==`) from sysfs to spot unexpectedly slow negotiated links.
+
 If you want each host to ping **all** peers instead of only ring neighbors:
 
 ```bash
@@ -49,6 +52,14 @@ When you need a quick end-to-end MTU sanity check (without installing tools):
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 (SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_mtu.sh --topology full aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-mtu-probe-${stamp}.md"
 ```
+
+Optional (no installs): quick Mac→Spark throughput smoke test (single stream, no writes):
+
+```bash
+/usr/bin/time -p dd if=/dev/zero bs=1m count=256 2>/dev/null | ssh -o BatchMode=yes spark0@aitopatom-9ab9.local 'cat >/dev/null'
+```
+
+This is purely a sanity check (ssh + crypto overhead included). Avoid running it in tight loops; treat it as a human-run diagnostic.
 
 ## 3) Deep single-node hardware/toolchain probe (optional; Spark0 recommended)
 
