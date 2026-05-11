@@ -195,6 +195,7 @@ int32_t ds4_config_defaults(ds4_config_t *cfg)
 	cfg->enable_cuda = 0;
 	cfg->cuda_device = DS4_CUDA_DEVICE_AUTO;
 	cfg->arena_size = 0;
+	cfg->cuda_arena_size = 0;
 	cfg->log_ring_entries = 0;
 	return(0);
 }
@@ -213,8 +214,12 @@ int32_t ds4_config_validate(const ds4_config_t *cfg)
 		return(-5);
 	if ( cfg->arena_size < 0 )
 		return(-6);
-	if ( cfg->log_ring_entries < 0 )
+	if ( cfg->cuda_arena_size < 0 )
 		return(-7);
+	if ( cfg->cuda_arena_size > 0 && cfg->enable_cuda == 0 )
+		return(-8);
+	if ( cfg->log_ring_entries < 0 )
+		return(-9);
 	return(0);
 }
 
@@ -365,6 +370,21 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 			cfg->arena_size = iv;
 		}
 	}
+	v = getenv("DS4_CUDA_ARENA_SIZE");
+	if ( v != 0 )
+	{
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-19);
+		if ( rv != 0 )
+		{
+			if ( ds4_parse_i32_kmg(tv,tvlen,&iv) < 0 )
+				return(-20);
+			if ( iv < 0 )
+				return(-21);
+			cfg->cuda_arena_size = iv;
+		}
+	}
 	v = getenv("DS4_LOG_RING_ENTRIES");
 	if ( v != 0 )
 	{
@@ -426,6 +446,15 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 		if ( iv < 0 )
 			return(-17);
 		cfg->arena_size = iv;
+		return(0);
+	}
+	if ( ds4_span_eq(k,klen,"cuda_arena_size") != 0 )
+	{
+		if ( ds4_parse_i32_kmg(v,vlen,&iv) < 0 )
+			return(-22);
+		if ( iv < 0 )
+			return(-23);
+		cfg->cuda_arena_size = iv;
 		return(0);
 	}
 	if ( ds4_span_eq(k,klen,"log_ring_entries") != 0 )
@@ -1049,9 +1078,9 @@ int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
 	if ( cfg->log_level >= DS4_LOG_LEVEL_MIN && cfg->log_level <= DS4_LOG_LEVEL_MAX )
 		lvl = ds4_log_level_name(cfg->log_level);
 	if ( lvl != 0 )
-		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%s\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\nlog_ring_entries=%d\n",lvl,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->log_ring_entries);
+		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%s\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\ncuda_arena_size=%d\nlog_ring_entries=%d\n",lvl,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->cuda_arena_size,cfg->log_ring_entries);
 	else
-		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\nlog_ring_entries=%d\n",cfg->log_level,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->log_ring_entries);
+		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\ncuda_arena_size=%d\nlog_ring_entries=%d\n",cfg->log_level,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->cuda_arena_size,cfg->log_ring_entries);
 	if ( n < 0 )
 		return(-4);
 	out[cap - 1] = 0;

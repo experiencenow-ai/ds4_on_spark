@@ -7,7 +7,7 @@
 int32_t test_cuda_arena(void)
 {
 	ds4_cuda_arena_t a;
-	uint8_t mem[128];
+	_Alignas(32) uint8_t mem[128];
 	void *p0,*p1;
 	if ( ds4_cuda_arena_init(&a,mem,(int64_t)sizeof(mem)) < 0 )
 		return(-1);

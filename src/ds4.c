@@ -60,6 +60,8 @@ int32_t ds4_ctx_deinit(ds4_ctx_t *ctx)
 		return(-1);
 	if ( ds4_ctx_log_ring_detach(ctx) < 0 )
 		return(-2);
+	if ( ds4_cuda_arena_deinit(&ctx->cuda_arena) != 0 )
+		return(-3);
 	ctx->log_ring_ready = 0;
 	ctx->log_ring_attached = 0;
 	ctx->log_ring = (ds4_log_ring_t){0};
@@ -111,6 +113,34 @@ static int32_t ds4_ctx_apply_log_ring(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 	return(0);
 }
 
+static int32_t ds4_ctx_apply_cuda_arena(ds4_ctx_t *ctx,const ds4_config_t *cfg)
+{
+	ds4_cuda_status_t st;
+	int32_t err;
+	if ( ctx == 0 )
+		return(-1);
+	if ( cfg == 0 )
+		return(-2);
+	if ( cfg->cuda_arena_size <= 0 )
+	{
+		if ( ds4_cuda_arena_deinit(&ctx->cuda_arena) != 0 )
+			return(-3);
+		return(0);
+	}
+	if ( cfg->enable_cuda == 0 )
+		return(-4);
+	if ( ds4_cuda_arena_deinit(&ctx->cuda_arena) != 0 )
+		return(-5);
+	err = ds4_cuda_arena_init_malloc(&ctx->cuda_arena,(int64_t)cfg->cuda_arena_size);
+	if ( err != 0 )
+	{
+		st = ds4_cuda_fail(err);
+		DS4_LOGE("ds4_ctx_apply_cuda_arena: init_malloc(%d) failed: %s",cfg->cuda_arena_size,ds4_cuda_errstr(st));
+		return(-6);
+	}
+	return(0);
+}
+
 int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 {
 	ds4_cuda_status_t st;
@@ -118,6 +148,8 @@ int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 		return(-1);
 	if ( cfg == 0 )
 		return(-2);
+	if ( ds4_config_validate(cfg) < 0 )
+		return(-8);
 	ctx->cfg = *cfg;
 	if ( ds4_log_set_level(cfg->log_level) < 0 )
 		return(-3);
@@ -142,6 +174,13 @@ int32_t ds4_ctx_apply_config(ds4_ctx_t *ctx,const ds4_config_t *cfg)
 				return(-7);
 			}
 		}
+		if ( ds4_ctx_apply_cuda_arena(ctx,cfg) < 0 )
+			return(-9);
+	}
+	else
+	{
+		if ( ds4_ctx_apply_cuda_arena(ctx,cfg) < 0 )
+			return(-10);
 	}
 	return(0);
 }
@@ -159,6 +198,7 @@ int32_t ds4_ctx_init_auto(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_
 		return(-4);
 	ctx->log_ring_ready = 0;
 	ctx->log_ring_attached = 0;
+	ctx->cuda_arena = (ds4_cuda_arena_t){0};
 	if ( ds4_arena_init_ex(&ctx->arena,arena_mem,arena_size,16) < 0 )
 		return(-5);
 	tmp = *cfg;
@@ -184,6 +224,7 @@ int32_t ds4_ctx_init(ds4_ctx_t *ctx,const ds4_config_t *cfg,uint8_t *arena_mem,i
 		return(-4);
 	ctx->log_ring_ready = 0;
 	ctx->log_ring_attached = 0;
+	ctx->cuda_arena = (ds4_cuda_arena_t){0};
 	if ( ds4_arena_init_ex(&ctx->arena,arena_mem,arena_size,16) < 0 )
 		return(-5);
 	if ( ds4_ctx_apply_config(ctx,cfg) < 0 )
