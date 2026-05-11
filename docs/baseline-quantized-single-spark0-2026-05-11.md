@@ -1,6 +1,6 @@
 # Baseline: Quantized Single-Spark Spark0 (DeepSeek V4 Flash IQ2XXS)
 
-Date (UTC): 2026-05-11T05:34:47Z
+Date (UTC): 2026-05-11T20:25:25Z
 
 Baseline type:
 
@@ -24,9 +24,13 @@ Baseline type:
 
 ## Repo + Upstream Revisions
 
-- ds4_on_spark commit: `d4d8fec779f1a2831928bde4d758f398928f5010`
+- ds4_on_spark commit: `6642ffb55a0ed6722ff56ac8fa65db6e07f64b69`
 - Upstream commit(s):
-  - llama.cpp fork (`/home/spark0/src/llama.cpp-kamnxt`): `fd89556567057bf64a6f6d6e50abec488929d7e0`
+  - llama.cpp fork (`/home/spark0/src/llama.cpp-kamnxt`): `9222e55c13c965ccb7e9104fda58796edd84a732`
+
+Notes:
+
+- The companion baseline wrapper now forwards `LLAMA_DIR` into the Spark-side llama.cpp runner; prior runs could print a revision for `$HOME/src/llama.cpp` even when `LLAMA_CLI` pointed at a different tree.
 
 ## Fixture Manifest
 
@@ -52,7 +56,7 @@ CTX=512 N_TOKENS=8 N_GPU_LAYERS=99 \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
-Local runner output dir (not committed): `/private/tmp/ds4_on_spark_baseline/20260511T053447Z`
+Local runner output dir (not committed): `/private/tmp/ds4_on_spark_baseline/20260511T202525Z`
 
 ## Results
 
@@ -72,33 +76,35 @@ GGUF contract inspector (metadata-only):
 
 TTFT:
 
-- `ttft_first_output_s=0.055915`
+- `ttft_first_output_s=0.051150`
 
 Prefill throughput:
 
-- `prefill_tps=22.7` (ctx=512, prompt=default)
+- `prefill_tps=19.1` (ctx=512, prompt=default)
 
 Generation throughput:
 
-- `generation_tps=16.0` (`output_tokens=8`)
-- `decode_tps=16.0` (alias)
+- `generation_tps=14.6` (`output_tokens=8`)
+- `decode_tps=14.6` (alias)
 
 Wall time:
 
-- `total_wall_s=NA` (not recorded in this committed report; re-run required to capture the baseline-summary block)
+- `total_wall_s=397.882706`
 
 Flash Attention scheduling signal:
 
 - `fattn_unique_nodes=43` (nonzero `__fattn__-*` schedule lines observed)
+- `fattn_log_lines=4730`
 
 Patch probes (read-only; wrapper now runs these by default):
 
-- `fattn_patch_probe=NA` (not recorded in this committed report; re-run required)
-- `multislot_patch_probe=NA` (not recorded in this committed report; re-run required)
+- `fattn_patch_probe.pad256_found=true` (head_dim=512 prefill pad-to-256 fix present)
+- `multislot_patch_probe.reserve_cap_n_ctx_seq_found=true` (reserve bounded by per-sequence ctx)
+- `multislot_patch_probe.swa_stream_view_found=false` (SWA current-stream view fix not detected)
 
 Memory:
 
-- `max_rss_kb=84998376` (~81.1 GiB RSS, child process; best-effort)
+- `max_rss_kb=85003232` (~81.1 GiB RSS, child process; best-effort)
 - GPU mem: `nvidia-smi` reports memory usage as `Not Supported` on this host
 
 Failure modes:
