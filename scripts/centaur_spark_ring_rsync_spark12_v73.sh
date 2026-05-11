@@ -30,6 +30,8 @@ Environment:
                   (default: ~/centaur-smoke/v73/run/venv)
   RING_WORKDIR     Local orchestrator workdir (default: ~/centaur-smoke/v73/ring_rsync_spark12)
   NODE_TYPE        Node type label (default: default)
+  RING_APPLY       If set to 1, also run `hyor-sync-apply` locally for Spark1/2
+                  and rsync the materialized `effective_spark{1,2}` dirs back.
   SSH_OPTS         Optional ssh options override (default includes BatchMode + temp known_hosts)
 
 Notes:
@@ -173,10 +175,23 @@ centaur hyor-ring-step "$s0" --scope effective
 centaur hyor-ring-step "$s1" --scope effective
 centaur hyor-ring-step "$s2" --scope effective
 
+echo "== effective manifests (local) =="
+mkdir -p "$workdir/effective_manifests"
+centaur hyor-sync-effective "$s1" spark1 --node-type "$node_type" --output "$workdir/effective_manifests/hyor_effective_manifest_spark1.json"
+centaur hyor-sync-effective "$s2" spark2 --node-type "$node_type" --output "$workdir/effective_manifests/hyor_effective_manifest_spark2.json"
+
 echo "== push mutated node roots back to Spark1/2 =="
 rsync_push "$s1" "$spark1" "$remote_s1"
 rsync_push "$s2" "$spark2" "$remote_s2"
 
+if [ "${RING_APPLY:-}" = "1" ]; then
+	echo "== optional: effective apply + push (RING_APPLY=1) =="
+	mkdir -p "$workdir/effective/spark1" "$workdir/effective/spark2"
+	centaur hyor-sync-apply "$s1" spark1 --node-type "$node_type" --output-dir "$workdir/effective/spark1" --clean
+	centaur hyor-sync-apply "$s2" spark2 --node-type "$node_type" --output-dir "$workdir/effective/spark2" --clean
+	rsync_push "$workdir/effective/spark1" "$spark1" "$remote_base/effective_spark1"
+	rsync_push "$workdir/effective/spark2" "$spark2" "$remote_base/effective_spark2"
+fi
+
 echo "== done =="
 echo "workdir: $workdir"
-
