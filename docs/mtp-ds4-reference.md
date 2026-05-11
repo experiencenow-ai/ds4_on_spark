@@ -5,7 +5,7 @@ This document records **source pointers** into the pinned `antirez/ds4` upstream
 Upstream repo + pin:
 
 - Repo: `https://github.com/antirez/ds4`
-- Commit: `cdf8040b2320a15942773ce0bb2b72aaedfb3f06` (see `docs/upstream-ds4.md`)
+- Commit: `579edb8d56a761083d92c9bd7a23e2e5a27fb1a2` (see `docs/upstream-ds4.md`)
 - File: `upstreams/ds4/ds4.c` (fetched via `./scripts/fetch_upstreams.sh ds4`, ignored by git)
 
 ## Tensor bindings (`mtp.0.*` contract)
