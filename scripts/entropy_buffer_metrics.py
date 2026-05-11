@@ -395,11 +395,16 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     ms_per_output_token: List[float] = []
     output_tok_per_s: List[float] = []
     total_tok_per_s: List[float] = []
+    input_tokens_present = 0
+    output_tokens_present = 0
+    wall_ms_present = 0
 
     answers_nonempty: List[str] = []
     answer_source_counts: Dict[str, int] = {}
     answer_task_runs_nonempty = 0
     answer_task_runs_extracted = 0
+    buffer_id_present = 0
+    buffer_item_id_present = 0
 
     novelty_flag_counts: Dict[str, int] = {}
     novelty_flagged = 0
@@ -452,18 +457,25 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             answer_source_counts[c.answer_source] = answer_source_counts.get(c.answer_source, 0) + 1
         for tag in lib.get_list(c.raw, "tags", "tag"):
             _inc(tag_counts, tag)
-        _inc(buffer_ids, c.buffer_id)
-        _inc(buffer_items, c.buffer_item_id)
+        if c.buffer_id != "":
+            buffer_id_present += 1
+            _inc(buffer_ids, c.buffer_id)
+        if c.buffer_item_id != "":
+            buffer_item_id_present += 1
+            _inc(buffer_items, c.buffer_item_id)
 
         itok = lib.get_int(c.raw, "input_tokens", "prompt_tokens", "input_token_count")
         otok = lib.get_int(c.raw, "output_tokens", "completion_tokens", "output_token_count")
         wms = lib.get_float(c.raw, "wall_ms", "latency_ms", "duration_ms", "elapsed_ms")
         if itok is not None:
             input_tokens.append(float(itok))
+            input_tokens_present += 1
         if otok is not None:
             output_tokens.append(float(otok))
+            output_tokens_present += 1
         if wms is not None:
             wall_ms.append(float(wms))
+            wall_ms_present += 1
         if wms is not None and wms > 0.0 and otok is not None and otok > 0:
             ms_per_output_token.append(float(wms) / float(otok))
             output_tok_per_s.append((float(otok) * 1000.0) / float(wms))
@@ -555,6 +567,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     judge_latency_ms: List[float] = []
     parse_valid_true = 0
     parse_valid_false = 0
+    judge_task_family_present = 0
+    judge_prompt_template_present = 0
+    judge_family_template_pair_present = 0
     for c in judge_pairs:
         _inc(label_counts, c.label)
         _inc(judge_id_counts, c.judge_id)
@@ -594,6 +609,12 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         tmpl = c.prompt_template_id
         fam = c.task_family
         fam_tmpl = "" if (fam == "" or tmpl == "") else f"{fam}|{tmpl}"
+        if fam != "":
+            judge_task_family_present += 1
+        if tmpl != "":
+            judge_prompt_template_present += 1
+        if fam_tmpl != "":
+            judge_family_template_pair_present += 1
         if tmpl != "":
             tmpl_label_counts.setdefault(tmpl, {})
             _inc(tmpl_label_counts[tmpl], c.label)
@@ -706,6 +727,12 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "ms_per_output_token": _num_stats(ms_per_output_token),
         "output_tok_per_s": _num_stats(output_tok_per_s),
         "total_tok_per_s": _num_stats(total_tok_per_s),
+        "input_tokens_present_task_runs": int(input_tokens_present),
+        "input_tokens_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(input_tokens_present) / float(len(task_runs))),
+        "output_tokens_present_task_runs": int(output_tokens_present),
+        "output_tokens_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(output_tokens_present) / float(len(task_runs))),
+        "wall_ms_present_task_runs": int(wall_ms_present),
+        "wall_ms_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(wall_ms_present) / float(len(task_runs))),
         "prompt_words_total": len(prompt_words),
         "prompt_words_unique": len(prompt_word_counts),
         "prompt_distinct_1": _distinct_ratio(prompt_word_counts),
@@ -869,6 +896,12 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "judge_out_budget_target": judge_out_budget_target,
         "judge_out_budget_le_target": judge_out_budget_le_target,
         "judge_out_budget_le_target_rate": _safe_div(float(judge_out_budget_le_target), float(len(judge_out_tokens))),
+        "task_family_nonempty_judge_pairs": int(judge_task_family_present),
+        "task_family_nonempty_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_task_family_present) / float(len(judge_pairs))),
+        "prompt_template_id_nonempty_judge_pairs": int(judge_prompt_template_present),
+        "prompt_template_id_nonempty_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_prompt_template_present) / float(len(judge_pairs))),
+        "task_family_template_pair_nonempty_judge_pairs": int(judge_family_template_pair_present),
+        "task_family_template_pair_nonempty_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_family_template_pair_present) / float(len(judge_pairs))),
         "judge_id_unique": len([k for k in judge_id_counts.keys() if k != ""]),
         "judge_id_top": lib.top_counts(judge_id_counts),
         "model_pair_count": len(pair_summary),
@@ -878,7 +911,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     }
 
     reuse = {
+        "buffer_id_nonempty_task_runs": int(buffer_id_present),
+        "buffer_id_nonempty_task_run_rate": 0.0 if len(task_runs) == 0 else (float(buffer_id_present) / float(len(task_runs))),
+        "buffer_item_id_nonempty_task_runs": int(buffer_item_id_present),
+        "buffer_item_id_nonempty_task_run_rate": 0.0 if len(task_runs) == 0 else (float(buffer_item_id_present) / float(len(task_runs))),
         "buffer_id_unique": len(buffer_ids),
+        "buffer_id_hhi": _hhi(buffer_ids),
+        "buffer_id_entropy_bits": lib.shannon_entropy(buffer_ids),
+        "buffer_id_top": lib.top_counts(buffer_ids),
         "buffer_item_id_unique": len(buffer_items),
         "buffer_item_id_reused_unique": reuse_count,
         "buffer_item_reuse_rate_unique": 0.0 if len(buffer_items) == 0 else (float(reuse_count) / float(len(buffer_items))),
@@ -1004,6 +1044,12 @@ def to_markdown(report: MetricsReport) -> str:
                 parts.append(f"- `{sk}`: {v}")
         parts.append("")
     for field in (
+        "input_tokens_present_task_runs",
+        "input_tokens_present_task_run_rate",
+        "output_tokens_present_task_runs",
+        "output_tokens_present_task_run_rate",
+        "wall_ms_present_task_runs",
+        "wall_ms_present_task_run_rate",
         "prompt_words_total",
         "prompt_words_unique",
         "prompt_distinct_1",
@@ -1086,6 +1132,9 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(f"- `tie_rate`: {report.judge.get('tie_rate'):.6f}")
     parts.append(f"- `invalid_rate`: {report.judge.get('invalid_rate'):.6f}")
     parts.append(f"- `label_balance_ab`: {report.judge.get('label_balance_ab'):.6f}")
+    parts.append(f"- `task_family_nonempty_judge_pair_rate`: {float(report.judge.get('task_family_nonempty_judge_pair_rate', 0.0) or 0.0):.6f}")
+    parts.append(f"- `prompt_template_id_nonempty_judge_pair_rate`: {float(report.judge.get('prompt_template_id_nonempty_judge_pair_rate', 0.0) or 0.0):.6f}")
+    parts.append(f"- `task_family_template_pair_nonempty_judge_pair_rate`: {float(report.judge.get('task_family_template_pair_nonempty_judge_pair_rate', 0.0) or 0.0):.6f}")
     parts.append(f"- `parse_valid_true`: {int(report.judge.get('parse_valid_true', 0) or 0)}")
     parts.append(f"- `parse_valid_false`: {int(report.judge.get('parse_valid_false', 0) or 0)}")
     parts.append(f"- `parse_valid_rate`: {float(report.judge.get('parse_valid_rate', 0.0) or 0.0):.6f}")
@@ -1135,12 +1184,14 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### slices.by_task_family_template_pair.disagreement_top\n")
     parts.append(_md_judge_slice_top(by_pair.get("disagreement_top", []), "task_family_template_pair"))
     parts.append("\n## Buffer reuse\n")
-    for k in ("buffer_id_unique", "buffer_item_id_unique", "buffer_item_id_reused_unique", "buffer_item_reuse_rate_unique", "buffer_item_reuse_events", "buffer_item_reuse_event_rate", "buffer_item_hhi", "buffer_item_entropy_bits"):
+    for k in ("buffer_id_nonempty_task_run_rate", "buffer_item_id_nonempty_task_run_rate", "buffer_id_unique", "buffer_id_hhi", "buffer_id_entropy_bits", "buffer_item_id_unique", "buffer_item_id_reused_unique", "buffer_item_reuse_rate_unique", "buffer_item_reuse_events", "buffer_item_reuse_event_rate", "buffer_item_hhi", "buffer_item_entropy_bits"):
         v = report.reuse.get(k)
         if isinstance(v, float):
             parts.append(f"- `{k}`: {v:.6f}")
         else:
             parts.append(f"- `{k}`: {v}")
+    parts.append("\n### buffer_id_top\n")
+    parts.append(_md_list_top(report.reuse.get("buffer_id_top", [])))
     parts.append("\n### buffer_item_top\n")
     parts.append(_md_list_top(report.reuse.get("buffer_item_top", [])))
     parts.append("\n## Useful novelty flags\n")

@@ -202,8 +202,16 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore]) -> Di
 
     selected_noise = [float(c.history_noise_rate) for c in top]
     selected_dup = [float(c.history_dup_rate) for c in top]
+    selected_judge_disagree_ab = [float(c.history_judge_disagreement_rate_decided_ab) for c in top]
+    selected_judge_invalid = [float(c.history_judge_invalid_rate) for c in top]
+    selected_judge_tie = [float(c.history_judge_tie_rate) for c in top]
+    selected_judge_imbalance = [float(c.history_judge_imbalance_ab) for c in top]
     noise_mean = 0.0 if len(selected_noise) == 0 else (sum(selected_noise) / float(len(selected_noise)))
     dup_mean = 0.0 if len(selected_dup) == 0 else (sum(selected_dup) / float(len(selected_dup)))
+    judge_disagree_ab_mean = 0.0 if len(selected_judge_disagree_ab) == 0 else (sum(selected_judge_disagree_ab) / float(len(selected_judge_disagree_ab)))
+    judge_invalid_mean = 0.0 if len(selected_judge_invalid) == 0 else (sum(selected_judge_invalid) / float(len(selected_judge_invalid)))
+    judge_tie_mean = 0.0 if len(selected_judge_tie) == 0 else (sum(selected_judge_tie) / float(len(selected_judge_tie)))
+    judge_imbalance_mean = 0.0 if len(selected_judge_imbalance) == 0 else (sum(selected_judge_imbalance) / float(len(selected_judge_imbalance)))
 
     return({
         "coverage_before": coverage_before,
@@ -211,6 +219,10 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore]) -> Di
         "coverage_delta": coverage_delta,
         "selected_history_noise_rate_mean": noise_mean,
         "selected_history_dup_rate_mean": dup_mean,
+        "selected_history_judge_disagreement_rate_decided_ab_mean": judge_disagree_ab_mean,
+        "selected_history_judge_invalid_rate_mean": judge_invalid_mean,
+        "selected_history_judge_tie_rate_mean": judge_tie_mean,
+        "selected_history_judge_imbalance_ab_mean": judge_imbalance_mean,
     })
 
 def _history_rates(history: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float], Dict[str, float]]:

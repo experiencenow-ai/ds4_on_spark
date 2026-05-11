@@ -69,6 +69,12 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.tokens["input_tokens"]["count"], 6)
         self.assertEqual(report.tokens["output_tokens"]["count"], 6)
         self.assertEqual(report.tokens["wall_ms"]["count"], 6)
+        self.assertEqual(int(report.tokens.get("input_tokens_present_task_runs", 0)), 6)
+        self.assertAlmostEqual(float(report.tokens.get("input_tokens_present_task_run_rate", 0.0)), 1.0)
+        self.assertEqual(int(report.tokens.get("output_tokens_present_task_runs", 0)), 6)
+        self.assertAlmostEqual(float(report.tokens.get("output_tokens_present_task_run_rate", 0.0)), 1.0)
+        self.assertEqual(int(report.tokens.get("wall_ms_present_task_runs", 0)), 6)
+        self.assertAlmostEqual(float(report.tokens.get("wall_ms_present_task_run_rate", 0.0)), 1.0)
 
         self.assertAlmostEqual(report.duplicates["output_norm_dup_rate"], 0.0)
         self.assertAlmostEqual(report.duplicates["prompt_norm_dup_rate"], (1.0 / 6.0))
@@ -90,6 +96,12 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(int((report.judge.get("judge_in_tokens") or {}).get("count", 0)), 0)
         self.assertEqual(int((report.judge.get("judge_out_tokens") or {}).get("count", 0)), 0)
         self.assertEqual(int((report.judge.get("judge_latency_ms") or {}).get("count", 0)), 0)
+        self.assertAlmostEqual(float(report.judge.get("task_family_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+        self.assertAlmostEqual(float(report.judge.get("prompt_template_id_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+        self.assertAlmostEqual(float(report.judge.get("task_family_template_pair_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+
+        self.assertAlmostEqual(float(report.reuse.get("buffer_id_nonempty_task_run_rate", 0.0)), 1.0)
+        self.assertAlmostEqual(float(report.reuse.get("buffer_item_id_nonempty_task_run_rate", 0.0)), 1.0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)
         flagged_model_top = report.useful_novelty.get("flagged_rate_by_model_id_top", [])
@@ -140,6 +152,10 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(int((predicted.get("coverage_after") or {}).get("task_family", {}).get("unique", 0)), int((predicted.get("coverage_before") or {}).get("task_family", {}).get("unique", 0)))
         self.assertIsInstance(float(predicted.get("selected_history_noise_rate_mean", 0.0)), float)
         self.assertIsInstance(float(predicted.get("selected_history_dup_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_disagreement_rate_decided_ab_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_invalid_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_tie_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_imbalance_ab_mean", 0.0)), float)
 
     def test_useful_novelty_flags_fixture(self) -> None:
         root = _repo_root()
