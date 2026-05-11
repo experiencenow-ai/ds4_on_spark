@@ -20,6 +20,12 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 
 ## Quickstart (recommended)
 
+If you don’t already have `SSH_OPTS` set, use a safe non-interactive default:
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+```
+
 From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 
 ```bash
