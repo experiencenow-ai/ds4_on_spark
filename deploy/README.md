@@ -1,6 +1,9 @@
 # Deploy Assets
 
-This folder contains **templates and examples** for deploying DS4 on Spark0/Spark1, preparing a Spark0/Spark1/Spark2 TP=3 layout, and preparing a Spark0..Spark3 ring layout.
+This folder contains **templates and examples** for deploying DS4 across an
+ordered Spark inventory. The checked-in examples cover early two-node,
+three-node, and TP=4-style ring bring-up, but the staging helpers should take
+the active host list from their command line.
 
 Nothing here is applied automatically. A human should copy files onto the Sparks,
 edit host-specific values, then enable services with `systemctl`.
@@ -46,6 +49,10 @@ The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 
 Optional: `deploy/systemd-user/` contains user-service + timer templates for `systemd --user` (developer bring-up). See `docs/deployment-systemd-user.md`.
 
+Optional: `deploy/compose/` contains Docker Compose examples for manual model
+serving experiments, including the attributed AEON-7 Qwen3.6 27B XS + DFlash
+Spark recipe. Compose files are not installed by the systemd staging helpers.
+
 ## Sysusers + Tmpfiles
 
 Optional (recommended) templates for repeatable host bring-up:
@@ -76,11 +83,11 @@ sudo systemd-tmpfiles --create || true
 - `logrotate.ds4.conf.example` : optional logrotate config for file logs (skip if journald-only)
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
 - `hosts.ds4.spark01.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1
-- `hosts.ds4.spark012.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1/Spark2
-- `hosts.ds4.spark_ring.example` : optional `/etc/hosts` pinning for wired Spark0..Spark3
+- `hosts.ds4.spark012.example` : optional `/etc/hosts` pinning for a three-node example
+- `hosts.ds4.spark_ring.example` : optional `/etc/hosts` pinning for a ring example
 - `ssh_config.ds4.spark01.example` : optional Mac-side `ssh_config` convenience (stable SSH_OPTS)
-- `ssh_config.ds4.spark012.example` : optional Mac-side `ssh_config` convenience (Spark0/Spark1/Spark2)
-- `ssh_config.ds4.spark_ring.example` : optional Mac-side `ssh_config` convenience (Spark0..Spark3)
+- `ssh_config.ds4.spark012.example` : optional Mac-side `ssh_config` convenience (three-node example)
+- `ssh_config.ds4.spark_ring.example` : optional Mac-side `ssh_config` convenience (ring example)
 - `sysctl.ds4.conf.example` : optional sysctl network tuning drop-in (host-wide; review first)
 - `spark-spark0.env.example`, `spark-spark1.env.example`, `spark-spark2.env.example` : optional Spark standalone env starting points
 
@@ -98,26 +105,19 @@ Optional: when staging, you can ask it to swap a TP-specific env example into pl
 - `DS4_ENV_VARIANT=tp3` uses `ds4-<instance>.tp3.env.example` when present
 - `DS4_ENV_VARIANT=tp4` uses `ds4-<instance>.tp4.env.example` when present
 
-If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids instance-name mistakes and can run an optional mesh check first):
+For an ordered Spark inventory, prefer the ring staging helper. The argument
+order defines the instance defaults (`spark0`, `spark1`, ...). If
+`DS4_ENV_VARIANT` is not set, the helper defaults to `tp3` for 3 hosts and `tp4`
+for 4 hosts; other inventory sizes stage the base examples unless you set an
+explicit variant.
 
 ```bash
-./scripts/ops_stage_spark0_spark1.sh spark0@<spark0-host> spark1@<spark1-host>
-# optional: add --mesh-check and/or --tcp <port>
+./scripts/ops_stage_spark_ring.sh spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
+# optional: add --mesh-check --topology ring, --tcp <port>, and/or --instance<N> <name>
 ```
 
-If you're staging Spark0/Spark1/Spark2, prefer the three-host wrapper:
-
-```bash
-./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
-# optional: add --tcp <port>
-```
-
-If you're staging Spark0..Spark3, prefer the ring wrapper:
-
-```bash
-./scripts/ops_stage_spark_ring.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
-# optional: add --mesh-check --topology ring and/or --tcp <port>
-```
+The older fixed-name wrappers remain for compatibility and delegate to the
+inventory-driven helper.
 
 Optional: on the Spark, use the staged installer wrapper to apply the staged assets in one command (human-run; review first):
 

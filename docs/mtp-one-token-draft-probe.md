@@ -46,6 +46,7 @@ Optional debug keys (non-normative; used by the skeleton patch to stage wiring w
 
 - `trunk_token_embd_{fnv64,nbytes,shape}`
 - `trunk_pre_hc_head_{fnv64,nbytes,shape}`
+- `mtp_stub_input_hc_{fnv64,nbytes,shape}` (stub pre-block input computed from sidecar `enorm/e_proj` + `hnorm/h_proj` + add; still not a real draft)
 - `mtp_stub_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
 
 ## Validation

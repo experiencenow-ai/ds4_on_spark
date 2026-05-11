@@ -61,6 +61,27 @@ Key signals (from the report JSON):
 
 Recommendation (synthetic): keep a **work-weighted backpressure** option available for real trace replay when `cost_scale` is meaningful (or derivable from `kv_tokens` / `decode_ms`). Do not default to work backpressure until real quantized-runtime traces show it improves starvation and interactive tail without an unacceptable drop/partial-admit tradeoff.
 
+## Backpressure Zero-Admit Policy (Skip vs Stall)
+
+Scenario: two-stream overload with reservation enabled (`expert_queue_reserve_interactive=16`), fixed batch `K=2`, and a small per-expert queue (`expert_queue_max=128`). Compare:
+
+- baseline: `backpressure_zero_admit_policy=skip` (drop a stage when all candidates are saturated; token may drop if every stage skips)
+- variant: `backpressure_zero_admit_policy=stall` (retry the blocked stage later to model upstream queueing)
+
+Key signals (from the report JSON):
+
+- `drop_frac_tokens`:
+  - skip: `0.732225`
+  - stall: `0.0`
+- `token_p95_batch_ms` (batch tail latency):
+  - skip: `163.9802753753623`
+  - stall: `3967.405404100289`
+- `blocked_stages_backpressure_attempts`:
+  - skip: `0.0`
+  - stall: `1298816.0`
+
+Recommendation (synthetic): keep **`skip`** as the default for early experiments so overload regimes surface as explicit drops/partial-admit rather than extreme queueing latency. Treat **`stall`** as a separate upstream-queueing mode to evaluate on real quantized-runtime traces when drops are unacceptable and queueing latency bounds are well-defined.
+
 ## Expert Batching (Per-Expert Microbatching)
 
 Scenario: two-stream overload with reservation enabled (`expert_queue_reserve_interactive=16`) and a simple service model with per-batch overhead:

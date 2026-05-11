@@ -92,7 +92,8 @@ Tradeoff fields:
 
 ```text
 quality_adjusted_decode_tps = decode_tps * quality_score / 100
-correct_task_rate = passed_tasks / total_wall_s
+correct_task_rate = passed_tasks / total_tasks
+correct_tasks_per_s = passed_tasks / total_wall_s
 tokens_per_success = output_tokens / passed_tasks
 wall_s_per_success = total_wall_s / passed_tasks
 ```
@@ -110,7 +111,7 @@ reports:
 ```sh
 scripts/model_quality_speed_score.py results/model_runs.csv
 scripts/model_quality_speed_score.py results/model_runs.csv --json
-scripts/model_quality_speed_score.py results/model_runs.csv --speed-field correct_task_rate
+scripts/model_quality_speed_score.py results/model_runs.csv --speed-field correct_tasks_per_s
 ```
 
 Example CSV:
@@ -138,6 +139,7 @@ The scorer emits:
 - `output_tokens`
 - `quality_adjusted_decode_tps`
 - `correct_task_rate`
+- `correct_tasks_per_s`
 - `tokens_per_success`
 - Pareto `dominated_by` status
 
@@ -184,6 +186,7 @@ Speed:
 Tradeoff:
   quality_adjusted_decode_tps:
   correct_task_rate:
+  correct_tasks_per_s:
   tokens_per_success:
   dominated_by:
 ```

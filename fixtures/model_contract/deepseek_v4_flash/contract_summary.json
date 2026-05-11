@@ -599,6 +599,8 @@
         "keys_sha256": "14109a40d47d1f284fdf3c644ea81582c1f144f7bd4762d2220c3e565c6a4a3d"
       }
     },
+    "weight_map_top_level_keys_sha256": "6a3f38353214cde43e43b9603b9eed9e26d75ee7ccabd5366041f58d168e2703",
+    "weight_map_top_level_tensor_key_count": 6,
     "weight_map_unique_files": 46
   },
   "compat": {
@@ -632,11 +634,16 @@
       "window_size": "topology.sliding_window"
     },
     "by_transformers_key": {
+      "compress_rate_csa": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
+      "compress_rate_hca": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
+      "compress_rates": "attention_schedule.transformers_compress_rates",
       "compress_ratios": "attention_schedule.compress_ratios",
       "compress_rope_theta": "yarn_rope.compress_rope_theta",
       "expert_dtype": "quantization.inference_config.expert_dtype",
       "head_dim": "topology.head_dim",
       "hidden_size": "topology.hidden_size",
+      "layer_types": "attention_schedule.transformers_main_layer_types",
+      "mlp_layer_types": "moe.transformers_mlp_layer_types",
       "moe_intermediate_size": "moe.moe_inter_dim",
       "n_routed_experts": "moe.n_routed_experts",
       "n_shared_experts": "moe.n_shared_experts",
@@ -739,6 +746,34 @@
         "transformers_key": "compress_ratios"
       },
       {
+        "canonical_path": "attention_schedule.transformers_main_layer_types",
+        "concept": "layer_types",
+        "inference_key": null,
+        "note": "Transformers DeepseekV4Config.layer_types is a per-trunk-layer attention schedule (length num_hidden_layers). DS4 also records the MTP schedule separately under attention_schedule.transformers_mtp_layer_types.",
+        "transformers_key": "layer_types"
+      },
+      {
+        "canonical_path": "attention_schedule.transformers_compress_rates",
+        "concept": "compress_rates",
+        "inference_key": null,
+        "note": "Transformers exposes per-layer-type compression rates as compress_rates; DS4 derives them from the pinned compress_ratios contract (CSA->4, HCA->128, sliding->0).",
+        "transformers_key": "compress_rates"
+      },
+      {
+        "canonical_path": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
+        "concept": "compress_rate_csa",
+        "inference_key": null,
+        "note": "Legacy Transformers config kwarg; folded into compress_rates at __post_init__ time.",
+        "transformers_key": "compress_rate_csa"
+      },
+      {
+        "canonical_path": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
+        "concept": "compress_rate_hca",
+        "inference_key": null,
+        "note": "Legacy Transformers config kwarg; folded into compress_rates at __post_init__ time.",
+        "transformers_key": "compress_rate_hca"
+      },
+      {
         "canonical_path": "moe.moe_inter_dim",
         "concept": "moe_inter_dim",
         "inference_key": "moe_inter_dim",
@@ -767,6 +802,13 @@
         "concept": "n_hash_layers",
         "inference_key": "n_hash_layers",
         "transformers_key": "num_hash_layers"
+      },
+      {
+        "canonical_path": "moe.transformers_mlp_layer_types",
+        "concept": "mlp_layer_types",
+        "inference_key": null,
+        "note": "Transformers DeepseekV4Config.mlp_layer_types is a per-trunk-layer MoE schedule (length num_hidden_layers). DS4 derives it from num_hash_layers for interpreting external runtimes.",
+        "transformers_key": "mlp_layer_types"
       },
       {
         "canonical_path": "moe.route_scale",
@@ -3196,12 +3238,20 @@
       "rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]"
     },
     "mtp": {
+      "e_proj.scale": [
+        32,
+        32
+      ],
       "e_proj.weight": [
         4096,
         4096
       ],
       "enorm.weight": [
         4096
+      ],
+      "h_proj.scale": [
+        32,
+        32
       ],
       "h_proj.weight": [
         4096,
@@ -3240,21 +3290,41 @@
           "q_norm.weight": [
             1024
           ],
+          "wkv.scale": [
+            4,
+            32
+          ],
           "wkv.weight": [
             512,
             4096
+          ],
+          "wo_a.scale": [
+            64,
+            32
           ],
           "wo_a.weight": [
             8192,
             4096
           ],
+          "wo_b.scale": [
+            32,
+            64
+          ],
           "wo_b.weight": [
             4096,
             8192
           ],
+          "wq_a.scale": [
+            8,
+            32
+          ],
           "wq_a.weight": [
             1024,
             4096
+          ],
+          "wq_b.scale": [
+            256,
+            8
           ],
           "wq_b.weight": [
             32768,
@@ -3290,13 +3360,25 @@
           "mix_hc": 24
         },
         "moe": {
+          "experts.{eid}.w1.scale": [
+            2048,
+            128
+          ],
           "experts.{eid}.w1.weight": [
             2048,
             4096
           ],
+          "experts.{eid}.w2.scale": [
+            4096,
+            64
+          ],
           "experts.{eid}.w2.weight": [
             4096,
             2048
+          ],
+          "experts.{eid}.w3.scale": [
+            2048,
+            128
           ],
           "experts.{eid}.w3.weight": [
             2048,
@@ -3313,13 +3395,25 @@
             256,
             4096
           ],
+          "shared_experts.w1.scale": [
+            2048,
+            128
+          ],
           "shared_experts.w1.weight": [
             2048,
             4096
           ],
+          "shared_experts.w2.scale": [
+            4096,
+            64
+          ],
           "shared_experts.w2.weight": [
             4096,
             2048
+          ],
+          "shared_experts.w3.scale": [
+            2048,
+            128
           ],
           "shared_experts.w3.weight": [
             2048,
@@ -3342,21 +3436,41 @@
         "q_norm.weight": [
           1024
         ],
+        "wkv.scale": [
+          4,
+          32
+        ],
         "wkv.weight": [
           512,
           4096
+        ],
+        "wo_a.scale": [
+          64,
+          32
         ],
         "wo_a.weight": [
           8192,
           4096
         ],
+        "wo_b.scale": [
+          32,
+          64
+        ],
         "wo_b.weight": [
           4096,
           8192
         ],
+        "wq_a.scale": [
+          8,
+          32
+        ],
         "wq_a.weight": [
           1024,
           4096
+        ],
+        "wq_b.scale": [
+          256,
+          8
         ],
         "wq_b.weight": [
           32768,
@@ -3412,19 +3526,35 @@
           64,
           4096
         ],
+        "wq_b.scale": [
+          64,
+          8
+        ],
         "wq_b.weight": [
           8192,
           1024
         ]
       },
       "moe": {
+        "experts.{eid}.w1.scale": [
+          2048,
+          128
+        ],
         "experts.{eid}.w1.weight": [
           2048,
           4096
         ],
+        "experts.{eid}.w2.scale": [
+          4096,
+          64
+        ],
         "experts.{eid}.w2.weight": [
           4096,
           2048
+        ],
+        "experts.{eid}.w3.scale": [
+          2048,
+          128
         ],
         "experts.{eid}.w3.weight": [
           2048,
@@ -3441,13 +3571,25 @@
           256,
           4096
         ],
+        "shared_experts.w1.scale": [
+          2048,
+          128
+        ],
         "shared_experts.w1.weight": [
           2048,
           4096
         ],
+        "shared_experts.w2.scale": [
+          4096,
+          64
+        ],
         "shared_experts.w2.weight": [
           4096,
           2048
+        ],
+        "shared_experts.w3.scale": [
+          2048,
+          128
         ],
         "shared_experts.w3.weight": [
           2048,

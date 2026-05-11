@@ -108,6 +108,29 @@ known_hosts_for_target()
 	return 0
 }
 
+ssh_classify_err()
+{
+	msg="$1"
+	case "$msg" in
+		*"Could not resolve hostname"*|*"Name or service not known"*|*"Temporary failure in name resolution"*|*"nodename nor servname provided"*)
+			echo "resolve_failed"
+			;;
+		*"No route to host"*|*"Network is unreachable"*)
+			echo "no_route"
+			;;
+		*"Connection timed out"*|*"Operation timed out"*|*"Connection timeout"*)
+			echo "timeout"
+			;;
+		*"Permission denied"*|*"Authentication failed"*)
+			echo "auth_failed"
+			;;
+		*)
+			echo "ssh_failed"
+			;;
+	esac
+	return 0
+}
+
 bw_annotate_dd_line()
 {
 	line="$1"
@@ -205,9 +228,14 @@ REMOTE
 				bw_annotate_dd_line "$dd_line"
 				echo
 			else
-				[ "$dd_line" != "" ] && echo "$dd_line"
 				ssh_err_line="$(head -n 2 "$ssh_err" 2>/dev/null | tr '\n' ' ' | sed -E 's/[[:space:]]+$//' || true)"
-				[ "$ssh_err_line" != "" ] && echo "ssh: $ssh_err_line"
+				ssh_status=""
+				if [ "$ssh_err_line" != "" ]; then
+					ssh_status="$(ssh_classify_err "$ssh_err_line")"
+					echo "ssh status: $ssh_status"
+					echo "ssh: $ssh_err_line"
+				fi
+				[ "$dd_line" != "" ] && echo "dd: $dd_line"
 				echo "failed"
 				ssh_fail=$((ssh_fail + 1))
 			fi
@@ -217,14 +245,21 @@ REMOTE
 
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "up" ]; then
 			printf "up (mac->remote) %s MiB: " "$BW_MB"
-			up_line="$(dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>/dev/null || true)"
+			ssh_err_up="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.ssherrup.XXXXXX)"
+			up_line="$(dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>"$ssh_err_up" || true)"
 			if [ "$up_line" != "" ]; then
 				bw_annotate_dd_line "$up_line"
 				echo
 			else
+				ssh_err_line="$(head -n 2 "$ssh_err_up" 2>/dev/null | tr '\n' ' ' | sed -E 's/[[:space:]]+$//' || true)"
+				if [ "$ssh_err_line" != "" ]; then
+					echo "ssh status: $(ssh_classify_err "$ssh_err_line")"
+					echo "ssh: $ssh_err_line"
+				fi
 				echo "failed"
 				ssh_fail=$((ssh_fail + 1))
 			fi
+			rm -f "$ssh_err_up" || true
 		fi
 		echo
 	done

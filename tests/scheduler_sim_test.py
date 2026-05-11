@@ -3669,6 +3669,19 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_accepts_single_expert_aliases(self) -> None:
+        obj = {"t_ms": 0.0, "cls": "batch", "expert_id": 7}
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [7])
+
+        obj2 = {"t_ms": 0.0, "cls": "batch", "route": {"chosen_expert": 3}}
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2["candidates"], [3])
+
     def test_trace_extract_maps_numeric_cls_to_latency_class(self) -> None:
         obj = {"t_ms": 0.0, "cls": 0, "candidates": [7, 3, 19]}
         rec = trace_extract.extract_route_record(obj)
@@ -3933,6 +3946,17 @@ class SchedulerSimTest(unittest.TestCase):
         full = row0["mtp_full"]
         stop = row0["mtp_stop_at_reject"]
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
+
+    def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
+        from sim.scheduler import recommendations
+
+        out = recommendations.run_recommendations(quick=True)
+        scenario = out["scenarios"]["backpressure_zero_admit_policy"]
+        base = scenario["results"]["baseline"]["summary"]
+        stall = scenario["results"]["variants"]["stall"]["summary"]
+        self.assertLess(float(stall["drop_frac_tokens"]), float(base["drop_frac_tokens"]))
+        self.assertGreater(float(stall["blocked_stages_backpressure_attempts"]), 0.0)
+        self.assertGreater(float(stall["token_p95_batch_ms"]), float(base["token_p95_batch_ms"]))
 
     def test_recommendations_runtime_trace_mtp_ablation_runs(self) -> None:
         from sim.scheduler import recommendations

@@ -145,15 +145,19 @@ summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
 if first_output_s is None:
     summary_lines.append("ttft_first_output_s=NA")
+    summary_lines.append("ttft_s=NA")
 else:
     summary_lines.append("ttft_first_output_s=%.6f" % first_output_s)
+    summary_lines.append("ttft_s=%.6f" % first_output_s)
 summary_lines.append("wall_s=%.6f" % (end - start))
+summary_lines.append("total_wall_s=%.6f" % (end - start))
 summary_lines.append("max_rss_native=%d" % max_rss_native)
 summary_lines.append("max_rss_bytes=%d" % max_rss_bytes)
 if prefill_tps is not None:
     summary_lines.append("prefill_tps=%.6f" % prefill_tps)
 if generation_tps is not None:
     summary_lines.append("generation_tps=%.6f" % generation_tps)
+    summary_lines.append("decode_tps=%.6f" % generation_tps)
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

@@ -4,21 +4,20 @@ set -eu
 usage()
 {
 	cat <<'EOF'
-ops_spark_ring_mesh_check.sh -- Mac-side Spark0..Spark3 mesh checks (safe)
+ops_spark_ring_mesh_check.sh -- Mac-side Spark ring mesh checks (safe)
 
 Usage:
-  ops_spark_ring_mesh_check.sh [--topology ring|full] [--tcp <port>]... <spark0_user@host> <spark1_user@host> <spark2_user@host> <spark3_user@host>
+  ops_spark_ring_mesh_check.sh [--topology ring|full] [--tcp <port>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
 
 Environment:
   SSH_OPTS   Optional ssh options override.
 
 Notes:
   - Non-destructive; intended to run from the Mac.
-  - Runs a small set of commands on each host and checks basic peer reachability.
-  - With `--topology ring` (default), each host checks ping/route to its ring neighbors.
-    With `--topology full`, each host checks all other hosts.
-  - `--tcp <port>` runs a best-effort `nc -z` probe to peers (only meaningful if something is listening).
-  - For stable host key handling, set SSH_OPTS to use a dedicated known-hosts file.
+  - Host order defines rank/order: arg0=spark0, arg1=spark1, etc.
+  - With `--topology ring` (default), each host checks its previous/next ring neighbors.
+  - With `--topology full`, each host checks all other hosts.
+  - `--tcp <port>` runs a best-effort `nc -z` probe to peers.
 EOF
 }
 
@@ -54,15 +53,10 @@ case "$topology" in
 		;;
 esac
 
-if [ "$#" -ne 4 ]; then
+if [ "$#" -lt 2 ]; then
 	usage >&2
 	exit 2
 fi
-
-spark0="$1"
-spark1="$2"
-spark2="$3"
-spark3="$4"
 
 host_from_target()
 {
@@ -76,14 +70,26 @@ host_from_target()
 	return 0
 }
 
+node_count="$#"
+i=0
+while [ "$#" -gt 0 ]; do
+	eval "target_$i=\$1"
+	host="$(host_from_target "$1")"
+	eval "host_$i=\$host"
+	i=$((i + 1))
+	shift
+done
+
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 fi
 
-h0="$(host_from_target "$spark0")"
-h1="$(host_from_target "$spark1")"
-h2="$(host_from_target "$spark2")"
-h3="$(host_from_target "$spark3")"
+value_at()
+{
+	prefix="$1"
+	idx="$2"
+	eval "printf '%s' \"\${${prefix}_${idx}:-}\""
+}
 
 ssh_run()
 {
@@ -134,43 +140,52 @@ fi
 	done
 }
 
-peers_for_role()
+peers_for_index()
 {
-	role="$1"
+	idx="$1"
+	peers=""
 	case "$topology" in
 		ring)
-			case "$role" in
-				spark0) echo "$h3 $h1"; return 0 ;;
-				spark1) echo "$h0 $h2"; return 0 ;;
-				spark2) echo "$h1 $h3"; return 0 ;;
-				spark3) echo "$h2 $h0"; return 0 ;;
-			esac
+			if [ "$node_count" -eq 2 ]; then
+				if [ "$idx" -eq 0 ]; then
+					peers="$(value_at host 1)"
+				else
+					peers="$(value_at host 0)"
+				fi
+			else
+				prev=$(((idx + node_count - 1) % node_count))
+				next=$(((idx + 1) % node_count))
+				peers="$(value_at host "$prev") $(value_at host "$next")"
+			fi
 			;;
 		full)
-			case "$role" in
-				spark0) echo "$h1 $h2 $h3"; return 0 ;;
-				spark1) echo "$h0 $h2 $h3"; return 0 ;;
-				spark2) echo "$h0 $h1 $h3"; return 0 ;;
-				spark3) echo "$h0 $h1 $h2"; return 0 ;;
-			esac
+			j=0
+			while [ "$j" -lt "$node_count" ]; do
+				if [ "$j" -ne "$idx" ]; then
+					peers="$peers $(value_at host "$j")"
+				fi
+				j=$((j + 1))
+			done
 			;;
 	esac
-	return 1
+	echo "$peers"
 }
 
 echo "== spark ring mesh check (Mac-side) =="
 date -Is 2>/dev/null || date || true
 echo "topology=$topology"
-echo "spark0: $spark0"
-echo "spark1: $spark1"
-echo "spark2: $spark2"
-echo "spark3: $spark3"
+echo "node_count=$node_count"
+i=0
+while [ "$i" -lt "$node_count" ]; do
+	echo "spark$i: $(value_at target "$i")"
+	i=$((i + 1))
+done
 echo
 
-spark_host_checks "$spark0" "spark0" "$(peers_for_role spark0)"
-spark_host_checks "$spark1" "spark1" "$(peers_for_role spark1)"
-spark_host_checks "$spark2" "spark2" "$(peers_for_role spark2)"
-spark_host_checks "$spark3" "spark3" "$(peers_for_role spark3)"
+i=0
+while [ "$i" -lt "$node_count" ]; do
+	spark_host_checks "$(value_at target "$i")" "spark$i" "$(peers_for_index "$i")"
+	i=$((i + 1))
+done
 
 echo "== done =="
-

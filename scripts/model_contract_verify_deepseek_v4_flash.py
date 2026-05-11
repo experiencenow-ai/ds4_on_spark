@@ -204,6 +204,17 @@ def main() -> int:
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 
+				ckpt = summary.get("checkpoint_index", {}) if isinstance(summary, dict) else {}
+				if isinstance(ckpt, dict):
+					expected_top_level_keys = sorted([k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))])
+					expected_top_level_sha = sha256_lines(expected_top_level_keys)
+					if ckpt.get("weight_map_top_level_keys_sha256") != expected_top_level_sha:
+						failures.append(Failure(90, f"contract summary checkpoint_index.weight_map_top_level_keys_sha256 mismatch (fixture drift?): {contract_summary}"))
+					if ckpt.get("weight_map_top_level_tensor_key_count") != int(len(expected_top_level_keys)):
+						failures.append(Failure(91, f"contract summary checkpoint_index.weight_map_top_level_tensor_key_count mismatch (fixture drift?): {contract_summary}"))
+				else:
+					failures.append(Failure(92, f"contract summary missing checkpoint_index (expected dict): {contract_summary}"))
+
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):
 					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
@@ -624,6 +635,11 @@ def main() -> int:
 				else:
 					expected = {
 						"num_nextn_predict_layers": "mtp.n_mtp_layers",
+						"layer_types": "attention_schedule.transformers_main_layer_types",
+						"compress_rates": "attention_schedule.transformers_compress_rates",
+						"compress_rate_csa": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
+						"compress_rate_hca": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
+						"mlp_layer_types": "moe.transformers_mlp_layer_types",
 						"expert_dtype": "quantization.inference_config.expert_dtype",
 						"quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
 						"quantization_config.fmt": "quantization.config_quantization_config.fmt",
@@ -695,6 +711,88 @@ def main() -> int:
 							failures.append(Failure(97, f"contract summary tensor_shapes.per_layer.hyper_connections.mix_hc mismatch (expected {mix_hc}): {contract_summary}"))
 						if phc.get("hc_attn_scale") != [3] or phc.get("hc_ffn_scale") != [3]:
 							failures.append(Failure(98, f"contract summary tensor_shapes.per_layer.hyper_connections hc_*_scale must be [3]: {contract_summary}"))
+
+					# Quantized linear scale tensors: shapes are part of the execution contract.
+					try:
+						dim = int(cfg.get("hidden_size"))
+						vocab_size = int(cfg.get("vocab_size"))
+						n_heads = int(cfg.get("num_attention_heads"))
+						head_dim = int(cfg.get("head_dim"))
+						q_lora_rank = int(cfg.get("q_lora_rank"))
+						o_groups = int(cfg.get("o_groups"))
+						o_lora_rank = int(cfg.get("o_lora_rank"))
+						moe_inter_dim = int(cfg.get("moe_intermediate_size"))
+					except Exception:
+						dim = None
+						vocab_size = None
+						n_heads = None
+						head_dim = None
+						q_lora_rank = None
+						o_groups = None
+						o_lora_rank = None
+						moe_inter_dim = None
+
+					lt = summary.get("quantization", {}).get("linear_tensor_contract", {}) if isinstance(summary, dict) else {}
+					fp8 = lt.get("fp8", {}) if isinstance(lt, dict) else {}
+					fp4 = lt.get("fp4", {}) if isinstance(lt, dict) else {}
+					block_size = fp8.get("block_size") if isinstance(fp8, dict) else None
+					fp4_block_size = fp4.get("fp4_block_size") if isinstance(fp4, dict) else None
+
+					def fp8_scale_shape(out_features: int, in_features: int) -> list[int]:
+						return [
+							(int(out_features) + int(block_size) - 1) // int(block_size),
+							(int(in_features) + int(block_size) - 1) // int(block_size),
+						]
+
+					def fp4_scale_shape(out_features: int, in_features: int) -> list[int]:
+						return [int(out_features), int(in_features) // int(fp4_block_size)]
+
+					attn = ts.get("per_layer", {}).get("attn", {})
+					if isinstance(attn, dict) and isinstance(block_size, int) and dim is not None and q_lora_rank is not None and n_heads is not None and head_dim is not None and o_groups is not None and o_lora_rank is not None:
+						want = fp8_scale_shape(q_lora_rank, dim)
+						if attn.get("wq_a.scale") != want:
+							failures.append(Failure(101, f"contract summary tensor_shapes.per_layer.attn wq_a.scale mismatch (got {attn.get('wq_a.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(n_heads * head_dim, q_lora_rank)
+						if attn.get("wq_b.scale") != want:
+							failures.append(Failure(102, f"contract summary tensor_shapes.per_layer.attn wq_b.scale mismatch (got {attn.get('wq_b.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(head_dim, dim)
+						if attn.get("wkv.scale") != want:
+							failures.append(Failure(103, f"contract summary tensor_shapes.per_layer.attn wkv.scale mismatch (got {attn.get('wkv.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups)
+						if attn.get("wo_a.scale") != want:
+							failures.append(Failure(104, f"contract summary tensor_shapes.per_layer.attn wo_a.scale mismatch (got {attn.get('wo_a.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp8_scale_shape(dim, o_groups * o_lora_rank)
+						if attn.get("wo_b.scale") != want:
+							failures.append(Failure(105, f"contract summary tensor_shapes.per_layer.attn wo_b.scale mismatch (got {attn.get('wo_b.scale')!r} expected {want!r}): {contract_summary}"))
+
+					moe = ts.get("per_layer", {}).get("moe", {})
+					if isinstance(moe, dict) and isinstance(fp4_block_size, int) and dim is not None and moe_inter_dim is not None:
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("experts.{eid}.w1.scale") != want:
+							failures.append(Failure(106, f"contract summary tensor_shapes.per_layer.moe experts.w1.scale mismatch (got {moe.get('experts.{eid}.w1.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(dim, moe_inter_dim)
+						if moe.get("experts.{eid}.w2.scale") != want:
+							failures.append(Failure(107, f"contract summary tensor_shapes.per_layer.moe experts.w2.scale mismatch (got {moe.get('experts.{eid}.w2.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("experts.{eid}.w3.scale") != want:
+							failures.append(Failure(108, f"contract summary tensor_shapes.per_layer.moe experts.w3.scale mismatch (got {moe.get('experts.{eid}.w3.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("shared_experts.w1.scale") != want:
+							failures.append(Failure(109, f"contract summary tensor_shapes.per_layer.moe shared_experts.w1.scale mismatch (got {moe.get('shared_experts.w1.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(dim, moe_inter_dim)
+						if moe.get("shared_experts.w2.scale") != want:
+							failures.append(Failure(110, f"contract summary tensor_shapes.per_layer.moe shared_experts.w2.scale mismatch (got {moe.get('shared_experts.w2.scale')!r} expected {want!r}): {contract_summary}"))
+						want = fp4_scale_shape(moe_inter_dim, dim)
+						if moe.get("shared_experts.w3.scale") != want:
+							failures.append(Failure(111, f"contract summary tensor_shapes.per_layer.moe shared_experts.w3.scale mismatch (got {moe.get('shared_experts.w3.scale')!r} expected {want!r}): {contract_summary}"))
+
+					mtp = ts.get("mtp", {})
+					if isinstance(mtp, dict) and isinstance(block_size, int) and dim is not None:
+						want = fp8_scale_shape(dim, dim)
+						if mtp.get("e_proj.scale") != want:
+							failures.append(Failure(112, f"contract summary tensor_shapes.mtp e_proj.scale mismatch (got {mtp.get('e_proj.scale')!r} expected {want!r}): {contract_summary}"))
+						if mtp.get("h_proj.scale") != want:
+							failures.append(Failure(113, f"contract summary tensor_shapes.mtp h_proj.scale mismatch (got {mtp.get('h_proj.scale')!r} expected {want!r}): {contract_summary}"))
 
 				top = summary.get("topology", {})
 				if isinstance(top, dict):
@@ -999,10 +1097,10 @@ def main() -> int:
 			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
 
 		# MTPBlock-specific projections + norms + HC head.
-		for suffix in (
-			"e_proj.weight",
-			"e_proj.scale",
-			"h_proj.weight",
+			for suffix in (
+				"e_proj.weight",
+				"e_proj.scale",
+				"h_proj.weight",
 			"h_proj.scale",
 			"enorm.weight",
 			"hnorm.weight",
@@ -1010,13 +1108,21 @@ def main() -> int:
 			"hc_head_fn",
 			"hc_head_base",
 			"hc_head_scale",
-		):
-			req_mtp(suffix)
+			):
+				req_mtp(suffix)
 
-	# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
-	enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
-	if not enc_test.exists():
-		failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
+		# Pinned GGUF metadata-only inspections should have a stable summary fixture for MTP/quant gating.
+		pinned_summary = FIX / "pinned_gguf_inspects_summary.json"
+		pinned_summary_script = ROOT / "scripts" / "model_contract_summarize_v4flash_pinned_gguf_inspects.py"
+		if pinned_summary.exists():
+			r = subprocess.run([sys.executable, str(pinned_summary_script), "--check"], cwd=str(ROOT))
+			if r.returncode != 0:
+				failures.append(Failure(18, f"pinned GGUF inspect summary fixture is stale: {pinned_summary} (re-run scripts/model_contract_refresh_v4flash_gguf_inspects.sh)"))
+
+		# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
+		enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
+		if not enc_test.exists():
+			failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
 	else:
 		r = subprocess.run([sys.executable, str(enc_test)], cwd=str(enc_test.parent))
 		if r.returncode != 0:

@@ -1,4 +1,11 @@
-# Deployment: Spark0..Spark3 (TP=4 Ring Prep)
+# Example Deployment: Spark0..Spark3 (TP=4 Ring Prep)
+
+Prefer inventory-driven staging for new work:
+
+- `scripts/ops_stage_spark_ring.sh <spark0> <spark1> [spark2 ...]`
+- `scripts/ops_spark_ring_mesh_check.sh <spark0> <spark1> [spark2 ...]`
+
+The current 3-node example remains `docs/deployment-spark0-spark1-spark2.md`. This file is retained as a 4-node/TP=4 example, not as a source of truth for the active inventory.
 
 This repo does not apply changes to Sparks automatically. Everything below is **human-run**.
 

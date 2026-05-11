@@ -91,7 +91,7 @@ def build_oracle_contract() -> dict:
 		},
 	}
 
-def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
+def build_tensor_shapes(cfg: dict, inf: dict, inf_model: dict) -> dict:
 	dim = int(cfg["hidden_size"])
 	vocab_size = int(cfg["vocab_size"])
 	n_heads = int(cfg["num_attention_heads"])
@@ -110,6 +110,25 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 	index_n_heads = int(inf["index_n_heads"])
 	index_head_dim = int(inf["index_head_dim"])
 
+	inf_consts = inf_model.get("inference_model_constants", {}) if isinstance(inf_model, dict) else {}
+	block_size = inf_consts.get("block_size", None) if isinstance(inf_consts, dict) else None
+	fp4_block_size = inf_consts.get("fp4_block_size", None) if isinstance(inf_consts, dict) else None
+	if not isinstance(block_size, int):
+		block_size = None
+	if not isinstance(fp4_block_size, int):
+		fp4_block_size = None
+
+	def fp8_scale_shape(out_features: int, in_features: int) -> list[int]:
+		assert block_size is not None
+		return [
+			(int(out_features) + int(block_size) - 1) // int(block_size),
+			(int(in_features) + int(block_size) - 1) // int(block_size),
+		]
+
+	def fp4_scale_shape(out_features: int, in_features: int) -> list[int]:
+		assert fp4_block_size is not None
+		return [int(out_features), int(in_features) // int(fp4_block_size)]
+
 	return {
 		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (logical/unsharded shapes)",
 		"top_level": {
@@ -124,12 +143,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			"attn": {
 				"attn_sink": [n_heads],
 				"wq_a.weight": [q_lora_rank, dim],
+				"wq_a.scale": fp8_scale_shape(q_lora_rank, dim) if block_size is not None else None,
 				"q_norm.weight": [q_lora_rank],
 				"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+				"wq_b.scale": fp8_scale_shape(n_heads * head_dim, q_lora_rank) if block_size is not None else None,
 				"wkv.weight": [head_dim, dim],
+				"wkv.scale": fp8_scale_shape(head_dim, dim) if block_size is not None else None,
 				"kv_norm.weight": [head_dim],
 				"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+				"wo_a.scale": fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups) if block_size is not None else None,
 				"wo_b.weight": [dim, o_groups * o_lora_rank],
+				"wo_b.scale": fp8_scale_shape(dim, o_groups * o_lora_rank) if block_size is not None else None,
 				"attn_norm.weight": [dim],
 			},
 			"compressor": {
@@ -143,6 +167,7 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			"indexer": {
 				"note": "Indexer tensors exist only for CSA layers (compress_ratio==4).",
 				"wq_b.weight": [index_n_heads * index_head_dim, q_lora_rank],
+				"wq_b.scale": fp8_scale_shape(index_n_heads * index_head_dim, q_lora_rank) if block_size is not None else None,
 				"weights_proj.weight": [index_n_heads, dim],
 				"compressor": {
 					"ape.shape_formula": "[compress_ratio, (1+overlap)*index_head_dim]",
@@ -156,11 +181,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"gate.tid2eid": [vocab_size, n_activated_experts],
 				"gate.bias": [n_routed_experts],
 				"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+				"experts.{eid}.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 				"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"shared_experts.w1.weight": [moe_inter_dim, dim],
+				"shared_experts.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"shared_experts.w2.weight": [dim, moe_inter_dim],
+				"shared_experts.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 				"shared_experts.w3.weight": [moe_inter_dim, dim],
+				"shared_experts.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 			},
 			"hyper_connections": {
 				"hc_mult": hc_mult,
@@ -180,12 +211,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"attn": {
 					"attn_sink": [n_heads],
 					"wq_a.weight": [q_lora_rank, dim],
+					"wq_a.scale": fp8_scale_shape(q_lora_rank, dim) if block_size is not None else None,
 					"q_norm.weight": [q_lora_rank],
 					"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+					"wq_b.scale": fp8_scale_shape(n_heads * head_dim, q_lora_rank) if block_size is not None else None,
 					"wkv.weight": [head_dim, dim],
+					"wkv.scale": fp8_scale_shape(head_dim, dim) if block_size is not None else None,
 					"kv_norm.weight": [head_dim],
 					"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+					"wo_a.scale": fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups) if block_size is not None else None,
 					"wo_b.weight": [dim, o_groups * o_lora_rank],
+					"wo_b.scale": fp8_scale_shape(dim, o_groups * o_lora_rank) if block_size is not None else None,
 					"attn_norm.weight": [dim],
 				},
 				"compressor": {
@@ -196,11 +232,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 					"gate.tid2eid": [vocab_size, n_activated_experts],
 					"gate.bias": [n_routed_experts],
 					"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+					"experts.{eid}.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 					"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"shared_experts.w1.weight": [moe_inter_dim, dim],
+					"shared_experts.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"shared_experts.w2.weight": [dim, moe_inter_dim],
+					"shared_experts.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 					"shared_experts.w3.weight": [moe_inter_dim, dim],
+					"shared_experts.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				},
 				"hyper_connections": {
 					"hc_mult": hc_mult,
@@ -222,7 +264,9 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 		},
 		"mtp": {
 			"e_proj.weight": [dim, dim],
+			"e_proj.scale": fp8_scale_shape(dim, dim) if block_size is not None else None,
 			"h_proj.weight": [dim, dim],
+			"h_proj.scale": fp8_scale_shape(dim, dim) if block_size is not None else None,
 			"enorm.weight": [dim],
 			"hnorm.weight": [dim],
 			"norm.weight": [dim],
@@ -1040,11 +1084,46 @@ def build_compat_mappings() -> dict:
 		{"concept": "o_lora_rank", "transformers_key": "o_lora_rank", "inference_key": "o_lora_rank", "canonical_path": "topology.o_lora_rank"},
 		{"concept": "sliding_window", "transformers_key": "sliding_window", "inference_key": "window_size", "canonical_path": "topology.sliding_window"},
 		{"concept": "compress_ratios", "transformers_key": "compress_ratios", "inference_key": "compress_ratios", "canonical_path": "attention_schedule.compress_ratios"},
+		{
+			"concept": "layer_types",
+			"transformers_key": "layer_types",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_main_layer_types",
+			"note": "Transformers DeepseekV4Config.layer_types is a per-trunk-layer attention schedule (length num_hidden_layers). DS4 also records the MTP schedule separately under attention_schedule.transformers_mtp_layer_types.",
+		},
+		{
+			"concept": "compress_rates",
+			"transformers_key": "compress_rates",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_compress_rates",
+			"note": "Transformers exposes per-layer-type compression rates as compress_rates; DS4 derives them from the pinned compress_ratios contract (CSA->4, HCA->128, sliding->0).",
+		},
+		{
+			"concept": "compress_rate_csa",
+			"transformers_key": "compress_rate_csa",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
+			"note": "Legacy Transformers config kwarg; folded into compress_rates at __post_init__ time.",
+		},
+		{
+			"concept": "compress_rate_hca",
+			"transformers_key": "compress_rate_hca",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
+			"note": "Legacy Transformers config kwarg; folded into compress_rates at __post_init__ time.",
+		},
 		{"concept": "moe_inter_dim", "transformers_key": "moe_intermediate_size", "inference_key": "moe_inter_dim", "canonical_path": "moe.moe_inter_dim"},
 		{"concept": "n_routed_experts", "transformers_key": "n_routed_experts", "inference_key": "n_routed_experts", "canonical_path": "moe.n_routed_experts"},
 		{"concept": "n_shared_experts", "transformers_key": "n_shared_experts", "inference_key": "n_shared_experts", "canonical_path": "moe.n_shared_experts"},
 		{"concept": "n_activated_experts", "transformers_key": "num_experts_per_tok", "inference_key": "n_activated_experts", "canonical_path": "moe.n_activated_experts"},
 		{"concept": "n_hash_layers", "transformers_key": "num_hash_layers", "inference_key": "n_hash_layers", "canonical_path": "moe.n_hash_layers"},
+		{
+			"concept": "mlp_layer_types",
+			"transformers_key": "mlp_layer_types",
+			"inference_key": None,
+			"canonical_path": "moe.transformers_mlp_layer_types",
+			"note": "Transformers DeepseekV4Config.mlp_layer_types is a per-trunk-layer MoE schedule (length num_hidden_layers). DS4 derives it from num_hash_layers for interpreting external runtimes.",
+		},
 		{"concept": "route_scale", "transformers_key": "routed_scaling_factor", "inference_key": "route_scale", "canonical_path": "moe.route_scale"},
 		{"concept": "scoring_func", "transformers_key": "scoring_func", "inference_key": "score_func", "canonical_path": "moe.scoring_func"},
 		{"concept": "num_nextn_predict_layers", "transformers_key": "num_nextn_predict_layers", "inference_key": None, "canonical_path": "mtp.n_mtp_layers"},
@@ -1140,9 +1219,12 @@ def build_contract() -> dict:
 	weight_map_files = [str(v) for v in weight_map.values()]
 	weight_map_file_counts = Counter(weight_map_files)
 	weight_map_keys_sha256 = sha256_lines(weight_keys)
+	top_level_keys = [k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))]
+	weight_map_top_level_keys_sha256 = sha256_lines(sorted(top_level_keys))
 	weight_map_prefix_fingerprints = build_weight_key_prefix_fingerprints(weight_keys)
 	mtp_prefix_fp = weight_map_prefix_fingerprints.get("mtp", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
+	top_level_tensor_key_count = sum(int(v.get("count", 0)) for k, v in weight_map_prefix_fingerprints.items() if k not in ("layers", "mtp") and isinstance(v, dict))
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1233,7 +1315,7 @@ def build_contract() -> dict:
 			"o_lora_rank": int(cfg["o_lora_rank"]),
 			"sliding_window": int(cfg["sliding_window"]),
 		},
-		"tensor_shapes": build_tensor_shapes(cfg, inf),
+		"tensor_shapes": build_tensor_shapes(cfg, inf, inf_model),
 		"yarn_rope": {
 			"rope_theta": float(cfg.get("rope_theta", 10000)),
 			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
@@ -1420,6 +1502,8 @@ def build_contract() -> dict:
 				"checkpoint_index": {
 					"weight_map_num_tensors": int(len(weight_keys)),
 					"weight_map_keys_sha256": weight_map_keys_sha256,
+					"weight_map_top_level_keys_sha256": weight_map_top_level_keys_sha256,
+					"weight_map_top_level_tensor_key_count": int(top_level_tensor_key_count),
 					"weight_map_prefix_fingerprints": weight_map_prefix_fingerprints,
 					"weight_map_layers_keys_sha256": layers_prefix_fp.get("keys_sha256", None),
 					"weight_map_mtp_keys_sha256": mtp_prefix_fp.get("keys_sha256", None),

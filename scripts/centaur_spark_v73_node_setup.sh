@@ -82,9 +82,16 @@ if [ "$log" != "" ]; then
 	fifo="$workdir/.centaur_node_setup_log.fifo"
 	rm -f "$fifo"
 	mkfifo "$fifo"
+	exec 3>&1 4>&2
 	tee "$log" <"$fifo" &
 	teepid="$!"
-	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	cleanup_log()
+	{
+		exec >&3 2>&4
+		rm -f "$fifo"
+		wait "$teepid" 2>/dev/null || true
+	}
+	trap 'cleanup_log' EXIT INT TERM
 	exec >"$fifo" 2>&1
 fi
 
@@ -97,6 +104,17 @@ echo "zip: $zip"
 echo "workdir: $workdir"
 echo "pwd: $(pwd)"
 ls -la "$zip" | sed -n '1p'
+zip_sha256="$(python3 - "$zip" <<'PY'
+import hashlib,sys
+p=sys.argv[1]
+h=hashlib.sha256()
+with open(p,'rb') as f:
+    for chunk in iter(lambda: f.read(1024*1024), b''):
+        h.update(chunk)
+print(h.hexdigest())
+PY
+)"
+echo "zip_sha256: $zip_sha256"
 
 echo "== python =="
 python3 -V
@@ -111,7 +129,27 @@ if [ ! -f "$pkgdir/centaur.py" ]; then
 fi
 
 echo "== centaur package facts =="
-decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$pkgdir/centaur.py" | sed -n '1p')"
+decomposer_version="$(python3 -c 'import ast,sys
+p=sys.argv[1]
+try:
+    t=open(p,"r",encoding="utf-8",errors="replace").read()
+except Exception:
+    print("")
+    raise SystemExit(0)
+try:
+    m=ast.parse(t)
+except Exception:
+    print("")
+    raise SystemExit(0)
+v=""
+for node in getattr(m,"body",[]):
+    if isinstance(node, ast.Assign):
+        for tgt in getattr(node,"targets",[]):
+            if isinstance(tgt, ast.Name) and tgt.id=="DECOMPOSER_VERSION":
+                val=getattr(node,"value",None)
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    v=val.value
+print(v)' "$pkgdir/centaur.py")"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi
@@ -144,17 +182,6 @@ else
 	fi
 fi
 
-sha256="$(python3 - <<PY
-import hashlib,sys
-p=sys.argv[1]
-h=hashlib.sha256()
-with open(p,'rb') as f:
-    h.update(f.read())
-print(h.hexdigest())
-PY
-"$zip")"
-echo "zip_sha256: $sha256"
-
 echo "== pip freeze (sanitized) =="
 "$venv_py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'
 
@@ -165,4 +192,3 @@ echo "== centaur selftest =="
 echo "== done =="
 echo "centaur_root: $pkgdir"
 echo "centaur_venv: $venvdir"
-

@@ -537,7 +537,7 @@ new file mode 100644
 index 0000000..00ef001
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,534 @@
+@@ -0,0 +1,659 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -675,6 +675,112 @@ index 0000000..00ef001
 +    return ggml_dsv4_hc_weighted_sum(ctx, x, pre);
 +}
 +
++static bool compute_stub_mtp_input_hc(
++        const tensor_capture & trunk_token_embd,
++        const tensor_capture & trunk_pre_hc_head,
++        const ds4::deepseek4_mtp_sidecar & sidecar,
++        const llama_hparams & hparams,
++        tensor_capture * out,
++        std::string * err) {
++    if (out == nullptr) {
++        if (err != nullptr) *err = "null out";
++        return false;
++    }
++    *out = tensor_capture();
++
++    if (!trunk_token_embd.got) {
++        if (err != nullptr) *err = "missing trunk token_embd capture";
++        return false;
++    }
++    if (!trunk_pre_hc_head.got) {
++        if (err != nullptr) *err = "missing trunk pre_hc_head capture";
++        return false;
++    }
++    if (trunk_token_embd.type != GGML_TYPE_F32) {
++        if (err != nullptr) *err = "trunk token_embd is not f32";
++        return false;
++    }
++    if (trunk_pre_hc_head.type != GGML_TYPE_F32) {
++        if (err != nullptr) *err = "trunk pre_hc_head is not f32";
++        return false;
++    }
++    if (!(trunk_token_embd.ne0 == 4096 && trunk_token_embd.ne1 == 1 && trunk_token_embd.ne2 == 1)) {
++        if (err != nullptr) *err = "trunk token_embd has unexpected shape";
++        return false;
++    }
++    if (!(trunk_pre_hc_head.ne0 == 4096 && trunk_pre_hc_head.ne1 == 4 && trunk_pre_hc_head.ne2 == 1)) {
++        if (err != nullptr) *err = "trunk pre_hc_head has unexpected shape";
++        return false;
++    }
++
++    ggml_init_params ip = {};
++    ip.mem_size = 512 * 1024 * 1024;
++    ip.mem_buffer = nullptr;
++    ip.no_alloc = false;
++
++    ggml_context * ctx = ggml_init(ip);
++    if (ctx == nullptr) {
++        if (err != nullptr) *err = "ggml_init failed";
++        return false;
++    }
++
++    ggml_tensor * tok = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4096, 1);
++    if (tok == nullptr || tok->data == nullptr) {
++        if (err != nullptr) *err = "failed to alloc stub tok";
++        ggml_free(ctx);
++        return false;
++    }
++    if (trunk_token_embd.bytes.size() != ggml_nbytes(tok)) {
++        if (err != nullptr) *err = "trunk token_embd nbytes mismatch";
++        ggml_free(ctx);
++        return false;
++    }
++    std::memcpy(tok->data, trunk_token_embd.bytes.data(), trunk_token_embd.bytes.size());
++
++    ggml_tensor * prev = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4096, 4);
++    if (prev == nullptr || prev->data == nullptr) {
++        if (err != nullptr) *err = "failed to alloc stub prev";
++        ggml_free(ctx);
++        return false;
++    }
++    if (trunk_pre_hc_head.bytes.size() != ggml_nbytes(prev)) {
++        if (err != nullptr) *err = "trunk pre_hc_head nbytes mismatch (prev)";
++        ggml_free(ctx);
++        return false;
++    }
++    std::memcpy(prev->data, trunk_pre_hc_head.bytes.data(), trunk_pre_hc_head.bytes.size());
++
++    ggml_tensor * e = ggml_rms_norm(ctx, tok, hparams.f_norm_rms_eps);
++    e = ggml_mul(ctx, e, sidecar.enorm);
++    e = ggml_mul_mat(ctx, sidecar.e_proj, e); // [n_embd, 1]
++
++    ggml_tensor * e_hc = ggml_repeat(ctx, e, prev); // [n_embd, n_hc]
++
++    ggml_tensor * h = ggml_rms_norm(ctx, prev, hparams.f_norm_rms_eps);
++    h = ggml_mul(ctx, h, sidecar.hnorm);
++    h = ggml_mul_mat(ctx, sidecar.h_proj, h); // [n_embd, n_hc]
++
++    ggml_tensor * cur = ggml_add(ctx, e_hc, h);
++    cur = ggml_reshape_3d(ctx, cur, 4096, 4, 1);
++
++    ggml_cgraph * gf = ggml_new_graph(ctx);
++    ggml_build_forward_expand(gf, cur);
++    ggml_graph_compute_with_ctx(ctx, gf, 1);
++
++    const size_t n_bytes = ggml_nbytes(cur);
++    out->bytes.resize(n_bytes);
++    std::memcpy(out->bytes.data(), cur->data, n_bytes);
++    out->type = cur->type;
++    out->ne0 = cur->ne[0];
++    out->ne1 = cur->ne[1];
++    out->ne2 = cur->ne[2];
++    out->ne3 = cur->ne[3];
++    out->got = true;
++
++    ggml_free(ctx);
++    return true;
++}
++
 +static bool compute_stub_mtp_output_head_norm(
 +        const tensor_capture & trunk_pre_hc_head,
 +        const ds4::deepseek4_mtp_sidecar & sidecar,
@@ -793,6 +899,7 @@ index 0000000..00ef001
 +        const std::string & mtp_draft_token,
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
++        const tensor_capture & mtp_stub_input_hc,
 +        const tensor_capture & mtp_stub_head_norm,
 +        bool ok,
 +        const std::vector<std::string> & errors) {
@@ -829,6 +936,20 @@ index 0000000..00ef001
 +        std::printf("  \"trunk_pre_hc_head_fnv64\": null,\n");
 +        std::printf("  \"trunk_pre_hc_head_nbytes\": null,\n");
 +        std::printf("  \"trunk_pre_hc_head_shape\": null,\n");
++    }
++
++    if (mtp_stub_input_hc.got) {
++        std::printf("  \"mtp_stub_input_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_stub_input_hc.bytes.data(), mtp_stub_input_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_stub_input_hc_nbytes\": %zu,\n", mtp_stub_input_hc.bytes.size());
++        std::printf("  \"mtp_stub_input_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_stub_input_hc.ne0,
++                (long long) mtp_stub_input_hc.ne1,
++                (long long) mtp_stub_input_hc.ne2);
++    } else {
++        std::printf("  \"mtp_stub_input_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_stub_input_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_stub_input_hc_shape\": null,\n");
 +    }
 +
 +    if (mtp_stub_head_norm.got) {
@@ -928,6 +1049,7 @@ index 0000000..00ef001
 +    std::vector<std::string> errors;
 +
 +    probe_captures caps;
++    tensor_capture stub_input_hc;
 +    tensor_capture stub_head_norm;
 +
 +    ggml_backend_load_all();
@@ -939,7 +1061,7 @@ index 0000000..00ef001
 +    if (model == nullptr) {
 +        errors.push_back("failed to load trunk model");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
 +        return 2;
 +    }
@@ -950,7 +1072,7 @@ index 0000000..00ef001
 +    if (n_prompt <= 0) {
 +        errors.push_back("failed to tokenize prompt");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
 +        llama_model_free(model);
 +        return 3;
@@ -960,7 +1082,7 @@ index 0000000..00ef001
 +    if (llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), true, true) < 0) {
 +        errors.push_back("failed to tokenize prompt (2nd pass)");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
 +        llama_model_free(model);
 +        return 4;
@@ -978,7 +1100,7 @@ index 0000000..00ef001
 +    if (ctx == nullptr) {
 +        errors.push_back("failed to init llama_context");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
 +        llama_model_free(model);
 +        return 5;
@@ -988,7 +1110,7 @@ index 0000000..00ef001
 +    if (llama_decode(ctx, batch) != 0) {
 +        errors.push_back("llama_decode failed for prompt");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
 +        llama_free(ctx);
 +        llama_model_free(model);
@@ -1022,7 +1144,7 @@ index 0000000..00ef001
 +    if (sidecar_gguf == nullptr || sidecar_ctx == nullptr) {
 +        errors.push_back("failed to open sidecar GGUF (metadata-only)");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
 +        if (sidecar_gguf) {
 +            gguf_free(sidecar_gguf);
@@ -1051,11 +1173,14 @@ index 0000000..00ef001
 +
 +    if (load_sidecar_weights && bind_ok) {
 +        std::string stub_err;
++        if (!compute_stub_mtp_input_hc(caps.token_embd, caps.pre_hc_head, sidecar, model->hparams, &stub_input_hc, &stub_err)) {
++            errors.push_back(std::string("stub mtp input_hc compute failed: ") + stub_err);
++        }
 +        if (!compute_stub_mtp_output_head_norm(caps.pre_hc_head, sidecar, model->hparams, &stub_head_norm, &stub_err)) {
 +            errors.push_back(std::string("stub output head compute failed: ") + stub_err);
 +        }
 +    } else {
-+        errors.push_back("stub output head compute skipped (requires --load-sidecar-weights + successful bind)");
++        errors.push_back("stub mtp compute skipped (requires --load-sidecar-weights + successful bind)");
 +    }
 +
 +    gguf_free(sidecar_gguf);
@@ -1064,7 +1189,7 @@ index 0000000..00ef001
 +    errors.push_back("TODO: implement gamma=1 MTP draft compute using sidecar weights + MTP KV/raw-cache state");
 +
 +    if (json) {
-+        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_head_norm, false, errors);
++        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +    }
 +
 +    llama_free(ctx);

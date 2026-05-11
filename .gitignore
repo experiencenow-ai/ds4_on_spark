@@ -9,5 +9,8 @@ build*/
 __pycache__/
 *.pyc
 upstreams/
+.git2/
 .codex_git/
 .codex_git_intake*/
+.git_local/
+.git-codex-*/
