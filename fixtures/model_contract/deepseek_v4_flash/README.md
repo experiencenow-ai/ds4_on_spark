@@ -8,6 +8,7 @@ This directory must **never** include large checkpoint shards (`model-00001-of-*
 
 Included upstream sources (metadata only):
 
+- `DeepSeek_V4.pdf` (technical report; small, safe to vendor)
 - `config.json`, `generation_config.json`
 - `model.safetensors.index.json` (tensor key set; no weight shards)
 - `contract_summary.json` (repo-generated, source-derived constants: topology, cache schedule, runtime params, tensor-key invariants (including `tensor_keys.required_top_level` and the `tensor_keys.required_layer_suffixes*` sets), `mtp.trust_gates`, plus `compat` mappings for interpreting external runtimes/configs)

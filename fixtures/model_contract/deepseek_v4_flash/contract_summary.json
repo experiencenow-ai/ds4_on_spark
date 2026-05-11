@@ -1416,12 +1416,14 @@
       "inference_kernel_py": "inference/kernel.py",
       "inference_model_py": "inference/model.py",
       "oracle_prompts_json": "oracle/prompts.json",
+      "technical_report_pdf": "DeepSeek_V4.pdf",
       "tokenizer_config_json": "tokenizer_config.json",
       "tokenizer_json": "tokenizer.json",
       "upstream_commit_txt": "upstream_commit.txt",
       "weight_index_json": "model.safetensors.index.json"
     },
     "fixtures_sha256": {
+      "DeepSeek_V4.pdf": "8a03dadae71894de1515da33e296f0df1dbeed3e7f4bf0badd087f9af77f29e9",
       "config.json": "b628e63398a645abc711d92207f8737dd8140f7a4ef1e0a5b3616019e0ddd818",
       "encoding/encoding_dsv4.py": "bdbd57c132a1b3725042323d02b98b9d1df28e5f388f134399555d041f5055e0",
       "encoding/tests/test_input_1.json": "10e0c074c977c3a80daab758af28219c6b1c2bd7f3f5cf2890c84b361cc32897",

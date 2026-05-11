@@ -1011,6 +1011,7 @@ def build_contract() -> dict:
 
 	fixture_sha = {}
 	for rel in (
+		"DeepSeek_V4.pdf",
 		"config.json",
 		"upstream_commit.txt",
 		"generation_config.json",
@@ -1045,6 +1046,7 @@ def build_contract() -> dict:
 			"fixtures_sha256": fixture_sha,
 			"fixtures": {
 				"config_json": "config.json",
+				"technical_report_pdf": "DeepSeek_V4.pdf",
 				"inference_config_json": "inference/config.json",
 				"inference_model_py": "inference/model.py",
 				"inference_kernel_py": "inference/kernel.py",
