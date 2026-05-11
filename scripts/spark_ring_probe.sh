@@ -198,13 +198,23 @@ fi
 echo
 echo "== storage (non-secret) =="
 if command -v lsblk >/dev/null 2>&1; then
-	lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT 2>/dev/null | head -n 200 || true
+	echo "-- lsblk (disks) --"
+	(lsblk -d -o NAME,TYPE,SIZE,MODEL 2>/dev/null | head -n 80) || (lsblk -d 2>/dev/null | head -n 80) || true
+	echo "-- lsblk (mounts, no loops) --"
+	(lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT 2>/dev/null | awk '"'"'NR==1 || $1 !~ /^loop/ {print}'"'"' | head -n 200) || true
 fi
 echo
 echo "== gpu (non-secret) =="
 if command -v nvidia-smi >/dev/null 2>&1; then
 	nvidia-smi --version 2>/dev/null || nvidia-smi -h 2>/dev/null | head -n 30 || true
-	nvidia-smi --query-gpu=index,name,compute_cap,pci.bus_id,driver_version --format=csv,noheader 2>/dev/null || true
+	q="$(nvidia-smi --query-gpu=index,name,compute_cap,pci.bus_id,driver_version --format=csv,noheader 2>/dev/null || true)"
+	if [ "$q" != "" ] && ! printf "%s" "$q" | grep -qi "not a valid field"; then
+		echo "$q"
+	else
+		q="$(nvidia-smi --query-gpu=index,name,pci.bus_id,driver_version --format=csv,noheader 2>/dev/null || true)"
+		[ "$q" != "" ] && echo "$q"
+		echo "note: nvidia-smi compute_cap field not supported; use scripts/spark_probe.sh for per-host cc"
+	fi
 fi
 echo
 if [ "$spark_ring_ping_matrix" = "1" ]; then
