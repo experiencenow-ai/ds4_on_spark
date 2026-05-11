@@ -93,7 +93,7 @@ def main() -> int:
 	parser.add_argument(
 		"--reference-json",
 		type=str,
-		default="docs/mtp-sidecar-probe-antirez-c198a70-payload64.json",
+		default="docs/mtp-sidecar-probe-antirez-b0c3326-payload64.json",
 		help="Pinned reference JSON containing payload_samples.",
 	)
 	parser.add_argument(
