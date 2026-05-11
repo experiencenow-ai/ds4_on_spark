@@ -71,6 +71,7 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(int(budget.get("records", 0)), 4)
         self.assertIn("tokens", budget)
         self.assertIn("latency_ms", budget)
+        self.assertIn("judge_out_budget", budget)
 
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
@@ -97,6 +98,25 @@ class JudgeEloTest(unittest.TestCase):
             latency_ms=None,
         )
         self.assertFalse(rec.get("parse_valid", True))
+
+    def test_parse_json_object_loose_extracts_first_object(self) -> None:
+        decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+        text = "NOTE {not json}\n" + json.dumps(decision, separators=(",", ":"), ensure_ascii=False) + "\nTRAILING"
+        obj, perr = schema.parse_json_object_loose(text)
+        self.assertEqual(perr, "")
+        self.assertIsInstance(obj, dict)
+        self.assertEqual(obj.get("winner"), "tie")
+
+    def test_json_schema_files_present(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
+        rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
+        for path in (dec_path, rec_path):
+            with open(path, "r", encoding="utf-8") as f:
+                obj = json.load(f)
+            self.assertIsInstance(obj, dict)
+            self.assertEqual(obj.get("type"), "object")
+            self.assertIn("properties", obj)
 
 
 if __name__ == "__main__":
