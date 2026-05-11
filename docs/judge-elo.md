@@ -42,14 +42,27 @@ Optional but recommended (for speed/quality separation and budgeting):
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
 - `parse_error`: short string when `parse_valid=false`
 
+For baseline-quality joins, treat `tokens` and `latency_ms` as required and validate with:
+
+```bash
+python3 scripts/judge_elo_validate.py --strict --in <records.jsonl>
+```
+
 ## Prompt Design (verifier budget)
 
 Use a strict system instruction:
 - "Return minified JSON only; no explanation."
 - "Keep `reason` and `train_hint` under 18 words each."
 - "Use scores to justify the margin; do not add extra keys."
+- Keep the JSON short: target `judge_out <= ~64 tokens` (reason/hint are the budget drivers).
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
+
+To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
+
+```bash
+python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
+```
 
 ## Offline ELO
 
@@ -57,7 +70,9 @@ The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 - validates input JSONL (optional strict mode)
 - filters to `parse_valid=true`
 - performs deterministic Elo updates (order = input order; optionally stable-sorted by `pair_id` only)
-- writes JSON/CSV/Markdown leaderboard summaries
+- writes JSON/CSV/Markdown leaderboard summaries plus:
+  - `quality_map.json` (model -> `quality_score`)
+  - `budget.json` (token/latency/parse-validity summary over the input JSONL)
 
 Elo math:
 - expected score: `E_A = 1 / (1 + 10^((R_B - R_A)/400))`

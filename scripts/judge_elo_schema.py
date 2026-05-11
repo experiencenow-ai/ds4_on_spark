@@ -178,6 +178,59 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
     return errs
 
 
+def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
+    """Strict validation for records intended to feed baseline-quality joins.
+
+    Compared to validate_record(), this additionally requires token/latency
+    accounting to be present (so the baseline runtime loop can compute
+    quality-adjusted tok/s without mixing judge quality and speed signals).
+    """
+    errs = validate_record(obj)
+
+    tokens = obj.get("tokens")
+    if not isinstance(tokens, dict):
+        errs.append("tokens is required and must be an object")
+    else:
+        for k in ("a_out", "b_out", "judge_in", "judge_out"):
+            if k not in tokens:
+                errs.append(f"tokens.{k} is required")
+                continue
+            v = tokens.get(k)
+            if not _is_int(v):
+                errs.append(f"tokens.{k} must be an integer")
+                continue
+            if int(v) < 0:
+                errs.append(f"tokens.{k} must be >= 0")
+
+    latency_ms = obj.get("latency_ms")
+    if not isinstance(latency_ms, dict):
+        errs.append("latency_ms is required and must be an object")
+    else:
+        for k in ("a", "b", "judge"):
+            if k not in latency_ms:
+                errs.append(f"latency_ms.{k} is required")
+                continue
+            v = latency_ms.get(k)
+            if not _is_int(v):
+                errs.append(f"latency_ms.{k} must be an integer")
+                continue
+            if int(v) < 0:
+                errs.append(f"latency_ms.{k} must be >= 0")
+
+    parse_valid = obj.get("parse_valid")
+    if parse_valid is False:
+        raw = obj.get("raw")
+        parse_error = obj.get("parse_error")
+        if raw is None and parse_error is None:
+            errs.append("parse_invalid records should include raw and/or parse_error")
+        if isinstance(raw, str) and len(raw) > 512:
+            errs.append("raw must be <= 512 chars")
+        if isinstance(parse_error, str) and len(parse_error) > 128:
+            errs.append("parse_error must be <= 128 chars")
+
+    return errs
+
+
 def parse_json_object_loose(text: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Parse a JSON object even if the model wrapped it with extra text."""
     try:
