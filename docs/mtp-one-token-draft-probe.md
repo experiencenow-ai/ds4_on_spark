@@ -90,6 +90,18 @@ Before running this probe, the Spark/CUDA fork needs a **real** one-token MTP co
 5. **Separate speculative state**: do not reuse trunk KV/cache state for the draft path; draft state must be independently reset/rolled back (even if the first probe uses a minimal prompt).
 6. **Emit the JSON contract**: output a single JSON object matching this doc + validate it with `scripts/model_contract_validate_mtp_one_token_draft_probe.py` before attempting any acceptance-rate experiments.
 
+## Code pointers (DS4 + llama.cpp fork)
+
+When implementing the actual Spark/CUDA one-token command, avoid “guessy” wiring by following these pinned code pointers:
+
+- DS4 reference behavior + tensor usage (source of truth): `upstreams/ds4/ds4.c`
+  - Sidecar binding + strict layout checks: `mtp_weights_bind(...)`
+  - One-step draft: `metal_graph_eval_mtp_draft_from_hc(...)`
+  - Draft output head (sidecar head + trunk vocab projection): `metal_graph_encode_output_head_mtp(...)`
+- Spark/CUDA llama.cpp fork building blocks (kamnxt @ `9222e55`):
+  - Hyper-connection helpers used by trunk: `src/models/deepseek4.cpp` (`dsv4_hc_pre(...)`, `dsv4_hc_post(...)`, `dsv4_hc_head(...)`)
+  - Trunk logits path uses `model.output` as the vocab projection; DS4’s MTP draft head still uses the trunk vocab matrix.
+
 ## Semantics (reference)
 
 For DeepSeek V4, the MTP module uses separate `e_proj` / `h_proj` projections and applies the `hc_head_*` head in `compute_logits` for draft token selection. Reference: vLLM API docs `vllm.model_executor.models.deepseek_v4_mtp` (DeepSeek V4 MTP draft model).
