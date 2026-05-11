@@ -64,7 +64,7 @@ These are community conversions distributed as `*.safetensors` shards. This repo
 
 | Candidate | Artifact (pinned) | License | Size (GiB) | Single-Spark plausibility | Runtime status |
 | --- | --- | --- | ---: | --- | --- |
-| L | `bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target` (`0cb3642b466e93bc30d83ff3f9afb122914e9645`) | MIT | 82.34 | Plausible | Blocked: runtime/loader support not yet pinned; see `docs/upstream-quantized-v4-flash-safetensors.md`. |
+| L | `bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target` (`0cb3642b466e93bc30d83ff3f9afb122914e9645`) | MIT | 82.34 | Plausible | Pinned bring-up path is vLLM + `Entrpi/ds4-spark-vllm` overlay (`--quantization deepseek_v4_hybrid_iq2`); still requires a human-approved fixture + on-hardware validation. |
 
 ## What this repo should do next (intake posture)
 
