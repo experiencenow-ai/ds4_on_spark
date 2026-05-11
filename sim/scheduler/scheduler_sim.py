@@ -2127,12 +2127,20 @@ def _derive_mtp_accept_len(route: TokenRoute, mtp_draft_len: int) -> Optional[in
     return(None)
 
 
-def _derive_dflash_accept_len(route: TokenRoute) -> Optional[int]:
+def _derive_dflash_accept_len(route: TokenRoute, dflash_draft_len: int) -> Optional[int]:
     if route.dflash_accept_len is not None:
         return(int(route.dflash_accept_len))
     if route.accepted_dflash is not None:
         al = (int(route.accepted_dflash) + 1)
         if al < 1:
+            return(None)
+        return(int(al))
+    if route.rejected_dflash is not None and dflash_draft_len > 0:
+        rd = int(route.rejected_dflash)
+        if rd < 0 or rd > dflash_draft_len:
+            return(None)
+        al = ((dflash_draft_len - rd) + 1)
+        if al < 1 or al > (dflash_draft_len + 1):
             return(None)
         return(int(al))
     return(None)
@@ -2150,10 +2158,16 @@ def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Op
     inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
     if inferred_mtp_draft_len is not None and "mtp_draft_len" not in meta_out:
         meta_out["mtp_draft_len"] = int(inferred_mtp_draft_len)
+    inferred_dflash_draft_len = infer_dflash_draft_len_from_trace(trace, meta)
+    if inferred_dflash_draft_len is not None and "dflash_draft_len" not in meta_out:
+        meta_out["dflash_draft_len"] = int(inferred_dflash_draft_len)
 
     mtp_draft_len = 0
     if isinstance(meta_out.get("mtp_draft_len"), int):
         mtp_draft_len = int(meta_out["mtp_draft_len"])
+    dflash_draft_len = 0
+    if isinstance(meta_out.get("dflash_draft_len"), int):
+        dflash_draft_len = int(meta_out["dflash_draft_len"])
 
     f = sys.stdout if path == "-" else open(path, "w", encoding="utf-8")
     try:
@@ -2190,7 +2204,7 @@ def write_trace_jsonl_canonical(path: str, trace: Sequence[TokenRoute], meta: Op
                 obj["accepted_mtp"] = int(r.accepted_mtp)
             if r.rejected_mtp is not None:
                 obj["rejected_mtp"] = int(r.rejected_mtp)
-            dflash_accept_len = _derive_dflash_accept_len(r)
+            dflash_accept_len = _derive_dflash_accept_len(r, dflash_draft_len)
             if dflash_accept_len is not None:
                 obj["dflash_accept_len"] = int(dflash_accept_len)
             if r.accepted_dflash is not None:
@@ -2265,6 +2279,12 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     present_kv_tokens = 0
     present_expert_batch_size = 0
 
+    dflash_draft_len = infer_dflash_draft_len_from_trace(trace, meta)
+    if dflash_draft_len is None:
+        dflash_draft_len = 0
+    else:
+        dflash_draft_len = int(dflash_draft_len)
+
     for r in trace:
         if r.cls == LatencyClass.INTERACTIVE:
             num_i += 1
@@ -2314,6 +2334,10 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             dflash_accept_lens.append(float(int(r.accepted_dflash) + 1))
         elif r.rejected_dflash is not None:
             present_rejected_dflash += 1
+            if dflash_draft_len > 0:
+                al = ((dflash_draft_len - int(r.rejected_dflash)) + 1)
+                if al >= 1 and al <= (dflash_draft_len + 1):
+                    dflash_accept_lens.append(float(al))
         if r.cost_scale is not None:
             present_cost_scale += 1
         if r.decode_ms is not None:
@@ -2376,6 +2400,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
     if inferred_mtp_draft_len is not None:
         inferred["mtp_draft_len"] = int(inferred_mtp_draft_len)
+    inferred_dflash_draft_len = infer_dflash_draft_len_from_trace(trace, meta)
+    if inferred_dflash_draft_len is not None:
+        inferred["dflash_draft_len"] = int(inferred_dflash_draft_len)
     if len(inferred) != 0:
         out["inferred"] = inferred
     return(out)
@@ -2408,6 +2435,24 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
         if r.accepted_mtp is None or r.rejected_mtp is None:
             continue
         g = (int(r.accepted_mtp) + int(r.rejected_mtp))
+        if gamma is None:
+            gamma = g
+        elif gamma != g:
+            return(None)
+    return(gamma)
+
+
+def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    if meta is not None:
+        v = meta.get("dflash_draft_len")
+        if isinstance(v, int) and v >= 0:
+            return(int(v))
+
+    gamma: Optional[int] = None
+    for r in trace:
+        if r.accepted_dflash is None or r.rejected_dflash is None:
+            continue
+        g = (int(r.accepted_dflash) + int(r.rejected_dflash))
         if gamma is None:
             gamma = g
         elif gamma != g:
@@ -2827,7 +2872,12 @@ def _mtp_attempted_draft_len(draft_len: int, accept_len: int) -> int:
     return(min(draft_len, accept_len))
 
 
-def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out: Optional[List[TokenState]] = None) -> SimMetrics:
+def run_simulation(
+    cfg: SimConfig,
+    trace: Sequence[TokenRoute],
+    token_states_out: Optional[List[TokenState]] = None,
+    trace_meta: Optional[Dict[str, object]] = None,
+) -> SimMetrics:
     if cfg.num_experts <= 0:
         raise ValueError("num_experts must be > 0")
     if cfg.expert_parallelism <= 0:
@@ -3191,6 +3241,8 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     metrics.dflash_accept_len_per_step = [-1 for _ in range(len(trace))]
     metrics.dflash_accepted_per_step = [-1 for _ in range(len(trace))]
     metrics.dflash_rejected_per_step = [-1 for _ in range(len(trace))]
+    dflash_draft_len = infer_dflash_draft_len_from_trace(trace, trace_meta)
+    dflash_draft_len = int(dflash_draft_len) if dflash_draft_len is not None else 0
 
     def _token_first_admit(tid: int) -> None:
         ts = tokens[tid]
@@ -3262,7 +3314,7 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         if metrics.dflash_accept_len_per_step[tid] != -1 or metrics.dflash_accepted_per_step[tid] != -1 or metrics.dflash_rejected_per_step[tid] != -1:
             return
         metrics.dflash_steps += 1
-        dal = _derive_dflash_accept_len(route)
+        dal = _derive_dflash_accept_len(route, dflash_draft_len)
         if dal is not None:
             metrics.dflash_accept_len_per_step[tid] = int(dal)
             metrics.dflash_output_tokens += int(dal)
@@ -4024,7 +4076,7 @@ def compare_simulation_variants_with_dumps(
     dump_enabled = (dump_tmpl != "")
     base_token_states: List[TokenState] = []
     base_trace = scale_trace_arrival_units(trace, arrival_units, base_cfg)
-    base_metrics = run_simulation(base_cfg, base_trace, token_states_out=base_token_states if dump_enabled else None)
+    base_metrics = run_simulation(base_cfg, base_trace, token_states_out=base_token_states if dump_enabled else None, trace_meta=trace_meta)
     if dump_enabled:
         write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), base_trace, base_token_states, base_cfg, meta=trace_meta)
     base_json = base_metrics.to_jsonable()
@@ -4039,7 +4091,7 @@ def compare_simulation_variants_with_dumps(
         if int(base_cfg.mtp_draft_len) > 0 and int(cfg.mtp_draft_len) <= 0:
             trace_in = strip_trace_mtp_fields(trace)
         v_trace = scale_trace_arrival_units(trace_in, arrival_units, cfg)
-        m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None)
+        m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None, trace_meta=trace_meta)
         if dump_enabled:
             write_sim_jsonl(dump_tmpl.replace("{label}", label), v_trace, token_states, cfg, meta=trace_meta)
         summary = compare_summary_jsonable(m)
@@ -4090,7 +4142,7 @@ def compare_simulation_summaries_with_dumps(
     dump_enabled = (dump_tmpl != "")
     base_token_states: List[TokenState] = []
     base_trace = scale_trace_arrival_units(trace, arrival_units, base_cfg)
-    base_metrics = run_simulation(base_cfg, base_trace, token_states_out=base_token_states if dump_enabled else None)
+    base_metrics = run_simulation(base_cfg, base_trace, token_states_out=base_token_states if dump_enabled else None, trace_meta=trace_meta)
     if dump_enabled:
         write_sim_jsonl(dump_tmpl.replace("{label}", "baseline"), base_trace, base_token_states, base_cfg, meta=trace_meta)
     base_summary = compare_summary_jsonable(base_metrics)
@@ -4104,7 +4156,7 @@ def compare_simulation_summaries_with_dumps(
         if int(base_cfg.mtp_draft_len) > 0 and int(cfg.mtp_draft_len) <= 0:
             trace_in = strip_trace_mtp_fields(trace)
         v_trace = scale_trace_arrival_units(trace_in, arrival_units, cfg)
-        m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None)
+        m = run_simulation(cfg, v_trace, token_states_out=token_states if dump_enabled else None, trace_meta=trace_meta)
         if dump_enabled:
             write_sim_jsonl(dump_tmpl.replace("{label}", label), v_trace, token_states, cfg, meta=trace_meta)
         summary = compare_summary_jsonable(m)
@@ -4695,7 +4747,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         sim_trace = scale_trace_arrival_units(trace, arrival_units_sim, sim_cfg)
         token_states: List[TokenState] = []
-        metrics = run_simulation(sim_cfg, sim_trace, token_states_out=token_states if dump_sim_enabled else None)
+        metrics = run_simulation(sim_cfg, sim_trace, token_states_out=token_states if dump_sim_enabled else None, trace_meta=trace_meta)
         if dump_sim_enabled:
             try:
                 dump_path = dump_sim_jsonl.replace("{label}", "baseline") if "{label}" in dump_sim_jsonl else dump_sim_jsonl
