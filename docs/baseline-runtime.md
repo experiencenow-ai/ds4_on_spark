@@ -84,11 +84,6 @@ MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/mo
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
-By default, `scripts/run_quantized_single_spark.sh` enables the read-only
-llama.cpp patch-status probes (`LLAMA_FATTN_PATCH_PROBE=1` and
-`LLAMA_MULTISLOT_PATCH_PROBE=1`) and includes their summaries in the baseline
-report. Set either env var to `0` to skip.
-
 Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 `REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime. See
 `docs/quantized-single-spark.md` for the milestone definition and failure
@@ -162,10 +157,12 @@ Per-script useful env vars:
 - `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL_ID` (CSV label override; avoids absolute Spark paths)
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
+- `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM` (skip irrelevant probes for faster multi-model loops)
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/run_baseline_vllm_dflash_pair.sh`: `VLLM_SCOPE_TARGET`, `VLLM_SCOPE_DFLASH` (CSV `scope` labels for target-only vs DFlash)
+- `scripts/run_baseline_vllm_matrix.sh`: tab-separated matrix file runner for repeated target-only + DFlash probes with shared prompt/token settings
 
 See `docs/upstream-qwen-dflash.md` for Ling, Qwen, and DFlash candidate order,
 artifact sizes, and example vLLM env strings.
@@ -188,6 +185,23 @@ scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
 ```
 
 If `VLLM_DRAFT_MODEL` is omitted, the wrapper runs target-only and exits.
+
+### vLLM matrix runner (recommended for Qwen/Ling ladders)
+
+If you have multiple targets already staged on Spark0 and want the same prompt,
+token budget, and CSV labeling across all runs, use the matrix wrapper:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+PROMPT='Explain Redis streams in one paragraph.' \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+scripts/run_baseline_vllm_matrix.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
+```
+
+The matrix runner defaults to `SKIP_LLAMA=1`, `SKIP_GGUF_INSPECT=1`, and
+`SKIP_MTP_SIDECAR=1` because Ling/Qwen/DFlash comparisons do not benefit from
+DeepSeek-specific probes. See `docs/baseline-vllm-matrix.md` for a template and
+the recommended measurement order.
 
 Recommended first comparison order (after DeepSeek V4 Flash can generate on Spark0):
 

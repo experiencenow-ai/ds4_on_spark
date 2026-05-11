@@ -159,6 +159,19 @@ MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
 scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
 ```
 
+If you are running a full Ling/Qwen ladder (multiple targets already staged on
+Spark0), prefer the matrix wrapper so all runs share the same prompt/token
+budget and the DeepSeek-specific probes are skipped by default:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+PROMPT='Explain Redis streams in one paragraph.' \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+scripts/run_baseline_vllm_matrix.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
+```
+
+See `docs/baseline-vllm-matrix.md` for the TSV format and a template.
+
 If the model is not already on Spark0, set `ALLOW_FETCH=1` only after approving
 the large download. Reports record the `REMOTE_*` env values, so do not place
 tokens or secrets there.

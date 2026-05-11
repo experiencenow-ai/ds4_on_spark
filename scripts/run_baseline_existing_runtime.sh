@@ -21,6 +21,10 @@ LLAMA_FATTN_PATCH_PROBE="${LLAMA_FATTN_PATCH_PROBE:-0}"
 LLAMA_MULTISLOT_PATCH_PROBE="${LLAMA_MULTISLOT_PATCH_PROBE:-0}"
 LLAMA_SERVER_SWEEP="${LLAMA_SERVER_SWEEP:-0}"
 LLAMA_SERVER_THROUGHPUT_SWEEP="${LLAMA_SERVER_THROUGHPUT_SWEEP:-0}"
+SKIP_GGUF_INSPECT="${SKIP_GGUF_INSPECT:-0}"
+SKIP_LLAMA="${SKIP_LLAMA:-0}"
+SKIP_MTP_SIDECAR="${SKIP_MTP_SIDECAR:-0}"
+SKIP_VLLM="${SKIP_VLLM:-0}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -262,6 +266,10 @@ score_model_runs_csv()
         echo "- model_runs_csv: $MODEL_RUNS_CSV"
         echo "- llama_scope: ${LLAMA_SCOPE:-llamacpp}"
         echo "- vllm_scope: ${VLLM_SCOPE:-vllm}"
+        echo "- skip_gguf_inspect: ${SKIP_GGUF_INSPECT:-0}"
+        echo "- skip_llama: ${SKIP_LLAMA:-0}"
+        echo "- skip_mtp_sidecar: ${SKIP_MTP_SIDECAR:-0}"
+        echo "- skip_vllm: ${SKIP_VLLM:-0}"
     fi
     echo
     if [ "$MODEL_RUNS_CSV" != "" ] || [ "$PUBLIC_QUALITY_PRIOR" != "" ] || [ "$PUBLIC_QUALITY_BASIS" != "" ] || [ "$PUBLIC_QUALITY_SOURCE" != "" ] || [ "$PASSED_TASKS" != "" ] || [ "$TOTAL_TASKS" != "" ] || [ "$LOCAL_QUALITY_SCORE" != "" ] || [ "$QUALITY_SCORE" != "" ]; then
@@ -338,6 +346,7 @@ score_model_runs_csv()
     echo
 } >"$REPORT_MD"
 
+if [ "$SKIP_GGUF_INSPECT" != "1" ]; then
 echo "== running GGUF contract inspector on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_inspect_quantized_artifact.py && chmod +x /tmp/model_contract_inspect_quantized_artifact.py" <"$repo_root/scripts/model_contract_inspect_quantized_artifact.py" \
     >/dev/null 2>"$OUT_DIR/remote_gguf_inspect_copy_stderr.txt" || true
@@ -379,10 +388,11 @@ python3 /tmp/model_contract_inspect_quantized_artifact.py --path \"\${MODEL_GGUF
     echo "- stderr: $OUT_DIR/remote_gguf_inspect_stderr.txt"
     echo
 } >>"$REPORT_MD"
+fi
 
 REMOTE_PROBE_ENV="$(remote_env_prefix)"
 
-if [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
+if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
     echo "== running llama.cpp fattn patch source probe on spark (read-only) =="
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_fattn_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_fattn_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_fattn_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_fattn_patch_probe.py" \
         >"$OUT_DIR/remote_fattn_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_fattn_patch_probe_stderr.txt" || true
@@ -403,7 +413,7 @@ if [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
     } >>"$REPORT_MD"
 fi
 
-if [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
+if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
     echo "== running llama.cpp multislot patch source probe on spark (read-only) =="
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_multislot_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_multislot_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_multislot_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_multislot_patch_probe.py" \
         >"$OUT_DIR/remote_multislot_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_multislot_patch_probe_stderr.txt" || true
@@ -424,6 +434,9 @@ if [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
     } >>"$REPORT_MD"
 fi
 
+if [ "$SKIP_LLAMA" = "1" ]; then
+    echo "== skipping llama.cpp probe/bench =="
+else
 echo "== running llama.cpp benchmark script on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && $REMOTE_LLAMA_ENV /tmp/benchmark_llamacpp_spark.sh" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
     >"$OUT_DIR/remote_llamacpp_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_stderr.txt" || true
@@ -457,6 +470,7 @@ append_model_runs_csv "${LLAMA_SCOPE:-llamacpp}" "${MODEL_SOURCE:-llamacpp}" "$O
     echo '```'
     echo
 } >>"$REPORT_MD"
+fi
 
 fetch_remote_dir_tar()
 {
@@ -469,7 +483,7 @@ fetch_remote_dir_tar()
     ssh $SSH_OPTS "$target" "if [ -d $remote_dir ]; then tar -C /tmp -czf - $remote_name; fi" >"$local_tgz" 2>"$local_tgz.stderr" || true
 }
 
-if [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
+if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
     echo "== running llama-server prompt sweep on spark (may be gated) =="
     remote_dir="/tmp/ds4_llama_server_sweep_$ts"
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_server_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_sweep.py && $(remote_server_sweep_env) OUT_DIR=$remote_dir python3 /tmp/benchmark_llamacpp_server_sweep.py" <"$repo_root/scripts/benchmark_llamacpp_server_sweep.py" \
@@ -488,10 +502,10 @@ if [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
         echo "- stderr: $OUT_DIR/remote_llama_server_sweep_stderr.txt"
         echo "- tarball: $OUT_DIR/remote_llama_server_sweep.tgz"
         echo
-    } >>"$REPORT_MD"
+} >>"$REPORT_MD"
 fi
 
-if [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
+if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
     echo "== running llama-server throughput sweep on spark (may be gated) =="
     remote_dir="/tmp/ds4_llama_server_throughput_sweep_$ts"
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_server_throughput_sweep.py && chmod +x /tmp/benchmark_llamacpp_server_throughput_sweep.py && $(remote_throughput_sweep_env) OUT_DIR=$remote_dir python3 /tmp/benchmark_llamacpp_server_throughput_sweep.py" <"$repo_root/scripts/benchmark_llamacpp_server_throughput_sweep.py" \
@@ -510,9 +524,12 @@ if [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
         echo "- stderr: $OUT_DIR/remote_llama_server_throughput_sweep_stderr.txt"
         echo "- tarball: $OUT_DIR/remote_llama_server_throughput_sweep.tgz"
         echo
-    } >>"$REPORT_MD"
+} >>"$REPORT_MD"
 fi
 
+if [ "$SKIP_MTP_SIDECAR" = "1" ]; then
+    echo "== skipping MTP sidecar contract probe =="
+else
 echo "== running MTP sidecar contract probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py && $REMOTE_MTP_SIDECAR_ENV sh -lc '
 set -eu
@@ -550,44 +567,49 @@ python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"\${MTP_SIDECAR_GGUF}\"
     echo "- stderr: $OUT_DIR/remote_mtp_sidecar_probe_stderr.txt"
     echo
 } >>"$REPORT_MD"
-
-echo "== running vLLM probe script on spark =="
-ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && $REMOTE_VLLM_ENV /tmp/benchmark_vllm_spark.sh" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
-    >"$OUT_DIR/remote_vllm_stdout.txt" 2>"$OUT_DIR/remote_vllm_stderr.txt" || true
-
-vllm_model_label="$VLLM_MODEL"
-if [ "$VLLM_MODEL_ID" != "" ]; then
-    vllm_model_label="$VLLM_MODEL_ID"
 fi
-append_model_runs_csv "${VLLM_SCOPE:-vllm}" "${vllm_model_label:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
 
-{
-    echo "## vLLM (Spark)"
-    echo
-    echo "Summary (best-effort):"
-    echo
-    echo '```'
-    extract_baseline_summary "$OUT_DIR/remote_vllm_stdout.txt"
-    echo '```'
-    echo
-    echo "Full logs:"
-    echo
-    echo "- stdout: $OUT_DIR/remote_vllm_stdout.txt"
-    echo "- stderr: $OUT_DIR/remote_vllm_stderr.txt"
-    echo
-    echo "Stdout:"
-    echo
-    echo '```'
-    sed -n '1,200p' "$OUT_DIR/remote_vllm_stdout.txt" || true
-    echo '```'
-    echo
-    echo "Stderr:"
-    echo
-    echo '```'
-    sed -n '1,200p' "$OUT_DIR/remote_vllm_stderr.txt" || true
-    echo '```'
-    echo
-} >>"$REPORT_MD"
+if [ "$SKIP_VLLM" = "1" ]; then
+    echo "== skipping vLLM probe =="
+else
+    echo "== running vLLM probe script on spark =="
+    ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && $REMOTE_VLLM_ENV /tmp/benchmark_vllm_spark.sh" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
+        >"$OUT_DIR/remote_vllm_stdout.txt" 2>"$OUT_DIR/remote_vllm_stderr.txt" || true
+
+    vllm_model_label="$VLLM_MODEL"
+    if [ "$VLLM_MODEL_ID" != "" ]; then
+        vllm_model_label="$VLLM_MODEL_ID"
+    fi
+    append_model_runs_csv "${VLLM_SCOPE:-vllm}" "${vllm_model_label:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
+
+    {
+        echo "## vLLM (Spark)"
+        echo
+        echo "Summary (best-effort):"
+        echo
+        echo '```'
+        extract_baseline_summary "$OUT_DIR/remote_vllm_stdout.txt"
+        echo '```'
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_vllm_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_vllm_stderr.txt"
+        echo
+        echo "Stdout:"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_vllm_stdout.txt" || true
+        echo '```'
+        echo
+        echo "Stderr:"
+        echo
+        echo '```'
+        sed -n '1,200p' "$OUT_DIR/remote_vllm_stderr.txt" || true
+        echo '```'
+        echo
+    } >>"$REPORT_MD"
+fi
 
 score_model_runs_csv
 
