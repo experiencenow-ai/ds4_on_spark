@@ -120,6 +120,7 @@ The scripts compute:
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Runtime / throughput** (optional): `input_tokens`, `output_tokens`, `wall_ms`, plus derived `output_tok_per_s`, `total_tok_per_s`, and `ms_per_output_token`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
+  - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
 - **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns.
 - **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
@@ -161,6 +162,7 @@ python3 scripts/entropy_buffer_recommend.py \
 Notes:
 
 - If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
+- If candidate records include an `answer`/`final_answer` (or an `output` with an extractable answer), the recommender can reward **answer-option diversity** via `--answer-weight` (set to `0` to disable).
 - If candidate records include `buffer_item_id`, the recommender can reward **new buffer items** to avoid reuse concentration:
   - Use `--avoid-seen-buffer-item-id` to hard-exclude previously-used `buffer_item_id`s.
   - Tune weighting with `--buffer-id-weight` / `--buffer-item-weight` (set to `0` to disable).
