@@ -105,6 +105,8 @@ need_file "$systemd_user_dir/ds4-preflight-tp3@.timer"
 need_file "$systemd_user_dir/ds4-preflight-tp3-strict@.timer"
 need_file "$systemd_user_dir/ds4-preflight-tp4@.timer"
 need_file "$systemd_user_dir/ds4-preflight-tp4-strict@.timer"
+need_file "$systemd_user_dir/ds4-support-bundle@.service"
+need_file "$systemd_user_dir/ds4-support-bundle@.timer"
 
 need_file "$config_dir/ds4.env.example"
 need_file "$config_dir/ds4-spark0.env.example"

@@ -13,7 +13,7 @@ Copy templates to your user-unit directory:
 ```bash
 install -d -m 0755 ~/.config/systemd/user
 cp deploy/systemd-user/ds4*.service ~/.config/systemd/user/
-cp deploy/systemd-user/ds4*.timer ~/.config/systemd/user/ 2>/dev/null || true
+cp deploy/systemd-user/ds4*.timer ~/.config/systemd/user/ 2>/dev/null || true  # optional (timers)
 systemctl --user daemon-reload
 ```
 
@@ -46,6 +46,12 @@ systemctl --user enable --now ds4@spark0.service
 
 # strict DS4 start (requires ds4-preflight-strict@%i):
 # systemctl --user enable --now ds4-strict@spark0.service
+
+# optional (collect a support bundle on preflight failure or by hand):
+systemctl --user start ds4-support-bundle@spark0.service
+
+# optional (periodic support bundle timer; defaults to weekly):
+# systemctl --user enable --now ds4-support-bundle@spark0.timer
 ```
 
 Optional: periodic preflight timers (safe, non-destructive):

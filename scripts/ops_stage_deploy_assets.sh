@@ -221,6 +221,10 @@ cat <<'EOF'
 #   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance ${instance} --start-preflight
 # Optional validator (non-root):
 #   /tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance ${instance} --strict
+# Optional support bundle collector (no sudo):
+#   systemctl --user start ds4-support-bundle@<instance>.service
+# Optional weekly timer:
+#   systemctl --user enable --now ds4-support-bundle@<instance>.timer
 #
 # If you are doing a non-root bring-up with a user-space DS4 checkout, see:
 #   docs/deployment-systemd-user.md

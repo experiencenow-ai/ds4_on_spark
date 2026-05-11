@@ -2,6 +2,7 @@
 Description=DS4 user TP=3 preflight checks (%i)
 Wants=network-online.target
 After=network-online.target
+OnFailure=ds4-support-bundle@%i.service
 ConditionPathIsExecutable=%h/ds4/scripts/ops_ds4_env_check.sh
 ConditionPathIsExecutable=%h/ds4/scripts/ops_tp3_readiness.sh
 
@@ -27,4 +28,3 @@ PrivateTmp=true
 
 [Install]
 WantedBy=default.target
-
