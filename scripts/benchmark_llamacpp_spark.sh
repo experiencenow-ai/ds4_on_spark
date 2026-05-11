@@ -119,7 +119,7 @@ echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU
 echo
 
 python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT"
-import os, resource, re, subprocess, sys, time, shlex
+import json, os, resource, re, subprocess, sys, time, shlex
 
 llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant = sys.argv[1:]
 
@@ -182,6 +182,151 @@ end = time.monotonic()
 
 ru = resource.getrusage(resource.RUSAGE_CHILDREN)
 
+def scan_fattn_cli(log_path: str):
+    out = {
+        "log_path": log_path,
+        "seen_fattn_disabled": False,
+        "seen_sched_reserve_cpu_fattn": False,
+        "fattn_line_count": 0,
+        "fattn_node_unique": 0,
+        "fattn_id_min": None,
+        "fattn_id_max": None,
+        "fattn_id_span": None,
+        "fattn_id_missing_count": None,
+        "fattn_expected_id_0_42_ok": None,
+        "fattn_backend_counts": {},
+        "fattn_backend_unique": 0,
+        "fattn_backend0_only": False,
+        "fattn_expected_backend0_ok": None,
+        "fattn_cuda_device_counts": {},
+        "fattn_cuda_device_unique": 0,
+        "fattn_cuda_device0_only": False,
+        "fattn_expected_cuda_device0_ok": None,
+        "fattn_cpu_line_count": 0,
+        "fattn_cuda_line_count": 0,
+        "sched_reserve_line_count": 0,
+        "sched_reserve_graph_nodes": None,
+        "sched_reserve_graph_splits": None,
+        "sched_reserve_took_ms": None,
+        "node_kind_unique": 0,
+        "node_kind_cpu_top": [],
+        "node_kind_cuda_top": [],
+        "match_lines": [],
+        "fattn_nodes_sample": [],
+        "node_kinds_sample": [],
+    }
+    if not log_path or not os.path.exists(log_path):
+        return out
+    nodes = set()
+    fattn_ids = set()
+    fattn_backend = {}
+    fattn_cuda_dev = {}
+    kind_nodes = set()
+    kind_cpu = {}
+    kind_cuda = {}
+    match_lines = []
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                ln = line.rstrip("\n")
+                is_match = False
+                if ln.startswith("sched_reserve:"):
+                    out["sched_reserve_line_count"] += 1
+                    m = re.search(r"graph nodes\\s*=\\s*(\\d+)", ln)
+                    if m is not None:
+                        try:
+                            out["sched_reserve_graph_nodes"] = int(m.group(1))
+                        except ValueError:
+                            pass
+                    m = re.search(r"graph splits\\s*=\\s*(\\d+)", ln)
+                    if m is not None:
+                        try:
+                            out["sched_reserve_graph_splits"] = int(m.group(1))
+                        except ValueError:
+                            pass
+                    m = re.search(r"reserve took\\s*([0-9]+(?:\\.[0-9]+)?)\\s*ms", ln)
+                    if m is not None:
+                        try:
+                            out["sched_reserve_took_ms"] = float(m.group(1))
+                        except ValueError:
+                            pass
+                if "Flash Attention was auto, set to disabled" in ln:
+                    out["seen_fattn_disabled"] = True
+                    is_match = True
+                if "Flash Attention tensor is assigned to device CPU" in ln:
+                    out["seen_sched_reserve_cpu_fattn"] = True
+                    is_match = True
+                if "__fattn__" in ln:
+                    out["fattn_line_count"] += 1
+                    for m in re.finditer(r"__fattn__-(\\d+)", ln):
+                        nodes.add("__fattn__-" + m.group(1))
+                        try:
+                            fattn_ids.add(int(m.group(1)))
+                        except ValueError:
+                            pass
+                    m = re.search(r"(?:cuda\\s+backend|backend)\\s*(?:=|:)?\\s*([0-9]+)", ln, flags=re.IGNORECASE)
+                    if m is not None:
+                        try:
+                            bid = int(m.group(1))
+                            fattn_backend[bid] = fattn_backend.get(bid, 0) + 1
+                        except ValueError:
+                            pass
+                    m = re.search(r"CUDA([0-9]+)", ln)
+                    if m is not None:
+                        try:
+                            did = int(m.group(1))
+                            fattn_cuda_dev[did] = fattn_cuda_dev.get(did, 0) + 1
+                        except ValueError:
+                            pass
+                    low = ln.lower()
+                    if "cpu" in low:
+                        out["fattn_cpu_line_count"] += 1
+                    if "cuda" in low:
+                        out["fattn_cuda_line_count"] += 1
+                    is_match = True
+                for m in re.finditer(r"(__[A-Za-z0-9_]+__)-\\d+", ln):
+                    kind_nodes.add(m.group(1))
+                    low = ln.lower()
+                    if "cpu" in low:
+                        kind_cpu[m.group(1)] = kind_cpu.get(m.group(1), 0) + 1
+                    if "cuda" in low:
+                        kind_cuda[m.group(1)] = kind_cuda.get(m.group(1), 0) + 1
+                    is_match = True
+                if is_match and len(match_lines) < 50:
+                    match_lines.append(ln[:4000])
+    except Exception:
+        pass
+    out["fattn_node_unique"] = len(nodes)
+    out["match_lines"] = match_lines
+    out["fattn_nodes_sample"] = sorted(nodes)[:50]
+    out["node_kind_unique"] = len(kind_nodes)
+    out["node_kinds_sample"] = sorted(kind_nodes)[:50]
+    out["node_kind_cpu_top"] = sorted(kind_cpu.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
+    out["node_kind_cuda_top"] = sorted(kind_cuda.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
+    if fattn_ids:
+        ids = sorted(fattn_ids)
+        out["fattn_id_min"] = ids[0]
+        out["fattn_id_max"] = ids[-1]
+        out["fattn_id_span"] = int(ids[-1] - ids[0] + 1)
+        missing = 0
+        have = set(fattn_ids)
+        for i in range(ids[0], ids[-1] + 1):
+            if i not in have:
+                missing += 1
+        out["fattn_id_missing_count"] = missing
+        out["fattn_expected_id_0_42_ok"] = (ids[0] == 0 and ids[-1] >= 42 and missing == 0)
+    out["fattn_backend_counts"] = {str(k): int(v) for (k, v) in sorted(fattn_backend.items(), key=lambda kv: kv[0])}
+    out["fattn_backend_unique"] = len(fattn_backend)
+    out["fattn_backend0_only"] = (len(fattn_backend) == 1 and 0 in fattn_backend and len(fattn_ids) > 0)
+    if out["fattn_backend_unique"] > 0:
+        out["fattn_expected_backend0_ok"] = bool(out["fattn_backend0_only"])
+    out["fattn_cuda_device_counts"] = {str(k): int(v) for (k, v) in sorted(fattn_cuda_dev.items(), key=lambda kv: kv[0])}
+    out["fattn_cuda_device_unique"] = len(fattn_cuda_dev)
+    out["fattn_cuda_device0_only"] = (len(fattn_cuda_dev) == 1 and 0 in fattn_cuda_dev and len(fattn_ids) > 0)
+    if out["fattn_cuda_device_unique"] > 0:
+        out["fattn_expected_cuda_device0_ok"] = bool(out["fattn_cuda_device0_only"])
+    return out
+
 def _last_float_before(haystack: str, needle: str):
     if needle not in haystack:
         return None
@@ -235,9 +380,12 @@ except OSError:
     summary_lines.append("model_size_bytes=NA")
 if first_output_s is None or rc != 0:
     summary_lines.append("ttft_first_output_s=NA")
+    summary_lines.append("ttft_s=NA")
 else:
     summary_lines.append("ttft_first_output_s=%.6f" % first_output_s)
+    summary_lines.append("ttft_s=%.6f" % first_output_s)
 summary_lines.append("wall_s=%.6f" % (end - start))
+summary_lines.append("total_wall_s=%.6f" % (end - start))
 summary_lines.append("max_rss_kb=%d" % int(ru.ru_maxrss))
 if prefill_tps is not None:
     summary_lines.append("prefill_tps=%.6f" % prefill_tps)
@@ -247,6 +395,7 @@ if prefill_tokens is not None:
     summary_lines.append("prompt_tokens=%d" % int(prefill_tokens))
 if gen_tps is not None:
     summary_lines.append("generation_tps=%.6f" % gen_tps)
+    summary_lines.append("decode_tps=%.6f" % gen_tps)
 if gen_ms_per_tok is not None:
     summary_lines.append("generation_ms_per_token=%.6f" % gen_ms_per_tok)
 if gen_tokens is not None:
@@ -261,6 +410,40 @@ if fattn_lines > 0:
     summary_lines.append("fattn_log_lines=%d" % int(fattn_lines))
 if fattn_ids:
     summary_lines.append("fattn_unique_nodes=%d" % int(len(fattn_ids)))
+
+probe = scan_fattn_cli(log_raw)
+probe_path = os.path.join(os.path.dirname(log_summary), "fattn_cli_probe.json")
+try:
+    with open(probe_path, "w", encoding="utf-8") as pf:
+        json.dump(probe, pf, indent=2, sort_keys=True)
+    summary_lines.append("fattn_cli_probe_path=%s" % probe_path)
+except Exception:
+    pass
+
+def _probe_val(name, default="NA"):
+    v = probe.get(name, None)
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+if probe.get("fattn_id_min") is not None:
+    summary_lines.append("fattn_id_min=%s" % _probe_val("fattn_id_min"))
+if probe.get("fattn_id_max") is not None:
+    summary_lines.append("fattn_id_max=%s" % _probe_val("fattn_id_max"))
+if probe.get("fattn_id_missing_count") is not None:
+    summary_lines.append("fattn_id_missing_count=%s" % _probe_val("fattn_id_missing_count"))
+if probe.get("fattn_expected_id_0_42_ok") is not None:
+    summary_lines.append("fattn_expected_id_0_42_ok=%s" % _probe_val("fattn_expected_id_0_42_ok"))
+if probe.get("fattn_backend_unique", 0) > 0:
+    summary_lines.append("fattn_backend0_only=%s" % _probe_val("fattn_backend0_only"))
+if probe.get("fattn_cuda_device_unique", 0) > 0:
+    summary_lines.append("fattn_cuda_device0_only=%s" % _probe_val("fattn_cuda_device0_only"))
+if probe.get("seen_fattn_disabled"):
+    summary_lines.append("fattn_seen_disabled=true")
+if probe.get("seen_sched_reserve_cpu_fattn"):
+    summary_lines.append("fattn_seen_sched_reserve_cpu=true")
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

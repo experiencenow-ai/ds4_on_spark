@@ -47,6 +47,7 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
+- `ds4_on_spark` commit hash (best-effort; uses `.codex_git` or `.git2/.git` when present)
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
 
@@ -63,11 +64,14 @@ When using `MODEL_RUNS_CSV`, you can also supply (optional) quality metadata:
 When any of these fields are set, the local report includes a `Quality Metadata (Local)`
 section to make it harder to forget which quality numbers were used for a comparison.
 
+For vLLM runs, you can also set `SMOKE_EVAL=1` (and optionally `SMOKE_MAX_TOKENS_PER_TASK=64`) to run a tiny deterministic smoke-eval task set that emits `passed_tasks`, `total_tasks`, and `local_quality_score` into the remote baseline summary block; the baseline wrapper will ingest those values into `MODEL_RUNS_CSV` when the corresponding env vars are not set. See `docs/baseline-smoke-eval.md`.
+
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
 
 - `model_quality_speed_score.md` (markdown table)
 - `model_quality_speed_score.json` (machine-readable rows, including Pareto `dominated_by`)
+- `model_quality_speed_scored_summary.txt` (key=value block per run_id, for copy/paste into baseline reports)
 
 To run a quantized V4 Flash smoke test through a V4-capable llama.cpp-compatible
 binary that already exists on Spark:
@@ -135,7 +139,7 @@ Those fields feed the quantized high-performance path in
 Run from the Mac:
 
 ```sh
-scripts/benchmark_ds4_macos.sh
+scripts/run_baseline_ds4_macos.sh
 ```
 
 Notes:
@@ -157,10 +161,13 @@ Per-script useful env vars:
 - `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL_ID` (CSV label override; avoids absolute Spark paths)
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
+- `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM` (skip irrelevant probes for faster multi-model loops)
+- `scripts/run_baseline_ds4_macos.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/run_baseline_vllm_dflash_pair.sh`: `VLLM_SCOPE_TARGET`, `VLLM_SCOPE_DFLASH` (CSV `scope` labels for target-only vs DFlash)
+- `scripts/run_baseline_vllm_matrix.sh`: tab-separated matrix file runner for repeated target-only + DFlash probes with shared prompt/token settings
 
 See `docs/upstream-qwen-dflash.md` for Ling, Qwen, and DFlash candidate order,
 artifact sizes, and example vLLM env strings.
@@ -183,6 +190,23 @@ scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
 ```
 
 If `VLLM_DRAFT_MODEL` is omitted, the wrapper runs target-only and exits.
+
+### vLLM matrix runner (recommended for Qwen/Ling ladders)
+
+If you have multiple targets already staged on Spark0 and want the same prompt,
+token budget, and CSV labeling across all runs, use the matrix wrapper:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+PROMPT='Explain Redis streams in one paragraph.' \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+scripts/run_baseline_vllm_matrix.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
+```
+
+The matrix runner defaults to `SKIP_LLAMA=1`, `SKIP_GGUF_INSPECT=1`, and
+`SKIP_MTP_SIDECAR=1` because Ling/Qwen/DFlash comparisons do not benefit from
+DeepSeek-specific probes. See `docs/baseline-vllm-matrix.md` for a template and
+the recommended measurement order.
 
 Recommended first comparison order (after DeepSeek V4 Flash can generate on Spark0):
 

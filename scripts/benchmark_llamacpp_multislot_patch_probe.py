@@ -94,17 +94,17 @@ def main():
     # Heuristic patterns:
     # - SWA stream view fix: ensure multi-stream cache views are sliced to one stream before reshape.
     swa_patterns = [
-        ("mctx_swa_get_k", re.compile(r"mctx_swa->get_k\\s*\\(")),
-        ("mctx_swa_get_v", re.compile(r"mctx_swa->get_v\\s*\\(")),
-        ("ne3_check", re.compile(r"\\bne\\s*\\[\\s*3\\s*\\]\\s*>\\s*1")),
-        ("ggml_view_3d", re.compile(r"\\bggml_view_3d\\s*\\(")),
-        ("reshape_3d", re.compile(r"\\bggml_reshape_3d\\s*\\(")),
+        ("mctx_swa_get_k", re.compile(r"mctx_swa->get_k\s*\(")),
+        ("mctx_swa_get_v", re.compile(r"mctx_swa->get_v\s*\(")),
+        ("ne3_check", re.compile(r"\bne\s*\[\s*3\s*\]\s*>\s*1")),
+        ("ggml_view_3d", re.compile(r"\bggml_view_3d\s*\(")),
+        ("reshape_3d", re.compile(r"\bggml_reshape_3d\s*\(")),
     ]
 
     reserve_patterns = [
-        ("reserve_pos0", re.compile(r"\\breserve_pos0\\b")),
-        ("n_ctx_seq", re.compile(r"\\bn_ctx_seq\\b")),
-        ("deepseek_v4_resumed_pp", re.compile(r"DeepSeek\\s+V4\\s+resumed", re.IGNORECASE)),
+        ("reserve_pos0", re.compile(r"\breserve_pos0\b")),
+        ("n_ctx_seq", re.compile(r"\bn_ctx_seq\b")),
+        ("deepseek_v4_resumed_pp", re.compile(r"DeepSeek\s+V4\s+resumed", re.IGNORECASE)),
     ]
 
     if os.path.exists(deepseek4_path):
