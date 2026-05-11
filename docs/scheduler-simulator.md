@@ -363,6 +363,7 @@ JSONL reads one JSON object per line (use `--trace-jsonl -` to read from stdin) 
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
   - Replay requires `--num-experts > expert_id_range.max` (see `--trace-summary`); the simulator rejects out-of-range expert IDs with a clear error.
+  - For minimal router logs, `--trace-input-format runtime` (or `sim/scheduler/trace_extract.py`) also accepts a single chosen expert alias like `expert_id` / `chosen_expert` and normalizes it into `candidates=[expert_id]`.
 - Inline metadata records are also accepted in JSONL and ignored by the simulator's event stream:
   - `{"type":"meta","meta":{...}}` (preferred), or
   - `{"meta":{...}}` when no other routing fields are present

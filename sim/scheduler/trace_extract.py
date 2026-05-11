@@ -178,14 +178,36 @@ def _extract_float_list(value: object) -> Optional[List[float]]:
     return(out)
 
 
+def _extract_candidates(container: Dict[str, object]) -> Optional[List[int]]:
+    cand_raw = _get_any(
+        container,
+        (
+            "candidates",
+            "experts",
+            "expert_ids",
+            "top_experts",
+            "chosen_experts",
+            "selected_experts",
+            "topk_experts",
+        ),
+    )
+    candidates = _extract_int_list(cand_raw)
+    if candidates is not None:
+        return(candidates)
+
+    expert_raw = _get_any(container, ("expert", "expert_id", "chosen_expert", "selected_expert", "top_expert"))
+    if isinstance(expert_raw, int) and expert_raw >= 0:
+        return([int(expert_raw)])
+    return(None)
+
+
 def _extract_layer_record(obj_in: object) -> Optional[Dict[str, object]]:
     obj = _as_dict(obj_in)
     if obj is None:
         return(None)
 
     container = _deep_candidates_container(obj) or obj
-    cand_raw = _get_any(container, ("candidates", "experts", "expert_ids", "top_experts"))
-    candidates = _extract_int_list(cand_raw)
+    candidates = _extract_candidates(container)
     if candidates is None:
         return(None)
 
@@ -278,8 +300,7 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
             return(None)
         out["candidates"] = union_candidates
     else:
-        cand_raw = _get_any(container, ("candidates", "experts", "expert_ids", "top_experts"))
-        candidates = _extract_int_list(cand_raw)
+        candidates = _extract_candidates(container)
         if candidates is None:
             return(None)
         out["candidates"] = candidates
