@@ -1272,6 +1272,10 @@ def build_contract() -> dict:
 				"window_size": window_size,
 				"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
 				"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+				"layer_cache_kind_by_layer_id": list(layer_types),
+				"layer_compress_ratio_by_layer_id": [int(r) for r in compress_ratios[:n_layers]],
+				"mtp_cache_kind_by_mtp_layer_id": [layer_type_from_ratio(int(r)) for r in mtp_ratios],
+				"mtp_compress_ratio_by_mtp_layer_id": [int(r) for r in mtp_ratios],
 				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
 				"compression_semantics": {
 					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)",

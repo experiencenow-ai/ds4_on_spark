@@ -112,7 +112,7 @@ Key JSON paths by concern:
 - Sliding/CSA/HCA schedule: `attention_schedule.compress_ratios`, `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
   - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type` and `attention_schedule.main_layer_ids_by_compress_ratio`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
-- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule`
+- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
 - MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
 - MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)

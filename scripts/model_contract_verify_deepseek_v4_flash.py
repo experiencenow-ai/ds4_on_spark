@@ -212,6 +212,38 @@ def main() -> int:
 					failures.append(Failure(15, f"contract summary missing MLA output de-rotation marker (mla.output_derotate_present=true): {contract_summary}"))
 				if mla.get("q_extra_rms_norm_present") is not True:
 					failures.append(Failure(16, f"contract summary missing MLA Q extra RMS normalization marker (mla.q_extra_rms_norm_present=true): {contract_summary}"))
+				cache_obj = summary.get("cache", {})
+				try:
+					n_layers_cfg = int(cfg.get("num_hidden_layers", 0))
+				except Exception:
+					n_layers_cfg = 0
+				cfg_cr = cfg.get("compress_ratios", None)
+				if not isinstance(cfg_cr, list):
+					cfg_cr = []
+				layer_kinds = cache_obj.get("layer_cache_kind_by_layer_id")
+				layer_ratios = cache_obj.get("layer_compress_ratio_by_layer_id")
+				want_kinds = summary.get("attention_schedule", {}).get("main_layer_types")
+				if not (isinstance(layer_kinds, list) and len(layer_kinds) == n_layers_cfg):
+					failures.append(Failure(126, f"contract summary cache.layer_cache_kind_by_layer_id must be a list of length n_layers={n_layers_cfg}: {contract_summary}"))
+				elif isinstance(want_kinds, list) and layer_kinds != want_kinds:
+					failures.append(Failure(127, f"contract summary cache.layer_cache_kind_by_layer_id must match attention_schedule.main_layer_types: {contract_summary}"))
+				want_ratios = [int(r) for r in cfg_cr[:n_layers_cfg]]
+				if not (isinstance(layer_ratios, list) and layer_ratios == want_ratios):
+					failures.append(Failure(128, f"contract summary cache.layer_compress_ratio_by_layer_id mismatch (expected config.json compress_ratios[:n_layers]): {contract_summary}"))
+				try:
+					n_mtp_layers_cfg = int(cfg.get("num_nextn_predict_layers", 0))
+				except Exception:
+					n_mtp_layers_cfg = 0
+				if n_mtp_layers_cfg > 0:
+					mtp_kinds = cache_obj.get("mtp_cache_kind_by_mtp_layer_id")
+					mtp_ratios = cache_obj.get("mtp_compress_ratio_by_mtp_layer_id")
+					want_mtp_ratios = [int(r) for r in cfg_cr[n_layers_cfg : n_layers_cfg + n_mtp_layers_cfg]]
+					if not (isinstance(mtp_ratios, list) and mtp_ratios == want_mtp_ratios):
+						failures.append(Failure(129, f"contract summary cache.mtp_compress_ratio_by_mtp_layer_id mismatch (expected config.json trailing compress_ratios): {contract_summary}"))
+					if not (isinstance(mtp_kinds, list) and len(mtp_kinds) == n_mtp_layers_cfg):
+						failures.append(Failure(130, f"contract summary cache.mtp_cache_kind_by_mtp_layer_id must be a list of length n_mtp_layers={n_mtp_layers_cfg}: {contract_summary}"))
+					elif any(k != "sliding" for k in mtp_kinds):
+						failures.append(Failure(131, f"contract summary cache.mtp_cache_kind_by_mtp_layer_id must be all 'sliding' (MTP is sliding-only): {contract_summary}"))
 				cache_update = summary.get("cache", {}).get("update_semantics", {})
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
