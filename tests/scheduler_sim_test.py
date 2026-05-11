@@ -1344,6 +1344,28 @@ class SchedulerSimTest(unittest.TestCase):
         ]
         self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
 
+    def test_infer_mtp_draft_len_from_trace_from_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=3),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=1),
+        ]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
+
+    def test_infer_mtp_draft_len_from_trace_accept_len_all_rejects_defaults_to_one(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=1)]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 1)
+
+    def test_infer_dflash_draft_len_from_trace_from_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=4),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=1),
+        ]
+        self.assertEqual(scheduler_sim.infer_dflash_draft_len_from_trace(trace), 3)
+
+    def test_infer_dflash_draft_len_from_trace_accept_len_all_rejects_defaults_to_one(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=1)]
+        self.assertEqual(scheduler_sim.infer_dflash_draft_len_from_trace(trace), 1)
+
     def test_trace_replay_auto_num_experts_and_mtp_draft_len(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:

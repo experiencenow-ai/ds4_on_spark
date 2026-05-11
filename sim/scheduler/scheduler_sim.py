@@ -2531,7 +2531,22 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
             gamma = g
         elif gamma != g:
             return(None)
-    return(gamma)
+    if gamma is not None:
+        return(gamma)
+
+    max_accept_len = 0
+    for r in trace:
+        if r.mtp_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.mtp_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+
+    # mtp_accept_len is the output-token count per verify step (>=1). A draft length of gamma implies:
+    #   1 <= accept_len <= (gamma + 1)
+    # If a trace only includes accept_len=1 (all rejects), gamma is underdetermined; pick gamma=1 so we can
+    # still run an MTP-on replay without violating bounds.
+    return(max(1, int(max_accept_len) - 1))
 
 
 def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
@@ -2549,7 +2564,17 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
             gamma = g
         elif gamma != g:
             return(None)
-    return(gamma)
+    if gamma is not None:
+        return(gamma)
+
+    max_accept_len = 0
+    for r in trace:
+        if r.dflash_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.dflash_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+    return(max(1, int(max_accept_len) - 1))
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -4844,7 +4869,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--sla-interactive-ms", type=float, default=0.0, help="Token SLA: count interactive tokens with latency > this (0 = disabled).")
     p.add_argument("--sla-batch-ms", type=float, default=0.0, help="Token SLA: count batch tokens with latency > this (0 = disabled).")
     p.add_argument("--sim-seed", type=int, default=1, help="Simulation seed (used for MTP accept/reject sampling).")
-    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (requires accepted_mtp+rejected_mtp or meta.mtp_draft_len).")
+    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (uses mtp_accept_len, accepted_mtp+rejected_mtp, or meta.mtp_draft_len).")
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
     p.add_argument(
@@ -4863,7 +4888,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
-    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from meta.dflash_draft_len or consistent accepted_dflash+rejected_dflash.")
+    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from dflash_accept_len, meta.dflash_draft_len, or consistent accepted_dflash+rejected_dflash.")
     p.add_argument(
         "--dflash-draft-cost-scale",
         type=float,
