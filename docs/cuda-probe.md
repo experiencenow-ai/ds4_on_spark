@@ -86,6 +86,8 @@ To skip the CMake build-system gate (faster), run:
 WITH_CMAKE_MINIMAL=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
+Observed on Spark0 (2026-05-11): `scripts/cuda_probe_capability_spark0.sh` completes end-to-end on CUDA 13.0 `V13.0.88`, including NVRTC (`supportedArchs` includes `121`), nvJitLink, TMA tensor-map encode, and cluster launch probes.
+
 ## Spark0: Tiny Compile-Only `sm_121`
 
 When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
