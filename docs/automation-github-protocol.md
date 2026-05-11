@@ -14,6 +14,7 @@ Each automation owns one branch prefix:
 - `codex/loop-mtp-cuda-*`
 - `codex/loop-baseline-runtime-*`
 - `codex/loop-build-skeleton-*`
+- `codex/loop-entropy-buffer-*`
 - `codex/loop-scheduler-sim-*`
 - `codex/loop-ops-hardening-*`
 
