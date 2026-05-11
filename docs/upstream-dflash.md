@@ -23,6 +23,46 @@ Qwen-family target/draft pairs are tracked separately in
 | 6 | `moonshotai/Kimi-K2.5` | `refs/heads/main` | `4d01dfe0332d63057c186e0b262165819efb6611` | `modified-mit` | 554.30 GiB | `z-lab/Kimi-K2.5-DFlash` | `e2db14df8337367b5eae8a6c206ea0d7d01a42a8` | `mit` | 6.48 GiB | no | Target weights are far beyond single-Spark; keep as a paired DFlash provenance reference only. |
 | 7 | `moonshotai/Kimi-K2.6` | `refs/heads/main` | `81bcaaa7947338ce2641983d98947bca0cc1a4d4` | `other` | 554.30 GiB | `z-lab/Kimi-K2.6-DFlash` | `c1462ef46589f6ccb3eca424bffef94d72354ea9` | `mit` | 6.48 GiB | no | Target weights are far beyond single-Spark; keep as a paired DFlash provenance reference only. |
 
+## Public quality prior (metadata-only pointers)
+
+These priors are meant for *staging decisions*, not “winner” claims. Model-card
+tables can differ in prompt formats, tool availability, contamination policy,
+and scoring. Keep the exact pinned model-card revision when referencing any
+numbers.
+
+### Gemma 4 (instruction-tuned)
+
+The pinned `google/gemma-4-26B-A4B-it` model card includes a benchmark table
+covering (non-exhaustive): `MMLU Pro`, `GPQA Diamond`, `LiveCodeBench v6`,
+`Codeforces ELO`, `Tau2`, and `BigBench Extra Hard`, plus multimodal rows like
+`MMMU Pro`, `OmniDocBench 1.5`, and `MATH-Vision`. The table includes a row
+named `AIME 2026 no tools`, so treat the card as at-least-2026-era evaluation.
+
+Selected table entries (model card, vendor-reported; keep comparability limits
+in mind):
+
+- `Gemma 4 26B A4B` (the DFlash target family):
+  - `MMLU Pro`: 82.6%
+  - `GPQA Diamond`: 82.3%
+  - `LiveCodeBench v6`: 77.1%
+- The same card also reports `Gemma 4 31B` numbers (e.g. `MMLU Pro`: 85.2%).
+
+Pinned source:
+
+- `https://huggingface.co/google/gemma-4-26B-A4B-it/blob/462a98a12e28e2cbcfccaf78fe41e3e50235e6ae/README.md`
+
+### GPT-OSS
+
+The pinned `openai/gpt-oss-20b` model card does not embed a numeric benchmark
+table in plain text at the pinned revision, but it links to an arXiv model card
+and an OpenAI blog post. It also states that “all evals were performed with the
+same MXFP4 quantization”.
+
+Pinned sources:
+
+- `https://huggingface.co/openai/gpt-oss-20b/blob/6cee5e81ee83917806bbde320786a8fb61efebee/README.md`
+- The README links `https://arxiv.org/abs/2508.10925` (model card) and `https://openai.com/index/introducing-gpt-oss/` (blog).
+
 ## Model-card requirements (DFlash)
 
 - Each DFlash draft checkpoint must be paired with the **exact** named target checkpoint.
