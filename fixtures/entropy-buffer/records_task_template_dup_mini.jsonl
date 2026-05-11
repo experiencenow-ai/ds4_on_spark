@@ -1,0 +1,5 @@
+{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"dup.task.001","task_family":"dup","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say hello","output":"Hello"}
+{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"dup.task.001","task_family":"dup","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say hello","output":" hello "}
+{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"dup.task.001","task_family":"dup","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say hello","output":"HELLO"}
+{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"dup.task.002","task_family":"dup","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say bye","output":"Goodbye"}
+{"type":"task_run","run_id":"baseline-20260511-spark0","task_id":"dup.task.002","task_family":"dup","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say bye","output":"Later"}
