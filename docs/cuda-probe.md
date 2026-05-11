@@ -209,6 +209,12 @@ From the Mac (this repo checkout):
 ./scripts/cuda_probe_spark0.sh
 ```
 
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_spark0.sh
+```
+
 What it does:
 
 - Ships `tools/cuda_probe/` to Spark0 (no remote git clone required).
@@ -253,12 +259,19 @@ What it does:
 Environment overrides:
 
 - `SSH_OPTS`: forwarded to `ssh`
-- `REMOTE_DIR`: where the probe directory lands on Spark0 (default: `/tmp/ds4_cuda_probe_kernel_tiny`)
+- `REMOTE_DIR`: where the probe directory lands on Spark0 (default: `/tmp/ds4_cuda_probe`)
+- `LOG_PATH`: where to append a complete local log file on the Mac
 
 ## Spark0: Compile-Only `sm_121`
 
 ```bash
 ./scripts/cuda_probe_compile_only_spark0.sh
+```
+
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_spark0.sh
 ```
 
 This is useful when kernel run is blocked but `nvcc` behavior needs confirmation.
@@ -270,6 +283,12 @@ Finally, it attempts a standalone `nvcc -arch=sm_121` compile of a kernel using 
 
 ```bash
 ./scripts/cuda_probe_disasm_spark0.sh
+```
+
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_disasm_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_disasm_spark0.sh
 ```
 
 This script builds a small subset of the probes and then dumps the first lines of:
