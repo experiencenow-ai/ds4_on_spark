@@ -130,7 +130,7 @@ bw_annotate_dd_line()
 	fi
 	if [ "$bytes" = "" ] && printf "%s\n" "$line" | grep -q " copied,"; then
 		bytes="$(printf "%s\n" "$line" | awk "{ print \$1 }" | head -n 1 || true)"
-		secs="$(printf "%s\n" "$line" | sed -nE 's/.*copied,[[:space:]]*([0-9.]+)[[:space:]]*s,.*/\\1/p' | head -n 1 || true)"
+		secs="$(printf "%s\n" "$line" | awk -F'copied, ' '{ if (NF >= 2) { print $2 } }' | awk '{ print $1 }' | head -n 1 || true)"
 		if [ "$bytes" != "" ] && [ "$secs" != "" ]; then
 			bps="$(awk -v b="$bytes" -v s="$secs" 'BEGIN{ if (s > 0) printf "%.0f", (b / s); }')"
 		fi
