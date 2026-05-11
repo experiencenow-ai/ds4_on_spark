@@ -194,3 +194,7 @@ Then classify:
 
 - **Centaur bug**: parser/schema/state failures inside `centaur.py` commands
 - **DS4 runtime bug**: missing `python3`/`unzip`, permissions, filesystem layout, or other host setup unrelated to Centaur logic
+
+For the shared checklist + sanitization rules, see:
+
+- `docs/centaur-bug-report.md`
