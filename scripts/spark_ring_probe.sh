@@ -373,6 +373,14 @@ echo
 					status="ping_ok"
 				else
 					status="ping_failed"
+					case "$out" in
+						*"Name or service not known"*|*"Temporary failure in name resolution"*|*"unknown host"*)
+							status="ping_resolve_failed"
+							;;
+						*"No route to host"*|*"Network is unreachable"*)
+							status="ping_no_route"
+							;;
+					esac
 				fi
 				loss="$(printf "%s\n" "$out" | awk '/packets transmitted/ { for (i=1; i<=NF; i++) if ($i ~ /%/) { print $i; exit } }' || true)"
 				rtt="$(printf "%s\n" "$out" | awk -F' = ' '/^rtt / { print $2; exit }' | sed -E 's/ ms$//' || true)"
