@@ -26,6 +26,17 @@ ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP
 ssh $SSH_OPTS spark2@<spark2-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark2.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
 ```
 
+Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
+
+- `CENTAUR_PIP_ARGS="--no-index --find-links=/path/to/wheels"`
+- `CENTAUR_SKIP_PIP=1` when re-running in the same venv
+
+Example (Spark1):
+
+```bash
+ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_PIP_ARGS=\"--no-index --find-links=/path/to/wheels\" && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+```
+
 Minimal per-node setup (run on Spark{1,2}) if you prefer doing it manually:
 
 ```bash
