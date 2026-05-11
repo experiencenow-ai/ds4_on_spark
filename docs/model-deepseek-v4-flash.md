@@ -54,6 +54,19 @@ When interpreting quantized single-Spark external-runtime results, prefer the co
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf --json
 ```
 
+## Execution contract checklist (DS4 implementers)
+
+Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior:
+
+- Encoding gate: `oracle.encoding_oracle.required == true` and the pinned vectors under `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` must pass via `scripts/model_contract_verify_deepseek_v4_flash.py`.
+- Topology gate: `topology.*` must match (`n_layers=43`, `hidden_size=4096`, `n_heads=64`, `head_dim=512`, `vocab_size=129280`).
+- Attention schedule gate: `attention_schedule.compress_ratios` must match exactly (2 sliding, then CSA/HCA alternation), and MTP trailing ratios must satisfy `mtp.compress_ratio_rule`.
+- Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask_rule`.
+- MoE routing gate: hash routing (`ffn.gate.tid2eid`, `int32`) applies only to layers `0..n_hash_layers-1`; score routing uses `ffn.gate.bias` for selection only (`moe.hash_routing.*`, `moe.semantics.*`).
+- Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
+- Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
+- MTP gate: treat MTP as **disabled/untrusted** unless the artifact preserves the upstream `mtp.0.*` namespace and satisfies `mtp.trust_gates.*` (including `mtp_contract.complete == true`) **and** a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`).
+
 ## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280
