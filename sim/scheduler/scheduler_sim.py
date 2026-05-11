@@ -3724,6 +3724,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     starved_task_frac_mtp_verify = (float(metrics.starved_tasks_mtp_verify) / float(metrics.tasks_started_mtp_verify)) if metrics.tasks_started_mtp_verify > 0 else 0.0
     partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
+    mtp_mean_accept_len = (float(metrics.mtp_output_tokens) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
+    mtp_mean_draft_attempt_len = (float(metrics.mtp_draft_tokens_total) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
     mtp_service_slot_draft_frac = (float(metrics.service_slot_ms_mtp_draft) / float(metrics.service_slot_ms_total)) if metrics.service_slot_ms_total > 0.0 else 0.0
     mtp_service_slot_verify_frac = (float(metrics.service_slot_ms_mtp_verify) / float(metrics.service_slot_ms_total)) if metrics.service_slot_ms_total > 0.0 else 0.0
     dropped_interactive = float(metrics.dropped_tokens_backpressure_interactive)
@@ -3840,6 +3842,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "pending_depth_time_weighted_p95_mtp_draft": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_draft, metrics.pending_depth_hist_mtp_draft_overflow, 0.95)),
             "pending_depth_time_weighted_p95_mtp_verify": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_verify, metrics.pending_depth_hist_mtp_verify_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
+            "mtp_mean_accept_len": float(mtp_mean_accept_len),
+            "mtp_mean_draft_attempt_len": float(mtp_mean_draft_attempt_len),
             "mtp_service_slot_ms_draft_frac": float(mtp_service_slot_draft_frac),
             "mtp_service_slot_ms_verify_frac": float(mtp_service_slot_verify_frac),
             "mtp_verify_layer0_skipped_backpressure": float(metrics.mtp_verify_layer0_skipped_backpressure),

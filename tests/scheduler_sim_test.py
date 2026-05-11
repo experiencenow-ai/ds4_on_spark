@@ -686,6 +686,8 @@ class SchedulerSimTest(unittest.TestCase):
             "pending_depth_time_weighted_p95_mtp_draft",
             "pending_depth_time_weighted_p95_mtp_verify",
             "mtp_accept_rate",
+            "mtp_mean_accept_len",
+            "mtp_mean_draft_attempt_len",
         ):
             self.assertIn(k, summary)
 
