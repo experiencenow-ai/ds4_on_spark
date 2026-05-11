@@ -215,12 +215,16 @@ env_summary="$work_dir/ds4_env_allowlist.txt"
 } >"$env_summary"
 
 DS4_CONFIG_PATH=""
-	DS4_MASTER_ADDR=""
-	DS4_MASTER_PORT=""
-	DS4_PEER_HOST=""
-	DS4_PEER_SSH=""
-	DS4_METRICS_ADDR=""
-	DS4_METRICS_PORT=""
+DS4_MASTER_ADDR=""
+DS4_MASTER_PORT=""
+DS4_PEER_HOST=""
+DS4_PEER_SSH=""
+DS4_METRICS_ADDR=""
+DS4_METRICS_PORT=""
+DS4_WORLD_SIZE=""
+DS4_RANK=""
+DS4_RING_HOSTS=""
+DS4_EXPECT_IFACE=""
 
 if [ "$env_paths" != "" ]; then
 	for raw in $env_paths; do
@@ -253,26 +257,38 @@ if [ "$env_paths" != "" ]; then
 		if [ "$v" != "" ]; then DS4_MASTER_ADDR="$v"; fi
 		v="$(extract_env_value DS4_MASTER_PORT "$env_path")"
 		if [ "$v" != "" ]; then DS4_MASTER_PORT="$v"; fi
-			v="$(extract_env_value DS4_PEER_HOST "$env_path")"
-			if [ "$v" != "" ]; then DS4_PEER_HOST="$v"; fi
-			v="$(extract_env_value DS4_PEER_SSH "$env_path")"
-			if [ "$v" != "" ]; then DS4_PEER_SSH="$v"; fi
-			v="$(extract_env_value DS4_METRICS_ADDR "$env_path")"
-			if [ "$v" != "" ]; then DS4_METRICS_ADDR="$v"; fi
-			v="$(extract_env_value DS4_METRICS_PORT "$env_path")"
-			if [ "$v" != "" ]; then DS4_METRICS_PORT="$v"; fi
+		v="$(extract_env_value DS4_PEER_HOST "$env_path")"
+		if [ "$v" != "" ]; then DS4_PEER_HOST="$v"; fi
+		v="$(extract_env_value DS4_PEER_SSH "$env_path")"
+		if [ "$v" != "" ]; then DS4_PEER_SSH="$v"; fi
+		v="$(extract_env_value DS4_METRICS_ADDR "$env_path")"
+		if [ "$v" != "" ]; then DS4_METRICS_ADDR="$v"; fi
+		v="$(extract_env_value DS4_METRICS_PORT "$env_path")"
+		if [ "$v" != "" ]; then DS4_METRICS_PORT="$v"; fi
+		v="$(extract_env_value DS4_WORLD_SIZE "$env_path")"
+		if [ "$v" != "" ]; then DS4_WORLD_SIZE="$v"; fi
+		v="$(extract_env_value DS4_RANK "$env_path")"
+		if [ "$v" != "" ]; then DS4_RANK="$v"; fi
+		v="$(extract_env_value DS4_RING_HOSTS "$env_path")"
+		if [ "$v" != "" ]; then DS4_RING_HOSTS="$v"; fi
+		v="$(extract_env_value DS4_EXPECT_IFACE "$env_path")"
+		if [ "$v" != "" ]; then DS4_EXPECT_IFACE="$v"; fi
 	done
 fi
 
 {
 	maybe_put_env_key "DS4_CONFIG_PATH" "$DS4_CONFIG_PATH"
-		maybe_put_env_key "DS4_MASTER_ADDR" "$DS4_MASTER_ADDR"
-		maybe_put_env_key "DS4_MASTER_PORT" "$DS4_MASTER_PORT"
-		maybe_put_env_key "DS4_PEER_HOST" "$DS4_PEER_HOST"
-		maybe_put_env_key "DS4_PEER_SSH" "$DS4_PEER_SSH"
-		maybe_put_env_key "DS4_METRICS_ADDR" "$DS4_METRICS_ADDR"
-		maybe_put_env_key "DS4_METRICS_PORT" "$DS4_METRICS_PORT"
-	} >>"$env_summary"
+	maybe_put_env_key "DS4_MASTER_ADDR" "$DS4_MASTER_ADDR"
+	maybe_put_env_key "DS4_MASTER_PORT" "$DS4_MASTER_PORT"
+	maybe_put_env_key "DS4_PEER_HOST" "$DS4_PEER_HOST"
+	maybe_put_env_key "DS4_PEER_SSH" "$DS4_PEER_SSH"
+	maybe_put_env_key "DS4_METRICS_ADDR" "$DS4_METRICS_ADDR"
+	maybe_put_env_key "DS4_METRICS_PORT" "$DS4_METRICS_PORT"
+	maybe_put_env_key "DS4_WORLD_SIZE" "$DS4_WORLD_SIZE"
+	maybe_put_env_key "DS4_RANK" "$DS4_RANK"
+	maybe_put_env_key "DS4_RING_HOSTS" "$DS4_RING_HOSTS"
+	maybe_put_env_key "DS4_EXPECT_IFACE" "$DS4_EXPECT_IFACE"
+} >>"$env_summary"
 
 	local_scripts_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
@@ -307,6 +323,16 @@ fi
 				run_cmd "ds4/tp2_readiness.txt" "$@"
 			)
 		fi
+
+		if [ -x "$local_scripts_dir/ops_tp4_readiness.sh" ]; then
+			(
+				set -- "$local_scripts_dir/ops_tp4_readiness.sh" --self "$instance" --topology ring --strict
+				for raw in $env_paths; do
+					set -- "$@" --env "$raw"
+				done
+				run_cmd "ds4/tp4_readiness.txt" "$@"
+			)
+		fi
 	fi
 
 	if have_cmd systemctl; then
@@ -314,6 +340,8 @@ fi
 	run_cmd "systemd/systemctl_status_ds4_strict.txt" systemctl --no-pager status "ds4-strict@${instance}.service"
 	run_cmd "systemd/systemctl_status_preflight.txt" systemctl --no-pager status "ds4-preflight@${instance}.service"
 	run_cmd "systemd/systemctl_status_preflight_strict.txt" systemctl --no-pager status "ds4-preflight-strict@${instance}.service"
+	run_cmd "systemd/systemctl_status_preflight_tp4.txt" systemctl --no-pager status "ds4-preflight-tp4@${instance}.service"
+	run_cmd "systemd/systemctl_status_preflight_tp4_strict.txt" systemctl --no-pager status "ds4-preflight-tp4-strict@${instance}.service"
 	run_cmd "systemd/systemctl_status_spark_master.txt" systemctl --no-pager status "spark-master@${instance}.service"
 	run_cmd "systemd/systemctl_status_spark_worker.txt" systemctl --no-pager status "spark-worker@${instance}.service"
 	run_cmd "systemd/systemctl_show_ds4.txt" systemctl show "ds4@${instance}.service"
@@ -325,6 +353,8 @@ if have_cmd journalctl; then
 	run_cmd "journald/journal_ds4.txt" journalctl --no-pager -u "ds4@${instance}.service" --since "$since"
 	run_cmd "journald/journal_preflight.txt" journalctl --no-pager -u "ds4-preflight@${instance}.service" --since "$since"
 	run_cmd "journald/journal_preflight_strict.txt" journalctl --no-pager -u "ds4-preflight-strict@${instance}.service" --since "$since"
+	run_cmd "journald/journal_preflight_tp4.txt" journalctl --no-pager -u "ds4-preflight-tp4@${instance}.service" --since "$since"
+	run_cmd "journald/journal_preflight_tp4_strict.txt" journalctl --no-pager -u "ds4-preflight-tp4-strict@${instance}.service" --since "$since"
 	run_cmd "journald/journal_spark_master.txt" journalctl --no-pager -u "spark-master@${instance}.service" --since "$since"
 	run_cmd "journald/journal_spark_worker.txt" journalctl --no-pager -u "spark-worker@${instance}.service" --since "$since"
 fi
@@ -336,6 +366,17 @@ if have_cmd getent; then
 	if [ "$DS4_PEER_HOST" != "" ]; then
 		run_cmd "net/getent_peer_host.txt" getent hosts "$DS4_PEER_HOST"
 	fi
+	if [ "$DS4_RING_HOSTS" != "" ]; then
+		run_cmd "net/getent_ring_hosts.txt" sh -c '
+set -eu
+csv="$1"
+for h in $(printf "%s" "$csv" | tr "," " "); do
+	[ "$h" != "" ] || continue
+	echo "== $h =="
+	getent hosts "$h" 2>&1 || true
+done
+' sh "$DS4_RING_HOSTS"
+	fi
 fi
 
 if have_cmd ip; then
@@ -344,6 +385,17 @@ if have_cmd ip; then
 	fi
 	if [ "$DS4_PEER_HOST" != "" ]; then
 		run_cmd "net/ip_route_get_peer.txt" sh -c "ip route get \"$DS4_PEER_HOST\" 2>&1 || true"
+	fi
+	if [ "$DS4_RING_HOSTS" != "" ]; then
+		run_cmd "net/ip_route_get_ring_hosts.txt" sh -c '
+set -eu
+csv="$1"
+for h in $(printf "%s" "$csv" | tr "," " "); do
+	[ "$h" != "" ] || continue
+	echo "== $h =="
+	ip route get "$h" 2>&1 || true
+done
+' sh "$DS4_RING_HOSTS"
 	fi
 fi
 

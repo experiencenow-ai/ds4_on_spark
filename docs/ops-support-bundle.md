@@ -1,6 +1,6 @@
 # Ops: DS4 Support Bundle (Safe)
 
-When TP=2 preflight fails (or logs/metrics look suspicious), it helps to capture a small, repeatable “support bundle” from the Spark for debugging.
+When TP=2/TP=4 preflight fails (or logs/metrics look suspicious), it helps to capture a small, repeatable “support bundle” from the Spark for debugging.
 
 This bundle is **non-destructive**: it reads system state, systemd status, and journald logs. It does **not** change networking, system services, or GPU settings.
 
@@ -50,13 +50,16 @@ Best-effort snapshots of:
 - GPU info: `nvidia-smi` when present
 - Network: `ip addr`, `ip route`, `ss -lntu`, best-effort `ip route get` for master/peer
 - Systemd: `systemctl status/show` for `ds4@<instance>`, preflight, strict variants
+- Systemd (TP=4): `systemctl status` for `ds4-preflight-tp4@<instance>` and `ds4-preflight-tp4-strict@<instance>` when present
 - Logs: `journalctl -u ... --since "<since>"`
-- A small allowlist of DS4 env keys (not the full env files)
+- A small allowlist of DS4 env keys (not the full env files), including TP=4 context like `DS4_WORLD_SIZE`, `DS4_RANK`, and `DS4_RING_HOSTS` when provided
 - DS4 config/env validation output when available:
   - `ops_ds4_config_check.sh --strict-unknown $DS4_CONFIG_PATH`
   - `ops_ds4_env_check.sh ...env...`
 - A TP=2 readiness snapshot when env paths are provided (e.g. via the systemd unit):
   - `ops_tp2_readiness.sh --self <instance> --env ... [--peer <DS4_PEER_HOST>]`
+- A TP=4 readiness snapshot when `ops_tp4_readiness.sh` is present and env paths are provided:
+  - `ops_tp4_readiness.sh --self <instance> --topology ring --strict --env ...`
 
 ## Redaction Guidance
 
