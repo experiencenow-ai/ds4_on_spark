@@ -1,9 +1,11 @@
+import json
 import os
 import tempfile
 import unittest
 
 from scripts import judge_elo_schema as schema
 from scripts import judge_elo_update as updater
+from scripts import pairwise_judge_record as record_wrap
 
 
 class JudgeEloTest(unittest.TestCase):
@@ -59,6 +61,42 @@ class JudgeEloTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.json")))
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.csv")))
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "quality_map.json")))
+
+    def test_budget_computed(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        budget = updater.compute_budget([path])
+        self.assertEqual(budget.get("schema"), "ds4_judge_elo_budget_v1")
+        self.assertEqual(int(budget.get("records", 0)), 4)
+        self.assertIn("tokens", budget)
+        self.assertIn("latency_ms", budget)
+
+    def test_wrap_record_parse_valid(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            pair_id="p0",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text="  \n" + json.dumps(decision, separators=(",", ":")) + "\n",
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+        )
+        self.assertTrue(rec.get("parse_valid", False))
+        self.assertEqual(rec.get("winner"), "A")
+
+    def test_wrap_record_parse_invalid(self) -> None:
+        rec = record_wrap.build_record(
+            pair_id="p1",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text="WINNER=A margin=2",
+            tokens=None,
+            latency_ms=None,
+        )
+        self.assertFalse(rec.get("parse_valid", True))
 
 
 if __name__ == "__main__":

@@ -34,6 +34,36 @@ class EloRow:
     quality_source: str
 
 
+def _pctl(sorted_vals: List[int], q: float) -> int:
+    if len(sorted_vals) == 0:
+        return 0
+    if q <= 0.0:
+        return int(sorted_vals[0])
+    if q >= 1.0:
+        return int(sorted_vals[-1])
+    i = int(math.floor(q * float(len(sorted_vals) - 1)))
+    if i < 0:
+        i = 0
+    if i >= len(sorted_vals):
+        i = len(sorted_vals) - 1
+    return int(sorted_vals[i])
+
+
+def _int_stats(vals: List[int]) -> Dict[str, float]:
+    if len(vals) == 0:
+        return {"count": 0.0}
+    s = sorted(int(v) for v in vals)
+    total = float(sum(s))
+    return {
+        "count": float(len(s)),
+        "min": float(s[0]),
+        "p50": float(_pctl(s, 0.50)),
+        "p90": float(_pctl(s, 0.90)),
+        "max": float(s[-1]),
+        "mean": (total / float(len(s))),
+    }
+
+
 def _expected(ra: float, rb: float, scale: float) -> float:
     return 1.0 / (1.0 + (10.0 ** ((rb - ra) / scale)))
 
@@ -119,6 +149,45 @@ def compute_elo(paths: Sequence[str], k: float, scale: float, sort_by_pair_id: b
     return ratings, stats
 
 
+def compute_budget(paths: Sequence[str]) -> Dict[str, Any]:
+    total = 0
+    parse_ok = 0
+    parse_bad = 0
+    tokens: Dict[str, List[int]] = {"a_out": [], "b_out": [], "judge_in": [], "judge_out": []}
+    latency: Dict[str, List[int]] = {"a": [], "b": [], "judge": []}
+    for path in paths:
+        for _, obj in schema.iter_jsonl(path):
+            total += 1
+            if bool(obj.get("parse_valid", False)):
+                parse_ok += 1
+            else:
+                parse_bad += 1
+
+            t = obj.get("tokens")
+            if isinstance(t, dict):
+                for k in tokens:
+                    v = t.get(k)
+                    if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
+                        tokens[k].append(int(v))
+
+            l = obj.get("latency_ms")
+            if isinstance(l, dict):
+                for k in latency:
+                    v = l.get(k)
+                    if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
+                        latency[k].append(int(v))
+
+    out: Dict[str, Any] = {
+        "schema": "ds4_judge_elo_budget_v1",
+        "records": int(total),
+        "parse_valid_true": int(parse_ok),
+        "parse_valid_false": int(parse_bad),
+        "tokens": {k: _int_stats(v) for k, v in tokens.items()},
+        "latency_ms": {k: _int_stats(v) for k, v in latency.items()},
+    }
+    return out
+
+
 def write_outputs(out_dir: str, rows: Sequence[EloRow]) -> None:
     os.makedirs(out_dir, exist_ok=True)
 
@@ -146,6 +215,11 @@ def write_outputs(out_dir: str, rows: Sequence[EloRow]) -> None:
         f.write("| --- | --- | --- | --- | --- | --- | --- | --- |\n")
         for r in rows:
             f.write(f"| {r.model} | {r.elo:.1f} | {r.games} | {r.wins} | {r.losses} | {r.ties} | {r.quality_score:.1f} | {r.quality_source} |\n")
+
+    with open(os.path.join(out_dir, "quality_map.json"), "w", encoding="utf-8") as f:
+        q = {r.model: float(r.quality_score) for r in rows}
+        json.dump(q, f, indent=2, sort_keys=True)
+        f.write("\n")
 
 
 def main() -> None:
@@ -179,6 +253,9 @@ def main() -> None:
         ))
     rows.sort(key=lambda r: (r.elo, r.games, r.model), reverse=True)
     write_outputs(args.out_dir, rows)
+    with open(os.path.join(args.out_dir, "budget.json"), "w", encoding="utf-8") as f:
+        json.dump(compute_budget(args.inputs), f, indent=2, sort_keys=True)
+        f.write("\n")
 
 
 if __name__ == "__main__":
