@@ -33,6 +33,19 @@ tokenizer/chat format, and memory envelope are real.
 - No automation downloads large model files unless a human explicitly approves
   the exact command and target path.
 
+### Inspector wiring (Mac → Spark)
+
+`scripts/run_baseline_existing_runtime.sh` can run a metadata-only GGUF inspection
+on Spark before the llama.cpp run:
+
+- Set `ALLOW_MODEL_INSPECT=1` on Spark (via `REMOTE_LLAMA_ENV` or `REMOTE_GGUF_INSPECT_ENV`).
+- Provide `MODEL_GGUF=/abs/path/to/model.gguf` (same as the llama.cpp run).
+
+The inspector output is written into the local report directory as:
+
+- `remote_gguf_inspect_stdout.txt` (JSON; full output)
+- `remote_gguf_inspect_stderr.txt`
+
 ## Candidate Artifacts
 
 As of 2026-05-10, the practical first target is a community GGUF using a
@@ -134,7 +147,7 @@ Acceptance checks before DS4 can trust MTP:
 Start with the least ambitious command that still proves real generation:
 
 ```sh
-REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
@@ -143,7 +156,7 @@ Optional: append a best-effort scoring row to a local CSV so you can run
 
 ```sh
 MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
-REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 

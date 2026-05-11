@@ -16,6 +16,7 @@ if [ "${LLAMA_CLI:-}" = "" ]; then
 fi
 
 ALLOW_RUN="${ALLOW_RUN:-1}"
+ALLOW_MODEL_INSPECT="${ALLOW_MODEL_INSPECT:-1}"
 RUNTIME_LABEL="${RUNTIME_LABEL:-v4-capable-llama}"
 MODEL_SOURCE="${MODEL_SOURCE:-unknown}"
 MODEL_QUANT="${MODEL_QUANT:-unknown}"
@@ -42,7 +43,7 @@ sh_quote()
 }
 
 if [ "${REMOTE_LLAMA_ENV:-}" = "" ]; then
-    REMOTE_LLAMA_ENV="ALLOW_RUN=$(sh_quote "$ALLOW_RUN") RUNTIME_LABEL=$(sh_quote "$RUNTIME_LABEL") MODEL_SOURCE=$(sh_quote "$MODEL_SOURCE") MODEL_QUANT=$(sh_quote "$MODEL_QUANT") MODEL_GGUF=$(sh_quote "$MODEL_GGUF") LLAMA_CLI=$(sh_quote "$LLAMA_CLI") CTX=$(sh_quote "$CTX") N_TOKENS=$(sh_quote "$N_TOKENS") N_GPU_LAYERS=$(sh_quote "$N_GPU_LAYERS") GPU_SAMPLE=$(sh_quote "$GPU_SAMPLE") GPU_SAMPLE_INTERVAL_S=$(sh_quote "$GPU_SAMPLE_INTERVAL_S")"
+    REMOTE_LLAMA_ENV="ALLOW_RUN=$(sh_quote "$ALLOW_RUN") ALLOW_MODEL_INSPECT=$(sh_quote "$ALLOW_MODEL_INSPECT") RUNTIME_LABEL=$(sh_quote "$RUNTIME_LABEL") MODEL_SOURCE=$(sh_quote "$MODEL_SOURCE") MODEL_QUANT=$(sh_quote "$MODEL_QUANT") MODEL_GGUF=$(sh_quote "$MODEL_GGUF") LLAMA_CLI=$(sh_quote "$LLAMA_CLI") CTX=$(sh_quote "$CTX") N_TOKENS=$(sh_quote "$N_TOKENS") N_GPU_LAYERS=$(sh_quote "$N_GPU_LAYERS") GPU_SAMPLE=$(sh_quote "$GPU_SAMPLE") GPU_SAMPLE_INTERVAL_S=$(sh_quote "$GPU_SAMPLE_INTERVAL_S")"
     if [ "${PROMPT:-}" != "" ]; then
         REMOTE_LLAMA_ENV="$REMOTE_LLAMA_ENV PROMPT=$(sh_quote "$PROMPT")"
     fi
