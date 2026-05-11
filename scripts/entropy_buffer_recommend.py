@@ -36,6 +36,11 @@ class CandidateScore:
     answer_count: int
     history_noise_rate: float = 0.0
     history_dup_rate: float = 0.0
+    history_judge_disagreement_rate: float = 0.0
+    history_judge_disagreement_rate_decided_ab: float = 0.0
+    history_judge_invalid_rate: float = 0.0
+    history_judge_tie_rate: float = 0.0
+    history_judge_imbalance_ab: float = 0.0
     score: float = 0.0
     delta_entropy_bits: Dict[str, float] = field(default_factory=dict)
 
@@ -276,8 +281,109 @@ def _candidate_history_rate(template_rates: Dict[str, float], pair_rates: Dict[s
         return(float(pair_rates.get(pair_k, 0.0)))
     return(float(template_rates.get(prompt_template_id, 0.0)))
 
+def _inc(counts: Dict[str, int], key: str) -> None:
+    if key == "":
+        return
+    counts[key] = counts.get(key, 0) + 1
 
-def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25) -> List[CandidateScore]:
+def _majority_disagreement(counts: Dict[str, int]) -> float:
+    if len(counts) == 0:
+        return(0.0)
+    total = int(sum(counts.values()))
+    if total <= 0:
+        return(0.0)
+    maxc = int(max(counts.values()))
+    return(1.0 - (float(maxc) / float(total)))
+
+def _judge_slice_rates(history: List[Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, float]]]:
+    tmpl_total: Dict[str, int] = {}
+    pair_total: Dict[str, int] = {}
+    tmpl_label_counts: Dict[str, Dict[str, int]] = {}
+    pair_label_counts: Dict[str, Dict[str, int]] = {}
+    tmpl_item_label_counts: Dict[str, Dict[str, Dict[str, int]]] = {}
+    pair_item_label_counts: Dict[str, Dict[str, Dict[str, int]]] = {}
+    tmpl_item_label_counts_ab: Dict[str, Dict[str, Dict[str, int]]] = {}
+    pair_item_label_counts_ab: Dict[str, Dict[str, Dict[str, int]]] = {}
+
+    for obj in history:
+        c = lib.canonicalize_record(obj)
+        if c.rtype != "judge_pair":
+            continue
+        if c.prompt_template_id == "":
+            continue
+        tmpl = c.prompt_template_id
+        fam = c.task_family
+        pair_k = "" if fam == "" else f"{fam}|{tmpl}"
+
+        tmpl_total[tmpl] = tmpl_total.get(tmpl, 0) + 1
+        tmpl_label_counts.setdefault(tmpl, {})
+        _inc(tmpl_label_counts[tmpl], c.label)
+        if c.item_id != "":
+            tmpl_item_label_counts.setdefault(tmpl, {})
+            tmpl_item_label_counts[tmpl].setdefault(c.item_id, {})
+            _inc(tmpl_item_label_counts[tmpl][c.item_id], c.label)
+            if c.label in ("a", "b"):
+                tmpl_item_label_counts_ab.setdefault(tmpl, {})
+                tmpl_item_label_counts_ab[tmpl].setdefault(c.item_id, {})
+                _inc(tmpl_item_label_counts_ab[tmpl][c.item_id], c.label)
+
+        if pair_k != "":
+            pair_total[pair_k] = pair_total.get(pair_k, 0) + 1
+            pair_label_counts.setdefault(pair_k, {})
+            _inc(pair_label_counts[pair_k], c.label)
+            if c.item_id != "":
+                pair_item_label_counts.setdefault(pair_k, {})
+                pair_item_label_counts[pair_k].setdefault(c.item_id, {})
+                _inc(pair_item_label_counts[pair_k][c.item_id], c.label)
+                if c.label in ("a", "b"):
+                    pair_item_label_counts_ab.setdefault(pair_k, {})
+                    pair_item_label_counts_ab[pair_k].setdefault(c.item_id, {})
+                    _inc(pair_item_label_counts_ab[pair_k][c.item_id], c.label)
+
+    def _stats_for_key(total: int, label_counts: Dict[str, int], item_counts: Dict[str, Dict[str, int]], item_counts_ab: Dict[str, Dict[str, int]]) -> Dict[str, float]:
+        invalid = int(label_counts.get("invalid", 0))
+        ties = int(label_counts.get("tie", 0))
+        wins_a = int(label_counts.get("a", 0))
+        wins_b = int(label_counts.get("b", 0))
+        decided = wins_a + wins_b
+        imbalance = 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided))
+
+        disagreements: List[float] = []
+        for counts in item_counts.values():
+            if sum(counts.values()) >= 2:
+                disagreements.append(_majority_disagreement(counts))
+        disagreements_ab: List[float] = []
+        for counts in item_counts_ab.values():
+            if sum(counts.values()) >= 2:
+                disagreements_ab.append(_majority_disagreement(counts))
+
+        disagree = 0.0 if len(disagreements) == 0 else (sum(disagreements) / float(len(disagreements)))
+        disagree_ab = 0.0 if len(disagreements_ab) == 0 else (sum(disagreements_ab) / float(len(disagreements_ab)))
+
+        return({
+            "disagreement_rate": disagree,
+            "disagreement_rate_decided_ab": disagree_ab,
+            "invalid_rate": 0.0 if total == 0 else (float(invalid) / float(total)),
+            "tie_rate": 0.0 if total == 0 else (float(ties) / float(total)),
+            "imbalance_ab": imbalance,
+        })
+
+    tmpl_stats: Dict[str, Dict[str, float]] = {}
+    pair_stats: Dict[str, Dict[str, float]] = {}
+    for tmpl, total in tmpl_total.items():
+        tmpl_stats[tmpl] = _stats_for_key(total, tmpl_label_counts.get(tmpl, {}), tmpl_item_label_counts.get(tmpl, {}), tmpl_item_label_counts_ab.get(tmpl, {}))
+    for pair_k, total in pair_total.items():
+        pair_stats[pair_k] = _stats_for_key(total, pair_label_counts.get(pair_k, {}), pair_item_label_counts.get(pair_k, {}), pair_item_label_counts_ab.get(pair_k, {}))
+    return(tmpl_stats, pair_stats)
+
+def _candidate_judge_stats(template_stats: Dict[str, Dict[str, float]], pair_stats: Dict[str, Dict[str, float]], task_family: str, prompt_template_id: str) -> Dict[str, float]:
+    pair_k = "" if (task_family == "" or prompt_template_id == "") else f"{task_family}|{prompt_template_id}"
+    if pair_k != "" and pair_k in pair_stats:
+        return(pair_stats.get(pair_k) or {})
+    return(template_stats.get(prompt_template_id) or {})
+
+
+def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0) -> List[CandidateScore]:
     hist_task_ids: Dict[str, int] = {}
     hist_family: Dict[str, int] = {}
     hist_template: Dict[str, int] = {}
@@ -288,6 +394,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
     hist_answer: Dict[str, int] = {}
 
     tmpl_noise, pair_noise, tmpl_dup, pair_dup = _history_rates(history)
+    tmpl_judge, pair_judge = _judge_slice_rates(history)
 
     for obj in history:
         c = lib.canonicalize_record(obj)
@@ -334,6 +441,12 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
         ans_c = hist_answer.get(answer, 0)
         noise_rate = _candidate_history_rate(tmpl_noise, pair_noise, task_family, prompt_template_id)
         dup_rate = _candidate_history_rate(tmpl_dup, pair_dup, task_family, prompt_template_id)
+        jstats = _candidate_judge_stats(tmpl_judge, pair_judge, task_family, prompt_template_id)
+        judge_disagree = float(jstats.get("disagreement_rate", 0.0))
+        judge_disagree_ab = float(jstats.get("disagreement_rate_decided_ab", 0.0))
+        judge_invalid = float(jstats.get("invalid_rate", 0.0))
+        judge_tie = float(jstats.get("tie_rate", 0.0))
+        judge_imb = float(jstats.get("imbalance_ab", 0.0))
         if max_noise_rate < 1.0 and noise_rate > max_noise_rate:
             continue
         if max_dup_rate < 1.0 and dup_rate > max_dup_rate:
@@ -363,6 +476,10 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
         score += (0.03 * _inv_freq_bonus(ans_c))
         score -= (float(noise_weight) * float(noise_rate))
         score -= (float(dup_weight) * float(dup_rate))
+        score -= (float(judge_disagree_weight) * float(judge_disagree_ab))
+        score -= (float(judge_invalid_weight) * float(judge_invalid))
+        score -= (float(judge_tie_weight) * float(judge_tie))
+        score -= (float(judge_imbalance_weight) * float(judge_imb))
         if len(tags) != 0:
             tag_bonus = sum(_inv_freq_bonus(hist_tags.get(t, 0)) for t in tags) / float(len(tags))
             score += (0.05 * tag_bonus)
@@ -389,6 +506,11 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
             answer_count=ans_c,
             history_noise_rate=noise_rate,
             history_dup_rate=dup_rate,
+            history_judge_disagreement_rate=judge_disagree,
+            history_judge_disagreement_rate_decided_ab=judge_disagree_ab,
+            history_judge_invalid_rate=judge_invalid,
+            history_judge_tie_rate=judge_tie,
+            history_judge_imbalance_ab=judge_imb,
             score=score,
             delta_entropy_bits=delta,
         ))
@@ -397,7 +519,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
     return(scored)
 
 
-def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, avoid_seen_buffer_item_id: bool = False, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25) -> List[CandidateScore]:
+def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, avoid_seen_buffer_item_id: bool = False, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0) -> List[CandidateScore]:
     if limit <= 0:
         return([])
     if max_per_family < 0:
@@ -406,6 +528,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
         max_per_template = 0
 
     tmpl_noise, pair_noise, tmpl_dup, pair_dup = _history_rates(history)
+    tmpl_judge, pair_judge = _judge_slice_rates(history)
 
     hist_task_ids: Dict[str, int] = {}
     hist_family: Dict[str, int] = {}
@@ -459,6 +582,12 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             pair_k = f"{c.task_family}|{c.prompt_template_id}"
             noise_rate = _candidate_history_rate(tmpl_noise, pair_noise, c.task_family, c.prompt_template_id)
             dup_rate = _candidate_history_rate(tmpl_dup, pair_dup, c.task_family, c.prompt_template_id)
+            jstats = _candidate_judge_stats(tmpl_judge, pair_judge, c.task_family, c.prompt_template_id)
+            judge_disagree = float(jstats.get("disagreement_rate", 0.0))
+            judge_disagree_ab = float(jstats.get("disagreement_rate_decided_ab", 0.0))
+            judge_invalid = float(jstats.get("invalid_rate", 0.0))
+            judge_tie = float(jstats.get("tie_rate", 0.0))
+            judge_imb = float(jstats.get("imbalance_ab", 0.0))
             if max_noise_rate < 1.0 and noise_rate > max_noise_rate:
                 continue
             if max_dup_rate < 1.0 and dup_rate > max_dup_rate:
@@ -488,6 +617,10 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             score += (0.03 * _inv_freq_bonus(hist_answer.get(c.answer, 0)))
             score -= (float(noise_weight) * float(noise_rate))
             score -= (float(dup_weight) * float(dup_rate))
+            score -= (float(judge_disagree_weight) * float(judge_disagree_ab))
+            score -= (float(judge_invalid_weight) * float(judge_invalid))
+            score -= (float(judge_tie_weight) * float(judge_tie))
+            score -= (float(judge_imbalance_weight) * float(judge_imb))
             if len(c.tags) != 0:
                 tag_bonus = sum(_inv_freq_bonus(hist_tags.get(t, 0)) for t in c.tags) / float(len(c.tags))
                 score += (0.05 * tag_bonus)
@@ -518,6 +651,11 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                     answer_count=hist_answer.get(c.answer, 0),
                     history_noise_rate=noise_rate,
                     history_dup_rate=dup_rate,
+                    history_judge_disagreement_rate=judge_disagree,
+                    history_judge_disagreement_rate_decided_ab=judge_disagree_ab,
+                    history_judge_invalid_rate=judge_invalid,
+                    history_judge_tie_rate=judge_tie,
+                    history_judge_imbalance_ab=judge_imb,
                     score=score,
                     delta_entropy_bits=delta,
                 )
@@ -563,6 +701,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--buffer-id-weight", type=float, default=0.15, help="Coverage weight for buffer_id entropy gain (0 disables).")
     p.add_argument("--buffer-item-weight", type=float, default=0.60, help="Coverage weight for buffer_item_id entropy gain (0 disables).")
     p.add_argument("--answer-weight", type=float, default=0.25, help="Coverage weight for answer entropy gain (0 disables; requires candidates to include answer).")
+    p.add_argument("--judge-disagree-weight", type=float, default=0.0, help="Penalty multiplier for historical judge disagreement_rate_decided_ab (0 disables).")
+    p.add_argument("--judge-invalid-weight", type=float, default=0.0, help="Penalty multiplier for historical judge invalid_rate (0 disables).")
+    p.add_argument("--judge-tie-weight", type=float, default=0.0, help="Penalty multiplier for historical judge tie_rate (0 disables).")
+    p.add_argument("--judge-imbalance-weight", type=float, default=0.0, help="Penalty multiplier for historical judge A/B imbalance (0 disables).")
     p.add_argument("--max-noise-rate", type=float, default=1.0, help="Drop candidates above this historical noise rate (1.0 disables).")
     p.add_argument("--max-dup-rate", type=float, default=1.0, help="Drop candidates above this historical dup rate (1.0 disables).")
     p.add_argument("--out-json", type=str, default="", help="Write recommendations JSON to this path.")
@@ -576,8 +718,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     history = lib.load_jsonl(args.history_jsonl)
     candidates = lib.load_jsonl(args.candidates_jsonl)
-    scored = _score(history, candidates, float(args.noise_weight), float(args.dup_weight), float(args.max_noise_rate), float(args.max_dup_rate), float(args.buffer_id_weight), float(args.buffer_item_weight), float(args.answer_weight))
-    top = _select(scored, history, max(0, args.limit), args.max_per_family, args.max_per_template, bool(args.avoid_seen_task_id), bool(args.avoid_seen_buffer_item_id), float(args.noise_weight), float(args.dup_weight), float(args.max_noise_rate), float(args.max_dup_rate), float(args.buffer_id_weight), float(args.buffer_item_weight), float(args.answer_weight))
+    scored = _score(history, candidates, noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight))
+    top = _select(scored, history, limit=max(0, args.limit), max_per_family=args.max_per_family, max_per_template=args.max_per_template, avoid_seen_task_id=bool(args.avoid_seen_task_id), avoid_seen_buffer_item_id=bool(args.avoid_seen_buffer_item_id), noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight))
     predicted = _predict(history, top)
 
     recs: List[Dict[str, Any]] = []
@@ -595,8 +737,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "penalties": {
                 "history_noise_rate": c.history_noise_rate,
                 "history_dup_rate": c.history_dup_rate,
+                "history_judge_disagreement_rate": c.history_judge_disagreement_rate,
+                "history_judge_disagreement_rate_decided_ab": c.history_judge_disagreement_rate_decided_ab,
+                "history_judge_invalid_rate": c.history_judge_invalid_rate,
+                "history_judge_tie_rate": c.history_judge_tie_rate,
+                "history_judge_imbalance_ab": c.history_judge_imbalance_ab,
                 "noise_weight": float(args.noise_weight),
                 "dup_weight": float(args.dup_weight),
+                "judge_disagree_weight": float(args.judge_disagree_weight),
+                "judge_invalid_weight": float(args.judge_invalid_weight),
+                "judge_tie_weight": float(args.judge_tie_weight),
+                "judge_imbalance_weight": float(args.judge_imbalance_weight),
             },
             "reasons": {
                 "seen_task_id": bool(c.seen_task_id),
@@ -624,6 +775,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "avoid_seen_buffer_item_id": bool(args.avoid_seen_buffer_item_id),
             "noise_weight": float(args.noise_weight),
             "dup_weight": float(args.dup_weight),
+            "judge_disagree_weight": float(args.judge_disagree_weight),
+            "judge_invalid_weight": float(args.judge_invalid_weight),
+            "judge_tie_weight": float(args.judge_tie_weight),
+            "judge_imbalance_weight": float(args.judge_imbalance_weight),
             "buffer_id_weight": float(args.buffer_id_weight),
             "buffer_item_weight": float(args.buffer_item_weight),
             "answer_weight": float(args.answer_weight),
