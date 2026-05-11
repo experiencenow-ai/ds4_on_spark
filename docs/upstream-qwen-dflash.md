@@ -57,10 +57,10 @@ target checkpoint named by its model card.
 | --- | --- | --- | --- | --- | --- | --- |
 | `Qwen/Qwen3.5-9B` | `c202236235762e1c871ad0ccb60c8ee5ba337b9a` | 17.98 GiB | `z-lab/Qwen3.5-9B-DFlash` | `492f4b532a957a50561e1418e5a3f31690f127f4` | 1.95 GiB | Best cheap DFlash plumbing test if 27B downloads are not staged yet. |
 | `Qwen/Qwen3.5-4B` | `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` | 8.68 GiB | `z-lab/Qwen3.5-4B-DFlash` | `96899cc270945f554998309580b08a04a05a3187` | 1.00 GiB | Lowest-cost target/draft sanity check for DFlash launch syntax and counters. |
-| `Qwen/Qwen3.5-35B-A3B` | not pinned here | not measured here | `z-lab/Qwen3.5-35B-A3B-DFlash` | not pinned here | not measured here | Add if upstream loop verifies target size and commit. |
-| `gemma-4-26B-A4B-it` | gated target | not measured here | `z-lab/gemma-4-26B-A4B-it-DFlash` | gated | not measured here | Promising non-Qwen DFlash path, but HF access gates apply. |
-| `gemma-4-31B-it` | gated target | not measured here | `z-lab/gemma-4-31B-it-DFlash` | gated | not measured here | Promising non-Qwen DFlash path, but HF access gates apply. |
-| `openai/gpt-oss-20b` | not pinned here | not measured here | `z-lab/gpt-oss-20b-DFlash` | `d53f6551543204c859e8bbaaddbd15d11b447af9` | 1.46 GiB | Exploratory; pin target/licensing/runtime before spending Spark time. |
+| `Qwen/Qwen3.5-35B-A3B` | `59d61f3ce65a6d9863b86d2e96597125219dc754` | 66.97 GiB | `z-lab/Qwen3.5-35B-A3B-DFlash` | `a6ab3a277f856d91c43f28711611e7929073d56d` | 0.88 GiB | MoE A3B target; likely single-Spark plausible but less headroom than FP8 A3B. Stage after smaller DFlash plumbing tests. |
+| `google/gemma-4-26B-A4B-it` | `462a98a12e28e2cbcfccaf78fe41e3e50235e6ae` | 48.07 GiB | `z-lab/gemma-4-26B-A4B-it-DFlash` | `77d4202772dfe50b2396ec7bac9cfffc7b9e7057` | 0.80 GiB | Promising non-Qwen DFlash pair; multimodal IT target (not directly comparable to DS4/Ling/Qwen text-only runs). |
+| `google/gemma-4-31B-it` | `ba74f5b6c647c0911554e50278d6f6f4477f9010` | 58.25 GiB | `z-lab/gemma-4-31B-it-DFlash` | `eabd648301ce28583cc14757912e5e0f84e152e1` | 2.86 GiB | Larger non-Qwen DFlash pair; multimodal IT target (not directly comparable to DS4/Ling/Qwen text-only runs). |
+| `openai/gpt-oss-20b` | `6cee5e81ee83917806bbde320786a8fb61efebee` | 25.63 GiB | `z-lab/gpt-oss-20b-DFlash` | `d53f6551543204c859e8bbaaddbd15d11b447af9` | 1.46 GiB | Open target/draft pair; good generic DFlash smoke test when Qwen artifacts are not staged. |
 | `meta-llama/Llama-3.1-8B-Instruct` | gated target | not measured here | `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat` | `d3af30def9601abdd10810aba220d692f0e803f0` | 1.95 GiB | Exploratory; gated target and not directly comparable to DS4/Ling/Qwen. |
 
 No Ling-2.6-flash DFlash drafter was found in the checked Z Lab/Hugging Face
