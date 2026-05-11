@@ -25,6 +25,8 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, and best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both.
 
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `cuobjdump --dump-ptx` reports embedded PTX for binaries built via `-arch=sm_121a` / `-arch=sm_121f`, and the first PTX `.target` line is still `.target sm_121` (treat the `a`/`f` variants as “toolchain accepts and runs them”, not as a distinct PTX target for portability planning).
+
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
 When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cuda_probe_compile_only_tiny_spark0.sh` also does a best-effort compile with `-arch=compute_121` (virtual-arch / PTX-target probe) and prints `arch_compute_121` as `OK` or `FAILED` (informational; missing `sm_121` remains the hard failure).
