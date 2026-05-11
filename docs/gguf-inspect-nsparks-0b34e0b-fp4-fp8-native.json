@@ -64,6 +64,14 @@
     "present_prefixes": []
   },
   "mtp_present": false,
+  "mtp_preservation": {
+    "checked": true,
+    "preserves": false,
+    "reasons": [
+      "no mtp.* tensors present"
+    ],
+    "status": "absent"
+  },
   "mtp_tensor_count": 0,
   "mtp_tensor_type_counts": {},
   "mtp_trust": {
@@ -177,8 +185,36 @@
     "vocab_size": 129280
   },
   "trunk_contract": {
-    "checked": false,
-    "reason": "artifact tensor keys do not appear to preserve DeepSeek upstream `layers.{i}.*` namespace; trunk_contract check not applicable"
+    "block_ids_present_sample": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "checked": true,
+    "complete": true,
+    "forbidden_present": [],
+    "kind": "llama.cpp",
+    "missing_required_count": 0,
+    "missing_required_sample": [],
+    "n_layers_checked": 43,
+    "notes": []
   },
   "url_prefix_bytes": 8388608
 }

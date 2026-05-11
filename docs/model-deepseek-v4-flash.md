@@ -626,7 +626,9 @@ For each quantized artifact tested, record:
     - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
     - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
-    - `trunk_contract` (`checked`, `complete`) when tensor keys preserve `layers.{i}.*`
+    - `trunk_contract` (`checked`, `complete`) with `trunk_contract.kind`:
+      - `kind="deepseek-upstream"`: upstream-style `layers.{i}.*` keys preserved
+      - `kind="llama.cpp"`: DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only structural signal)
     - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract
@@ -707,8 +709,8 @@ As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scrip
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
 - When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make trust gates explicit in JSON (including namespace failures like `namespace_incomplete` / `namespace_missing_mtp0`).
 - Also record and review:
-  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; `trunk_contract` is only meaningful when `trunk_contract.checked == true`)
-  - `trunk_contract.complete == true` (upstream tensor-key completeness for `embed.*` + `layers.{i}.*`; only meaningful when `trunk_contract.checked == true`)
+  - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; interpret `trunk_contract` via its `kind`)
+  - `trunk_contract.complete == true` (structural trunk key completeness; for GGUF conversions this is a compatibility signal only and does not replace an oracle)
   - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
 
 MTP acceptance gates (high-performance / quantized path):
