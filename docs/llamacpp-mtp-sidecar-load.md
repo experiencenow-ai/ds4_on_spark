@@ -33,6 +33,7 @@ Net: even after solving the “unknown architecture” error, the fork still nee
 Before touching llama.cpp code, validate the sidecar file you intend to use:
 
 - Repo-side (Hugging Face URL, metadata-only range reads + optional payload sampling): `scripts/model_contract_probe_mtp_sidecar_antirez.sh`
+- Local file convenience runner (writes a small Markdown + JSON bundle under `/private/tmp`): `scripts/run_mtp_sidecar_contract_probe_local.sh /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf`
 - Spark-side (local file already staged on Spark; no downloads): run the baseline runner with:
 
 ```bash
