@@ -212,3 +212,51 @@ def load_jsonl(paths: Sequence[str]) -> List[Dict[str, Any]]:
 
 def get_str(obj: Dict[str, Any], *names: str) -> str:
     return(_get_str(obj, *names))
+
+
+def _to_float(v: Any) -> Optional[float]:
+    if v is None:
+        return(None)
+    if isinstance(v, bool):
+        return(None)
+    if isinstance(v, (int, float)):
+        x = float(v)
+        if math.isfinite(x):
+            return(x)
+        return(None)
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            return(None)
+        try:
+            x = float(s)
+        except ValueError:
+            return(None)
+        if math.isfinite(x):
+            return(x)
+        return(None)
+    return(None)
+
+
+def _get_float(obj: Dict[str, Any], *names: str) -> Optional[float]:
+    for name in names:
+        if name in obj:
+            x = _to_float(obj.get(name))
+            if x is not None:
+                return(x)
+    return(None)
+
+
+def _get_int(obj: Dict[str, Any], *names: str) -> Optional[int]:
+    x = _get_float(obj, *names)
+    if x is None:
+        return(None)
+    return(int(x))
+
+
+def get_float(obj: Dict[str, Any], *names: str) -> Optional[float]:
+    return(_get_float(obj, *names))
+
+
+def get_int(obj: Dict[str, Any], *names: str) -> Optional[int]:
+    return(_get_int(obj, *names))

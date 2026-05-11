@@ -56,15 +56,20 @@ class EntropyBufferMetricsTest(unittest.TestCase):
 
         self.assertEqual(report.tokens["prompt_words_total"], 61)
         self.assertEqual(report.tokens["output_words_total"], 19)
+        self.assertEqual(report.tokens["input_tokens"]["count"], 6)
+        self.assertEqual(report.tokens["output_tokens"]["count"], 6)
+        self.assertEqual(report.tokens["wall_ms"]["count"], 6)
 
         self.assertAlmostEqual(report.duplicates["output_norm_dup_rate"], 0.0)
         self.assertAlmostEqual(report.duplicates["prompt_norm_dup_rate"], (1.0 / 6.0))
+        self.assertAlmostEqual(report.duplicates["answer_dup_rate"], 0.25)
         self.assertEqual(report.duplicates["task_template_groups_ge2"], 1)
 
         self.assertEqual(report.judge["label_counts"]["a"], 3)
         self.assertEqual(report.judge["label_counts"]["tie"], 1)
         self.assertEqual(report.judge["label_counts"]["invalid"], 1)
         self.assertAlmostEqual(report.judge["disagreement_rate"], 0.25)
+        self.assertAlmostEqual(report.judge["disagreement_rate_decided_ab"], 0.0)
         self.assertEqual(report.judge["decided_count_ab"], 3)
         self.assertAlmostEqual(report.judge["decided_rate_ab"], 0.60)
         self.assertAlmostEqual(report.judge["label_balance_ab"], 1.0)
@@ -87,6 +92,18 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(len(top), 1)
         self.assertEqual(top[0].task_family, "code")
         self.assertFalse(any(c.task_id == "math.add.001" and c.prompt_template_id == "cot.v2" for c in top))
+
+    def test_useful_novelty_flags_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_flags_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        self.assertEqual(report.totals["task_run_records"], 2)
+        self.assertEqual(report.useful_novelty["flagged_task_runs"], 2)
+        flags = report.useful_novelty.get("flag_counts", {})
+        self.assertGreaterEqual(flags.get("echo_prompt_overlap_ge_0.90", 0), 1)
+        self.assertGreaterEqual(flags.get("line_repetition_ge_6", 0), 1)
 
 
 if __name__ == "__main__":

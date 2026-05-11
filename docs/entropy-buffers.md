@@ -105,12 +105,15 @@ The scripts compute:
 - **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
 - **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
+- **Runtime / throughput** (optional): `input_tokens`, `output_tokens`, `wall_ms`, plus derived `output_tok_per_s`, `total_tok_per_s`, and `ms_per_output_token`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
 - **Judge label balance**: label histogram + entropy.
-- **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean.
+- **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
+  - The report also includes `tie_rate` and `invalid_rate` to help debug judge stability.
 - **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
 - **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
+  - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
 
 ## Tools
 
