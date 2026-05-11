@@ -65,6 +65,7 @@ Use a strict system instruction:
 - Keep the JSON short: target `judge_out <= ~64 tokens` (reason/hint are the budget drivers).
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
+It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
 
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 
