@@ -53,10 +53,10 @@ If Spark0 already has the pinned sidecar staged at
 defaults `MTP_SIDECAR_GGUF` to that path when it is readable. Override by adding
 `MTP_SIDECAR_GGUF=/abs/path/to/your-sidecar.gguf` to `REMOTE_MTP_SIDECAR_ENV`.
 
-This runner also accepts an `https://` URL for `MTP_SIDECAR_GGUF` and will validate the sidecar using HTTP range reads (no full download):
+This runner also accepts an `https://` URL for `MTP_SIDECAR_GGUF` and will validate the sidecar using HTTP range reads (no full download), but it is gated: set `ALLOW_URL=1` explicitly on Spark:
 
 ```bash
-REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=https://host/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 ALLOW_URL=1 MTP_SIDECAR_GGUF=https://host/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
