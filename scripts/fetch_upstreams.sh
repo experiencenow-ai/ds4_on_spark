@@ -55,6 +55,10 @@ Targets:
   gpt_oss_120b_dflash_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   kimi_k2_5_hf                         (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   kimi_k2_5_dflash_hf                  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  kimi_k2_6_hf                         (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  kimi_k2_6_dflash_hf                  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  minimax_m2_7_hf                      (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  minimax_m2_7_dflash_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_quant_bleysg  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_antirez   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_gguf_ssweens   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -434,6 +438,26 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/z-lab/Kimi-K2.5-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "kimi_k2_5_dflash_hf" "https://huggingface.co/z-lab/Kimi-K2.5-DFlash" "${ref}" "${expected}"
+			;;
+		kimi_k2_6_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/moonshotai/Kimi-K2.6"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "kimi_k2_6_hf" "https://huggingface.co/moonshotai/Kimi-K2.6" "${ref}" "${expected}"
+			;;
+		kimi_k2_6_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/Kimi-K2.6-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "kimi_k2_6_dflash_hf" "https://huggingface.co/z-lab/Kimi-K2.6-DFlash" "${ref}" "${expected}"
+			;;
+		minimax_m2_7_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/MiniMaxAI/MiniMax-M2.7"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "minimax_m2_7_hf" "https://huggingface.co/MiniMaxAI/MiniMax-M2.7" "${ref}" "${expected}"
+			;;
+		minimax_m2_7_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/MiniMax-M2.7-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "minimax_m2_7_dflash_hf" "https://huggingface.co/z-lab/MiniMax-M2.7-DFlash" "${ref}" "${expected}"
 			;;
 		sglang)
 			upstream="sgl-project/sglang"; ref="refs/tags/v0.5.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
