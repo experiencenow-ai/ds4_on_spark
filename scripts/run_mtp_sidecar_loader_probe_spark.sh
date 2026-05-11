@@ -8,6 +8,7 @@ OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_loader_probe}"
 
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
+ALLOW_FETCH_DS4="${ALLOW_FETCH_DS4:-0}"
 SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-}"
 if [ "$SIDECAR_EXPECT_FILE_SIZE" != "" ]; then
 	case " $REMOTE_MTP_SIDECAR_ARGS " in
@@ -70,6 +71,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "Optional local env vars:"
 	echo
 	echo "- SIDECAR_EXPECT_FILE_SIZE=3807602400 (pins the staged sidecar file size; appended as --expect-file-size)"
+	echo "- ALLOW_FETCH_DS4=1 (fetch pinned `antirez/ds4` locally to validate the expected 32-tensor list vs ds4 binder)"
 	echo
 	echo "Remote contract probe env (recorded):"
 	echo
@@ -325,6 +327,21 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_consistency.py" 
 } >>"$REPORT_MD"
 
 echo "== verifying expected tensor list against upstream ds4 binder (local) =="
+DS4_C="$repo_root/upstreams/ds4/ds4.c"
+if [ ! -r "$DS4_C" ]; then
+	if [ "$ALLOW_FETCH_DS4" = "1" ]; then
+		echo "== fetching pinned upstream ds4 (local; best-effort) =="
+		"$repo_root/scripts/fetch_upstreams.sh" ds4 \
+			>"$OUT_DIR/local_fetch_ds4_stdout.txt" 2>"$OUT_DIR/local_fetch_ds4_stderr.txt" || true
+	else
+		printf '%s\n' "skipped: $DS4_C missing (set ALLOW_FETCH_DS4=1 to fetch pinned antirez/ds4)" \
+			>"$OUT_DIR/local_fetch_ds4_stdout.txt"
+		printf '%s\n' "" >"$OUT_DIR/local_fetch_ds4_stderr.txt"
+	fi
+else
+	printf '%s\n' "present: $DS4_C" >"$OUT_DIR/local_fetch_ds4_stdout.txt"
+	printf '%s\n' "" >"$OUT_DIR/local_fetch_ds4_stderr.txt"
+fi
 python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --json \
 	>"$OUT_DIR/local_ds4_tensor_contract_stdout.txt" 2>"$OUT_DIR/local_ds4_tensor_contract_stderr.txt" || true
 
@@ -351,6 +368,8 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --jso
 	echo
 	echo "Artifacts:"
 	echo
+	echo "- upstream fetch stdout: $OUT_DIR/local_fetch_ds4_stdout.txt"
+	echo "- upstream fetch stderr: $OUT_DIR/local_fetch_ds4_stderr.txt"
 	echo "- stdout: $OUT_DIR/local_ds4_tensor_contract_stdout.txt"
 	echo "- stderr: $OUT_DIR/local_ds4_tensor_contract_stderr.txt"
 	echo
