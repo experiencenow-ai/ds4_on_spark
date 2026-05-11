@@ -30,7 +30,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe` shows that an `sm_120`-compiled kernel runs successfully on GB10 (`sm_121`) (observed `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints `cudaDevAttrMaxSharedMemoryPerBlockOptin` and validates an opt-in dynamic shared-memory launch
-  - Observed on Spark0 (2026-05-08): `MaxSharedMemoryPerBlockOptin=101376` bytes
+  - Observed on Spark0 (2026-05-11): `MaxSharedMemoryPerBlockOptin=101376` bytes
 - `tools/cuda_probe/bin/cuda_sm121_devattrs` dumps key `cudaDeviceGetAttribute` values commonly used to gate kernel bring-up (shared memory, registers, L2, cooperative/cluster launch).
 - `tools/cuda_probe/bin/cuda_sm121_fp8_conv` validates that CUDA 13 FP8 conversion helpers (`cuda_fp8.h`) compile and run for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_bf16_conv` validates that CUDA BF16 helpers (`cuda_bf16.h`) compile and run for `sm_121` (BF16 data plumbing gate for many CUTLASS-style kernels).
@@ -59,7 +59,7 @@ Implication:
 - When custom kernels or template libraries fail to build for `sm_121`, cuBLASLt is the fallback for correctness gating and early performance baselines.
 - The cuBLASLt smoke probes print `cublasLtGetVersion` and `cublasLtGetCudartVersion`; keep these lines in logs so failures can be correlated to the exact cuBLASLt stack.
 - FP8 matmul is verified via cuBLASLt on `sm_121` for E4M3 (see `cuda_cublaslt_fp8_smoke`), which de-risks early FP8 bring-up for DeepGEMM-style paths.
-- The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (observed 2026-05-10: `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
+- The current CUDA 13.0 (`V13.0.88`) cuBLASLt stack on Spark0 fails to find any supported algo for the E5M2 smoke probe (`cuda_cublaslt_fp8_e5m2_smoke`) even when sweeping `m=n=k` in `{16,64,128}` and workspace sizes `{1MiB,16MiB}` using the narrow-precision-recommended “TN” format (A transposed, B non-transposed) and BF16 output (observed 2026-05-11: `cublasLtGetVersion=130101`), which may matter for DeepGEMM paths that use E5M2 inputs.
 - FP4 conversion helpers exist in CUDA 13 (`cuda_fp4.h`), but FP4 matmul support and packing/scale semantics are cuBLASLt-stack dependent; use `cuda_cublaslt_fp4_smoke` / `cuda_cublaslt_fp4_sweep` as the first “does FP4 GEMM exist?” gate before investing in FP4 kernels.
 - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88` / `cublasLtGetVersion=130101`):
   - `cuda_cublaslt_fp4_sweep` reports `heuristic=CUBLAS_STATUS_SUCCESS got=8 rc=0` for BF16 output (`CUBLAS_COMPUTE_32F`), which suggests an FP4 matmul execution path exists in cuBLASLt on GB10.

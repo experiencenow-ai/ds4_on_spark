@@ -249,7 +249,7 @@ Currently it disassembles:
 
 This is useful when bringing up CUTLASS/DeepGEMM-style kernels, because it validates that the developer tooling can inspect the generated kernels on Spark0.
 
-## Current Spark0 Results (2026-05-10)
+## Current Spark0 Results (2026-05-11)
 
 Commands run:
 
@@ -277,7 +277,7 @@ Observed:
 - `cuda_sm121_compile_probe.o` compile gate observes `__CUDA_ARCH__=1210` for `-arch=sm_121`
 - The kernel-tiny subset (no cuBLASLt) compiles and runs end-to-end, and retries once to smooth over transient Spark0 GPU pressure
 
-## Full Suite Spark0 Results (2026-05-10)
+## Full Suite Spark0 Results (2026-05-11)
 
 Commands run:
 
