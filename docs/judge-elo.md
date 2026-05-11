@@ -21,6 +21,9 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
+Machine-readable schema:
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v1.schema.json`
+
 ## Judge Record JSONL (envelope)
 
 The offline tools in `scripts/judge_elo_*.py` expect one JSON object per line with:
@@ -48,6 +51,9 @@ For baseline-quality joins, treat `tokens` and `latency_ms` as required and vali
 python3 scripts/judge_elo_validate.py --strict --in <records.jsonl>
 ```
 
+Machine-readable schema:
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v1.schema.json`
+
 ## Prompt Design (verifier budget)
 
 Use a strict system instruction:
@@ -73,6 +79,7 @@ python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b 
 - writes JSON/CSV/Markdown leaderboard summaries plus:
   - `quality_map.json` (model -> `quality_score`)
   - `budget.json` (token/latency/parse-validity summary over the input JSONL)
+    - includes `judge_out_budget` (how often judge outputs meet the compact token target)
 
 Elo math:
 - expected score: `E_A = 1 / (1 + 10^((R_B - R_A)/400))`

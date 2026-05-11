@@ -233,26 +233,33 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
 
 def parse_json_object_loose(text: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Parse a JSON object even if the model wrapped it with extra text."""
+    s = text.strip()
     try:
-        obj = json.loads(text)
+        obj = json.loads(s)
         if isinstance(obj, dict):
             return obj, ""
         return None, "top-level JSON value must be an object"
     except json.JSONDecodeError:
         pass
 
-    start = text.find("{")
-    end = text.rfind("}")
-    if start < 0 or end < 0 or end <= start:
-        return None, "missing JSON object braces"
-    snippet = text[start : end + 1]
-    try:
-        obj = json.loads(snippet)
-        if not isinstance(obj, dict):
+    # Many judge models occasionally wrap the JSON in extra prose. Prefer the
+    # first parseable object rather than greedy-matching the last '}'.
+    dec = json.JSONDecoder()
+    i = 0
+    while True:
+        start = text.find("{", i)
+        if start < 0:
+            break
+        try:
+            obj2, _end = dec.raw_decode(text, start)
+            if isinstance(obj2, dict):
+                return obj2, ""
             return None, "top-level JSON value must be an object"
-        return obj, ""
-    except json.JSONDecodeError as e:
-        return None, f"json decode error: {e.msg}"
+        except json.JSONDecodeError:
+            i = start + 1
+            continue
+
+    return None, "missing JSON object braces"
 
 
 def iter_jsonl(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
