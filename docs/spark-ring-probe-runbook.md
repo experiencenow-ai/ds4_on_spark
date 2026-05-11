@@ -44,6 +44,14 @@ Notes:
 - The output includes `known_hosts:` mapping for reproducibility.
 - The `== peer ping ==` section includes packet loss and RTT summary when available.
 
+Optional (no installs): quick Mac→Spark throughput smoke test (single stream, no writes):
+
+```bash
+/usr/bin/time -p dd if=/dev/zero bs=1m count=256 2>/dev/null | ssh -o BatchMode=yes spark0@aitopatom-9ab9.local 'cat >/dev/null'
+```
+
+This is purely a sanity check (ssh + crypto overhead included). Avoid running it in tight loops; treat it as a human-run diagnostic.
+
 ## 3) Deep single-node hardware/toolchain probe (optional; Spark0 recommended)
 
 When you need CUDA compute capability cross-checks and PCIe link detail, record a full per-host probe:

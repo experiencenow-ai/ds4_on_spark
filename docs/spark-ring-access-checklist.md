@@ -42,6 +42,14 @@ Record (for each node):
 - Wired interface name(s) and MTU (jumbo vs standard).
 - Wi‑Fi interface name(s) and MTU.
 
+Commit-safe address matrix template (redacted):
+
+| Node | SSH target | Primary fabric | Wired iface | Wired MTU | Wi‑Fi iface | Wi‑Fi MTU | Notes |
+|---|---|---|---|---:|---|---:|---|
+| spark0 | `spark0@aitopatom-9ab9.local` | wired | `enP7s7` | 9000 | `wlP9s9` | 1500 | 10GbE link speed expected |
+| spark1 | `spark0@spark1.local` | (tbd) | (tbd) | (tbd) | (tbd) | (tbd) | provision + validate mDNS |
+| spark2 | `spark0@spark2.local` | (tbd) | (tbd) | (tbd) | (tbd) | (tbd) | provision + validate mDNS |
+
 ## 5) MTU Consistency
 
 - Ensure the intended fabric (wired vs Wi‑Fi) uses consistent MTU across nodes for tests that care about latency/bandwidth.
@@ -53,6 +61,9 @@ Record (for each node):
 - Use ping RTT as the minimum viable latency check:
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
 - The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
+- Optional (no installs): quick Mac→Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
+  - `dd if=/dev/zero bs=1m count=256 2>/dev/null | ssh -o BatchMode=yes spark0@aitopatom-9ab9.local 'cat >/dev/null'`
+  - Use `/usr/bin/time -p ...` around the command if you want a simple MB/s estimate; do not run this in tight loops.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
 - If `iperf3` is already present on all nodes, you can do a quick throughput check (do not commit raw IPs; summarize results or redact manually):
   - On receiver: `iperf3 -s`
