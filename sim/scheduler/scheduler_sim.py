@@ -168,6 +168,8 @@ class SimConfig:
     sla_batch_ms: float = 0.0
     sim_seed: int = 1
     mtp_draft_len: int = 0
+    mtp_accept_model: str = "geom"
+    mtp_accept_hist: Tuple[float, ...] = ()
     mtp_accept_prob: float = 0.0
     mtp_accept_decay: float = 1.0
     mtp_draft_cost_scale: float = 0.25
@@ -423,6 +425,8 @@ class SimMetrics:
     mtp_output_tokens: int = 0
     mtp_verify_steps: int = 0
     mtp_draft_len: int = 0
+    mtp_accept_model: str = "geom"
+    mtp_accept_hist: List[float] = dataclasses.field(default_factory=list)
     mtp_accept_prob: float = 0.0
     mtp_accept_decay: float = 1.0
     mtp_draft_attempt_policy: str = "full"
@@ -584,6 +588,8 @@ class SimMetrics:
                     "output_token_throughput_tps": (float(self.mtp_output_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                     "verify_steps": self.mtp_verify_steps,
                     "draft_len": self.mtp_draft_len,
+                    "accept_model": str(self.mtp_accept_model),
+                    "accept_hist": list(self.mtp_accept_hist) if str(self.mtp_accept_model).strip().lower() == "hist" else [],
                     "accept_prob": self.mtp_accept_prob,
                     "accept_decay": self.mtp_accept_decay,
                     "draft_attempt_policy": self.mtp_draft_attempt_policy,
@@ -2511,9 +2517,64 @@ class KControllerState:
     k: int = 0
 
 
-def expected_mtp_accept_len(mtp_draft_len: int, mtp_accept_prob: float, mtp_accept_decay: float) -> float:
+def _normalize_prob_hist(probs: Sequence[float]) -> Tuple[float, ...]:
+    if len(probs) == 0:
+        return(())
+    total = 0.0
+    out: List[float] = []
+    for p in probs:
+        v = float(p)
+        if v < 0.0:
+            raise ValueError("probabilities must be >= 0")
+        out.append(v)
+        total += v
+    if total <= 0.0:
+        raise ValueError("probabilities must sum to > 0")
+    return(tuple((v / total) for v in out))
+
+
+def _parse_prob_csv(text: str) -> Tuple[float, ...]:
+    parts = [p.strip() for p in str(text).split(",") if p.strip() != ""]
+    if len(parts) == 0:
+        return(())
+    vals: List[float] = []
+    for p in parts:
+        try:
+            vals.append(float(p))
+        except ValueError as e:
+            raise ValueError(f"could not parse probability '{p}'") from e
+    return(_normalize_prob_hist(vals))
+
+
+def _sample_from_prob_hist(rng: random.Random, probs: Sequence[float]) -> int:
+    if len(probs) == 0:
+        return(1)
+    r = rng.random()
+    acc = 0.0
+    for i, p in enumerate(probs):
+        acc += float(p)
+        if r < acc:
+            return(int(i + 1))
+    return(int(len(probs)))
+
+
+def expected_mtp_accept_len(
+    mtp_draft_len: int,
+    mtp_accept_prob: float,
+    mtp_accept_decay: float,
+    mtp_accept_model: str = "geom",
+    mtp_accept_hist: Sequence[float] = (),
+) -> float:
     if mtp_draft_len <= 0:
         return(1.0)
+    model = mtp_accept_model.strip().lower()
+    if model == "hist":
+        if len(mtp_accept_hist) == 0:
+            return(1.0)
+        exp_len = 0.0
+        for i, p in enumerate(mtp_accept_hist, 1):
+            exp_len += (float(i) * float(p))
+        return(float(exp_len))
     if mtp_accept_prob <= 0.0:
         return(1.0)
     if mtp_accept_decay <= 0.0:
@@ -2532,12 +2593,26 @@ def expected_mtp_accept_len(mtp_draft_len: int, mtp_accept_prob: float, mtp_acce
     return(exp_len)
 
 
-def arrival_rate_steps_tps(arrival_rate_tps: float, arrival_units: str, mtp_draft_len: int, mtp_accept_prob: float, mtp_accept_decay: float) -> float:
+def arrival_rate_steps_tps(
+    arrival_rate_tps: float,
+    arrival_units: str,
+    mtp_draft_len: int,
+    mtp_accept_prob: float,
+    mtp_accept_decay: float,
+    mtp_accept_model: str = "geom",
+    mtp_accept_hist: Sequence[float] = (),
+) -> float:
     units = arrival_units.strip().lower()
     if units == "steps":
         return(arrival_rate_tps)
     if units == "output_tokens":
-        exp_len = expected_mtp_accept_len(mtp_draft_len, mtp_accept_prob, mtp_accept_decay)
+        exp_len = expected_mtp_accept_len(
+            mtp_draft_len,
+            mtp_accept_prob,
+            mtp_accept_decay,
+            mtp_accept_model=mtp_accept_model,
+            mtp_accept_hist=mtp_accept_hist,
+        )
         if exp_len <= 0.0:
             exp_len = 1.0
         return(arrival_rate_tps / exp_len)
@@ -2841,6 +2916,15 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
 def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics, draft_attempt_policy: str) -> int:
     if cfg.mtp_draft_len <= 0:
         return(1)
+    model = str(cfg.mtp_accept_model).strip().lower()
+    if model == "hist":
+        if len(cfg.mtp_accept_hist) != (int(cfg.mtp_draft_len) + 1):
+            raise ValueError("mtp_accept_hist must have length mtp_draft_len + 1")
+        accept_len = _sample_from_prob_hist(rng, cfg.mtp_accept_hist)
+        _record_mtp_accept_len(cfg, metrics, int(accept_len), draft_attempt_policy)
+        return(int(accept_len))
+    if model != "geom":
+        return(1)
     if cfg.mtp_accept_prob <= 0.0:
         return(1)
     if cfg.mtp_accept_prob > 1.0:
@@ -3044,6 +3128,16 @@ def run_simulation(
         mtp_draft_attempt_policy = cfg.mtp_draft_attempt_policy.strip().lower()
         if mtp_draft_attempt_policy not in ("full", "stop_at_reject"):
             raise ValueError("mtp_draft_attempt_policy must be 'full' or 'stop_at_reject'")
+        accept_model = str(cfg.mtp_accept_model).strip().lower()
+        if accept_model not in ("geom", "hist"):
+            raise ValueError("mtp_accept_model must be 'geom' or 'hist'")
+        if accept_model == "hist":
+            if len(cfg.mtp_accept_hist) != (int(cfg.mtp_draft_len) + 1):
+                raise ValueError("mtp_accept_hist must have length mtp_draft_len + 1 (one probability per accept_len in [1..draft_len+1])")
+            if any(float(p) < 0.0 for p in cfg.mtp_accept_hist):
+                raise ValueError("mtp_accept_hist probabilities must be >= 0")
+            if float(sum(cfg.mtp_accept_hist)) <= 0.0:
+                raise ValueError("mtp_accept_hist probabilities must sum to > 0")
         if cfg.mtp_accept_prob < 0.0 or cfg.mtp_accept_prob > 1.0:
             raise ValueError("mtp_accept_prob must be within [0,1]")
         if cfg.mtp_accept_decay <= 0.0:
@@ -3156,6 +3250,8 @@ def run_simulation(
     if cfg.mtp_draft_len > 0:
         metrics.mtp_verify_steps = len(trace)
         metrics.mtp_draft_len = cfg.mtp_draft_len
+        metrics.mtp_accept_model = str(cfg.mtp_accept_model).strip().lower()
+        metrics.mtp_accept_hist = list(cfg.mtp_accept_hist)
         metrics.mtp_accept_prob = cfg.mtp_accept_prob
         metrics.mtp_accept_decay = cfg.mtp_accept_decay
         metrics.mtp_draft_attempt_policy = mtp_draft_attempt_policy
@@ -4350,7 +4446,13 @@ def scale_trace_arrival_units(trace: Sequence[TokenRoute], arrival_units: str, c
     if len(derived) != 0:
         scale = statistics.fmean(derived)
     else:
-        scale = expected_mtp_accept_len(int(cfg.mtp_draft_len), float(cfg.mtp_accept_prob), float(cfg.mtp_accept_decay))
+        scale = expected_mtp_accept_len(
+            int(cfg.mtp_draft_len),
+            float(cfg.mtp_accept_prob),
+            float(cfg.mtp_accept_decay),
+            mtp_accept_model=str(cfg.mtp_accept_model),
+            mtp_accept_hist=cfg.mtp_accept_hist,
+        )
     if scale <= 0.0:
         return(list(trace))
     if abs(scale - 1.0) < 1e-12:
@@ -4545,6 +4647,19 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (requires accepted_mtp+rejected_mtp or meta.mtp_draft_len).")
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
+    p.add_argument(
+        "--mtp-accept-model",
+        type=str,
+        default="geom",
+        choices=("geom", "hist"),
+        help="MTP: accept-length model for synthetic traces when the trace does not provide mtp_accept_len/accepted_mtp/rejected_mtp. geom samples from --mtp-accept-prob/--mtp-accept-decay; hist samples accept_len from --mtp-accept-hist (comma-separated probabilities for accept_len=1..draft_len+1, auto-normalized).",
+    )
+    p.add_argument(
+        "--mtp-accept-hist",
+        type=str,
+        default="",
+        help="MTP: comma-separated accept_len histogram probabilities for --mtp-accept-model hist. Must provide exactly (mtp_draft_len + 1) entries for accept_len in [1..draft_len+1] (example for draft_len=2: '0.1,0.2,0.7').",
+    )
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
@@ -4599,6 +4714,14 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
+
+    mtp_accept_model = str(args.mtp_accept_model).strip().lower()
+    if mtp_accept_model not in ("geom", "hist"):
+        raise SystemExit("--mtp-accept-model must be 'geom' or 'hist'")
+    try:
+        mtp_accept_hist = _parse_prob_csv(args.mtp_accept_hist) if mtp_accept_model == "hist" else ()
+    except ValueError as e:
+        raise SystemExit(f"--mtp-accept-hist parse failed: {e}")
 
     try:
         trace_speedup = float(args.trace_speedup)
@@ -4707,7 +4830,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.mtp_draft_len == -1:
             raise SystemExit("--mtp-draft-len=-1 is only supported for trace replay (use an explicit value for synthetic traces)")
         try:
-            arrival_rate_tps = arrival_rate_steps_tps(args.arrival_rate_tps, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay)
+            arrival_rate_tps = arrival_rate_steps_tps(
+                args.arrival_rate_tps,
+                args.arrival_units,
+                args.mtp_draft_len,
+                args.mtp_accept_prob,
+                args.mtp_accept_decay,
+                mtp_accept_model=mtp_accept_model,
+                mtp_accept_hist=mtp_accept_hist,
+            )
         except ValueError as e:
             raise SystemExit(str(e))
 
@@ -4774,8 +4905,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     hi_rate_in = (float(args.arrival_rate_tps) * float(args.interactive_prob))
                 if lo_rate_in < 0.0:
                     lo_rate_in = (float(args.arrival_rate_tps) * (1.0 - float(args.interactive_prob)))
-                hi_rate = arrival_rate_steps_tps(hi_rate_in, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay) if hi_rate_in > 0.0 else 0.0
-                lo_rate = arrival_rate_steps_tps(lo_rate_in, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay) if lo_rate_in > 0.0 else 0.0
+                hi_rate = (
+                    arrival_rate_steps_tps(
+                        hi_rate_in,
+                        args.arrival_units,
+                        args.mtp_draft_len,
+                        args.mtp_accept_prob,
+                        args.mtp_accept_decay,
+                        mtp_accept_model=mtp_accept_model,
+                        mtp_accept_hist=mtp_accept_hist,
+                    )
+                    if hi_rate_in > 0.0
+                    else 0.0
+                )
+                lo_rate = (
+                    arrival_rate_steps_tps(
+                        lo_rate_in,
+                        args.arrival_units,
+                        args.mtp_draft_len,
+                        args.mtp_accept_prob,
+                        args.mtp_accept_decay,
+                        mtp_accept_model=mtp_accept_model,
+                        mtp_accept_hist=mtp_accept_hist,
+                    )
+                    if lo_rate_in > 0.0
+                    else 0.0
+                )
             except ValueError as e:
                 raise SystemExit(str(e))
 
@@ -4824,6 +4979,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(out, indent=2, sort_keys=True))
             return(0)
 
+    if mtp_accept_model == "hist" and int(args.mtp_draft_len) > 0:
+        if len(mtp_accept_hist) == 0:
+            raise SystemExit("--mtp-accept-model=hist requires --mtp-accept-hist when --mtp-draft-len > 0")
+        if len(mtp_accept_hist) != (int(args.mtp_draft_len) + 1):
+            raise SystemExit("--mtp-accept-hist must have length mtp_draft_len + 1 (one probability per accept_len in [1..draft_len+1])")
+
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,
         k_max_interactive=args.k_max_interactive,
@@ -4866,6 +5027,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         sla_batch_ms=args.sla_batch_ms,
         sim_seed=args.sim_seed,
         mtp_draft_len=args.mtp_draft_len,
+        mtp_accept_model=mtp_accept_model,
+        mtp_accept_hist=mtp_accept_hist,
         mtp_accept_prob=args.mtp_accept_prob,
         mtp_accept_decay=args.mtp_accept_decay,
         mtp_draft_cost_scale=args.mtp_draft_cost_scale,
