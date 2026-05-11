@@ -2338,6 +2338,39 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             }
         )
 
+    def accept_len_histogram(accept_lens_in: Sequence[float], draft_len: int) -> Optional[Dict[str, object]]:
+        if len(accept_lens_in) == 0 or int(draft_len) <= 0:
+            return(None)
+        dl = int(draft_len)
+        counts: List[int] = [0 for _ in range(dl + 1)]
+        invalid = 0
+        for v in accept_lens_in:
+            if isinstance(v, (int, float)) == False:
+                invalid += 1
+                continue
+            al = int(v)
+            if float(al) != float(v):
+                invalid += 1
+                continue
+            if al < 1 or al > (dl + 1):
+                invalid += 1
+                continue
+            counts[al - 1] += 1
+        total = int(sum(counts))
+        prob: List[float] = [0.0 for _ in range(dl + 1)]
+        if total > 0:
+            prob = [float(c) / float(total) for c in counts]
+        return(
+            {
+                "draft_len": int(dl),
+                "total": int(total),
+                "invalid": int(invalid),
+                "accept_len_values": [i + 1 for i in range(dl + 1)],
+                "counts": counts,
+                "prob": prob,
+            }
+        )
+
     num_i = 0
     num_b = 0
     t_ms: List[float] = []
@@ -2475,8 +2508,18 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["k"] = summarize(k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
+        hist = accept_len_histogram(accept_lens, int(mtp_draft_len))
+        if hist is None and meta is not None:
+            inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+            if inferred_mtp_draft_len is not None:
+                hist = accept_len_histogram(accept_lens, int(inferred_mtp_draft_len))
+        if hist is not None:
+            out["mtp_accept_len_hist"] = hist
     if len(dflash_accept_lens) != 0:
         out["dflash_accept_len_derived"] = summarize(dflash_accept_lens)
+        hist = accept_len_histogram(dflash_accept_lens, int(dflash_draft_len))
+        if hist is not None:
+            out["dflash_accept_len_hist"] = hist
     if len(decode_ms) != 0:
         out["decode_ms"] = summarize(decode_ms)
     if len(token_index_vals) != 0:

@@ -240,6 +240,24 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_summary_accept_len_histogram_is_emitted_and_validates_range(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=1),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=2),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,), mtp_accept_len=3),
+            scheduler_sim.TokenRoute(t_ms=3.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,), mtp_accept_len=10),
+        ]
+        summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=2, meta={})
+        hist = summary.get("mtp_accept_len_hist")
+        self.assertIsNotNone(hist)
+        if not isinstance(hist, dict):
+            return
+        self.assertEqual(hist.get("draft_len"), 2)
+        self.assertEqual(hist.get("accept_len_values"), [1, 2, 3])
+        self.assertEqual(hist.get("counts"), [1, 1, 1])
+        self.assertEqual(hist.get("total"), 3)
+        self.assertEqual(hist.get("invalid"), 1)
+
     def test_trace_extract_runtime_separates_mtp_and_dflash_accept_counters(self) -> None:
         obj = {
             "t_ms": 0.0,
