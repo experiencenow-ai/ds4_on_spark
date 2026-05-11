@@ -211,27 +211,42 @@ def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str
     parse_bad = 0
     tokens: Dict[str, List[int]] = {"a_out": [], "b_out": [], "judge_in": [], "judge_out": []}
     latency: Dict[str, List[int]] = {"a": [], "b": [], "judge": []}
+    tokens_missing: Dict[str, int] = {k: 0 for k in tokens}
+    latency_missing: Dict[str, int] = {k: 0 for k in latency}
+    parse_ok_with_judge_out = 0
+    parse_ok_judge_out_le_target = 0
     for path in paths:
         for _, obj in schema.iter_jsonl(path):
             total += 1
-            if bool(obj.get("parse_valid", False)):
+            parse_valid = bool(obj.get("parse_valid", False))
+            if parse_valid:
                 parse_ok += 1
             else:
                 parse_bad += 1
 
             t = obj.get("tokens")
-            if isinstance(t, dict):
-                for k in tokens:
+            for k in tokens:
+                v = None
+                if isinstance(t, dict):
                     v = t.get(k)
-                    if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
-                        tokens[k].append(int(v))
+                if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
+                    tokens[k].append(int(v))
+                    if parse_valid and k == "judge_out":
+                        parse_ok_with_judge_out += 1
+                        if int(v) <= judge_out_target:
+                            parse_ok_judge_out_le_target += 1
+                else:
+                    tokens_missing[k] += 1
 
             l = obj.get("latency_ms")
-            if isinstance(l, dict):
-                for k in latency:
+            for k in latency:
+                v = None
+                if isinstance(l, dict):
                     v = l.get(k)
-                    if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
-                        latency[k].append(int(v))
+                if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
+                    latency[k].append(int(v))
+                else:
+                    latency_missing[k] += 1
 
     judge_out_vals = tokens.get("judge_out", [])
     judge_out_le_target = 0
@@ -239,18 +254,35 @@ def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str
         if int(v) <= judge_out_target:
             judge_out_le_target += 1
 
+    tokens_out: Dict[str, Any] = {}
+    for k, vals in tokens.items():
+        st = _int_stats(vals)
+        st["missing"] = float(tokens_missing.get(k, 0))
+        st["present_fraction"] = (float(len(vals)) / float(total)) if total != 0 else 0.0
+        tokens_out[k] = st
+
+    latency_out: Dict[str, Any] = {}
+    for k, vals in latency.items():
+        st = _int_stats(vals)
+        st["missing"] = float(latency_missing.get(k, 0))
+        st["present_fraction"] = (float(len(vals)) / float(total)) if total != 0 else 0.0
+        latency_out[k] = st
+
     out: Dict[str, Any] = {
         "schema": "ds4_judge_elo_budget_v1",
         "records": int(total),
         "parse_valid_true": int(parse_ok),
         "parse_valid_false": int(parse_bad),
-        "tokens": {k: _int_stats(v) for k, v in tokens.items()},
-        "latency_ms": {k: _int_stats(v) for k, v in latency.items()},
+        "tokens": tokens_out,
+        "latency_ms": latency_out,
         "judge_out_budget": {
             "target_tokens": int(judge_out_target),
             "count_with_tokens": int(len(judge_out_vals)),
             "count_le_target": int(judge_out_le_target),
             "fraction_le_target": (float(judge_out_le_target) / float(len(judge_out_vals))) if len(judge_out_vals) != 0 else 0.0,
+            "count_with_tokens_parse_valid_true": int(parse_ok_with_judge_out),
+            "count_le_target_parse_valid_true": int(parse_ok_judge_out_le_target),
+            "fraction_le_target_parse_valid_true": (float(parse_ok_judge_out_le_target) / float(parse_ok_with_judge_out)) if parse_ok_with_judge_out != 0 else 0.0,
         },
     }
     return out

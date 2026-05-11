@@ -26,6 +26,9 @@ def _is_int(v: Any) -> bool:
 def _words(s: str) -> int:
     return len([w for w in s.strip().split() if w != ""])
 
+def _has_newline(s: str) -> bool:
+    return ("\n" in s) or ("\r" in s)
+
 
 def _as_obj(v: Any, field: str, errs: List[str]) -> Optional[Dict[str, Any]]:
     if v is None:
@@ -95,12 +98,16 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
         errs.append("reason must be <= 18 words")
     if reason != "" and len(reason) > 200:
         errs.append("reason must be <= 200 chars")
+    if reason != "" and _has_newline(reason):
+        errs.append("reason must be a single line (no newlines)")
 
     train_hint = _as_str(obj.get("train_hint"), "train_hint", errs)
     if train_hint != "" and _words(train_hint) > 18:
         errs.append("train_hint must be <= 18 words")
     if train_hint != "" and len(train_hint) > 200:
         errs.append("train_hint must be <= 200 chars")
+    if train_hint != "" and _has_newline(train_hint):
+        errs.append("train_hint must be a single line (no newlines)")
 
     tags_v = obj.get("tags")
     if not isinstance(tags_v, list):
@@ -114,6 +121,8 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
                 continue
             if tag.strip() == "":
                 errs.append(f"tags[{i}] must be non-empty")
+            if _has_newline(tag):
+                errs.append(f"tags[{i}] must be a single line (no newlines)")
             if len(tag) > 24:
                 errs.append(f"tags[{i}] must be <= 24 chars")
 
@@ -159,11 +168,15 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             errs.append("raw must be a string when present")
         if isinstance(raw, str) and len(raw) > 512:
             errs.append("raw must be <= 512 chars")
+        if isinstance(raw, str) and _has_newline(raw):
+            errs.append("raw must be a single line (no newlines)")
         parse_error = obj.get("parse_error")
         if parse_error is not None and not isinstance(parse_error, str):
             errs.append("parse_error must be a string when present")
         if isinstance(parse_error, str) and len(parse_error) > 128:
             errs.append("parse_error must be <= 128 chars")
+        if isinstance(parse_error, str) and _has_newline(parse_error):
+            errs.append("parse_error must be a single line (no newlines)")
 
     tokens = _as_obj(obj.get("tokens"), "tokens", errs)
     if tokens is not None:

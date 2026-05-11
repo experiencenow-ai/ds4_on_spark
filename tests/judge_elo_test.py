@@ -165,6 +165,32 @@ class JudgeEloTest(unittest.TestCase):
         errs = schema.validate_decision(decision)
         self.assertTrue(any("<= 200 chars" in e for e in errs))
 
+    def test_decision_strings_single_line(self) -> None:
+        decision = {
+            "winner": "A",
+            "margin": 1,
+            "score_a": 7,
+            "score_b": 6,
+            "reason": "line1\nline2",
+            "train_hint": "ok",
+            "tags": ["clean"],
+        }
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("reason must be a single line" in e for e in errs))
+
+        decision2 = dict(decision)
+        decision2["reason"] = "ok"
+        decision2["train_hint"] = "hint\rmore"
+        errs2 = schema.validate_decision(decision2)
+        self.assertTrue(any("train_hint must be a single line" in e for e in errs2))
+
+        decision3 = dict(decision)
+        decision3["reason"] = "ok"
+        decision3["train_hint"] = "ok"
+        decision3["tags"] = ["ok", "bad\ntag"]
+        errs3 = schema.validate_decision(decision3)
+        self.assertTrue(any("tags[1] must be a single line" in e for e in errs3))
+
     def test_record_raw_char_limit(self) -> None:
         rec = {
             "schema": schema.SCHEMA_RECORD_V1,
@@ -178,6 +204,24 @@ class JudgeEloTest(unittest.TestCase):
         }
         errs = schema.validate_record(rec)
         self.assertTrue(any("raw must be <= 512 chars" in e for e in errs))
+
+    def test_wrap_record_sanitizes_raw_newlines(self) -> None:
+        rec = record_wrap.build_record(
+            pair_id="p_nl",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text="not json\nline2\rline3",
+            tokens=None,
+            latency_ms=None,
+        )
+        self.assertFalse(rec.get("parse_valid", True))
+        raw = str(rec.get("raw", ""))
+        perr = str(rec.get("parse_error", ""))
+        self.assertNotIn("\n", raw)
+        self.assertNotIn("\r", raw)
+        self.assertNotIn("\n", perr)
+        self.assertNotIn("\r", perr)
 
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
