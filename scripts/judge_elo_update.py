@@ -91,7 +91,8 @@ def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[
     if sort_by_pair_id:
         # When multiple inputs are merged, a stable ordering avoids nondeterminism.
         # pair_id is required by the schema and should be stable across runs.
-        rows.sort(key=lambda t: (t[0], t[1], t[2], t[3], t[4]))
+        # Sort only by pair_id; Python's sort is stable, so ties preserve input order.
+        rows.sort(key=lambda t: t[0])
     for r in rows:
         yield (r[1], r[2], r[3], r[4])
 
