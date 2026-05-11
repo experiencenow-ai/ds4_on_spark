@@ -10,6 +10,7 @@ Type=simple
 User=ds4
 Group=ds4
 WorkingDirectory=/
+SyslogIdentifier=spark-worker-%i
 EnvironmentFile=/etc/ds4/spark-%i.env
 
 # Example unit for a Spark standalone worker. Review + adjust for your Spark install.
@@ -39,4 +40,3 @@ LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
-

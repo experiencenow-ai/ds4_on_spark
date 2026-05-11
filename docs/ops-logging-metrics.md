@@ -71,6 +71,8 @@ If Spark is managed via systemd (see `docs/deployment-spark-standalone-systemd.m
 ```bash
 journalctl -u spark-master@spark0.service -n 200 --no-pager
 journalctl -u spark-worker@spark1.service -n 200 --no-pager
+journalctl -t spark-master-spark0 -n 200 --no-pager
+journalctl -t spark-worker-spark1 -n 200 --no-pager
 ```
 
 For troubleshooting distributed runs, also consider enabling Spark event logs and recording the event log directory in your run notes.

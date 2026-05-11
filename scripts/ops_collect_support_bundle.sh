@@ -280,14 +280,19 @@ if have_cmd systemctl; then
 	run_cmd "systemd/systemctl_status_ds4_strict.txt" systemctl --no-pager status "ds4-strict@${instance}.service"
 	run_cmd "systemd/systemctl_status_preflight.txt" systemctl --no-pager status "ds4-preflight@${instance}.service"
 	run_cmd "systemd/systemctl_status_preflight_strict.txt" systemctl --no-pager status "ds4-preflight-strict@${instance}.service"
+	run_cmd "systemd/systemctl_status_spark_master.txt" systemctl --no-pager status "spark-master@${instance}.service"
+	run_cmd "systemd/systemctl_status_spark_worker.txt" systemctl --no-pager status "spark-worker@${instance}.service"
 	run_cmd "systemd/systemctl_show_ds4.txt" systemctl show "ds4@${instance}.service"
 	run_cmd "systemd/systemctl_list_units_ds4.txt" sh -c "systemctl list-units --no-pager | grep -E '^ds4' || true"
+	run_cmd "systemd/systemctl_list_units_spark.txt" sh -c "systemctl list-units --no-pager | grep -E '^(spark-master|spark-worker)' || true"
 fi
 
 if have_cmd journalctl; then
 	run_cmd "journald/journal_ds4.txt" journalctl --no-pager -u "ds4@${instance}.service" --since "$since"
 	run_cmd "journald/journal_preflight.txt" journalctl --no-pager -u "ds4-preflight@${instance}.service" --since "$since"
 	run_cmd "journald/journal_preflight_strict.txt" journalctl --no-pager -u "ds4-preflight-strict@${instance}.service" --since "$since"
+	run_cmd "journald/journal_spark_master.txt" journalctl --no-pager -u "spark-master@${instance}.service" --since "$since"
+	run_cmd "journald/journal_spark_worker.txt" journalctl --no-pager -u "spark-worker@${instance}.service" --since "$since"
 fi
 
 if have_cmd getent; then

@@ -62,6 +62,17 @@ sudo systemctl enable spark-worker@spark0.service
 sudo systemctl start  spark-worker@spark0.service
 ```
 
+## Logs
+
+If using the systemd templates in this repo, you can filter by unit or by the `SyslogIdentifier` tag:
+
+```bash
+journalctl -u spark-master@spark0.service -n 200 --no-pager
+journalctl -u spark-worker@spark0.service -n 200 --no-pager
+journalctl -t spark-master-spark0 -n 200 --no-pager
+journalctl -t spark-worker-spark0 -n 200 --no-pager
+```
+
 ## Notes
 
 - These templates assume Spark is installed at `${SPARK_HOME}` and provides `bin/spark-class`.
