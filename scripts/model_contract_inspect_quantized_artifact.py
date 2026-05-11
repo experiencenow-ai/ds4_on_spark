@@ -901,6 +901,37 @@ def compute_mtp_trust(mtp_present: bool, mtp_contract: Optional[dict[str, Any]],
 		"reasons": reasons,
 	}
 
+def compute_mtp_preservation(mtp_present: bool, mtp_namespace: Optional[dict[str, Any]], mtp_contract: Optional[dict[str, Any]]) -> dict[str, Any]:
+	if not mtp_present:
+		return {"checked": True, "preserves": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+
+	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
+		return {"checked": False, "preserves": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+
+	if isinstance(mtp_namespace, dict):
+		expected_ids = mtp_namespace.get("expected_layer_ids", [])
+		if isinstance(expected_ids, list) and len(expected_ids) > 0:
+			if mtp_namespace.get("expected_complete") is not True:
+				missing = mtp_namespace.get("missing_expected_layer_ids", [])
+				return {
+					"checked": True,
+					"preserves": False,
+					"status": "namespace_incomplete",
+					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
+				}
+			if mtp_namespace.get("has_mtp0") is not True:
+				return {
+					"checked": True,
+					"preserves": False,
+					"status": "namespace_missing_mtp0",
+					"reasons": ["mtp_namespace.has_mtp0 != true"],
+				}
+
+	if mtp_contract.get("complete") is not True:
+		return {"checked": True, "preserves": False, "status": "incomplete", "reasons": ["mtp_contract.complete != true"]}
+
+	return {"checked": True, "preserves": True, "status": "complete", "reasons": ["mtp.* keys satisfy upstream contract"]}
+
 
 def inspect_safetensors_index(path: Path) -> InspectResult:
 	data = load_json(path)
@@ -1091,6 +1122,11 @@ def main() -> int:
 	parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
 	parser.add_argument("--require-mtp", action="store_true", help="Exit non-zero if no mtp.* tensors are present.")
 	parser.add_argument(
+		"--require-mtp-complete",
+		action="store_true",
+		help="Exit non-zero unless mtp.* tensors satisfy the upstream MTP contract (requires --contract-summary or repo default).",
+	)
+	parser.add_argument(
 		"--contract-summary",
 		type=str,
 		default=None,
@@ -1130,6 +1166,7 @@ def main() -> int:
 
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
+		mtp_namespace = compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary)
 		out = {
 			"path": res.path,
 			"artifact_type": res.artifact_type,
@@ -1145,7 +1182,7 @@ def main() -> int:
 			"mtp_tensor_count": res.mtp_tensor_count,
 			"mtp_tensor_type_counts": res.mtp_tensor_type_counts,
 			"mtp_layer_ids": res.mtp_layer_ids,
-			"mtp_namespace": compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary),
+			"mtp_namespace": mtp_namespace,
 			"first_mtp_keys": res.first_mtp_keys,
 		}
 		if res.tensor_type_profile is not None:
@@ -1182,6 +1219,7 @@ def main() -> int:
 		trunk_contract = None
 		topology_contract = None
 		quantization_contract = None
+		mtp_namespace = compute_mtp_namespace_status(sorted(mtp_layer_ids), contract_summary)
 		if contract_summary is not None:
 			mtp_contract = compute_mtp_contract(mtp_keys_union, contract_summary)
 			trunk_contract = compute_trunk_contract(weight_keys_union, contract_summary)
@@ -1190,6 +1228,7 @@ def main() -> int:
 			if topology_candidate is not None:
 				quantization_contract = compute_quantization_contract_hint(topology_candidate.tensor_type_profile, contract_summary)
 		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary)
+		mtp_preservation = compute_mtp_preservation(any(r.mtp_present for r in results), mtp_namespace, mtp_contract)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -1200,10 +1239,11 @@ def main() -> int:
 			"mtp_tensor_count": sum(r.mtp_tensor_count for r in results),
 			"mtp_tensor_type_counts": dict(sorted(mtp_type_counts.items())),
 			"mtp_layer_ids": sorted(mtp_layer_ids),
-			"mtp_namespace": compute_mtp_namespace_status(sorted(mtp_layer_ids), contract_summary),
+			"mtp_namespace": mtp_namespace,
 			"first_mtp_keys": first_mtp_keys,
 			"mtp_contract": mtp_contract,
 			"mtp_trust": mtp_trust,
+			"mtp_preservation": mtp_preservation,
 			"trunk_contract": trunk_contract,
 			"topology_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"topology_contract": topology_contract,
@@ -1217,6 +1257,7 @@ def main() -> int:
 			if contract_summary is not None:
 				out["mtp_contract"] = compute_mtp_contract(set(results[0].mtp_keys_all), contract_summary)
 				out["mtp_trust"] = compute_mtp_trust(bool(out.get("mtp_present", False)), out.get("mtp_contract"), contract_summary)
+				out["mtp_preservation"] = compute_mtp_preservation(bool(out.get("mtp_present", False)), out.get("mtp_namespace"), out.get("mtp_contract"))
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
@@ -1234,6 +1275,7 @@ def main() -> int:
 									else {
 										"mtp_contract": compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
 										"mtp_trust": compute_mtp_trust(bool(r.mtp_present), compute_mtp_contract(set(r.mtp_keys_all), contract_summary), contract_summary),
+										"mtp_preservation": compute_mtp_preservation(bool(r.mtp_present), compute_mtp_namespace_status(r.mtp_layer_ids, contract_summary), compute_mtp_contract(set(r.mtp_keys_all), contract_summary)),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 									}
@@ -1267,6 +1309,9 @@ def main() -> int:
 					print(f"mtp_contract_missing_required: {k}")
 				for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 					print(f"mtp_contract_forbidden_present: {k}")
+			mtp_preservation = combined.get("mtp_preservation", None)
+			if isinstance(mtp_preservation, dict) and mtp_preservation.get("checked") is True:
+				print(f"mtp_preservation_status: {mtp_preservation.get('status')}")
 			trunk_contract = combined.get("trunk_contract", None)
 			if isinstance(trunk_contract, dict) and trunk_contract.get("checked") is True:
 				print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
@@ -1330,6 +1375,10 @@ def main() -> int:
 						print(f"mtp_contract_missing_required: {k}")
 					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 						print(f"mtp_contract_forbidden_present: {k}")
+				mtp_namespace = compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary)
+				mtp_preservation = compute_mtp_preservation(bool(res.mtp_present), mtp_namespace, mtp_contract)
+				if isinstance(mtp_preservation, dict) and mtp_preservation.get("checked") is True:
+					print(f"mtp_preservation_status: {mtp_preservation.get('status')}")
 				trunk_contract = compute_trunk_contract(set(res.weight_keys_all), contract_summary)
 				if trunk_contract.get("checked") is True:
 					print(f"trunk_contract_complete: {str(bool(trunk_contract.get('complete', False))).lower()}")
@@ -1347,6 +1396,19 @@ def main() -> int:
 
 	if args.require_mtp and not any(r.mtp_present for r in results):
 		return 1
+
+	if args.require_mtp_complete:
+		if contract_summary is None:
+			print("ERROR: --require-mtp-complete requires a DeepSeek V4 Flash contract_summary.json (use --contract-summary or run from the repo).")
+			return 2
+		combined = combine(results)
+		mtp_preservation = combined.get("mtp_preservation", None)
+		if not isinstance(mtp_preservation, dict) or mtp_preservation.get("checked") is not True:
+			print("ERROR: unable to compute mtp_preservation (contract missing or artifact missing mtp keys)")
+			return 2
+		if mtp_preservation.get("preserves") is not True:
+			return 1
+		return 0
 	return 0
 
 

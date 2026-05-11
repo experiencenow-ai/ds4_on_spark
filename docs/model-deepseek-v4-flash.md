@@ -622,6 +622,7 @@ For each quantized artifact tested, record:
   - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
     - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
     - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
+    - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
     - `trunk_contract` (`checked`, `complete`) when tensor keys preserve `layers.{i}.*`
     - `topology_contract.mismatches` when GGUF header metadata is present
@@ -679,7 +680,7 @@ For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` ca
 python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, and `mtp_trust`.
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, `mtp_preservation`, and `mtp_trust`.
 
 When multiple `--path` values are provided, the tool emits both:
 
