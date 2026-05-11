@@ -109,6 +109,7 @@ Implication:
 - When `compute_121` is advertised, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also does a best-effort end-to-end build+run via `-gencode arch=compute_121,code=[sm_121,compute_121]` and includes it in the `cuobjdump --dump-ptx` embedded-PTX report.
 - For artifacts expected to run across multiple GPU variants, prefer explicit `-gencode` with both SASS and PTX (for example: `-gencode arch=compute_121,code=sm_121 -gencode arch=compute_121,code=compute_121`, or `-gencode arch=compute_121,code=[sm_121,compute_121]`) and add additional `sm_*` entries as needed for your fleet.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe` is a tiny “fatbin portability” gate that builds via `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX) and runs the same sanity kernel as the `-arch=sm_121` probe.
+- For CUTLASS-style template libraries and dispatch tables that are still catching up to explicit `sm_121`, it can be safer to include a family fallback (`sm_120`) alongside any `sm_121`-specific build during bring-up; `tools/cuda_probe/bin/cuda_sm120_compat_probe` provides a direct “`sm_120` SASS runs on GB10 (`sm_121`)” signal, and `cuda_sm121_fatbin_probe` is a concrete “`sm_120`+`sm_121`+PTX” packaging reference.
 
 ## DeepGEMM
 
