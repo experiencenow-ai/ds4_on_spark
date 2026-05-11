@@ -265,6 +265,29 @@ echo "== network (links + addrs, compact) =="
 if command -v ip >/dev/null 2>&1; then
 	ip -br link 2>/dev/null || true
 	echo
+	echo "== network (link speed, compact) =="
+	if [ -d /sys/class/net ]; then
+		for iface in $(ls /sys/class/net 2>/dev/null || true); do
+			if [ "$iface" = "lo" ]; then
+				continue
+			fi
+			speed="$(cat "/sys/class/net/$iface/speed" 2>/dev/null || true)"
+			duplex="$(cat "/sys/class/net/$iface/duplex" 2>/dev/null || true)"
+			if [ "$speed" = "" ]; then
+				speed="?"
+			fi
+			if [ "$speed" = "-1" ]; then
+				speed="unknown"
+			fi
+			if [ "$duplex" = "" ]; then
+				duplex="?"
+			fi
+			echo "$iface speed_mbps=$speed duplex=$duplex"
+		done | head -n 80 || true
+	else
+		echo "/sys/class/net not found"
+	fi
+	echo
 	echo "== network (mtu, compact) =="
 	ip -o link show 2>/dev/null | awk '{
 		name=$2
@@ -313,6 +336,16 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 		echo "columns: index,gpu_name,pci.bus_id,driver_version,memory.total"
 		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 		[ "$q" != "" ] && echo "$q"
+		echo "note: nvidia-smi compute_cap field not supported; using nvidia-smi -q fallback"
+		smi_q="$(nvidia-smi -q 2>/dev/null || true)"
+		compute_cap_q="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Compute Capability[[:space:]]*:[[:space:]]*([0-9]+)[.]([0-9]+).*/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }" || true)"
+		[ "$compute_cap_q" != "" ] && echo "compute_cap (-q): $compute_cap_q"
+	fi
+	if [ "$q" != "" ]; then
+		smi_mem_total_any_na="$(printf "%s\n" "$q" | awk -F"," '{ v=$NF; gsub(/^[ \t]+|[ \t]+$/, "", v); if ( v == "[N/A]" ) { print "1"; exit } }' || true)"
+		if [ "$smi_mem_total_any_na" = "1" ]; then
+			echo "note: nvidia-smi memory.total is [N/A] (unified memory); use free -h for system RAM"
+		fi
 	fi
 else
 	echo "nvidia-smi not found"

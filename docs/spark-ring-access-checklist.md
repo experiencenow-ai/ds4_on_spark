@@ -52,7 +52,12 @@ Record (for each node):
 
 - Use ping RTT as the minimum viable latency check:
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
+- The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
+- If `iperf3` is already present on all nodes, you can do a quick throughput check (do not commit raw IPs; summarize results or redact manually):
+  - On receiver: `iperf3 -s`
+  - On sender: `iperf3 -c <receiver-ip> -t 10 -P 4`
+- If `ib_write_bw` / `ib_write_lat` (perftest) is already installed, you can validate RDMA/RoCE fabric performance similarly; this is higher risk (active traffic), so keep it human-run and outside automation loops.
 
 ## 7) Safe GPU/Storage Metadata Capture
 

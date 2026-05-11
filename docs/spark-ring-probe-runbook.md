@@ -31,6 +31,7 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 ```
 
 The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.
+It also includes a compact link speed/duplex summary (`== network (link speed, compact) ==`) from sysfs to spot unexpectedly slow negotiated links.
 
 If you want each host to ping **all** peers instead of only ring neighbors:
 
