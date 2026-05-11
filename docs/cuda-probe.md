@@ -10,6 +10,12 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 ./scripts/cuda_probe_tiny_spark0.sh
 ```
 
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_tiny_spark0.sh
+```
+
 This builds and runs only:
 
 - `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support)
@@ -84,6 +90,12 @@ When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
 
 ```bash
 ./scripts/cuda_probe_compile_only_tiny_spark0.sh
+```
+
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 ```
 
 This also performs best-effort toolchain-only checks when supported:
