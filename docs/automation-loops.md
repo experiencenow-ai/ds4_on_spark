@@ -121,3 +121,16 @@ Tasks:
 
 Exit: scheduler simulator with tests, replayable route traces, and quantified
 expert-queue/MTP recommendations.
+
+## Loop 9: Entropy Buffer Metrics
+
+Goal: define measurable entropy-buffer metrics for the Centaur/DS4 multi-model workflow and keep the JSONL tooling deterministic.
+
+Tasks:
+
+- Summarize task/prompt/template diversity, duplicates, and buffer reuse from mixed JSONL logs.
+- Track judge balance + disagreement for pairwise records used by ELO.
+- Recommend next task batches that increase *useful* coverage (not random noise).
+- Keep fixtures + tests for the record schema stable.
+
+Exit: committed `docs/entropy-buffers.md`, fixtures, and `scripts/entropy_buffer_*.py` tools with tests.
