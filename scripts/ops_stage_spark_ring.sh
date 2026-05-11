@@ -117,20 +117,19 @@ if [ "$mesh_check" -ne 0 ]; then
 fi
 
 echo "== stage spark0 =="
-DS4_SKIP_VALIDATE=1 "$root/scripts/ops_stage_deploy_assets.sh" "$spark0" "$instance0"
+DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp4 "$root/scripts/ops_stage_deploy_assets.sh" "$spark0" "$instance0"
 echo
 
 echo "== stage spark1 =="
-DS4_SKIP_VALIDATE=1 "$root/scripts/ops_stage_deploy_assets.sh" "$spark1" "$instance1"
+DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp4 "$root/scripts/ops_stage_deploy_assets.sh" "$spark1" "$instance1"
 echo
 
 echo "== stage spark2 =="
-DS4_SKIP_VALIDATE=1 "$root/scripts/ops_stage_deploy_assets.sh" "$spark2" "$instance2"
+DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp4 "$root/scripts/ops_stage_deploy_assets.sh" "$spark2" "$instance2"
 echo
 
 echo "== stage spark3 =="
-DS4_SKIP_VALIDATE=1 "$root/scripts/ops_stage_deploy_assets.sh" "$spark3" "$instance3"
+DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp4 "$root/scripts/ops_stage_deploy_assets.sh" "$spark3" "$instance3"
 echo
 
 echo "== done =="
-

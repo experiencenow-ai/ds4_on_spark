@@ -4,7 +4,7 @@ This repo primarily targets **system** systemd units under `/etc/systemd/system/
 
 For developer bring-up or non-root runs, `deploy/systemd-user/` includes **optional** templates intended for `systemd --user`.
 
-These templates are not staged by `scripts/ops_stage_deploy_assets.sh`; treat them as manual-copy references.
+These templates are staged by `scripts/ops_stage_deploy_assets.sh` under `/tmp/ds4-systemd-user/` on the Spark (reference only; user units are installed manually).
 
 ## Install (Human Runbook)
 
@@ -34,10 +34,17 @@ Enable/start:
 
 ```bash
 systemctl --user start ds4-preflight@spark0.service
+# strict gating (fails non-zero on missing/invalid TP=2 inputs):
+# systemctl --user start ds4-preflight-strict@spark0.service
 # optional TP=3/TP=4 preflight templates:
 # systemctl --user start ds4-preflight-tp3@spark0.service
+# systemctl --user start ds4-preflight-tp3-strict@spark0.service
 # systemctl --user start ds4-preflight-tp4@spark0.service
+# systemctl --user start ds4-preflight-tp4-strict@spark0.service
 systemctl --user enable --now ds4@spark0.service
+
+# strict DS4 start (requires ds4-preflight-strict@%i):
+# systemctl --user enable --now ds4-strict@spark0.service
 ```
 
 Logs:
