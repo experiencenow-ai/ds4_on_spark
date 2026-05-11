@@ -93,6 +93,12 @@ centaur hyor-ring-step "$s1" --scope effective
 centaur hyor-ring-step "$s2" --scope effective
 centaur hyor-ring-step "$s3" --scope effective
 
+echo "== effective manifests (spark1/2/3) =="
+mkdir -p "$workdir/effective_manifests"
+centaur hyor-sync-effective "$s1" spark1 --node-type "$node_type" --output "$workdir/effective_manifests/hyor_effective_manifest_spark1.json"
+centaur hyor-sync-effective "$s2" spark2 --node-type "$node_type" --output "$workdir/effective_manifests/hyor_effective_manifest_spark2.json"
+centaur hyor-sync-effective "$s3" spark3 --node-type "$node_type" --output "$workdir/effective_manifests/hyor_effective_manifest_spark3.json"
+
 echo "== effective apply (spark1/2/3) =="
 mkdir -p "$workdir/effective/spark1" "$workdir/effective/spark2" "$workdir/effective/spark3"
 centaur hyor-sync-apply "$s1" spark1 --node-type "$node_type" --output-dir "$workdir/effective/spark1" --clean
