@@ -5,8 +5,8 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` is not reachable yet (as of the 00:58Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0058Z.md`, `docs/spark0-probe-2026-05-11T0058Z.md`.
+- `spark1.local` is not reachable yet (as of the 02:52Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0252Z.md`, `docs/spark0-probe-2026-05-11T0252Z.md`.
 
 ## Goals
 
@@ -20,7 +20,7 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 Use discovery first to confirm which `*.local` targets resolve and whether TCP/22 is reachable.
 
 ```bash
-REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
 ```
 
 Omit args to use the same default targets.
@@ -34,9 +34,9 @@ If `spark1.local` does not resolve from the Mac yet, keep the probe flow the sam
 Always use `REDACT=1` when saving output for commit.
 
 ```bash
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local | tee /private/tmp/spark1-probe.txt
-(SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local || true) | tee /private/tmp/spark01-probe-summary.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local | tee /private/tmp/spark0-probe.txt
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local | tee /private/tmp/spark1-probe.txt
+(SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh aitopatom-9ab9.local spark1.local || true) | tee /private/tmp/spark01-probe-summary.txt
 ```
 
 Optional toggles:
@@ -44,7 +44,7 @@ Optional toggles:
 - Facts-only mode (smallest/stablest output; good for Spark1 bring-up checks):
 
 ```bash
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
 ```
 
 Facts-only mode implies summary mode and trims variable runtime sections (GPU temperature/pstate, power draw/utilization, IP addr/routes, and disk usage) while keeping stable identity + CUDA/toolchain + GPU inventory + disk model/size facts.
@@ -90,8 +90,8 @@ Notes:
 - The CUDA runtime probe prints both the raw `cuda*GetVersion()` integers and a `major.minor` parse to avoid ambiguity (e.g. `13000 (13.0)`).
 - When `REDACT=1`, the probe scrubs GPU UUID tokens that can appear in `nvidia-smi -L` output.
 - `NVCC_ARCH` is forwarded into the remote probe so overrides work when connecting over SSH.
-- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.git-codex/` (bare gitdir) or `.git-codex/.git` (non-bare `git init .git-codex` layout), plus `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
-- For a copy/paste shim setup recipe (`git init --bare .git-codex` + `git --git-dir=... fetch/checkout`), see `docs/spark-access.md` under “Git Shim For Read-Only Checkouts (`.git-codex`)”.
+- If the checkout `.git` metadata is unusable (macOS provenance/permission), the scripts also check for a local shim gitdir at `.codex_git/` or `.git-codex/` (bare gitdir) or `.codex_git/.git` / `.git-codex/.git` (non-bare `git init <dir>` layout), plus `.gitshim/repo/.git` (used by some probe automations). Otherwise, set `DS4_GIT_DIR=/path/to/.git` so probe artifacts include `git: <hash>`. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
+- For a copy/paste shim setup recipe, see `docs/spark-access.md` under “Git Shim For Read-Only Checkouts”.
 
 ## What To Record In `docs/spark0-*.md`
 
