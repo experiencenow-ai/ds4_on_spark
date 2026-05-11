@@ -3,11 +3,10 @@
 This note tracks a Spark0 failure mode seen on DSv4 Flash forks when enabling multi-slot scheduling (for example `llama-server --parallel 2`).
 
 Status note: this document and the companion probe scripts were rescued from
-the superseded baseline-runtime PR #27 as standalone artifacts. The current
-baseline wrapper may not yet invoke `LLAMA_SERVER_THROUGHPUT_SWEEP=1` or
-`LLAMA_MULTISLOT_PATCH_PROBE=1`; if those hooks are absent, run the throughput
-sweep directly on Spark and attach `multislot_reservation_probe.json` to the
-baseline report.
+the superseded baseline-runtime PR #27 as standalone artifacts. The baseline
+wrapper now supports `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and
+`LLAMA_MULTISLOT_PATCH_PROBE=1` and records the fetched artifacts under the
+local report directory.
 
 ## Symptom
 
