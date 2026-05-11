@@ -3225,9 +3225,9 @@ class SchedulerSimTest(unittest.TestCase):
         from sim.scheduler import scheduler_sim
 
         trace = [
-            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0, 1, 2), mtp_accept_len=3),
-            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1, 2), mtp_accept_len=1),
-            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1, 2), mtp_accept_len=2),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0, 1, 2), mtp_accept_len=3, dflash_accept_len=2),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1, 2), mtp_accept_len=1, dflash_accept_len=1),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1, 2), mtp_accept_len=2, dflash_accept_len=2),
         ]
 
         out = recommendations.run_runtime_trace_mtp_ablation(trace=trace, trace_meta={})
@@ -3239,6 +3239,13 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("baseline", out["results"]["arrival_units_steps"])
         self.assertIn("variants", out["results"]["arrival_units_steps"])
         self.assertIn("mtp_off", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("dflash_comparator", out)
+        self.assertTrue(bool(out["dflash_comparator"]["present"]))
+        mtp_off_summary = out["results"]["arrival_units_steps"]["variants"]["mtp_off"]["summary"]
+        numer = float(mtp_off_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+        denom = float(mtp_off_summary.get("service_slot_ms_per_output_token", 0.0))
+        expected = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+        self.assertAlmostEqual(float(out["dflash_comparator"]["service_slot_ms_per_output_token_ratio_vs_target_only"]), float(expected))
 
     def test_trace_sweep_runs_on_synthetic_trace(self) -> None:
         from sim.scheduler import scheduler_sim

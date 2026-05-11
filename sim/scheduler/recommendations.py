@@ -60,6 +60,7 @@ def run_runtime_trace_mtp_ablation(
         raise ValueError("runtime trace ablation requires a trace (or meta.num_experts) with valid expert IDs")
 
     any_mtp = any((r.mtp_accept_len is not None or r.accepted_mtp is not None or r.rejected_mtp is not None) for r in trace)
+    any_dflash = any((r.dflash_accept_len is not None or r.accepted_dflash is not None or r.rejected_dflash is not None) for r in trace)
     mtp_draft_len = 0
     if any_mtp:
         inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
@@ -100,6 +101,20 @@ def run_runtime_trace_mtp_ablation(
 
     if int(mtp_draft_len) <= 0:
         out["note"] = "Trace has no MTP counters; skipping mtp_off ablation."
+        if any_dflash:
+            cfg_no_mtp = dataclasses.replace(base_cfg, mtp_draft_len=0)
+            base_trace = scheduler_sim.scale_trace_arrival_units(trace, "steps", cfg_no_mtp)
+            base_metrics = scheduler_sim.run_simulation(cfg_no_mtp, base_trace)
+            base_summary = scheduler_sim.compare_summary_jsonable(base_metrics)
+            denom = float(base_summary.get("service_slot_ms_per_output_token", 0.0))
+            numer = float(base_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+            ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+            out["dflash_comparator"] = {
+                "present": True,
+                "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. Draft compute for the comparator is not modeled; treat efficiency ratios as upper bounds.",
+                "summary": base_summary,
+                "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
+            }
         return(out)
 
     variants: List[Tuple[str, Dict[str, object]]] = [("mtp_off", {"mtp_draft_len": 0})]
@@ -107,6 +122,17 @@ def run_runtime_trace_mtp_ablation(
         "arrival_units_steps": scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants, arrival_units="steps"),
         "arrival_units_output_tokens": scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants, arrival_units="output_tokens"),
     }
+    if any_dflash:
+        mtp_off_summary = out["results"]["arrival_units_steps"]["variants"]["mtp_off"]["summary"]
+        denom = float(mtp_off_summary.get("service_slot_ms_per_output_token", 0.0))
+        numer = float(mtp_off_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+        ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+        out["dflash_comparator"] = {
+            "present": True,
+            "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. Draft compute for the comparator is not modeled; treat efficiency ratios as upper bounds.",
+            "summary": mtp_off_summary,
+            "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
+        }
     return(out)
 
 
