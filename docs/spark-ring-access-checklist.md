@@ -45,7 +45,8 @@ Record (for each node):
 ## 5) MTU Consistency
 
 - Ensure the intended fabric (wired vs Wi‑Fi) uses consistent MTU across nodes for tests that care about latency/bandwidth.
-- The ring probe prints `ip -br link` which includes MTU; use it to spot mismatches quickly.
+- Use the ring probe `== network (mtu, compact) ==` section (from `ip link`) to spot mismatches quickly.
+- The Mac discovery snapshot also records `mtu` for `en0`/`en1` via `ifconfig` for context.
 
 ## 6) Bandwidth/Latency (Safe, Non-Secret)
 

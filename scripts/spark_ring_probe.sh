@@ -265,6 +265,27 @@ echo "== network (links + addrs, compact) =="
 if command -v ip >/dev/null 2>&1; then
 	ip -br link 2>/dev/null || true
 	echo
+	echo "== network (mtu, compact) =="
+	ip -o link show 2>/dev/null | awk '{
+		name=$2
+		sub(/:$/, "", name)
+		if ( name == "lo" )
+			next
+		mtu=""
+		state=""
+		for (i=1; i<=NF; i++) {
+			if ( $i == "mtu" )
+				mtu=$(i+1)
+			if ( $i == "state" )
+				state=$(i+1)
+		}
+		if ( mtu == "" )
+			mtu="?"
+		if ( state == "" )
+			state="?"
+		printf "%s mtu=%s state=%s\n", name, mtu, state
+	}' | head -n 80 || true
+	echo
 	ip -4 -br addr 2>/dev/null || true
 	echo
 	ip -6 -br addr 2>/dev/null || true

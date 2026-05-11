@@ -30,6 +30,8 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 (SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
 ```
 
+The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.
+
 If you want each host to ping **all** peers instead of only ring neighbors:
 
 ```bash
