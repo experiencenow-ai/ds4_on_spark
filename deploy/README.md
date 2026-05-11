@@ -1,6 +1,6 @@
 # Deploy Assets
 
-This folder contains **templates and examples** for deploying DS4 on Spark0/Spark1 and preparing a Spark0..Spark3 ring layout.
+This folder contains **templates and examples** for deploying DS4 on Spark0/Spark1, preparing a Spark0/Spark1/Spark2 TP=3 layout, and preparing a Spark0..Spark3 ring layout.
 
 Nothing here is applied automatically. A human should copy files onto the Sparks,
 edit host-specific values, then enable services with `systemctl`.
@@ -63,8 +63,10 @@ sudo systemd-tmpfiles --create || true
 - `logrotate.ds4.conf.example` : optional logrotate config for file logs (skip if journald-only)
 - `prometheus-scrape.ds4.yml.example` : example Prometheus scrape config snippet
 - `hosts.ds4.spark01.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1
+- `hosts.ds4.spark012.example` : optional `/etc/hosts` pinning for wired Spark0/Spark1/Spark2
 - `hosts.ds4.spark_ring.example` : optional `/etc/hosts` pinning for wired Spark0..Spark3
 - `ssh_config.ds4.spark01.example` : optional Mac-side `ssh_config` convenience (stable SSH_OPTS)
+- `ssh_config.ds4.spark012.example` : optional Mac-side `ssh_config` convenience (Spark0/Spark1/Spark2)
 - `ssh_config.ds4.spark_ring.example` : optional Mac-side `ssh_config` convenience (Spark0..Spark3)
 - `sysctl.ds4.conf.example` : optional sysctl network tuning drop-in (host-wide; review first)
 - `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points

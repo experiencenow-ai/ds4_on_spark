@@ -1,14 +1,25 @@
-# Deployment Layout (Spark0/Spark1)
+# Deployment Layout (Spark0/Spark1/Spark2)
 
 This repo does not apply changes to Sparks automatically. Treat everything here
 as **human-run** instructions and templates.
 
-## Host Roles
+## Topologies
 
-- Spark0: initial single-box development + eventual TP=2 rank 0
-- Spark1: TP=2 rank 1 (bring-up later)
+This repo supports three deployment shapes:
 
-For Spark2/Spark3 (TP=4 ring prep), see `docs/deployment-spark-ring.md`.
+- Spark0/Spark1 (TP=2): `docs/deployment-spark0-spark1.md`
+- Spark0/Spark1/Spark2 (TP=3 prep): `docs/deployment-spark0-spark1-spark2.md`
+- Spark0..Spark3 ring (TP=4 prep): `docs/deployment-spark-ring.md`
+
+This document focuses on the **shared filesystem + systemd layout** and the
+repeatable bring-up patterns that apply to all of the above.
+
+## Host Roles (Recommended Convention)
+
+- Spark0: rank 0 (`ds4@spark0`)
+- Spark1: rank 1 (`ds4@spark1`)
+- Spark2: rank 2 (`ds4@spark2`) (TP=3+)
+- Spark3: rank 3 (`ds4@spark3`) (TP=4 ring)
 
 Keep hostnames stable. Prefer mDNS (`*.local`) early; switch to wired IPv4 once
 the wired subnet is standardized.
