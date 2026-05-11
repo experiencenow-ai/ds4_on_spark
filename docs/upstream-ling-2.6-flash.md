@@ -16,6 +16,19 @@ document.
 | 2 | `inclusionAI/Ling-2.6-flash-fp8` | `refs/heads/main` | `8bc416b60fe28be33303d57bb77dd826445a1eb1` | `mit` | 101.48 GiB | maybe (tight) | Weight footprint is close to the Spark0 unified-memory envelope; leaves limited headroom for runtime + KV/cache. |
 | 3 | `inclusionAI/Ling-2.6-flash` | `refs/heads/main` | `9c861253ede654353d20bf1708182c81aab5f069` | `mit` | 200.23 GiB | no | Reference-only (not single-Spark plausible). |
 
+## Community GGUF (Spark provenance, pinned)
+
+Spark0 already has a community Ling GGUF staged at:
+
+- `/home/spark0/models/ling/Ling-2.6-flash-IQ4_NL-bailing_hybrid-20260505-LJ.gguf`
+
+Pin the upstream here so the staged artifact has a reproducible public source
+(metadata-only; no GGUF was downloaded while preparing this doc).
+
+| Priority | Upstream | Ref | Commit / SHA | License | Smallest GGUF (metadata) | Size | Single Spark? | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `ljupco/Ling-2.6-flash-GGUF` | `refs/heads/main` | `5bdbd5ca603bd48488ccca06ec17e0e1312764f3` | `apache-2.0` | `Ling-2.6-flash-IQ4_NL-bailing_hybrid-20260505-LJ.gguf` | 56.96 GiB | likely | GGUF header reports `general.architecture=bailing_hybrid`; the current pinned V4-capable llama.cpp forks do **not** recognize this architecture (see `docs/baseline-ling-gguf-bailing-hybrid-spark0-2026-05-11.md`). |
+
 ## DFlash status
 
 As of 2026-05-11, no matching Ling 2.6 Flash DFlash draft checkpoints are
@@ -47,4 +60,6 @@ Sources (pinned revisions):
 ./scripts/upstream_hf_api_report.sh inclusionAI/Ling-2.6-flash-int4 --sum-safetensors
 ./scripts/upstream_hf_api_report.sh inclusionAI/Ling-2.6-flash-fp8 --sum-safetensors
 ./scripts/upstream_hf_api_report.sh inclusionAI/Ling-2.6-flash --sum-safetensors
+./scripts/upstream_hf_api_report.sh ljupco/Ling-2.6-flash-GGUF
+./scripts/upstream_hf_smallest_gguf.sh ljupco/Ling-2.6-flash-GGUF --group-shards --limit 20
 ```
