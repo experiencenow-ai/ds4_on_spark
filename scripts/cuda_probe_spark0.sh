@@ -130,6 +130,7 @@ else
 fi
 echo
 run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
 run_retry cuda_sm120_compat_probe \"$REMOTE_DIR\"/bin/cuda_sm120_compat_probe
 run_retry cuda_cublaslt_smoke \"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
 run_retry cuda_cublaslt_fp8_smoke \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp8_smoke
