@@ -276,6 +276,41 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(s["dflash_accept_rate"]), 1.0, places=6)
         self.assertAlmostEqual(float(s["dflash_service_slot_ms_per_output_token"]), (1.0 / 3.0), places=6)
 
+
+    def test_summary_includes_pending_hi_lo_depth_time_weighted(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertIn("pending_hi_depth_time_weighted_p95", s)
+        self.assertIn("pending_lo_depth_time_weighted_p95", s)
+        self.assertIn("pending_hi_work_depth_time_weighted_p95", s)
+        self.assertIn("pending_lo_work_depth_time_weighted_p95", s)
+        self.assertAlmostEqual(float(s["hi_queue_depth_time_weighted_p95"]), 0.0, places=6)
+        self.assertAlmostEqual(float(s["pending_hi_depth_time_weighted_p95"]), 1.0, places=6)
+        self.assertAlmostEqual(float(s["pending_lo_depth_time_weighted_p95"]), 1.0, places=6)
+        self.assertAlmostEqual(float(s["pending_hi_work_depth_time_weighted_p95"]), 1.0, places=6)
+        self.assertAlmostEqual(float(s["pending_lo_work_depth_time_weighted_p95"]), 1.0, places=6)
+
     def test_summary_includes_pending_signal_and_k_controller_activity(self) -> None:
         trace_cfg = scheduler_sim.TwoStreamTraceConfig(
             num_tokens=200,

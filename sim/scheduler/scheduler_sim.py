@@ -377,12 +377,20 @@ class SimMetrics:
     hi_queue_depth_hist_overflow: float = 0.0
     lo_queue_depth_hist: List[float] = dataclasses.field(default_factory=list)
     lo_queue_depth_hist_overflow: float = 0.0
+    pending_hi_depth_hist: List[float] = dataclasses.field(default_factory=list)
+    pending_hi_depth_hist_overflow: float = 0.0
+    pending_lo_depth_hist: List[float] = dataclasses.field(default_factory=list)
+    pending_lo_depth_hist_overflow: float = 0.0
     pending_work_depth_hist: List[float] = dataclasses.field(default_factory=list)
     pending_work_depth_hist_overflow: float = 0.0
     hi_queue_work_depth_hist: List[float] = dataclasses.field(default_factory=list)
     hi_queue_work_depth_hist_overflow: float = 0.0
     lo_queue_work_depth_hist: List[float] = dataclasses.field(default_factory=list)
     lo_queue_work_depth_hist_overflow: float = 0.0
+    pending_hi_work_depth_hist: List[float] = dataclasses.field(default_factory=list)
+    pending_hi_work_depth_hist_overflow: float = 0.0
+    pending_lo_work_depth_hist: List[float] = dataclasses.field(default_factory=list)
+    pending_lo_work_depth_hist_overflow: float = 0.0
     pending_depth_hist_mtp_draft: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist_mtp_draft_overflow: float = 0.0
     pending_depth_hist_mtp_verify: List[float] = dataclasses.field(default_factory=list)
@@ -773,6 +781,20 @@ class SimMetrics:
                         "p95": hist_int_percentile(self.lo_queue_depth_hist, self.lo_queue_depth_hist_overflow, 0.95),
                         "p99": hist_int_percentile(self.lo_queue_depth_hist, self.lo_queue_depth_hist_overflow, 0.99),
                     },
+                    "pending_hi_depth_time_weighted": {
+                        "max_depth": (len(self.pending_hi_depth_hist) - 1) if len(self.pending_hi_depth_hist) != 0 else 0,
+                        "overflow_time_ms": self.pending_hi_depth_hist_overflow,
+                        "p50": hist_int_percentile(self.pending_hi_depth_hist, self.pending_hi_depth_hist_overflow, 0.50),
+                        "p95": hist_int_percentile(self.pending_hi_depth_hist, self.pending_hi_depth_hist_overflow, 0.95),
+                        "p99": hist_int_percentile(self.pending_hi_depth_hist, self.pending_hi_depth_hist_overflow, 0.99),
+                    },
+                    "pending_lo_depth_time_weighted": {
+                        "max_depth": (len(self.pending_lo_depth_hist) - 1) if len(self.pending_lo_depth_hist) != 0 else 0,
+                        "overflow_time_ms": self.pending_lo_depth_hist_overflow,
+                        "p50": hist_int_percentile(self.pending_lo_depth_hist, self.pending_lo_depth_hist_overflow, 0.50),
+                        "p95": hist_int_percentile(self.pending_lo_depth_hist, self.pending_lo_depth_hist_overflow, 0.95),
+                        "p99": hist_int_percentile(self.pending_lo_depth_hist, self.pending_lo_depth_hist_overflow, 0.99),
+                    },
                     "pending_work_depth_time_weighted": {
                         "max_depth": (len(self.pending_work_depth_hist) - 1) if len(self.pending_work_depth_hist) != 0 else 0,
                         "overflow_time_ms": self.pending_work_depth_hist_overflow,
@@ -793,6 +815,20 @@ class SimMetrics:
                         "p50": hist_int_percentile(self.lo_queue_work_depth_hist, self.lo_queue_work_depth_hist_overflow, 0.50),
                         "p95": hist_int_percentile(self.lo_queue_work_depth_hist, self.lo_queue_work_depth_hist_overflow, 0.95),
                         "p99": hist_int_percentile(self.lo_queue_work_depth_hist, self.lo_queue_work_depth_hist_overflow, 0.99),
+                    },
+                    "pending_hi_work_depth_time_weighted": {
+                        "max_depth": (len(self.pending_hi_work_depth_hist) - 1) if len(self.pending_hi_work_depth_hist) != 0 else 0,
+                        "overflow_time_ms": self.pending_hi_work_depth_hist_overflow,
+                        "p50": hist_int_percentile(self.pending_hi_work_depth_hist, self.pending_hi_work_depth_hist_overflow, 0.50),
+                        "p95": hist_int_percentile(self.pending_hi_work_depth_hist, self.pending_hi_work_depth_hist_overflow, 0.95),
+                        "p99": hist_int_percentile(self.pending_hi_work_depth_hist, self.pending_hi_work_depth_hist_overflow, 0.99),
+                    },
+                    "pending_lo_work_depth_time_weighted": {
+                        "max_depth": (len(self.pending_lo_work_depth_hist) - 1) if len(self.pending_lo_work_depth_hist) != 0 else 0,
+                        "overflow_time_ms": self.pending_lo_work_depth_hist_overflow,
+                        "p50": hist_int_percentile(self.pending_lo_work_depth_hist, self.pending_lo_work_depth_hist_overflow, 0.50),
+                        "p95": hist_int_percentile(self.pending_lo_work_depth_hist, self.pending_lo_work_depth_hist_overflow, 0.95),
+                        "p99": hist_int_percentile(self.pending_lo_work_depth_hist, self.pending_lo_work_depth_hist_overflow, 0.99),
                     },
                 },
                 "expert_utilization": summarize_experts(self.mean_utilization_per_expert),
@@ -2959,12 +2995,20 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
         hi_queue_depth_hist_overflow=0.0,
         lo_queue_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         lo_queue_depth_hist_overflow=0.0,
+        pending_hi_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        pending_hi_depth_hist_overflow=0.0,
+        pending_lo_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        pending_lo_depth_hist_overflow=0.0,
         pending_work_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_work_depth_hist_overflow=0.0,
         hi_queue_work_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         hi_queue_work_depth_hist_overflow=0.0,
         lo_queue_work_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         lo_queue_work_depth_hist_overflow=0.0,
+        pending_hi_work_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        pending_hi_work_depth_hist_overflow=0.0,
+        pending_lo_work_depth_hist=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
+        pending_lo_work_depth_hist_overflow=0.0,
         pending_depth_hist_mtp_draft=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_depth_hist_mtp_draft_overflow=0.0,
         pending_depth_hist_mtp_verify=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
@@ -2995,6 +3039,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
     last_lo_queue: List[int] = [0 for _ in range(cfg.num_experts)]
     last_hi_queue_work: List[float] = [0.0 for _ in range(cfg.num_experts)]
     last_lo_queue_work: List[float] = [0.0 for _ in range(cfg.num_experts)]
+    last_pending_hi: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_lo: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_hi_work: List[float] = [0.0 for _ in range(cfg.num_experts)]
+    last_pending_lo_work: List[float] = [0.0 for _ in range(cfg.num_experts)]
     last_inflight: List[int] = [0 for _ in range(cfg.num_experts)]
     last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_draft: List[int] = [0 for _ in range(cfg.num_experts)]
@@ -3027,6 +3075,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
                         metrics.lo_queue_depth_hist_overflow += dt
                     else:
                         metrics.lo_queue_depth_hist[lo_depth] += dt
+                    hi_pending = last_pending_hi[e]
+                    if hi_pending >= hist_len:
+                        metrics.pending_hi_depth_hist_overflow += dt
+                    else:
+                        metrics.pending_hi_depth_hist[hi_pending] += dt
+                    lo_pending = last_pending_lo[e]
+                    if lo_pending >= hist_len:
+                        metrics.pending_lo_depth_hist_overflow += dt
+                    else:
+                        metrics.pending_lo_depth_hist[lo_pending] += dt
                     work_depth = int(math.floor(float(last_pending_work[e])))
                     if work_depth >= hist_len:
                         metrics.pending_work_depth_hist_overflow += dt
@@ -3042,6 +3100,16 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
                         metrics.lo_queue_work_depth_hist_overflow += dt
                     else:
                         metrics.lo_queue_work_depth_hist[lo_work_depth] += dt
+                    hi_pending_work_depth = int(math.floor(float(last_pending_hi_work[e])))
+                    if hi_pending_work_depth >= hist_len:
+                        metrics.pending_hi_work_depth_hist_overflow += dt
+                    else:
+                        metrics.pending_hi_work_depth_hist[hi_pending_work_depth] += dt
+                    lo_pending_work_depth = int(math.floor(float(last_pending_lo_work[e])))
+                    if lo_pending_work_depth >= hist_len:
+                        metrics.pending_lo_work_depth_hist_overflow += dt
+                    else:
+                        metrics.pending_lo_work_depth_hist[lo_pending_work_depth] += dt
                     d_draft = last_pending_mtp_draft[e]
                     if d_draft >= hist_len:
                         metrics.pending_depth_hist_mtp_draft_overflow += dt
@@ -3062,6 +3130,10 @@ def run_simulation(cfg: SimConfig, trace: Sequence[TokenRoute], token_states_out
             last_lo_queue[e] = len(experts[e].lo)
             last_hi_queue_work[e] = float(experts[e].pending_work_hi)
             last_lo_queue_work[e] = float(experts[e].pending_work_lo)
+            last_pending_hi[e] = expert_pending_for_class(experts[e], LatencyClass.INTERACTIVE)
+            last_pending_lo[e] = expert_pending_for_class(experts[e], LatencyClass.BATCH)
+            last_pending_hi_work[e] = float(experts[e].pending_work_for_queue(LatencyClass.INTERACTIVE))
+            last_pending_lo_work[e] = float(experts[e].pending_work_for_queue(LatencyClass.BATCH))
             last_inflight[e] = experts[e].in_flight
             if backpressure_units == "work":
                 last_saturated[e] = 1 if last_pending_work[e] >= float(cfg.expert_queue_max) else 0
@@ -3836,9 +3908,13 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
+            "pending_hi_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_hi_depth_hist, metrics.pending_hi_depth_hist_overflow, 0.95)),
+            "pending_lo_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_lo_depth_hist, metrics.pending_lo_depth_hist_overflow, 0.95)),
             "pending_work_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_work_depth_hist, metrics.pending_work_depth_hist_overflow, 0.95)),
             "hi_queue_work_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_work_depth_hist, metrics.hi_queue_work_depth_hist_overflow, 0.95)),
             "lo_queue_work_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_work_depth_hist, metrics.lo_queue_work_depth_hist_overflow, 0.95)),
+            "pending_hi_work_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_hi_work_depth_hist, metrics.pending_hi_work_depth_hist_overflow, 0.95)),
+            "pending_lo_work_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_lo_work_depth_hist, metrics.pending_lo_work_depth_hist_overflow, 0.95)),
             "pending_depth_time_weighted_p95_mtp_draft": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_draft, metrics.pending_depth_hist_mtp_draft_overflow, 0.95)),
             "pending_depth_time_weighted_p95_mtp_verify": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_verify, metrics.pending_depth_hist_mtp_verify_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
