@@ -155,17 +155,26 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "down" ]; then
 			printf "down (remote->mac) %s MiB: " "$BW_MB"
-			if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$BW_MB" 2>/dev/null <<'REMOTE' | dd of=/dev/null bs=1M 2>&1 | tail -n 1
-set -eu
-mb="${1:-64}"
-dd if=/dev/zero bs=1M count="$mb" 2>/dev/null
+			ssh_err="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.ssherr.XXXXXX)"
+			dd_line_tmp="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.ddline.XXXXXX)"
+			ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$BW_MB" 2>"$ssh_err" <<-'REMOTE' | dd of=/dev/null bs=1M 2>&1 | tail -n 1 >"$dd_line_tmp" || true
+				set -eu
+				mb="${1:-64}"
+				dd if=/dev/zero bs=1M count="$mb" 2>/dev/null
 REMOTE
-			then
-				:
+			dd_line="$(cat "$dd_line_tmp" 2>/dev/null || true)"
+			bytes="$(printf "%s\n" "$dd_line" | awk '{ print $1 }' || true)"
+			if [ "$bytes" != "" ] && [ "$bytes" != "0" ]; then
+				echo "$dd_line"
 			else
+				[ "$dd_line" != "" ] && echo "$dd_line"
+				ssh_err_line="$(head -n 2 "$ssh_err" 2>/dev/null | tr '\n' ' ' | sed -E 's/[[:space:]]+$//' || true)"
+				[ "$ssh_err_line" != "" ] && echo "ssh: $ssh_err_line"
 				echo "failed"
 				ssh_fail=$((ssh_fail + 1))
 			fi
+			rm -f "$dd_line_tmp" || true
+			rm -f "$ssh_err" || true
 		fi
 
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "up" ]; then
