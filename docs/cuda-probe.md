@@ -22,6 +22,14 @@ This compiles a single tiny `.cu` file directly on Spark0 with `nvcc -arch=nativ
 
 It also includes compile-only `-arch=sm_121` and `nvcc --gpu-architecture=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
 
+To make the “end-to-end link+run via `sm_121`” path explicit (not just compile-only), run:
+
+```bash
+WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+This additionally builds and runs the same tiny probe via `nvcc -arch=sm_121` and `nvcc --gpu-architecture=sm_121`.
+
 When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” gate:
 
 ```bash

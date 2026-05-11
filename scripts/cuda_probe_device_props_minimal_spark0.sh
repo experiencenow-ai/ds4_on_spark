@@ -5,6 +5,7 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_device_props_minimal}"
 log_path="${LOG_PATH:-}"
+with_sm121_run="${WITH_SM121_RUN:-0}"
 
 main() {
 ssh $SSH_OPTS "$target" "set -eu
@@ -165,6 +166,16 @@ EOF
 
 \$NVCC -O2 -std=c++17 -arch=native -o \"$REMOTE_DIR\"/cuda_device_props_minimal \"$REMOTE_DIR\"/cuda_device_props_minimal.cu -lcuda
 
+if [ \"${with_sm121_run}\" = \"1\" ]; then
+	echo
+	echo \"== build: cuda_device_props_minimal (-arch=sm_121) ==\"
+	\$NVCC -O2 -std=c++17 -arch=sm_121 -o \"$REMOTE_DIR\"/cuda_device_props_minimal_sm121 \"$REMOTE_DIR\"/cuda_device_props_minimal.cu -lcuda
+
+	echo
+	echo \"== build: cuda_device_props_minimal (nvcc --gpu-architecture=sm_121) ==\"
+	\$NVCC -O2 -std=c++17 --gpu-architecture=sm_121 -o \"$REMOTE_DIR\"/cuda_device_props_minimal_gpuarch_sm121 \"$REMOTE_DIR\"/cuda_device_props_minimal.cu -lcuda
+fi
+
 echo
 echo \"== build: sm_121 compile-only gate ==\"
 cat > \"$REMOTE_DIR\"/cuda_sm121_compile_only.cu <<'EOF'
@@ -215,6 +226,14 @@ set -e
 	echo
 	echo \"== run: cuda_device_props_minimal ==\"
 	\"$REMOTE_DIR\"/cuda_device_props_minimal
+	if [ \"${with_sm121_run}\" = \"1\" ]; then
+		echo
+		echo \"== run: cuda_device_props_minimal_sm121 ==\"
+		\"$REMOTE_DIR\"/cuda_device_props_minimal_sm121
+		echo
+		echo \"== run: cuda_device_props_minimal_gpuarch_sm121 ==\"
+		\"$REMOTE_DIR\"/cuda_device_props_minimal_gpuarch_sm121
+	fi
 "
 }
 

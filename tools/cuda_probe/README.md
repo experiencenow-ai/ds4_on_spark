@@ -10,6 +10,12 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 - Kernel bring-up tiny (no cuBLASLt): `./scripts/cuda_probe_kernel_tiny_spark0.sh`
 - Full suite: `./scripts/cuda_probe_spark0.sh` and `./scripts/cuda_probe_compile_only_spark0.sh`
 
+For an explicit “`sm_121` link+run” check in the no-transfer device-props script:
+
+```bash
+WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
 The fast path `scripts/cuda_probe_tiny_spark0.sh` also includes an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate when `nvcc --list-gpu-arch` is supported and advertises `compute_121` (quick “fatbin PTX+SASS packaging works” signal).
 
 To capture deterministic logs on the Mac without relying on `tee`/`pipefail`, set `LOG_PATH`:
