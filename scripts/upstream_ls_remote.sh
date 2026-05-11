@@ -12,6 +12,9 @@ Modes:
   --all     Print both reports (HEAD first, then pinned).
 
 Default is --head for backwards compatibility.
+
+Environment:
+  UPSTREAM_LS_REMOTE_TIMEOUT_SEC  Per-upstream `git ls-remote` timeout (default: 20).
 EOF
 }
 
@@ -37,6 +40,23 @@ if [ "${#}" -eq 1 ]; then
 			;;
 	esac
 fi
+
+LS_REMOTE_TIMEOUT_SEC="${UPSTREAM_LS_REMOTE_TIMEOUT_SEC:-20}"
+
+git_ls_remote()
+{
+	local url="$1"
+	shift
+
+	GIT_TERMINAL_PROMPT=0 timeout "${LS_REMOTE_TIMEOUT_SEC}s" git ls-remote "${url}" "$@" 2>/dev/null
+}
+
+git_ls_remote_symref_head()
+{
+	local url="$1"
+
+	GIT_TERMINAL_PROMPT=0 timeout "${LS_REMOTE_TIMEOUT_SEC}s" git ls-remote --symref "${url}" HEAD 2>/dev/null
+}
 
 print_ref()
 {
@@ -64,9 +84,21 @@ print_ref()
 		return 0
 	fi
 	if [ "${ref}" = "HEAD" ]; then
-		GIT_TERMINAL_PROMPT=0 git ls-remote --symref "${url}" HEAD | sed -n '1,2p'
+		local out
+		out="$(git_ls_remote_symref_head "${url}" || true)"
+		if [ -z "${out}" ]; then
+			printf "ref: TIMEOUT_OR_ERROR\n\n"
+			return 0
+		fi
+		sed -n '1,2p' <<<"${out}"
 	else
-		GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | sed -n '1p'
+		local out
+		out="$(git_ls_remote "${url}" "${ref}" || true)"
+		if [ -z "${out}" ]; then
+			printf "ref: TIMEOUT_OR_ERROR\n\n"
+			return 0
+		fi
+		sed -n '1p' <<<"${out}"
 	fi
 	echo
 }
@@ -139,7 +171,7 @@ print_pinned()
 		return 0
 	fi
 
-	got="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+	got="$(git_ls_remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
 	if [ -z "${got}" ]; then
 		printf "== %s\n" "${name}"
 		printf "upstream:  %s\n" "${upstream}"
@@ -151,7 +183,7 @@ print_pinned()
 
 	if [[ "${ref}" == refs/tags/* ]]; then
 		local deref
-		deref="$(GIT_TERMINAL_PROMPT=0 git ls-remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
+		deref="$(git_ls_remote "${url}" "${ref}^{}" | awk '{print $1}' | head -n 1 || true)"
 		if [ -n "${deref}" ]; then
 			got="${deref}"
 		fi
