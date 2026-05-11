@@ -1,0 +1,33 @@
+[Unit]
+Description=Spark standalone master (%i) (user)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=%h/.config/ds4/spark-%i.env
+
+[Service]
+Type=simple
+WorkingDirectory=/
+SyslogIdentifier=spark-user-master-%i
+EnvironmentFile=%h/.config/ds4/spark-%i.env
+
+# Example unit for a Spark standalone master (user-service). Review + adjust for your Spark install.
+ExecStart=${SPARK_HOME}/bin/spark-class org.apache.spark.deploy.master.Master --host ${SPARK_MASTER_HOST} --port ${SPARK_MASTER_PORT} --webui-port ${SPARK_MASTER_WEBUI_PORT}
+
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+
+# Keep user units minimal; add hardening once the runtime interface stabilizes.
+NoNewPrivileges=true
+PrivateTmp=true
+
+UMask=0027
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=default.target
+

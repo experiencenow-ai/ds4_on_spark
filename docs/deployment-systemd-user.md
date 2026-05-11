@@ -6,6 +6,8 @@ For developer bring-up or non-root runs, `deploy/systemd-user/` includes **optio
 
 These templates are staged by `scripts/ops_stage_deploy_assets.sh` under `/tmp/ds4-systemd-user/` on the Spark (reference only; user units are installed manually).
 
+Spark standalone user-service templates are also available (optional): see `docs/deployment-spark-standalone-systemd-user.md`.
+
 ## Install (Human Runbook)
 
 Copy templates to your user-unit directory:

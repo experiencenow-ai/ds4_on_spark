@@ -93,6 +93,9 @@ need_file "$systemd_dir/ds4-preflight-tp4@.timer"
 need_file "$systemd_dir/ds4-preflight-tp4-strict@.timer"
 need_file "$systemd_dir/ds4-support-bundle@.timer"
 
+need_file "$systemd_dir/spark-master@.service"
+need_file "$systemd_dir/spark-worker@.service"
+
 need_file "$systemd_user_dir/ds4@.service"
 need_file "$systemd_user_dir/ds4-strict@.service"
 need_file "$systemd_user_dir/ds4-tp3-strict@.service"
@@ -111,6 +114,9 @@ need_file "$systemd_user_dir/ds4-preflight-tp4@.timer"
 need_file "$systemd_user_dir/ds4-preflight-tp4-strict@.timer"
 need_file "$systemd_user_dir/ds4-support-bundle@.service"
 need_file "$systemd_user_dir/ds4-support-bundle@.timer"
+
+need_file "$systemd_user_dir/spark-master@.service"
+need_file "$systemd_user_dir/spark-worker@.service"
 
 need_file "$config_dir/ds4.env.example"
 need_file "$config_dir/ds4-spark0.env.example"
@@ -131,6 +137,9 @@ need_file "$config_dir/ds4-spark3.conf.example"
 need_file "$config_dir/journald.ds4.conf.example"
 need_file "$config_dir/logrotate.ds4.conf.example"
 need_file "$config_dir/prometheus-scrape.ds4.yml.example"
+need_file "$config_dir/spark-spark0.env.example"
+need_file "$config_dir/spark-spark1.env.example"
+need_file "$config_dir/spark-spark2.env.example"
 need_file "$config_dir/hosts.ds4.spark01.example"
 need_file "$config_dir/hosts.ds4.spark012.example"
 need_file "$config_dir/hosts.ds4.spark_ring.example"
@@ -183,6 +192,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         "$systemd_dir/ds4-preflight-tp4@.timer" \
         "$systemd_dir/ds4-preflight-tp4-strict@.timer" \
         "$systemd_dir/ds4-support-bundle@.timer" \
+        "$systemd_dir/spark-master@.service" \
+        "$systemd_dir/spark-worker@.service" \
         >/dev/null 2>&1; then
         echo "systemd-analyze verify: ok"
     else
