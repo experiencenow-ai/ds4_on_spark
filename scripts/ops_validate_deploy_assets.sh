@@ -59,11 +59,27 @@ need_file "deploy/systemd/ds4-preflight@.timer"
 need_file "deploy/systemd/ds4-preflight-strict@.timer"
 need_file "deploy/systemd/ds4-support-bundle@.timer"
 
+need_file "deploy/systemd-user/ds4@.service"
+need_file "deploy/systemd-user/ds4-strict@.service"
+need_file "deploy/systemd-user/ds4-preflight@.service"
+need_file "deploy/systemd-user/ds4-preflight-strict@.service"
+need_file "deploy/systemd-user/ds4-preflight-tp3@.service"
+need_file "deploy/systemd-user/ds4-preflight-tp3-strict@.service"
+need_file "deploy/systemd-user/ds4-preflight-tp4@.service"
+need_file "deploy/systemd-user/ds4-preflight-tp4-strict@.service"
+
 need_file "deploy/config/ds4.env.example"
 need_file "deploy/config/ds4-spark0.env.example"
 need_file "deploy/config/ds4-spark1.env.example"
 need_file "deploy/config/ds4-spark2.env.example"
 need_file "deploy/config/ds4-spark3.env.example"
+need_file "deploy/config/ds4-spark0.tp3.env.example"
+need_file "deploy/config/ds4-spark1.tp3.env.example"
+need_file "deploy/config/ds4-spark2.tp3.env.example"
+need_file "deploy/config/ds4-spark0.tp4.env.example"
+need_file "deploy/config/ds4-spark1.tp4.env.example"
+need_file "deploy/config/ds4-spark2.tp4.env.example"
+need_file "deploy/config/ds4-spark3.tp4.env.example"
 need_file "deploy/config/ds4-spark0.conf.example"
 need_file "deploy/config/ds4-spark1.conf.example"
 need_file "deploy/config/ds4-spark2.conf.example"
@@ -118,7 +134,20 @@ sh -n scripts/ops_validate_installed_assets.sh
 sh -n scripts/ops_install_staged_assets.sh
 
 echo "== env examples include required keys =="
-for env in deploy/config/ds4.env.example deploy/config/ds4-spark0.env.example deploy/config/ds4-spark1.env.example deploy/config/ds4-spark2.env.example deploy/config/ds4-spark3.env.example; do
+for env in \
+	deploy/config/ds4.env.example \
+	deploy/config/ds4-spark0.env.example \
+	deploy/config/ds4-spark1.env.example \
+	deploy/config/ds4-spark2.env.example \
+	deploy/config/ds4-spark3.env.example \
+	deploy/config/ds4-spark0.tp3.env.example \
+	deploy/config/ds4-spark1.tp3.env.example \
+	deploy/config/ds4-spark2.tp3.env.example \
+	deploy/config/ds4-spark0.tp4.env.example \
+	deploy/config/ds4-spark1.tp4.env.example \
+	deploy/config/ds4-spark2.tp4.env.example \
+	deploy/config/ds4-spark3.tp4.env.example \
+	; do
 	need_key_in_file "DS4_INSTANCE" "$env"
 	need_key_in_file "DS4_HOME" "$env"
 	need_key_in_file "DS4_STATE_DIR" "$env"
