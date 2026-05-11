@@ -217,6 +217,8 @@ print_head_report()
 	print_ref "GPT-OSS-20B-DFlash (HF)" "https://huggingface.co/z-lab/gpt-oss-20b-DFlash"
 	print_ref "GPT-OSS-120B (HF)" "https://huggingface.co/openai/gpt-oss-120b"
 	print_ref "GPT-OSS-120B-DFlash (HF)" "https://huggingface.co/z-lab/gpt-oss-120b-DFlash"
+	print_ref "Kimi-K2.5 (HF)" "https://huggingface.co/moonshotai/Kimi-K2.5"
+	print_ref "Kimi-K2.5-DFlash (HF)" "https://huggingface.co/z-lab/Kimi-K2.5-DFlash"
 	print_ref "SGLang" "https://github.com/sgl-project/sglang.git"
 	print_ref "llama.cpp" "https://github.com/ggml-org/llama.cpp.git"
 	print_ref "llama.cpp (antirez V4 fork)" "https://github.com/antirez/llama.cpp-deepseek-v4-flash.git"
