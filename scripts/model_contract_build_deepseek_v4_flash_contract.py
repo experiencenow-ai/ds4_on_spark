@@ -1072,6 +1072,8 @@ def build_contract() -> dict:
 	weight_map_file_counts = Counter(weight_map_files)
 	weight_map_keys_sha256 = sha256_lines(weight_keys)
 	weight_map_prefix_fingerprints = build_weight_key_prefix_fingerprints(weight_keys)
+	mtp_prefix_fp = weight_map_prefix_fingerprints.get("mtp", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
+	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1266,6 +1268,11 @@ def build_contract() -> dict:
 					"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
 					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
 					"namespace_prefix": "mtp.{j}.",
+					"checkpoint_key_fingerprint": {
+						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
+						"tensor_key_count": mtp_prefix_fp.get("count", None),
+						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					},
 					"semantics": mtp_sem,
 					"trust_gates": {
 						"artifact_requires_mtp_contract_complete": True,
@@ -1341,6 +1348,8 @@ def build_contract() -> dict:
 					"weight_map_num_tensors": int(len(weight_keys)),
 					"weight_map_keys_sha256": weight_map_keys_sha256,
 					"weight_map_prefix_fingerprints": weight_map_prefix_fingerprints,
+					"weight_map_layers_keys_sha256": layers_prefix_fp.get("keys_sha256", None),
+					"weight_map_mtp_keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
 					"weight_map_unique_files": int(len(weight_map_file_counts)),
 					"weight_map_file_counts": dict(weight_map_file_counts),
 					"metadata": idx.get("metadata", {}),
