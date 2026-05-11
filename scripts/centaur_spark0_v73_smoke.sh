@@ -8,15 +8,20 @@ Spark0 Centaur spec-impl v73 smoke (runs on Spark0; no sudo).
 
 Environment (recommended):
   CENTAUR_ZIP           Path to centaur_spec_impl_v73.zip (required)
-  CENTAUR_WORKDIR       Workspace dir (default: ~/centaur-smoke/v73/run)
+  CENTAUR_WORKDIR       Workspace dir (default: ~/centaur-smoke/v73/run or ~/centaur-smoke/v73/run/$CENTAUR_RUN_ID)
+  CENTAUR_RUN_ID        Optional run id to avoid clobbering prior runs (example: 20260511T120000Z)
   CENTAUR_CATALOG_JSON  Optional path to a model-catalog JSON fixture
   CENTAUR_PIP_ARGS      Optional extra args for pip install (e.g. "--no-index --find-links=/path/to/wheels")
   CENTAUR_SKIP_PIP      Set to 1 to skip pip install (assumes venv already has deps)
+  CENTAUR_LOG           Optional log path (duplicates stdout/stderr via tee)
+  CENTAUR_TRACE         Set to 1 to enable shell tracing (prints exact commands)
 
 Example (on Spark0):
   export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip
   export CENTAUR_CATALOG_JSON=~/centaur-smoke/v73/unit_model_catalog.json
-  sh ./centaur_spark0_v73_smoke.sh | tee ~/centaur-smoke/v73/run/smoke.log
+  export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+  export CENTAUR_LOG=~/centaur-smoke/v73/run/"$CENTAUR_RUN_ID"/smoke.log
+  sh ./centaur_spark0_v73_smoke.sh
 
 Notes:
   - Avoids large model downloads; registers only a tiny synthetic model candidate.
@@ -61,7 +66,15 @@ if [ ! -f "$zip" ]; then
 	exit 2
 fi
 
-workdir="${CENTAUR_WORKDIR:-$HOME/centaur-smoke/v73/run}"
+run_id="${CENTAUR_RUN_ID:-}"
+workdir="${CENTAUR_WORKDIR:-}"
+if [ "$workdir" = "" ]; then
+	if [ "$run_id" = "" ]; then
+		workdir="$HOME/centaur-smoke/v73/run"
+	else
+		workdir="$HOME/centaur-smoke/v73/run/$run_id"
+	fi
+fi
 pkgdir="$workdir/centaur_spec_impl_v73"
 venvdir="$workdir/venv"
 ctrldir="$workdir/hyor/controller"
@@ -74,9 +87,30 @@ catalog_json="${CENTAUR_CATALOG_JSON:-}"
 
 mkdir -p "$workdir" "$ctrldir" "$nodedir" "$publish_baseline" "$publish_type" "$effective_out" "$effective_manifests"
 
+log="${CENTAUR_LOG:-}"
+if [ "$log" != "" ]; then
+	need_cmd tee
+	need_cmd mkfifo
+	need_cmd dirname
+	mkdir -p "$(dirname -- "$log")"
+	fifo="$workdir/.centaur_smoke_log.fifo"
+	rm -f "$fifo"
+	mkfifo "$fifo"
+	tee "$log" <"$fifo" &
+	teepid="$!"
+	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	exec >"$fifo" 2>&1
+fi
+
+if [ "${CENTAUR_TRACE:-0}" = "1" ]; then
+	set -x
+fi
+
 echo "== centaur v73 smoke (spark0) =="
 echo "zip: $zip"
 echo "workdir: $workdir"
+echo "pwd: $(pwd)"
+ls -la "$zip" | sed -n '1p'
 
 echo "== python =="
 python3 -V

@@ -15,13 +15,14 @@ Environment:
   SSH_OPTS           Optional ssh options override (default includes BatchMode + temp known_hosts)
   CENTAUR_PIP_ARGS   Optional extra args for remote pip install (e.g. "--no-index --find-links=/path/to/wheels")
   CENTAUR_SKIP_PIP   Set to 1 to skip remote pip install (assumes deps already present in venv)
+  CENTAUR_RUN_ID     Optional remote run id (default: generated UTC timestamp)
 
 Examples:
   ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local
   ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local ~/centaur-smoke/v73 /tmp/centaur_spark0_v73_smoke.log
 
 Notes:
-  - Artifacts are written under `remote_dir/run/` on Spark0.
+  - Artifacts are written under `remote_dir/run/$CENTAUR_RUN_ID/` on Spark0.
   - If local_log is provided, stdout/stderr are tee'd locally.
 USAGE
 }
@@ -74,7 +75,14 @@ fi
 remote_zip="$remote_dir/centaur_spec_impl_v73.zip"
 remote_catalog="$remote_dir/unit_model_catalog.json"
 
-ssh_cmd="cd $remote_dir && export CENTAUR_ZIP=\"$remote_zip\" && export CENTAUR_CATALOG_JSON=\"$remote_catalog\""
+run_id="${CENTAUR_RUN_ID:-}"
+if [ "$run_id" = "" ]; then
+	run_id="$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+remote_run_dir="$remote_dir/run/$run_id"
+remote_smoke_log="$remote_run_dir/smoke.log"
+
+ssh_cmd="cd $remote_dir && mkdir -p $remote_run_dir && export CENTAUR_RUN_ID=\"$run_id\" && export CENTAUR_LOG=\"$remote_smoke_log\" && export CENTAUR_ZIP=\"$remote_zip\" && export CENTAUR_CATALOG_JSON=\"$remote_catalog\""
 if [ "${CENTAUR_PIP_ARGS:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_PIP_ARGS=\"${CENTAUR_PIP_ARGS}\""
 fi
@@ -85,10 +93,10 @@ ssh_cmd="$ssh_cmd && sh -s"
 
 echo "== run smoke (streamed) =="
 echo "ssh $SSH_OPTS $target \"$ssh_cmd\" < $smoke"
+echo "remote_smoke_log: $remote_smoke_log"
 
 if [ "$local_log" = "" ]; then
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$smoke"
 else
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$smoke" 2>&1 | tee "$local_log"
 fi
-
