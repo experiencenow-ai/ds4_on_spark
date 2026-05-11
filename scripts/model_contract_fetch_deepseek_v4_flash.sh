@@ -35,7 +35,7 @@ FILES=(
 hf_url()
 {
   local path="$1"
-  printf "https://huggingface.co/%s/resolve/%s/%s" "$REPO_ID" "$REV" "$path"
+  printf "https://huggingface.co/%s/resolve/%s/%s" "$REPO_ID" "$PINNED_REV" "$path"
 }
 
 fetch_one()
@@ -56,9 +56,17 @@ fetch_one()
 mkdir -p "$OUT_DIR"
 
 # Record the upstream commit hash as seen by Hugging Face for this revision.
-UPSTREAM_COMMIT="$(curl -sSI "$(hf_url "config.json")" | awk -F': ' 'tolower($1)=="x-repo-commit"{print $2}' | tr -d '\r' | tail -n 1)"
+UPSTREAM_COMMIT="$(curl -sSI "https://huggingface.co/${REPO_ID}/resolve/${REV}/config.json" | awk -F': ' 'tolower($1)=="x-repo-commit"{print $2}' | tr -d '\r' | tail -n 1)"
 if [[ -n "$UPSTREAM_COMMIT" ]]; then
   printf "%s\n" "$UPSTREAM_COMMIT" > "$OUT_DIR/upstream_commit.txt"
+fi
+
+# Pin all downloads to a single immutable revision when possible so the fixture
+# snapshot cannot mix files from different upstream commits if HF `main` moves
+# mid-fetch.
+PINNED_REV="$REV"
+if [[ "$UPSTREAM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  PINNED_REV="$UPSTREAM_COMMIT"
 fi
 
 for f in "${FILES[@]}"; do

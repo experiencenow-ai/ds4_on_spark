@@ -161,6 +161,7 @@ class SimConfig:
     k_signal: str = "global"
     pending_units: str = "tasks"
     backpressure_units: str = "tasks"
+    backpressure_zero_admit_policy: str = "skip"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -168,12 +169,15 @@ class SimConfig:
     sla_batch_ms: float = 0.0
     sim_seed: int = 1
     mtp_draft_len: int = 0
+    mtp_accept_model: str = "geom"
+    mtp_accept_hist: Tuple[float, ...] = ()
     mtp_accept_prob: float = 0.0
     mtp_accept_decay: float = 1.0
     mtp_draft_cost_scale: float = 0.25
     mtp_verify_per_draft_cost_scale: float = 0.0
     mtp_draft_attempt_policy: str = "full"
     dflash_draft_len: int = -1
+    dflash_draft_cost_scale: float = 0.0
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     batch_wait_interactive_ms: float = 0.0
@@ -189,6 +193,7 @@ class Task:
     enqueue_ms: float
     cost_scale: float = 1.0
     mtp_phase: MtpPhase = MtpPhase.NONE
+    layer_index: int = 0
     start_ms: Optional[float] = None
     served_hi: bool = False
 
@@ -225,6 +230,7 @@ class TokenState:
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
+    stage_accounted_idx: int = -1
     admitted_any: bool = False
     metrics_slot: int = -1
     admitted_verify_layer0: int = 0
@@ -354,11 +360,20 @@ class SimMetrics:
     skipped_stages_backpressure_batch: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    blocked_stages_backpressure_attempts: int = 0
+    blocked_stages_backpressure_attempts_interactive: int = 0
+    blocked_stages_backpressure_attempts_batch: int = 0
+    skipped_stages_backpressure_per_layer: List[int] = dataclasses.field(default_factory=list)
+    skipped_stages_backpressure_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
+    skipped_stages_backpressure_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
     stages_total: int = 0
     stages_total_interactive: int = 0
     stages_total_batch: int = 0
     stages_total_verify: int = 0
     stages_total_draft: int = 0
+    stages_total_per_layer: List[int] = dataclasses.field(default_factory=list)
+    stages_total_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
+    stages_total_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -375,8 +390,10 @@ class SimMetrics:
     promoted_tasks: int = 0
     forced_batch_starts: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
+    max_queue_per_expert: List[int] = dataclasses.field(default_factory=list)
     mean_pending_per_expert: List[float] = dataclasses.field(default_factory=list)
     max_pending_work_per_expert: List[float] = dataclasses.field(default_factory=list)
+    max_queue_work_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_pending_work_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_utilization_per_expert: List[float] = dataclasses.field(default_factory=list)
     saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
@@ -404,6 +421,8 @@ class SimMetrics:
     pending_depth_hist_mtp_draft_overflow: float = 0.0
     pending_depth_hist_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist_mtp_verify_overflow: float = 0.0
+    pending_depth_hist_per_layer: List[List[float]] = dataclasses.field(default_factory=list)
+    pending_depth_hist_per_layer_overflow: List[float] = dataclasses.field(default_factory=list)
     work_units_total: float = 0.0
     work_units_interactive: float = 0.0
     work_units_batch: float = 0.0
@@ -420,6 +439,8 @@ class SimMetrics:
     mtp_output_tokens: int = 0
     mtp_verify_steps: int = 0
     mtp_draft_len: int = 0
+    mtp_accept_model: str = "geom"
+    mtp_accept_hist: List[float] = dataclasses.field(default_factory=list)
     mtp_accept_prob: float = 0.0
     mtp_accept_decay: float = 1.0
     mtp_draft_attempt_policy: str = "full"
@@ -435,6 +456,7 @@ class SimMetrics:
     mtp_accept_len_clamped_backpressure: int = 0
     dflash_steps: int = 0
     dflash_output_tokens: int = 0
+    dflash_draft_cost_scale: float = 0.0
     dflash_draft_tokens_total: int = 0
     dflash_draft_tokens_accepted: int = 0
     dflash_draft_tokens_rejected: int = 0
@@ -580,6 +602,8 @@ class SimMetrics:
                     "output_token_throughput_tps": (float(self.mtp_output_tokens) * 1000.0 / self.makespan_ms) if self.makespan_ms > 0.0 else 0.0,
                     "verify_steps": self.mtp_verify_steps,
                     "draft_len": self.mtp_draft_len,
+                    "accept_model": str(self.mtp_accept_model),
+                    "accept_hist": list(self.mtp_accept_hist) if str(self.mtp_accept_model).strip().lower() == "hist" else [],
                     "accept_prob": self.mtp_accept_prob,
                     "accept_decay": self.mtp_accept_decay,
                     "draft_attempt_policy": self.mtp_draft_attempt_policy,
@@ -690,6 +714,42 @@ class SimMetrics:
                     "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
                     "skipped_backpressure_verify": self.skipped_stages_backpressure_verify,
                     "skipped_backpressure_draft": self.skipped_stages_backpressure_draft,
+                    "blocked_backpressure_attempts": self.blocked_stages_backpressure_attempts,
+                    "blocked_backpressure_attempts_interactive": self.blocked_stages_backpressure_attempts_interactive,
+                    "blocked_backpressure_attempts_batch": self.blocked_stages_backpressure_attempts_batch,
+                    "per_layer": [
+                        {
+                            "layer": int(li),
+                            "total": int(self.stages_total_per_layer[li]),
+                            "total_verify": int(self.stages_total_per_layer_verify[li]),
+                            "total_draft": int(self.stages_total_per_layer_draft[li]),
+                            "skipped_backpressure": int(self.skipped_stages_backpressure_per_layer[li]),
+                            "skipped_backpressure_verify": int(self.skipped_stages_backpressure_per_layer_verify[li]),
+                            "skipped_backpressure_draft": int(self.skipped_stages_backpressure_per_layer_draft[li]),
+                            "pending_depth_time_weighted": {
+                                "max_depth": (len(self.pending_depth_hist_per_layer[li]) - 1)
+                                if li < len(self.pending_depth_hist_per_layer) and len(self.pending_depth_hist_per_layer[li]) != 0
+                                else 0,
+                                "overflow_time_ms": float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                "p50": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.50,
+                                ),
+                                "p95": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.95,
+                                ),
+                                "p99": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.99,
+                                ),
+                            },
+                        }
+                        for li in range(len(self.stages_total_per_layer))
+                    ],
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -746,6 +806,8 @@ class SimMetrics:
                     "num_experts": len(self.max_pending_per_expert),
                     "max_pending_p50": statistics.median(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
                     "max_pending_max": max(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
+                    "max_queue_p50": statistics.median(self.max_queue_per_expert) if len(self.max_queue_per_expert) != 0 else 0,
+                    "max_queue_max": max(self.max_queue_per_expert) if len(self.max_queue_per_expert) != 0 else 0,
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "tasks_started_total": int(sum(self.tasks_started_per_expert)) if len(self.tasks_started_per_expert) != 0 else 0,
@@ -766,6 +828,8 @@ class SimMetrics:
                     "work": {
                         "max_pending_p50": statistics.median(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
                         "max_pending_max": max(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
+                        "max_queue_p50": statistics.median(self.max_queue_work_per_expert) if len(self.max_queue_work_per_expert) != 0 else 0.0,
+                        "max_queue_max": max(self.max_queue_work_per_expert) if len(self.max_queue_work_per_expert) != 0 else 0.0,
                         "mean_pending_p50": statistics.median(self.mean_pending_work_per_expert) if len(self.mean_pending_work_per_expert) != 0 else 0.0,
                         "mean_pending_max": max(self.mean_pending_work_per_expert) if len(self.mean_pending_work_per_expert) != 0 else 0.0,
                     },
@@ -2503,9 +2567,64 @@ class KControllerState:
     k: int = 0
 
 
-def expected_mtp_accept_len(mtp_draft_len: int, mtp_accept_prob: float, mtp_accept_decay: float) -> float:
+def _normalize_prob_hist(probs: Sequence[float]) -> Tuple[float, ...]:
+    if len(probs) == 0:
+        return(())
+    total = 0.0
+    out: List[float] = []
+    for p in probs:
+        v = float(p)
+        if v < 0.0:
+            raise ValueError("probabilities must be >= 0")
+        out.append(v)
+        total += v
+    if total <= 0.0:
+        raise ValueError("probabilities must sum to > 0")
+    return(tuple((v / total) for v in out))
+
+
+def _parse_prob_csv(text: str) -> Tuple[float, ...]:
+    parts = [p.strip() for p in str(text).split(",") if p.strip() != ""]
+    if len(parts) == 0:
+        return(())
+    vals: List[float] = []
+    for p in parts:
+        try:
+            vals.append(float(p))
+        except ValueError as e:
+            raise ValueError(f"could not parse probability '{p}'") from e
+    return(_normalize_prob_hist(vals))
+
+
+def _sample_from_prob_hist(rng: random.Random, probs: Sequence[float]) -> int:
+    if len(probs) == 0:
+        return(1)
+    r = rng.random()
+    acc = 0.0
+    for i, p in enumerate(probs):
+        acc += float(p)
+        if r < acc:
+            return(int(i + 1))
+    return(int(len(probs)))
+
+
+def expected_mtp_accept_len(
+    mtp_draft_len: int,
+    mtp_accept_prob: float,
+    mtp_accept_decay: float,
+    mtp_accept_model: str = "geom",
+    mtp_accept_hist: Sequence[float] = (),
+) -> float:
     if mtp_draft_len <= 0:
         return(1.0)
+    model = mtp_accept_model.strip().lower()
+    if model == "hist":
+        if len(mtp_accept_hist) == 0:
+            return(1.0)
+        exp_len = 0.0
+        for i, p in enumerate(mtp_accept_hist, 1):
+            exp_len += (float(i) * float(p))
+        return(float(exp_len))
     if mtp_accept_prob <= 0.0:
         return(1.0)
     if mtp_accept_decay <= 0.0:
@@ -2524,12 +2643,26 @@ def expected_mtp_accept_len(mtp_draft_len: int, mtp_accept_prob: float, mtp_acce
     return(exp_len)
 
 
-def arrival_rate_steps_tps(arrival_rate_tps: float, arrival_units: str, mtp_draft_len: int, mtp_accept_prob: float, mtp_accept_decay: float) -> float:
+def arrival_rate_steps_tps(
+    arrival_rate_tps: float,
+    arrival_units: str,
+    mtp_draft_len: int,
+    mtp_accept_prob: float,
+    mtp_accept_decay: float,
+    mtp_accept_model: str = "geom",
+    mtp_accept_hist: Sequence[float] = (),
+) -> float:
     units = arrival_units.strip().lower()
     if units == "steps":
         return(arrival_rate_tps)
     if units == "output_tokens":
-        exp_len = expected_mtp_accept_len(mtp_draft_len, mtp_accept_prob, mtp_accept_decay)
+        exp_len = expected_mtp_accept_len(
+            mtp_draft_len,
+            mtp_accept_prob,
+            mtp_accept_decay,
+            mtp_accept_model=mtp_accept_model,
+            mtp_accept_hist=mtp_accept_hist,
+        )
         if exp_len <= 0.0:
             exp_len = 1.0
         return(arrival_rate_tps / exp_len)
@@ -2833,6 +2966,15 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
 def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetrics, draft_attempt_policy: str) -> int:
     if cfg.mtp_draft_len <= 0:
         return(1)
+    model = str(cfg.mtp_accept_model).strip().lower()
+    if model == "hist":
+        if len(cfg.mtp_accept_hist) != (int(cfg.mtp_draft_len) + 1):
+            raise ValueError("mtp_accept_hist must have length mtp_draft_len + 1")
+        accept_len = _sample_from_prob_hist(rng, cfg.mtp_accept_hist)
+        _record_mtp_accept_len(cfg, metrics, int(accept_len), draft_attempt_policy)
+        return(int(accept_len))
+    if model != "geom":
+        return(1)
     if cfg.mtp_accept_prob <= 0.0:
         return(1)
     if cfg.mtp_accept_prob > 1.0:
@@ -2979,6 +3121,10 @@ def run_simulation(
     if backpressure_units not in ("tasks", "work"):
         raise ValueError("backpressure_units must be 'tasks' or 'work'")
 
+    backpressure_zero_admit_policy = cfg.backpressure_zero_admit_policy.strip().lower()
+    if backpressure_zero_admit_policy not in ("skip", "stall"):
+        raise ValueError("backpressure_zero_admit_policy must be 'skip' or 'stall'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -3030,10 +3176,22 @@ def run_simulation(
         raise ValueError("sim_seed must be >= 0")
     if cfg.mtp_draft_len < 0:
         raise ValueError("mtp_draft_len must be >= 0")
+    if cfg.dflash_draft_cost_scale < 0.0:
+        raise ValueError("dflash_draft_cost_scale must be >= 0")
     if cfg.mtp_draft_len > 0:
         mtp_draft_attempt_policy = cfg.mtp_draft_attempt_policy.strip().lower()
         if mtp_draft_attempt_policy not in ("full", "stop_at_reject"):
             raise ValueError("mtp_draft_attempt_policy must be 'full' or 'stop_at_reject'")
+        accept_model = str(cfg.mtp_accept_model).strip().lower()
+        if accept_model not in ("geom", "hist"):
+            raise ValueError("mtp_accept_model must be 'geom' or 'hist'")
+        if accept_model == "hist":
+            if len(cfg.mtp_accept_hist) != (int(cfg.mtp_draft_len) + 1):
+                raise ValueError("mtp_accept_hist must have length mtp_draft_len + 1 (one probability per accept_len in [1..draft_len+1])")
+            if any(float(p) < 0.0 for p in cfg.mtp_accept_hist):
+                raise ValueError("mtp_accept_hist probabilities must be >= 0")
+            if float(sum(cfg.mtp_accept_hist)) <= 0.0:
+                raise ValueError("mtp_accept_hist probabilities must sum to > 0")
         if cfg.mtp_accept_prob < 0.0 or cfg.mtp_accept_prob > 1.0:
             raise ValueError("mtp_accept_prob must be within [0,1]")
         if cfg.mtp_accept_decay <= 0.0:
@@ -3097,6 +3255,11 @@ def run_simulation(
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
+    stalled_tokens: Deque[int] = deque()
+    stalled_set: set[int] = set()
+    max_layers_seen = 1
+    for route in trace:
+        max_layers_seen = max(max_layers_seen, len(_route_layers(route)))
     hist_len = 0
     if cfg.pending_hist_max_depth > 0:
         hist_len = min(cfg.pending_hist_max_depth, cfg.expert_queue_max) + 1
@@ -3109,8 +3272,10 @@ def run_simulation(
         starved_tasks_started_per_expert=[0 for _ in range(cfg.num_experts)],
         max_task_queue_wait_ms_per_expert=[0.0 for _ in range(cfg.num_experts)],
         max_pending_per_expert=[0 for _ in range(cfg.num_experts)],
+        max_queue_per_expert=[0 for _ in range(cfg.num_experts)],
         mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)],
         max_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
+        max_queue_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
         mean_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
         mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
         saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
@@ -3138,11 +3303,22 @@ def run_simulation(
         pending_depth_hist_mtp_draft_overflow=0.0,
         pending_depth_hist_mtp_verify=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_depth_hist_mtp_verify_overflow=0.0,
+        pending_depth_hist_per_layer=[[0.0 for _ in range(hist_len)] for _ in range(max_layers_seen)] if hist_len != 0 else [],
+        pending_depth_hist_per_layer_overflow=[0.0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer=[0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer_verify=[0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer_draft=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer_verify=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer_draft=[0 for _ in range(max_layers_seen)],
     )
     rng = random.Random(cfg.sim_seed)
+    metrics.dflash_draft_cost_scale = float(cfg.dflash_draft_cost_scale)
     if cfg.mtp_draft_len > 0:
         metrics.mtp_verify_steps = len(trace)
         metrics.mtp_draft_len = cfg.mtp_draft_len
+        metrics.mtp_accept_model = str(cfg.mtp_accept_model).strip().lower()
+        metrics.mtp_accept_hist = list(cfg.mtp_accept_hist)
         metrics.mtp_accept_prob = cfg.mtp_accept_prob
         metrics.mtp_accept_decay = cfg.mtp_accept_decay
         metrics.mtp_draft_attempt_policy = mtp_draft_attempt_policy
@@ -3172,6 +3348,8 @@ def run_simulation(
     last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_draft: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_verify: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_per_layer: List[List[int]] = [[0 for _ in range(max_layers_seen)] for _ in range(cfg.num_experts)]
+    pending_per_layer: List[List[int]] = [[0 for _ in range(max_layers_seen)] for _ in range(cfg.num_experts)]
 
     def integrate_areas(now_ms: float) -> None:
         nonlocal last_t_ms
@@ -3245,6 +3423,13 @@ def run_simulation(
                         metrics.pending_depth_hist_mtp_verify_overflow += dt
                     else:
                         metrics.pending_depth_hist_mtp_verify[d_verify] += dt
+                    if len(metrics.pending_depth_hist_per_layer) != 0:
+                        for li in range(max_layers_seen):
+                            d_layer = last_pending_per_layer[e][li]
+                            if d_layer >= hist_len:
+                                metrics.pending_depth_hist_per_layer_overflow[li] += dt
+                            else:
+                                metrics.pending_depth_hist_per_layer[li][d_layer] += dt
         last_t_ms = now_ms
 
     def snapshot_state() -> None:
@@ -3266,10 +3451,18 @@ def run_simulation(
                 last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             last_pending_mtp_draft[e] = experts[e].pending_mtp_draft()
             last_pending_mtp_verify[e] = experts[e].pending_mtp_verify()
+            for li in range(max_layers_seen):
+                last_pending_per_layer[e][li] = pending_per_layer[e][li]
             if last_pending[e] > metrics.max_pending_per_expert[e]:
                 metrics.max_pending_per_expert[e] = last_pending[e]
             if last_pending_work[e] > metrics.max_pending_work_per_expert[e]:
                 metrics.max_pending_work_per_expert[e] = float(last_pending_work[e])
+            q_tasks = (last_hi_queue[e] + last_lo_queue[e])
+            if q_tasks > metrics.max_queue_per_expert[e]:
+                metrics.max_queue_per_expert[e] = int(q_tasks)
+            q_work = (float(last_hi_queue_work[e]) + float(last_lo_queue_work[e]))
+            if q_work > metrics.max_queue_work_per_expert[e]:
+                metrics.max_queue_work_per_expert[e] = float(q_work)
 
     evq: List[Event] = []
     seq_ref = [0]
@@ -3423,13 +3616,15 @@ def run_simulation(
                     metrics.dropped_tasks_backpressure_batch += 1
                 tokens[tid].dropped_tasks_backpressure += 1
                 continue
-            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase)
+            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase, layer_index=stage.layer_index)
             if route.cls == LatencyClass.INTERACTIVE:
                 eq.hi.append(task)
                 eq.pending_work_hi += float(task.cost_scale)
             else:
                 eq.lo.append(task)
                 eq.pending_work_lo += float(task.cost_scale)
+            if stage.layer_index >= 0 and stage.layer_index < max_layers_seen:
+                pending_per_layer[expert_id][stage.layer_index] += 1
             if task.mtp_phase == MtpPhase.DRAFT:
                 eq.queued_tasks_mtp_draft += 1
             elif task.mtp_phase == MtpPhase.VERIFY:
@@ -3444,6 +3639,28 @@ def run_simulation(
             admitted += 1
             _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
         return(admitted)
+
+    def _stall_token(tid: int) -> None:
+        if tid in stalled_set:
+            return
+        stalled_set.add(tid)
+        stalled_tokens.append(tid)
+
+    def _retry_stalled(now_ms: float) -> None:
+        if len(stalled_tokens) == 0:
+            return
+        n = len(stalled_tokens)
+        for _ in range(n):
+            tid = stalled_tokens.popleft()
+            stalled_set.discard(tid)
+            ts = tokens.get(tid)
+            if ts is None:
+                continue
+            if ts.done_ms is not None:
+                continue
+            if ts.remaining != 0:
+                continue
+            _advance_token(now_ms, tid)
 
     def _finish_token(now_ms: float, tid: int) -> None:
         ts = tokens[tid]
@@ -3502,7 +3719,8 @@ def run_simulation(
         while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
             stage = ts.stages[ts.stage_idx]
             desired_stage = min(stage.k, len(stage.candidates))
-            if desired_stage > 0:
+            first_attempt = (ts.stage_accounted_idx != ts.stage_idx)
+            if desired_stage > 0 and first_attempt:
                 metrics.stages_total += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.stages_total_interactive += 1
@@ -3512,8 +3730,25 @@ def run_simulation(
                     metrics.stages_total_verify += 1
                 else:
                     metrics.stages_total_draft += 1
+                if stage.layer_index < len(metrics.stages_total_per_layer):
+                    metrics.stages_total_per_layer[stage.layer_index] += 1
+                    if stage.is_verify:
+                        metrics.stages_total_per_layer_verify[stage.layer_index] += 1
+                    else:
+                        metrics.stages_total_per_layer_draft[stage.layer_index] += 1
+                ts.stage_accounted_idx = ts.stage_idx
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
+                if backpressure_zero_admit_policy == "stall":
+                    pending_limit = _expert_queue_pending_limit_units(cfg, ts.cls, backpressure_units)
+                    if float(pending_limit) > 0.0:
+                        metrics.blocked_stages_backpressure_attempts += 1
+                        if ts.cls == LatencyClass.INTERACTIVE:
+                            metrics.blocked_stages_backpressure_attempts_interactive += 1
+                        else:
+                            metrics.blocked_stages_backpressure_attempts_batch += 1
+                        _stall_token(tid)
+                        return
                 metrics.skipped_stages_backpressure += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.skipped_stages_backpressure_interactive += 1
@@ -3523,6 +3758,12 @@ def run_simulation(
                     metrics.skipped_stages_backpressure_verify += 1
                 else:
                     metrics.skipped_stages_backpressure_draft += 1
+                if stage.layer_index < len(metrics.skipped_stages_backpressure_per_layer):
+                    metrics.skipped_stages_backpressure_per_layer[stage.layer_index] += 1
+                    if stage.is_verify:
+                        metrics.skipped_stages_backpressure_per_layer_verify[stage.layer_index] += 1
+                    else:
+                        metrics.skipped_stages_backpressure_per_layer_draft[stage.layer_index] += 1
                 ts.skipped_stages_backpressure += 1
                 if stage.is_verify:
                     ts.skipped_stages_backpressure_verify += 1
@@ -3826,6 +4067,13 @@ def run_simulation(
             eq.in_flight_tasks_mtp_verify -= done_verify
 
             for task in ev.tasks:
+                li = int(task.layer_index)
+                if li >= 0 and li < max_layers_seen:
+                    if pending_per_layer[ev.expert_id][li] <= 0:
+                        raise RuntimeError("pending_per_layer underflow")
+                    pending_per_layer[ev.expert_id][li] -= 1
+
+            for task in ev.tasks:
                 tid = task.token_id
                 if tid not in tokens:
                     raise RuntimeError("unknown token_id")
@@ -3849,6 +4097,8 @@ def run_simulation(
         else:
             raise RuntimeError("unknown event kind")
 
+        if ev.kind == EventKind.TASK_DONE:
+            _retry_stalled(now_ms)
         snapshot_state()
 
     makespan_ms = max((t.done_ms or 0.0) for t in tokens.values()) if len(tokens) != 0 else 0.0
@@ -3925,6 +4175,15 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             return(0)
         return(len(hist_time_ms) - 1)
 
+    def _hist_int_mean(hist_time_ms: Sequence[float], overflow_time_ms: float) -> float:
+        total = float(sum(hist_time_ms)) + float(overflow_time_ms)
+        if total <= 0.0:
+            return(0.0)
+        acc = 0.0
+        for d, t in enumerate(hist_time_ms):
+            acc += (float(d) * float(t))
+        return(float(acc) / total)
+
     makespan_ms = metrics.makespan_ms
     token_tps = (float(metrics.num_tokens) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
     task_tps = (float(metrics.admitted_tasks) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
@@ -3936,11 +4195,20 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     dflash_bonus_tokens = float(metrics.dflash_bonus_tokens)
     dflash_accept_rate = (float(metrics.dflash_draft_tokens_accepted) / float(metrics.dflash_draft_tokens_total)) if metrics.dflash_draft_tokens_total > 0 else 0.0
     dflash_accept_lens = [float(al) for al in metrics.dflash_accept_len_per_step if al > 0]
+    dflash_draft_cost_scale = float(metrics.dflash_draft_cost_scale) if float(metrics.dflash_draft_cost_scale) > 0.0 else 0.0
+    dflash_draft_overhead_scale = 0.0
+    if metrics.num_tokens > 0 and dflash_steps > 0.0 and dflash_draft_cost_scale > 0.0:
+        dflash_draft_overhead_scale = ((dflash_steps / float(metrics.num_tokens)) * dflash_draft_cost_scale)
     dropped = float(metrics.dropped_tokens_backpressure)
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
     dflash_service_per_output_token = (float(metrics.service_slot_ms_total) / dflash_output_tokens) if dflash_output_tokens > 0.0 else 0.0
+    dflash_service_per_output_token_adjusted = (
+        (float(metrics.service_slot_ms_total) * (1.0 + dflash_draft_overhead_scale) / dflash_output_tokens) if dflash_output_tokens > 0.0 else 0.0
+    )
+    dflash_makespan_ms_adjusted = (float(makespan_ms) * (1.0 + dflash_draft_overhead_scale)) if makespan_ms > 0.0 else 0.0
+    dflash_output_tps_adjusted = (dflash_output_tokens * 1000.0 / dflash_makespan_ms_adjusted) if dflash_makespan_ms_adjusted > 0.0 else 0.0
     tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
     expert_tasks_started_gini = _gini_nonneg([float(v) for v in metrics.tasks_started_per_expert])
     expert_utilization_gini = _gini_nonneg([float(v) for v in metrics.mean_utilization_per_expert])
@@ -3988,8 +4256,29 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     skipped_stage_frac_batch = (float(metrics.skipped_stages_backpressure_batch) / stages_total_batch) if stages_total_batch > 0.0 else 0.0
     skipped_stage_frac_verify = (float(metrics.skipped_stages_backpressure_verify) / stages_total_verify) if stages_total_verify > 0.0 else 0.0
     skipped_stage_frac_draft = (float(metrics.skipped_stages_backpressure_draft) / stages_total_draft) if stages_total_draft > 0.0 else 0.0
-    return(
-        {
+    trace_expert_batch_size_present_frac_interactive = (float(len(metrics.trace_expert_batch_size_interactive)) / denom_interactive) if denom_interactive > 0.0 else 0.0
+    trace_expert_batch_size_present_frac_batch = (float(len(metrics.trace_expert_batch_size_batch)) / denom_batch) if denom_batch > 0.0 else 0.0
+    trace_expert_batch_size_leq1_frac_interactive = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_interactive if float(x) <= 1.0)) / float(len(metrics.trace_expert_batch_size_interactive)))
+        if len(metrics.trace_expert_batch_size_interactive) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq1_frac_batch = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_batch if float(x) <= 1.0)) / float(len(metrics.trace_expert_batch_size_batch)))
+        if len(metrics.trace_expert_batch_size_batch) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq4_frac_interactive = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_interactive if float(x) <= 4.0)) / float(len(metrics.trace_expert_batch_size_interactive)))
+        if len(metrics.trace_expert_batch_size_interactive) != 0
+        else 0.0
+    )
+    trace_expert_batch_size_leq4_frac_batch = (
+        (float(sum(1 for x in metrics.trace_expert_batch_size_batch if float(x) <= 4.0)) / float(len(metrics.trace_expert_batch_size_batch)))
+        if len(metrics.trace_expert_batch_size_batch) != 0
+        else 0.0
+    )
+    out: Dict[str, float] = {
             "makespan_ms": float(makespan_ms),
             "token_throughput_tps": float(token_tps),
             "task_throughput_tps": float(task_tps),
@@ -4004,6 +4293,9 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "dflash_accept_len_p95": float(_p_or_zero(dflash_accept_lens, 0.95)),
             "dflash_accept_rate": float(dflash_accept_rate),
             "dflash_service_slot_ms_per_output_token": float(dflash_service_per_output_token),
+            "dflash_draft_cost_scale": float(dflash_draft_cost_scale),
+            "dflash_output_token_throughput_tps_adjusted": float(dflash_output_tps_adjusted),
+            "dflash_service_slot_ms_per_output_token_adjusted": float(dflash_service_per_output_token_adjusted),
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
             "service_batch_size_p50_interactive": float(_p_or_zero(metrics.service_batch_size_interactive, 0.50)),
@@ -4012,8 +4304,14 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "service_batch_size_p95_batch": float(_p_or_zero(metrics.service_batch_size_batch, 0.95)),
             "trace_expert_batch_size_p50_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.50)),
             "trace_expert_batch_size_p95_interactive": float(_p_or_zero(metrics.trace_expert_batch_size_interactive, 0.95)),
+            "trace_expert_batch_size_present_frac_interactive": float(trace_expert_batch_size_present_frac_interactive),
+            "trace_expert_batch_size_leq1_frac_interactive": float(trace_expert_batch_size_leq1_frac_interactive),
+            "trace_expert_batch_size_leq4_frac_interactive": float(trace_expert_batch_size_leq4_frac_interactive),
             "trace_expert_batch_size_p50_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.50)),
             "trace_expert_batch_size_p95_batch": float(_p_or_zero(metrics.trace_expert_batch_size_batch, 0.95)),
+            "trace_expert_batch_size_present_frac_batch": float(trace_expert_batch_size_present_frac_batch),
+            "trace_expert_batch_size_leq1_frac_batch": float(trace_expert_batch_size_leq1_frac_batch),
+            "trace_expert_batch_size_leq4_frac_batch": float(trace_expert_batch_size_leq4_frac_batch),
             "trace_decode_ms_p50_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.50)),
             "trace_decode_ms_p95_interactive": float(_p_or_zero(metrics.trace_decode_ms_interactive, 0.95)),
             "trace_decode_ms_p50_batch": float(_p_or_zero(metrics.trace_decode_ms_batch, 0.50)),
@@ -4055,11 +4353,17 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
             "expert_max_pending_tasks_p95": float(_p_or_zero(metrics.max_pending_per_expert, 0.95)),
             "expert_max_pending_tasks_max": float(max(metrics.max_pending_per_expert)) if len(metrics.max_pending_per_expert) != 0 else 0.0,
+            "expert_max_queue_tasks_p50": float(_p_or_zero(metrics.max_queue_per_expert, 0.50)),
+            "expert_max_queue_tasks_p95": float(_p_or_zero(metrics.max_queue_per_expert, 0.95)),
+            "expert_max_queue_tasks_max": float(max(metrics.max_queue_per_expert)) if len(metrics.max_queue_per_expert) != 0 else 0.0,
             "expert_mean_pending_tasks_p50": float(_p_or_zero(metrics.mean_pending_per_expert, 0.50)),
             "expert_mean_pending_tasks_p95": float(_p_or_zero(metrics.mean_pending_per_expert, 0.95)),
             "expert_max_pending_work_p50": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.50)),
             "expert_max_pending_work_p95": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.95)),
             "expert_max_pending_work_max": float(max(metrics.max_pending_work_per_expert)) if len(metrics.max_pending_work_per_expert) != 0 else 0.0,
+            "expert_max_queue_work_p50": float(_p_or_zero(metrics.max_queue_work_per_expert, 0.50)),
+            "expert_max_queue_work_p95": float(_p_or_zero(metrics.max_queue_work_per_expert, 0.95)),
+            "expert_max_queue_work_max": float(max(metrics.max_queue_work_per_expert)) if len(metrics.max_queue_work_per_expert) != 0 else 0.0,
             "expert_mean_pending_work_p50": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.50)),
             "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
             "expert_utilization_p50": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.50)),
@@ -4079,6 +4383,10 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "k_changes": float(metrics.k_changes_interactive + metrics.k_changes_batch),
             "k_change_frac_tokens_interactive": float(k_change_frac_interactive),
             "k_change_frac_tokens_batch": float(k_change_frac_batch),
+            "promoted_tasks": float(metrics.promoted_tasks),
+            "promoted_task_frac": float(float(metrics.promoted_tasks) / float(metrics.admitted_tasks)) if metrics.admitted_tasks > 0 else 0.0,
+            "forced_batch_starts": float(metrics.forced_batch_starts),
+            "forced_batch_start_frac": float(float(metrics.forced_batch_starts) / float(metrics.service_batches_started)) if metrics.service_batches_started > 0 else 0.0,
             "pending_depth_time_weighted_p95": float(_hist_int_percentile(metrics.pending_depth_hist, metrics.pending_depth_hist_overflow, 0.95)),
             "hi_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.hi_queue_depth_hist, metrics.hi_queue_depth_hist_overflow, 0.95)),
             "lo_queue_depth_time_weighted_p95": float(_hist_int_percentile(metrics.lo_queue_depth_hist, metrics.lo_queue_depth_hist_overflow, 0.95)),
@@ -4111,8 +4419,37 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "skipped_stage_frac_batch": float(skipped_stage_frac_batch),
             "skipped_stage_frac_verify": float(skipped_stage_frac_verify),
             "skipped_stage_frac_draft": float(skipped_stage_frac_draft),
+            "blocked_stages_backpressure_attempts": float(metrics.blocked_stages_backpressure_attempts),
+            "blocked_stages_backpressure_attempts_interactive": float(metrics.blocked_stages_backpressure_attempts_interactive),
+            "blocked_stages_backpressure_attempts_batch": float(metrics.blocked_stages_backpressure_attempts_batch),
         }
-    )
+
+    for li in range(len(metrics.stages_total_per_layer)):
+        total = float(metrics.stages_total_per_layer[li])
+        skipped = float(metrics.skipped_stages_backpressure_per_layer[li])
+        out[f"stages_total_layer{li}"] = float(total)
+        out[f"skipped_stages_backpressure_layer{li}"] = float(skipped)
+        out[f"skipped_stage_frac_layer{li}"] = float((skipped / total) if total > 0.0 else 0.0)
+
+        total_verify = float(metrics.stages_total_per_layer_verify[li])
+        skipped_verify = float(metrics.skipped_stages_backpressure_per_layer_verify[li])
+        if total_verify > 0.0 or skipped_verify > 0.0:
+            out[f"skipped_stage_frac_layer{li}_verify"] = float((skipped_verify / total_verify) if total_verify > 0.0 else 0.0)
+
+        total_draft = float(metrics.stages_total_per_layer_draft[li])
+        skipped_draft = float(metrics.skipped_stages_backpressure_per_layer_draft[li])
+        if total_draft > 0.0 or skipped_draft > 0.0:
+            out[f"skipped_stage_frac_layer{li}_draft"] = float((skipped_draft / total_draft) if total_draft > 0.0 else 0.0)
+
+        if li < len(metrics.pending_depth_hist_per_layer) and li < len(metrics.pending_depth_hist_per_layer_overflow):
+            out[f"pending_depth_time_weighted_p95_layer{li}"] = float(
+                _hist_int_percentile(metrics.pending_depth_hist_per_layer[li], float(metrics.pending_depth_hist_per_layer_overflow[li]), 0.95)
+            )
+            out[f"pending_depth_time_weighted_mean_layer{li}"] = float(
+                _hist_int_mean(metrics.pending_depth_hist_per_layer[li], float(metrics.pending_depth_hist_per_layer_overflow[li]))
+            )
+
+    return(out)
 
 
 def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> SimConfig:
@@ -4309,7 +4646,13 @@ def scale_trace_arrival_units(trace: Sequence[TokenRoute], arrival_units: str, c
     if len(derived) != 0:
         scale = statistics.fmean(derived)
     else:
-        scale = expected_mtp_accept_len(int(cfg.mtp_draft_len), float(cfg.mtp_accept_prob), float(cfg.mtp_accept_decay))
+        scale = expected_mtp_accept_len(
+            int(cfg.mtp_draft_len),
+            float(cfg.mtp_accept_prob),
+            float(cfg.mtp_accept_decay),
+            mtp_accept_model=str(cfg.mtp_accept_model),
+            mtp_accept_hist=cfg.mtp_accept_hist,
+        )
     if scale <= 0.0:
         return(list(trace))
     if abs(scale - 1.0) < 1e-12:
@@ -4504,10 +4847,29 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (requires accepted_mtp+rejected_mtp or meta.mtp_draft_len).")
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
+    p.add_argument(
+        "--mtp-accept-model",
+        type=str,
+        default="geom",
+        choices=("geom", "hist"),
+        help="MTP: accept-length model for synthetic traces when the trace does not provide mtp_accept_len/accepted_mtp/rejected_mtp. geom samples from --mtp-accept-prob/--mtp-accept-decay; hist samples accept_len from --mtp-accept-hist (comma-separated probabilities for accept_len=1..draft_len+1, auto-normalized).",
+    )
+    p.add_argument(
+        "--mtp-accept-hist",
+        type=str,
+        default="",
+        help="MTP: comma-separated accept_len histogram probabilities for --mtp-accept-model hist. Must provide exactly (mtp_draft_len + 1) entries for accept_len in [1..draft_len+1] (example for draft_len=2: '0.1,0.2,0.7').",
+    )
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from meta.dflash_draft_len or consistent accepted_dflash+rejected_dflash.")
+    p.add_argument(
+        "--dflash-draft-cost-scale",
+        type=float,
+        default=0.0,
+        help="Heuristic: draft overhead for the dflash_* speculative-decoding comparator, as a fraction of baseline per-step service cost. Used only for adjusted dflash_* summary metrics (0 = no adjustment).",
+    )
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -4536,6 +4898,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="tasks",
         help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
     )
+    p.add_argument(
+        "--backpressure-zero-admit-policy",
+        type=str,
+        default="skip",
+        choices=("skip", "stall"),
+        help="When a stage cannot admit any tasks because all candidates are at the pending limit: skip (default; counts as a backpressure stage-skip and can drop tokens if all stages skip) or stall (retry the same stage later, modeling upstream queueing; can increase latency/makespan).",
+    )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument(
         "--admit-policy",
@@ -4552,6 +4921,14 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = _parse_args(argv)
+
+    mtp_accept_model = str(args.mtp_accept_model).strip().lower()
+    if mtp_accept_model not in ("geom", "hist"):
+        raise SystemExit("--mtp-accept-model must be 'geom' or 'hist'")
+    try:
+        mtp_accept_hist = _parse_prob_csv(args.mtp_accept_hist) if mtp_accept_model == "hist" else ()
+    except ValueError as e:
+        raise SystemExit(f"--mtp-accept-hist parse failed: {e}")
 
     try:
         trace_speedup = float(args.trace_speedup)
@@ -4660,7 +5037,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.mtp_draft_len == -1:
             raise SystemExit("--mtp-draft-len=-1 is only supported for trace replay (use an explicit value for synthetic traces)")
         try:
-            arrival_rate_tps = arrival_rate_steps_tps(args.arrival_rate_tps, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay)
+            arrival_rate_tps = arrival_rate_steps_tps(
+                args.arrival_rate_tps,
+                args.arrival_units,
+                args.mtp_draft_len,
+                args.mtp_accept_prob,
+                args.mtp_accept_decay,
+                mtp_accept_model=mtp_accept_model,
+                mtp_accept_hist=mtp_accept_hist,
+            )
         except ValueError as e:
             raise SystemExit(str(e))
 
@@ -4727,8 +5112,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     hi_rate_in = (float(args.arrival_rate_tps) * float(args.interactive_prob))
                 if lo_rate_in < 0.0:
                     lo_rate_in = (float(args.arrival_rate_tps) * (1.0 - float(args.interactive_prob)))
-                hi_rate = arrival_rate_steps_tps(hi_rate_in, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay) if hi_rate_in > 0.0 else 0.0
-                lo_rate = arrival_rate_steps_tps(lo_rate_in, args.arrival_units, args.mtp_draft_len, args.mtp_accept_prob, args.mtp_accept_decay) if lo_rate_in > 0.0 else 0.0
+                hi_rate = (
+                    arrival_rate_steps_tps(
+                        hi_rate_in,
+                        args.arrival_units,
+                        args.mtp_draft_len,
+                        args.mtp_accept_prob,
+                        args.mtp_accept_decay,
+                        mtp_accept_model=mtp_accept_model,
+                        mtp_accept_hist=mtp_accept_hist,
+                    )
+                    if hi_rate_in > 0.0
+                    else 0.0
+                )
+                lo_rate = (
+                    arrival_rate_steps_tps(
+                        lo_rate_in,
+                        args.arrival_units,
+                        args.mtp_draft_len,
+                        args.mtp_accept_prob,
+                        args.mtp_accept_decay,
+                        mtp_accept_model=mtp_accept_model,
+                        mtp_accept_hist=mtp_accept_hist,
+                    )
+                    if lo_rate_in > 0.0
+                    else 0.0
+                )
             except ValueError as e:
                 raise SystemExit(str(e))
 
@@ -4777,6 +5186,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(out, indent=2, sort_keys=True))
             return(0)
 
+    if mtp_accept_model == "hist" and int(args.mtp_draft_len) > 0:
+        if len(mtp_accept_hist) == 0:
+            raise SystemExit("--mtp-accept-model=hist requires --mtp-accept-hist when --mtp-draft-len > 0")
+        if len(mtp_accept_hist) != (int(args.mtp_draft_len) + 1):
+            raise SystemExit("--mtp-accept-hist must have length mtp_draft_len + 1 (one probability per accept_len in [1..draft_len+1])")
+
     adapt = AdaptiveKConfig(
         k_min_interactive=args.k_min_interactive,
         k_max_interactive=args.k_max_interactive,
@@ -4812,6 +5227,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_signal=args.k_signal,
         pending_units=args.pending_units,
         backpressure_units=args.backpressure_units,
+        backpressure_zero_admit_policy=args.backpressure_zero_admit_policy,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,
@@ -4819,12 +5235,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         sla_batch_ms=args.sla_batch_ms,
         sim_seed=args.sim_seed,
         mtp_draft_len=args.mtp_draft_len,
+        mtp_accept_model=mtp_accept_model,
+        mtp_accept_hist=mtp_accept_hist,
         mtp_accept_prob=args.mtp_accept_prob,
         mtp_accept_decay=args.mtp_accept_decay,
         mtp_draft_cost_scale=args.mtp_draft_cost_scale,
         mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
         mtp_draft_attempt_policy=args.mtp_draft_attempt_policy,
         dflash_draft_len=args.dflash_draft_len,
+        dflash_draft_cost_scale=args.dflash_draft_cost_scale,
     )
 
     replay_mode = (args.trace_jsonl != "" or args.trace_csv != "")

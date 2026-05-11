@@ -18,7 +18,15 @@ From your Mac repo root, you can stage the zip (and optional tiny catalog fixtur
 sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
 ```
 
-One minimal per-node setup (run on Spark{1,2}):
+Recommended per-node setup (run on Spark{1,2}) using the reproducible setup script:
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark1.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+ssh $SSH_OPTS spark2@<spark2-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark2.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+```
+
+Minimal per-node setup (run on Spark{1,2}) if you prefer doing it manually:
 
 ```bash
 mkdir -p ~/centaur-smoke/v73/run
@@ -49,25 +57,40 @@ On Spark0:
 ```bash
 export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
 export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
-sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
+
+# Recommended: isolate outputs per-run and capture a log
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_LOG=~/centaur-smoke/v73/ring_sim_spark12/run/"$RING_RUN_ID"/ring_sim.log
+sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh
+
+# Alternative: pipe to tee (no RING_RUN_ID isolation)
+# sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
 ```
 
 For exact command capture in the log, add `export RING_TRACE=1` before running.
 
-This creates three Centaur roots under:
+This creates three Centaur roots under `.../`:
 
-- `~/centaur-smoke/v73/ring_sim_spark12/controller`
-- `~/centaur-smoke/v73/ring_sim_spark12/spark0`
-- `~/centaur-smoke/v73/ring_sim_spark12/spark1`
-- `~/centaur-smoke/v73/ring_sim_spark12/spark2`
+- `.../controller`
+- `.../spark0`
+- `.../spark1`
+- `.../spark2`
 
 And then exercises, for Spark1/Spark2:
 
 - `hyor-sync-init` with left/right peer roots
 - `hyor-ring-step --scope metadata`
 - `hyor-ring-step --scope effective`
-- `hyor-sync-effective` manifests to `~/centaur-smoke/v73/ring_sim_spark12/effective_manifests/hyor_effective_manifest_spark{1,2}.json`
-- `hyor-sync-apply` materialization to `~/centaur-smoke/v73/ring_sim_spark12/effective/spark{1,2}`
+- `hyor-sync-effective` manifests to `.../effective_manifests/hyor_effective_manifest_spark{1,2}.json`
+- `hyor-sync-apply` materialization to `.../effective/spark{1,2}`
+
+If `RING_RUN_ID` is set, the `...` prefix above is:
+
+- `~/centaur-smoke/v73/ring_sim_spark12/run/<run_id>/`
+
+Otherwise it is:
+
+- `~/centaur-smoke/v73/ring_sim_spark12/`
 
 ## What to record for “ring readiness”
 
@@ -106,6 +129,21 @@ From your Mac repo root (stream-run on Spark0, passing Spark1/2 SSH targets as a
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 ```
 
+Recommended wrapper (stages the v73 zip to Spark1/2, sets `RING_RUN_ID`, and writes a remote log under `~/centaur-smoke/v73/ring_rsync_spark12/run/<run_id>/`):
+
+```bash
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+If you want exact command capture in the remote log, add:
+
+```bash
+export RING_TRACE=1
+```
+
+Alternative (direct SSH stream, no wrapper):
+
 ```bash
 ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host>" < ./scripts/centaur_spark_ring_rsync_spark12_v73.sh
 ```
@@ -113,8 +151,15 @@ ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/
 Notes:
 
 - For exact command capture, add `export RING_TRACE=1` on the orchestrator host before running.
+- Recommended: add `export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"` and `export RING_LOG=~/centaur-smoke/v73/ring_rsync_spark12/run/"$RING_RUN_ID"/ring_rsync.log` on the orchestrator host so logs/manifests are per-run.
 - Use a dedicated `remote_base_dir` (3rd arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
 - This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2, but it is not a shared-root deployment model.
+
+After a wrapper run, you can fetch a small artifact bundle (log + manifests) back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
 
 ### After rsync ring-step: quick node validation (Spark1/2)
 
@@ -194,3 +239,7 @@ Then classify:
 
 - **Centaur bug**: parser/schema/state failures inside `centaur.py` commands
 - **DS4 runtime bug**: missing `python3`/`unzip`, permissions, filesystem layout, or other host setup unrelated to Centaur logic
+
+For the shared checklist + sanitization rules, see:
+
+- `docs/centaur-bug-report.md`

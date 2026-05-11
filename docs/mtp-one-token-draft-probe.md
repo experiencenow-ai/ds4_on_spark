@@ -42,6 +42,12 @@ Keep this probe *fast*: it should stop after the first verify step and draft com
 
 Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`.
 
+Optional debug keys (non-normative; used by the skeleton patch to stage wiring work):
+
+- `trunk_token_embd_{fnv64,nbytes,shape}`
+- `trunk_pre_hc_head_{fnv64,nbytes,shape}`
+- `mtp_stub_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
+
 ## Validation
 
 After capturing the JSON, validate its shape (and optionally cross-check `mtp_params` against the sidecar’s derived params):
@@ -51,7 +57,21 @@ python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-jso
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json --sidecar-probe-json /path/to/mtp_sidecar_probe.json
 ```
 
-## Spark runner (once available)
+## Spark runner (llama.cpp skeleton patch; available now)
+
+This repo ships a **gated** Spark runner that can clone/patch/build/run the current llama.cpp *skeleton* one-token probe patch (pinned to `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@9222e55`) and then validate the emitted JSON locally:
+
+```bash
+REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1' \
+scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Notes:
+
+- This runner **loads the trunk GGUF** when `ALLOW_RUN=1` is set. Keep it gated and coordinate with the baseline runtime loop.
+- As of 2026-05-11, the patch is still a **skeleton**: it validates sidecar binding and can compute a debug-only stub output-head tensor when `LOAD_SIDECAR_WEIGHTS=1`, but it emits `ok=false` with a TODO until the real `gamma=1` draft compute is implemented.
+
+## Spark runner (when the fork has a real one-token command)
 
 When the Spark/CUDA llama.cpp fork has a one-token probe command available, run it on Spark and record artifacts using:
 

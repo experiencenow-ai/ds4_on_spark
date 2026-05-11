@@ -38,6 +38,8 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
+By default, when a stage cannot admit any tasks because all candidates are at the pending limit, the simulator treats it as a **stage skip** (and a token can be dropped if every stage skips). To model upstream queueing instead, set `--backpressure-zero-admit-policy stall` to retry the same stage at later times (higher latency/makespan, fewer drops).
+
 By default, backpressure is enforced in *task* units (each admitted expert task counts as `1`). When traces include a meaningful `cost_scale` (or `layers[].cost_scale`), you can instead enforce backpressure in *work* units via:
 
 - `--backpressure-units work`: cap `sum(cost_scale)` of queued + in-flight work per expert (still using `--expert-queue-max` / `--expert-queue-reserve-interactive` as the capacity in the same units)
@@ -61,6 +63,8 @@ When a trace record includes `layers[]` (multi-MoE-layer routes), the simulator 
 This makes per-token latency approximately additive across layers, which better matches transformer execution than admitting all layers concurrently.
 
 Stage skips (layer-local residual-path drops) are summarized under `stages.skipped_backpressure*` in the simulator JSON output.
+
+Per-layer expert congestion is summarized under `stages.per_layer[].pending_depth_time_weighted` (and mirrored in `--summary-json` as `pending_depth_time_weighted_p95_layer{i}` / `pending_depth_time_weighted_mean_layer{i}`) so multi-layer traces can surface which layer(s) actually build queue depth.
 
 ### Candidate Admission Policy
 
@@ -161,7 +165,8 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
-  - Draft position `i` is accepted with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
+  - Default `--mtp-accept-model geom` accepts draft position `i` with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
+  - `--mtp-accept-model hist` samples `accept_len` directly from `--mtp-accept-hist` (comma-separated probabilities for `accept_len=1..draft_len+1`, auto-normalized).
   - If all draft tokens are accepted, the simulator counts one extra **bonus token** (accept length `= draft_len + 1`).
 
 Notes:
@@ -177,7 +182,7 @@ Notes:
 By default `--arrival-rate-tps` is interpreted as **verify steps per second** (one trace entry per step).
 When exploring MTP, it is often more useful to hold **output tokens per second** constant instead.
 
-For synthetic traces, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from `--mtp-accept-prob/--mtp-accept-decay`.
+For synthetic traces, `--arrival-units output_tokens` reinterprets `--arrival-rate-tps` as output-token demand and rescales the synthetic step arrival rate by the model-expected MTP accept length derived from the configured accept model (`--mtp-accept-model geom` uses `--mtp-accept-prob/--mtp-accept-decay`; `hist` uses `--mtp-accept-hist`).
 
 Notes:
 
@@ -218,9 +223,11 @@ If early runtime traces do not tag latency class (`cls`), force a default class 
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
 ```
 
-The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, `starved_task_queue_wait_ms_p95_{interactive,batch}`, `task_queue_wait_ms_p95_{interactive,batch}`, `expert_max_task_queue_wait_ms_p95`, `pending_depth_time_weighted_p95`, `{hi_queue,lo_queue}_depth_time_weighted_p95`, `{pending_hi,pending_lo}_depth_time_weighted_p95` (includes in-flight tasks), plus the analogous `*_work_depth_time_weighted_p95` keys when `cost_scale` is meaningful; the adaptive-K congestion signal percentiles `pending_signal_p{50,95}_{interactive,batch}`, controller activity (`k_update_frac_tokens_{interactive,batch}` / `k_change_frac_tokens_{interactive,batch}`), and when MTP is enabled `pending_depth_time_weighted_p95_mtp_{draft,verify}`, `task_queue_wait_ms_p95_mtp_{draft,verify}`, `starved_task_queue_wait_ms_p95_mtp_{draft,verify}`, `mtp_accept_rate`, `mtp_mean_accept_len`, `mtp_mean_draft_attempt_len`, `mtp_accept_len_p{50,95}`, `mtp_draft_attempt_len_p{50,95}`, and `mtp_service_slot_ms_{draft,verify}_frac`). For multi-layer traces, it also reports layer-local drop/skip signals via `skipped_stage_frac*` and `skipped_stages_backpressure`. When replay traces include speculative-decoding counters for a separate DFlash-style comparator (`dflash_accept_len` / `accepted_dflash` / `rejected_dflash`), the summary surfaces them under separate keys (`dflash_steps`, `dflash_output_tokens`, `dflash_output_token_throughput_tps`, `dflash_mean_accept_len`, `dflash_accept_len_p{50,95}`, `dflash_accept_rate`, `dflash_bonus_tokens`, `dflash_service_slot_ms_per_output_token`) and does not mix them into DS4 MTP assumptions.
+Note: `--trace-input-format runtime` also accepts numeric class IDs (`cls=0` => interactive, `cls=1` => batch) and normalizes them to the simulator’s `"interactive"` / `"batch"` contract.
 
-When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size percentiles for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) and `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed, when present).
+The summary output is intentionally small but includes per-class backpressure/starvation and queue-depth signals that are useful for go/no-go decisions (for example: `drop_frac_tokens_{interactive,batch}`, `starved_task_frac_{interactive,batch}`, `starved_task_queue_wait_ms_p95_{interactive,batch}`, `task_queue_wait_ms_p95_{interactive,batch}`, `expert_max_task_queue_wait_ms_p95`, `expert_max_queue_tasks_p95` (max queued depth per expert), `expert_max_queue_work_p95` (max queued work per expert when `cost_scale` is meaningful), `pending_depth_time_weighted_p95`, `{hi_queue,lo_queue}_depth_time_weighted_p95`, `{pending_hi,pending_lo}_depth_time_weighted_p95` (includes in-flight tasks), plus the analogous `*_work_depth_time_weighted_p95` keys when `cost_scale` is meaningful; the adaptive-K congestion signal percentiles `pending_signal_p{50,95}_{interactive,batch}`, controller activity (`k_update_frac_tokens_{interactive,batch}` / `k_change_frac_tokens_{interactive,batch}`), fairness counters (`promoted_tasks`, `forced_batch_starts`), and when MTP is enabled `pending_depth_time_weighted_p95_mtp_{draft,verify}`, `task_queue_wait_ms_p95_mtp_{draft,verify}`, `starved_task_queue_wait_ms_p95_mtp_{draft,verify}`, `mtp_accept_rate`, `mtp_mean_accept_len`, `mtp_mean_draft_attempt_len`, `mtp_accept_len_p{50,95}`, `mtp_draft_attempt_len_p{50,95}`, and `mtp_service_slot_ms_{draft,verify}_frac`). For multi-layer traces, it also reports layer-local drop/skip signals via `skipped_stage_frac*`, `skipped_stages_backpressure`, and per-layer stage accounting keys (`stages_total_layer{i}`, `skipped_stages_backpressure_layer{i}`, `skipped_stage_frac_layer{i}`, plus optional `_verify`/`_draft` splits). When replay traces include speculative-decoding counters for a separate DFlash-style comparator (`dflash_accept_len` / `accepted_dflash` / `rejected_dflash`), the summary surfaces them under separate keys (`dflash_steps`, `dflash_output_tokens`, `dflash_output_token_throughput_tps`, `dflash_mean_accept_len`, `dflash_accept_len_p{50,95}`, `dflash_accept_rate`, `dflash_bonus_tokens`, `dflash_service_slot_ms_per_output_token`, and the heuristic draft-cost adjusted keys `dflash_output_token_throughput_tps_adjusted` / `dflash_service_slot_ms_per_output_token_adjusted` when `--dflash-draft-cost-scale > 0`) and does not mix them into DS4 MTP assumptions.
+
+When batching is enabled (or when replay traces include `expert_batch_size`), the summary also reports batch-size signals for quick calibration loops: `service_batch_size_p{50,95}_{interactive,batch}` (simulated start batch sizes) plus `trace_expert_batch_size_p{50,95}_{interactive,batch}` (observed percentiles) and the observability/underfill counters `trace_expert_batch_size_present_frac_{interactive,batch}`, `trace_expert_batch_size_leq{1,4}_frac_{interactive,batch}`.
 
 When replay traces include `decode_ms` and/or `kv_tokens`, the summary also reports trace percentiles and model-vs-trace decode error percentiles (for quick sanity checks that queueing/backpressure behavior is in the right ballpark): `trace_decode_ms_p{50,95}_{interactive,batch}`, `trace_decode_error_ms_p{50,95}_{interactive,batch}`, and `trace_kv_tokens_p{50,95}_{interactive,batch}`.
 
@@ -420,10 +427,11 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --nu
   - if both are provided, `accepted_mtp + rejected_mtp` must equal `mtp_draft_len`
   - note: when any of `mtp_accept_len` / `accepted_mtp` / `rejected_mtp` is present, replay uses it to populate the simulator’s MTP accept-rate metrics (not just output-token counts)
   - runtime-format notes: when using `--trace-input-format runtime` (or `trace_extract.py`), these fields may also appear under a nested `mtp` object (for example `mtp.accept_len`, `mtp.accepted`, `mtp.rejected`) or under the nested route container (for example `route.accept_len`, `route.mtp_accepted`, `route.mtp_rejected`). If the runtime trace also includes a speculative-decoding comparator container (for example `spec_decode`), the extractor keeps those counters separate under the `dflash_*` fields (it does not treat them as MTP unless the keys are explicitly `mtp_*`).
-- `dflash_accept_len` (optional int): Qwen+DFlash speculative-decoding comparator accept length for this step (kept separate from MTP). When present, the simulator reports it under `dflash.accept_len` in `--summary-json`.
+- `dflash_accept_len` (optional int): speculative-decoding comparator accept length for this step (kept separate from DeepSeek MTP). When present, the simulator reports it under separate `dflash_*` summary keys.
 - `accepted_dflash` / `rejected_dflash` (optional int): optional comparator counters (kept separate from MTP). When `dflash_accept_len` is omitted, canonicalization derives it as:
   - `accepted_dflash + 1` when `accepted_dflash` is present, or
   - `(dflash_draft_len - rejected_dflash) + 1` when only `rejected_dflash` is present and `dflash_draft_len` is known (via `--dflash-draft-len`, `meta.dflash_draft_len`, or consistent `accepted_dflash+rejected_dflash` elsewhere in the trace).
+- `--dflash-draft-cost-scale` (optional float CLI flag): heuristic draft overhead (as a fraction of baseline per-step service cost) applied only to the DFlash comparator summary keys `dflash_output_token_throughput_tps_adjusted` / `dflash_service_slot_ms_per_output_token_adjusted` (it does not affect DS4 MTP modeling and does not change simulation scheduling behavior).
 - `cost_scale` (optional number): per-token cost multiplier applied to all admitted tasks for that token (useful for shape-dependent service modeling in replay traces)
 - `decode_ms` (optional number): observed per-token decode latency from a runtime trace; the simulator records `trace.decode_ms` and `trace.decode_error_ms` to compare the model to the trace
 - `kv_tokens` (optional int): KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens`)

@@ -68,19 +68,31 @@ print_ref()
 	if [[ "${url}" == https://huggingface.co/* ]]; then
 		local repo sha
 		repo="${url#https://huggingface.co/}"
-		local report
-		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${repo}")"
-		sha="$(awk '/^sha:/ {print $2}' <<<"${report}")"
-		if [ -z "${sha}" ] || [ "${sha}" = "UNKNOWN" ]; then
-			printf "ref: (hf api) UNKNOWN\n\n"
+		if [ "${ref}" = "HEAD" ] || [ "${ref}" = "refs/heads/main" ] || [ "${ref}" = "refs/heads/master" ]; then
+			local report
+			report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${repo}")"
+			sha="$(awk '/^sha:/ {print $2}' <<<"${report}")"
+			if [ -z "${sha}" ] || [ "${sha}" = "UNKNOWN" ]; then
+				printf "ref: (hf api) UNKNOWN\n\n"
+				return 0
+			fi
+			if [ "${ref}" = "HEAD" ]; then
+				printf "ref: refs/heads/main\tHEAD\n"
+				printf "%s\tHEAD\n\n" "${sha}"
+				return 0
+			fi
+			printf "%s\t%s\n\n" "${sha}" "${ref}"
 			return 0
 		fi
-		if [ "${ref}" = "HEAD" ]; then
-			printf "ref: refs/heads/main\tHEAD\n"
-			printf "%s\tHEAD\n\n" "${sha}"
+
+		local out
+		out="$(git_ls_remote "${url}" "${ref}" || true)"
+		if [ -z "${out}" ]; then
+			printf "ref: TIMEOUT_OR_ERROR\n\n"
 			return 0
 		fi
-		printf "%s\t%s\n\n" "${sha}" "${ref}"
+		sed -n '1p' <<<"${out}"
+		echo
 		return 0
 	fi
 	if [ "${ref}" = "HEAD" ]; then
@@ -152,17 +164,16 @@ print_pinned()
 	local got
 
 	if [[ "${upstream}" == huggingface.co/* ]]; then
-		if [ "${ref}" != "refs/heads/main" ] && [ "${ref}" != "refs/heads/master" ]; then
-			printf "== %s\n" "${name}"
-			printf "upstream:  %s\n" "${upstream}"
-			printf "ref:       %s\n" "${ref}"
-			printf "expected:  %s\n" "${expected}"
-			printf "got:       UNSUPPORTED_HF_REF\n\n"
-			return 0
+		if [ "${ref}" = "refs/heads/main" ] || [ "${ref}" = "refs/heads/master" ]; then
+			local report
+			report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
+			got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
+		else
+			got="$(git_ls_remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+			if [ -z "${got}" ]; then
+				got="MISSING"
+			fi
 		fi
-		local report
-		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
-		got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
 		printf "== %s\n" "${name}"
 		printf "upstream:  %s\n" "${upstream}"
 		printf "ref:       %s\n" "${ref}"
@@ -229,8 +240,10 @@ print_head_report()
 	print_ref "Qwen3.6-35B-A3B-DFlash (HF)" "https://huggingface.co/z-lab/Qwen3.6-35B-A3B-DFlash"
 	print_ref "Qwen3.6-27B (HF)" "https://huggingface.co/Qwen/Qwen3.6-27B"
 	print_ref "Qwen3.6-27B-DFlash (HF)" "https://huggingface.co/z-lab/Qwen3.6-27B-DFlash"
+	print_ref "Qwen3.6-27B-FP8 (HF)" "https://huggingface.co/Qwen/Qwen3.6-27B-FP8"
 	print_ref "Qwen3.5-27B (HF)" "https://huggingface.co/Qwen/Qwen3.5-27B"
 	print_ref "Qwen3.5-27B-DFlash (HF)" "https://huggingface.co/z-lab/Qwen3.5-27B-DFlash"
+	print_ref "Qwen3.5-27B-FP8 (HF)" "https://huggingface.co/Qwen/Qwen3.5-27B-FP8"
 	print_ref "Qwen3.5-35B-A3B (HF)" "https://huggingface.co/Qwen/Qwen3.5-35B-A3B"
 	print_ref "Qwen3.5-35B-A3B-DFlash (HF)" "https://huggingface.co/z-lab/Qwen3.5-35B-A3B-DFlash"
 	print_ref "Qwen3.5-9B (HF)" "https://huggingface.co/Qwen/Qwen3.5-9B"

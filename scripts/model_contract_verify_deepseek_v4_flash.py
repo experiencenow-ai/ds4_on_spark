@@ -204,6 +204,17 @@ def main() -> int:
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 
+				ckpt = summary.get("checkpoint_index", {}) if isinstance(summary, dict) else {}
+				if isinstance(ckpt, dict):
+					expected_top_level_keys = sorted([k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))])
+					expected_top_level_sha = sha256_lines(expected_top_level_keys)
+					if ckpt.get("weight_map_top_level_keys_sha256") != expected_top_level_sha:
+						failures.append(Failure(90, f"contract summary checkpoint_index.weight_map_top_level_keys_sha256 mismatch (fixture drift?): {contract_summary}"))
+					if ckpt.get("weight_map_top_level_tensor_key_count") != int(len(expected_top_level_keys)):
+						failures.append(Failure(91, f"contract summary checkpoint_index.weight_map_top_level_tensor_key_count mismatch (fixture drift?): {contract_summary}"))
+				else:
+					failures.append(Failure(92, f"contract summary missing checkpoint_index (expected dict): {contract_summary}"))
+
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):
 					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
@@ -212,6 +223,38 @@ def main() -> int:
 					failures.append(Failure(15, f"contract summary missing MLA output de-rotation marker (mla.output_derotate_present=true): {contract_summary}"))
 				if mla.get("q_extra_rms_norm_present") is not True:
 					failures.append(Failure(16, f"contract summary missing MLA Q extra RMS normalization marker (mla.q_extra_rms_norm_present=true): {contract_summary}"))
+				cache_obj = summary.get("cache", {})
+				try:
+					n_layers_cfg = int(cfg.get("num_hidden_layers", 0))
+				except Exception:
+					n_layers_cfg = 0
+				cfg_cr = cfg.get("compress_ratios", None)
+				if not isinstance(cfg_cr, list):
+					cfg_cr = []
+				layer_kinds = cache_obj.get("layer_cache_kind_by_layer_id")
+				layer_ratios = cache_obj.get("layer_compress_ratio_by_layer_id")
+				want_kinds = summary.get("attention_schedule", {}).get("main_layer_types")
+				if not (isinstance(layer_kinds, list) and len(layer_kinds) == n_layers_cfg):
+					failures.append(Failure(126, f"contract summary cache.layer_cache_kind_by_layer_id must be a list of length n_layers={n_layers_cfg}: {contract_summary}"))
+				elif isinstance(want_kinds, list) and layer_kinds != want_kinds:
+					failures.append(Failure(127, f"contract summary cache.layer_cache_kind_by_layer_id must match attention_schedule.main_layer_types: {contract_summary}"))
+				want_ratios = [int(r) for r in cfg_cr[:n_layers_cfg]]
+				if not (isinstance(layer_ratios, list) and layer_ratios == want_ratios):
+					failures.append(Failure(128, f"contract summary cache.layer_compress_ratio_by_layer_id mismatch (expected config.json compress_ratios[:n_layers]): {contract_summary}"))
+				try:
+					n_mtp_layers_cfg = int(cfg.get("num_nextn_predict_layers", 0))
+				except Exception:
+					n_mtp_layers_cfg = 0
+				if n_mtp_layers_cfg > 0:
+					mtp_kinds = cache_obj.get("mtp_cache_kind_by_mtp_layer_id")
+					mtp_ratios = cache_obj.get("mtp_compress_ratio_by_mtp_layer_id")
+					want_mtp_ratios = [int(r) for r in cfg_cr[n_layers_cfg : n_layers_cfg + n_mtp_layers_cfg]]
+					if not (isinstance(mtp_ratios, list) and mtp_ratios == want_mtp_ratios):
+						failures.append(Failure(129, f"contract summary cache.mtp_compress_ratio_by_mtp_layer_id mismatch (expected config.json trailing compress_ratios): {contract_summary}"))
+					if not (isinstance(mtp_kinds, list) and len(mtp_kinds) == n_mtp_layers_cfg):
+						failures.append(Failure(130, f"contract summary cache.mtp_cache_kind_by_mtp_layer_id must be a list of length n_mtp_layers={n_mtp_layers_cfg}: {contract_summary}"))
+					elif any(k != "sliding" for k in mtp_kinds):
+						failures.append(Failure(131, f"contract summary cache.mtp_cache_kind_by_mtp_layer_id must be all 'sliding' (MTP is sliding-only): {contract_summary}"))
 				cache_update = summary.get("cache", {}).get("update_semantics", {})
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
@@ -410,6 +453,53 @@ def main() -> int:
 
 						if missing_required:
 							failures.append(Failure(115, f"official checkpoint missing tensor keys implied by tensor_keys.required_* lists (sample={sorted(missing_required)[:20]}): {contract_summary}"))
+						else:
+							# Enforce machine-readable per-layer suffix + count helpers for DS4 implementers.
+							layer_req = tk.get("layer_required_nonexpert_suffixes_by_layer_id", None)
+							layer_expected = tk.get("layer_expected_tensor_key_count_by_layer_id", None)
+							layer_counts = tk.get("layer_tensor_key_count_by_layer_id", None)
+							layer_ok = tk.get("layer_expected_tensor_key_count_by_layer_id_ok", None)
+							if not (isinstance(layer_req, dict) and isinstance(layer_expected, dict) and isinstance(layer_counts, dict) and isinstance(layer_ok, dict)):
+								failures.append(Failure(121, f"contract summary missing tensor_keys.layer_* per-layer helpers (required_nonexpert_suffixes / expected_counts / counts / ok): {contract_summary}"))
+							else:
+								try:
+									n_hash_layers_cfg = int(cfg.get("num_hash_layers", 0))
+								except Exception:
+									n_hash_layers_cfg = 0
+
+								for i in range(int(n_layers)):
+									key = str(i)
+									try:
+										ratio = int(compress_ratios[i])
+									except Exception:
+										ratio = 0
+									exp = list(req_layer)
+									if ratio != 0:
+										exp += list(req_nonzero)
+									if ratio == 4:
+										exp += list(req_csa)
+									exp.append(str(hash_gate_suffix if i < n_hash_layers_cfg else score_gate_suffix))
+
+									got_req = layer_req.get(key)
+									if got_req != exp:
+										failures.append(Failure(122, f"contract summary tensor_keys.layer_required_nonexpert_suffixes_by_layer_id[{i}] mismatch (got_len={len(got_req) if isinstance(got_req, list) else 'n/a'} expected_len={len(exp)}): {contract_summary}"))
+										break
+
+									got_count = layer_counts.get(key)
+									want_count = sum(1 for k in weight_keys if k.startswith(f"layers.{i}.")) if isinstance(weight_keys, set) else None
+									if got_count != want_count:
+										failures.append(Failure(123, f"contract summary tensor_keys.layer_tensor_key_count_by_layer_id[{i}] mismatch (got {got_count!r} expected {want_count}): {contract_summary}"))
+										break
+
+									got_expected_total = layer_expected.get(key)
+									want_expected_total = int(tk.get("expected_expert_key_count_per_layer", 0)) + len(exp)
+									if got_expected_total != want_expected_total:
+										failures.append(Failure(124, f"contract summary tensor_keys.layer_expected_tensor_key_count_by_layer_id[{i}] mismatch (got {got_expected_total!r} expected {want_expected_total}): {contract_summary}"))
+										break
+
+									if layer_ok.get(key) is not True:
+										failures.append(Failure(125, f"contract summary tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok[{i}] must be true: {contract_summary}"))
+										break
 				if tk.get("mtp_embed_present") is not False:
 					failures.append(Failure(28, f"contract summary expects no mtp.*.embed.* keys in official checkpoint (tensor_keys.mtp_embed_present=false): {contract_summary}"))
 				if tk.get("mtp_head_present") is not False:
@@ -920,10 +1010,10 @@ def main() -> int:
 			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
 
 		# MTPBlock-specific projections + norms + HC head.
-		for suffix in (
-			"e_proj.weight",
-			"e_proj.scale",
-			"h_proj.weight",
+			for suffix in (
+				"e_proj.weight",
+				"e_proj.scale",
+				"h_proj.weight",
 			"h_proj.scale",
 			"enorm.weight",
 			"hnorm.weight",
@@ -931,13 +1021,21 @@ def main() -> int:
 			"hc_head_fn",
 			"hc_head_base",
 			"hc_head_scale",
-		):
-			req_mtp(suffix)
+			):
+				req_mtp(suffix)
 
-	# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
-	enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
-	if not enc_test.exists():
-		failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
+		# Pinned GGUF metadata-only inspections should have a stable summary fixture for MTP/quant gating.
+		pinned_summary = FIX / "pinned_gguf_inspects_summary.json"
+		pinned_summary_script = ROOT / "scripts" / "model_contract_summarize_v4flash_pinned_gguf_inspects.py"
+		if pinned_summary.exists():
+			r = subprocess.run([sys.executable, str(pinned_summary_script), "--check"], cwd=str(ROOT))
+			if r.returncode != 0:
+				failures.append(Failure(18, f"pinned GGUF inspect summary fixture is stale: {pinned_summary} (re-run scripts/model_contract_refresh_v4flash_gguf_inspects.sh)"))
+
+		# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
+		enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
+		if not enc_test.exists():
+			failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
 	else:
 		r = subprocess.run([sys.executable, str(enc_test)], cwd=str(enc_test.parent))
 		if r.returncode != 0:

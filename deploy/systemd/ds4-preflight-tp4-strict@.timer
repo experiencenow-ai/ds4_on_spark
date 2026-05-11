@@ -1,0 +1,13 @@
+[Unit]
+Description=DS4 TP=4 strict preflight timer (%i)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=ds4-preflight-tp4-strict@%i.service
+
+[Install]
+WantedBy=timers.target
+

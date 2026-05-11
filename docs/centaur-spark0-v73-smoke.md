@@ -72,6 +72,13 @@ Notable outputs:
 - `hyor_dashboard/` (HTML/JSON dashboard output)
 - `smoke.log` (if `CENTAUR_LOG` is set; `centaur_spark0_v73_run.sh` sets it automatically)
 
+To validate the expected artifacts exist (run on Spark0):
+
+```bash
+export CENTAUR_RUN_ID="<run_id>"
+sh ./scripts/centaur_spark0_v73_validate_artifacts.sh
+```
+
 ### Optional: faster/offline dependency install
 
 Centaur v73 `requirements.txt` includes `numpy/scipy/scikit-learn`. On Spark0, install can be slow without cached wheels.
@@ -126,6 +133,16 @@ Avoid committing:
 - raw SSH host keys
 - private IPs / MAC addresses
 - any API keys / tokens (Centaur provider registration should only reference env var names via `--auth-env`, not values)
+
+If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact bundle (log + manifests + dashboard) back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+```
+
+For a fuller bug-report checklist and sanitization guidance, see:
+
+- `docs/centaur-bug-report.md`
 
 ## Bug triage: Centaur vs DS4 runtime
 

@@ -23,11 +23,20 @@ edit host-specific values, then enable services with `systemctl`.
   - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
   - `ExecStartPre` validates `ds4.env` (when present) and `ds4-%i.env`
 - Optional: `ds4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails).
+- Optional: `ds4-tp3-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp3-strict@%i.service` before start (strict TP=3 gating).
+- Optional: `ds4-tp4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp4-strict@%i.service` before start (strict TP=4 gating).
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional: `ds4-preflight-strict@.timer` runs strict preflight on boot and periodically after.
+- Optional TP=3 helpers:
+  - `ds4-preflight-tp3@.service`
+  - `ds4-preflight-tp3-strict@.service`
+  - `ds4-preflight-tp3@.timer`
+  - `ds4-preflight-tp3-strict@.timer`
 - Optional TP=4 helpers:
   - `ds4-preflight-tp4@.service`
   - `ds4-preflight-tp4-strict@.service`
+  - `ds4-preflight-tp4@.timer`
+  - `ds4-preflight-tp4-strict@.timer`
 - Optional: `ds4-support-bundle@.service` collects a non-destructive support bundle (triggered automatically when `ds4-preflight-strict@.service` fails; can also be started manually).
 - Optional Spark standalone examples:
   - `spark-master@.service`
@@ -35,7 +44,7 @@ edit host-specific values, then enable services with `systemctl`.
 
 The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 
-Optional: `deploy/systemd-user/` contains user-service templates for `systemd --user` (developer bring-up). See `docs/deployment-systemd-user.md`.
+Optional: `deploy/systemd-user/` contains user-service + timer templates for `systemd --user` (developer bring-up). See `docs/deployment-systemd-user.md`.
 
 ## Sysusers + Tmpfiles
 
@@ -73,7 +82,7 @@ sudo systemd-tmpfiles --create || true
 - `ssh_config.ds4.spark012.example` : optional Mac-side `ssh_config` convenience (Spark0/Spark1/Spark2)
 - `ssh_config.ds4.spark_ring.example` : optional Mac-side `ssh_config` convenience (Spark0..Spark3)
 - `sysctl.ds4.conf.example` : optional sysctl network tuning drop-in (host-wide; review first)
-- `spark-spark0.env.example`, `spark-spark1.env.example` : optional Spark standalone env starting points
+- `spark-spark0.env.example`, `spark-spark1.env.example`, `spark-spark2.env.example` : optional Spark standalone env starting points
 
 Copy these to `/etc/ds4/` and remove secrets before committing anything.
 
@@ -96,6 +105,13 @@ If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids in
 # optional: add --mesh-check and/or --tcp <port>
 ```
 
+If you're staging Spark0/Spark1/Spark2, prefer the three-host wrapper:
+
+```bash
+./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+# optional: add --tcp <port>
+```
+
 If you're staging Spark0..Spark3, prefer the ring wrapper:
 
 ```bash
@@ -107,7 +123,7 @@ Optional: on the Spark, use the staged installer wrapper to apply the staged ass
 
 ```bash
 sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight
-# optional: add --install-timers, --install-spark-units, and/or --strict
+# optional: add --preflight tp2|tp3|tp4, --install-timers, --install-spark-units, and/or --strict
 ```
 
 Before staging, you can sanity-check that deploy assets and ops scripts are internally consistent:

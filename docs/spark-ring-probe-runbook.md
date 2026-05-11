@@ -53,13 +53,16 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 (SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_mtu.sh --topology full aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-mtu-probe-${stamp}.md"
 ```
 
-Optional (no installs): quick Mac→Spark throughput smoke test (single stream, no writes):
+## 2c) Bandwidth probe snapshot (optional; Mac<->host throughput)
+
+This is an install-free, best-effort throughput smoke test for the Mac’s path to each host (it does **not** measure host-to-host bandwidth).
 
 ```bash
-/usr/bin/time -p dd if=/dev/zero bs=1m count=256 2>/dev/null | ssh -o BatchMode=yes spark0@aitopatom-9ab9.local 'cat >/dev/null'
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+(BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-bw-probe-${stamp}.md"
 ```
 
-This is purely a sanity check (ssh + crypto overhead included). Avoid running it in tight loops; treat it as a human-run diagnostic.
+This is purely a sanity check (ssh + crypto overhead included). Avoid running it in tight loops; keep `BW_MB` small.
 
 ## 3) Deep single-node hardware/toolchain probe (optional; Spark0 recommended)
 
@@ -85,3 +88,5 @@ Minimum “ready for multi-node bring-up” bar:
 - MTU is consistent on the intended fabric (wired vs Wi‑Fi).
 - Ping is successful for the intended topology (ring neighbors or full mesh).
 - GPU inventory and CUDA toolkit facts are captured per node (commit-safe redacted output).
+
+For a single place to track “what’s missing” and link the latest snapshot files, keep `docs/spark-ring-readiness-status.md` up to date.

@@ -86,6 +86,28 @@ Hard requirements:
 - emits JSON only (no banners / logs on stdout)
 - uses deterministic decode knobs (`temperature=0.0`, `top_k=1`, `top_p=1.0`)
 
+## Patch scaffold in this repo (skeleton; draft compute still TODO)
+
+This repo ships a **skeleton** patch against the pinned Spark fork (`9222e55`) that adds a `llama-ds4-mtp-one-token-draft-probe` binary which:
+
+- loads the trunk GGUF and runs the single verify step (`verify_step_idx=0`) to compute `base_next_token_id`
+- commits `base_next_token_id` once (mirrors DS4 “accept one target token, then draft” sequencing) and captures the trunk **pre-`hc_head`** HC tensor via `cb_eval` (`result_pre_hc_head`)
+- opens the MTP sidecar GGUF in **metadata-only** mode by default and validates the exact 32 `mtp.0.*` tensors via a generated binder header
+  - optional: pass `--load-sidecar-weights` to load sidecar tensor payloads into the GGUF ggml context (large; use only when needed)
+- optional (still not a real draft): when `--load-sidecar-weights` is set and binding succeeds, computes a **stub** “MTP output head norm” tensor by applying the sidecar `hc_head_*` + `norm.weight` to the captured trunk `result_pre_hc_head` and emits:
+  - `mtp_stub_head_norm_fnv64`
+  - `mtp_stub_head_norm_nbytes`
+  - `mtp_stub_head_norm_shape`
+- emits the required JSON contract, including optional debug keys `trunk_pre_hc_head_fnv64`, `trunk_pre_hc_head_nbytes`, and `trunk_pre_hc_head_shape`, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
+
+Patch file:
+
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch`
+
+Convenience runner (clone/patch/build/run are all gated behind `ALLOW_*` env vars):
+
+- `scripts/llamacpp_mtp_one_token_draft_probe_patch.sh`
+
 ## Sidecar binding (avoid guessy dims/types)
 
 Do not hand-write the 32 tensor names, dims, or ggml types. Generate a binder skeleton from the repo-side sidecar probe JSON:
@@ -112,6 +134,34 @@ Reference semantics and tensor usage are pinned to `antirez/ds4`:
 Important invariant:
 
 - the sidecar does **not** ship a token embedding table; the MTP draft uses the trunk embedding (or `inputs_embeds` supplied by the trunk caller).
+
+## DS4 `gamma=1` draft sequence (concrete reference)
+
+When implementing the one-token probe in the Spark/CUDA fork, use DS4 as the source of truth for **operation order** and which weights participate in the draft step.
+
+Pinned DS4 implementation locations (see `docs/mtp-ds4-reference.md` for the upstream pin and additional context):
+
+- `upstreams/ds4/ds4.c:12612`: `metal_graph_eval_mtp_draft_from_hc(...)` (draft-step orchestration; embed/proj + MTP block + logits readback)
+- `upstreams/ds4/ds4.c:9962`: `metal_graph_encode_output_head_mtp(...)` (MTP output head + trunk vocab projection)
+
+High-level DS4 sequence (for `gamma=1`) that the llama.cpp probe should mirror:
+
+1) **Trunk embed**: embed the draft input token using the trunk embedding table (sidecar does not provide embeddings).
+2) **`enorm` + `e_proj`**: RMSNorm with `mtp.0.enorm.weight`, then project via `mtp.0.e_proj.weight`.
+3) **Repeat to HC**: broadcast the `n_embd` vector across `n_hc` to form `eproj_hc` (`hc_dim = n_embd * n_hc`).
+4) **`hnorm` + `h_proj`**: RMSNorm rows on `prev_hc` (the target hidden buffer, pre-`hc_head`) with `mtp.0.hnorm.weight`, then project each row via `mtp.0.h_proj.weight`.
+5) **Add**: `mtp_input_hc = eproj_hc + hproj_hc`.
+6) **MTP block**: run one decode block using the `mtp.0.{attn_*,hc_attn_*,ffn_*,hc_ffn_*}` weights, against a **separate** MTP KV/raw-cache frontier (not the trunk KV cache).
+7) **Output head (MTP) + trunk logits**:
+   - apply the MTP head `mtp.0.hc_head_*` + `mtp.0.norm.weight` to produce a normalized `n_embd` stream
+   - project to logits using the trunk vocab matrix (`base_weights->output`)
+8) **Select token**: deterministic `argmax` for the probe (`temperature=0.0`, `top_k=1`, `top_p=1.0`).
+
+Mapping to the current skeleton patch in this repo:
+
+- `base_next_token_id` is already computed from trunk logits and then **committed** (mirrors DS4’s “accept 1 target token, then draft” sequencing).
+- `result_pre_hc_head` capture is intended to correspond to DS4’s `prev_hc` input (the “target hidden buffer”, pre-`hc_head`).
+- The remaining TODO is to implement steps (1)-(8) above inside the fork (including a distinct MTP cache), then emit `mtp_draft_token_id` with `ok=true`.
 
 ## Spark runner wiring
 
@@ -140,4 +190,3 @@ Even after this probe passes, MTP is not “trusted” until a correctness oracl
 - multi-prompt comparisons must be deterministic under `temperature=0.0`
 
 Track these under the MTP trust gates in `docs/model-contract.md` before enabling MTP in any performance path.
-

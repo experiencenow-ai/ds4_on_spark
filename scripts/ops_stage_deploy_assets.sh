@@ -73,6 +73,8 @@ rsync_run "$root/scripts/ops_collect_support_bundle.sh" "$target:/tmp/ds4-script
 rsync_run "$root/scripts/ops_validate_staged_assets.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_validate_installed_assets.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_install_staged_assets.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_install_staged_assets_user.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_validate_user_installed_assets.sh" "$target:/tmp/ds4-scripts/"
 
 if [ "$env_variant" != "" ]; then
     case "$env_variant" in
@@ -214,6 +216,15 @@ cat <<'EOF'
 == optional (systemd --user templates, human-run) ==
 # Staged for reference under:
 #   /tmp/ds4-systemd-user/
+#
+# Optional (non-root) installer wrapper:
+#   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance ${instance} --start-preflight
+# Optional validator (non-root):
+#   /tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance ${instance} --strict
+# Optional support bundle collector (no sudo):
+#   systemctl --user start ds4-support-bundle@<instance>.service
+# Optional weekly timer:
+#   systemctl --user enable --now ds4-support-bundle@<instance>.timer
 #
 # If you are doing a non-root bring-up with a user-space DS4 checkout, see:
 #   docs/deployment-systemd-user.md

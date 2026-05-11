@@ -82,7 +82,7 @@
     "status": "absent",
     "trusted": false
   },
-  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/9cb905d99321dbefb0e7c63fdb9bbd4d8aa7126a/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
   "quantization_contract": {
     "checked": true,
     "dense_fp8_like": false,

@@ -41,7 +41,7 @@ DS4_ENV_VARIANT=tp4 ./scripts/ops_stage_deploy_assets.sh spark2@<spark2-host> sp
 Recommended: use the staged installer wrapper (human-run; review first):
 
 ```bash
-sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spark2|spark3> --start-preflight
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spark2|spark3> --start-preflight --preflight tp4
 ```
 
 Notes:
@@ -74,6 +74,13 @@ sudo systemctl start ds4-preflight-tp4-strict@spark0.service
 ```
 
 Details: `docs/ops-tp4-readiness.md`.
+
+If you want strict TP=4 gating on start (recommended for early ring bring-up), enable the topology-specific strict unit:
+
+```bash
+sudo systemctl enable ds4-tp4-strict@spark0.service
+sudo systemctl start  ds4-tp4-strict@spark0.service
+```
 
 ## Conventions + Runbooks
 

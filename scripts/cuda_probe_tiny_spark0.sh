@@ -75,6 +75,42 @@ echo
 	cd \"$REMOTE_DIR\"
 	make clean
 	make tiny
+	echo
+	echo \"== nvcc: gencode sm_121+compute_121 compile (if compute_121 advertised) ==\"
+	if [ \"\${list_gpu_arch}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-arch not supported; skipping)\"
+	else
+		if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+			mkdir -p bin
+			set +e
+			\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=[sm_121,compute_121]\" -c -o bin/cuda_sm121_gencode_sm_plus_ptx_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_sm121_gencode_sm_plus_ptx_compile_probe.err
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				echo \"gencode_sm_121_plus_compute_121_compile: OK\"
+			else
+				echo \"gencode_sm_121_plus_compute_121_compile: FAILED rc=\$rc\" >&2
+				head -n 80 bin/cuda_sm121_gencode_sm_plus_ptx_compile_probe.err || true
+				exit 6
+			fi
+		else
+			echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\" >&2
+		fi
+	fi
+	echo
+	echo \"== build (sm_121 variant arch_list_report; best-effort) ==\"
+	try_make_optional() {
+		target=\"\$1\"
+		set +e
+		make \"\${target}\"
+		rc=\$?
+		set -e
+		if [ \${rc} -ne 0 ]; then
+			echo \"(\${target} build failed; nvcc may not accept that arch spelling)\"
+		fi
+	}
+	try_make_optional bin/cuda_sm121a_arch_list_report
+	try_make_optional bin/cuda_sm121f_arch_list_report
 	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
 		echo
 		echo \"== build (tiny link probes) ==\"
@@ -103,10 +139,16 @@ echo
 	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
 		run_retry cuda_sm121_rdc_probe \"$REMOTE_DIR\"/bin/cuda_sm121_rdc_probe
 		run_retry cuda_sm121_dlto_probe \"$REMOTE_DIR\"/bin/cuda_sm121_dlto_probe
-		fi
-		run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
-		run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
-		"
+			fi
+			run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+			run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+			if [ -x \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report ]; then
+				run_retry cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
+			fi
+			if [ -x \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report ]; then
+				run_retry cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
+			fi
+			"
 	}
 
 if [ "$log_path" = "" ]; then

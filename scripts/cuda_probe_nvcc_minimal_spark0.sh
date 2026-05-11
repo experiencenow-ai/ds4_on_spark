@@ -120,43 +120,36 @@ __global__ void cuda_compile_only_cxx20_flags(uint32_t *out)
 EOF
 
 cat > \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu <<'EOF'
-#include <stdint.h>
+#define STR1(x) #x
+#define STR(x) STR1(x)
 
 #if defined(__CUDA_ARCH__)
 #if (__CUDA_ARCH__ != 1210)
 #error nvcc_featureset_macros_expected___CUDA_ARCH___1210
 #endif
+#endif
 
-#if defined(EXPECT_SPECIFIC)
-#if !defined(__CUDA_ARCH_SPECIFIC__)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_SPECIFIC___defined
-#endif
-#if (__CUDA_ARCH_SPECIFIC__ != 1210)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_SPECIFIC___1210
-#endif
+#if defined(__CUDA_ARCH_LIST__)
+#pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
 #else
+#pragma message(\"DS4_CUDA_ARCH_LIST=(missing)\")
+#endif
+
 #if defined(__CUDA_ARCH_SPECIFIC__)
-#error nvcc_featureset_macros_unexpected___CUDA_ARCH_SPECIFIC___defined
-#endif
-#endif
-
-#if defined(EXPECT_FAMILY)
-#if !defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___defined
-#endif
-#if (__CUDA_ARCH_FAMILY_SPECIFIC__ != 1210)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___1210
-#endif
+#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=\" STR(__CUDA_ARCH_SPECIFIC__))
 #else
-#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-#error nvcc_featureset_macros_unexpected___CUDA_ARCH_FAMILY_SPECIFIC___defined
-#endif
-#endif
+#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=(missing)\")
 #endif
 
-__global__ void cuda_featureset_macros_compile_only(uint32_t *out)
+#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" STR(__CUDA_ARCH_FAMILY_SPECIFIC__))
+#else
+#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=(missing)\")
+#endif
+
+int cuda_featureset_macros_compile_only_dummy(void)
 {
-	(void)out;
+	return(0);
 }
 EOF
 
@@ -165,9 +158,9 @@ cat > \"$REMOTE_DIR\"/cuda_nvcc_arch_list_probe.cu <<'EOF'
 #define STR(x) STR1(x)
 
 #if defined(__CUDA_ARCH_LIST__)
-#pragma message(\"CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
+#pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
 #else
-#pragma message(\"CUDA_ARCH_LIST=(missing)\")
+#pragma message(\"DS4_CUDA_ARCH_LIST=(missing)\")
 #endif
 
 int cuda_arch_list_probe_dummy(void)
@@ -176,10 +169,20 @@ int cuda_arch_list_probe_dummy(void)
 }
 EOF
 
-	try_compile_only() {
-		tag=\"\$1\"
-		arch=\"\$2\"
-		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+cat > \"$REMOTE_DIR\"/cuda_nvcc_ptx_target_probe.cu <<'EOF'
+#include <stdint.h>
+
+__global__ void cuda_ptx_target_probe(uint32_t *out)
+{
+	if ( out != 0 )
+		out[0] = 0;
+}
+EOF
+
+		try_compile_only() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- compile-only: \${tag} (-arch=\${arch})\"
 		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
 		set +e
 		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
@@ -227,23 +230,30 @@ EOF
 		fi
 	}
 
-	try_compile_only_featureset_macros() {
-		tag=\"\$1\"
-		arch=\"\$2\"
-		defs=\"\$3\"
-		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
-		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
-		set +e
-		\$NVCC -O2 -std=c++17 \${defs} -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
-		rc=\$?
-		set -e
-		if [ \$rc -eq 0 ]; then
-			echo \"\${tag}: OK\"
-		else
-			echo \"\${tag}: FAILED rc=\${rc}\"
-			head -n 40 \"\${err_path}\" || true
-		fi
-	}
+		try_compile_only_featureset_macros() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+			err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//' | tr -cd '0-9')
+				fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//' | tr -cd '0-9')
+				if [ \"\${spec}\" = \"\" ]; then
+					spec=\"(missing)\"
+				fi
+				if [ \"\${fam}\" = \"\" ]; then
+					fam=\"(missing)\"
+				fi
+				echo \"\${tag}: OK __CUDA_ARCH_SPECIFIC__=\${spec} __CUDA_ARCH_FAMILY_SPECIFIC__=\${fam}\"
+			else
+				echo \"\${tag}: FAILED rc=\${rc}\"
+				head -n 40 \"\${err_path}\" || true
+			fi
+		}
 
 try_gencode_only() {
 	tag=\"\$1\"
@@ -267,13 +277,40 @@ try_gencode_only() {
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
 	try_compile_only variant_sm_121a sm_121a
-	try_compile_only variant_sm_121f sm_121f
-	try_compile_only_featureset_macros featureset_compute_121a compute_121a \"-DEXPECT_SPECIFIC=1 -DEXPECT_FAMILY=1\"
-	try_compile_only_featureset_macros featureset_compute_121f compute_121f \"-DEXPECT_FAMILY=1\"
-	echo
-	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
-	try_arch_list() {
-		tag=\"\$1\"
+		try_compile_only variant_sm_121f sm_121f
+			try_compile_only_featureset_macros featureset_compute_121a compute_121a
+			try_compile_only_featureset_macros featureset_compute_121f compute_121f
+		echo
+		echo \"== nvcc: PTX .target probe (best-effort) ==\"
+		try_ptx_target() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- ptx: \${tag} (-arch=\${arch})\"
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -ptx -o \"$REMOTE_DIR\"/\"\${tag}\".ptx \"$REMOTE_DIR\"/cuda_nvcc_ptx_target_probe.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"$REMOTE_DIR\"/\"\${tag}\".err
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				target_line=\$(grep \"^\\\\.target\" \"$REMOTE_DIR\"/\"\${tag}\".ptx | head -n 1 || true)
+				if [ \"\${target_line}\" = \"\" ]; then
+					target_line=\"(missing)\"
+				fi
+				echo \"\${tag}: OK ptx_target=\${target_line}\"
+			else
+				echo \"\${tag}: FAILED rc=\${rc}\"
+				head -n 40 \"$REMOTE_DIR\"/\"\${tag}\".err || true
+			fi
+		}
+		try_ptx_target ptx_target_sm_121 sm_121
+		try_ptx_target ptx_target_sm_121a sm_121a
+		try_ptx_target ptx_target_sm_121f sm_121f
+		try_ptx_target ptx_target_compute_121 compute_121
+		try_ptx_target ptx_target_compute_121a compute_121a
+		try_ptx_target ptx_target_compute_121f compute_121f
+		echo
+		echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
+		try_arch_list() {
+			tag=\"\$1\"
 		arch=\"\$2\"
 		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
 		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
@@ -282,10 +319,10 @@ try_gencode_only() {
 		rc=\$?
 		set -e
 		if [ \$rc -eq 0 ]; then
-			arch_list=\$(grep -E \"CUDA_ARCH_LIST=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*CUDA_ARCH_LIST=//' | tr -cd '0-9,')
-			if [ \"\${arch_list}\" = \"\" ]; then
-				arch_list=\"(missing)\"
-			fi
+				arch_list=\$(grep -E \"DS4_CUDA_ARCH_LIST=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_LIST=//' | tr -cd '0-9,')
+				if [ \"\${arch_list}\" = \"\" ]; then
+					arch_list=\"(missing)\"
+				fi
 			echo \"\${tag}: OK __CUDA_ARCH_LIST__=\${arch_list}\"
 		else
 			echo \"\${tag}: FAILED rc=\${rc}\"
@@ -506,7 +543,7 @@ __global__ void cuda_arch_probe(uint32_t *out)
 		return(rc);
 		if ( count <= 0 )
 		{
-			printf(\"cuda drv=%d rt=%d count=%d bus_width_bits=%d async_engines=%d max_persisting_l2=%d max_apw=%d tma_map=%d schema=3\\n\",driver_v,runtime_v,count,bus_width_bits,async_engines,max_persisting_l2,max_apw_bytes,tma_map);
+			printf(\"cuda drv=%d rt=%d count=%d bus_width_bits=%d async_engines=%d max_persisting_l2=%d max_apw=%d tma_map=%d cuda_arch=0 schema=4\\n\",driver_v,runtime_v,count,bus_width_bits,async_engines,max_persisting_l2,max_apw_bytes,tma_map);
 			return(0);
 		}
 		rc = ck(cudaGetDeviceProperties(&prop,0),-3,\"cudaGetDeviceProperties(0)\");
@@ -527,15 +564,15 @@ __global__ void cuda_arch_probe(uint32_t *out)
 	(void)get_attr_i32(&smem_sm,0,cudaDevAttrMaxSharedMemoryPerMultiprocessor);
 	(void)get_attr_i32(&regs_block,0,cudaDevAttrMaxRegistersPerBlock);
 	(void)get_attr_i32(&smem_block_max,0,cudaDevAttrMaxSharedMemoryPerBlock);
-	(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
-	(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
-	(void)get_attr_i32(&smem_reserved_block,0,cudaDevAttrReservedSharedMemoryPerBlock);
-	(void)get_attr_i32(&mem_pools,0,cudaDevAttrMemoryPoolsSupported);
+		(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
+		(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
+		(void)get_attr_i32(&smem_reserved_block,0,cudaDevAttrReservedSharedMemoryPerBlock);
+		(void)get_attr_i32(&mem_pools,0,cudaDevAttrMemoryPoolsSupported);
+	#if defined(CUDA_VERSION) && (CUDA_VERSION >= 12000)
 		(void)get_cu_attr_i32(&tma_map,0,CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED);
-		mem_bytes = (uint64_t)prop.totalGlobalMem;
-		smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-		printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d schema=3\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map);
-
+	#else
+		tma_map = -1;
+	#endif
 	rc = ck(cudaMalloc((void **)&dout,sizeof(out)),-4,\"cudaMalloc\");
 	if ( rc != 0 )
 		return(rc);
@@ -544,35 +581,52 @@ __global__ void cuda_arch_probe(uint32_t *out)
 	if ( rc != 0 )
 		return(rc);
 	rc = ck(cudaMemcpy(&out,dout,sizeof(out),cudaMemcpyDeviceToHost),-6,\"cudaMemcpy\");
+	(void)cudaFree(dout);
 	if ( rc != 0 )
 		return(rc);
-	printf(\"__CUDA_ARCH__=%u\\n\",out);
-	(void)cudaFree(dout);
+	mem_bytes = (uint64_t)prop.totalGlobalMem;
+	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
+		printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d cuda_arch=%u schema=4\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map,out);
 	return(0);
 }
 EOF
 
+run_retry() {
+	name=\"\$1\"
+	shift
+	set +e
+	\"\$@\"
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		return 0
+	fi
+	echo \"(\${name} failed rc=\${rc}; retrying once)\" >&2
+	sleep 1
+	\"\$@\"
+}
+
 echo \"-- build: -arch=sm_121\"
 \$NVCC -O2 -std=c++17 -arch=sm_121 -o \"$REMOTE_DIR\"/nvcc_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_sm121_minimal\"
-\"$REMOTE_DIR\"/nvcc_sm121_minimal
+run_retry nvcc_sm121_minimal \"$REMOTE_DIR\"/nvcc_sm121_minimal
 echo
 echo \"-- build: --gpu-architecture=sm_121\"
 \$NVCC -O2 -std=c++17 --gpu-architecture=sm_121 -o \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_gpuarch_sm121_minimal\"
-\"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal
+run_retry nvcc_gpuarch_sm121_minimal \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal
 echo
 echo \"-- build: -arch=native\"
 \$NVCC -O2 -std=c++17 -arch=native -o \"$REMOTE_DIR\"/nvcc_native_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_native_minimal\"
-\"$REMOTE_DIR\"/nvcc_native_minimal
+run_retry nvcc_native_minimal \"$REMOTE_DIR\"/nvcc_native_minimal
 
 if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 	echo
 	echo \"-- build: -arch=compute_121 (PTX; JIT at runtime)\"
 	\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/nvcc_compute121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 	echo \"-- run: nvcc_compute121_minimal\"
-	\"$REMOTE_DIR\"/nvcc_compute121_minimal
+	run_retry nvcc_compute121_minimal \"$REMOTE_DIR\"/nvcc_compute121_minimal
 fi
 
 try_gencode_build_run() {

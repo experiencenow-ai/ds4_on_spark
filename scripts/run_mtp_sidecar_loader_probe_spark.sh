@@ -8,6 +8,7 @@ OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_loader_probe}"
 
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
+ALLOW_FETCH_DS4="${ALLOW_FETCH_DS4:-0}"
 SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-}"
 if [ "$SIDECAR_EXPECT_FILE_SIZE" != "" ]; then
 	case " $REMOTE_MTP_SIDECAR_ARGS " in
@@ -50,8 +51,8 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo
 	echo "This runner performs two *independent* validations against the same already-staged sidecar GGUF on Spark:"
 	echo
-	echo "1) **Contract probe (Python)**: reads GGUF metadata + tensor directory (and samples payload bytes) to validate the 32 `mtp.0.*` tensors."
-	echo "2) **Loader probe (llama.cpp)**: builds/runs `llama-ds4-mtp-sidecar-probe` and (optionally) loads the sidecar tensor blob into RAM via `--load-weights`."
+	echo '1) **Contract probe (Python)**: reads GGUF metadata + tensor directory (and samples payload bytes) to validate the 32 `mtp.0.*` tensors.'
+	echo '2) **Loader probe (llama.cpp)**: builds/runs `llama-ds4-mtp-sidecar-probe` and (optionally) loads the sidecar tensor blob into RAM via `--load-weights`.'
 	echo
 	echo "It does **not** load the trunk model GGUF."
 	echo
@@ -70,6 +71,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "Optional local env vars:"
 	echo
 	echo "- SIDECAR_EXPECT_FILE_SIZE=3807602400 (pins the staged sidecar file size; appended as --expect-file-size)"
+	echo "- ALLOW_FETCH_DS4=1 (fetch pinned `antirez/ds4` locally to validate the expected 32-tensor list vs ds4 binder)"
 	echo
 	echo "Remote contract probe env (recorded):"
 	echo
@@ -118,50 +120,55 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 } >"$REPORT_MD"
 
 echo "== running Python MTP sidecar contract probe on spark (may be gated) =="
-ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py && $REMOTE_MTP_SIDECAR_ENV sh -lc '
+ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py" \
+	<"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
+	>"$OUT_DIR/remote_contract_probe_upload_stdout.txt" 2>"$OUT_DIR/remote_contract_probe_upload_stderr.txt" || true
+
+ssh $SSH_OPTS "$target" "env $REMOTE_MTP_SIDECAR_ENV sh -s -- $REMOTE_MTP_SIDECAR_ARGS" \
+	>"$OUT_DIR/remote_contract_probe_stdout.txt" 2>"$OUT_DIR/remote_contract_probe_stderr.txt" <<'SH' || true
 set -eu
-if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
-  echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
-  exit 0
+REMOTE_MTP_SIDECAR_ARGS="$*"
+if [ "${ALLOW_RUN:-0}" != "1" ]; then
+	echo "run skipped: set ALLOW_RUN=1 on Spark to enable"
+	exit 0
 fi
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  for p in \
-    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
-  do
-    if [ -r \"$p\" ]; then
-      MTP_SIDECAR_GGUF=\"$p\"
-      export MTP_SIDECAR_GGUF
-      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
-      break
-    fi
-  done
+if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
+	for p in \
+		/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+	do
+		if [ -r "$p" ]; then
+			MTP_SIDECAR_GGUF="$p"
+			export MTP_SIDECAR_GGUF
+			echo "defaulted MTP_SIDECAR_GGUF=$p" 1>&2
+			break
+		fi
+	done
 fi
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\" 1>&2
-  exit 0
+if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
+	echo "run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf" 1>&2
+	exit 0
 fi
-case \"${MTP_SIDECAR_GGUF}\" in
-  http://*|https://*)
-    if [ \"${ALLOW_URL:-0}\" != \"1\" ]; then
-      echo \"run skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-read probe\"
-      exit 0
-    fi
-    python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
-    ;;
-  *)
-    if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
-      echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
-      exit 0
-    fi
-    python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
-    ;;
+case "${MTP_SIDECAR_GGUF}" in
+	http://*|https://*)
+		if [ "${ALLOW_URL:-0}" != "1" ]; then
+			echo "run skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-read probe"
+			exit 0
+		fi
+		python3 /tmp/model_contract_probe_mtp_sidecar.py --url "${MTP_SIDECAR_GGUF}" ${REMOTE_MTP_SIDECAR_ARGS}
+		;;
+	*)
+		if [ ! -r "${MTP_SIDECAR_GGUF}" ]; then
+			echo "run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}"
+			exit 0
+		fi
+		python3 /tmp/model_contract_probe_mtp_sidecar.py --path "${MTP_SIDECAR_GGUF}" ${REMOTE_MTP_SIDECAR_ARGS}
+		;;
 esac
-' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
-	>"$OUT_DIR/remote_contract_probe_stdout.txt" 2>"$OUT_DIR/remote_contract_probe_stderr.txt" || true
+SH
 
 python3 - "$OUT_DIR/remote_contract_probe_stdout.txt" >"$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY' || true
 import json
@@ -320,6 +327,21 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_consistency.py" 
 } >>"$REPORT_MD"
 
 echo "== verifying expected tensor list against upstream ds4 binder (local) =="
+DS4_C="$repo_root/upstreams/ds4/ds4.c"
+if [ ! -r "$DS4_C" ]; then
+	if [ "$ALLOW_FETCH_DS4" = "1" ]; then
+		echo "== fetching pinned upstream ds4 (local; best-effort) =="
+		"$repo_root/scripts/fetch_upstreams.sh" ds4 \
+			>"$OUT_DIR/local_fetch_ds4_stdout.txt" 2>"$OUT_DIR/local_fetch_ds4_stderr.txt" || true
+	else
+		printf '%s\n' "skipped: $DS4_C missing (set ALLOW_FETCH_DS4=1 to fetch pinned antirez/ds4)" \
+			>"$OUT_DIR/local_fetch_ds4_stdout.txt"
+		printf '%s\n' "" >"$OUT_DIR/local_fetch_ds4_stderr.txt"
+	fi
+else
+	printf '%s\n' "present: $DS4_C" >"$OUT_DIR/local_fetch_ds4_stdout.txt"
+	printf '%s\n' "" >"$OUT_DIR/local_fetch_ds4_stderr.txt"
+fi
 python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --json \
 	>"$OUT_DIR/local_ds4_tensor_contract_stdout.txt" 2>"$OUT_DIR/local_ds4_tensor_contract_stderr.txt" || true
 
@@ -346,6 +368,8 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --jso
 	echo
 	echo "Artifacts:"
 	echo
+	echo "- upstream fetch stdout: $OUT_DIR/local_fetch_ds4_stdout.txt"
+	echo "- upstream fetch stderr: $OUT_DIR/local_fetch_ds4_stderr.txt"
 	echo "- stdout: $OUT_DIR/local_ds4_tensor_contract_stdout.txt"
 	echo "- stderr: $OUT_DIR/local_ds4_tensor_contract_stderr.txt"
 	echo
@@ -360,29 +384,29 @@ ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe.patch" \
 	<"$PATCH_LOCAL" \
 	>"$OUT_DIR/remote_loader_upload_patch_stdout.txt" 2>"$OUT_DIR/remote_loader_upload_patch_stderr.txt" || true
 
-ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV sh -lc '
+ssh $SSH_OPTS "$target" "env $REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV sh -s" \
+	>"$OUT_DIR/remote_loader_probe_stdout.txt" 2>"$OUT_DIR/remote_loader_probe_stderr.txt" <<'SH' || true
 set -eu
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  for p in \
-    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
-  do
-    if [ -r \"$p\" ]; then
-      MTP_SIDECAR_GGUF=\"$p\"
-      export MTP_SIDECAR_GGUF
-      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
-      break
-    fi
-  done
+if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
+	for p in \
+		/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+	do
+		if [ -r "$p" ]; then
+			MTP_SIDECAR_GGUF="$p"
+			export MTP_SIDECAR_GGUF
+			echo "defaulted MTP_SIDECAR_GGUF=$p" 1>&2
+			break
+		fi
+	done
 fi
-PATCH_FILE=\"/tmp/llamacpp_mtp_sidecar_probe.patch\"
+PATCH_FILE="/tmp/llamacpp_mtp_sidecar_probe.patch"
 export PATCH_FILE
 /tmp/llamacpp_mtp_sidecar_probe_patch.sh
-' " \
-	>"$OUT_DIR/remote_loader_probe_stdout.txt" 2>"$OUT_DIR/remote_loader_probe_stderr.txt" || true
+SH
 
 python3 - "$OUT_DIR/remote_loader_probe_stdout.txt" "$OUT_DIR/loader_probe.json" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
 import json

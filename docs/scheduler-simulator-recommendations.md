@@ -124,6 +124,22 @@ Key signals to inspect (from the report JSON, per accept probability):
 
 Recommendation (synthetic): default MTP compute policy should behave like `stop_at_reject` (don’t always compute full `gamma` drafts). Even at accept_prob `0.0`, this reduces wasted draft work vs `full`, which is a safer baseline under unknown/low accept regimes. Validate the full queueing story on real quantized-runtime traces before enabling MTP.
 
+## MTP (Accept-Length Shape Sensitivity)
+
+Scenario: the same two-stream overload regime as the congestion sweep, but using the simulator’s histogram accept model (`mtp_accept_model=hist`) with `draft_len=3` and three different accept-length histograms that all share the same mean accept length (`E[accept_len]=2.5`):
+
+- `uniform`: `[0.25, 0.25, 0.25, 0.25]`
+- `middle_heavy`: `[0.1, 0.4, 0.4, 0.1]`
+- `bimodal_extremes`: `[0.4, 0.1, 0.1, 0.4]`
+
+Key signals to inspect (from the report JSON, per histogram):
+
+- `service_slot_ms_per_output_token` (compute efficiency)
+- `sla_violation_frac_tokens_interactive` and `token_p95_interactive_ms` (interactive safety)
+- `pending_depth_time_weighted_p95_mtp_verify` and `starved_task_frac_mtp_verify` (verify-phase congestion / starvation)
+
+Recommendation (synthetic): treat MTP accept-length *shape* as a first-class input once real traces exist. Mean-only fits (for example a single accept rate) can miss heavy tails of short accepts that amplify queue pressure. Prefer replaying empirical `accept_len` histograms from quantized-runtime traces before enabling MTP.
+
 ## Adaptive K (Batch Throttling Under Congestion)
 
 Scenario: two-stream arrivals (interactive + batch) with sustained overload, small per-expert queue (`expert_queue_max=128`), and `service_ms=1.0`. Compare:
@@ -144,6 +160,27 @@ Key signals (from the report JSON):
   - fixed batch K=1: `0.0`
 
 Recommendation (synthetic): keep an **adaptive batch-K controller** available; fixed high batch K can sharply inflate backpressure drops under overload. Tune thresholds against real traces once available.
+
+## Adaptive K Controller Smoothing (EMA + Update Interval)
+
+Scenario: two-stream arrivals with bursty inter-arrival deltas (both classes), moderate queue capacity (`expert_queue_max=512`), and adaptive K enabled. Compare:
+
+- baseline (no smoothing): `ema_alpha=1.0`, `update_ms=0.0`, `k_slew=0`
+- EMA smoothing: `ema_alpha=0.2`, `update_ms=0.0`, `k_slew=1`
+- EMA + rate-limited updates: `ema_alpha=0.2`, `update_ms=2.0`, `k_slew=1`
+
+Key signals (from the report JSON):
+
+- `k_change_frac_tokens_batch`:
+  - baseline: `0.000225`
+  - EMA: `7.5e-05`
+  - EMA + update_ms: `7.5e-05`
+- `k_update_frac_tokens_batch`:
+  - baseline: `1.0`
+  - EMA: `1.0`
+  - EMA + update_ms: `0.137625`
+
+Recommendation (synthetic): keep **controller smoothing knobs** available in the runtime design (EMA, update interval, and optional slew). They reduce controller churn in bursty regimes without changing drop behavior here; tune against real quantized-runtime traces before committing to defaults.
 
 ## Adaptive K Signal Choice (Global vs Candidates vs Class)
 
@@ -220,4 +257,4 @@ If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/
 python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
 ```
 
-If the trace also includes a speculative-decoding comparator like Qwen+DFlash (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the same report includes a separate `dflash_comparator` block that summarizes acceptance and reports a `service_slot_ms_per_output_token_ratio_vs_target_only` upper-bound efficiency ratio (comparator draft compute is not modeled).
+If the trace also includes a speculative-decoding comparator (for example a target+DFlash run) via `dflash_accept_len` or `accepted_dflash`/`rejected_dflash`, the same report includes a separate `dflash_comparator` block that summarizes acceptance and reports a `service_slot_ms_per_output_token_ratio_vs_target_only` upper-bound efficiency ratio (comparator draft compute is not modeled).

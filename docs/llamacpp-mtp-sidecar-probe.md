@@ -10,6 +10,8 @@ This patch adds a **metadata-only** probe binary to the Spark fork:
 
 - `llama-ds4-mtp-sidecar-probe`
 
+It also replaces the confusing `unknown model architecture: deepseek4_mtp_support` exception with a targeted message explaining that `deepseek4_mtp_support` is a **sidecar-only** GGUF and pointing at `llama-ds4-mtp-sidecar-probe` for validation.
+
 It validates:
 
 - `general.architecture == deepseek4_mtp_support`
@@ -99,6 +101,6 @@ Pinned reference runner:
 ./scripts/model_contract_probe_mtp_sidecar_antirez.sh
 ```
 
-Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-9cb905d.json`.
+Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-b0c3326.json`.
 
-Stronger pinned output (includes `--payload-sample-bytes 64`) is in `docs/mtp-sidecar-probe-antirez-9cb905d-payload64.json`.
+Stronger pinned output (includes `--payload-sample-bytes 64`) is in `docs/mtp-sidecar-probe-antirez-b0c3326-payload64.json`.

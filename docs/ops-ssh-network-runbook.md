@@ -138,6 +138,7 @@ active.
 If you choose `/etc/hosts` pinning, this repo includes a starting point:
 
 - `deploy/config/hosts.ds4.spark01.example`
+- `deploy/config/hosts.ds4.spark012.example`
 - `deploy/config/hosts.ds4.spark_ring.example`
 
 Stage it via `scripts/ops_stage_deploy_assets.sh` (it lands under `/tmp/ds4-config/`) and append the lines to `/etc/hosts` on each Spark (human-run, review first).
@@ -149,6 +150,16 @@ ip addr
 ip route
 ping -c 2 <peer-ip-or-hostname>
 ss -lntp | head
+```
+
+## Non-Root Bring-Up (`systemd --user`) With Staged Assets (Optional)
+
+If you staged deploy assets via `scripts/ops_stage_deploy_assets.sh` (Mac-side), you can install user units without sudo (Spark-side):
+
+```bash
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight
+/tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance spark0 --strict
+systemctl --user enable --now ds4@spark0.service
 ```
 
 ## If Networking Looks Wrong: Capture A Support Bundle

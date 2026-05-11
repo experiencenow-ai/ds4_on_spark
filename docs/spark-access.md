@@ -27,6 +27,29 @@ Some automation-provided macOS checkouts have a `.git` worktree that is readable
 
 Prefer a local shim repo at `.codex_git/` (gitignored by this repo). Older notes and runs may refer to `.git-codex/`; both layouts work.
 
+#### Fast path: copy the worktree gitdir (recommended for locked-down checkouts)
+
+When `git fetch origin` fails with `Operation not permitted` under `.git/worktrees/.../FETCH_HEAD`, the most reliable fix in locked-down environments is to copy the current worktree’s gitdir into `.codex_git/` and rewrite `commondir` to an absolute path.
+
+From repo root:
+
+```bash
+worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p' .git)"
+common_rel="$(cat "${worktree_gitdir}/commondir")"
+common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
+rm -rf .codex_git
+mkdir .codex_git
+cp -a "${worktree_gitdir}/." .codex_git/
+printf "%s\\n" "${common_abs}" > .codex_git/commondir
+```
+
+Then use the shim for git ops:
+
+```bash
+GIT_DIR=.codex_git GIT_WORK_TREE=. git fetch origin --prune
+GIT_DIR=.codex_git GIT_WORK_TREE=. git checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
+```
+
 ```bash
 # One-time setup (from repo root, simplest gitdir shim; creates `.codex_git/` as a gitdir)
 git --git-dir=.codex_git init
@@ -51,7 +74,16 @@ If the shim setup fails with an error like:
 
 - `error: The following untracked working tree files would be overwritten by checkout/reset`
 
-it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”). In that case, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
+it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”).
+
+Fast path (overwrites the working tree; only do this when `git status` is clean and you are OK discarding any local-only files):
+
+```bash
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
+```
+
+If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
 
 ```bash
 # Seed `.codex_git/` from the current checkout worktree metadata.
@@ -128,7 +160,7 @@ Notes:
 REDACT=1 ./scripts/mac_spark_discovery.sh
 ```
 
-Default targets (when no args are provided): `aitopatom-9ab9.local` and `spark1.local`.
+Default targets (when no args are provided): `aitopatom-9ab9.local`, `spark1.local`, and `spark2.local`.
 Pass additional hostnames/IPs explicitly if you need extra checks.
 Targets may also be passed as `user@host`; the script strips the `user@` prefix for mDNS resolution and TCP reachability checks.
 
@@ -201,6 +233,12 @@ The ring probe is a compact, commit-safe snapshot (clock + network + storage + G
 
 ```bash
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true
+```
+
+Optional: install-free Mac<->host throughput smoke test (best-effort; does not measure host-to-host bandwidth):
+
+```bash
+BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true
 ```
 
 ## Diagnosis

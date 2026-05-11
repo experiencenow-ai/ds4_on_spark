@@ -15,6 +15,11 @@ DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local
 
 The readiness script uses this list to derive ring neighbors (prev/next) based on `DS4_RANK`.
 
+Notes:
+
+- `DS4_RING_HOSTS` must have exactly 3 comma-separated entries (no trailing commas). In strict mode, invalid or duplicate entries fail non-zero.
+- When using `--topology full`, the script uses `DS4_RANK` + `DS4_RING_HOSTS` to skip self and probe only peers.
+
 ## Commands (Spark Side)
 
 Ad-hoc run (no systemd required):
@@ -27,6 +32,12 @@ Strict gating (fails non-zero if required TP=3 inputs are missing/invalid):
 
 ```bash
 sudo -u ds4 /opt/ds4/scripts/ops_tp3_readiness.sh --strict --self spark2 --topology ring --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark2.env
+```
+
+Deeper debug (checks all peers, not just ring neighbors; still non-destructive):
+
+```bash
+sudo -u ds4 /opt/ds4/scripts/ops_tp3_readiness.sh --strict --self spark2 --topology full --tcp 29500 --tcp 9090 --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark2.env
 ```
 
 What the script checks (best-effort, safe):
@@ -60,3 +71,21 @@ journalctl -t ds4-preflight-tp3-spark0 -n 200 --no-pager
 
 If strict preflight fails and you have `ds4-support-bundle@.service` installed, systemd triggers a non-destructive support bundle. See `docs/ops-support-bundle.md`.
 
+## Optional: Periodic TP=3 Preflight (Systemd Timer)
+
+If you want readiness checks to run automatically on boot and periodically after,
+install and enable the timer template (human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-tp3@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-tp3@spark0.timer
+```
+
+Strict variant (fails non-zero on missing/invalid TP=3 inputs; human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-tp3-strict@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-tp3-strict@spark0.timer
+```

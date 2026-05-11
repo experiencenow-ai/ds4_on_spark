@@ -24,7 +24,16 @@ sh ./scripts/centaur_spark_v73_stage.sh spark2@<spark2-host> ~/centaur-smoke/v73
 sh ./scripts/centaur_spark_v73_stage.sh spark3@<spark3-host> ~/centaur-smoke/v73
 ```
 
-One minimal per-node setup (run on Spark{1,2,3}):
+Recommended per-node setup (run on Spark{1,2,3}) using the reproducible setup script:
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark1.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+ssh $SSH_OPTS spark2@<spark2-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark2.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+ssh $SSH_OPTS spark3@<spark3-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark3.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+```
+
+Minimal per-node setup (run on Spark{1,2,3}) if you prefer doing it manually:
 
 ```bash
 mkdir -p ~/centaur-smoke/v73/run
@@ -204,3 +213,7 @@ Then classify:
 
 - **Centaur bug**: parser/schema/state failures inside `centaur.py` commands
 - **DS4 runtime bug**: missing `python3`/`unzip`, permissions, filesystem layout, or other host setup unrelated to Centaur logic
+
+For the shared checklist + sanitization rules, see:
+
+- `docs/centaur-bug-report.md`

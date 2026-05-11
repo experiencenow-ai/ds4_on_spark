@@ -125,38 +125,23 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 	try_variant_gpuarch sm_121a
 	try_variant_gpuarch sm_121f
 
-	echo
-	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
-	cat > bin/cuda_sm121_arch_list_probe.cu <<'EOF'
-#define STR1(x) #x
-#define STR(x) STR1(x)
-
-#if defined(__CUDA_ARCH_LIST__)
-#pragma message(\"CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
-#else
-#pragma message(\"CUDA_ARCH_LIST=(missing)\")
-#endif
-
-int cuda_arch_list_probe_dummy(void)
-{
-	return(0);
-}
-EOF
-
-	try_arch_list() {
-		tag=\"\$1\"
-		arch=\"\$2\"
-		echo \"-- \${tag} (-arch=\${arch})\"
-		set +e
-		\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/\${tag}.o bin/cuda_sm121_arch_list_probe.cu 2>bin/\${tag}.err
-		rc=\$?
-		set -e
-		if [ \$rc -eq 0 ]; then
-			arch_list=\$(grep -E \"CUDA_ARCH_LIST=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*CUDA_ARCH_LIST=//' | tr -cd '0-9,')
-			if [ \"\${arch_list}\" = \"\" ]; then
-				arch_list=\"(missing)\"
-			fi
-			echo \"\${tag}: OK __CUDA_ARCH_LIST__=\${arch_list}\"
+		echo
+		echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
+	
+		try_arch_list() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- \${tag} (-arch=\${arch})\"
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/\${tag}.o src/cuda_sm121_arch_list_compile_probe.cu 2>bin/\${tag}.err
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				arch_list=\$(grep -E \"DS4_CUDA_ARCH_LIST=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_LIST=//' | tr -cd '0-9,')
+				if [ \"\${arch_list}\" = \"\" ]; then
+					arch_list=\"(missing)\"
+				fi
+				echo \"\${tag}: OK __CUDA_ARCH_LIST__=\${arch_list}\"
 		else
 			echo \"\${tag}: FAILED rc=\$rc\"
 			head -n 40 bin/\${tag}.err || true
@@ -166,74 +151,69 @@ EOF
 	try_arch_list arch_list_sm_121 sm_121
 	try_arch_list arch_list_sm_121a sm_121a
 	try_arch_list arch_list_sm_121f sm_121f
+	
+		echo
+		echo \"== nvcc: feature-set macro compile (best-effort) ==\"
+	
+		try_featureset_macros() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- \${tag} (-arch=\${arch})\"
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/\${tag}.o src/cuda_sm121_arch_list_compile_probe.cu 2>bin/\${tag}.err
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//' | tr -cd '0-9')
+				fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//' | tr -cd '0-9')
+				if [ \"\${spec}\" = \"\" ]; then
+					spec=\"(missing)\"
+				fi
+				if [ \"\${fam}\" = \"\" ]; then
+					fam=\"(missing)\"
+				fi
+				echo \"\${tag}: OK __CUDA_ARCH_SPECIFIC__=\${spec} __CUDA_ARCH_FAMILY_SPECIFIC__=\${fam}\"
+			else
+				echo \"\${tag}: FAILED rc=\$rc\"
+				head -n 40 bin/\${tag}.err || true
+			fi
+		}
+	
+	try_featureset_macros featureset_compute_121a compute_121a
+	try_featureset_macros featureset_compute_121f compute_121f
 
 	echo
-	echo \"== nvcc: feature-set macro compile (best-effort) ==\"
-	cat > bin/cuda_sm121_featureset_macros_compile_probe.cu <<'EOF'
-#include <stdint.h>
-
-	#if defined(__CUDA_ARCH__)
-	#if (__CUDA_ARCH__ != 1210)
-	#error featureset_macros_expected___CUDA_ARCH___1210
-		#endif
-
-		#if defined(EXPECT_SPECIFIC)
-	#if !defined(__CUDA_ARCH_SPECIFIC__)
-	#error featureset_macros_expected___CUDA_ARCH_SPECIFIC___defined
-	#endif
-	#if (__CUDA_ARCH_SPECIFIC__ != 1210)
-	#error featureset_macros_expected___CUDA_ARCH_SPECIFIC___1210
-	#endif
-	#else
-	#if defined(__CUDA_ARCH_SPECIFIC__)
-	#error featureset_macros_unexpected___CUDA_ARCH_SPECIFIC___defined
-	#endif
-		#endif
-
-		#if defined(EXPECT_FAMILY)
-	#if !defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-	#error featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___defined
-	#endif
-	#if (__CUDA_ARCH_FAMILY_SPECIFIC__ != 1210)
-	#error featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___1210
-	#endif
-	#else
-	#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-	#error featureset_macros_unexpected___CUDA_ARCH_FAMILY_SPECIFIC___defined
-	#endif
-	#endif
-	#endif
-
-__global__ void featureset_macros_compile_probe(uint32_t *out)
-{
-	(void)out;
-}
-EOF
-
-	try_featureset_macros() {
+	echo \"== nvcc: PTX .target probe (best-effort) ==\"
+	try_ptx_target() {
 		tag=\"\$1\"
 		arch=\"\$2\"
-		defs=\"\$3\"
-		echo \"-- \${tag} (-arch=\${arch})\"
+		echo \"-- ptx: \${tag} (-arch=\${arch})\"
 		set +e
-		\$NVCC -O2 -std=c++17 \${defs} -arch=\${arch} -c -o bin/\${tag}.o bin/cuda_sm121_featureset_macros_compile_probe.cu 2>bin/\${tag}.err
+		\$NVCC -O2 -std=c++17 -arch=\${arch} -ptx -o bin/\${tag}.ptx src/cuda_sm121_compile_probe.cu 2>bin/\${tag}.err
 		rc=\$?
 		set -e
 		if [ \$rc -eq 0 ]; then
-			echo \"\${tag}: OK\"
+			target_line=\$(grep \"^\\\\.target\" bin/\${tag}.ptx | head -n 1 || true)
+			if [ \"\${target_line}\" = \"\" ]; then
+				target_line=\"(missing)\"
+			fi
+			echo \"\${tag}: OK ptx_target=\${target_line}\"
 		else
 			echo \"\${tag}: FAILED rc=\$rc\"
 			head -n 40 bin/\${tag}.err || true
 		fi
 	}
+	try_ptx_target ptx_target_sm_121 sm_121
+	try_ptx_target ptx_target_sm_121a sm_121a
+	try_ptx_target ptx_target_sm_121f sm_121f
+	try_ptx_target ptx_target_compute_121 compute_121
+	try_ptx_target ptx_target_compute_121a compute_121a
+	try_ptx_target ptx_target_compute_121f compute_121f
 
-	try_featureset_macros featureset_compute_121a compute_121a \"-DEXPECT_SPECIFIC=1 -DEXPECT_FAMILY=1\"
-	try_featureset_macros featureset_compute_121f compute_121f \"-DEXPECT_FAMILY=1\"
-
-	echo
-	echo \"== nvcc: compute_121 compile (best-effort) ==\"
-	if [ \"\${list_gpu_arch}\" = \"\" ]; then
-		echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
+echo
+echo \"== nvcc: compute_121 compile (best-effort) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
 else
 	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		echo \"-- compute_121\"
