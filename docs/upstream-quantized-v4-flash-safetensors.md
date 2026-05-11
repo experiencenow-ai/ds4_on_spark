@@ -10,13 +10,13 @@ For GGUF-based candidates, see [`docs/upstream-quantized-v4-flash.md`](upstream-
 
 - Repo: `https://huggingface.co/bleysg/DeepSeek-V4-Flash-IQ2XXS-Q2K-FP8-120GB-target`
 - Ref: `refs/heads/main`
-- Commit: `4ce0d4ac6bd35b63b68dfc813d0ae07497c4bf49`
+- Commit: `0cb3642b466e93bc30d83ff3f9afb122914e9645`
 - License: MIT (HF model card + `LICENSE` in repo)
 - `base_model`: `deepseek-ai/DeepSeek-V4-Flash` (HF metadata)
 
 ## Footprint (HF API, no downloads)
 
-As of `4ce0d4ac6bd35b63b68dfc813d0ae07497c4bf49`:
+As of `0cb3642b466e93bc30d83ff3f9afb122914e9645`:
 
 - Total repo storage: **82.34 GiB**
 - `*.gguf`: **0 bytes** (none)
