@@ -15,6 +15,11 @@ DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local
 
 The readiness script uses this list to derive ring neighbors (prev/next) based on `DS4_RANK`.
 
+Notes:
+
+- `DS4_RING_HOSTS` must have exactly 3 comma-separated entries (no trailing commas). In strict mode, invalid or duplicate entries fail non-zero.
+- When using `--topology full`, the script uses `DS4_RANK` + `DS4_RING_HOSTS` to skip self and probe only peers.
+
 ## Commands (Spark Side)
 
 Ad-hoc run (no systemd required):
