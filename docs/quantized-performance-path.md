@@ -185,7 +185,7 @@ Trace JSONL fields:
 - `mtp_accept_len`: optional accept length for MTP replay
 - `accepted_mtp` / `rejected_mtp`: optional runtime-friendly MTP accounting; the simulator can derive `mtp_accept_len` from these when `mtp_accept_len` is omitted
 - `dflash_accept_len`: optional accept length for a Qwen+DFlash speculative-decoding comparator trace (kept separate from DeepSeek MTP). The simulator reports separate comparator metrics (for example: `dflash_output_tokens`, `dflash_mean_accept_len`, `dflash_accept_rate`, `dflash_bonus_tokens`, `dflash_service_slot_ms_per_output_token`) in `--summary-json` without mixing them into DS4 MTP assumptions.
-- `accepted_dflash` / `rejected_dflash`: optional comparator counters (kept separate from MTP). When `dflash_accept_len` is omitted but `accepted_dflash` is present, canonicalization derives `dflash_accept_len = accepted_dflash + 1`.
+- `accepted_dflash` / `rejected_dflash`: optional comparator counters (kept separate from MTP). When `dflash_accept_len` is omitted but `accepted_dflash` is present, canonicalization derives `dflash_accept_len = accepted_dflash + 1`. When only `rejected_dflash` is present, canonicalization can also derive `dflash_accept_len` if `dflash_draft_len` is known (from `meta.dflash_draft_len` or consistent `accepted_dflash+rejected_dflash` elsewhere in the trace).
 - `cost_scale`: optional per-token cost multiplier
 - `decode_ms`: optional observed per-token decode latency (the simulator reports `trace.decode_ms` and `trace.decode_error_ms` vs modeled latency when present)
 - `kv_tokens`: optional KV/cache token count at this step (the simulator summarizes this under `trace.kv_tokens` when present)
