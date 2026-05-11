@@ -11,6 +11,10 @@ while preparing this document.
 - Safety policy: use `GIT_LFS_SKIP_SMUDGE=1`, Hugging Face API metadata, or local
   Spark paths first; large weight fetches require explicit human approval.
 
+Non-Qwen DFlash target/draft pairs (GPT-OSS, Gemma, MiniMax, Kimi) are tracked in
+[`docs/upstream-dflash.md`](upstream-dflash.md) to keep this note focused on
+Qwen-family comparisons and Ling target-only baselines.
+
 ## Core Comparison Matrix
 
 | Priority | Target | Target ref | Target commit / SHA | Target license | Target safetensors | Draft / accelerator | Draft commit / SHA | Draft license | Draft safetensors | Single Spark? | Why test |

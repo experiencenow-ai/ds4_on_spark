@@ -8,6 +8,7 @@ Safety constraints (assumed by all runbooks): no `sudo`, no system services, no 
 
 - Spark0 v73 smoke (runs the full command sequence): `docs/centaur-spark0-v73-smoke.md`
 - Bug report workflow + sanitization checklist: `docs/centaur-bug-report.md`
+- PR checklist/template (required sections for automation PRs): `docs/centaur-pr-checklist.md`
 
 ## Spark0 smoke (recommended)
 

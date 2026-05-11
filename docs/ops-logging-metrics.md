@@ -63,6 +63,7 @@ Recommended baseline metrics:
 - `ds4_cuda_oom_total`
 
 Prometheus scrape snippet example: `deploy/config/prometheus-scrape.ds4.yml.example`.
+Prometheus alerting rules example: `deploy/config/prometheus-alerts.ds4.yml.example`.
 
 ## Spark (Optional)
 

@@ -41,7 +41,7 @@ DS4_ENV_VARIANT=tp4 ./scripts/ops_stage_deploy_assets.sh spark2@<spark2-host> sp
 Recommended: use the staged installer wrapper (human-run; review first):
 
 ```bash
-sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spark2|spark3> --start-preflight
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance <spark0|spark1|spark2|spark3> --start-preflight --preflight tp4
 ```
 
 Notes:

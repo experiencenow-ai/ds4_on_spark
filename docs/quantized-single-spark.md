@@ -152,8 +152,9 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 Acceptance checks before DS4 can trust MTP:
 
 1. Encoding oracle passes (tokenizer/chat rendering).
-2. Next-token logits oracle passes (normal trunk forward + KV/cache semantics).
-3. Add and validate an explicit MTP correctness oracle (weights required) that
+2. Artifact gate: `mtp_present == true` implies `mtp_keys_sha256` matches `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256` **and** `mtp_contract.complete == true` (otherwise treat MTP as disabled/untrusted).
+3. Next-token logits oracle passes (normal trunk forward + KV/cache semantics).
+4. Add and validate an explicit MTP correctness oracle (weights required) that
    exercises `MTPBlock.forward(...)` semantics and the `mtp.0.hc_head_*` head.
 
 ## First Run Shape
