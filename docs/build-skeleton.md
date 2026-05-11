@@ -1,0 +1,73 @@
+# Build Skeleton Overview
+
+This repo’s build-skeleton track provides a conservative C/CUDA foundation for DS4-on-Spark:
+
+- C11 library target (`ds4`) with optional CUDA integration
+- Static-allocation patterns (arena + fixed pools/rings)
+- Minimal logging with pluggable sinks (including a fixed-size ring capture)
+- Config parsing/loading from memory/file/env (with diagnostics helpers)
+- CUDA wrappers that compile on macOS (stubbed when CUDA is disabled)
+- Unit-test scaffolding runnable on macOS (CPU-only)
+
+## Layout
+
+- `CMakeLists.txt`: Library/CLI/tests wiring; CUDA is `OFF` by default on macOS.
+- `Makefile`: Thin wrappers for the common CMake/CTest commands (see `docs/build.md`).
+- `include/ds4/*.h`: Public API headers.
+- `src/*.c`, `src/*.cu`: DS4 implementation.
+- `tests/*.c`: Unit tests; driven by `tests/test_main.c`.
+- `cmake/*.cmake`: Reusable CMake helpers and smoke tests.
+
+## Static allocation patterns
+
+The build skeleton avoids heap allocation in core paths. The primary pattern is:
+
+- `ds4_arena_t`: Caller-provided arena backing (`include/ds4/arena.h`, `src/ds4_arena.c`)
+- `ds4_ctx_t`: One “context” object that carries config, arena, and optional log capture (`include/ds4/ds4.h`, `src/ds4.c`)
+
+`ds4_ctx_init()` expects an arena memory region supplied by the caller; `ds4_ctx_init_auto()` can optionally allocate a log ring from that arena when `cfg->log_ring_entries > 0`.
+
+## Logging
+
+Logging is intentionally minimal and allocation-free:
+
+- `include/ds4/log.h` + `src/ds4_log.c`: global log level + pluggable sink
+- `include/ds4/log_ring.h` + `src/ds4_log_ring.c`: fixed-size ring capture sink
+
+See `docs/build-logging.md`.
+
+## Config parsing/loading
+
+Config uses a simple `key=value` format and supports:
+
+- Defaults (`ds4_config_defaults`)
+- In-memory parsing (`ds4_config_parse_mem[_ex][_diag]`)
+- File parsing/loading (`ds4_config_parse_file[_ex][_diag]`, `ds4_config_load*_ex*_diag`)
+- Environment overrides (`ds4_config_parse_env`)
+
+Diagnostics are carried via `ds4_config_diag_t` for optional 1-based line reporting on parse errors.
+
+See `docs/build-config.md`.
+
+## CUDA wrappers (macOS-safe)
+
+CUDA entrypoints are wrapped behind `include/ds4/cuda.h` and compile in two modes:
+
+- CUDA enabled: compiled from `src/ds4_cuda.cu` when `DS4_ENABLE_CUDA=ON`
+- CUDA disabled: compiled from `src/ds4_cuda_stub.c` when `DS4_ENABLE_CUDA=OFF` (default on macOS)
+
+In CPU-only builds, CUDA wrappers return `DS4_CUDA_ERR_DISABLED` while preserving link compatibility, so tests and CLI can still compile and run on macOS.
+
+See `docs/build-cuda.md`.
+
+## Unit tests
+
+Tests are a single executable (`ds4_tests`) that calls per-module test functions and returns non-zero on failure.
+
+Use the Makefile wrapper on macOS:
+
+```bash
+make check BUILD_DIR=build_macos_check
+```
+
+See `docs/build.md` for the full build matrix.
