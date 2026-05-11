@@ -138,6 +138,7 @@ active.
 If you choose `/etc/hosts` pinning, this repo includes a starting point:
 
 - `deploy/config/hosts.ds4.spark01.example`
+- `deploy/config/hosts.ds4.spark012.example`
 - `deploy/config/hosts.ds4.spark_ring.example`
 
 Stage it via `scripts/ops_stage_deploy_assets.sh` (it lands under `/tmp/ds4-config/`) and append the lines to `/etc/hosts` on each Spark (human-run, review first).
