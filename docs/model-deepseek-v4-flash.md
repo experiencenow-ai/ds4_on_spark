@@ -56,6 +56,18 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
   - Upstream sources: `tokenizer.json`, `tokenizer_config.json`, and `encoding/encoding_dsv4.py` + `encoding/tests/*`.
   - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/tokenizer*.json` and `fixtures/model_contract/deepseek_v4_flash/encoding/*`.
   - DS4 contract: `contract_summary.json` `tokenizer.*` / `tokenizer.tokenizer_json_summary.*` / `encoding_constants.*` plus the machine-pinned vector hashes under `upstream.fixtures_sha256.encoding/tests/*`.
+- **Quantization + scale-tensor semantics (FP8 trunk, FP4 experts)**:
+  - Upstream sources: `config.json` (`quantization_config.*`, `expert_dtype`) + `inference/config.json` (`dtype`, `scale_fmt`, `expert_dtype`) + `inference/model.py` (`Linear`, `act_quant`, FP8/FP4 block-size rules).
+  - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/config.json` and `fixtures/model_contract/deepseek_v4_flash/inference/*`.
+  - DS4 contract: `contract_summary.json` `quantization.*` (including `quantization.linear_tensor_contract.*` and `quantization.inference_model_constants.*`).
+- **Logical tensor shapes (unsharded) + required tensor keys**:
+  - Upstream sources: `inference/model.py` (linear definitions + module names) + the official checkpoint index `model.safetensors.index.json` (authoritative key set).
+  - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json`.
+  - DS4 contract: `contract_summary.json` `tensor_shapes.*` and `tensor_keys.*` (plus key-set fingerprints under `checkpoint_index.*`).
+- **Correctness oracle requirements (what must be validated before trusting outputs)**:
+  - Upstream sources: `encoding/tests/*` (encoding oracle vectors) and `oracle/prompts.json` (logits-oracle prompt set).
+  - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` and `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`.
+  - DS4 contract: `contract_summary.json` `oracle.*` plus sha256 pinning under `upstream.fixtures_sha256.*`.
 
 ## Contract map (machine-readable `contract_summary.json`)
 
