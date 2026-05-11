@@ -1,6 +1,6 @@
 # Ops: Logging + Metrics Conventions
 
-Goal: make Spark0/Spark1 troubleshooting reproducible and grep-able, with minimal
+Goal: make Spark troubleshooting reproducible and grep-able, with minimal
 future refactors.
 
 ## Logging
@@ -13,8 +13,8 @@ Recommended common fields:
 - `level` (`debug|info|warn|error`)
 - `msg`
 - `component` (e.g. `loader`, `scheduler`, `net`, `cuda`)
-- `ds4_instance` (`spark0`, `spark1`)
-- `rank`, `world_size` (for TP=2)
+- `ds4_instance` (`spark0`, `spark1`, `spark2`, `spark3`)
+- `rank`, `world_size` (for TP=2 / TP=4)
 - `request_id` (stable for a streaming request)
 
 Human runbook:

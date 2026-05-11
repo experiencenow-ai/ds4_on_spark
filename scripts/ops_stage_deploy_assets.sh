@@ -59,6 +59,7 @@ rsync_run "$root/deploy/config/" "$target:/tmp/ds4-config/"
 rsync_run "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
 rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
 rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_tp4_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_config_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_spark_standalone_check.sh" "$target:/tmp/ds4-scripts/"
@@ -90,6 +91,7 @@ sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-${instance}.env.example /etc/ds4
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-${instance}.conf.example /etc/ds4/ds4-${instance}.conf
 sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_tp4_readiness.sh /opt/ds4/scripts/ops_tp4_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_config_check.sh /opt/ds4/scripts/ops_ds4_config_check.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_spark_standalone_check.sh /opt/ds4/scripts/ops_spark_standalone_check.sh

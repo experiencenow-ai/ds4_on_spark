@@ -75,6 +75,8 @@ need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
 need_file "$systemd_dir/ds4-preflight-strict@.service"
+need_file "$systemd_dir/ds4-preflight-tp4@.service"
+need_file "$systemd_dir/ds4-preflight-tp4-strict@.service"
 need_file "$systemd_dir/ds4-support-bundle@.service"
 need_file "$systemd_dir/ds4-preflight@.timer"
 need_file "$systemd_dir/ds4-preflight-strict@.timer"
@@ -83,18 +85,25 @@ need_file "$systemd_dir/ds4-support-bundle@.timer"
 need_file "$config_dir/ds4.env.example"
 need_file "$config_dir/ds4-spark0.env.example"
 need_file "$config_dir/ds4-spark1.env.example"
+need_file "$config_dir/ds4-spark2.env.example"
+need_file "$config_dir/ds4-spark3.env.example"
 need_file "$config_dir/ds4-spark0.conf.example"
 need_file "$config_dir/ds4-spark1.conf.example"
+need_file "$config_dir/ds4-spark2.conf.example"
+need_file "$config_dir/ds4-spark3.conf.example"
 need_file "$config_dir/journald.ds4.conf.example"
 need_file "$config_dir/logrotate.ds4.conf.example"
 need_file "$config_dir/prometheus-scrape.ds4.yml.example"
 need_file "$config_dir/hosts.ds4.spark01.example"
+need_file "$config_dir/hosts.ds4.spark_ring.example"
 need_file "$config_dir/ssh_config.ds4.spark01.example"
+need_file "$config_dir/ssh_config.ds4.spark_ring.example"
 need_file "$config_dir/sysctl.ds4.conf.example"
 
 need_file "$scripts_dir/ops_ds4_env_check.sh"
 need_file "$scripts_dir/ops_ds4_config_check.sh"
 need_file "$scripts_dir/ops_tp2_readiness.sh"
+need_file "$scripts_dir/ops_tp4_readiness.sh"
 need_file "$scripts_dir/ops_spark_standalone_check.sh"
 need_file "$scripts_dir/ops_collect_support_bundle.sh"
 need_file "$scripts_dir/ops_validate_staged_assets.sh"
@@ -105,6 +114,7 @@ echo "== sh -n (staged ops scripts) =="
 sh -n "$scripts_dir/ops_ds4_env_check.sh"
 sh -n "$scripts_dir/ops_ds4_config_check.sh"
 sh -n "$scripts_dir/ops_tp2_readiness.sh"
+sh -n "$scripts_dir/ops_tp4_readiness.sh"
 sh -n "$scripts_dir/ops_spark_standalone_check.sh"
 sh -n "$scripts_dir/ops_collect_support_bundle.sh"
 sh -n "$scripts_dir/ops_validate_staged_assets.sh"
@@ -118,6 +128,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
         "$systemd_dir/ds4-strict@.service" \
         "$systemd_dir/ds4-preflight@.service" \
         "$systemd_dir/ds4-preflight-strict@.service" \
+        "$systemd_dir/ds4-preflight-tp4@.service" \
+        "$systemd_dir/ds4-preflight-tp4-strict@.service" \
         "$systemd_dir/ds4-support-bundle@.service" \
         "$systemd_dir/ds4-preflight@.timer" \
         "$systemd_dir/ds4-preflight-strict@.timer" \
@@ -132,7 +144,7 @@ else
 fi
 
 echo "== env examples include required keys =="
-for env in "$config_dir/ds4.env.example" "$config_dir/ds4-spark0.env.example" "$config_dir/ds4-spark1.env.example"; do
+for env in "$config_dir/ds4.env.example" "$config_dir/ds4-spark0.env.example" "$config_dir/ds4-spark1.env.example" "$config_dir/ds4-spark2.env.example" "$config_dir/ds4-spark3.env.example"; do
     need_key_in_file "DS4_INSTANCE" "$env"
     need_key_in_file "DS4_HOME" "$env"
     need_key_in_file "DS4_STATE_DIR" "$env"

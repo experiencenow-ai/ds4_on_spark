@@ -1,4 +1,4 @@
-# Ops: SSH + Network Runbook (Spark0/Spark1)
+# Ops: SSH + Network Runbook (Spark0/Spark1 + Spark Ring)
 
 This is a **human-run** checklist for keeping Spark connectivity stable.
 
@@ -11,7 +11,7 @@ SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 ssh $SSH_OPTS <user>@spark0.local hostname
 ```
 
-`scripts/ops_stage_deploy_assets.sh` and `scripts/ops_spark01_mesh_check.sh` both respect `SSH_OPTS`.
+`scripts/ops_stage_deploy_assets.sh`, `scripts/ops_spark01_mesh_check.sh`, and `scripts/ops_spark_ring_mesh_check.sh` all respect `SSH_OPTS`.
 
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark
 console.
@@ -21,6 +21,7 @@ console.
 If you prefer a single config file instead of repeating long `SSH_OPTS`, this repo includes an example:
 
 - `deploy/config/ssh_config.ds4.spark01.example`
+- `deploy/config/ssh_config.ds4.spark_ring.example`
 
 Example usage (Mac-side):
 
@@ -65,6 +66,13 @@ If you want to run a mesh check *and* stage deploy assets in one flow, use:
 
 ```bash
 ./scripts/ops_stage_spark0_spark1.sh --mesh-check spark0@<spark0-host> spark1@<spark1-host>
+```
+
+For Spark0..Spark3:
+
+```bash
+./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>
 ```
 
 Optional: add a best-effort TCP probe to the peer (only meaningful if something is listening):
@@ -122,6 +130,7 @@ active.
 If you choose `/etc/hosts` pinning, this repo includes a starting point:
 
 - `deploy/config/hosts.ds4.spark01.example`
+- `deploy/config/hosts.ds4.spark_ring.example`
 
 Stage it via `scripts/ops_stage_deploy_assets.sh` (it lands under `/tmp/ds4-config/`) and append the lines to `/etc/hosts` on each Spark (human-run, review first).
 
