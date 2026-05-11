@@ -21,7 +21,7 @@ if [ "$matrix_tsv" = "" ] || [ ! -r "$matrix_tsv" ]; then
     exit 2
 fi
 
-ALLOW_RUN="${ALLOW_RUN:-1}"
+ALLOW_RUN="${ALLOW_RUN:-0}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 MAX_TOKENS="${MAX_TOKENS:-64}"

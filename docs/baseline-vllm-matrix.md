@@ -13,6 +13,13 @@ The entrypoint is:
 scripts/run_baseline_vllm_matrix.sh <spark-ssh-target> <matrix.tsv>
 ```
 
+If you want a single local output directory with per-row reports plus a single
+scored summary, use:
+
+```sh
+scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
+```
+
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
 
@@ -36,6 +43,17 @@ ALLOW_RUN=1 ALLOW_FETCH=0 \
 scripts/run_baseline_vllm_matrix.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
 ```
 
+Bundle (recommended for multi-row comparisons; creates its own `model_runs.csv`
+inside the bundle dir):
+
+```sh
+BUNDLE_LABEL=qwen-ling-ladder \
+PROMPT='Explain Redis streams in one paragraph.' \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+ALLOW_RUN=1 ALLOW_FETCH=0 \
+scripts/run_baseline_vllm_matrix_bundle.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
+```
+
 Notes:
 
 - Keep `PROMPT`, `MAX_TOKENS`, and `TENSOR_PARALLEL_SIZE` constant across the matrix.
@@ -43,6 +61,7 @@ Notes:
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.
 - Do not download large model weights unless explicitly approved.
+- These wrappers default to `ALLOW_RUN=0` so nothing executes on Spark unless you opt in.
 
 ## Matrix TSV format
 
@@ -65,13 +84,15 @@ Template:
 ```text
 # run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
 ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4	
-qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B-DFlash
-qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B-DFlash
-qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B-DFlash
-qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B-DFlash
-qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-DFlash
-qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-DFlash
+qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/z-lab/Qwen3.5-4B-DFlash
+qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/z-lab/Qwen3.5-9B-DFlash
+qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/z-lab/Qwen3.5-27B-DFlash
+qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/z-lab/Qwen3.6-27B-DFlash
+qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/z-lab/Qwen3-Coder-30B-A3B-DFlash
+qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/z-lab/Qwen3.6-35B-A3B-DFlash
 ```
+
+Repo template file: `fixtures/baseline/vllm_matrix_template.tsv`.
 
 ## Recommended measurement order
 
