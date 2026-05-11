@@ -140,6 +140,18 @@ Refreshed again (19:21Z refresh, `origin/main` at `git: 10e5b7b`):
 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local > /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1921Z_loop_accessprobe.txt
 ```
 
+Refreshed again (21:54Z refresh, Spark0 + Spark1 multi-target summary mode, `origin/main` at `git: e4da4da`):
+
+```bash
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark1.local || true) > /private/tmp/ds4_spark01_probe_summary_redacted_2026-05-10T2154Z_loop_spark_access.txt
+```
+
+Refreshed again (22:25Z refresh, Spark0 + Spark1 multi-target summary mode, `origin/main` at `git: 79a155f`, temporary gitdir):
+
+```bash
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_on_spark_gitdir_loop_spark_access DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark1.local || true) > /private/tmp/ds4_spark01_probe_summary_redacted_2026-05-10T2225Z_loop_spark_access.txt
+```
+
 High-level facts observed (from the probe output in `docs/spark0-probe-2026-05-10.md`):
 
 - OS: Ubuntu 24.04.4 LTS (Noble)

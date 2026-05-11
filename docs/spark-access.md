@@ -81,6 +81,7 @@ Notes:
 - The sysfs PCIe cross-check includes the resolved sysfs path and a PCIe device path chain (e.g., root port -> endpoint). When the relevant `current_link_*` and `max_link_*` sysfs fields exist on upstream devices, those are printed as `path ...` lines to help diagnose link downtraining without `sudo`. When permitted, the probe also attempts to print `lspci -vv` link capability/state lines for each `path ...` chain element.
 - The Spark probe also emits a capped `nvidia-smi -q` PCI section (`nvidia-smi -q pci link`) so the output includes `GPU Link Info` fields like `Device Max` / `Host Max` alongside the negotiated `Current` link state (useful when `nvidia-smi --query-gpu=pcie.link.*` reports surprising `max` values).
 - The Spark probe also prints a small `nvidia-smi -q fabric/c2c (summary)` section (`Product Architecture`, `Peer Type`, `GPU C2C Mode`) to help interpret misleading PCIe link fields on GB10-class platforms.
+- On GB10-class Spark systems, it is common for `nvidia-smi` CSV queries to report `pcie.link.gen.max=1` / `width.current=1` even when `nvidia-smi -q` reports `Device Max: 5` / `Host Max: 5` and `GPU C2C Mode: Enabled`; treat the PCIe link fields as best-effort/legacy reporting and prefer the `-q` `GPU Link Info` + the optional `pcie.link.gen.gpumax/hostmax` query fields for max-capability cross-checks.
 - The Spark probe prints both `selected compute_cap:` and `selected nvcc arch:` so `NVCC_ARCH` selection is explicit in committed excerpts.
 - The Spark probe also prints a `== cuda/toolchain facts (summary) ==` block that consolidates the key version/arch facts (`driver`, `smi CUDA`, `nvcc release`, `cuda version.json`, `cuda.h CUDA_VERSION`, `compute_cap`, `nvcc arch`) into a single paste-friendly stanza.
 - The Spark probe prints `columns:` header lines for `nvidia-smi --query-gpu` CSV output so pasted excerpts are self-describing.
@@ -118,6 +119,14 @@ For quick smoke checks (especially when Spark1 is flaky/not-yet-provisioned), us
 ```bash
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_SUMMARY=1 ./scripts/spark_probe.sh spark1.local || true
 ```
+
+For the smallest/stablest output (good for Spark1 bring-up), use facts-only mode:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 ./scripts/spark_probe.sh spark1.local || true
+```
+
+Facts-only mode implies summary mode and trims variable runtime sections (GPU temperature/pstate, power draw/utilization, IP addr/routes, and disk usage) while keeping the stable identity + CUDA/toolchain + GPU inventory + disk model/size facts needed for bring-up.
 
 In summary mode, the Spark probe suppresses larger/diagnostic-only sections (for example, `nvcc --list-gpu-*` lists and the full `/usr/local/cuda/version.json` dump). It still records the key CUDA/toolchain facts (including `selected compute_cap`, the `nvcc` release banner when present, and `cuda version.json` `cuda: <version>` when available) so Spark1 bring-up checks stay readable.
 

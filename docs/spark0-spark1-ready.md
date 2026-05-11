@@ -2,10 +2,11 @@
 
 This is a lightweight, reproducible probe flow for Spark hosts.
 
-## Current Status (2026-05-10)
+## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` is not reachable yet (likely not provisioned / not on the same mDNS domain).
+- `spark1.local` is not reachable yet (as of the 00:24Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11.md`, `docs/spark0-probe-2026-05-11.md`.
 
 ## Goals
 
@@ -38,6 +39,14 @@ SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-cod
 ```
 
 Optional toggles:
+
+- Facts-only mode (smallest/stablest output; good for Spark1 bring-up checks):
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
+```
+
+Facts-only mode implies summary mode and trims variable runtime sections (GPU temperature/pstate, power draw/utilization, IP addr/routes, and disk usage) while keeping stable identity + CUDA/toolchain + GPU inventory + disk model/size facts.
 
 - Summary mode (smaller output; useful for Spark1 smoke checks when it may be unreachable):
 
