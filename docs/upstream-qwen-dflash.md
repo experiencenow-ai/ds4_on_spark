@@ -29,8 +29,8 @@ The DFlash implementation reference is `z-lab/dflash`
 
 Draft model cards (at the pinned draft commits) reference:
 
-- vLLM: `vllm-project/vllm` at `refs/pull/40898/head`
-- SGLang: `sgl-project/sglang` at `refs/pull/20547/head`
+- vLLM: `vllm-project/vllm` at `refs/pull/40898/head` (`23002d3f368a5a24641301bc71e4ae15dae89a24`)
+- SGLang: `sgl-project/sglang` at `refs/pull/20547/head` (`e67a0d488d905661e621342912874bc7893f1d94`)
 
 ## Model-card Requirements (DFlash)
 

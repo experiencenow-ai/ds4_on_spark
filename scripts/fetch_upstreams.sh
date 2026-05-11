@@ -75,8 +75,10 @@ Targets:
   deepseek_v4_gguf_teamblobfish  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   bati_cpp   (runtime required by batiai/DeepSeek-V4-Flash-GGUF)
   vllm
+  vllm_dflash_pr
   transformers
   sglang
+  sglang_dflash_pr
   llama_cpp
   llama_cpp_deepseek_v4_flash
   llama_cpp_deepseek_v4_support_wip
@@ -288,6 +290,10 @@ fetch_one()
 			upstream="vllm-project/vllm"; ref="refs/tags/v0.20.2"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "vllm" "https://github.com/vllm-project/vllm.git" "${ref}" "${expected}"
 			;;
+		vllm_dflash_pr)
+			upstream="vllm-project/vllm"; ref="refs/pull/40898/head"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "vllm_dflash_pr" "https://github.com/vllm-project/vllm.git" "${ref}" "${expected}"
+			;;
 		transformers)
 			upstream="huggingface/transformers"; ref="refs/tags/v5.8.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
@@ -489,6 +495,10 @@ fetch_one()
 		sglang)
 			upstream="sgl-project/sglang"; ref="refs/tags/v0.5.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "sglang" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
+			;;
+		sglang_dflash_pr)
+			upstream="sgl-project/sglang"; ref="refs/pull/20547/head"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "sglang_dflash_pr" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
 		llama_cpp)
 			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9102"; expected="$(manifest_commit_for "${upstream}" "${ref}")"

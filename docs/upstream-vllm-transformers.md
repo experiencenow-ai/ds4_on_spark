@@ -44,6 +44,10 @@ DeepSeek-V4 landing notes:
 - vLLM blog (DeepSeek-V4 attention + deployment notes): `https://vllm.ai/blog/deepseek-v4`
 - Community reports indicate some DeepSeek-V4 local deployments may require vLLM nightly wheels + a newer Transformers snapshot than the latest stable wheels; treat this as a compatibility watch item (not a guarantee): `https://discuss.vllm.ai/t/the-latest-version-of-vllm-is-not-compatible-with-local-deployment-of-deepseek-v4-0-20/2599`
 
+DFlash model-card PR pin (reference):
+
+- Z Lab DFlash model cards reference vLLM at `refs/pull/40898/head` (`23002d3f368a5a24641301bc71e4ae15dae89a24`); we pin it separately in `docs/upstream-manifest.md` for reproducible inspection.
+
 Community compatibility reference (non-Spark; license-unknown):
 
 - Ampere SM86 patch set: `https://github.com/Lasimeri/vllm-dsv4-ampere` (`refs/heads/master`, `06f6f6058834907b7db490f440baa443787a0666`)
