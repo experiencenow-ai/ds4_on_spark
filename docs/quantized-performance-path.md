@@ -80,7 +80,7 @@ Tip: when `cost_scale` is meaningful (synthetic or replayed), consider `--backpr
 Synthetic recommendations (reservation + MTP breakeven) are tracked in:
 
 - `docs/scheduler-simulator-recommendations.md`
-- `docs/scheduler-simulator-recommendations-2026-05-10.json`
+- `docs/scheduler-simulator-recommendations-2026-05-11.json`
 
 ## Phase 1: Real Router Trace Replay
 
