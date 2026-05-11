@@ -35,6 +35,7 @@ class CanonicalRecord:
     prompt: str
     output: str
     answer: str
+    answer_source: str
     buffer_id: str
     buffer_item_id: str
 
@@ -158,9 +159,15 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
     prompt = _get_str(obj, "prompt", "input_prompt", "prompt_text", "input")
     output = _get_str(obj, "output", "completion", "response", "assistant", "text")
 
-    answer = _get_str(obj, "answer", "final_answer")
-    if answer == "" and output != "":
-        answer = extract_answer(output)
+    answer = _get_str(obj, "answer", "final_answer", "expected_answer", "gold_answer")
+    answer_source = "missing"
+    if answer != "":
+        answer_source = "field"
+    elif output != "":
+        extracted = extract_answer(output)
+        if extracted != "":
+            answer = extracted
+            answer_source = "extract"
 
     buffer_id = _get_str(obj, "buffer_id", "entropy_buffer_id")
     buffer_item_id = _get_str(obj, "buffer_item_id", "entropy_buffer_item_id", "buffer_key")
@@ -181,6 +188,7 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
         prompt=prompt,
         output=output,
         answer=answer,
+        answer_source=answer_source,
         buffer_id=buffer_id,
         buffer_item_id=buffer_item_id,
     ))

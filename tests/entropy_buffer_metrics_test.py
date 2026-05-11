@@ -23,6 +23,7 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         })
         self.assertEqual(c.rtype, "task_run")
         self.assertEqual(c.answer, "2")
+        self.assertEqual(c.answer_source, "extract")
 
         j = lib.canonicalize_record({
             "schema": "ds4_pairwise_judge_record_v1",
@@ -182,6 +183,21 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         top = recommend._select(scored, history, limit=2, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, avoid_seen_buffer_item_id=True)
         self.assertGreaterEqual(len(top), 1)
         self.assertTrue(all(c.buffer_item_id != "entropy.v1:buf.task.001:plain.v1" for c in top))
+
+    def test_recommendations_prefer_unseen_answers_when_provided(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_answer_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_answer_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates)
+        self.assertGreaterEqual(len(scored), 3)
+        self.assertEqual(scored[0].answer, "C")
+
+        top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].answer, "C")
 
 
 if __name__ == "__main__":

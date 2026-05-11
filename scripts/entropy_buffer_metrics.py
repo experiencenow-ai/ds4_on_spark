@@ -397,6 +397,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     total_tok_per_s: List[float] = []
 
     answers_nonempty: List[str] = []
+    answer_source_counts: Dict[str, int] = {}
+    answer_task_runs_nonempty = 0
+    answer_task_runs_extracted = 0
 
     novelty_flag_counts: Dict[str, int] = {}
     novelty_flagged = 0
@@ -442,6 +445,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         _inc(answers, c.answer)
         if c.answer != "":
             answers_nonempty.append(c.answer)
+            answer_task_runs_nonempty += 1
+            if c.answer_source == "extract":
+                answer_task_runs_extracted += 1
+        if c.answer_source != "":
+            answer_source_counts[c.answer_source] = answer_source_counts.get(c.answer_source, 0) + 1
         for tag in lib.get_list(c.raw, "tags", "tag"):
             _inc(tag_counts, tag)
         _inc(buffer_ids, c.buffer_id)
@@ -664,6 +672,16 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "answer": _div_stats(answers),
         "tags": _div_stats(tag_counts),
     }
+    ans = diversity.get("answer") or {}
+    ans.update({
+        "nonempty_task_runs": int(answer_task_runs_nonempty),
+        "nonempty_task_run_rate": 0.0 if len(task_runs) == 0 else (float(answer_task_runs_nonempty) / float(len(task_runs))),
+        "extracted_task_runs": int(answer_task_runs_extracted),
+        "extracted_task_run_rate": 0.0 if len(task_runs) == 0 else (float(answer_task_runs_extracted) / float(len(task_runs))),
+        "extracted_rate_among_nonempty": 0.0 if answer_task_runs_nonempty == 0 else (float(answer_task_runs_extracted) / float(answer_task_runs_nonempty)),
+        "source_counts": dict(sorted(answer_source_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+    })
+    diversity["answer"] = ans
 
     word_counts: Dict[str, int] = {}
     for w in out_words:
