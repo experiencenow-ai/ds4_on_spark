@@ -31,6 +31,18 @@ If the repo stores sharded GGUFs (e.g. `...-00001-of-00002.gguf`), prefer the gr
 ./scripts/upstream_hf_smallest_gguf.sh <org>/<repo> --group-shards --limit 20
 ```
 
+To filter a *search query* down to “the smallest GGUF variant per repo that’s <= N GiB” (shards summed), use:
+
+```bash
+./scripts/upstream_hf_spark_gguf_candidates.sh "DeepSeek-V4-Flash GGUF" --limit 50 --sort downloads --max-gib 110
+```
+
+To avoid common false positives, you can require the model-card `base_model` field to reference the official checkpoint:
+
+```bash
+./scripts/upstream_hf_spark_gguf_candidates.sh "DeepSeek-V4-Flash GGUF" --limit 50 --sort downloads --max-gib 110 --require-base-model deepseek-ai/DeepSeek-V4-Flash
+```
+
 Sanity-check for false positives:
 
 - Many search hits are *not* the 284B MoE DeepSeek-V4-Flash model (e.g., smaller distill/fine-tune repos that include “V4-Flash” in the name).
