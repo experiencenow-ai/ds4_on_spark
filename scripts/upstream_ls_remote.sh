@@ -164,17 +164,16 @@ print_pinned()
 	local got
 
 	if [[ "${upstream}" == huggingface.co/* ]]; then
-		if [ "${ref}" != "refs/heads/main" ] && [ "${ref}" != "refs/heads/master" ]; then
-			printf "== %s\n" "${name}"
-			printf "upstream:  %s\n" "${upstream}"
-			printf "ref:       %s\n" "${ref}"
-			printf "expected:  %s\n" "${expected}"
-			printf "got:       UNSUPPORTED_HF_REF\n\n"
-			return 0
+		if [ "${ref}" = "refs/heads/main" ] || [ "${ref}" = "refs/heads/master" ]; then
+			local report
+			report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
+			got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
+		else
+			got="$(git_ls_remote "${url}" "${ref}" | awk '{print $1}' | head -n 1 || true)"
+			if [ -z "${got}" ]; then
+				got="MISSING"
+			fi
 		fi
-		local report
-		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
-		got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
 		printf "== %s\n" "${name}"
 		printf "upstream:  %s\n" "${upstream}"
 		printf "ref:       %s\n" "${ref}"

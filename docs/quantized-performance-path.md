@@ -172,7 +172,7 @@ Trace JSONL fields:
 - `t_ms`: token arrival time in milliseconds (default). Alternatively, set `--trace-time-mode dt_ms` and emit per-line `dt_ms` deltas.
 - `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - Runtime traces may emit microsecond/nanosecond variants (`t_us` / `t_ns` or `dt_us` / `dt_ns`); `--trace-input-format runtime` (or `trace_extract.py`) normalizes them into millisecond `t_ms` / `dt_ms` fields.
-- `cls`: `"interactive"` or `"batch"`
+- `cls`: `"interactive"` or `"batch"` (runtime input format also accepts integer class IDs `0` (interactive) and `1` (batch), normalized by `--trace-input-format runtime` / `trace_extract.py`)
 - `candidates`: ordered expert candidates for that token
 - `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
   - `candidates`: ordered expert candidates for that layer (required)
@@ -239,7 +239,7 @@ Initial scope:
   - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load) + pinned payload fingerprint gate: `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Local combined runner (no fetch/build; requires a prebuilt `llama-ds4-mtp-sidecar-probe`): `scripts/run_mtp_sidecar_loader_probe_local.sh`
-- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-9cb905d-mtp-sidecar.json`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-c198a70-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

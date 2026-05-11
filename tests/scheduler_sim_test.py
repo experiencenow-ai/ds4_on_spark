@@ -3428,6 +3428,34 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_maps_numeric_cls_to_latency_class(self) -> None:
+        obj = {"t_ms": 0.0, "cls": 0, "candidates": [7, 3, 19]}
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["cls"], "interactive")
+        self.assertEqual(rec["candidates"], [7, 3, 19])
+
+        obj2 = {"t_ms": 0.0, "cls_id": 1, "candidates": [0]}
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2["cls"], "batch")
+
+    def test_trace_load_jsonl_runtime_accepts_numeric_cls(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": 0, "candidates": [0]}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, input_format="runtime", non_route_policy="error")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_trace_extract_maps_ns_timestamps(self) -> None:
         obj = {
             "ts_ns": 5_000_000,
