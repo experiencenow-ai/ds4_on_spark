@@ -31,6 +31,18 @@ If the repo stores sharded GGUFs (e.g. `...-00001-of-00002.gguf`), prefer the gr
 ./scripts/upstream_hf_smallest_gguf.sh <org>/<repo> --group-shards --limit 20
 ```
 
+To filter a *search query* down to “the smallest GGUF variant per repo that’s <= N GiB” (shards summed), use:
+
+```bash
+./scripts/upstream_hf_spark_gguf_candidates.sh "DeepSeek-V4-Flash GGUF" --limit 50 --sort downloads --max-gib 110
+```
+
+To avoid common false positives, you can require the model-card `base_model` field to reference the official checkpoint:
+
+```bash
+./scripts/upstream_hf_spark_gguf_candidates.sh "DeepSeek-V4-Flash GGUF" --limit 50 --sort downloads --max-gib 110 --require-base-model deepseek-ai/DeepSeek-V4-Flash
+```
+
 Sanity-check for false positives:
 
 - Many search hits are *not* the 284B MoE DeepSeek-V4-Flash model (e.g., smaller distill/fine-tune repos that include “V4-Flash” in the name).
@@ -107,7 +119,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### antirez/deepseek-v4-gguf (DS4-tuned IQ2XXS)
 
-- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `c198a70525f1856f1bf50448f163471692c881f8` (`refs/heads/main`)
+- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `b0c3326275d2207e25e42bc8ac0704952466b5bb` (`refs/heads/main`)
 - License: MIT (model card)
 - Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
   - IQ2XXS: `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` (86720111200 bytes, 80.8 GiB)

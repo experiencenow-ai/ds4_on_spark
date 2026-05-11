@@ -20,6 +20,25 @@ priority is to add measurable performance layers around that working path:
 This can get us most of the way to a usable high-performance quantized product
 before the native FP4/FP8 loader and dual-Spark TP path are complete.
 
+## Gate 0: MTP sidecar + one-token wiring (no full downloads)
+
+If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven MTP path), add an explicit correctness gate *before* any acceptance/perf claims:
+
+- Validate the staged MTP sidecar contract (Spark-safe; header + tensor table only; no trunk load):
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
+```
+
+- Only after the sidecar contract passes, run the llama.cpp **one-token** MTP wiring probe (gamma=1) runner (still gated; see `docs/mtp-one-token-draft-probe.md`):
+
+```bash
+scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
+
 ## Gate 1: Real Quantized Generation
 
 Before scheduler or MTP work, capture one successful run from
@@ -239,7 +258,7 @@ Initial scope:
   - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load) + pinned payload fingerprint gate: `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Local combined runner (no fetch/build; requires a prebuilt `llama-ds4-mtp-sidecar-probe`): `scripts/run_mtp_sidecar_loader_probe_local.sh`
-- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-c198a70-mtp-sidecar.json`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

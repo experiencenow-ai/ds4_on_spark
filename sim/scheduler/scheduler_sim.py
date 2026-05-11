@@ -161,6 +161,7 @@ class SimConfig:
     k_signal: str = "global"
     pending_units: str = "tasks"
     backpressure_units: str = "tasks"
+    backpressure_zero_admit_policy: str = "skip"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -192,6 +193,7 @@ class Task:
     enqueue_ms: float
     cost_scale: float = 1.0
     mtp_phase: MtpPhase = MtpPhase.NONE
+    layer_index: int = 0
     start_ms: Optional[float] = None
     served_hi: bool = False
 
@@ -228,6 +230,7 @@ class TokenState:
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
+    stage_accounted_idx: int = -1
     admitted_any: bool = False
     metrics_slot: int = -1
     admitted_verify_layer0: int = 0
@@ -357,11 +360,20 @@ class SimMetrics:
     skipped_stages_backpressure_batch: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    blocked_stages_backpressure_attempts: int = 0
+    blocked_stages_backpressure_attempts_interactive: int = 0
+    blocked_stages_backpressure_attempts_batch: int = 0
+    skipped_stages_backpressure_per_layer: List[int] = dataclasses.field(default_factory=list)
+    skipped_stages_backpressure_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
+    skipped_stages_backpressure_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
     stages_total: int = 0
     stages_total_interactive: int = 0
     stages_total_batch: int = 0
     stages_total_verify: int = 0
     stages_total_draft: int = 0
+    stages_total_per_layer: List[int] = dataclasses.field(default_factory=list)
+    stages_total_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
+    stages_total_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
     admitted_tasks: int = 0
     admitted_tasks_interactive: int = 0
     admitted_tasks_batch: int = 0
@@ -409,6 +421,8 @@ class SimMetrics:
     pending_depth_hist_mtp_draft_overflow: float = 0.0
     pending_depth_hist_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist_mtp_verify_overflow: float = 0.0
+    pending_depth_hist_per_layer: List[List[float]] = dataclasses.field(default_factory=list)
+    pending_depth_hist_per_layer_overflow: List[float] = dataclasses.field(default_factory=list)
     work_units_total: float = 0.0
     work_units_interactive: float = 0.0
     work_units_batch: float = 0.0
@@ -700,6 +714,42 @@ class SimMetrics:
                     "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
                     "skipped_backpressure_verify": self.skipped_stages_backpressure_verify,
                     "skipped_backpressure_draft": self.skipped_stages_backpressure_draft,
+                    "blocked_backpressure_attempts": self.blocked_stages_backpressure_attempts,
+                    "blocked_backpressure_attempts_interactive": self.blocked_stages_backpressure_attempts_interactive,
+                    "blocked_backpressure_attempts_batch": self.blocked_stages_backpressure_attempts_batch,
+                    "per_layer": [
+                        {
+                            "layer": int(li),
+                            "total": int(self.stages_total_per_layer[li]),
+                            "total_verify": int(self.stages_total_per_layer_verify[li]),
+                            "total_draft": int(self.stages_total_per_layer_draft[li]),
+                            "skipped_backpressure": int(self.skipped_stages_backpressure_per_layer[li]),
+                            "skipped_backpressure_verify": int(self.skipped_stages_backpressure_per_layer_verify[li]),
+                            "skipped_backpressure_draft": int(self.skipped_stages_backpressure_per_layer_draft[li]),
+                            "pending_depth_time_weighted": {
+                                "max_depth": (len(self.pending_depth_hist_per_layer[li]) - 1)
+                                if li < len(self.pending_depth_hist_per_layer) and len(self.pending_depth_hist_per_layer[li]) != 0
+                                else 0,
+                                "overflow_time_ms": float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                "p50": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.50,
+                                ),
+                                "p95": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.95,
+                                ),
+                                "p99": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.99,
+                                ),
+                            },
+                        }
+                        for li in range(len(self.stages_total_per_layer))
+                    ],
                 },
                 "task_queue_wait_ms": {
                     "interactive": summarize(self.task_queue_wait_ms_interactive),
@@ -3071,6 +3121,10 @@ def run_simulation(
     if backpressure_units not in ("tasks", "work"):
         raise ValueError("backpressure_units must be 'tasks' or 'work'")
 
+    backpressure_zero_admit_policy = cfg.backpressure_zero_admit_policy.strip().lower()
+    if backpressure_zero_admit_policy not in ("skip", "stall"):
+        raise ValueError("backpressure_zero_admit_policy must be 'skip' or 'stall'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -3201,6 +3255,11 @@ def run_simulation(
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
+    stalled_tokens: Deque[int] = deque()
+    stalled_set: set[int] = set()
+    max_layers_seen = 1
+    for route in trace:
+        max_layers_seen = max(max_layers_seen, len(_route_layers(route)))
     hist_len = 0
     if cfg.pending_hist_max_depth > 0:
         hist_len = min(cfg.pending_hist_max_depth, cfg.expert_queue_max) + 1
@@ -3244,6 +3303,14 @@ def run_simulation(
         pending_depth_hist_mtp_draft_overflow=0.0,
         pending_depth_hist_mtp_verify=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_depth_hist_mtp_verify_overflow=0.0,
+        pending_depth_hist_per_layer=[[0.0 for _ in range(hist_len)] for _ in range(max_layers_seen)] if hist_len != 0 else [],
+        pending_depth_hist_per_layer_overflow=[0.0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer=[0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer_verify=[0 for _ in range(max_layers_seen)],
+        skipped_stages_backpressure_per_layer_draft=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer_verify=[0 for _ in range(max_layers_seen)],
+        stages_total_per_layer_draft=[0 for _ in range(max_layers_seen)],
     )
     rng = random.Random(cfg.sim_seed)
     metrics.dflash_draft_cost_scale = float(cfg.dflash_draft_cost_scale)
@@ -3281,6 +3348,8 @@ def run_simulation(
     last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_draft: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_verify: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_per_layer: List[List[int]] = [[0 for _ in range(max_layers_seen)] for _ in range(cfg.num_experts)]
+    pending_per_layer: List[List[int]] = [[0 for _ in range(max_layers_seen)] for _ in range(cfg.num_experts)]
 
     def integrate_areas(now_ms: float) -> None:
         nonlocal last_t_ms
@@ -3354,6 +3423,13 @@ def run_simulation(
                         metrics.pending_depth_hist_mtp_verify_overflow += dt
                     else:
                         metrics.pending_depth_hist_mtp_verify[d_verify] += dt
+                    if len(metrics.pending_depth_hist_per_layer) != 0:
+                        for li in range(max_layers_seen):
+                            d_layer = last_pending_per_layer[e][li]
+                            if d_layer >= hist_len:
+                                metrics.pending_depth_hist_per_layer_overflow[li] += dt
+                            else:
+                                metrics.pending_depth_hist_per_layer[li][d_layer] += dt
         last_t_ms = now_ms
 
     def snapshot_state() -> None:
@@ -3375,6 +3451,8 @@ def run_simulation(
                 last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             last_pending_mtp_draft[e] = experts[e].pending_mtp_draft()
             last_pending_mtp_verify[e] = experts[e].pending_mtp_verify()
+            for li in range(max_layers_seen):
+                last_pending_per_layer[e][li] = pending_per_layer[e][li]
             if last_pending[e] > metrics.max_pending_per_expert[e]:
                 metrics.max_pending_per_expert[e] = last_pending[e]
             if last_pending_work[e] > metrics.max_pending_work_per_expert[e]:
@@ -3538,13 +3616,15 @@ def run_simulation(
                     metrics.dropped_tasks_backpressure_batch += 1
                 tokens[tid].dropped_tasks_backpressure += 1
                 continue
-            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase)
+            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase, layer_index=stage.layer_index)
             if route.cls == LatencyClass.INTERACTIVE:
                 eq.hi.append(task)
                 eq.pending_work_hi += float(task.cost_scale)
             else:
                 eq.lo.append(task)
                 eq.pending_work_lo += float(task.cost_scale)
+            if stage.layer_index >= 0 and stage.layer_index < max_layers_seen:
+                pending_per_layer[expert_id][stage.layer_index] += 1
             if task.mtp_phase == MtpPhase.DRAFT:
                 eq.queued_tasks_mtp_draft += 1
             elif task.mtp_phase == MtpPhase.VERIFY:
@@ -3559,6 +3639,28 @@ def run_simulation(
             admitted += 1
             _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
         return(admitted)
+
+    def _stall_token(tid: int) -> None:
+        if tid in stalled_set:
+            return
+        stalled_set.add(tid)
+        stalled_tokens.append(tid)
+
+    def _retry_stalled(now_ms: float) -> None:
+        if len(stalled_tokens) == 0:
+            return
+        n = len(stalled_tokens)
+        for _ in range(n):
+            tid = stalled_tokens.popleft()
+            stalled_set.discard(tid)
+            ts = tokens.get(tid)
+            if ts is None:
+                continue
+            if ts.done_ms is not None:
+                continue
+            if ts.remaining != 0:
+                continue
+            _advance_token(now_ms, tid)
 
     def _finish_token(now_ms: float, tid: int) -> None:
         ts = tokens[tid]
@@ -3617,7 +3719,8 @@ def run_simulation(
         while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
             stage = ts.stages[ts.stage_idx]
             desired_stage = min(stage.k, len(stage.candidates))
-            if desired_stage > 0:
+            first_attempt = (ts.stage_accounted_idx != ts.stage_idx)
+            if desired_stage > 0 and first_attempt:
                 metrics.stages_total += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.stages_total_interactive += 1
@@ -3627,8 +3730,25 @@ def run_simulation(
                     metrics.stages_total_verify += 1
                 else:
                     metrics.stages_total_draft += 1
+                if stage.layer_index < len(metrics.stages_total_per_layer):
+                    metrics.stages_total_per_layer[stage.layer_index] += 1
+                    if stage.is_verify:
+                        metrics.stages_total_per_layer_verify[stage.layer_index] += 1
+                    else:
+                        metrics.stages_total_per_layer_draft[stage.layer_index] += 1
+                ts.stage_accounted_idx = ts.stage_idx
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
+                if backpressure_zero_admit_policy == "stall":
+                    pending_limit = _expert_queue_pending_limit_units(cfg, ts.cls, backpressure_units)
+                    if float(pending_limit) > 0.0:
+                        metrics.blocked_stages_backpressure_attempts += 1
+                        if ts.cls == LatencyClass.INTERACTIVE:
+                            metrics.blocked_stages_backpressure_attempts_interactive += 1
+                        else:
+                            metrics.blocked_stages_backpressure_attempts_batch += 1
+                        _stall_token(tid)
+                        return
                 metrics.skipped_stages_backpressure += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.skipped_stages_backpressure_interactive += 1
@@ -3638,6 +3758,12 @@ def run_simulation(
                     metrics.skipped_stages_backpressure_verify += 1
                 else:
                     metrics.skipped_stages_backpressure_draft += 1
+                if stage.layer_index < len(metrics.skipped_stages_backpressure_per_layer):
+                    metrics.skipped_stages_backpressure_per_layer[stage.layer_index] += 1
+                    if stage.is_verify:
+                        metrics.skipped_stages_backpressure_per_layer_verify[stage.layer_index] += 1
+                    else:
+                        metrics.skipped_stages_backpressure_per_layer_draft[stage.layer_index] += 1
                 ts.skipped_stages_backpressure += 1
                 if stage.is_verify:
                     ts.skipped_stages_backpressure_verify += 1
@@ -3941,6 +4067,13 @@ def run_simulation(
             eq.in_flight_tasks_mtp_verify -= done_verify
 
             for task in ev.tasks:
+                li = int(task.layer_index)
+                if li >= 0 and li < max_layers_seen:
+                    if pending_per_layer[ev.expert_id][li] <= 0:
+                        raise RuntimeError("pending_per_layer underflow")
+                    pending_per_layer[ev.expert_id][li] -= 1
+
+            for task in ev.tasks:
                 tid = task.token_id
                 if tid not in tokens:
                     raise RuntimeError("unknown token_id")
@@ -3964,6 +4097,8 @@ def run_simulation(
         else:
             raise RuntimeError("unknown event kind")
 
+        if ev.kind == EventKind.TASK_DONE:
+            _retry_stalled(now_ms)
         snapshot_state()
 
     makespan_ms = max((t.done_ms or 0.0) for t in tokens.values()) if len(tokens) != 0 else 0.0
@@ -4039,6 +4174,15 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
         if len(hist_time_ms) == 0:
             return(0)
         return(len(hist_time_ms) - 1)
+
+    def _hist_int_mean(hist_time_ms: Sequence[float], overflow_time_ms: float) -> float:
+        total = float(sum(hist_time_ms)) + float(overflow_time_ms)
+        if total <= 0.0:
+            return(0.0)
+        acc = 0.0
+        for d, t in enumerate(hist_time_ms):
+            acc += (float(d) * float(t))
+        return(float(acc) / total)
 
     makespan_ms = metrics.makespan_ms
     token_tps = (float(metrics.num_tokens) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
@@ -4134,8 +4278,7 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
         if len(metrics.trace_expert_batch_size_batch) != 0
         else 0.0
     )
-    return(
-        {
+    out: Dict[str, float] = {
             "makespan_ms": float(makespan_ms),
             "token_throughput_tps": float(token_tps),
             "task_throughput_tps": float(task_tps),
@@ -4276,8 +4419,37 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "skipped_stage_frac_batch": float(skipped_stage_frac_batch),
             "skipped_stage_frac_verify": float(skipped_stage_frac_verify),
             "skipped_stage_frac_draft": float(skipped_stage_frac_draft),
+            "blocked_stages_backpressure_attempts": float(metrics.blocked_stages_backpressure_attempts),
+            "blocked_stages_backpressure_attempts_interactive": float(metrics.blocked_stages_backpressure_attempts_interactive),
+            "blocked_stages_backpressure_attempts_batch": float(metrics.blocked_stages_backpressure_attempts_batch),
         }
-    )
+
+    for li in range(len(metrics.stages_total_per_layer)):
+        total = float(metrics.stages_total_per_layer[li])
+        skipped = float(metrics.skipped_stages_backpressure_per_layer[li])
+        out[f"stages_total_layer{li}"] = float(total)
+        out[f"skipped_stages_backpressure_layer{li}"] = float(skipped)
+        out[f"skipped_stage_frac_layer{li}"] = float((skipped / total) if total > 0.0 else 0.0)
+
+        total_verify = float(metrics.stages_total_per_layer_verify[li])
+        skipped_verify = float(metrics.skipped_stages_backpressure_per_layer_verify[li])
+        if total_verify > 0.0 or skipped_verify > 0.0:
+            out[f"skipped_stage_frac_layer{li}_verify"] = float((skipped_verify / total_verify) if total_verify > 0.0 else 0.0)
+
+        total_draft = float(metrics.stages_total_per_layer_draft[li])
+        skipped_draft = float(metrics.skipped_stages_backpressure_per_layer_draft[li])
+        if total_draft > 0.0 or skipped_draft > 0.0:
+            out[f"skipped_stage_frac_layer{li}_draft"] = float((skipped_draft / total_draft) if total_draft > 0.0 else 0.0)
+
+        if li < len(metrics.pending_depth_hist_per_layer) and li < len(metrics.pending_depth_hist_per_layer_overflow):
+            out[f"pending_depth_time_weighted_p95_layer{li}"] = float(
+                _hist_int_percentile(metrics.pending_depth_hist_per_layer[li], float(metrics.pending_depth_hist_per_layer_overflow[li]), 0.95)
+            )
+            out[f"pending_depth_time_weighted_mean_layer{li}"] = float(
+                _hist_int_mean(metrics.pending_depth_hist_per_layer[li], float(metrics.pending_depth_hist_per_layer_overflow[li]))
+            )
+
+    return(out)
 
 
 def _sim_cfg_apply_overrides(base: SimConfig, overrides: Dict[str, object]) -> SimConfig:
@@ -4726,6 +4898,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="tasks",
         help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
     )
+    p.add_argument(
+        "--backpressure-zero-admit-policy",
+        type=str,
+        default="skip",
+        choices=("skip", "stall"),
+        help="When a stage cannot admit any tasks because all candidates are at the pending limit: skip (default; counts as a backpressure stage-skip and can drop tokens if all stages skip) or stall (retry the same stage later, modeling upstream queueing; can increase latency/makespan).",
+    )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument(
         "--admit-policy",
@@ -5048,6 +5227,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_signal=args.k_signal,
         pending_units=args.pending_units,
         backpressure_units=args.backpressure_units,
+        backpressure_zero_admit_policy=args.backpressure_zero_admit_policy,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,

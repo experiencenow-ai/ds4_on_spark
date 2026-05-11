@@ -9,6 +9,8 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 - Kernel bring-up tiny (no cuBLASLt): `./scripts/cuda_probe_kernel_tiny_spark0.sh`
 - Full suite: `./scripts/cuda_probe_spark0.sh` and `./scripts/cuda_probe_compile_only_spark0.sh`
 
+The fast path `scripts/cuda_probe_tiny_spark0.sh` also includes an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate when `nvcc --list-gpu-arch` is supported and advertises `compute_121` (quick “fatbin PTX+SASS packaging works” signal).
+
 To capture deterministic logs on the Mac without relying on `tee`/`pipefail`, set `LOG_PATH`:
 
 ```bash
@@ -38,7 +40,7 @@ Subset builds:
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
-- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); ends with `schema=3` for parsing).
+- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); includes `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`); ends with `schema=4` for parsing).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o`: compile-only object that requires `nvcc --gpu-architecture=sm_121` support (build-system compatibility gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_flags_compile_probe.o`: compile-only object that requires `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` (DeepGEMM/CUTLASS-style toolchain gate; no runtime needed).
@@ -50,6 +52,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_dlto_probe`: compile/run device LTO (`-dlto`) smoke test for `sm_121` (toolchain gate for some CUDA build systems).
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
 - `tools/cuda_probe/bin/cuda_sm121_arch_list_report`: print compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined (`__CUDA_ARCH_SPECIFIC__`, `__CUDA_ARCH_FAMILY_SPECIFIC__`); this is a convenient “what arch list did nvcc think we built?” sanity check for `sm_121` builds.
+- `tools/cuda_probe/bin/cuda_sm121a_arch_list_report` / `tools/cuda_probe/bin/cuda_sm121f_arch_list_report`: same report, but compiled with `-arch=sm_121a` / `-arch=sm_121f` (build explicitly via `make bin/cuda_sm121a_arch_list_report` / `make bin/cuda_sm121f_arch_list_report`, or run `scripts/cuda_probe_tiny_spark0.sh` on Spark0; best-effort build may succeed even when `nvcc --list-gpu-code` does not advertise those variants).
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121` (TN format; BF16 output).

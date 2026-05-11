@@ -15,6 +15,11 @@ DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local,spark3.local
 
 The readiness script uses this list to derive ring neighbors (prev/next) based on `DS4_RANK`.
 
+Notes:
+
+- `DS4_RING_HOSTS` must have exactly 4 comma-separated entries (no trailing commas). In strict mode, invalid or duplicate entries fail non-zero.
+- When using `--topology full`, the script uses `DS4_RANK` + `DS4_RING_HOSTS` to skip self and probe only peers.
+
 ## Commands (Spark Side)
 
 Ad-hoc run (no systemd required):
@@ -60,3 +65,21 @@ journalctl -t ds4-preflight-tp4-spark0 -n 200 --no-pager
 
 If strict preflight fails and you have `ds4-support-bundle@.service` installed, systemd triggers a non-destructive support bundle. See `docs/ops-support-bundle.md`.
 
+## Optional: Periodic TP=4 Preflight (Systemd Timer)
+
+If you want readiness checks to run automatically on boot and periodically after,
+install and enable the timer template (human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-tp4@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-tp4@spark0.timer
+```
+
+Strict variant (fails non-zero on missing/invalid TP=4 inputs; human-run):
+
+```bash
+sudo install -m 0644 /tmp/ds4-systemd/ds4-preflight-tp4-strict@.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ds4-preflight-tp4-strict@spark0.timer
+```

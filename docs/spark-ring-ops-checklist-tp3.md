@@ -8,10 +8,18 @@ This is a **human-run** checklist for operating a 3-node ring layout safely.
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring ...` (stages TP=3 env variants via `DS4_ENV_VARIANT=tp3`)
 - Install staged templates on each Spark:
-  - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight`
+  - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight --preflight tp3`
 - Confirm systemd templates and scripts are present:
   - `/etc/systemd/system/ds4*.service`
   - `/opt/ds4/scripts/ops_tp3_readiness.sh`
+
+## Developer Path (`systemd --user`) (Optional)
+
+If you are doing a non-root bring-up (developer path), follow `docs/deployment-staged-systemd-user.md` and prefer the TP=3 strict-start unit:
+
+- Preflight (safe gating): `systemctl --user start ds4-preflight-tp3-strict@spark0.service`
+- Start DS4 (gated on strict preflight): `systemctl --user enable --now ds4-tp3-strict@spark0.service`
+- Logs: `journalctl --user -u ds4-tp3-strict@spark0.service -n 200 --no-pager`
 
 ## Before A TP=3 Attempt (Repeatable)
 
@@ -50,8 +58,8 @@ Until DS4 documents a safe rolling restart for TP=3, treat restarts as a coordin
   - `sudo systemctl start ds4-preflight-tp3-strict@spark2.service`
 - Start DS4 again (example):
   - `sudo systemctl start ds4@spark0.service ds4@spark1.service ds4@spark2.service`
-- If you use the strict-start template, prefer `ds4-strict@%i.service` and keep preflight strict:
-  - `sudo systemctl start ds4-strict@spark0.service`
+- If you use the strict-start template, prefer `ds4-tp3-strict@%i.service` (TP=3-gated) rather than `ds4-strict@%i.service` (TP=2-gated):
+  - `sudo systemctl start ds4-tp3-strict@spark0.service`
 
 ## After A TP=3 Attempt (Repeatable)
 

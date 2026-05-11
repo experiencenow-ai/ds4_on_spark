@@ -25,7 +25,7 @@ Optional: install the staged assets (human-run; review first). This is a conveni
 
 ```bash
 sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight
-# optional: add --install-timers, --install-spark-units, and/or --strict
+# optional: add --preflight tp2|tp3|tp4, --install-timers, --install-spark-units, and/or --strict
 # dry-run preview:
 # /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --dry-run
 ```

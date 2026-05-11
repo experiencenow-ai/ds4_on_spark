@@ -24,6 +24,7 @@ Targets:
   deepseek_v4_flash_hf   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_hf_pr14  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_hf_pr16  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  deepseek_v4_flash_hf_pr18  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_base_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   deepseek_v4_flash_fp8_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   dflash_code
@@ -59,6 +60,8 @@ Targets:
   gemma_4_31b_it_dflash_hf             (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_20b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_20b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  llama3_1_8b_instruct_hf              (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  llama3_1_8b_instruct_dflash_hf        (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_120b_hf                      (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   gpt_oss_120b_dflash_hf               (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   kimi_k2_5_hf                         (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -244,6 +247,11 @@ fetch_one()
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/deepseek-ai/DeepSeek-V4-Flash"; ref="refs/pr/16"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "deepseek_v4_flash_hf_pr16" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash" "${ref}" "${expected}"
+			;;
+		deepseek_v4_flash_hf_pr18)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/deepseek-ai/DeepSeek-V4-Flash"; ref="refs/pr/18"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "deepseek_v4_flash_hf_pr18" "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash" "${ref}" "${expected}"
 			;;
 		deepseek_v4_flash_base_hf)
 			# HF metadata/config only: do not download weights.
@@ -476,6 +484,16 @@ fetch_one()
 			upstream="huggingface.co/z-lab/gpt-oss-20b-DFlash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "gpt_oss_20b_dflash_hf" "https://huggingface.co/z-lab/gpt-oss-20b-DFlash" "${ref}" "${expected}"
 			;;
+		llama3_1_8b_instruct_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/meta-llama/Llama-3.1-8B-Instruct"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "llama3_1_8b_instruct_hf" "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct" "${ref}" "${expected}"
+			;;
+		llama3_1_8b_instruct_dflash_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "llama3_1_8b_instruct_dflash_hf" "https://huggingface.co/z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat" "${ref}" "${expected}"
+			;;
 		gpt_oss_120b_hf)
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/openai/gpt-oss-120b"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
@@ -525,7 +543,7 @@ fetch_one()
 			clone_or_update "sglang_dflash_pr" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
 		llama_cpp)
-			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9102"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9106"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
 			;;
 		llama_cpp_deepseek_v4_flash)

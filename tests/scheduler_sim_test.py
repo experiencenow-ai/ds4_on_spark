@@ -239,6 +239,51 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_summary_json_emits_per_layer_stage_skip_fractions(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                layers=(scheduler_sim.LayerRoute(candidates=(0,)), scheduler_sim.LayerRoute(candidates=(1,))),
+                cost_scale=1.0,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(1,),
+                cost_scale=100.0,
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=2,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+        )
+        metrics = scheduler_sim.run_simulation(cfg, trace)
+        summary = scheduler_sim.compare_summary_jsonable(metrics)
+        self.assertIn("stages_total_layer0", summary)
+        self.assertIn("stages_total_layer1", summary)
+        self.assertIn("skipped_stage_frac_layer0", summary)
+        self.assertIn("skipped_stage_frac_layer1", summary)
+        self.assertAlmostEqual(float(summary["stages_total_layer0"]), 2.0, places=6)
+        self.assertAlmostEqual(float(summary["stages_total_layer1"]), 1.0, places=6)
+        self.assertAlmostEqual(float(summary["skipped_stage_frac_layer0"]), 0.0, places=6)
+        self.assertAlmostEqual(float(summary["skipped_stage_frac_layer1"]), 1.0, places=6)
+
     def test_adaptive_k_per_class_q_threshold_overrides(self) -> None:
         adapt = scheduler_sim.AdaptiveKConfig(
             k_min_interactive=1,
@@ -494,6 +539,40 @@ class SchedulerSimTest(unittest.TestCase):
         s = scheduler_sim.compare_summary_jsonable(m)
         self.assertAlmostEqual(float(s["skipped_stage_frac"]), 0.5, places=6)
         self.assertAlmostEqual(float(s["skipped_stage_frac_verify"]), 0.5, places=6)
+
+    def test_backpressure_zero_admit_policy_stall_retries_instead_of_drop(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1),
+        ]
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+
+        m_skip = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, backpressure_zero_admit_policy="skip"), trace)
+        self.assertEqual(m_skip.dropped_tokens_backpressure, 1)
+
+        m_stall = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, backpressure_zero_admit_policy="stall"), trace)
+        self.assertEqual(m_stall.dropped_tokens_backpressure, 0)
+        self.assertEqual(len(m_stall.token_lat_ms_batch), 2)
+        self.assertAlmostEqual(max(m_stall.token_lat_ms_batch), 2.0, places=6)
+        s = scheduler_sim.compare_summary_jsonable(m_stall)
+        self.assertEqual(int(s["blocked_stages_backpressure_attempts"]), 1)
 
     def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
         tmp_path = ""
@@ -999,6 +1078,44 @@ class SchedulerSimTest(unittest.TestCase):
         s = scheduler_sim.compare_summary_jsonable(m)
         self.assertAlmostEqual(float(s.get("expert_max_pending_tasks_p95", 0.0)), 11.55, places=6)
         self.assertAlmostEqual(float(s.get("expert_max_pending_work_p95", 0.0)), 22.95, places=6)
+
+    def test_summary_json_reports_pending_depth_per_layer_means(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                layers=(
+                    scheduler_sim.LayerRoute(candidates=(0,), k=1),
+                    scheduler_sim.LayerRoute(candidates=(1,), k=1),
+                ),
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=100,
+            expert_parallelism=1,
+            expert_queue_max=1000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertIn("pending_depth_time_weighted_mean_layer0", s)
+        self.assertIn("pending_depth_time_weighted_mean_layer1", s)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_mean_layer0", 0.0)), 0.005, places=6)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_mean_layer1", 0.0)), 0.005, places=6)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_p95_layer0", 1.0)), 0.0, places=6)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_p95_layer1", 1.0)), 0.0, places=6)
 
     def test_summary_json_reports_max_queue_p95(self) -> None:
         trace = []

@@ -11,8 +11,8 @@ mkdir -p "$OUT_DIR"
 
 PINNED_PREYAZZ_TRUNK_URL="https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d/DeepSeek-V4-Flash-Q4_K_M.gguf"
 PINNED_NSPARKS_TRUNK_URL="https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf"
-PINNED_ANTIREZ_TRUNK_URL="https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c198a70525f1856f1bf50448f163471692c881f8/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf"
-PINNED_ANTIREZ_MTP_SIDECAR_URL="https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c198a70525f1856f1bf50448f163471692c881f8/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+PINNED_ANTIREZ_TRUNK_URL="https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf"
+PINNED_ANTIREZ_MTP_SIDECAR_URL="https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
 
 refresh_one()
 {
@@ -76,24 +76,26 @@ refresh_one \
 
 refresh_one \
   "$PINNED_ANTIREZ_TRUNK_URL" \
-  "$OUT_DIR/gguf-inspect-antirez-c198a70-iq2xxs-chat-v2.json"
+  "$OUT_DIR/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json"
 
 refresh_one \
   "$PINNED_ANTIREZ_MTP_SIDECAR_URL" \
-  "$OUT_DIR/gguf-inspect-antirez-c198a70-mtp-sidecar.json"
+  "$OUT_DIR/gguf-inspect-antirez-b0c3326-mtp-sidecar.json"
 
 # Combined trunk+sidecar view (artifact-set-level fingerprints + MTP trust signal).
 refresh_combined \
   "$PINNED_ANTIREZ_TRUNK_URL" \
   "$PINNED_ANTIREZ_MTP_SIDECAR_URL" \
-  "$OUT_DIR/gguf-inspect-antirez-c198a70-iq2xxs-chat-v2-mtp-set.json"
+  "$OUT_DIR/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2-mtp-set.json"
 
 refresh_probe \
   "$PINNED_ANTIREZ_MTP_SIDECAR_URL" \
-  "$OUT_DIR/mtp-sidecar-probe-antirez-c198a70.json"
+  "$OUT_DIR/mtp-sidecar-probe-antirez-b0c3326.json"
 
 refresh_probe_strong \
   "$PINNED_ANTIREZ_MTP_SIDECAR_URL" \
-  "$OUT_DIR/mtp-sidecar-probe-antirez-c198a70-payload64.json"
+  "$OUT_DIR/mtp-sidecar-probe-antirez-b0c3326-payload64.json"
+
+python3 scripts/model_contract_summarize_v4flash_pinned_gguf_inspects.py --docs-dir "$OUT_DIR"
 
 echo "OK: refreshed pinned DeepSeek V4 Flash GGUF inspections into $OUT_DIR (MAX_BYTES=$MAX_BYTES)"

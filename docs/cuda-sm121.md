@@ -36,6 +36,8 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, best-effort compile-only `--gpu-architecture=sm_121a` / `sm_121f` also succeeds, best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both, and best-effort build+run of `cuda_sm121_fatbin_probe` via `scripts/cuda_probe_kernel_tiny_spark0.sh` reports `__CUDA_ARCH_LIST__=1210` with kernel `__CUDA_ARCH__=1210` for both `sm_121a` and `sm_121f` (treat as “accepted aliases”, not a distinct target).
 
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `scripts/cuda_probe_tiny_spark0.sh` best-effort builds and runs `cuda_sm121a_arch_list_report` / `cuda_sm121f_arch_list_report`; both print `__CUDA_ARCH_LIST__=1210` and still report `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “aliases accepted, feature-set macros not surfaced”).
+
 Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `cuobjdump --dump-ptx` reports embedded PTX for binaries built via `-arch=sm_121a` / `-arch=sm_121f`, and the first PTX `.target` line is still `.target sm_121` (treat the `a`/`f` variants as “toolchain accepts and runs them”, not as a distinct PTX target for portability planning).
 
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
@@ -97,6 +99,8 @@ If your toolkit supports it, `nvcc --list-gpu-arch` and `nvcc --list-gpu-code` s
 The Spark0 tiny scripts treat missing `compute_121` / `sm_121` entries as errors when those `nvcc --list-*` commands are supported.
 
 The Spark0 tiny smoke script (`scripts/cuda_probe_tiny_spark0.sh`) builds and runs `cuda_sm121_arch_report` plus the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates as part of the fast-path validation.
+
+When `nvcc --list-gpu-arch` is supported and advertises `compute_121`, that same fast-path script also runs an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate so “fatbin PTX+SASS packaging” regressions show up quickly.
 
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.
 

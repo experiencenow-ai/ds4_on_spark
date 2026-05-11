@@ -11,3 +11,4 @@ __pycache__/
 upstreams/
 .codex_git/
 .codex_git_intake*/
+.git_local/

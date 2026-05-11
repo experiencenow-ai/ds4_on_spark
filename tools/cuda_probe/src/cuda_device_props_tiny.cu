@@ -47,6 +47,15 @@ static int32_t get_cu_attr_i32(int32_t *out,int32_t dev,CUdevice_attribute attr)
 	return(0);
 }
 
+__global__ void write_cuda_arch(uint32_t *out)
+{
+#if defined(__CUDA_ARCH__)
+	out[0] = (uint32_t)__CUDA_ARCH__;
+#else
+	out[0] = 0U;
+#endif
+}
+
 int main(int argc,char **argv)
 {
 	int32_t count = 0,rc = 0,driver_v = -1,runtime_v = -1,clock_khz = -1,mem_clock_khz = -1;
@@ -57,6 +66,8 @@ int main(int argc,char **argv)
 	int32_t tma_map = -1;
 	int32_t bus_width_bits = -1,async_engines = -1,max_persisting_l2 = -1,max_apw_bytes = -1;
 	cudaDeviceProp prop;
+	uint32_t cuda_arch = 0;
+	uint32_t *d_arch = 0;
 	uint64_t mem_bytes = 0,smem_block_bytes = 0;
 	(void)argc;
 	(void)argv;
@@ -67,7 +78,7 @@ int main(int argc,char **argv)
 		return(rc);
 	if ( count <= 0 )
 	{
-		printf("cuda drv=%d rt=%d count=%d bus_width_bits=%d async_engines=%d max_persisting_l2=%d max_apw=%d tma_map=%d schema=3\n",driver_v,runtime_v,count,bus_width_bits,async_engines,max_persisting_l2,max_apw_bytes,tma_map);
+		printf("cuda drv=%d rt=%d count=%d bus_width_bits=%d async_engines=%d max_persisting_l2=%d max_apw=%d tma_map=%d cuda_arch=%u schema=4\n",driver_v,runtime_v,count,bus_width_bits,async_engines,max_persisting_l2,max_apw_bytes,tma_map,cuda_arch);
 		return(0);
 	}
 	rc = cuda_probe_check(cudaGetDeviceProperties(&prop,0),-2,"cudaGetDeviceProperties(0)");
@@ -97,8 +108,21 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
+	rc = cuda_probe_check(cudaMalloc((void **)&d_arch,(size_t)sizeof(uint32_t)),-3,"cudaMalloc(d_arch)");
+	if ( rc == 0 )
+	{
+		rc = cuda_probe_check(cudaMemset(d_arch,0,(size_t)sizeof(uint32_t)),-4,"cudaMemset(d_arch)");
+		if ( rc == 0 )
+		{
+			write_cuda_arch<<<1,1>>>(d_arch);
+			rc = cuda_probe_check(cudaGetLastError(),-5,"write_cuda_arch launch");
+			if ( rc == 0 )
+				(void)cuda_probe_check(cudaMemcpy(&cuda_arch,d_arch,(size_t)sizeof(uint32_t),cudaMemcpyDeviceToHost),-6,"cudaMemcpy(cuda_arch)");
+		}
+		cudaFree(d_arch);
+	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-	printf("cuda drv=%d rt=%d count=%d dev0=\"%s\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%" PRIu64 " smem_block=%" PRIu64 " smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d schema=3\n",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map);
+	printf("cuda drv=%d rt=%d count=%d dev0=\"%s\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%" PRIu64 " smem_block=%" PRIu64 " smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d cuda_arch=%u schema=4\n",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map,cuda_arch);
 	return(0);
 }

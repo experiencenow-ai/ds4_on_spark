@@ -43,7 +43,7 @@ When staging assets to a Spark via `scripts/ops_stage_deploy_assets.sh`, the rep
 - `ops_validate_installed_assets.sh`: checks installed assets under `/etc` + `/opt` then runs preflight (no sudo; use `--strict` for fail-fast gating)
 - Optional installer wrapper: `ops_install_staged_assets.sh` (human-run; installs staged assets into `/etc` + `/opt`, then reloads systemd)
 
-Timer templates (`ds4-preflight@.timer`, `ds4-preflight-strict@.timer`) are optional and are not required for `ops_validate_installed_assets.sh`.
+Timer templates (`ds4-preflight@.timer`, `ds4-preflight-strict@.timer`, `ds4-preflight-tp3@.timer`, `ds4-preflight-tp3-strict@.timer`, `ds4-preflight-tp4@.timer`, `ds4-preflight-tp4-strict@.timer`) are optional and are not required for `ops_validate_installed_assets.sh`.
 
 See `docs/ops-deploy-asset-validation.md` for the full workflow.
 
@@ -51,6 +51,8 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 
 - `ds4@.service`: long-running DS4 instance
 - `ds4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails)
+- `ds4-tp3-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-tp3-strict@%i.service` before start (fails start if strict TP=3 preflight fails)
+- `ds4-tp4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-tp4-strict@%i.service` before start (fails start if strict TP=4 preflight fails)
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly); triggers `ds4-support-bundle@%i.service` on failure
 - `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`); triggers `ds4-support-bundle@%i.service` on failure
 - Optional: `ds4-preflight-tp3@.service`: oneshot TP=3 readiness checks (see `docs/ops-tp3-readiness.md`)
@@ -60,6 +62,10 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 - `ds4-support-bundle@.service`: oneshot support bundle collector (safe; see `docs/ops-support-bundle.md`); wired via `OnFailure=`
 - Optional: `ds4-preflight@.timer`: periodic non-destructive preflight
 - Optional: `ds4-preflight-strict@.timer`: periodic strict preflight
+- Optional: `ds4-preflight-tp3@.timer`: periodic TP=3 preflight
+- Optional: `ds4-preflight-tp3-strict@.timer`: periodic strict TP=3 preflight
+- Optional: `ds4-preflight-tp4@.timer`: periodic TP=4 preflight
+- Optional: `ds4-preflight-tp4-strict@.timer`: periodic strict TP=4 preflight
 - Optional Spark standalone helpers: `spark-master@.service`, `spark-worker@.service` (see `docs/deployment-spark-standalone-systemd.md`)
 
 ## Instance Naming
@@ -114,6 +120,18 @@ If you want strict TP=2 gating on start, enable the strict service instead:
 ```bash
 sudo systemctl enable ds4-strict@spark0.service
 sudo systemctl start  ds4-strict@spark0.service
+```
+
+If you want strict gating for TP=3 or TP=4 starts, use the topology-specific strict templates:
+
+```bash
+# TP=3 (Spark0/Spark1/Spark2)
+sudo systemctl enable ds4-tp3-strict@spark0.service
+sudo systemctl start  ds4-tp3-strict@spark0.service
+
+# TP=4 ring (Spark0..Spark3)
+sudo systemctl enable ds4-tp4-strict@spark0.service
+sudo systemctl start  ds4-tp4-strict@spark0.service
 ```
 
 Inspect logs:
