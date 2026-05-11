@@ -128,7 +128,7 @@ Notes:
 REDACT=1 ./scripts/mac_spark_discovery.sh
 ```
 
-Default targets (when no args are provided): `aitopatom-9ab9.local` and `spark1.local`.
+Default targets (when no args are provided): `aitopatom-9ab9.local`, `spark1.local`, and `spark2.local`.
 Pass additional hostnames/IPs explicitly if you need extra checks.
 Targets may also be passed as `user@host`; the script strips the `user@` prefix for mDNS resolution and TCP reachability checks.
 
@@ -201,6 +201,12 @@ The ring probe is a compact, commit-safe snapshot (clock + network + storage + G
 
 ```bash
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true
+```
+
+Optional: install-free Mac<->host throughput smoke test (best-effort; does not measure host-to-host bandwidth):
+
+```bash
+BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true
 ```
 
 ## Diagnosis

@@ -1,0 +1,204 @@
+#!/usr/bin/env sh
+set -eu
+
+usage()
+{
+	cat <<'EOF'
+usage: spark_ring_probe_bw.sh [user@host ...]
+
+Mac-side bandwidth probe for Spark hosts. Non-destructive.
+
+What it does:
+  - Measures best-effort one-way throughput for each target:
+    - down: remote -> mac (remote `dd if=/dev/zero` piped to mac `dd of=/dev/null`)
+    - up:   mac -> remote (mac `dd if=/dev/zero` piped to remote `dd of=/dev/null`)
+
+Defaults:
+  - Targets: aitopatom-9ab9.local spark1.local spark2.local
+  - Transfer size: 64 MiB each direction (override with BW_MB)
+
+Environment:
+  SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
+  SSH_OPTS              Extra ssh options (default includes BatchMode + temp known_hosts)
+  SPARK_KNOWN_HOSTS     SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
+  SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
+  DS4_GIT_DIR           Optional git dir override for printing `git: <hash>`
+  DS4_GIT_WORK_TREE     Optional work tree override (defaults to $PWD)
+  REDACT=1              Redact IPv4/IPv6/MAC addresses from output
+  BW_MB                 Transfer size in MiB (default: 64)
+  BW_DIR                Which directions to run: both|down|up (default: both)
+
+Examples:
+  BW_MB=16 REDACT=1 SPARK_SSH_USER=spark0 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local
+  BW_MB=8 REDACT=1 ./scripts/spark_ring_probe_bw.sh spark0@aitopatom-9ab9.local spark0@spark1.local || true
+EOF
+}
+
+case "${1:-}" in
+	-h|--help)
+		usage
+		exit 0
+		;;
+esac
+
+SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
+SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
+BW_MB="${BW_MB:-64}"
+BW_DIR="${BW_DIR:-both}"
+
+case "$BW_DIR" in
+	both|down|up)
+		;;
+	*)
+		echo "invalid BW_DIR: $BW_DIR (expected both|down|up)" >&2
+		exit 2
+		;;
+esac
+
+if [ "${SSH_OPTS:-}" = "" ]; then
+	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
+fi
+
+normalize_target()
+{
+	t="$1"
+	case "$t" in
+		*@*)
+			printf "%s" "$t"
+			;;
+		*)
+			printf "%s" "${SPARK_SSH_USER}@${t}"
+			;;
+	esac
+}
+
+targets=""
+if [ "$#" -eq 0 ]; then
+	targets="$(normalize_target "aitopatom-9ab9.local") $(normalize_target "spark1.local") $(normalize_target "spark2.local")"
+else
+	for t in "$@"; do
+		nt="$(normalize_target "$t")"
+		if [ "$targets" = "" ]; then
+			targets="$nt"
+		else
+			targets="$targets $nt"
+		fi
+	done
+fi
+
+probe_args="$*"
+if [ "$probe_args" = "" ]; then
+	probe_args="(default)"
+fi
+
+known_hosts_for_target()
+{
+	t="$1"
+	if [ "${SPARK_KNOWN_HOSTS:-}" != "" ]; then
+		echo "$SPARK_KNOWN_HOSTS"
+		return 0
+	fi
+	if [ "$SPARK_KNOWN_HOSTS_PER_HOST" = "1" ]; then
+		h="${t#*@}"
+		safe_h="$(printf "%s" "$h" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
+		echo "/private/tmp/ds4_spark_known_hosts.$safe_h"
+	else
+		echo "/private/tmp/ds4_spark_known_hosts"
+	fi
+	return 0
+}
+
+tmp="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT INT HUP TERM
+
+{
+	echo "== local meta =="
+	date -u
+	if command -v git >/dev/null 2>&1; then
+		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
+		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git" ] && [ -r "$git_worktree/.codex_git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git/.git" ] && [ -r "$git_worktree/.codex_git/.git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git/.git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex/.git" ] && [ -r "$git_worktree/.git-codex/.git/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex/.git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
+			git_dir="$git_worktree/.gitshim/repo/.git"
+		fi
+		git_hash=""
+		if [ "$git_dir" != "" ]; then
+			git_hash="$(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
+		fi
+		[ "$git_hash" != "" ] && echo "git: $git_hash" || echo "git: (unknown)"
+	fi
+	echo "probe args: $probe_args"
+	echo "resolved targets: $targets"
+	echo "bw mb: $BW_MB"
+	echo "bw dir: $BW_DIR"
+	echo "ssh opts: $SSH_OPTS"
+	for t in $targets; do
+		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
+	done
+	echo
+
+	ssh_fail="0"
+	for target in $targets; do
+		kh="$(known_hosts_for_target "$target")"
+		echo "== target: $target =="
+
+		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "down" ]; then
+			printf "down (remote->mac) %s MiB: " "$BW_MB"
+			if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$BW_MB" 2>/dev/null <<'REMOTE' | dd of=/dev/null bs=1m 2>&1 | tail -n 1
+set -eu
+mb="${1:-64}"
+dd if=/dev/zero bs=1m count="$mb" 2>/dev/null
+REMOTE
+			then
+				:
+			else
+				echo "failed"
+				ssh_fail=$((ssh_fail + 1))
+			fi
+		fi
+
+		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "up" ]; then
+			printf "up (mac->remote) %s MiB: " "$BW_MB"
+			if dd if=/dev/zero bs=1m count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1m 2>&1 | tail -n 1' 2>/dev/null
+			then
+				:
+			else
+				echo "failed"
+				ssh_fail=$((ssh_fail + 1))
+			fi
+		fi
+		echo
+	done
+
+	if [ "$ssh_fail" != "0" ]; then
+		echo "== probe summary =="
+		echo "failures: $ssh_fail"
+	fi
+} >"$tmp"
+
+if [ "${REDACT:-0}" = "1" ]; then
+	sed -E \
+		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
+		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
+		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+		"$tmp"
+else
+	cat "$tmp"
+fi
+
+if [ "${ssh_fail:-0}" != "0" ]; then
+	exit 1
+fi
+

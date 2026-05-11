@@ -5,9 +5,10 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` and `spark2.local` are not reachable yet (as of the 12:28Z refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T1228Z.md`, `docs/spark0-probe-facts-2026-05-11T1228Z.md`.
-- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-11T1228Z.md`, `docs/spark-ring-probe-2026-05-11T1228Z.md`.
+- `spark1.local` and `spark2.local` are not reachable yet (as of the 12:58Z refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-probe-facts-2026-05-11T1258Z.md`.
+- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-11T1258Z.md`, `docs/spark-ring-probe-2026-05-11T1258Z.md`.
+- Latest ring bandwidth snapshot (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-11T1258Z.md`.
 - Latest ring MTU snapshot: `docs/spark-ring-mtu-probe-2026-05-11T1228Z.md`.
 
 ## Goals
@@ -31,10 +32,10 @@ The compact ring probe (`scripts/spark_ring_probe.sh`) is meant to be commit-saf
 Use discovery first to confirm which `*.local` targets resolve and whether TCP/22 is reachable.
 
 ```bash
-REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local
 ```
 
-Omit args to use the same default targets.
+Omit args to use the default targets (Spark0 + Spark1/Spark2 placeholders).
 The discovery output prints `targets:` so the exact target list is visible in committed excerpts.
 The discovery output also attempts `route -n get <target>` per host, but in locked-down macOS probe environments this may print `route: socket: Operation not permitted`; treat it as best-effort.
 
