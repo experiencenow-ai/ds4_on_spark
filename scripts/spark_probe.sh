@@ -782,7 +782,33 @@ command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null |
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
 cuda_json_ver=""
 if [ -r /usr/local/cuda/version.json ]; then
-	cuda_json_ver="$(sed -nE "s/^[[:space:]]*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9.]+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
+	if command -v python3 >/dev/null 2>&1; then
+		cuda_json_ver="$(python3 - <<'PY' 2>/dev/null || true
+import json,sys,re
+p="/usr/local/cuda/version.json"
+try:
+    d=json.load(open(p))
+except Exception:
+    sys.exit(0)
+v=""
+if isinstance(d,dict):
+    cuda=d.get("cuda")
+    if isinstance(cuda,dict):
+        v=cuda.get("version","")
+    elif isinstance(cuda,str):
+        v=cuda
+    if not v and isinstance(d.get("version"),str):
+        v=d.get("version","")
+if isinstance(v,str):
+    m=re.search(r"[0-9]+(?:[.][0-9]+)+",v)
+    if m:
+        sys.stdout.write(m.group(0))
+PY
+)"
+	fi
+	if [ "$cuda_json_ver" = "" ]; then
+		cuda_json_ver="$(sed -nE "s/.*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9]+(\\.[0-9]+)+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
+	fi
 	if [ "$spark_probe_summary" != "1" ]; then
 		echo
 		echo "== cuda version.json (capped) =="

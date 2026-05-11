@@ -69,6 +69,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 - Optional (no installs): quick Mac<->Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
   - `BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true`
   - The probe reports one-way best-effort throughput for `down` (remote→mac) and `up` (mac→remote). Keep `BW_MB` small (e.g. `8` or `16`) and do not run this in tight loops.
+  - When SSH cannot connect (DNS, routing, auth), the probe prints `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`) to make bring-up blockers obvious in commit-safe snapshots.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
 - If `iperf3` is already present on all nodes, you can do a quick throughput check (do not commit raw IPs; summarize results or redact manually):
   - On receiver: `iperf3 -s`
@@ -79,7 +80,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 For each node, capture:
 - GPU inventory (`nvidia-smi` CSV query output: GPU name, bus id, driver version, compute cap when available).
-- Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` `cuda:` when present.
+- Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` (toolkit version) when present.
 - Storage facts (`df -h` + `lsblk` model/size).
 
 Use `REDACT=1` for any committed output.
