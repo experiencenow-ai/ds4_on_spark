@@ -10,6 +10,12 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 ./scripts/cuda_probe_tiny_spark0.sh
 ```
 
+When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” gate:
+
+```bash
+./scripts/cuda_probe_cublaslt_tiny_spark0.sh
+```
+
 To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
 
 ```bash

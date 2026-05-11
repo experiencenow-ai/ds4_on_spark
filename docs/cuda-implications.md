@@ -75,6 +75,7 @@ Implication:
 
 Probe:
 
+- `./scripts/cuda_probe_cublaslt_tiny_spark0.sh`: Spark0 “cuBLASLt only” fast path (builds `cuda_device_props_tiny`, `cuda_sm121_arch_report`, and the cuBLASLt smoke probes).
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E4M3) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E5M2) matmul smoke test on Spark0.
