@@ -425,9 +425,9 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
         echo
         echo "Summary (best-effort):"
         echo
-        echo "```"
+        echo '```'
         sed -n "1,80p" "$OUT_DIR/remote_fattn_patch_probe_stdout.txt" || true
-        echo "```"
+        echo '```'
         echo
         echo "Full logs:"
         echo
@@ -446,9 +446,9 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
         echo
         echo "Summary (best-effort):"
         echo
-        echo "```"
+        echo '```'
         sed -n "1,100p" "$OUT_DIR/remote_multislot_patch_probe_stdout.txt" || true
-        echo "```"
+        echo '```'
         echo
         echo "Full logs:"
         echo
