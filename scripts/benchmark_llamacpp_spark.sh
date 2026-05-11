@@ -380,9 +380,12 @@ except OSError:
     summary_lines.append("model_size_bytes=NA")
 if first_output_s is None or rc != 0:
     summary_lines.append("ttft_first_output_s=NA")
+    summary_lines.append("ttft_s=NA")
 else:
     summary_lines.append("ttft_first_output_s=%.6f" % first_output_s)
+    summary_lines.append("ttft_s=%.6f" % first_output_s)
 summary_lines.append("wall_s=%.6f" % (end - start))
+summary_lines.append("total_wall_s=%.6f" % (end - start))
 summary_lines.append("max_rss_kb=%d" % int(ru.ru_maxrss))
 if prefill_tps is not None:
     summary_lines.append("prefill_tps=%.6f" % prefill_tps)
@@ -392,6 +395,7 @@ if prefill_tokens is not None:
     summary_lines.append("prompt_tokens=%d" % int(prefill_tokens))
 if gen_tps is not None:
     summary_lines.append("generation_tps=%.6f" % gen_tps)
+    summary_lines.append("decode_tps=%.6f" % gen_tps)
 if gen_ms_per_tok is not None:
     summary_lines.append("generation_ms_per_token=%.6f" % gen_ms_per_tok)
 if gen_tokens is not None:

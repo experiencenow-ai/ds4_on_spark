@@ -176,7 +176,9 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 
 The CSV row is derived from the `== baseline summary (approx) ==` block emitted
 by the remote runner. For llama.cpp it now includes `output_tokens` (best-effort
-count from the llama.cpp `eval time = ... / <tokens>` timing line).
+count from the llama.cpp `eval time = ... / <tokens>` timing line), plus
+canonical aliases `ttft_s`, `total_wall_s`, and `decode_tps` for cross-runtime
+comparisons.
 
 Compatibility notes (llama.cpp forks):
 

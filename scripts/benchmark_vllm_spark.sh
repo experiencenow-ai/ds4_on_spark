@@ -171,6 +171,7 @@ def _fmt_float(v):
 summary = []
 summary.append("exit_code=%d" % rc)
 summary.append("ttft_first_output_s=NA")
+summary.append("ttft_s=NA")
 summary.append("load_s=" + _fmt_float(load_s))
 summary.append("generate_wall_s=" + _fmt_float(generate_wall_s))
 summary.append("total_wall_s=" + _fmt_float(total_wall_s))
@@ -178,6 +179,7 @@ summary.append("generated_tokens=%d" % int(generated_tokens))
 summary.append("output_tokens=%d" % int(generated_tokens))
 if generate_wall_s is not None and generate_wall_s > 0 and generated_tokens > 0:
     summary.append("generation_tps=%.6f" % (generated_tokens / max(1e-9, generate_wall_s)))
+    summary.append("decode_tps=%.6f" % (generated_tokens / max(1e-9, generate_wall_s)))
 summary.append("max_rss_native=%d" % max_rss_native)
 summary.append("max_rss_bytes=%d" % max_rss_bytes)
 

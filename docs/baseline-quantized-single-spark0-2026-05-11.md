@@ -81,6 +81,11 @@ Prefill throughput:
 Generation throughput:
 
 - `generation_tps=16.0` (`output_tokens=8`)
+- `decode_tps=16.0` (alias)
+
+Wall time:
+
+- `total_wall_s=NA` (not recorded in this report; re-run required)
 
 Flash Attention scheduling signal:
 
@@ -94,4 +99,3 @@ Memory:
 Failure modes:
 
 - Exit code: `0` (success)
-
