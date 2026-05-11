@@ -22,6 +22,13 @@ If you're staging both Spark0 and Spark1, prefer the two-host wrapper (avoids in
 # optional: add --mesh-check and/or --tcp <port>
 ```
 
+If you're staging Spark0/Spark1/Spark2, prefer the three-host wrapper:
+
+```bash
+./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+# optional: add --tcp <port>
+```
+
 If you're staging Spark0..Spark3, prefer the ring wrapper (optional mesh check and ring/full topology):
 
 ```bash
@@ -46,6 +53,8 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 - `ds4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails)
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly); triggers `ds4-support-bundle@%i.service` on failure
 - `ds4-preflight-strict@.service`: oneshot readiness checks that fail fast on missing/invalid TP=2 inputs (see `docs/ops-tp2-readiness.md`); triggers `ds4-support-bundle@%i.service` on failure
+- Optional: `ds4-preflight-tp3@.service`: oneshot TP=3 readiness checks (see `docs/ops-tp3-readiness.md`)
+- Optional: `ds4-preflight-tp3-strict@.service`: strict TP=3 readiness gating (see `docs/ops-tp3-readiness.md`)
 - Optional: `ds4-preflight-tp4@.service`: oneshot TP=4 readiness checks (see `docs/ops-tp4-readiness.md`)
 - Optional: `ds4-preflight-tp4-strict@.service`: strict TP=4 readiness gating (see `docs/ops-tp4-readiness.md`)
 - `ds4-support-bundle@.service`: oneshot support bundle collector (safe; see `docs/ops-support-bundle.md`); wired via `OnFailure=`
