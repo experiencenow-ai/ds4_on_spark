@@ -164,10 +164,10 @@ scope = sys.argv[4]
 public_quality_prior = sys.argv[5].strip()
 public_quality_basis = sys.argv[6].strip()
 public_quality_source = sys.argv[7].strip()
-passed_tasks = sys.argv[8].strip()
-total_tasks = sys.argv[9].strip()
-local_quality_score = sys.argv[10].strip()
-quality_score = sys.argv[11].strip()
+passed_tasks_arg = sys.argv[8].strip()
+total_tasks_arg = sys.argv[9].strip()
+local_quality_score_arg = sys.argv[10].strip()
+quality_score_arg = sys.argv[11].strip()
 summary_path = sys.argv[12]
 
 kv = {}
@@ -191,6 +191,26 @@ def _get(*names: str) -> str:
         if v:
             return v
     return ""
+
+def _prefer(arg: str, *names: str) -> str:
+    v = (arg or "").strip()
+    if v:
+        return v
+    return _get(*names)
+
+passed_tasks = _prefer(passed_tasks_arg, "passed_tasks")
+total_tasks = _prefer(total_tasks_arg, "total_tasks")
+local_quality_score = _prefer(local_quality_score_arg, "local_quality_score")
+quality_score = _prefer(quality_score_arg, "quality_score")
+
+if not local_quality_score and passed_tasks and total_tasks:
+    try:
+        p = float(passed_tasks)
+        t = float(total_tasks)
+        if t > 0:
+            local_quality_score = f"{(100.0 * p / t):.6f}"
+    except Exception:
+        pass
 
 row = {
     "model": model,

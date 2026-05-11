@@ -64,6 +64,8 @@ When using `MODEL_RUNS_CSV`, you can also supply (optional) quality metadata:
 When any of these fields are set, the local report includes a `Quality Metadata (Local)`
 section to make it harder to forget which quality numbers were used for a comparison.
 
+For vLLM runs, you can also set `SMOKE_EVAL=1` (and optionally `SMOKE_MAX_TOKENS_PER_TASK=64`) to run a tiny deterministic smoke-eval task set that emits `passed_tasks`, `total_tasks`, and `local_quality_score` into the remote baseline summary block; the baseline wrapper will ingest those values into `MODEL_RUNS_CSV` when the corresponding env vars are not set. See `docs/baseline-smoke-eval.md`.
+
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
 
