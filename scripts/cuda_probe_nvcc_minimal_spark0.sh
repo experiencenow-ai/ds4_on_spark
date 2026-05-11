@@ -120,43 +120,36 @@ __global__ void cuda_compile_only_cxx20_flags(uint32_t *out)
 EOF
 
 cat > \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu <<'EOF'
-#include <stdint.h>
+#define STR1(x) #x
+#define STR(x) STR1(x)
 
 #if defined(__CUDA_ARCH__)
 #if (__CUDA_ARCH__ != 1210)
 #error nvcc_featureset_macros_expected___CUDA_ARCH___1210
 #endif
+#endif
 
-#if defined(EXPECT_SPECIFIC)
-#if !defined(__CUDA_ARCH_SPECIFIC__)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_SPECIFIC___defined
-#endif
-#if (__CUDA_ARCH_SPECIFIC__ != 1210)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_SPECIFIC___1210
-#endif
+#if defined(__CUDA_ARCH_LIST__)
+#pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
 #else
+#pragma message(\"DS4_CUDA_ARCH_LIST=(missing)\")
+#endif
+
 #if defined(__CUDA_ARCH_SPECIFIC__)
-#error nvcc_featureset_macros_unexpected___CUDA_ARCH_SPECIFIC___defined
-#endif
-#endif
-
-#if defined(EXPECT_FAMILY)
-#if !defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___defined
-#endif
-#if (__CUDA_ARCH_FAMILY_SPECIFIC__ != 1210)
-#error nvcc_featureset_macros_expected___CUDA_ARCH_FAMILY_SPECIFIC___1210
-#endif
+#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=\" STR(__CUDA_ARCH_SPECIFIC__))
 #else
-#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
-#error nvcc_featureset_macros_unexpected___CUDA_ARCH_FAMILY_SPECIFIC___defined
-#endif
-#endif
+#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=(missing)\")
 #endif
 
-__global__ void cuda_featureset_macros_compile_only(uint32_t *out)
+#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" STR(__CUDA_ARCH_FAMILY_SPECIFIC__))
+#else
+#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=(missing)\")
+#endif
+
+int cuda_featureset_macros_compile_only_dummy(void)
 {
-	(void)out;
+	return(0);
 }
 EOF
 
@@ -165,9 +158,9 @@ cat > \"$REMOTE_DIR\"/cuda_nvcc_arch_list_probe.cu <<'EOF'
 #define STR(x) STR1(x)
 
 #if defined(__CUDA_ARCH_LIST__)
-#pragma message(\"CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
+#pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
 #else
-#pragma message(\"CUDA_ARCH_LIST=(missing)\")
+#pragma message(\"DS4_CUDA_ARCH_LIST=(missing)\")
 #endif
 
 int cuda_arch_list_probe_dummy(void)
@@ -227,23 +220,30 @@ EOF
 		fi
 	}
 
-	try_compile_only_featureset_macros() {
-		tag=\"\$1\"
-		arch=\"\$2\"
-		defs=\"\$3\"
-		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
-		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
-		set +e
-		\$NVCC -O2 -std=c++17 \${defs} -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
-		rc=\$?
-		set -e
-		if [ \$rc -eq 0 ]; then
-			echo \"\${tag}: OK\"
-		else
-			echo \"\${tag}: FAILED rc=\${rc}\"
-			head -n 40 \"\${err_path}\" || true
-		fi
-	}
+		try_compile_only_featureset_macros() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+			err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//' | tr -cd '0-9')
+				fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//' | tr -cd '0-9')
+				if [ \"\${spec}\" = \"\" ]; then
+					spec=\"(missing)\"
+				fi
+				if [ \"\${fam}\" = \"\" ]; then
+					fam=\"(missing)\"
+				fi
+				echo \"\${tag}: OK __CUDA_ARCH_SPECIFIC__=\${spec} __CUDA_ARCH_FAMILY_SPECIFIC__=\${fam}\"
+			else
+				echo \"\${tag}: FAILED rc=\${rc}\"
+				head -n 40 \"\${err_path}\" || true
+			fi
+		}
 
 try_gencode_only() {
 	tag=\"\$1\"
@@ -268,8 +268,8 @@ try_gencode_only() {
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
 	try_compile_only variant_sm_121a sm_121a
 	try_compile_only variant_sm_121f sm_121f
-	try_compile_only_featureset_macros featureset_compute_121a compute_121a \"-DEXPECT_SPECIFIC=1 -DEXPECT_FAMILY=1\"
-	try_compile_only_featureset_macros featureset_compute_121f compute_121f \"-DEXPECT_FAMILY=1\"
+		try_compile_only_featureset_macros featureset_compute_121a compute_121a
+		try_compile_only_featureset_macros featureset_compute_121f compute_121f
 	echo
 	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
 	try_arch_list() {
@@ -282,10 +282,10 @@ try_gencode_only() {
 		rc=\$?
 		set -e
 		if [ \$rc -eq 0 ]; then
-			arch_list=\$(grep -E \"CUDA_ARCH_LIST=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*CUDA_ARCH_LIST=//' | tr -cd '0-9,')
-			if [ \"\${arch_list}\" = \"\" ]; then
-				arch_list=\"(missing)\"
-			fi
+				arch_list=\$(grep -E \"DS4_CUDA_ARCH_LIST=\" \"\${err_path}\" | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_LIST=//' | tr -cd '0-9,')
+				if [ \"\${arch_list}\" = \"\" ]; then
+					arch_list=\"(missing)\"
+				fi
 			echo \"\${tag}: OK __CUDA_ARCH_LIST__=\${arch_list}\"
 		else
 			echo \"\${tag}: FAILED rc=\${rc}\"

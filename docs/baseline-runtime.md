@@ -60,6 +60,8 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 When using `MODEL_RUNS_CSV`, you can also supply (optional) quality metadata:
 `PUBLIC_QUALITY_PRIOR`, `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`,
 `PASSED_TASKS`, `TOTAL_TASKS`, `LOCAL_QUALITY_SCORE`, and `QUALITY_SCORE`.
+When any of these fields are set, the local report includes a `Quality Metadata (Local)`
+section to make it harder to forget which quality numbers were used for a comparison.
 
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
@@ -71,8 +73,15 @@ To run a quantized V4 Flash smoke test through a V4-capable llama.cpp-compatible
 binary that already exists on Spark:
 
 ```sh
-REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=512 N_TOKENS=8 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+Equivalent milestone wrapper (same run shape, fewer knobs to type):
+
+```sh
+MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
 Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or

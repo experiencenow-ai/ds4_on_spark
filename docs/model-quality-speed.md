@@ -141,6 +141,26 @@ The scorer emits:
 - `tokens_per_success`
 - Pareto `dominated_by` status
 
+## Scope Hygiene
+
+Use the optional CSV `scope` column to keep different mechanisms from getting
+mixed together in downstream comparisons (especially when you later aggregate
+rows into one `MODEL_RUNS_CSV` file).
+
+Recommended `scope` labels:
+
+- DeepSeek V4 Flash (target-only): `deepseek_v4_flash`
+- DeepSeek V4 Flash MTP (draft/accept metrics): `deepseek_v4_flash_mtp`
+- Ling target-only: `ling_target`
+- Qwen target-only: `qwen_target`
+- Qwen DFlash (paired): `qwen_dflash`
+- Other non-Qwen DFlash (paired): `other_dflash`
+
+When running the baseline wrappers, set these via:
+
+- `LLAMA_SCOPE` (llama.cpp Spark runs)
+- `VLLM_SCOPE` / `VLLM_SCOPE_TARGET` / `VLLM_SCOPE_DFLASH` (vLLM target + DFlash runs)
+
 ## Reporting Rule
 
 Every multi-model baseline report should include a quality block before the speed

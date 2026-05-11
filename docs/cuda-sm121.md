@@ -55,7 +55,7 @@ CUDA 13 adds architecture-specific (`a`) and family-specific (`f`) feature-set t
 
 These probes are informational; the hard failure for GB10 targeting remains “missing `sm_121` support”.
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, and the compile-report probe currently reports `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 
 ### NVCC `__CUDA_ARCH_LIST__` (Toolchain Introspection)
 

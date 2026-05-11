@@ -29,6 +29,8 @@ Environment:
   CENTAUR_VENV     Centaur venv dir containing bin/python3
                   (default: ~/centaur-smoke/v73/run/venv)
   RING_WORKDIR     Local orchestrator workdir (default: ~/centaur-smoke/v73/ring_rsync_spark12)
+  RING_RUN_ID      Optional run id to avoid clobbering prior runs (writes under RING_WORKDIR/run/<run_id>)
+  RING_LOG         Optional log path (duplicates stdout/stderr via tee)
   NODE_TYPE        Node type label (default: default)
   RING_APPLY       If set to 1, also run `hyor-sync-apply` locally for Spark1/2
                   and rsync the materialized `effective_spark{1,2}` dirs back.
@@ -62,7 +64,13 @@ fi
 
 centaur_root="${CENTAUR_ROOT:-$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}"
 venv_dir="${CENTAUR_VENV:-$HOME/centaur-smoke/v73/run/venv}"
-workdir="${RING_WORKDIR:-$HOME/centaur-smoke/v73/ring_rsync_spark12}"
+base_workdir="${RING_WORKDIR:-$HOME/centaur-smoke/v73/ring_rsync_spark12}"
+run_id="${RING_RUN_ID:-}"
+if [ "$run_id" = "" ]; then
+	workdir="$base_workdir"
+else
+	workdir="$base_workdir/run/$run_id"
+fi
 node_type="${NODE_TYPE:-default}"
 
 if [ "${RING_TRACE:-0}" = "1" ]; then
@@ -80,6 +88,11 @@ need_cmd()
 
 need_cmd ssh
 need_cmd rsync
+if [ "${RING_LOG:-}" != "" ]; then
+	need_cmd tee
+	need_cmd mkfifo
+	need_cmd dirname
+fi
 
 if [ ! -f "$centaur_root/centaur.py" ]; then
 	echo "missing centaur.py under CENTAUR_ROOT: $centaur_root" >&2
@@ -97,6 +110,19 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 		known_hosts="/private/tmp/ds4_spark_known_hosts"
 	fi
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
+fi
+
+log="${RING_LOG:-}"
+if [ "$log" != "" ]; then
+	mkdir -p "$(dirname -- "$log")"
+	fifo="$workdir/.centaur_ring_rsync_log.fifo"
+	rm -f "$fifo"
+	mkdir -p "$workdir"
+	mkfifo "$fifo"
+	tee "$log" <"$fifo" &
+	teepid="$!"
+	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	exec >"$fifo" 2>&1
 fi
 
 ssh_run()
