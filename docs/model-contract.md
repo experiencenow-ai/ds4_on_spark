@@ -91,7 +91,7 @@ MTP (multi-token prediction) oracle requirements:
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
     - Validate the probe JSON shape with: `python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json ...`
 
-Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-10):
+Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-11; refreshed via `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`):
 
 | Pinned probe output | Artifact kind | `mtp_present` | `mtp_contract.complete` | Note |
 |---|---|---:|---:|---|
