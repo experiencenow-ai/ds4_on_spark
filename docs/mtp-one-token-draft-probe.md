@@ -79,6 +79,8 @@ scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 
 This runner does not fetch/build. It only runs the provided command, validates the emitted JSON, and saves the report under `/private/tmp`.
 
+Note: the runner assumes the one-token command emits **exactly one JSON object** to stdout (no banners, no logs). Any validation output is written to stderr and captured in the report separately.
+
 ## Implementation checklist (Spark/CUDA llama.cpp fork)
 
 Before running this probe, the Spark/CUDA fork needs a **real** one-token MTP command (the runner only executes what you provide as `MTP_ONE_TOKEN_CMD`):

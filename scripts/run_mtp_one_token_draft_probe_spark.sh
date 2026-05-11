@@ -102,15 +102,51 @@ if [ \"${MTP_ONE_TOKEN_CMD:-}\" = \"\" ]; then
   exit 0
 fi
 out_json=\"/tmp/mtp_one_token_probe.json\"
+v1_json=\"/tmp/mtp_one_token_probe_validate.json\"
+v2_json=\"/tmp/mtp_one_token_probe_validate_sidecar.json\"
 rm -f \"$out_json\"
+rm -f \"$v1_json\" \"$v2_json\"
 sh -lc \"$MTP_ONE_TOKEN_CMD\" >\"$out_json\"
-python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --json
+python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --json >\"$v1_json\" || true
 if [ \"${SIDE_CAR_PROBE_JSON:-}\" != \"\" ] && [ -r \"${SIDE_CAR_PROBE_JSON}\" ]; then
-  python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --sidecar-probe-json \"${SIDE_CAR_PROBE_JSON}\" --json
+  python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --sidecar-probe-json \"${SIDE_CAR_PROBE_JSON}\" --json >\"$v2_json\" || true
+fi
+if [ -r \"$v1_json\" ]; then
+  echo \"== validation (no sidecar) ==\" 1>&2
+  cat \"$v1_json\" 1>&2
+fi
+if [ -r \"$v2_json\" ]; then
+  echo \"== validation (sidecar cross-check) ==\" 1>&2
+  cat \"$v2_json\" 1>&2
 fi
 cat \"$out_json\"
 ' " <"$repo_root/scripts/model_contract_validate_mtp_one_token_draft_probe.py" \
 	>"$OUT_DIR/remote_mtp_one_token_stdout.txt" 2>"$OUT_DIR/remote_mtp_one_token_stderr.txt" || true
+
+python3 - "$OUT_DIR/remote_mtp_one_token_stdout.txt" "$OUT_DIR/mtp_one_token_probe.json" >"$OUT_DIR/mtp_one_token_probe_parse.json" 2>/dev/null <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+
+out = {"ok": False, "errors": [], "probe_ok": None}
+try:
+	doc = json.loads(src.read_text(encoding="utf-8"))
+	if isinstance(doc, dict):
+		dst.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+		out["probe_ok"] = bool(doc.get("ok", False))
+		out["ok"] = out["probe_ok"]
+		errs = doc.get("errors", [])
+		if isinstance(errs, list):
+			out["errors"] = [str(x) for x in errs[:64]]
+	else:
+		out["errors"].append("stdout JSON top-level is not an object")
+except Exception as e:
+	out["errors"].append(f"failed to parse stdout as JSON: {e}")
+print(json.dumps(out, indent=2, sort_keys=True))
+PY
 
 {
 	echo "## Results"
@@ -133,6 +169,8 @@ cat \"$out_json\"
 	echo
 	echo "- stdout: $OUT_DIR/remote_mtp_one_token_stdout.txt"
 	echo "- stderr: $OUT_DIR/remote_mtp_one_token_stderr.txt"
+	echo "- probe JSON (if parseable): $OUT_DIR/mtp_one_token_probe.json"
+	echo "- parsed status: $OUT_DIR/mtp_one_token_probe_parse.json"
 	echo
 } >>"$REPORT_MD"
 
