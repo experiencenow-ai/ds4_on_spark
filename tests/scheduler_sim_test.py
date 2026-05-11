@@ -1270,6 +1270,13 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m.tasks_started_per_expert, [3])
         self.assertEqual(m.starved_tasks_started_per_expert, [2])
         self.assertAlmostEqual(m.max_task_queue_wait_ms_per_expert[0], 20.0, places=6)
+        self.assertEqual(m.starved_task_queue_wait_ms_interactive, [])
+        self.assertEqual(m.starved_task_queue_wait_ms_batch, [10.0, 20.0])
+
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(s.get("starved_task_queue_wait_ms_p95", 0.0), 19.5, places=6)
+        self.assertAlmostEqual(s.get("starved_task_queue_wait_ms_p95_batch", 0.0), 19.5, places=6)
+        self.assertAlmostEqual(s.get("starved_task_queue_wait_ms_p95_interactive", 0.0), 0.0, places=6)
 
         out = m.to_jsonable()
         q = out.get("expert_queue", {})
