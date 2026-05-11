@@ -13,6 +13,7 @@ REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash}"
 RUN_LABEL="${RUN_LABEL:-}"
 MODEL_RUNS_CSV="${MODEL_RUNS_CSV:-}"
+VLLM_MODEL_ID="${VLLM_MODEL_ID:-}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -155,6 +156,18 @@ with open(csv_path, "a", encoding="utf-8", newline="") as f:
         w.writeheader()
     w.writerow({k: row.get(k, "") for k in header})
 PY
+}
+
+score_model_runs_csv()
+{
+    if [ "$MODEL_RUNS_CSV" = "" ] || [ ! -r "$MODEL_RUNS_CSV" ]; then
+        return 0
+    fi
+    if [ ! -r "$repo_root/scripts/model_quality_speed_score.py" ]; then
+        return 0
+    fi
+    python3 "$repo_root/scripts/model_quality_speed_score.py" "$MODEL_RUNS_CSV" >"$OUT_DIR/model_quality_speed_score.md" 2>"$OUT_DIR/model_quality_speed_score_stderr.txt" || true
+    python3 "$repo_root/scripts/model_quality_speed_score.py" "$MODEL_RUNS_CSV" --json >"$OUT_DIR/model_quality_speed_score.json" 2>>"$OUT_DIR/model_quality_speed_score_stderr.txt" || true
 }
 
 {
@@ -346,7 +359,11 @@ echo "== running vLLM probe script on spark =="
 ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && $REMOTE_VLLM_ENV /tmp/benchmark_vllm_spark.sh" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
     >"$OUT_DIR/remote_vllm_stdout.txt" 2>"$OUT_DIR/remote_vllm_stderr.txt" || true
 
-append_model_runs_csv "vllm" "${VLLM_MODEL:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
+vllm_model_label="$VLLM_MODEL"
+if [ "$VLLM_MODEL_ID" != "" ]; then
+    vllm_model_label="$VLLM_MODEL_ID"
+fi
+append_model_runs_csv "vllm" "${vllm_model_label:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
 
 {
     echo "## vLLM (Spark)"
@@ -375,5 +392,26 @@ append_model_runs_csv "vllm" "${VLLM_MODEL:-vllm}" "$OUT_DIR/remote_vllm_stdout.
     echo '```'
     echo
 } >>"$REPORT_MD"
+
+score_model_runs_csv
+
+if [ "$MODEL_RUNS_CSV" != "" ]; then
+{
+    echo "## Quality/speed scoring (local)"
+    echo
+    echo "- model_runs_csv: $MODEL_RUNS_CSV"
+    echo "- score_md: $OUT_DIR/model_quality_speed_score.md"
+    echo "- score_json: $OUT_DIR/model_quality_speed_score.json"
+    echo
+    if [ -r "$OUT_DIR/model_quality_speed_score.md" ]; then
+        echo "Summary (best-effort):"
+        echo
+        echo '```'
+        sed -n '1,20p' "$OUT_DIR/model_quality_speed_score.md" || true
+        echo '```'
+        echo
+    fi
+} >>"$REPORT_MD"
+fi
 
 echo "done: $REPORT_MD"

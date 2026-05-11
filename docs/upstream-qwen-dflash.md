@@ -131,6 +131,7 @@ prompt/token settings and are labeled consistently in `MODEL_RUNS_CSV`:
 ```sh
 MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
 RUN_LABEL=qwen3-coder-30b-a3b \
+VLLM_TARGET_ID=Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 \
 VLLM_TARGET_MODEL=/abs/path/Qwen3-Coder-30B-A3B-Instruct-FP8 \
 VLLM_DRAFT_MODEL=/abs/path/Qwen3-Coder-30B-A3B-DFlash \
 MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
