@@ -17,6 +17,10 @@ This baseline track is designed to capture **exact command lines**, **model arti
 - memory usage (CPU RSS + GPU memory snapshot)
 - failure modes (exact stderr / return codes)
 
+For multi-model comparisons (Ling/Qwen/DFlash/etc), add a quality axis before
+interpreting speed. See `docs/model-quality-speed.md` and run
+`scripts/model_quality_speed_score.py` on the aggregated CSV.
+
 ## Safety Gates (non-negotiable)
 
 - Scripts **do not download model weights**.
@@ -44,6 +48,17 @@ This writes a markdown report to a local output directory and includes:
 - Spark identity + `nvidia-smi` snapshot
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
+
+Optional: append best-effort per-run rows to a local CSV for quality/speed scoring:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+```
+
+When using `MODEL_RUNS_CSV`, you can also supply (optional) quality metadata:
+`PUBLIC_QUALITY_PRIOR`, `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`,
+`PASSED_TASKS`, `TOTAL_TASKS`, `LOCAL_QUALITY_SCORE`, and `QUALITY_SCORE`.
 
 To run a quantized V4 Flash smoke test through a V4-capable llama.cpp-compatible
 binary that already exists on Spark:

@@ -10,6 +10,14 @@ REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash}"
+MODEL_RUNS_CSV="${MODEL_RUNS_CSV:-}"
+PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
+PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
+PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
+PASSED_TASKS="${PASSED_TASKS:-}"
+TOTAL_TASKS="${TOTAL_TASKS:-}"
+LOCAL_QUALITY_SCORE="${LOCAL_QUALITY_SCORE:-}"
+QUALITY_SCORE="${QUALITY_SCORE:-}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -38,6 +46,101 @@ extract_baseline_summary()
         }
         $0 == "== baseline summary (approx) ==" { found=1 }
     ' "$in" 2>/dev/null || true
+}
+
+append_model_runs_csv()
+{
+    scope="$1"
+    model="$2"
+    summary_path="$3"
+    if [ "$MODEL_RUNS_CSV" = "" ] || [ "$summary_path" = "" ] || [ ! -r "$summary_path" ]; then
+        return 0
+    fi
+    python3 - "$MODEL_RUNS_CSV" "$model" "$ts-$scope" "$scope" "$PUBLIC_QUALITY_PRIOR" "$PUBLIC_QUALITY_BASIS" "$PUBLIC_QUALITY_SOURCE" "$PASSED_TASKS" "$TOTAL_TASKS" "$LOCAL_QUALITY_SCORE" "$QUALITY_SCORE" <<'PY' <"$summary_path" 2>/dev/null || true
+import csv
+import os
+import sys
+
+csv_path = sys.argv[1]
+model = sys.argv[2]
+run_id = sys.argv[3]
+scope = sys.argv[4]
+public_quality_prior = sys.argv[5].strip()
+public_quality_basis = sys.argv[6].strip()
+public_quality_source = sys.argv[7].strip()
+passed_tasks = sys.argv[8].strip()
+total_tasks = sys.argv[9].strip()
+local_quality_score = sys.argv[10].strip()
+quality_score = sys.argv[11].strip()
+
+kv = {}
+for raw_line in sys.stdin.read().splitlines():
+    line = raw_line.strip()
+    if not line or "=" not in line:
+        continue
+    k, v = line.split("=", 1)
+    k = k.strip()
+    v = v.strip()
+    if k:
+        kv[k] = v
+
+def _get(*names: str) -> str:
+    for n in names:
+        v = kv.get(n, "").strip()
+        if v:
+            return v
+    return ""
+
+row = {
+    "model": model,
+    "run_id": run_id,
+    "scope": scope,
+    "public_quality_prior": public_quality_prior,
+    "public_quality_basis": public_quality_basis,
+    "public_quality_source": public_quality_source,
+    "passed_tasks": passed_tasks,
+    "total_tasks": total_tasks,
+    "local_quality_score": local_quality_score,
+    "quality_score": quality_score,
+    "decode_tps": _get("generation_tps", "decode_tps"),
+    "prefill_tps": _get("prefill_tps"),
+    "ttft_s": _get("ttft_first_output_s", "ttft_s"),
+    "total_wall_s": _get("wall_s", "total_wall_s"),
+    "output_tokens": _get("token_trace_events", "output_tokens", "n_tokens"),
+}
+
+header = [
+    "model",
+    "run_id",
+    "scope",
+    "public_quality_prior",
+    "public_quality_basis",
+    "public_quality_source",
+    "passed_tasks",
+    "total_tasks",
+    "local_quality_score",
+    "quality_score",
+    "decode_tps",
+    "prefill_tps",
+    "ttft_s",
+    "total_wall_s",
+    "output_tokens",
+]
+
+need_header = True
+if os.path.exists(csv_path):
+    try:
+        need_header = (os.stat(csv_path).st_size == 0)
+    except OSError:
+        need_header = True
+
+os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+with open(csv_path, "a", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=header)
+    if need_header:
+        w.writeheader()
+    w.writerow({k: row.get(k, "") for k in header})
+PY
 }
 
 {
@@ -100,6 +203,8 @@ extract_baseline_summary()
 echo "== running llama.cpp benchmark script on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp/benchmark_llamacpp_spark.sh && $REMOTE_LLAMA_ENV /tmp/benchmark_llamacpp_spark.sh" <"$repo_root/scripts/benchmark_llamacpp_spark.sh" \
     >"$OUT_DIR/remote_llamacpp_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_stderr.txt" || true
+
+append_model_runs_csv "llamacpp" "${MODEL_SOURCE:-llamacpp}" "$OUT_DIR/remote_llamacpp_stdout.txt"
 
 {
     echo "## llama.cpp (Spark)"
@@ -170,6 +275,8 @@ python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" 
 echo "== running vLLM probe script on spark =="
 ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_vllm_spark.sh && chmod +x /tmp/benchmark_vllm_spark.sh && $REMOTE_VLLM_ENV /tmp/benchmark_vllm_spark.sh" <"$repo_root/scripts/benchmark_vllm_spark.sh" \
     >"$OUT_DIR/remote_vllm_stdout.txt" 2>"$OUT_DIR/remote_vllm_stderr.txt" || true
+
+append_model_runs_csv "vllm" "${VLLM_MODEL:-vllm}" "$OUT_DIR/remote_vllm_stdout.txt"
 
 {
     echo "## vLLM (Spark)"
