@@ -11,8 +11,9 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tupl
 
 
 _WORD_RE = re.compile(r"[A-Za-z0-9]+")
-_WS_RE = re.compile(r"\\s+")
-_ANSWER_LETTER_RE = re.compile(r"(?i)\\b(?:answer\\s*[:=]\\s*)?([A-D])\\b")
+_WS_RE = re.compile(r"\s+")
+_ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*([A-D])\s*$")
+_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer)\s*[:=]\s*([A-D])\b")
 
 
 @dataclass
@@ -90,6 +91,9 @@ def top_counts(counts: Dict[str, int], k: int = 10) -> List[Tuple[str, int]]:
 
 
 def _extract_label(obj: Dict[str, Any]) -> str:
+    parse_valid = obj.get("parse_valid", None)
+    if parse_valid is False:
+        return("invalid")
     label = _get_str(obj, "label", "judge_label", "winner", "result")
     label = label.lower()
     if label in ("a", "b", "tie", "invalid"):
@@ -104,7 +108,10 @@ def _extract_label(obj: Dict[str, Any]) -> str:
 
 
 def extract_answer(text: str) -> str:
-    m = _ANSWER_LETTER_RE.search(text)
+    m = _ANSWER_STANDALONE_RE.match(text)
+    if m is not None:
+        return(m.group(1).upper())
+    m = _ANSWER_MARKED_RE.search(text)
     if m is None:
         return("")
     return(m.group(1).upper())
@@ -123,7 +130,7 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
     rtype = _get_str(obj, "type", "record_type")
     rtype = rtype.lower()
     if rtype == "":
-        if "a_model_id" in obj or "b_model_id" in obj or "judge_id" in obj:
+        if "a_model_id" in obj or "b_model_id" in obj or "judge_id" in obj or "model_a" in obj or "model_b" in obj or "pair_id" in obj:
             rtype = "judge_pair"
         elif "prompt" in obj and ("output" in obj or "completion" in obj or "response" in obj):
             rtype = "task_run"

@@ -73,6 +73,28 @@ One record per judge decision comparing two candidates.
 
 To measure **disagreement**, multiple `judge_pair` records may share the same `item_id` (different `judge_id`).
 
+### Compact judge-elo records (`schema="ds4_pairwise_judge_record_v1"`)
+
+The entropy tools also accept the compact record envelope used by the judge-ELO loop:
+
+```json
+{
+  "schema": "ds4_pairwise_judge_record_v1",
+  "pair_id": "pair.mini.001",
+  "model_a": "dsv4-flash",
+  "model_b": "ling-2.6",
+  "parse_valid": true,
+  "winner": "A",
+  "margin": 2
+}
+```
+
+Mapping:
+
+- `pair_id` -> `item_id`
+- `model_a` / `model_b` -> `a_model_id` / `b_model_id`
+- `parse_valid=false` -> `label="invalid"`
+
 ## Entropy metrics
 
 The scripts compute:
@@ -80,6 +102,7 @@ The scripts compute:
 - **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family`.
 - **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
+- **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
 - **Judge label balance**: label histogram + entropy.

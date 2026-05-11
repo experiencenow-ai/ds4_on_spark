@@ -18,9 +18,9 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         records = lib.load_jsonl([path])
         report = metrics.summarize(records)
 
-        self.assertEqual(report.totals["records_total"], 11)
+        self.assertEqual(report.totals["records_total"], 12)
         self.assertEqual(report.totals["task_run_records"], 6)
-        self.assertEqual(report.totals["judge_pair_records"], 4)
+        self.assertEqual(report.totals["judge_pair_records"], 5)
         self.assertEqual(report.totals["unknown_records"], 0)
 
         self.assertEqual(report.diversity["task_id"]["unique"], 5)
@@ -39,9 +39,10 @@ class EntropyBufferMetricsTest(unittest.TestCase):
 
         self.assertEqual(report.judge["label_counts"]["a"], 3)
         self.assertEqual(report.judge["label_counts"]["tie"], 1)
+        self.assertEqual(report.judge["label_counts"]["invalid"], 1)
         self.assertAlmostEqual(report.judge["disagreement_rate"], 0.25)
         self.assertEqual(report.judge["decided_count_ab"], 3)
-        self.assertAlmostEqual(report.judge["decided_rate_ab"], 0.75)
+        self.assertAlmostEqual(report.judge["decided_rate_ab"], 0.60)
         self.assertAlmostEqual(report.judge["label_balance_ab"], 1.0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)

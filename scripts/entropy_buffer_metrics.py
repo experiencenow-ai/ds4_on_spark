@@ -103,14 +103,37 @@ def _hhi(counts: Dict[str, int]) -> float:
     return(h)
 
 
+def _distinct_ratio(counts: Dict[str, int]) -> float:
+    total = float(sum(counts.values()))
+    if total <= 0.0:
+        return(0.0)
+    return(float(len(counts)) / total)
+
+
 def _useful_novelty_flags(output: str) -> List[str]:
     flags: List[str] = []
     norm = lib.normalize_text(output)
     if norm == "":
         return(["empty_output"])
+    if lib.extract_answer(output) != "":
+        return([])
+    if norm.isdigit():
+        return([])
+    if norm.startswith("{") and norm.endswith("}"):
+        return([])
+    if norm.startswith("[") and norm.endswith("]"):
+        return([])
     ws = lib.words(norm)
     if len(ws) == 0:
         return(["no_words"])
+    if len(norm) >= 4096:
+        flags.append("very_long_output_ge_4096_chars")
+    if len(ws) <= 2 and len(norm) <= 16:
+        flags.append("very_short_output_le_2_words")
+    if "as an ai" in norm or "as a language model" in norm:
+        flags.append("ai_disclaimer")
+    if "i can't" in norm or "i cannot" in norm or "unable to" in norm:
+        flags.append("refusal_like")
     if len(ws) >= 8:
         counts: Dict[str, int] = {}
         for w in ws:
@@ -279,6 +302,10 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     prompt_word_counts: Dict[str, int] = {}
     for w in prompt_words:
         prompt_word_counts[w] = prompt_word_counts.get(w, 0) + 1
+    prompt_2gram_total = int(sum(prompt_2grams.values()))
+    prompt_3gram_total = int(sum(prompt_3grams.values()))
+    out_2gram_total = int(sum(out_2grams.values()))
+    out_3gram_total = int(sum(out_3grams.values()))
     tokens = {
         "prompt_chars": _len_stats(prompt_len_chars),
         "prompt_words": _len_stats(prompt_len_words),
@@ -286,18 +313,34 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "output_words": _len_stats(output_len_words),
         "prompt_words_total": len(prompt_words),
         "prompt_words_unique": len(prompt_word_counts),
+        "prompt_distinct_1": _distinct_ratio(prompt_word_counts),
+        "prompt_top_word_frac": 0.0 if len(prompt_words) == 0 else (float(max(prompt_word_counts.values())) / float(len(prompt_words))),
         "prompt_word_entropy_bits": lib.shannon_entropy(prompt_word_counts),
         "prompt_word_top": lib.top_counts(prompt_word_counts),
+        "prompt_2gram_total": prompt_2gram_total,
+        "prompt_2gram_unique": len(prompt_2grams),
+        "prompt_distinct_2": _distinct_ratio(prompt_2grams),
         "prompt_2gram_entropy_bits": lib.shannon_entropy(prompt_2grams),
         "prompt_2gram_top": lib.top_counts(prompt_2grams),
+        "prompt_3gram_total": prompt_3gram_total,
+        "prompt_3gram_unique": len(prompt_3grams),
+        "prompt_distinct_3": _distinct_ratio(prompt_3grams),
         "prompt_3gram_entropy_bits": lib.shannon_entropy(prompt_3grams),
         "prompt_3gram_top": lib.top_counts(prompt_3grams),
         "output_words_total": len(out_words),
         "output_words_unique": len(word_counts),
+        "output_distinct_1": _distinct_ratio(word_counts),
+        "output_top_word_frac": 0.0 if len(out_words) == 0 else (float(max(word_counts.values())) / float(len(out_words))),
         "output_word_entropy_bits": lib.shannon_entropy(word_counts),
         "output_word_top": lib.top_counts(word_counts),
+        "output_2gram_total": out_2gram_total,
+        "output_2gram_unique": len(out_2grams),
+        "output_distinct_2": _distinct_ratio(out_2grams),
         "output_2gram_entropy_bits": lib.shannon_entropy(out_2grams),
         "output_2gram_top": lib.top_counts(out_2grams),
+        "output_3gram_total": out_3gram_total,
+        "output_3gram_unique": len(out_3grams),
+        "output_distinct_3": _distinct_ratio(out_3grams),
         "output_3gram_entropy_bits": lib.shannon_entropy(out_3grams),
         "output_3gram_top": lib.top_counts(out_3grams),
     }
@@ -404,7 +447,34 @@ def to_markdown(report: MetricsReport) -> str:
             else:
                 parts.append(f"- `{sk}`: {v}")
         parts.append("")
-    for field in ("prompt_words_total", "prompt_words_unique", "prompt_word_entropy_bits", "output_words_total", "output_words_unique", "output_word_entropy_bits"):
+    for field in (
+        "prompt_words_total",
+        "prompt_words_unique",
+        "prompt_distinct_1",
+        "prompt_top_word_frac",
+        "prompt_word_entropy_bits",
+        "prompt_2gram_total",
+        "prompt_2gram_unique",
+        "prompt_distinct_2",
+        "prompt_2gram_entropy_bits",
+        "prompt_3gram_total",
+        "prompt_3gram_unique",
+        "prompt_distinct_3",
+        "prompt_3gram_entropy_bits",
+        "output_words_total",
+        "output_words_unique",
+        "output_distinct_1",
+        "output_top_word_frac",
+        "output_word_entropy_bits",
+        "output_2gram_total",
+        "output_2gram_unique",
+        "output_distinct_2",
+        "output_2gram_entropy_bits",
+        "output_3gram_total",
+        "output_3gram_unique",
+        "output_distinct_3",
+        "output_3gram_entropy_bits",
+    ):
         v = report.tokens.get(field)
         if isinstance(v, float):
             parts.append(f"- `{field}`: {v:.6f}")
@@ -412,8 +482,16 @@ def to_markdown(report: MetricsReport) -> str:
             parts.append(f"- `{field}`: {v}")
     parts.append("\n### prompt_word_top\n")
     parts.append(_md_list_top(report.tokens.get("prompt_word_top", [])))
+    parts.append("\n### prompt_2gram_top\n")
+    parts.append(_md_list_top(report.tokens.get("prompt_2gram_top", [])))
+    parts.append("\n### prompt_3gram_top\n")
+    parts.append(_md_list_top(report.tokens.get("prompt_3gram_top", [])))
     parts.append("\n### output_word_top\n")
     parts.append(_md_list_top(report.tokens.get("output_word_top", [])))
+    parts.append("\n### output_2gram_top\n")
+    parts.append(_md_list_top(report.tokens.get("output_2gram_top", [])))
+    parts.append("\n### output_3gram_top\n")
+    parts.append(_md_list_top(report.tokens.get("output_3gram_top", [])))
     parts.append("\n## Duplicates\n")
     for k, v in report.duplicates.items():
         if isinstance(v, float):
