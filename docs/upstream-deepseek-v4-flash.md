@@ -142,6 +142,14 @@ Practical contract rule:
 
 - Treat `fixtures/.../inference/config.json` `expert_dtype` as canonical; `config.json` `expert_dtype` may be absent in some upstream revisions.
 
+Additional drift watch (PR 18):
+
+- There is also an HF PR ref (`refs/pr/18`, commit `e37f9032e9116f7002fc917b720e945857bbac68`) that:
+  - adds an SGLang deployment pointer to `README.md`,
+  - removes `expert_dtype` from the top-level `config.json` (matching the PR 14 drift), and
+  - changes `inference/model.py` shared-expert construction (removes `swiglu_limit` from the shared expert path).
+- Treat these as potentially runtime-visible semantic drift and keep inspection metadata-only.
+
 Chat-template drift watch:
 
 - There is also a “conversational” HF PR ref (`refs/pr/16`, commit `014a5cfe6d1349d3d1096b2f8c15faaaa11819d5`) that is pinned in [`docs/upstream-manifest.md`](upstream-manifest.md) for reproducible inspection of prompt templating additions (for example `chat_template.jinja`) and any config deltas. Treat these changes as potentially runtime-visible (tokenization/prompt formatting), but keep all inspection metadata-only.
@@ -152,6 +160,7 @@ Re-check quickly (metadata-only fetch; no weights):
 ./scripts/upstream_feature_probe.sh --fetch
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf_pr14
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf_pr16
+./scripts/fetch_upstreams.sh deepseek_v4_flash_hf_pr18
 ```
 
 ## Transformers references
