@@ -96,4 +96,6 @@ refresh_probe_strong \
   "$PINNED_ANTIREZ_MTP_SIDECAR_URL" \
   "$OUT_DIR/mtp-sidecar-probe-antirez-b0c3326-payload64.json"
 
+python3 scripts/model_contract_summarize_v4flash_pinned_gguf_inspects.py --docs-dir "$OUT_DIR"
+
 echo "OK: refreshed pinned DeepSeek V4 Flash GGUF inspections into $OUT_DIR (MAX_BYTES=$MAX_BYTES)"

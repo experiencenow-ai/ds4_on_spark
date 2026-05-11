@@ -204,6 +204,17 @@ def main() -> int:
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 
+				ckpt = summary.get("checkpoint_index", {}) if isinstance(summary, dict) else {}
+				if isinstance(ckpt, dict):
+					expected_top_level_keys = sorted([k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))])
+					expected_top_level_sha = sha256_lines(expected_top_level_keys)
+					if ckpt.get("weight_map_top_level_keys_sha256") != expected_top_level_sha:
+						failures.append(Failure(90, f"contract summary checkpoint_index.weight_map_top_level_keys_sha256 mismatch (fixture drift?): {contract_summary}"))
+					if ckpt.get("weight_map_top_level_tensor_key_count") != int(len(expected_top_level_keys)):
+						failures.append(Failure(91, f"contract summary checkpoint_index.weight_map_top_level_tensor_key_count mismatch (fixture drift?): {contract_summary}"))
+				else:
+					failures.append(Failure(92, f"contract summary missing checkpoint_index (expected dict): {contract_summary}"))
+
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):
 					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
@@ -999,10 +1010,10 @@ def main() -> int:
 			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
 
 		# MTPBlock-specific projections + norms + HC head.
-		for suffix in (
-			"e_proj.weight",
-			"e_proj.scale",
-			"h_proj.weight",
+			for suffix in (
+				"e_proj.weight",
+				"e_proj.scale",
+				"h_proj.weight",
 			"h_proj.scale",
 			"enorm.weight",
 			"hnorm.weight",
@@ -1010,13 +1021,21 @@ def main() -> int:
 			"hc_head_fn",
 			"hc_head_base",
 			"hc_head_scale",
-		):
-			req_mtp(suffix)
+			):
+				req_mtp(suffix)
 
-	# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
-	enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
-	if not enc_test.exists():
-		failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
+		# Pinned GGUF metadata-only inspections should have a stable summary fixture for MTP/quant gating.
+		pinned_summary = FIX / "pinned_gguf_inspects_summary.json"
+		pinned_summary_script = ROOT / "scripts" / "model_contract_summarize_v4flash_pinned_gguf_inspects.py"
+		if pinned_summary.exists():
+			r = subprocess.run([sys.executable, str(pinned_summary_script), "--check"], cwd=str(ROOT))
+			if r.returncode != 0:
+				failures.append(Failure(18, f"pinned GGUF inspect summary fixture is stale: {pinned_summary} (re-run scripts/model_contract_refresh_v4flash_gguf_inspects.sh)"))
+
+		# Tokenizer/encoding oracle: run upstream-provided encoding tests (no weights required).
+		enc_test = FIX / "encoding" / "test_encoding_dsv4.py"
+		if not enc_test.exists():
+			failures.append(Failure(40, f"missing encoding oracle test file: {enc_test}"))
 	else:
 		r = subprocess.run([sys.executable, str(enc_test)], cwd=str(enc_test.parent))
 		if r.returncode != 0:

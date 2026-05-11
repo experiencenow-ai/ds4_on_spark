@@ -17,6 +17,21 @@ This complements the prompt-size sweep (`scripts/benchmark_llamacpp_server_sweep
 
 This sweep is expensive: it starts resident `llama-server` instances and may reload the model for each `(parallel,batch,ubatch)` combination. Do not automate large runs without an explicit human-approved plan.
 
+## Current Spark0 Snapshot (2026-05-11)
+
+These numbers summarize the current **single-Spark Spark0** DeepSeek V4 Flash IQ2XXS llama.cpp-fork baseline status after the Flash-Attention reservation fix and the initial multi-slot reservation fixes.
+
+- Stable batching point (current “usable” config): `--parallel 8 -b 2048 -ub 512`.
+- Aggregate decode plateaus (generated tok/s, aggregate across the server):
+  - short decode: ~13.5 tok/s (observed P8/P16 plateau region)
+  - 64-word decode: ~12.5 tok/s
+  - 256-word decode: ~8.6 tok/s
+- Prefill throughput probe (measured with `n_predict=1`): ~220–286 prompt tok/s for ~64–384 word prompts.
+- Larger batches did not help: `-b 4096 -ub 1024` became runnable after the `n_ctx_seq` reserve caps, but did not improve throughput.
+- HTTP overhead is not the likely bottleneck: a high-concurrency server probe (`--parallel 128 -b 1024 -ub 64`, 16-word prompt, `n_predict=8`) degraded to ~9.6 aggregate output tok/s, while direct `llama-batched-bench` `-npl 1,8,32,64,128` plateaus at ~13.5–14.2 aggregate decode tok/s.
+
+Decision gate reminder: do **not** recommend buying additional Sparks for this llama.cpp path until single-Spark proof shows ~50–100 aggregate output tok/s, or an alternative runtime path (vLLM / expert-parallel / MTP / DFlash) shows stable scaling with quality-adjusted scoring.
+
 ## What It Produces
 
 When run directly, or via `scripts/run_baseline_existing_runtime.sh` after the

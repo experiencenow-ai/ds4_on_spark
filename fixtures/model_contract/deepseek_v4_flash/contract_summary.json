@@ -599,6 +599,8 @@
         "keys_sha256": "14109a40d47d1f284fdf3c644ea81582c1f144f7bd4762d2220c3e565c6a4a3d"
       }
     },
+    "weight_map_top_level_keys_sha256": "6a3f38353214cde43e43b9603b9eed9e26d75ee7ccabd5366041f58d168e2703",
+    "weight_map_top_level_tensor_key_count": 6,
     "weight_map_unique_files": 46
   },
   "compat": {

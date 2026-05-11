@@ -260,6 +260,9 @@ date -u +"epoch: %s"
 if command -v timedatectl >/dev/null 2>&1; then
 	timedatectl show -p NTPSynchronized -p SystemClockSynchronized -p NTPService -p TimeUSec 2>/dev/null || true
 fi
+if command -v chronyc >/dev/null 2>&1; then
+	chronyc tracking 2>/dev/null | grep -E "^(Reference ID|Stratum|Ref time|System time|Last offset|RMS offset|Frequency|Skew|Root delay|Root dispersion|Update interval|Leap status)" | head -n 40 || true
+fi
 echo
 echo "== network (links + addrs, compact) =="
 if command -v ip >/dev/null 2>&1; then
@@ -322,7 +325,14 @@ echo
 echo "== storage (df, lsblk model/size) =="
 df -h 2>/dev/null | head -n 60 || true
 if command -v lsblk >/dev/null 2>&1; then
-	lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT,FSTYPE 2>/dev/null | head -n 120 || true
+	echo "== disks (summary) =="
+	lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null | head -n 40 || true
+	echo
+	echo "== lsblk (mounts, no loop, capped) =="
+	lsblk_out="$(lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT,FSTYPE 2>/dev/null || true)"
+	if [ "$lsblk_out" != "" ]; then
+		printf "%s\n" "$lsblk_out" | awk 'NR==1{print;next} $1 !~ /^loop[0-9]+$/ {print}' | head -n 120 || true
+	fi
 fi
 echo
 echo "== gpu/toolchain facts (compact) =="
