@@ -28,6 +28,13 @@ class JudgeEloTest(unittest.TestCase):
         for k in ratings1:
             self.assertAlmostEqual(ratings1[k], ratings2[k], places=9)
 
+    def test_sort_by_pair_id_is_stable(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        m1 = list(updater.iter_valid_matches([path], sort_by_pair_id=False))
+        m2 = list(updater.iter_valid_matches([path], sort_by_pair_id=True))
+        self.assertEqual(m1, m2)
+
     def test_output_files_written(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
@@ -56,4 +63,3 @@ class JudgeEloTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

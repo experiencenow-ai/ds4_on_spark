@@ -79,7 +79,7 @@ def _apply_match(ratings: Dict[str, float], a: str, b: str, winner: str, margin:
 
 
 def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[Tuple[str, str, str, int]]:
-    rows: List[Tuple[str, str, str, int]] = []
+    rows: List[Tuple[str, str, str, str, int]] = []
     for path in paths:
         for _, obj in schema.iter_jsonl(path):
             if not obj.get("parse_valid", False):
@@ -87,13 +87,13 @@ def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[
             errs = schema.validate_record(obj)
             if len(errs) != 0:
                 continue
-            rows.append((str(obj["model_a"]), str(obj["model_b"]), str(obj["winner"]), int(obj["margin"])))
+            rows.append((str(obj["pair_id"]), str(obj["model_a"]), str(obj["model_b"]), str(obj["winner"]), int(obj["margin"])))
     if sort_by_pair_id:
         # When multiple inputs are merged, a stable ordering avoids nondeterminism.
-        # We don't have pair_id here anymore, so sort by tuple.
-        rows.sort(key=lambda t: (t[0], t[1], t[2], t[3]))
+        # pair_id is required by the schema and should be stable across runs.
+        rows.sort(key=lambda t: (t[0], t[1], t[2], t[3], t[4]))
     for r in rows:
-        yield r
+        yield (r[1], r[2], r[3], r[4])
 
 
 def compute_elo(paths: Sequence[str], k: float, scale: float, sort_by_pair_id: bool) -> Tuple[Dict[str, float], Dict[str, Dict[str, int]]]:
@@ -182,4 +182,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
