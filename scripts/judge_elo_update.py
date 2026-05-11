@@ -205,7 +205,7 @@ def compute_meta(paths: Sequence[str], k: float, scale: float, sort_by_pair_id: 
     }
 
 
-def compute_budget(paths: Sequence[str]) -> Dict[str, Any]:
+def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str, Any]:
     total = 0
     parse_ok = 0
     parse_bad = 0
@@ -234,7 +234,6 @@ def compute_budget(paths: Sequence[str]) -> Dict[str, Any]:
                         latency[k].append(int(v))
 
     judge_out_vals = tokens.get("judge_out", [])
-    judge_out_target = 64
     judge_out_le_target = 0
     for v in judge_out_vals:
         if int(v) <= judge_out_target:
@@ -315,12 +314,15 @@ def main() -> None:
     ap.add_argument("--sort", action="store_true", help="sort matches (stable but loses chronological meaning)")
     ap.add_argument("--strict", action="store_true", help="require tokens/latency accounting and strict schema constraints")
     ap.add_argument("--quality-mode", choices=["logistic", "minmax"], default="logistic", help="map Elo -> quality_score (default logistic)")
+    ap.add_argument("--judge-out-target", type=int, default=64, help="target tokens for compact judge output budgeting")
     args = ap.parse_args()
 
     if not schema._finite(float(args.k)) or args.k <= 0.0:
         raise SystemExit("K must be finite and > 0")
     if not schema._finite(float(args.scale)) or args.scale <= 0.0:
         raise SystemExit("scale must be finite and > 0")
+    if not isinstance(args.judge_out_target, int) or int(args.judge_out_target) <= 0:
+        raise SystemExit("--judge-out-target must be an integer > 0")
 
     if args.strict:
         validate_inputs_strict(args.inputs)
@@ -351,10 +353,11 @@ def main() -> None:
         meta = compute_meta(args.inputs, float(args.k), float(args.scale), bool(args.sort))
         meta["quality_mode"] = str(args.quality_mode)
         meta["quality_source"] = str(qsrc)
+        meta["judge_out_target_tokens"] = int(args.judge_out_target)
         json.dump(meta, f, indent=2, sort_keys=True)
         f.write("\n")
     with open(os.path.join(args.out_dir, "budget.json"), "w", encoding="utf-8") as f:
-        json.dump(compute_budget(args.inputs), f, indent=2, sort_keys=True)
+        json.dump(compute_budget(args.inputs, judge_out_target=int(args.judge_out_target)), f, indent=2, sort_keys=True)
         f.write("\n")
 
 

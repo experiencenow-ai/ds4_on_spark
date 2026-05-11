@@ -83,6 +83,7 @@ python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b 
   - `meta.json` (record/match counts and updater parameters)
   - `budget.json` (token/latency/parse-validity summary over the input JSONL)
     - includes `judge_out_budget` (how often judge outputs meet the compact token target)
+    - compact target is configurable via `--judge-out-target` (default 64)
 
 Quality mapping defaults to `--quality-mode logistic` (anchored: Elo 1000 -> quality_score 50). Use `--quality-mode minmax` only for quick relative comparisons within a single closed set of models.
 

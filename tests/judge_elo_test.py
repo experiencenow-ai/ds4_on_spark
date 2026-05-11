@@ -74,6 +74,13 @@ class JudgeEloTest(unittest.TestCase):
         self.assertIn("latency_ms", budget)
         self.assertIn("judge_out_budget", budget)
 
+    def test_budget_target_is_configurable(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        budget = updater.compute_budget([path], judge_out_target=42)
+        j = budget.get("judge_out_budget", {})
+        self.assertEqual(int(j.get("target_tokens", 0)), 42)
+
     def test_meta_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
@@ -81,6 +88,14 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(meta.get("schema"), "ds4_judge_elo_meta_v1")
         self.assertEqual(int(meta.get("records", 0)), 4)
         self.assertGreaterEqual(int(meta.get("matches_used", 0)), 3)
+
+    def test_elo_expected_values(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        ratings, _stats = updater.compute_elo([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+        self.assertAlmostEqual(float(ratings.get("model_slow", 0.0)), 1008.736, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_mid", 0.0)), 999.899, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_fast", 0.0)), 991.364, places=3)
 
     def test_join_quality_rows(self) -> None:
         rows = [
