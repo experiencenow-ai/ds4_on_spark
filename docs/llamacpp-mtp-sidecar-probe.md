@@ -101,6 +101,6 @@ Pinned reference runner:
 ./scripts/model_contract_probe_mtp_sidecar_antirez.sh
 ```
 
-Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-9cb905d.json`.
+Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-c198a70.json`.
 
-Stronger pinned output (includes `--payload-sample-bytes 64`) is in `docs/mtp-sidecar-probe-antirez-9cb905d-payload64.json`.
+Stronger pinned output (includes `--payload-sample-bytes 64`) is in `docs/mtp-sidecar-probe-antirez-c198a70-payload64.json`.
