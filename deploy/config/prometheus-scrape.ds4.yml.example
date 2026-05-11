@@ -14,3 +14,12 @@
         - spark1.local:9090
       labels:
         ds4_instance: spark1
+    # Optional Spark2/Spark3 (TP=4 / ring bring-up):
+    #- targets:
+    #    - spark2.local:9090
+    #  labels:
+    #    ds4_instance: spark2
+    #- targets:
+    #    - spark3.local:9090
+    #  labels:
+    #    ds4_instance: spark3

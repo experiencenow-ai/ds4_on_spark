@@ -112,4 +112,46 @@ run_retry() {
 	run_retry cuda_sm121_nvrtc_cxx20_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvrtc_cxx20_jit
 	run_retry cuda_sm121_nvjitlink_jit \"$REMOTE_DIR\"/bin/cuda_sm121_nvjitlink_jit
 	run_retry cuda_sm121_cluster_launch \"$REMOTE_DIR\"/bin/cuda_sm121_cluster_launch
+
+	echo \"== sm_121 variant build+run (fatbin probe, best-effort) ==\"
+	try_variant_fatbin() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		mode=\"\$3\"
+		out_bin=\"$REMOTE_DIR\"/bin/\"\${tag}\"
+		advertised=\"unknown\"
+		if [ \"\${list_gpu_code}\" != \"\" ]; then
+			if echo \"\${list_gpu_code}\" | grep -q \"\${arch}\"; then
+				advertised=\"yes\"
+			else
+				advertised=\"no\"
+			fi
+		fi
+		echo \"-- build: \${tag} (\${mode}=\${arch}; advertised=\${advertised})\"
+		set +e
+		if [ \"\${mode}\" = \"-arch\" ]; then
+			\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -o \"\${out_bin}\" src/cuda_sm121_fatbin_probe.cu 2>\"$REMOTE_DIR\"/bin/\"\${tag}\".err
+		else
+			\$NVCC -O2 -std=c++17 --gpu-architecture=\"\${arch}\" -o \"\${out_bin}\" src/cuda_sm121_fatbin_probe.cu 2>\"$REMOTE_DIR\"/bin/\"\${tag}\".err
+		fi
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"\${tag}: BUILD FAILED rc=\$rc\" >&2
+			head -n 60 \"$REMOTE_DIR\"/bin/\"\${tag}\".err || true
+			return 0
+		fi
+		set +e
+		run_retry \"\${tag}\" \"\${out_bin}\"
+		rc_run=\$?
+		set -e
+		if [ \$rc_run -ne 0 ]; then
+			echo \"(\${tag} run failed rc=\${rc_run}; continuing)\" >&2
+		fi
+	}
+
+	try_variant_fatbin cuda_sm121a_fatbin_probe sm_121a -arch
+	try_variant_fatbin cuda_sm121f_fatbin_probe sm_121f -arch
+	try_variant_fatbin cuda_sm121a_gpuarch_fatbin_probe sm_121a --gpu-architecture
+	try_variant_fatbin cuda_sm121f_gpuarch_fatbin_probe sm_121f --gpu-architecture
 "

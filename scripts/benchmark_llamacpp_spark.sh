@@ -115,7 +115,7 @@ LOG_SUMMARY="$OUT_DIR/llama_cli.summary.txt"
 
 echo "== run =="
 echo "runtime_label=$RUNTIME_LABEL"
-echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS --timings $EXTRA_ARGS"
+echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS <timings-flags> $EXTRA_ARGS"
 echo
 
 python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT"
@@ -123,13 +123,35 @@ import os, resource, re, subprocess, sys, time, shlex
 
 llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant = sys.argv[1:]
 
-cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl, "--timings"]
+help_text = ""
+try:
+    hr = subprocess.run([llama_cli, "--help"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
+    help_text = (hr.stdout or "")
+except Exception:
+    help_text = ""
+
+perf_flags = []
+if "--timings" in help_text:
+    perf_flags.append("--timings")
+elif "--show-timings" in help_text:
+    perf_flags.append("--show-timings")
+if "--perf" in help_text:
+    perf_flags.append("--perf")
+
+fixed_flags = []
+for flag in ["--single-turn", "--simple-io", "--no-display-prompt", "--no-warmup"]:
+    if flag in help_text:
+        fixed_flags.append(flag)
+
+cmd = [llama_cli, "-m", model, "-p", prompt, "-n", n_tokens, "-c", ctx, "-ngl", ngl] + perf_flags + fixed_flags
 if extra_args.strip():
     cmd.extend(shlex.split(extra_args))
 
 start = time.monotonic()
 
 timings_lines = []
+fattn_ids = set()
+fattn_lines = 0
 with open(log_raw, "w", encoding="utf-8") as f:
     f.write("cmd=" + " ".join(shlex.quote(x) for x in cmd) + "\n")
     f.write("utc_start=" + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
@@ -143,7 +165,12 @@ with open(log_raw, "w", encoding="utf-8") as f:
     for line in proc.stdout:
         if first_output_s is None and line != "":
             first_output_s = time.monotonic() - start
-        if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line):
+        if "__fattn__" in line:
+            fattn_lines += 1
+            m = re.search(r"__fattn__-([0-9]+)", line)
+            if m is not None:
+                fattn_ids.add(int(m.group(1)))
+        if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line) or ("[ Prompt:" in line and "Generation:" in line and "t/s" in line):
             timings_lines.append(line.strip())
         f.write(line)
         f.flush()
@@ -180,7 +207,15 @@ gen_tps = None
 gen_ms_per_tok = None
 gen_tokens = None
 for tl in timings_lines:
-    if "prompt eval time" in tl:
+    if "[ Prompt:" in tl and "Generation:" in tl and "t/s" in tl:
+        mp = re.search(r"Prompt:\s*([0-9]+(?:\.[0-9]+)?)\s*t/s", tl)
+        mg = re.search(r"Generation:\s*([0-9]+(?:\.[0-9]+)?)\s*t/s", tl)
+        if mp is not None:
+            prefill_tps = float(mp.group(1))
+        if mg is not None:
+            gen_tps = float(mg.group(1))
+    elif "prompt eval time" in tl:
+
         prefill_tps = _last_float_before(tl, "tokens per second")
         prefill_ms_per_tok = _last_float_before(tl, "ms per token")
         prefill_tokens = _tokens_after_slash(tl)
@@ -216,6 +251,16 @@ if gen_ms_per_tok is not None:
     summary_lines.append("generation_ms_per_token=%.6f" % gen_ms_per_tok)
 if gen_tokens is not None:
     summary_lines.append("output_tokens=%d" % int(gen_tokens))
+elif rc == 0:
+    try:
+        summary_lines.append("output_tokens=%d" % int(n_tokens))
+    except Exception:
+        pass
+
+if fattn_lines > 0:
+    summary_lines.append("fattn_log_lines=%d" % int(fattn_lines))
+if fattn_ids:
+    summary_lines.append("fattn_unique_nodes=%d" % int(len(fattn_ids)))
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

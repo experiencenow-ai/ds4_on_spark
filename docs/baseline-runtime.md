@@ -33,6 +33,7 @@ Enable gates with environment variables:
 
 - `ALLOW_FETCH=1` to `git clone` upstream repos (small; still explicit)
 - `ALLOW_BUILD=1` to compile (can take minutes)
+- `ALLOW_MODEL_INSPECT=1` to run a metadata-only GGUF header + tensor-key inspection pass (no model load)
 - `ALLOW_RUN=1` to run inference (can be long / expensive)
 
 ## One-command entrypoint (Mac → Spark)
@@ -64,7 +65,7 @@ To run a quantized V4 Flash smoke test through a V4-capable llama.cpp-compatible
 binary that already exists on Spark:
 
 ```sh
-REMOTE_LLAMA_ENV='ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
+REMOTE_LLAMA_ENV='ALLOW_MODEL_INSPECT=1 ALLOW_RUN=1 RUNTIME_LABEL=v4-capable-llama MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli CTX=2048 N_TOKENS=32 N_GPU_LAYERS=99' \
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
@@ -73,6 +74,9 @@ Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 `docs/quantized-single-spark.md` for the milestone definition and failure
 triage. These env strings are recorded in the generated report, so do not put
 tokens or other secrets in them.
+
+If you need different `MODEL_GGUF` / `ALLOW_MODEL_INSPECT` wiring for the
+inspector phase, use `REMOTE_GGUF_INSPECT_ENV` (defaults to `REMOTE_LLAMA_ENV`).
 
 To validate a DS4-tuned MTP sidecar GGUF that already exists on Spark (no trunk
 model load, and no tensor payload reads), set `REMOTE_MTP_SIDECAR_ENV` on the

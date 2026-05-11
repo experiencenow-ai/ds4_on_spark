@@ -19,7 +19,8 @@ Notes:
   - Intended to run on a Spark after installing templates under /etc and scripts under /opt.
   - Validates installed unit templates + env/config readability, then runs:
       - ops_ds4_env_check.sh (env sanity)
-      - ops_tp2_readiness.sh (preflight; add --strict to fail fast)
+      - ops_tp2_readiness.sh (preflight; add --strict to fail fast) when DS4_WORLD_SIZE != 4
+      - ops_tp4_readiness.sh (preflight; add --strict to fail fast) when DS4_WORLD_SIZE == 4 and the script is installed
   - systemd timer templates are optional; this script does not require them.
 EOF
 }
@@ -153,6 +154,9 @@ echo "== /opt/ds4 scripts =="
 need_exec "$scripts_dir/ops_ds4_env_check.sh"
 need_exec "$scripts_dir/ops_ds4_config_check.sh"
 need_exec "$scripts_dir/ops_tp2_readiness.sh"
+if [ -x "$scripts_dir/ops_tp4_readiness.sh" ]; then
+    need_exec "$scripts_dir/ops_tp4_readiness.sh"
+fi
 need_exec "$scripts_dir/ops_collect_support_bundle.sh"
 echo "ok"
 echo
@@ -161,11 +165,21 @@ echo "== ds4 env sanity =="
 "$scripts_dir/ops_ds4_env_check.sh" "-$config_dir/ds4.env" "$config_dir/ds4-${instance}.env"
 echo
 
-echo "== ds4 tp=2 preflight =="
-if [ "$strict" -ne 0 ]; then
-    "$scripts_dir/ops_tp2_readiness.sh" --strict --self "$instance" --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+world_size="$(awk -F= '/^[[:space:]]*DS4_WORLD_SIZE=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$config_dir/ds4-${instance}.env" 2>/dev/null || true)"
+if [ "$world_size" = "4" ] && [ -x "$scripts_dir/ops_tp4_readiness.sh" ]; then
+    echo "== ds4 tp=4 preflight =="
+    if [ "$strict" -ne 0 ]; then
+        "$scripts_dir/ops_tp4_readiness.sh" --strict --self "$instance" --topology ring --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    else
+        "$scripts_dir/ops_tp4_readiness.sh" --self "$instance" --topology ring --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    fi
 else
-    "$scripts_dir/ops_tp2_readiness.sh" --self "$instance" --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    echo "== ds4 tp=2 preflight =="
+    if [ "$strict" -ne 0 ]; then
+        "$scripts_dir/ops_tp2_readiness.sh" --strict --self "$instance" --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    else
+        "$scripts_dir/ops_tp2_readiness.sh" --self "$instance" --env "-$config_dir/ds4.env" --env "$config_dir/ds4-${instance}.env"
+    fi
 fi
 echo
 
