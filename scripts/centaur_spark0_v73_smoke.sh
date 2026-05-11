@@ -118,7 +118,7 @@ echo "zip: $zip"
 echo "workdir: $workdir"
 echo "pwd: $(pwd)"
 ls -la "$zip" | sed -n '1p'
-zip_sha256="$(python3 - <<'PY'
+zip_sha256="$(python3 - "$zip" <<'PY'
 import hashlib,sys
 p=sys.argv[1]
 h=hashlib.sha256()
@@ -127,7 +127,7 @@ with open(p,'rb') as f:
         h.update(chunk)
 print(h.hexdigest())
 PY
-"$zip")"
+)"
 echo "zip_sha256: $zip_sha256"
 
 echo "== python =="
@@ -144,7 +144,27 @@ fi
 
 echo "== centaur package facts =="
 ls -la "$pkgdir" | sed -n '1,20p'
-decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$pkgdir/centaur.py" | sed -n '1p')"
+decomposer_version="$(python3 -c 'import ast,sys
+p=sys.argv[1]
+try:
+    t=open(p,"r",encoding="utf-8",errors="replace").read()
+except Exception:
+    print("")
+    raise SystemExit(0)
+try:
+    m=ast.parse(t)
+except Exception:
+    print("")
+    raise SystemExit(0)
+v=""
+for node in getattr(m,"body",[]):
+    if isinstance(node, ast.Assign):
+        for tgt in getattr(node,"targets",[]):
+            if isinstance(tgt, ast.Name) and tgt.id=="DECOMPOSER_VERSION":
+                val=getattr(node,"value",None)
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    v=val.value
+print(v)' "$pkgdir/centaur.py")"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi
@@ -251,16 +271,17 @@ centaur hyor-model-catalog "$ctrldir" --full
 echo "== hyor: benchmark suite + record + results =="
 centaur hyor-benchmark-suite-register "$ctrldir" spark0_smoke_suite --task-type code_edit --model-class code --metric quality_score --metric cost_score --notes spark0-v73-smoke --force
 
-catalog_key="$(centaur hyor-model-catalog "$ctrldir" --full | "$venv_py" - <<'PY'
-import json,sys
-data=json.load(sys.stdin)
+catalog_key="$(centaur hyor-model-catalog "$ctrldir" --full | "$venv_py" -c 'import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    print("")
+    raise SystemExit(0)
 matches=data.get("matches") or []
 if not matches:
     print("")
-    sys.exit(0)
-print(matches[0].get("catalog_key",""))
-PY
-)"
+    raise SystemExit(0)
+print(matches[0].get("catalog_key",""))')"
 if [ "$catalog_key" = "" ]; then
 	echo "failed to resolve catalog_key from hyor-model-catalog output" >&2
 	exit 2

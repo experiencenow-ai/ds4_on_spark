@@ -104,7 +104,7 @@ echo "zip: $zip"
 echo "workdir: $workdir"
 echo "pwd: $(pwd)"
 ls -la "$zip" | sed -n '1p'
-zip_sha256="$(python3 - <<'PY'
+zip_sha256="$(python3 - "$zip" <<'PY'
 import hashlib,sys
 p=sys.argv[1]
 h=hashlib.sha256()
@@ -113,7 +113,7 @@ with open(p,'rb') as f:
         h.update(chunk)
 print(h.hexdigest())
 PY
-"$zip")"
+)"
 echo "zip_sha256: $zip_sha256"
 
 echo "== python =="
@@ -129,7 +129,27 @@ if [ ! -f "$pkgdir/centaur.py" ]; then
 fi
 
 echo "== centaur package facts =="
-decomposer_version="$(sed -n 's/^DECOMPOSER_VERSION = \"\\([^\"]\\{1,\\}\\)\".*/\\1/p' "$pkgdir/centaur.py" | sed -n '1p')"
+decomposer_version="$(python3 -c 'import ast,sys
+p=sys.argv[1]
+try:
+    t=open(p,"r",encoding="utf-8",errors="replace").read()
+except Exception:
+    print("")
+    raise SystemExit(0)
+try:
+    m=ast.parse(t)
+except Exception:
+    print("")
+    raise SystemExit(0)
+v=""
+for node in getattr(m,"body",[]):
+    if isinstance(node, ast.Assign):
+        for tgt in getattr(node,"targets",[]):
+            if isinstance(tgt, ast.Name) and tgt.id=="DECOMPOSER_VERSION":
+                val=getattr(node,"value",None)
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    v=val.value
+print(v)' "$pkgdir/centaur.py")"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi
