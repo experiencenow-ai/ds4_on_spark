@@ -157,6 +157,8 @@ This script writes a tiny `CMakeLists.txt` + `main.cu` directly into a Spark0 te
 - Configures with `-DCMAKE_CUDA_ARCHITECTURES="121"` and builds a single tiny CUDA executable
 - Runs the executable and expects `__CUDA_ARCH__=1210`
 
+Observed on Spark0 (2026-05-11): `cmake version 3.28.3`; C++ host compiler `GNU 13.3.0`; `__CUDA_ARCH__=1210`.
+
 Environment overrides:
 
 - `SSH_OPTS`: forwarded to `ssh`

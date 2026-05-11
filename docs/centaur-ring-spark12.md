@@ -121,6 +121,21 @@ From your Mac repo root (stream-run on Spark0, passing Spark1/2 SSH targets as a
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 ```
 
+Recommended wrapper (stages the v73 zip to Spark1/2, sets `RING_RUN_ID`, and writes a remote log under `~/centaur-smoke/v73/ring_rsync_spark12/run/<run_id>/`):
+
+```bash
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+If you want exact command capture in the remote log, add:
+
+```bash
+export RING_TRACE=1
+```
+
+Alternative (direct SSH stream, no wrapper):
+
 ```bash
 ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host>" < ./scripts/centaur_spark_ring_rsync_spark12_v73.sh
 ```
@@ -131,6 +146,12 @@ Notes:
 - Recommended: add `export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"` and `export RING_LOG=~/centaur-smoke/v73/ring_rsync_spark12/run/"$RING_RUN_ID"/ring_rsync.log` on the orchestrator host so logs/manifests are per-run.
 - Use a dedicated `remote_base_dir` (3rd arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
 - This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2, but it is not a shared-root deployment model.
+
+After a wrapper run, you can fetch a small artifact bundle (log + manifests) back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
 
 ### After rsync ring-step: quick node validation (Spark1/2)
 
