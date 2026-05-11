@@ -27,6 +27,10 @@ while preparing this document.
 The DFlash implementation reference is `z-lab/dflash`
 `94e4abc5e0c31b67bc1a9d30f1cc34ece28a8756` on `refs/heads/main` (`MIT`).
 
+Spark0 staging note (Ling):
+
+- Spark0 currently has a community Ling GGUF staged under `/home/spark0/models/ling`, but the current V4-capable llama.cpp fork on Spark0 does not recognize `general.architecture=bailing_hybrid`, so it is **not** a valid Ling baseline yet; see `docs/baseline-ling-gguf-bailing-hybrid-spark0-2026-05-11.md`.
+
 Draft model cards (at the pinned draft commits) reference:
 
 - vLLM: `vllm-project/vllm` at `refs/pull/40898/head`
