@@ -49,7 +49,7 @@ For CLI-style overrides where keys and values are NUL-terminated strings, `ds4_c
 
 - If DS4 is built without CUDA (`DS4_ENABLE_CUDA=OFF`), enabling CUDA via config will cause `ds4_ctx_apply_config` to fail.
 - If DS4 is built with CUDA but no CUDA device is available at runtime, `ds4_ctx_apply_config` will fail (it calls `ds4_cuda_init` when `enable_cuda=1`).
-- If DS4 is built with CUDA, `DS4_HAS_CUDA` is defined and `ds4_cuda_is_enabled_build()` returns `1`.
+- `DS4_HAS_CUDA` is always defined to `0` or `1`; when DS4 is built with CUDA, `DS4_HAS_CUDA=1` and `ds4_cuda_is_enabled_build()` returns `1`.
 
 ## Environment variables
 
