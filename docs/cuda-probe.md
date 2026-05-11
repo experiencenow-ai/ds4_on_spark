@@ -17,6 +17,7 @@ This builds and runs only:
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
+- `cuda_sm121_cluster_dims_attr_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `-arch=sm_121`; cluster/CUTLASS-style toolchain gate)
 - `cuda_sm121_probe`
 - `cuda_sm121_arch_report` (prints runtime device CC plus compiled `__CUDA_ARCH__` from an `sm_121` build; expected `1210`)
 
@@ -31,9 +32,10 @@ Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` in
 Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
 
 - `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1 schema=1`
+- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1 tma_map=1 schema=2`
 - `__CUDA_ARCH__=1210`
 
-If a queried device attribute is unavailable (older runtime/toolkit), the scripts print `-1` for that field rather than silently reporting `0`.
+If a queried `cudaDeviceGetAttribute` or driver-attribute field is unavailable (older runtime/toolkit/driver API), the scripts print `-1` for that field rather than silently reporting `0`.
 
 ## Spark0: Capability Sweep (One Command)
 

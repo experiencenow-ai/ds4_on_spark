@@ -414,6 +414,7 @@ cat > \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu <<'EOF'
 #include <stdio.h>
 
 #include <cuda_runtime.h>
+#include <cuda.h>
 
 #if defined(__CUDA_ARCH__)
 #if (__CUDA_ARCH__ != 1210)
@@ -447,6 +448,30 @@ static int32_t get_attr_i32(int32_t *out,int32_t dev,cudaDeviceAttr attr)
 	return(0);
 }
 
+static int32_t get_cu_attr_i32(int32_t *out,int32_t dev,CUdevice_attribute attr)
+{
+	CUdevice cu_dev;
+	int32_t v = -1;
+	CUresult err;
+	if ( out == 0 )
+		return(-1011);
+	*out = -1;
+	err = cuInit(0);
+	if ( err != CUDA_SUCCESS )
+		return(-1012);
+	err = cuDeviceGet(&cu_dev,dev);
+	if ( err != CUDA_SUCCESS )
+		return(-1013);
+	err = cuDeviceGetAttribute(&v,attr,cu_dev);
+	if ( err != CUDA_SUCCESS )
+	{
+		*out = -1;
+		return(-1014);
+	}
+	*out = v;
+	return(0);
+}
+
 __global__ void cuda_arch_probe(uint32_t *out)
 {
 #if defined(__CUDA_ARCH__)
@@ -463,6 +488,7 @@ int main(int argc,char **argv)
 	int32_t max_threads_block = -1,max_blocks_sm = -1,smem_sm = -1,regs_block = -1,smem_block_max = -1;
 	int32_t coop_launch = -1,cluster_launch = -1;
 	int32_t smem_reserved_block = -1,mem_pools = -1;
+	int32_t tma_map = -1;
 	cudaDeviceProp prop;
 	uint32_t out = 0;
 	uint32_t *dout = 0;
@@ -477,7 +503,7 @@ int main(int argc,char **argv)
 		return(rc);
 	if ( count <= 0 )
 	{
-		printf(\"cuda drv=%d rt=%d count=%d schema=1\\n\",driver_v,runtime_v,count);
+		printf(\"cuda drv=%d rt=%d count=%d tma_map=%d schema=2\\n\",driver_v,runtime_v,count,tma_map);
 		return(0);
 	}
 	rc = ck(cudaGetDeviceProperties(&prop,0),-3,\"cudaGetDeviceProperties(0)\");
@@ -498,9 +524,10 @@ int main(int argc,char **argv)
 	(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
 	(void)get_attr_i32(&smem_reserved_block,0,cudaDevAttrReservedSharedMemoryPerBlock);
 	(void)get_attr_i32(&mem_pools,0,cudaDevAttrMemoryPoolsSupported);
+	(void)get_cu_attr_i32(&tma_map,0,CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED);
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-	printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d schema=1\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch);
+	printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d schema=2\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map);
 
 	rc = ck(cudaMalloc((void **)&dout,sizeof(out)),-4,\"cudaMalloc\");
 	if ( rc != 0 )
@@ -519,24 +546,24 @@ int main(int argc,char **argv)
 EOF
 
 echo \"-- build: -arch=sm_121\"
-\$NVCC -O2 -std=c++17 -arch=sm_121 -o \"$REMOTE_DIR\"/nvcc_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu
+\$NVCC -O2 -std=c++17 -arch=sm_121 -o \"$REMOTE_DIR\"/nvcc_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_sm121_minimal\"
 \"$REMOTE_DIR\"/nvcc_sm121_minimal
 echo
 echo \"-- build: --gpu-architecture=sm_121\"
-\$NVCC -O2 -std=c++17 --gpu-architecture=sm_121 -o \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu
+\$NVCC -O2 -std=c++17 --gpu-architecture=sm_121 -o \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_gpuarch_sm121_minimal\"
 \"$REMOTE_DIR\"/nvcc_gpuarch_sm121_minimal
 echo
 echo \"-- build: -arch=native\"
-\$NVCC -O2 -std=c++17 -arch=native -o \"$REMOTE_DIR\"/nvcc_native_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu
+\$NVCC -O2 -std=c++17 -arch=native -o \"$REMOTE_DIR\"/nvcc_native_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 echo \"-- run: nvcc_native_minimal\"
 \"$REMOTE_DIR\"/nvcc_native_minimal
 
 if [ \"\${list_gpu_arch}\" != \"\" ] && echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 	echo
 	echo \"-- build: -arch=compute_121 (PTX; JIT at runtime)\"
-	\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/nvcc_compute121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu
+	\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/nvcc_compute121_minimal \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda
 	echo \"-- run: nvcc_compute121_minimal\"
 	\"$REMOTE_DIR\"/nvcc_compute121_minimal
 fi
@@ -547,7 +574,7 @@ try_gencode_build_run() {
 	echo
 	echo \"-- build+run (best-effort): \${tag} (-gencode \${gencode})\"
 	set +e
-	\$NVCC -O2 -std=c++17 -gencode \"\${gencode}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
+	\$NVCC -O2 -std=c++17 -gencode \"\${gencode}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
 	rc=\$?
 	if [ \$rc -ne 0 ]; then
 		echo \"\${tag}: build FAILED rc=\${rc}\"
@@ -575,7 +602,7 @@ fi
 		echo
 		echo \"-- build+run (best-effort): \${tag} (-arch=\${arch}; advertised=\${advertised})\"
 		set +e
-		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
+		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -o \"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal\" \"$REMOTE_DIR\"/cuda_nvcc_minimal.cu -lcuda >\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_minimal.err\"
 		rc=\$?
 		if [ \$rc -ne 0 ]; then
 			echo \"\${tag}: build FAILED rc=\${rc}\"
