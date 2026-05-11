@@ -1140,9 +1140,12 @@ def build_contract() -> dict:
 	weight_map_files = [str(v) for v in weight_map.values()]
 	weight_map_file_counts = Counter(weight_map_files)
 	weight_map_keys_sha256 = sha256_lines(weight_keys)
+	top_level_keys = [k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))]
+	weight_map_top_level_keys_sha256 = sha256_lines(sorted(top_level_keys))
 	weight_map_prefix_fingerprints = build_weight_key_prefix_fingerprints(weight_keys)
 	mtp_prefix_fp = weight_map_prefix_fingerprints.get("mtp", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
+	top_level_tensor_key_count = sum(int(v.get("count", 0)) for k, v in weight_map_prefix_fingerprints.items() if k not in ("layers", "mtp") and isinstance(v, dict))
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1420,6 +1423,8 @@ def build_contract() -> dict:
 				"checkpoint_index": {
 					"weight_map_num_tensors": int(len(weight_keys)),
 					"weight_map_keys_sha256": weight_map_keys_sha256,
+					"weight_map_top_level_keys_sha256": weight_map_top_level_keys_sha256,
+					"weight_map_top_level_tensor_key_count": int(top_level_tensor_key_count),
 					"weight_map_prefix_fingerprints": weight_map_prefix_fingerprints,
 					"weight_map_layers_keys_sha256": layers_prefix_fp.get("keys_sha256", None),
 					"weight_map_mtp_keys_sha256": mtp_prefix_fp.get("keys_sha256", None),

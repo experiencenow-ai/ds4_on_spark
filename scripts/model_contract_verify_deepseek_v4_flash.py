@@ -204,6 +204,17 @@ def main() -> int:
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 
+				ckpt = summary.get("checkpoint_index", {}) if isinstance(summary, dict) else {}
+				if isinstance(ckpt, dict):
+					expected_top_level_keys = sorted([k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))])
+					expected_top_level_sha = sha256_lines(expected_top_level_keys)
+					if ckpt.get("weight_map_top_level_keys_sha256") != expected_top_level_sha:
+						failures.append(Failure(90, f"contract summary checkpoint_index.weight_map_top_level_keys_sha256 mismatch (fixture drift?): {contract_summary}"))
+					if ckpt.get("weight_map_top_level_tensor_key_count") != int(len(expected_top_level_keys)):
+						failures.append(Failure(91, f"contract summary checkpoint_index.weight_map_top_level_tensor_key_count mismatch (fixture drift?): {contract_summary}"))
+				else:
+					failures.append(Failure(92, f"contract summary missing checkpoint_index (expected dict): {contract_summary}"))
+
 				group_sizes = summary.get("quantization", {}).get("inference_model_constants", {}).get("kv_act_quant_group_sizes", [])
 				if 64 not in list(group_sizes):
 					failures.append(Failure(13, f"contract summary missing expected kv_act_quant_group_sizes=64: {contract_summary}"))
