@@ -80,6 +80,7 @@ Targets:
   llama_cpp_deepseek_v4_ssweens
   llama_cpp_cuda_spark
   spark_v4_bringup_mockingjay
+  spark_v4_bringup_entrpi
   spark_v4_bringup_bigs
   spark_v4_gb10_runtime_devid791
   deepseek_v4_flash_sm120_patch
@@ -491,6 +492,10 @@ fetch_one()
 			upstream="Mockingjay1316/deepseek-v4-flash-spark"; ref="refs/heads/master"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_bringup_mockingjay" "https://github.com/Mockingjay1316/deepseek-v4-flash-spark.git" "${ref}" "${expected}"
 			;;
+		spark_v4_bringup_entrpi)
+			upstream="Entrpi/ds4-spark-vllm"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "spark_v4_bringup_entrpi" "https://github.com/Entrpi/ds4-spark-vllm.git" "${ref}" "${expected}"
+			;;
 		spark_v4_bringup_bigs)
 			upstream="bigs/deepseek-v4-flash-dgx-spark"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_bringup_bigs" "https://github.com/bigs/deepseek-v4-flash-dgx-spark.git" "${ref}" "${expected}"
@@ -544,6 +549,7 @@ main()
 		fetch_one llama_cpp_deepseek_v4_ssweens
 		fetch_one llama_cpp_cuda_spark
 		fetch_one spark_v4_bringup_mockingjay
+		fetch_one spark_v4_bringup_entrpi
 		fetch_one spark_v4_bringup_bigs
 		fetch_one spark_v4_gb10_runtime_devid791
 		fetch_one deepseek_v4_flash_sm120_patch

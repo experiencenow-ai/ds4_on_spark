@@ -18,6 +18,19 @@ This project **must not** download or vendor large checkpoints/weights; treat th
 - Risk notes:
   - Requires downloading the official HF checkpoint and running a conversion step; treat as human-approved, Spark-only work.
 
+## Entrpi/ds4-spark-vllm (single Spark vLLM hybrid-quant bring-up)
+
+- Repo: `https://github.com/Entrpi/ds4-spark-vllm`
+- Ref: `refs/heads/main`
+- Commit: `dab8c4c4a44111e686f516b747a7ffb161475943`
+- License: MIT (see upstream `LICENSE`)
+- What it is (from upstream README, summarized):
+  - A Spark-focused bring-up that runs DeepSeek-V4-Flash through a **vLLM** stack while applying ds4-style hybrid quantization ideas (as opposed to the pure llama.cpp GGUF path).
+- Why we track it:
+  - Useful as a “vLLM-first” reference when a GGUF path is not viable, and as a cross-check against ds4/llama.cpp behavior for the same prompts.
+- Risk notes:
+  - Assumes a local checkpoint is already staged; do not pull weights without explicit approval.
+
 ## bigs/deepseek-v4-flash-dgx-spark (native checkpoint runtime experiments)
 
 - Repo: `https://github.com/bigs/deepseek-v4-flash-dgx-spark`
