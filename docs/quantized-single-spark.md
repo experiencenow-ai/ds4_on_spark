@@ -93,6 +93,19 @@ If you want an exact byte count (better for comparing near-ties), prefer `wc -c`
 ssh spark0@aitopatom-9ab9.local "for f in /home/spark0/models/ds4/*.gguf; do [ -r \"$f\" ] || continue; wc -c \"$f\"; done | sort -n | head"
 ```
 
+If you want the quantized single-Spark wrapper to do this automatically (still
+metadata-only; no downloads), you can omit `MODEL_GGUF` and provide a glob:
+
+```sh
+MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
+LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
+By default the wrapper excludes likely non-trunk artifacts (`MTP`, `DFlash`,
+`draft`, `sidecar`) via `MODEL_GGUF_EXCLUDE_EGREP`. Override it when you
+intentionally want a different selection policy.
+
 ## MTP (multi-token prediction) expectations
 
 DeepSeek V4 Flash’s official checkpoint includes an MTP module namespace (`mtp.0.*`).
