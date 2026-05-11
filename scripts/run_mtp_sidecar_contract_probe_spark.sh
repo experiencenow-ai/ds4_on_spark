@@ -7,6 +7,16 @@ SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChec
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_probe}"
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
+SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-}"
+if [ "$SIDECAR_EXPECT_FILE_SIZE" != "" ]; then
+	case " $REMOTE_MTP_SIDECAR_ARGS " in
+		*" --expect-file-size "*)
+			;;
+		*)
+			REMOTE_MTP_SIDECAR_ARGS="$REMOTE_MTP_SIDECAR_ARGS --expect-file-size $SIDECAR_EXPECT_FILE_SIZE"
+			;;
+	esac
+fi
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -37,6 +47,10 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_probe_spark.md"
 	echo "- ALLOW_RUN=1"
 	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (optional; defaults to Spark0-staged artifact if present; URL requires ALLOW_URL=1)"
 	echo "- ALLOW_URL=1 (required when MTP_SIDECAR_GGUF is a URL)"
+	echo
+	echo "Optional local env vars:"
+	echo
+	echo "- SIDECAR_EXPECT_FILE_SIZE=3807602400 (pins the staged sidecar file size; appended as --expect-file-size)"
 	echo
 	echo "Remote MTP sidecar env:"
 	echo

@@ -454,6 +454,12 @@ def main() -> int:
 	)
 	parser.add_argument("--max-bytes", type=int, default=(16 * 1024 * 1024), help="Max bytes to fetch when using --url (default: 16777216).")
 	parser.add_argument("--timeout-s", type=int, default=20, help="HTTP timeout seconds for --url (default: 20).")
+	parser.add_argument(
+		"--expect-file-size",
+		type=int,
+		default=None,
+		help="When set, require the probed file_size matches this value. For --url, requires a server-provided total size via Content-Range.",
+	)
 	args = parser.parse_args()
 
 	label = ""
@@ -488,6 +494,8 @@ def main() -> int:
 		out["url_prefix_bytes"] = int(fetched_bytes)
 	if file_size is not None:
 		out["file_size"] = int(file_size)
+	if args.expect_file_size is not None:
+		out["expect_file_size"] = int(args.expect_file_size)
 
 	tensors_by_offset = sorted(tensors, key=lambda t: (int(t.rel_offset), t.name))
 	spans: dict[str, Optional[int]] = {}
@@ -548,6 +556,11 @@ def main() -> int:
 		errors.append(f"gguf version is {version}, expected 3")
 	if meta.get("general.architecture", None) != "deepseek4_mtp_support":
 		errors.append(f"general.architecture is {meta.get('general.architecture', None)!r}, expected 'deepseek4_mtp_support'")
+	if args.expect_file_size is not None:
+		if file_size is None:
+			errors.append("expect-file-size was set but file_size is unavailable (missing stat or Content-Range total bytes)")
+		elif int(file_size) != int(args.expect_file_size):
+			errors.append(f"file_size is {int(file_size)}, expected {int(args.expect_file_size)}")
 
 	if (data_off % alignment) != 0:
 		errors.append(f"data_offset {data_off} is not aligned to alignment {alignment}")

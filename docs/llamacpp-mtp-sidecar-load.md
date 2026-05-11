@@ -65,6 +65,14 @@ If Spark0 already has the pinned sidecar staged at
 defaults `MTP_SIDECAR_GGUF` to that path when it is readable. Override by adding
 `MTP_SIDECAR_GGUF=/abs/path/to/your-sidecar.gguf` to `REMOTE_MTP_SIDECAR_ENV`.
 
+Optional stronger check: pin the expected byte size for the staged sidecar (still no trunk load or downloads):
+
+```bash
+SIDECAR_EXPECT_FILE_SIZE=3807602400 \
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
+```
+
 This runner also accepts an `https://` URL for `MTP_SIDECAR_GGUF` and will validate the sidecar using HTTP range reads (no full download), but it is gated: set `ALLOW_URL=1` explicitly on Spark:
 
 ```bash
@@ -92,7 +100,7 @@ By default this Spark-only runner also samples 64 bytes from each tensor payload
 
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
 
-Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez.sh` now defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`), still avoiding full weight downloads. The recorded output is `docs/mtp-sidecar-probe-antirez-9cb905d-payload64.json`.
+Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez.sh` now defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`) and validating the pinned file size, still avoiding full weight downloads. The recorded output is `docs/mtp-sidecar-probe-antirez-9cb905d-payload64.json`.
 
 ### Step 1: sidecar weight loader (not a model loader)
 
