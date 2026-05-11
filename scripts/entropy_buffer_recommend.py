@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -81,6 +82,131 @@ def _dup_rate(total: int, uniq: int) -> float:
     if total <= 0:
         return(0.0)
     return(float(max(0, total - uniq)) / float(total))
+
+def _entropy_norm_bits(counts: Dict[str, int]) -> float:
+    uniq = len(counts)
+    if uniq <= 1:
+        return(0.0)
+    h = lib.shannon_entropy(counts)
+    if h <= 0.0:
+        return(0.0)
+    return(h / math.log2(float(uniq)))
+
+def _effective_num(counts: Dict[str, int]) -> float:
+    h = lib.shannon_entropy(counts)
+    return(pow(2.0, h))
+
+def _coverage_stats(counts: Dict[str, int]) -> Dict[str, Any]:
+    return({
+        "unique": len(counts),
+        "entropy_bits": lib.shannon_entropy(counts),
+        "entropy_norm": _entropy_norm_bits(counts),
+        "effective_num": _effective_num(counts),
+        "top": lib.top_counts(counts),
+    })
+
+def _coverage_snapshot(hist_task_id: Dict[str, int], hist_task_family: Dict[str, int], hist_prompt_template_id: Dict[str, int], hist_pair: Dict[str, int], hist_tags: Dict[str, int], hist_buffer_id: Dict[str, int], hist_buffer_item_id: Dict[str, int], hist_answer: Dict[str, int]) -> Dict[str, Any]:
+    return({
+        "task_id": _coverage_stats(hist_task_id),
+        "task_family": _coverage_stats(hist_task_family),
+        "prompt_template_id": _coverage_stats(hist_prompt_template_id),
+        "task_family_template_pair": _coverage_stats(hist_pair),
+        "tags": _coverage_stats(hist_tags),
+        "buffer_id": _coverage_stats(hist_buffer_id),
+        "buffer_item_id": _coverage_stats(hist_buffer_item_id),
+        "answer": _coverage_stats(hist_answer),
+    })
+
+def _coverage_delta(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key in sorted(before.keys()):
+        b = before.get(key) or {}
+        a = after.get(key) or {}
+        out[key] = {
+            "unique": int(a.get("unique", 0)) - int(b.get("unique", 0)),
+            "entropy_bits": float(a.get("entropy_bits", 0.0)) - float(b.get("entropy_bits", 0.0)),
+            "entropy_norm": float(a.get("entropy_norm", 0.0)) - float(b.get("entropy_norm", 0.0)),
+            "effective_num": float(a.get("effective_num", 0.0)) - float(b.get("effective_num", 0.0)),
+        }
+    return(out)
+
+def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore]) -> Dict[str, Any]:
+    hist_task_id: Dict[str, int] = {}
+    hist_task_family: Dict[str, int] = {}
+    hist_prompt_template_id: Dict[str, int] = {}
+    hist_pair: Dict[str, int] = {}
+    hist_tags: Dict[str, int] = {}
+    hist_buffer_id: Dict[str, int] = {}
+    hist_buffer_item_id: Dict[str, int] = {}
+    hist_answer: Dict[str, int] = {}
+    for obj in history:
+        c = lib.canonicalize_record(obj)
+        if c.rtype != "task_run":
+            continue
+        if c.task_id != "":
+            hist_task_id[c.task_id] = hist_task_id.get(c.task_id, 0) + 1
+        if c.task_family != "":
+            hist_task_family[c.task_family] = hist_task_family.get(c.task_family, 0) + 1
+        if c.prompt_template_id != "":
+            hist_prompt_template_id[c.prompt_template_id] = hist_prompt_template_id.get(c.prompt_template_id, 0) + 1
+        if c.task_family != "" and c.prompt_template_id != "":
+            k = f"{c.task_family}|{c.prompt_template_id}"
+            hist_pair[k] = hist_pair.get(k, 0) + 1
+        if c.answer != "":
+            hist_answer[c.answer] = hist_answer.get(c.answer, 0) + 1
+        for tag in lib.get_list(c.raw, "tags", "tag"):
+            if tag != "":
+                hist_tags[tag] = hist_tags.get(tag, 0) + 1
+        if c.buffer_id != "":
+            hist_buffer_id[c.buffer_id] = hist_buffer_id.get(c.buffer_id, 0) + 1
+        if c.buffer_item_id != "":
+            hist_buffer_item_id[c.buffer_item_id] = hist_buffer_item_id.get(c.buffer_item_id, 0) + 1
+
+    coverage_before = _coverage_snapshot(hist_task_id, hist_task_family, hist_prompt_template_id, hist_pair, hist_tags, hist_buffer_id, hist_buffer_item_id, hist_answer)
+
+    after_task_id = dict(hist_task_id)
+    after_task_family = dict(hist_task_family)
+    after_prompt_template_id = dict(hist_prompt_template_id)
+    after_pair = dict(hist_pair)
+    after_tags = dict(hist_tags)
+    after_buffer_id = dict(hist_buffer_id)
+    after_buffer_item_id = dict(hist_buffer_item_id)
+    after_answer = dict(hist_answer)
+    for c in top:
+        if c.task_id != "":
+            after_task_id[c.task_id] = after_task_id.get(c.task_id, 0) + 1
+        if c.task_family != "":
+            after_task_family[c.task_family] = after_task_family.get(c.task_family, 0) + 1
+        if c.prompt_template_id != "":
+            after_prompt_template_id[c.prompt_template_id] = after_prompt_template_id.get(c.prompt_template_id, 0) + 1
+        if c.task_family != "" and c.prompt_template_id != "":
+            k = f"{c.task_family}|{c.prompt_template_id}"
+            after_pair[k] = after_pair.get(k, 0) + 1
+        for tag in c.tags:
+            if tag != "":
+                after_tags[tag] = after_tags.get(tag, 0) + 1
+        if c.buffer_id != "":
+            after_buffer_id[c.buffer_id] = after_buffer_id.get(c.buffer_id, 0) + 1
+        if c.buffer_item_id != "":
+            after_buffer_item_id[c.buffer_item_id] = after_buffer_item_id.get(c.buffer_item_id, 0) + 1
+        if c.answer != "":
+            after_answer[c.answer] = after_answer.get(c.answer, 0) + 1
+
+    coverage_after = _coverage_snapshot(after_task_id, after_task_family, after_prompt_template_id, after_pair, after_tags, after_buffer_id, after_buffer_item_id, after_answer)
+    coverage_delta = _coverage_delta(coverage_before, coverage_after)
+
+    selected_noise = [float(c.history_noise_rate) for c in top]
+    selected_dup = [float(c.history_dup_rate) for c in top]
+    noise_mean = 0.0 if len(selected_noise) == 0 else (sum(selected_noise) / float(len(selected_noise)))
+    dup_mean = 0.0 if len(selected_dup) == 0 else (sum(selected_dup) / float(len(selected_dup)))
+
+    return({
+        "coverage_before": coverage_before,
+        "coverage_after": coverage_after,
+        "coverage_delta": coverage_delta,
+        "selected_history_noise_rate_mean": noise_mean,
+        "selected_history_dup_rate_mean": dup_mean,
+    })
 
 def _history_rates(history: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float], Dict[str, float]]:
     tmpl_total: Dict[str, int] = {}
@@ -452,6 +578,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     candidates = lib.load_jsonl(args.candidates_jsonl)
     scored = _score(history, candidates, float(args.noise_weight), float(args.dup_weight), float(args.max_noise_rate), float(args.max_dup_rate), float(args.buffer_id_weight), float(args.buffer_item_weight), float(args.answer_weight))
     top = _select(scored, history, max(0, args.limit), args.max_per_family, args.max_per_template, bool(args.avoid_seen_task_id), bool(args.avoid_seen_buffer_item_id), float(args.noise_weight), float(args.dup_weight), float(args.max_noise_rate), float(args.max_dup_rate), float(args.buffer_id_weight), float(args.buffer_item_weight), float(args.answer_weight))
+    predicted = _predict(history, top)
 
     recs: List[Dict[str, Any]] = []
     for c in top:
@@ -486,6 +613,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     js: Dict[str, Any] = {
         "recommendations": recs,
+        "predicted": predicted,
         "meta": {
             "history_records": len(history),
             "candidates_records": len(candidates),
