@@ -150,6 +150,8 @@ if extra_args.strip():
 start = time.monotonic()
 
 timings_lines = []
+fattn_ids = set()
+fattn_lines = 0
 with open(log_raw, "w", encoding="utf-8") as f:
     f.write("cmd=" + " ".join(shlex.quote(x) for x in cmd) + "\n")
     f.write("utc_start=" + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
@@ -163,6 +165,11 @@ with open(log_raw, "w", encoding="utf-8") as f:
     for line in proc.stdout:
         if first_output_s is None and line != "":
             first_output_s = time.monotonic() - start
+        if "__fattn__" in line:
+            fattn_lines += 1
+            m = re.search(r"__fattn__-([0-9]+)", line)
+            if m is not None:
+                fattn_ids.add(int(m.group(1)))
         if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line) or ("[ Prompt:" in line and "Generation:" in line and "t/s" in line):
             timings_lines.append(line.strip())
         f.write(line)
@@ -249,6 +256,11 @@ elif rc == 0:
         summary_lines.append("output_tokens=%d" % int(n_tokens))
     except Exception:
         pass
+
+if fattn_lines > 0:
+    summary_lines.append("fattn_log_lines=%d" % int(fattn_lines))
+if fattn_ids:
+    summary_lines.append("fattn_unique_nodes=%d" % int(len(fattn_ids)))
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")

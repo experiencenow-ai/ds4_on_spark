@@ -225,25 +225,25 @@ ssh $SSH_OPTS "$target" "cat > /tmp/deepseek_v4_flash_contract_summary.json" <"$
 
 ssh $SSH_OPTS "$target" "$REMOTE_GGUF_INSPECT_ENV sh -lc '
 set -eu
-if [ \"${ALLOW_MODEL_INSPECT:-0}\" != \"1\" ]; then
+if [ \"\${ALLOW_MODEL_INSPECT:-0}\" != \"1\" ]; then
   echo \"inspect skipped: set ALLOW_MODEL_INSPECT=1 on Spark to enable\"
   exit 0
 fi
-if [ \"${MODEL_GGUF:-}\" = \"\" ]; then
+if [ \"\${MODEL_GGUF:-}\" = \"\" ]; then
   echo \"inspect skipped: set MODEL_GGUF=/abs/path/to/model.gguf\"
   exit 0
 fi
-if [ ! -r \"${MODEL_GGUF}\" ]; then
-  echo \"inspect skipped: MODEL_GGUF not readable: ${MODEL_GGUF}\"
+if [ ! -r \"\${MODEL_GGUF}\" ]; then
+  echo \"inspect skipped: MODEL_GGUF not readable: \${MODEL_GGUF}\"
   exit 0
 fi
-python3 /tmp/model_contract_inspect_quantized_artifact.py --path \"${MODEL_GGUF}\" --contract-summary /tmp/deepseek_v4_flash_contract_summary.json --json
+python3 /tmp/model_contract_inspect_quantized_artifact.py --path \"\${MODEL_GGUF}\" --contract-summary /tmp/deepseek_v4_flash_contract_summary.json --json
 ' " >"$OUT_DIR/remote_gguf_inspect_stdout.txt" 2>"$OUT_DIR/remote_gguf_inspect_stderr.txt" || true
 
 {
     echo "## GGUF contract inspector (Spark)"
     echo
-    echo "This is a metadata-only inspection pass for the `MODEL_GGUF` file."
+    echo 'This is a metadata-only inspection pass for the `MODEL_GGUF` file.'
     echo "It does not load the full model into GPU memory."
     echo
     echo "Summary (best-effort):"

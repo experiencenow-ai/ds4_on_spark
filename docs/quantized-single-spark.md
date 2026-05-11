@@ -187,6 +187,13 @@ If it loads and generates, rerun with:
 - runtime instrumentation enabled if available: routing trace, expert batch
   sizes, per-token latency, memory snapshots, and MTP accept/reject counters
 
+## Example Baseline Report
+
+- `docs/baseline-quantized-single-spark0-2026-05-11.md` records a Spark0 run that:
+  - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
+  - captures `scripts/model_contract_inspect_quantized_artifact.py --json` output (MTP absent)
+  - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)
+
 ## Failure Triage
 
 - `unsupported architecture` or `unknown model`: switch runtime first; do not
