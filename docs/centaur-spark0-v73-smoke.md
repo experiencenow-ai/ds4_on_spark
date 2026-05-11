@@ -22,8 +22,11 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 
 The smoke prints “package facts” early in the run so bug reports can include version/dep context even when later steps fail:
 
-- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (example observed in the May 11, 2026 zip: `centaur-impl-0.68`)
-- `requirements.txt`: currently:
+- `zip_mtime/size`: from `ls -la "$CENTAUR_ZIP"`
+- `zip_sha256`: computed from the zip bytes
+- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (observed in `/Users/mac/Downloads/centaur_spec_impl_v73.zip` mtime `2026-05-11 02:08` local: `centaur-impl-0.68`)
+- `zip_sha256` (observed in the same zip): `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
+- `requirements.txt` (observed in the same zip):
   - `numpy>=1.26`
   - `scipy>=1.11`
   - `scikit-learn>=1.4`
