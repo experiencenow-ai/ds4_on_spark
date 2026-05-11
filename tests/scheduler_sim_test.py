@@ -274,6 +274,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(int(s["dflash_bonus_tokens"]), 2)
         self.assertAlmostEqual(float(s["dflash_mean_accept_len"]), 3.0, places=6)
         self.assertAlmostEqual(float(s["dflash_accept_rate"]), 1.0, places=6)
+        self.assertAlmostEqual(float(s["dflash_service_slot_ms_per_output_token"]), (1.0 / 3.0), places=6)
 
     def test_stage_skip_totals_count_attempts(self) -> None:
         trace = [

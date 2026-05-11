@@ -171,7 +171,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke` is a tiny compile/r
 - ends capture to a `cudaGraph_t`, instantiates it (`cudaGraphInstantiateWithFlags`), and launches it (`cudaGraphLaunch`)
 - validates that the final writeback matches the expected value
 
-Observed on Spark0 (2026-05-09): probe prints `cuda_graph_smoke out=22222222`.
+Observed on Spark0 (2026-05-11): probe prints `cuda_graph_smoke out=22222222`.
 
 ## `sm_120` → `sm_121` Binary Compatibility Probe
 
@@ -287,7 +287,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` is a tiny compile/run che
 - runs a single warp WMMA matmul on `sm_121`
 - prints a couple of output elements plus `max_abs_err` against an expected result
 
-Observed on Spark0 (2026-05-09): `wmma_smoke ... max_abs_err=0`.
+Observed on Spark0 (2026-05-11): `wmma_smoke ... max_abs_err=0`.
 
 ## Thread Block Clusters (CUTLASS-style scheduling)
 
@@ -299,7 +299,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_cluster_launch` is a tiny compile/run
 - uses `cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension` to launch a 2-block cluster
 - validates `cooperative_groups::this_cluster().block_rank()` via a device writeback
 
-Observed on Spark0 (2026-05-09): `cluster_launch_supported=1`, `max_cluster_size_portable=8`, `max_active_clusters_for_2x1x1=48`.
+Observed on Spark0 (2026-05-11): `cluster_launch_supported=1`, `max_cluster_size_portable=8`, `max_active_clusters_for_2x1x1=48`.
 
 ### Cluster-Dims Attribute Note
 
@@ -309,7 +309,7 @@ On some toolkit/architecture combinations, `nvcc -arch=sm_121` may reject `__clu
 
 The compile-only scripts `./scripts/cuda_probe_compile_only_spark0.sh` and `./scripts/cuda_probe_compile_only_tiny_spark0.sh`, plus the no-transfer `./scripts/cuda_probe_nvcc_minimal_spark0.sh`, include a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and print either `cluster_dims_attr_compile: OK` or the first lines of the compilation error.
 
-Observed on Spark0 (2026-05-09): `cluster_dims_attr_compile: OK` (CUDA 13.0 `V13.0.88`).
+Observed on Spark0 (2026-05-11): `cluster_dims_attr_compile: OK` (CUDA 13.0 `V13.0.88`).
 
 ## cuBLASLt FP8 Matmul Smoke
 

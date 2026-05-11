@@ -3710,6 +3710,7 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
     service_per_output_token = (float(metrics.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0
+    dflash_service_per_output_token = (float(metrics.service_slot_ms_total) / dflash_output_tokens) if dflash_output_tokens > 0.0 else 0.0
     tasks_started_total = float(sum(metrics.tasks_started_per_expert)) if len(metrics.tasks_started_per_expert) != 0 else 0.0
     expert_tasks_started_gini = _gini_nonneg([float(v) for v in metrics.tasks_started_per_expert])
     expert_utilization_gini = _gini_nonneg([float(v) for v in metrics.mean_utilization_per_expert])
@@ -3757,6 +3758,7 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "dflash_bonus_tokens": float(dflash_bonus_tokens),
             "dflash_mean_accept_len": float((dflash_output_tokens / dflash_steps) if dflash_steps > 0.0 else 0.0),
             "dflash_accept_rate": float(dflash_accept_rate),
+            "dflash_service_slot_ms_per_output_token": float(dflash_service_per_output_token),
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
             "service_slot_ms_per_output_token": float(service_per_output_token),
             "service_batch_size_p50_interactive": float(_p_or_zero(metrics.service_batch_size_interactive, 0.50)),

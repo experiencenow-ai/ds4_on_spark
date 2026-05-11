@@ -4,7 +4,7 @@ This note tracks Qwen, Ling, and DFlash speculative-decoding candidates for the
 Spark0 evaluation matrix. It is metadata-only: no model weights were downloaded
 while preparing this document.
 
-- Pinned-at: 2026-05-10 (UTC)
+- Pinned-at: 2026-05-11 (UTC)
 - Primary goal: compare DeepSeek V4 Flash against runnable Ling and Qwen
   baselines on one Spark, then test DFlash only where an exact target/draft pair
   exists.
@@ -64,8 +64,37 @@ target checkpoint named by its model card.
 | `meta-llama/Llama-3.1-8B-Instruct` | gated target | not measured here | `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat` | `d3af30def9601abdd10810aba220d692f0e803f0` | 1.95 GiB | Exploratory; gated target and not directly comparable to DS4/Ling/Qwen. |
 
 No Ling-2.6-flash DFlash drafter was found in the checked Z Lab/Hugging Face
-search results as of 2026-05-10. Keep Ling in the target-only comparison set and
+search results as of 2026-05-11. Keep Ling in the target-only comparison set and
 watch for a paired drafter later.
+
+## Public quality prior (model cards, metadata-only)
+
+These priors are taken from **vendor/author model cards** and are not directly comparable across different benchmark harnesses. Use them only to decide what to stage first; prefer local Spark quality runs for decisions.
+
+### Qwen3.6 family (Qwen model cards)
+
+From `Qwen/Qwen3.6-27B` model card (`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`, `last_modified=2026-04-24T02:39:16Z`), the “Benchmark Results → Language → Coding Agent” table reports:
+
+- `Qwen3.6-27B`: SWE-bench Verified `77.2`, Terminal-Bench 2.0 `59.3`, MMLU‑Pro `86.2`, GPQA Diamond `87.8`, LiveCodeBench v6 `83.9`.
+
+From `Qwen/Qwen3.6-35B-A3B-FP8` model card (`95a723d08a9490559dae23d0cff1d9466213d989`, `last_modified=2026-04-24T02:39:23Z`), the analogous table reports:
+
+- `Qwen3.6-35B-A3B`: SWE-bench Verified `73.4`, Terminal-Bench 2.0 `51.5`, MMLU‑Pro `85.2`, LiveCodeBench v6 `80.4`.
+- `Qwen3.5-27B` (included in the same comparison table): SWE-bench Verified `75.0`, Terminal-Bench 2.0 `41.6`, MMLU‑Pro `86.1`, LiveCodeBench v6 `80.7`.
+
+Sources (pinned revisions):
+
+- `https://huggingface.co/Qwen/Qwen3.6-27B/blob/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9/README.md`
+- `https://huggingface.co/Qwen/Qwen3.6-35B-A3B-FP8/blob/95a723d08a9490559dae23d0cff1d9466213d989/README.md`
+
+### Qwen3-Coder (Qwen model card pointers)
+
+The `Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8` model card (`dcaee4d4dfc5ee71ad501f01f530e5652438fde0`, `last_modified=2025-12-03T08:20:23Z`) points to external benchmark writeups rather than embedding a numeric table in the README at that revision:
+
+- Blog: `https://qwenlm.github.io/blog/qwen3-coder/`
+- GitHub: `https://github.com/QwenLM/Qwen3-Coder`
+
+Treat these as sources for later manual prior extraction (do not cherry-pick vendor numbers into a “winner” claim without noting harness differences).
 
 ## Measurement Order
 

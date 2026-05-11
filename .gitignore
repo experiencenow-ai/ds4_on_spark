@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 upstreams/
 .codex_git/
+.codex_git_intake/

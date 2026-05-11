@@ -125,6 +125,11 @@ Per-script useful env vars:
 See `docs/upstream-qwen-dflash.md` for Ling, Qwen, and DFlash candidate order,
 artifact sizes, and example vLLM env strings.
 
+Use `docs/model-quality-speed.md` and `scripts/model_quality_speed_score.py`
+when comparing multiple model families. Speed claims should include
+`quality_score`, `quality_adjusted_decode_tps`, and Pareto status once local
+quality rows exist.
+
 ## Required Fixtures
 
 See `docs/baseline-fixtures.md` for artifact handling and the fixture manifest template.

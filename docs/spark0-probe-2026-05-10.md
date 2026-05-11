@@ -155,6 +155,18 @@ Additional probe run (19:21Z refresh, single-target summary mode, `origin/main` 
 REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local | tee /private/tmp/ds4_spark0_probe_summary_redacted_2026-05-10T1921Z_loop_accessprobe.txt
 ```
 
+Additional probe run (21:54Z refresh, Spark0 + Spark1 multi-target summary mode, `origin/main` at `git: e4da4da`):
+
+```bash
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark1.local || true) | tee /private/tmp/ds4_spark01_probe_summary_redacted_2026-05-10T2154Z_loop_spark_access.txt
+```
+
+Additional probe run (22:25Z refresh, Spark0 + Spark1 multi-target summary mode, `origin/main` at `git: 79a155f`, temporary gitdir):
+
+```bash
+(REDACT=1 SPARK_PROBE_SUMMARY=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=/private/tmp/ds4_on_spark_gitdir_loop_spark_access DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark1.local || true) | tee /private/tmp/ds4_spark01_probe_summary_redacted_2026-05-10T2225Z_loop_spark_access.txt
+```
+
 Notes:
 
 - This output is redacted (`REDACT=1`) to remove IPv4/IPv6/MAC addresses and GPU UUID tokens.
@@ -247,6 +259,85 @@ cuda version.json: 13.0.3
 cuda.h CUDA_VERSION: 13000
 compute_cap: 12.1
 nvcc arch: sm_121
+```
+
+### CUDA/toolchain facts + runtime probe + PCIe post-load (Spark0, 21:54Z)
+
+```text
+== local meta ==
+Sun May 10 21:54:02 UTC 2026
+git: e4da4da
+probe args: spark0@aitopatom-9ab9.local spark1.local
+resolved targets: spark0@aitopatom-9ab9.local spark0@spark1.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 pci bus id: 000F:01:00.0
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== pci link (sysfs, gpu endpoints, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
+
+== target: spark0@spark1.local ==
+ssh: failed rc=255
+```
+
+### CUDA/toolchain facts + runtime probe + PCIe post-load (Spark0, 22:25Z)
+
+```text
+== local meta ==
+Sun May 10 22:25:27 UTC 2026
+git: 79a155f
+probe args: spark0@aitopatom-9ab9.local spark1.local
+resolved targets: spark0@aitopatom-9ab9.local spark0@spark1.local
+
+== cuda/toolchain facts (summary) ==
+driver: 580.142
+smi CUDA: 13.0
+nvcc release: 13.0
+cuda version.json: 13.0.3
+cuda.h CUDA_VERSION: 13000
+compute_cap: 12.1
+nvcc arch: sm_121
+
+== cuda runtime probe (nvcc, no deps) ==
+device0 name: NVIDIA GB10
+device0 cc: 12.1
+device0 pci bus id: 000F:01:00.0
+runtime max cc: 12.1
+
+== nvidia-smi pcie link (max/current, post-load) ==
+columns: index,pci.bus_id,pcie.link.gen.max,pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current
+0, 0000000F:01:00.0, 1, 1, 16, 1
+warning: nvidia-smi query pcie.gen.max=1 but -q shows device_max=5 host_max=5 (bus 0000000F:01:00.0)
+
+== pci link (sysfs, gpu endpoints, current/max, post-load) ==
+-- 0000000F:01:00.0 -> 000f:01:00.0 --
+current_link_speed: 2.5 GT/s PCIe
+current_link_width: 1
+max_link_speed: 2.5 GT/s PCIe
+max_link_width: 16
+
+== target: spark0@spark1.local ==
+ssh: failed rc=255
 ```
 
 ### PCIe link query warning + host/GPU max fields (Spark0, 16:45Z)

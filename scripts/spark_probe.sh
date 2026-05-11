@@ -14,6 +14,7 @@ Environment:
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE    Optional work tree override (defaults to $PWD)
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
+  SPARK_PROBE_FACTS=1  Facts-only mode (stable, compact; implies SPARK_PROBE_SUMMARY=1)
   SPARK_PROBE_SUMMARY=1  Print a smaller, Spark1-friendly subset of sections
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
   PYTORCH_PROBE=1      Attempt a python3 torch CUDA probe (optional)
@@ -23,7 +24,7 @@ Environment:
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
-  DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+  DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
@@ -44,11 +45,18 @@ esac
 
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
+SPARK_PROBE_FACTS="${SPARK_PROBE_FACTS:-0}"
 SPARK_PROBE_SUMMARY="${SPARK_PROBE_SUMMARY:-0}"
 NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
 NVCC_ARCH_OVERRIDE="${NVCC_ARCH:-}"
+
+if [ "$SPARK_PROBE_FACTS" = "1" ]; then
+	SPARK_PROBE_SUMMARY="1"
+	NVIDIA_SMI_FULL="0"
+	PYTORCH_PROBE="0"
+fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -121,10 +129,17 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
 			git_dir="$git_worktree/.gitshim/repo/.git"
 		fi
+		git_hash=""
 		if [ "$git_dir" != "" ]; then
-			echo "git: $(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
-		elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-			echo "git: $(git rev-parse --short HEAD 2>/dev/null || true)"
+			git_hash="$(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
+		fi
+		if [ "$git_hash" = "" ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+			git_hash="$(git rev-parse --short HEAD 2>/dev/null || true)"
+		fi
+		if [ "$git_hash" != "" ]; then
+			echo "git: $git_hash"
+		else
+			echo "git: (unknown)"
 		fi
 	fi
 	echo "probe args: $probe_args"
@@ -143,6 +158,7 @@ export LANG=C LC_ALL=C
 export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'
 spark_probe_summary='"$SPARK_PROBE_SUMMARY"'
+spark_probe_facts='"$SPARK_PROBE_FACTS"'
 pytorch_probe='"$PYTORCH_PROBE"'
 cuda_runtime_probe='"$CUDA_RUNTIME_PROBE"'
 nvcc_arch_override='"$NVCC_ARCH_OVERRIDE"'
@@ -164,10 +180,18 @@ if [ -r /etc/os-release ]; then
 fi
 echo
 echo "== cpu =="
-lscpu || true
+if [ "$spark_probe_facts" = "1" ]; then
+	lscpu 2>/dev/null | grep -E "^(Architecture:|Byte Order:|CPU\\(s\\):|Model name:|Thread\\(s\\) per core:|Core\\(s\\) per socket:|Socket\\(s\\):|NUMA node\\(s\\):)" || lscpu || true
+else
+	lscpu || true
+fi
 echo
 echo "== memory =="
-free -h || true
+if [ "$spark_probe_facts" = "1" ]; then
+	free -h 2>/dev/null | awk '"'"'NR==1 || $1=="Mem:" || $1=="Swap:" {print}'"'"' || free -h || true
+else
+	free -h || true
+fi
 echo
 echo "== toolchain =="
 for tool in gcc g++ clang cmake ninja make python3 ldd; do
@@ -184,7 +208,7 @@ command -v make >/dev/null 2>&1 && make --version | head -n 1 || true
 command -v python3 >/dev/null 2>&1 && python3 --version || true
 command -v ldd >/dev/null 2>&1 && ldd --version 2>/dev/null | head -n 1 || true
 echo
-if [ "$spark_probe_summary" != "1" ]; then
+if [ "$spark_probe_summary" != "1" ] && [ "$spark_probe_facts" != "1" ]; then
 	echo "== packages (cuda/nvidia, dpkg, capped) =="
 	if command -v dpkg-query >/dev/null 2>&1; then
 		dpkg-query -W -f='"'"'${Package}\t${Version}\n'"'"' "cuda*" "nvidia*" "libcudnn*" 2>/dev/null | head -n 200 || true
@@ -246,15 +270,28 @@ echo
 echo "== nvidia-smi inventory (index + pci bus) =="
 q=""
 if [ "$have_smi" = "1" ]; then
-	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
-	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
-	if [ "$q" != "" ]; then
-		echo "$q"
+	if [ "$spark_probe_facts" = "1" ]; then
+		echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
+		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+		if [ "$q" != "" ]; then
+			echo "$q"
+		else
+			echo "columns: index,gpu_name,pci.bus_id,driver_version,memory.total"
+			q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+			[ "$q" != "" ] && echo "$q"
+			echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+		fi
 	else
-		echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
-		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
-		[ "$q" != "" ] && echo "$q"
-		echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+		echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
+		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+		if [ "$q" != "" ]; then
+			echo "$q"
+		else
+			echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
+			q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+			[ "$q" != "" ] && echo "$q"
+			echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+		fi
 	fi
 else
 	echo "nvidia-smi not found"
@@ -335,6 +372,11 @@ if [ "$have_smi" = "1" ] && [ "$smi_q" != "" ]; then
 	[ "$smi_c2c_mode" != "" ] && echo "GPU C2C Mode: $smi_c2c_mode"
 else
 	echo "nvidia-smi -q not available"
+fi
+if [ "$spark_probe_facts" = "1" ]; then
+	echo
+	echo "== probe mode =="
+	echo "facts-only: 1"
 fi
 	echo
 	pcie_link_query()
@@ -541,7 +583,7 @@ emit_sysfs_pcie_link_summary()
 
 emit_pcie_link ""
 echo
-if [ "$spark_probe_summary" != "1" ]; then
+if [ "$spark_probe_facts" != "1" ] && [ "$spark_probe_summary" != "1" ]; then
 	emit_sysfs_pcie_link ""
 	echo
 	emit_smi_q_pci_link ""
@@ -550,24 +592,26 @@ else
 	emit_sysfs_pcie_link_summary ""
 	echo
 fi
-echo "== nvidia-smi power/clocks (summary) =="
-if command -v nvidia-smi >/dev/null 2>&1; then
-	pwr_q="$(nvidia-smi --query-gpu=index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory --format=csv,noheader,nounits 2>/dev/null || true)"
-	if [ "$pwr_q" != "" ]; then
-		if printf "%s" "$pwr_q" | grep -qi "not a valid field"; then
-			echo "power/clocks query not supported"
-			printf "%s\n" "$pwr_q" | head -n 2
+if [ "$spark_probe_facts" != "1" ]; then
+	echo "== nvidia-smi power/clocks (summary) =="
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		pwr_q="$(nvidia-smi --query-gpu=index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory --format=csv,noheader,nounits 2>/dev/null || true)"
+		if [ "$pwr_q" != "" ]; then
+			if printf "%s" "$pwr_q" | grep -qi "not a valid field"; then
+				echo "power/clocks query not supported"
+				printf "%s\n" "$pwr_q" | head -n 2
+			else
+				echo "columns: index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory"
+				echo "$pwr_q"
+			fi
 		else
-			echo "columns: index,pci.bus_id,power.limit,power.draw,clocks.gr,clocks.sm,clocks.mem,utilization.gpu,utilization.memory"
-			echo "$pwr_q"
+			echo "power/clocks query not supported"
 		fi
 	else
-		echo "power/clocks query not supported"
+		echo "nvidia-smi not found"
 	fi
-else
-	echo "nvidia-smi not found"
+	echo
 fi
-echo
 if [ "$spark_probe_summary" != "1" ]; then
 	echo "== nvidia-smi gpu list =="
 	if command -v nvidia-smi >/dev/null 2>&1; then
@@ -869,15 +913,10 @@ try:
 except Exception as e:
     print("torch probe failed:", e)
 PY
-	echo
-fi
-echo "== network =="
-ip -br -4 addr 2>/dev/null || ip -brief addr 2>/dev/null || ip addr || true
-ip -4 route 2>/dev/null || ip route || true
-ip -6 route 2>/dev/null || true
 echo
+fi
 echo "== network links (no IPs) =="
-ip -br link 2>/dev/null || true
+ip -d -br link 2>/dev/null || ip -br link 2>/dev/null || true
 if command -v ethtool >/dev/null 2>&1; then
 	ifaces="$(ip -br link 2>/dev/null | awk '"'"'$1 != "lo" && ($2 == "UP" || $2 == "UNKNOWN") { print $1 }'"'"' | tr '"'"'\n'"'"' '"'"' '"'"' || true)"
 	for iface in $ifaces; do
@@ -887,6 +926,13 @@ if command -v ethtool >/dev/null 2>&1; then
 	done
 fi
 echo
+if [ "$spark_probe_facts" != "1" ]; then
+	echo "== network =="
+	ip -br -4 addr 2>/dev/null || ip -brief addr 2>/dev/null || ip addr || true
+	ip -4 route 2>/dev/null || ip route || true
+	ip -6 route 2>/dev/null || true
+	echo
+fi
 if [ "$spark_probe_summary" != "1" ]; then
 	echo "== rdma (roce/infiniband, optional) =="
 	if [ -d /sys/class/infiniband ]; then
@@ -924,15 +970,17 @@ else
 fi
 echo
 echo "== storage =="
-df -h / /home 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || df -h / || true
-if [ "$spark_probe_summary" != "1" ]; then
-	lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
-	if [ "$lsblk_out" != "" ]; then
-		printf "%s\n" "$lsblk_out"
-	else
-		lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+if [ "$spark_probe_facts" != "1" ]; then
+	df -h / /home 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || df -h / || true
+	if [ "$spark_probe_summary" != "1" ]; then
+		lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
+		if [ "$lsblk_out" != "" ]; then
+			printf "%s\n" "$lsblk_out"
+		else
+			lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+		fi
+		echo
 	fi
-	echo
 fi
 echo "== disks (summary) =="
 disks_out="$(lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE -e 7 2>/dev/null || true)"

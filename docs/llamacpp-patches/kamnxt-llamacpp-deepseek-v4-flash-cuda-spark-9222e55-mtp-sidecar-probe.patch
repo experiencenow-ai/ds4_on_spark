@@ -23,10 +23,10 @@ index 0000000..0e749fd
 +target_compile_features(${TARGET} PRIVATE cxx_std_17)
 diff --git a/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
 new file mode 100644
-index 0000000..1c12591
+index 0000000..59d03d6
 --- /dev/null
 +++ b/examples/ds4-mtp-sidecar-probe/ds4-mtp-sidecar-probe.cpp
-@@ -0,0 +1,584 @@
+@@ -0,0 +1,741 @@
 +#include "gguf.h"
 +#include "ggml.h"
 +
@@ -104,6 +104,53 @@ index 0000000..1c12591
 +
 +static bool tensor_is_3d(const ggml_tensor * t, int64_t a, int64_t b, int64_t c) {
 +    return tensor_dims_eq(t, { a, b, c });
++}
++
++static bool ggml_type_in(enum ggml_type t, const std::vector<enum ggml_type> & want) {
++    for (const auto w : want) {
++        if (t == w) {
++            return true;
++        }
++    }
++    return false;
++}
++
++static void expect_tensor_type(std::vector<std::string> & errors, const char * name, const ggml_tensor * t, const std::vector<enum ggml_type> & want) {
++    if (name == nullptr) {
++        errors.push_back("internal error: null tensor name");
++        return;
++    }
++    if (t == nullptr) {
++        errors.push_back(std::string("type check: missing tensor meta for '") + name + "'");
++        return;
++    }
++    if (!ggml_type_in(t->type, want)) {
++        errors.push_back(std::string("type mismatch: ") + name);
++    }
++}
++
++static bool gguf_get_u32(const gguf_context * ctx, const char * key, uint32_t & out) {
++    if (ctx == nullptr || key == nullptr) {
++        return false;
++    }
++    const int kid = gguf_find_key(ctx, key);
++    if (kid < 0) {
++        return false;
++    }
++    const gguf_type t = gguf_get_kv_type(ctx, kid);
++    if (t == GGUF_TYPE_UINT32) {
++        out = gguf_get_val_u32(ctx, kid);
++        return true;
++    }
++    if (t == GGUF_TYPE_INT32) {
++        const int32_t v = gguf_get_val_i32(ctx, kid);
++        if (v < 0) {
++            return false;
++        }
++        out = (uint32_t) v;
++        return true;
++    }
++    return false;
 +}
 +
 +static const std::vector<std::string> & expected_tensor_names() {
@@ -256,6 +303,60 @@ index 0000000..1c12591
 +        errors.push_back("unexpected extra tensors present (see extra[])");
 +    }
 +
++    int64_t file_size = -1;
++    {
++        FILE * fp = std::fopen(path.c_str(), "rb");
++        if (fp != nullptr) {
++            if (std::fseek(fp, 0, SEEK_END) == 0) {
++                const long end = std::ftell(fp);
++                if (end >= 0) {
++                    file_size = (int64_t) end;
++                }
++            }
++            std::fclose(fp);
++        }
++    }
++
++    // payload span checks (offset monotonic, no overlap, in-bounds when file size is known)
++    if (ctx_meta != nullptr) {
++        struct tensor_span {
++            std::string name;
++            size_t offs = 0;
++            size_t nbytes = 0;
++        };
++        std::vector<tensor_span> spans;
++        spans.reserve(expected_tensor_names().size());
++
++        for (const auto & name : expected_tensor_names()) {
++            const int64_t tid = gguf_find_tensor(ctx_gguf, name.c_str());
++            const ggml_tensor * t = ggml_get_tensor(ctx_meta, name.c_str());
++            if (tid < 0 || t == nullptr) {
++                continue;
++            }
++            const size_t offs = gguf_get_data_offset(ctx_gguf) + gguf_get_tensor_offset(ctx_gguf, tid);
++            const size_t nbytes = (size_t) ggml_nbytes(t);
++            spans.push_back(tensor_span { name, offs, nbytes });
++        }
++
++        std::sort(spans.begin(), spans.end(), [](const tensor_span & a, const tensor_span & b) {
++            return a.offs < b.offs;
++        });
++
++        size_t last_end = 0;
++        bool have_last = false;
++        for (const auto & s : spans) {
++            const size_t end = s.offs + s.nbytes;
++            if (have_last && s.offs < last_end) {
++                errors.push_back("payload overlap near: " + s.name);
++            }
++            if (file_size >= 0 && (int64_t) end > file_size) {
++                errors.push_back("payload end out of file bounds near: " + s.name);
++            }
++            last_end = std::max(last_end, end);
++            have_last = true;
++        }
++    }
++
 +    if (load_weights) {
 +        if (ctx_meta == nullptr) {
 +            errors.push_back("internal error: missing ggml weights context");
@@ -283,6 +384,11 @@ index 0000000..1c12591
 +    int64_t n_ff_exp = -1;
 +    int64_t n_hc = -1;
 +
++    const std::vector<ggml_type> PLAIN = { GGML_TYPE_F32, GGML_TYPE_F16 };
++    const std::vector<ggml_type> F32 = { GGML_TYPE_F32 };
++    const std::vector<ggml_type> Q8_0 = { GGML_TYPE_Q8_0 };
++    const std::vector<ggml_type> ROUTED = { GGML_TYPE_Q2_K, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS };
++
 +    if (ctx_meta != nullptr) {
 +        const ggml_tensor * t_norm = ggml_get_tensor(ctx_meta, "mtp.0.norm.weight");
 +        if (t_norm != nullptr && t_norm->n_dims == 1) {
@@ -290,26 +396,31 @@ index 0000000..1c12591
 +        }
 +
 +        const ggml_tensor * t_sinks = ggml_get_tensor(ctx_meta, "mtp.0.attn_sinks.weight");
++        expect_tensor_type(errors, "mtp.0.attn_sinks.weight", t_sinks, F32);
 +        if (t_sinks != nullptr && t_sinks->n_dims == 1) {
 +            n_head = t_sinks->ne[0];
 +        }
 +
 +        const ggml_tensor * t_kv = ggml_get_tensor(ctx_meta, "mtp.0.attn_kv.weight");
++        expect_tensor_type(errors, "mtp.0.attn_kv.weight", t_kv, Q8_0);
 +        if (t_kv != nullptr && t_kv->n_dims == 2) {
 +            n_head_dim = t_kv->ne[1];
 +        }
 +
 +        const ggml_tensor * t_q_a = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_a.weight");
++        expect_tensor_type(errors, "mtp.0.attn_q_a.weight", t_q_a, Q8_0);
 +        if (t_q_a != nullptr && t_q_a->n_dims == 2) {
 +            n_lora_q = t_q_a->ne[1];
 +        }
 +
 +        const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
++        expect_tensor_type(errors, "mtp.0.attn_q_b.weight", t_q_b, Q8_0);
 +        if (t_q_b != nullptr && t_q_b->n_dims == 2) {
 +            q_dim = t_q_b->ne[1];
 +        }
 +
 +        const ggml_tensor * t_exp_bias = ggml_get_tensor(ctx_meta, "mtp.0.exp_probs_b.bias");
++        expect_tensor_type(errors, "mtp.0.exp_probs_b.bias", t_exp_bias, F32);
 +        if (t_exp_bias != nullptr && t_exp_bias->n_dims == 1) {
 +            n_expert = t_exp_bias->ne[0];
 +        }
@@ -320,9 +431,21 @@ index 0000000..1c12591
 +        }
 +
 +        const ggml_tensor * t_hc_head_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_base.weight");
++        expect_tensor_type(errors, "mtp.0.hc_head_base.weight", t_hc_head_base, F32);
 +        if (t_hc_head_base != nullptr && t_hc_head_base->n_dims == 1) {
 +            n_hc = t_hc_head_base->ne[0];
 +        }
++
++        // prefer explicit DeepSeek4 params from metadata when present
++        uint32_t u = 0;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.embedding_length", u)) n_embd = (int64_t) u;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.attention.head_count", u)) n_head = (int64_t) u;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.attention.key_length", u)) n_head_dim = (int64_t) u;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.attention.q_lora_rank", u)) n_lora_q = (int64_t) u;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.expert_count", u)) n_expert = (int64_t) u;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.expert_feed_forward_length", u)) n_ff_exp = (int64_t) u;
++        if (gguf_get_u32(ctx_gguf, "deepseek4.hyper_connection.count", u)) n_hc = (int64_t) u;
++        if (n_head > 0 && n_head_dim > 0) q_dim = n_head * n_head_dim;
 +
 +        if (n_embd > 0) {
 +            const ggml_tensor * t_attn_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_norm.weight");
@@ -330,6 +453,12 @@ index 0000000..1c12591
 +            const ggml_tensor * t_enorm = ggml_get_tensor(ctx_meta, "mtp.0.enorm.weight");
 +            const ggml_tensor * t_hnorm = ggml_get_tensor(ctx_meta, "mtp.0.hnorm.weight");
 +            const ggml_tensor * t_norm2 = ggml_get_tensor(ctx_meta, "mtp.0.norm.weight");
++
++            expect_tensor_type(errors, "mtp.0.attn_norm.weight", t_attn_norm, F32);
++            expect_tensor_type(errors, "mtp.0.ffn_norm.weight", t_ffn_norm, F32);
++            expect_tensor_type(errors, "mtp.0.enorm.weight", t_enorm, F32);
++            expect_tensor_type(errors, "mtp.0.hnorm.weight", t_hnorm, F32);
++            expect_tensor_type(errors, "mtp.0.norm.weight", t_norm2, F32);
 +
 +            if (!tensor_is_1d_len(t_attn_norm, n_embd)) errors.push_back("shape mismatch: mtp.0.attn_norm.weight");
 +            if (!tensor_is_1d_len(t_ffn_norm,  n_embd)) errors.push_back("shape mismatch: mtp.0.ffn_norm.weight");
@@ -339,11 +468,15 @@ index 0000000..1c12591
 +
 +            const ggml_tensor * t_eproj = ggml_get_tensor(ctx_meta, "mtp.0.e_proj.weight");
 +            const ggml_tensor * t_hproj = ggml_get_tensor(ctx_meta, "mtp.0.h_proj.weight");
++            expect_tensor_type(errors, "mtp.0.e_proj.weight", t_eproj, Q8_0);
++            expect_tensor_type(errors, "mtp.0.h_proj.weight", t_hproj, Q8_0);
 +            if (!tensor_is_2d(t_eproj, n_embd, n_embd)) errors.push_back("shape mismatch: mtp.0.e_proj.weight");
 +            if (!tensor_is_2d(t_hproj, n_embd, n_embd)) errors.push_back("shape mismatch: mtp.0.h_proj.weight");
 +
 +            const ggml_tensor * t_attn_out_a = ggml_get_tensor(ctx_meta, "mtp.0.attn_output_a.weight");
 +            const ggml_tensor * t_attn_out_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_output_b.weight");
++            expect_tensor_type(errors, "mtp.0.attn_output_a.weight", t_attn_out_a, Q8_0);
++            expect_tensor_type(errors, "mtp.0.attn_output_b.weight", t_attn_out_b, Q8_0);
 +            if (t_attn_out_a && t_attn_out_a->n_dims == 2) {
 +                if (t_attn_out_a->ne[0] != n_embd) errors.push_back("shape mismatch: mtp.0.attn_output_a.weight");
 +            }
@@ -357,11 +490,13 @@ index 0000000..1c12591
 +
 +        if (n_lora_q > 0) {
 +            const ggml_tensor * t_q_a_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_a_norm.weight");
++            expect_tensor_type(errors, "mtp.0.attn_q_a_norm.weight", t_q_a_norm, F32);
 +            if (!tensor_is_1d_len(t_q_a_norm, n_lora_q)) errors.push_back("shape mismatch: mtp.0.attn_q_a_norm.weight");
 +        }
 +
 +        if (n_embd > 0 && n_lora_q > 0) {
 +            const ggml_tensor * t_q_a = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_a.weight");
++            expect_tensor_type(errors, "mtp.0.attn_q_a.weight", t_q_a, Q8_0);
 +            if (!tensor_is_2d(t_q_a, n_embd, n_lora_q)) errors.push_back("shape mismatch: mtp.0.attn_q_a.weight");
 +        }
 +
@@ -372,11 +507,13 @@ index 0000000..1c12591
 +
 +        if (n_head_dim > 0) {
 +            const ggml_tensor * t_kv_a_norm = ggml_get_tensor(ctx_meta, "mtp.0.attn_kv_a_norm.weight");
++            expect_tensor_type(errors, "mtp.0.attn_kv_a_norm.weight", t_kv_a_norm, F32);
 +            if (!tensor_is_1d_len(t_kv_a_norm, n_head_dim)) errors.push_back("shape mismatch: mtp.0.attn_kv_a_norm.weight");
 +        }
 +
 +        if (n_head > 0 && n_head_dim > 0 && n_lora_q > 0) {
 +            const ggml_tensor * t_q_b = ggml_get_tensor(ctx_meta, "mtp.0.attn_q_b.weight");
++            expect_tensor_type(errors, "mtp.0.attn_q_b.weight", t_q_b, Q8_0);
 +            const int64_t want_out = n_head * n_head_dim;
 +            if (t_q_b && t_q_b->n_dims == 2) {
 +                if (t_q_b->ne[0] != n_lora_q || t_q_b->ne[1] != want_out) {
@@ -390,16 +527,24 @@ index 0000000..1c12591
 +            const ggml_tensor * t_up_exps   = ggml_get_tensor(ctx_meta, "mtp.0.ffn_up_exps.weight");
 +            const ggml_tensor * t_down_exps = ggml_get_tensor(ctx_meta, "mtp.0.ffn_down_exps.weight");
 +
++            expect_tensor_type(errors, "mtp.0.ffn_gate_exps.weight", t_gate_exps, ROUTED);
++            expect_tensor_type(errors, "mtp.0.ffn_up_exps.weight", t_up_exps, ROUTED);
++            expect_tensor_type(errors, "mtp.0.ffn_down_exps.weight", t_down_exps, ROUTED);
++
 +            if (!tensor_is_3d(t_gate_exps, n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_exps.weight");
 +            if (!tensor_is_3d(t_up_exps,   n_embd, n_ff_exp, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_up_exps.weight");
 +            if (!tensor_is_3d(t_down_exps, n_ff_exp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_down_exps.weight");
 +
 +            const ggml_tensor * t_gate_inp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_inp.weight");
++            expect_tensor_type(errors, "mtp.0.ffn_gate_inp.weight", t_gate_inp, PLAIN);
 +            if (!tensor_is_2d(t_gate_inp, n_embd, n_expert)) errors.push_back("shape mismatch: mtp.0.ffn_gate_inp.weight");
 +
 +            const ggml_tensor * t_gate_shexp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_gate_shexp.weight");
 +            const ggml_tensor * t_up_shexp   = ggml_get_tensor(ctx_meta, "mtp.0.ffn_up_shexp.weight");
 +            const ggml_tensor * t_down_shexp = ggml_get_tensor(ctx_meta, "mtp.0.ffn_down_shexp.weight");
++            expect_tensor_type(errors, "mtp.0.ffn_gate_shexp.weight", t_gate_shexp, Q8_0);
++            expect_tensor_type(errors, "mtp.0.ffn_up_shexp.weight", t_up_shexp, Q8_0);
++            expect_tensor_type(errors, "mtp.0.ffn_down_shexp.weight", t_down_shexp, Q8_0);
 +            if (!tensor_is_2d(t_gate_shexp, n_embd, n_ff_exp)) errors.push_back("shape mismatch: mtp.0.ffn_gate_shexp.weight");
 +            if (!tensor_is_2d(t_up_shexp,   n_embd, n_ff_exp)) errors.push_back("shape mismatch: mtp.0.ffn_up_shexp.weight");
 +            if (!tensor_is_2d(t_down_shexp, n_ff_exp, n_embd)) errors.push_back("shape mismatch: mtp.0.ffn_down_shexp.weight");
@@ -413,12 +558,18 @@ index 0000000..1c12591
 +            const ggml_tensor * t_hc_ffn_scale  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_scale.weight");
 +            const ggml_tensor * t_hc_head_scale = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_scale.weight");
 +
++            expect_tensor_type(errors, "mtp.0.hc_attn_scale.weight", t_hc_attn_scale, F32);
++            expect_tensor_type(errors, "mtp.0.hc_ffn_scale.weight", t_hc_ffn_scale, F32);
++            expect_tensor_type(errors, "mtp.0.hc_head_scale.weight", t_hc_head_scale, F32);
++
 +            if (!tensor_is_1d_len(t_hc_attn_scale, 3)) errors.push_back("shape mismatch: mtp.0.hc_attn_scale.weight");
 +            if (!tensor_is_1d_len(t_hc_ffn_scale,  3)) errors.push_back("shape mismatch: mtp.0.hc_ffn_scale.weight");
 +            if (!tensor_is_1d_len(t_hc_head_scale, 1)) errors.push_back("shape mismatch: mtp.0.hc_head_scale.weight");
 +
 +            const ggml_tensor * t_hc_head_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_base.weight");
 +            const ggml_tensor * t_hc_head_fn   = ggml_get_tensor(ctx_meta, "mtp.0.hc_head_fn.weight");
++            expect_tensor_type(errors, "mtp.0.hc_head_base.weight", t_hc_head_base, F32);
++            expect_tensor_type(errors, "mtp.0.hc_head_fn.weight", t_hc_head_fn, PLAIN);
 +            if (!tensor_is_1d_len(t_hc_head_base, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_base.weight");
 +            if (hc_dim > 0) {
 +                if (!tensor_is_2d(t_hc_head_fn, hc_dim, n_hc)) errors.push_back("shape mismatch: mtp.0.hc_head_fn.weight");
@@ -429,6 +580,11 @@ index 0000000..1c12591
 +                const ggml_tensor * t_hc_attn_base = ggml_get_tensor(ctx_meta, "mtp.0.hc_attn_base.weight");
 +                const ggml_tensor * t_hc_ffn_fn    = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_fn.weight");
 +                const ggml_tensor * t_hc_ffn_base  = ggml_get_tensor(ctx_meta, "mtp.0.hc_ffn_base.weight");
++
++                expect_tensor_type(errors, "mtp.0.hc_attn_fn.weight", t_hc_attn_fn, PLAIN);
++                expect_tensor_type(errors, "mtp.0.hc_attn_base.weight", t_hc_attn_base, F32);
++                expect_tensor_type(errors, "mtp.0.hc_ffn_fn.weight", t_hc_ffn_fn, PLAIN);
++                expect_tensor_type(errors, "mtp.0.hc_ffn_base.weight", t_hc_ffn_base, F32);
 +
 +                if (!tensor_is_2d(t_hc_attn_fn, hc_dim, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_attn_fn.weight");
 +                if (!tensor_is_1d_len(t_hc_attn_base, hc_mix_dim)) errors.push_back("shape mismatch: mtp.0.hc_attn_base.weight");
@@ -526,6 +682,7 @@ index 0000000..1c12591
 +        std::printf("  \"path\": \"%s\",\n", json_escape(path).c_str());
 +        std::printf("  \"architecture\": \"%s\",\n", json_escape(arch).c_str());
 +        std::printf("  \"tensor_count\": %" PRId64 ",\n", n_tensors);
++        std::printf("  \"file_size\": %" PRId64 ",\n", file_size);
 +        std::printf("  \"payload_sample_bytes\": %d,\n", payload_sample_bytes);
 +        std::printf("  \"load_weights\": %s,\n", load_weights ? "true" : "false");
 +
