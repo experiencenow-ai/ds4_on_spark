@@ -216,6 +216,17 @@ PY
 		>"$OUT_DIR/deepseek4_mtp_sidecar.hpp" 2>/dev/null || true
 fi
 
+echo "== verifying sidecar payload fingerprints against pinned antirez reference (local) =="
+if [ -r "$OUT_DIR/contract_probe.json" ]; then
+	python3 "$repo_root/scripts/verify_mtp_sidecar_payload_fingerprint.py" \
+		--probe-json "$OUT_DIR/contract_probe.json" \
+		--json \
+		>"$OUT_DIR/contract_probe_fingerprint_gate.json" 2>"$OUT_DIR/contract_probe_fingerprint_gate_stderr.txt" || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"contract_probe.json missing\"}" >"$OUT_DIR/contract_probe_fingerprint_gate.json"
+	printf '%s\n' "" >"$OUT_DIR/contract_probe_fingerprint_gate_stderr.txt"
+fi
+
 {
 	echo "## Contract Probe Results (Python)"
 	echo
@@ -238,6 +249,8 @@ fi
 	echo "- full JSON (if parseable): $OUT_DIR/contract_probe.json"
 	echo "- parsed status: $OUT_DIR/contract_probe_parse.json"
 	echo "- binder skeleton (if ok=true): $OUT_DIR/deepseek4_mtp_sidecar.hpp"
+	echo "- fingerprint gate JSON (local): $OUT_DIR/contract_probe_fingerprint_gate.json"
+	echo "- fingerprint gate stderr (local): $OUT_DIR/contract_probe_fingerprint_gate_stderr.txt"
 	echo
 } >>"$REPORT_MD"
 

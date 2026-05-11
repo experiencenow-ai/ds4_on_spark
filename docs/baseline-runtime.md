@@ -106,6 +106,9 @@ REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 AL
 scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@aitopatom-9ab9.local
 ```
 
+This combined runner also runs the pinned antirez payload fingerprint gate locally
+and records it next to the report as `contract_probe_fingerprint_gate.json`.
+
 After the first successful quantized run, prefer instrumentation over immediate
 optimization. The next useful report should say whether the runtime can expose:
 
