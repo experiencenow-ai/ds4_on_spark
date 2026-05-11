@@ -156,6 +156,33 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].prompt_template_id, "clean.v1")
 
+    def test_judge_slice_summaries_exist(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+        slices = report.judge.get("slices", {})
+        by_tmpl = (slices.get("by_prompt_template_id") or {})
+        top = (by_tmpl.get("count_top") or [])
+        tmpl_keys = set(js.get("prompt_template_id") for js in top)
+        self.assertIn("cot.v1", tmpl_keys)
+        self.assertIn("mcq.letter.v1", tmpl_keys)
+
+    def test_recommendations_avoid_seen_buffer_items(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_buffer_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_buffer_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates)
+        self.assertGreaterEqual(len(scored), 2)
+        self.assertEqual(scored[0].buffer_item_id, "entropy.v1:buf.task.003:plain.v1")
+
+        top = recommend._select(scored, history, limit=2, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, avoid_seen_buffer_item_id=True)
+        self.assertGreaterEqual(len(top), 1)
+        self.assertTrue(all(c.buffer_item_id != "entropy.v1:buf.task.001:plain.v1" for c in top))
+
 
 if __name__ == "__main__":
     unittest.main()
