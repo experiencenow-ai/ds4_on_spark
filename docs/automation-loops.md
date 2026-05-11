@@ -134,3 +134,21 @@ Tasks:
 - Keep fixtures + tests for the record schema stable.
 
 Exit: committed `docs/entropy-buffers.md`, fixtures, and `scripts/entropy_buffer_*.py` tools with tests.
+
+## Loop 10: Centaur on Spark
+
+Goal: turn the Centaur spec-impl v73 smoke into a reproducible Spark0 runbook + scripts, then prepare Spark1/2/3 ring rehearsal instructions.
+
+Tasks:
+
+- Stage `centaur_spec_impl_v73.zip` to Spark0 with `scripts/centaur_spark0_v73_stage.sh`.
+- Run the Spark0 smoke via `scripts/centaur_spark0_v73_smoke.sh` and capture a sanitized excerpt.
+- Rehearse Spark1/2/3 ring-step behavior locally on Spark0 with `scripts/centaur_spark_ring_sim_v73.sh`.
+- Draft the Spark1/2/3 “real ring” rsync-staged path with `scripts/centaur_spark_ring_rsync_v73.sh` (do not run unless Spark1/2/3 exist and SSH is ready).
+
+Docs:
+
+- `docs/centaur-spark0-v73-smoke.md`
+- `docs/centaur-ring-spark123.md`
+
+Exit: Spark0 smoke is repeatable, and ring steps for Spark1/2/3 have a concrete rehearsal + first deployment option.

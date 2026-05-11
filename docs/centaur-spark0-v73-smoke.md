@@ -26,6 +26,12 @@ From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 ./scripts/centaur_spark0_v73_stage.sh spark0@<spark0-host>
 ```
 
+If you do not already have `SSH_OPTS` set in your shell, a safe default that avoids prompting is:
+
+```bash
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+```
+
 Then run the smoke on Spark0 (the stage script prints the exact command). The smoke script is streamed over SSH, so nothing new needs to be installed on Spark0 besides python3 + unzip:
 
 ```bash

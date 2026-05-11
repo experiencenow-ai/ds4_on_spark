@@ -23,6 +23,13 @@ python3 -m venv ./venv
 ./venv/bin/python3 -u ./centaur_spec_impl_v73/centaur.py selftest --json
 ```
 
+Recommended (reproducible): stage the zip and stream-run the bootstrap script from your Mac repo root, once per node:
+
+```bash
+rsync -av -e "ssh $SSH_OPTS" /Users/mac/Downloads/centaur_spec_impl_v73.zip spark1@<spark1-host>:~/centaur-smoke/v73/centaur_spec_impl_v73.zip
+ssh $SSH_OPTS spark1@<spark1-host> "export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip; sh -s" < ./scripts/centaur_spark_node_v73_bootstrap.sh
+```
+
 Do **not** commit zips or venvs into this repo.
 
 ## Prereqs (run once on Spark0)
@@ -92,6 +99,12 @@ This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/
 3. Pushes the mutated node roots back to the remote Sparks
 
 From your Mac repo root (stream-run on Spark0, passing Spark1/2/3 SSH targets as args):
+
+If you do not already have `SSH_OPTS` set in your shell, a safe default that avoids prompting is:
+
+```bash
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+```
 
 ```bash
 ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>" < ./scripts/centaur_spark_ring_rsync_v73.sh
