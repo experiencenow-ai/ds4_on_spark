@@ -111,6 +111,17 @@ echo "zip: $zip"
 echo "workdir: $workdir"
 echo "pwd: $(pwd)"
 ls -la "$zip" | sed -n '1p'
+zip_sha256="$(python3 - <<'PY'
+import hashlib,sys
+p=sys.argv[1]
+h=hashlib.sha256()
+with open(p,'rb') as f:
+    for chunk in iter(lambda: f.read(1024*1024), b''):
+        h.update(chunk)
+print(h.hexdigest())
+PY
+"$zip")"
+echo "zip_sha256: $zip_sha256"
 
 echo "== python =="
 python3 -V
@@ -154,17 +165,6 @@ else
 		"$venv_py" -m pip install $pip_args -r "$pkgdir/requirements.txt"
 	fi
 fi
-
-sha256="$(python3 - <<PY
-import hashlib,sys
-p=sys.argv[1]
-h=hashlib.sha256()
-with open(p,'rb') as f:
-    h.update(f.read())
-print(h.hexdigest())
-PY
-"$zip")"
-echo "zip_sha256: $sha256"
 
 echo "== pip freeze (sanitized) =="
 "$venv_py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'

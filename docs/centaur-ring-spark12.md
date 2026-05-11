@@ -101,6 +101,13 @@ Capture these outputs (sanitized) after the sim:
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective_manifests`
 - `python3 -u centaur.py hyor-sync-status` for each root (controller + spark0 + spark1 + spark2)
 
+To validate expected ring artifacts exist (run on the orchestrator host; Spark0 in the sim case):
+
+```bash
+export RING_RUN_ID="<run_id>"
+sh ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh --mode sim
+```
+
 ## Next step (when Spark1/2 hardware exists)
 
 Decide one of:
@@ -159,6 +166,13 @@ After a wrapper run, you can fetch a small artifact bundle (log + manifests) bac
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+To validate expected ring artifacts exist on the orchestrator host (Spark0):
+
+```bash
+export RING_RUN_ID="<run_id>"
+sh ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh --mode rsync
 ```
 
 ### After rsync ring-step: quick node validation (Spark1/2)
