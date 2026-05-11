@@ -45,6 +45,8 @@ int32_t test_config(void)
 	static const uint8_t buf_i32min[] = "log_level=-2147483648\nenable_cuda=0\n";
 	static const uint8_t fbuf[] = "log_level=0\nenable_cuda=1\n";
 	static const uint8_t capbuf[] = "log_level=1\n";
+	static const uint8_t env_cfg0[] = "log_level=debug\n";
+	static const uint8_t env_cfg_unknown0[] = "unknown_key=1\n";
 	char path[64];
 	char env_path[96];
 	char out[128];
@@ -406,6 +408,46 @@ int32_t test_config(void)
 		unlink(path);
 		return(-49);
 	}
+	unsetenv("DS4_LOG_LEVEL");
+	if ( setenv("DS4_CONFIG",(const char *)env_cfg0,1) != 0 )
+	{
+		unlink(path);
+		return(-189);
+	}
+	if ( ds4_config_load(&cfg,path,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		unlink(path);
+		return(-190);
+	}
+	if ( cfg.log_level != 3 )
+	{
+		unsetenv("DS4_CONFIG");
+		unlink(path);
+		return(-191);
+	}
+	if ( setenv("DS4_LOG_LEVEL","1",1) != 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		unlink(path);
+		return(-192);
+	}
+	if ( ds4_config_load(&cfg,path,io_buf,(int32_t)sizeof(io_buf),0) < 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		unsetenv("DS4_LOG_LEVEL");
+		unlink(path);
+		return(-193);
+	}
+	if ( cfg.log_level != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		unsetenv("DS4_LOG_LEVEL");
+		unlink(path);
+		return(-194);
+	}
+	unsetenv("DS4_CONFIG");
+	unsetenv("DS4_LOG_LEVEL");
 	unlink(path);
 	for (n=0; n<(int32_t)sizeof(path); n++)
 		path[n] = 0;
@@ -464,6 +506,21 @@ int32_t test_config(void)
 		return(-211);
 	}
 	unlink(path);
+	unsetenv("DS4_CONFIG");
+	if ( setenv("DS4_CONFIG",(const char *)env_cfg_unknown0,1) != 0 )
+		return(-212);
+	unknown = -1;
+	if ( ds4_config_load_ex(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown) >= 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-213);
+	}
+	if ( unknown != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-214);
+	}
+	unsetenv("DS4_CONFIG");
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	for (n=0; n<(int32_t)sizeof(path); n++)

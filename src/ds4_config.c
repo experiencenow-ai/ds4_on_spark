@@ -213,6 +213,34 @@ static int32_t ds4_copy_trimmed_env_path(const char *env_path,char *out,int32_t 
 	return(1);
 }
 
+static int32_t ds4_config_parse_env_config_ex_diag(ds4_config_t *cfg,int32_t flags,int32_t *out_unknown,ds4_config_diag_t *diag)
+{
+	const char *v;
+	const char *tv;
+	int32_t tvlen,rv,unknown,err;
+	if ( cfg == 0 )
+		return(-1);
+	unknown = 0;
+	if ( out_unknown != 0 )
+		*out_unknown = 0;
+	v = getenv("DS4_CONFIG");
+	rv = ds4_trim_env_value(v,&tv,&tvlen);
+	if ( rv < 0 )
+		return(-2);
+	if ( rv == 0 )
+		return(0);
+	err = ds4_config_parse_mem_ex_diag(cfg,(const uint8_t *)tv,tvlen,flags,&unknown,diag);
+	if ( err < 0 )
+	{
+		if ( out_unknown != 0 )
+			*out_unknown = unknown;
+		return(-3);
+	}
+	if ( out_unknown != 0 )
+		*out_unknown = unknown;
+	return(1);
+}
+
 int32_t ds4_config_parse_env(ds4_config_t *cfg)
 {
 	const char *v;
@@ -751,11 +779,13 @@ int32_t ds4_config_parse_file(ds4_config_t *cfg,const char *path,uint8_t *buf,in
 
 int32_t ds4_config_load_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len,int32_t flags,int32_t *out_unknown)
 {
-	int32_t unknown;
+	int32_t unknown_file,unknown_env_cfg,unknown,rv;
 	if ( cfg == 0 )
 		return(-1);
 	if ( (flags & ~DS4_CONFIG_PARSE_STRICT_UNKNOWN) != 0 )
 		return(-2);
+	unknown_file = 0;
+	unknown_env_cfg = 0;
 	unknown = 0;
 	if ( out_unknown != 0 )
 		*out_unknown = 0;
@@ -765,14 +795,23 @@ int32_t ds4_config_load_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32
 	{
 		if ( path[0] != 0 )
 		{
-			if ( ds4_config_parse_file_ex(cfg,path,buf,cap,out_len,flags,&unknown) < 0 )
+			if ( ds4_config_parse_file_ex(cfg,path,buf,cap,out_len,flags,&unknown_file) < 0 )
 			{
 				if ( out_unknown != 0 )
-					*out_unknown = unknown;
+					*out_unknown = unknown_file;
 				return(-4);
 			}
 		}
 	}
+	rv = ds4_config_parse_env_config_ex_diag(cfg,flags,&unknown_env_cfg,0);
+	if ( rv < 0 )
+	{
+		unknown = (unknown_file + unknown_env_cfg);
+		if ( out_unknown != 0 )
+			*out_unknown = unknown;
+		return(-6);
+	}
+	unknown = (unknown_file + unknown_env_cfg);
 	if ( ds4_config_parse_env(cfg) < 0 )
 		return(-5);
 	if ( out_unknown != 0 )
@@ -787,6 +826,8 @@ int32_t ds4_config_load(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t 
 	if ( err == -3 )
 		return(-2);
 	if ( err == -4 )
+		return(-3);
+	if ( err == -6 )
 		return(-3);
 	if ( err == -5 )
 		return(-4);
@@ -821,7 +862,7 @@ int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t 
 	const char *env_path;
 	const char *use_path;
 	char path_buf[512];
-	int32_t rv,unknown,err;
+	int32_t rv,unknown_file,unknown_env_cfg,unknown,err;
 	if ( diag != 0 )
 		ds4_config_diag_init(diag);
 	if ( cfg == 0 )
@@ -836,6 +877,8 @@ int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t 
 			ds4_config_diag_set(diag,DS4_CONFIG_DIAG_STAGE_LOAD,0,-2,0);
 		return(-2);
 	}
+	unknown_file = 0;
+	unknown_env_cfg = 0;
 	unknown = 0;
 	if ( out_unknown != 0 )
 		*out_unknown = 0;
@@ -868,20 +911,34 @@ int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t 
 	{
 		if ( use_path[0] != 0 )
 		{
-			err = ds4_config_parse_file_ex_diag(cfg,use_path,buf,cap,out_len,flags,&unknown,diag);
+			err = ds4_config_parse_file_ex_diag(cfg,use_path,buf,cap,out_len,flags,&unknown_file,diag);
 			if ( err < 0 )
 			{
 				if ( diag != 0 )
 				{
 					diag->stage = DS4_CONFIG_DIAG_STAGE_LOAD;
-					diag->unknown = unknown;
+					diag->unknown = unknown_file;
 				}
 				if ( out_unknown != 0 )
-					*out_unknown = unknown;
+					*out_unknown = unknown_file;
 				return(-4);
 			}
 		}
 	}
+	err = ds4_config_parse_env_config_ex_diag(cfg,flags,&unknown_env_cfg,diag);
+	if ( err < 0 )
+	{
+		unknown = (unknown_file + unknown_env_cfg);
+		if ( diag != 0 )
+		{
+			diag->stage = DS4_CONFIG_DIAG_STAGE_LOAD;
+			diag->unknown = unknown;
+		}
+		if ( out_unknown != 0 )
+			*out_unknown = unknown;
+		return(-6);
+	}
+	unknown = (unknown_file + unknown_env_cfg);
 	err = ds4_config_parse_env(cfg);
 	if ( err < 0 )
 	{

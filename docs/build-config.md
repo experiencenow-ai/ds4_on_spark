@@ -59,6 +59,7 @@ Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "
 `ds4_config_load_auto` also consults:
 
 - `DS4_CONFIG_PATH` (default config file path when no `path` is provided; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
+- `DS4_CONFIG` (inline config text; newline-delimited `key=value` pairs, parsed like a config file; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
 
 ## Load order helper
 
@@ -66,7 +67,8 @@ For callers that want a single entrypoint, `ds4_config_load` applies configurati
 
 1. Defaults (`ds4_config_defaults`)
 2. Optional file (`ds4_config_parse_file`) when `path` is non-empty
-3. Environment overrides (`ds4_config_parse_env`)
+3. Optional inline config (`DS4_CONFIG`) parsed with `ds4_config_parse_mem_ex`
+4. Environment overrides (`ds4_config_parse_env`)
 
 `ds4_config_load_auto` extends this with an environment-backed config path: when `path` is empty, it uses `DS4_CONFIG_PATH` (when set) before applying env overrides.
 
