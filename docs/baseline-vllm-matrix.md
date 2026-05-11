@@ -55,6 +55,7 @@ run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
 Rules:
 
 - Lines starting with `#` are ignored.
+- A header row starting with `run_label` is ignored.
 - `draft_model_dir` may be empty to run target-only.
 - `scope_target` and `scope_dflash` may be empty; defaults are `vllm_target` and `vllm_dflash`.
 - Use absolute Spark paths for `target_model_dir` / `draft_model_dir`.

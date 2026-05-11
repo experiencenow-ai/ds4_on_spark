@@ -51,7 +51,7 @@ line_no=0
 while IFS="$tab" read -r run_label scope_target scope_dflash target_id target_model draft_model _rest; do
     line_no=$((line_no + 1))
     case "$run_label" in
-        ""|\#*)
+        ""|\#*|run_label)
             continue
             ;;
     esac
