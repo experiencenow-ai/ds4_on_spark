@@ -11,4 +11,5 @@ int32_t test_log(void);
 int32_t test_log_ring(void);
 int32_t test_ctx(void);
 int32_t test_cuda(void);
+int32_t test_cuda_arena(void);
 int32_t test_gguf(void);

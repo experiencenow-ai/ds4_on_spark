@@ -9,6 +9,7 @@
 #include "ds4/log.h"
 #include "ds4/log_ring.h"
 #include "ds4/cuda.h"
+#include "ds4/cuda_arena.h"
 
 typedef struct
 {
