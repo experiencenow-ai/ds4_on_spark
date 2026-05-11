@@ -109,6 +109,12 @@ centaur hyor-sync-init "$s0" --node-id spark0 --node-type "$node_type" --left-pe
 centaur hyor-sync-init "$s1" --node-id spark1 --node-type "$node_type" --left-peer-root "$s0" --right-peer-root "$s2"
 centaur hyor-sync-init "$s2" --node-id spark2 --node-type "$node_type" --left-peer-root "$s1" --right-peer-root "$s0"
 
+echo "== sync status (post-init) =="
+centaur hyor-sync-status "$ctrl"
+centaur hyor-sync-status "$s0"
+centaur hyor-sync-status "$s1"
+centaur hyor-sync-status "$s2"
+
 echo "== publish baseline + node_type from controller =="
 printf "baseline\n" >"$workdir/publish/baseline/baseline.txt"
 printf "node-type\n" >"$workdir/publish/node_type_default/model.txt"
@@ -126,6 +132,12 @@ centaur hyor-ring-step "$ctrl" --scope effective
 centaur hyor-ring-step "$s0" --scope effective
 centaur hyor-ring-step "$s1" --scope effective
 centaur hyor-ring-step "$s2" --scope effective
+
+echo "== sync status (post-ring-step) =="
+centaur hyor-sync-status "$ctrl"
+centaur hyor-sync-status "$s0"
+centaur hyor-sync-status "$s1"
+centaur hyor-sync-status "$s2"
 
 echo "== effective manifests (spark1/2) =="
 mkdir -p "$workdir/effective_manifests"

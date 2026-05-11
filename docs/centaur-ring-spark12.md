@@ -96,6 +96,7 @@ Otherwise it is:
 
 Capture these outputs (sanitized) after the sim:
 
+- The ring scripts print `hyor-sync-status` for each root post-init and post-ring-step; if you set `RING_LOG`, the log is usually sufficient evidence.
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective/spark1`
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective/spark2`
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective_manifests`

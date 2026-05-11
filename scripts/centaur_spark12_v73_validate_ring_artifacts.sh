@@ -112,6 +112,19 @@ warn_dir()
 	fi
 }
 
+warn_file()
+{
+	p="$1"
+	if [ "$p" = "" ]; then
+		return 0
+	fi
+	if [ -f "$p" ]; then
+		echo "ok file: $p"
+	else
+		echo "warn missing file: $p (RING_LOG set; expected only when ring log was enabled)" >&2
+	fi
+}
+
 echo "== centaur ring artifact check =="
 echo "mode: $mode"
 echo "workdir: $workdir"
@@ -127,6 +140,8 @@ need_file "$workdir/effective_manifests/hyor_effective_manifest_spark2.json"
 warn_dir "$workdir/effective/spark1"
 warn_dir "$workdir/effective/spark2"
 
+warn_file "${RING_LOG:-}"
+
 if [ "$missing" -eq 0 ]; then
 	echo "STATUS: PASS"
 	exit 0
@@ -134,4 +149,3 @@ fi
 
 echo "STATUS: FAIL (missing $missing required artifact(s))" >&2
 exit 3
-
