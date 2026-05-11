@@ -91,8 +91,9 @@ Hard requirements:
 This repo ships a **skeleton** patch against the pinned Spark fork (`9222e55`) that adds a `llama-ds4-mtp-one-token-draft-probe` binary which:
 
 - loads the trunk GGUF and runs the single verify step (`verify_step_idx=0`) to compute `base_next_token_id`
+- commits `base_next_token_id` once (mirrors DS4 “accept one target token, then draft” sequencing) and captures the trunk **pre-`hc_head`** HC tensor via `cb_eval` (`result_pre_hc_head`)
 - opens the MTP sidecar GGUF in **metadata-only** mode and validates the exact 32 `mtp.0.*` tensors via a generated binder header
-- emits the required JSON contract, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
+- emits the required JSON contract, including optional debug keys `trunk_pre_hc_head_fnv64`, `trunk_pre_hc_head_nbytes`, and `trunk_pre_hc_head_shape`, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
 
 Patch file:
 
