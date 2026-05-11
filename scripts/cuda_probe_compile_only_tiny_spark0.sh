@@ -164,8 +164,8 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 			rc=\$?
 			set -e
 			if [ \$rc -eq 0 ]; then
-				spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//')
-				fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//')
+				spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//' | tr -cd '0-9')
+				fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//' | tr -cd '0-9')
 				if [ \"\${spec}\" = \"\" ]; then
 					spec=\"(missing)\"
 				fi
