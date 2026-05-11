@@ -24,7 +24,7 @@ Environment:
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE    Optional work tree override (defaults to $PWD)
   REDACT=1             Redact IPv4/IPv6/MAC addresses from output
-  MTU_PAYLOADS         Override payload list (default: "1472 8972")
+  MTU_PAYLOADS         Override payload list (default: "1472,8972"; comma-separated)
 
 Examples:
   SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_ring_probe_mtu.sh aitopatom-9ab9.local spark1.local spark2.local || true
@@ -60,7 +60,7 @@ esac
 
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
-MTU_PAYLOADS="${MTU_PAYLOADS:-1472 8972}"
+MTU_PAYLOADS="${MTU_PAYLOADS:-1472,8972}"
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -228,12 +228,13 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		i=$((i + 1))
 		kh="$(known_hosts_for_target "$target")"
 		peers="$(peer_hosts_for_index "$i")"
+		payloads_arg="$(printf "%s" "$MTU_PAYLOADS" | tr ' ' ',' | tr -s ',' | sed -E 's/^,+//; s/,+$//')"
 		echo "== target: $target =="
-		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$MTU_PAYLOADS" $peers 2>&1 <<'REMOTE'
+		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$payloads_arg" $peers 2>&1 <<'REMOTE'
 set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
-payloads="${1:-}"
+payloads_csv="${1:-}"
 shift || true
 echo "== probe meta =="
 date -u
@@ -255,6 +256,7 @@ fi
 
 for peer in "$@"; do
 	echo "-- $peer --"
+	payloads="$(printf "%s" "$payloads_csv" | tr ',' ' ' | tr -s ' ' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
 	for sz in $payloads; do
 		label="payload=${sz}"
 		if [ "$have_m_flag" = "1" ]; then
@@ -302,4 +304,3 @@ fi
 if [ "${ssh_fail:-0}" != "0" ]; then
 	exit 1
 fi
-
