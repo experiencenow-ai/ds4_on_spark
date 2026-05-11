@@ -6,6 +6,13 @@ MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-$sidecar_arg}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_probe_local}"
 MTP_SIDECAR_ARGS="${MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
+SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-}"
+if [ "$SIDECAR_EXPECT_FILE_SIZE" != "" ]; then
+	case " $MTP_SIDECAR_ARGS " in
+		*" --expect-file-size "*) ;;
+		*) MTP_SIDECAR_ARGS="$MTP_SIDECAR_ARGS --expect-file-size $SIDECAR_EXPECT_FILE_SIZE" ;;
+	esac
+fi
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -23,29 +30,34 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_probe_local.md"
 if [ "$MTP_SIDECAR_GGUF" = "" ]; then
 	echo "usage: $0 /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf" 1>&2
 	echo "or set: MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf" 1>&2
+	echo "or set: MTP_SIDECAR_GGUF=https://.../DeepSeek-V4-Flash-MTP-*.gguf (metadata-only range reads)" 1>&2
 	exit 2
 fi
 
+probe_mode="path"
 case "$MTP_SIDECAR_GGUF" in
 	http://*|https://*)
-		echo "refusing URL input for local runner (requires a readable local file): $MTP_SIDECAR_GGUF" 1>&2
-		echo "use: python3 scripts/model_contract_probe_mtp_sidecar.py --url ... --json" 1>&2
-		exit 3
+		probe_mode="url"
+		;;
+	*)
+		if [ ! -r "$MTP_SIDECAR_GGUF" ]; then
+			echo "sidecar not readable: $MTP_SIDECAR_GGUF" 1>&2
+			exit 4
+		fi
 		;;
 esac
 
-if [ ! -r "$MTP_SIDECAR_GGUF" ]; then
-	echo "sidecar not readable: $MTP_SIDECAR_GGUF" 1>&2
-	exit 4
-fi
-
 {
-	echo "# MTP Sidecar Contract Probe (local file)"
+	echo "# MTP Sidecar Contract Probe (local)"
 	echo
 	echo "Date (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	echo
 	echo "- ds4_on_spark commit: $repo_rev"
-	echo "- sidecar: $MTP_SIDECAR_GGUF"
+	if [ "$probe_mode" = "url" ]; then
+		echo "- sidecar_url: $MTP_SIDECAR_GGUF"
+	else
+		echo "- sidecar_path: $MTP_SIDECAR_GGUF"
+	fi
 	echo
 	echo "## Command"
 	echo
@@ -53,14 +65,23 @@ fi
 	echo "It does not require loading the trunk GGUF or reading full tensor payloads into RAM."
 	echo
 	echo '```'
-	echo "python3 scripts/model_contract_probe_mtp_sidecar.py --path \"$MTP_SIDECAR_GGUF\" $MTP_SIDECAR_ARGS"
+	if [ "$probe_mode" = "url" ]; then
+		echo "python3 scripts/model_contract_probe_mtp_sidecar.py --url \"$MTP_SIDECAR_GGUF\" $MTP_SIDECAR_ARGS"
+	else
+		echo "python3 scripts/model_contract_probe_mtp_sidecar.py --path \"$MTP_SIDECAR_GGUF\" $MTP_SIDECAR_ARGS"
+	fi
 	echo '```'
 	echo
 } >"$REPORT_MD"
 
 echo "== running MTP sidecar contract probe (local) =="
-python3 "$repo_root/scripts/model_contract_probe_mtp_sidecar.py" --path "$MTP_SIDECAR_GGUF" $MTP_SIDECAR_ARGS \
-	>"$OUT_DIR/contract_probe_stdout.txt" 2>"$OUT_DIR/contract_probe_stderr.txt" || true
+if [ "$probe_mode" = "url" ]; then
+	python3 "$repo_root/scripts/model_contract_probe_mtp_sidecar.py" --url "$MTP_SIDECAR_GGUF" $MTP_SIDECAR_ARGS \
+		>"$OUT_DIR/contract_probe_stdout.txt" 2>"$OUT_DIR/contract_probe_stderr.txt" || true
+else
+	python3 "$repo_root/scripts/model_contract_probe_mtp_sidecar.py" --path "$MTP_SIDECAR_GGUF" $MTP_SIDECAR_ARGS \
+		>"$OUT_DIR/contract_probe_stdout.txt" 2>"$OUT_DIR/contract_probe_stderr.txt" || true
+fi
 
 python3 - "$OUT_DIR/contract_probe_stdout.txt" >"$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY' || true
 import json
@@ -141,4 +162,3 @@ fi
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
-
