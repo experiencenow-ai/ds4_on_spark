@@ -156,6 +156,25 @@
           "tags"
         ]
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "parse_valid": {
+            "const": true
+          },
+          "winner": {
+            "const": "tie"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "margin": {
+            "const": 0
+          }
+        }
+      }
     }
   ]
 }

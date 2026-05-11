@@ -52,5 +52,23 @@
         "maxLength": 24
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "winner": {
+            "const": "tie"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "margin": {
+            "const": 0
+          }
+        }
+      }
+    }
+  ]
 }

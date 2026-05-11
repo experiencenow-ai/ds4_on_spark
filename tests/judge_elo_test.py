@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from scripts import judge_elo_schema as schema
+from scripts import judge_elo_join_quality as joiner
 from scripts import judge_elo_update as updater
 from scripts import pairwise_judge_record as record_wrap
 
@@ -72,6 +73,35 @@ class JudgeEloTest(unittest.TestCase):
         self.assertIn("tokens", budget)
         self.assertIn("latency_ms", budget)
         self.assertIn("judge_out_budget", budget)
+
+    def test_meta_computed(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        meta = updater.compute_meta([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+        self.assertEqual(meta.get("schema"), "ds4_judge_elo_meta_v1")
+        self.assertEqual(int(meta.get("records", 0)), 4)
+        self.assertGreaterEqual(int(meta.get("matches_used", 0)), 3)
+
+    def test_join_quality_rows(self) -> None:
+        rows = [
+            {"model": "model_fast", "decode_tps": "100.0"},
+            {"model": "model_mid", "decode_tps": "80.0", "quality_score": ""},
+            {"model": "missing_model", "decode_tps": "50.0"},
+        ]
+        qmap = {"model_fast": 70.0, "model_mid": 55.5}
+        joined, missing = joiner.join_quality_rows(
+            rows=rows,
+            quality_map=qmap,
+            quality_source="testsrc",
+            model_field="model",
+            overwrite=True,
+            require_all=False,
+        )
+        self.assertEqual(missing, 1)
+        self.assertEqual(joined[0].get("quality_score"), "70.000")
+        self.assertEqual(joined[0].get("quality_source"), "testsrc")
+        self.assertEqual(joined[1].get("quality_score"), "55.500")
+        self.assertEqual(joined[2].get("quality_score", ""), "")
 
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}

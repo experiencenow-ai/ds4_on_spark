@@ -78,8 +78,11 @@ python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b 
 - performs deterministic Elo updates (order = input order; optionally stable-sorted by `pair_id` only)
 - writes JSON/CSV/Markdown leaderboard summaries plus:
   - `quality_map.json` (model -> `quality_score`)
+  - `meta.json` (record/match counts and updater parameters)
   - `budget.json` (token/latency/parse-validity summary over the input JSONL)
     - includes `judge_out_budget` (how often judge outputs meet the compact token target)
+
+Quality mapping defaults to `--quality-mode logistic` (anchored: Elo 1000 -> quality_score 50). Use `--quality-mode minmax` only for quick relative comparisons within a single closed set of models.
 
 Elo math:
 - expected score: `E_A = 1 / (1 + 10^((R_B - R_A)/400))`
@@ -90,3 +93,11 @@ Elo math:
 ## Baseline Integration Notes
 
 The leaderboard CSV emitted by `scripts/judge_elo_update.py` contains an Elo-derived `quality_score` (0..100) **derived only from judge results** (no speed fields). The baseline runtime loop can join this `quality_score` onto its speed measurements and compute quality-adjusted tok/s without mixing speed signals into judge quality.
+
+For a CSV-first workflow, use `scripts/judge_elo_join_quality.py` to attach `quality_score` onto baseline rows before scoring:
+
+```bash
+python3 scripts/judge_elo_update.py --in <judge_records.jsonl> --out-dir <elo_out_dir> --strict
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
+python3 scripts/model_quality_speed_score.py --in <baseline_with_quality.csv> --out-md <scored.md>
+```

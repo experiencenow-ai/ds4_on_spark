@@ -16,14 +16,17 @@ from typing import Dict
 SYSTEM = (
     "You are a strict pairwise judge. Return minified JSON only.\n"
     "No markdown. No extra keys. No explanations.\n"
-    "reason and train_hint must each be <= 18 words."
+    "Return exactly one JSON object on one line.\n"
+    "Target judge_out <= ~64 tokens by keeping reason/train_hint short.\n"
+    "reason and train_hint must each be <= 18 words.\n"
+    "If winner is tie, margin must be 0 and score_a must equal score_b."
 )
 
 
 def build_user(prompt: str, a: str, b: str) -> str:
     schema_hint = {
         "winner": "A|B|tie",
-        "margin": "0..3",
+        "margin": "0..3 (tie=>0)",
         "score_a": "0..10",
         "score_b": "0..10",
         "reason": "<=18 words",
@@ -69,4 +72,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
