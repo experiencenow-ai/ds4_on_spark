@@ -24,6 +24,18 @@ while preparing this document.
 | 7 | `Qwen/Qwen3-Coder-Next-FP8` | `refs/heads/main` | `da6e2ed27304dd39abadd9c82ef50e8de67bdd4c` | `apache-2.0` | 74.86 GiB | `z-lab/Qwen3-Coder-Next-DFlash` | `6d741db11b89d7ea80a423b109f0424817ce8f1b` | `mit` | 0.88 GiB | maybe | Larger 80B/3B-active coding-agent target; plausible on Spark0, but should run after the smaller candidates. |
 | 8 | `Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8` | `refs/heads/main` | `003f183a92fbe5b9a8325aaa8b2ae797c91dd90f` | `apache-2.0` | not measured here | none selected | n/a | n/a | n/a | no | Dual-Spark or future reference only unless a smaller local quantized artifact appears. |
 
+## FP8-packaged 27B targets (target-only)
+
+These are smaller-than-dense packaging variants for 27B Qwen targets. They do
+not have official DFlash drafters (as of the pinned revisions), so treat them as
+target-only baselines or cheap staging probes before downloading the full dense
+target.
+
+| Target | Ref | Commit / SHA | License | Safetensors | Single Spark? | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Qwen/Qwen3.5-27B-FP8` | `refs/heads/main` | `97f5941bf617e31c5e237364a8602ce3f03a551a` | `apache-2.0` | 28.75 GiB | yes | FP8 packaging for `Qwen/Qwen3.5-27B`; use for target-only quality/speed probes. |
+| `Qwen/Qwen3.6-27B-FP8` | `refs/heads/main` | `e89b16ebf1988b3d6befa7de50abc2d76f26eb09` | `apache-2.0` | 28.75 GiB | yes | FP8 packaging for `Qwen/Qwen3.6-27B`; use for target-only probes (DFlash pairing still requires the dense target). |
+
 The DFlash implementation reference is `z-lab/dflash`
 `94e4abc5e0c31b67bc1a9d30f1cc34ece28a8756` on `refs/heads/main` (`MIT`).
 
