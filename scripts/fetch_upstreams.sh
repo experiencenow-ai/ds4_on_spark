@@ -83,6 +83,8 @@ Targets:
   spark_v4_bringup_entrpi
   spark_v4_bringup_bigs
   spark_v4_gb10_runtime_devid791
+  deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul
+  deepseek_v4_flash_vllm_ampere_patch_lasimeri
   deepseek_v4_flash_sm120_patch
   all
 EOF
@@ -504,6 +506,14 @@ fetch_one()
 			upstream="devid791/dsv4-flash-gb10-runtime"; ref="refs/tags/v0.1.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "spark_v4_gb10_runtime_devid791" "https://github.com/devid791/dsv4-flash-gb10-runtime.git" "${ref}" "${expected}"
 			;;
+		deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul)
+			upstream="pasta-paul/dsv4-flash-w4a16-fp8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul" "https://github.com/pasta-paul/dsv4-flash-w4a16-fp8.git" "${ref}" "${expected}"
+			;;
+		deepseek_v4_flash_vllm_ampere_patch_lasimeri)
+			upstream="Lasimeri/vllm-dsv4-ampere"; ref="refs/heads/master"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "deepseek_v4_flash_vllm_ampere_patch_lasimeri" "https://github.com/Lasimeri/vllm-dsv4-ampere.git" "${ref}" "${expected}"
+			;;
 		deepseek_v4_flash_sm120_patch)
 			upstream="0xSero/deepseek-v4-flash-sm120"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "deepseek_v4_flash_sm120_patch" "https://github.com/0xSero/deepseek-v4-flash-sm120.git" "${ref}" "${expected}"
@@ -552,6 +562,8 @@ main()
 		fetch_one spark_v4_bringup_entrpi
 		fetch_one spark_v4_bringup_bigs
 		fetch_one spark_v4_gb10_runtime_devid791
+		fetch_one deepseek_v4_flash_w4a16_fp8_recipe_pasta_paul
+		fetch_one deepseek_v4_flash_vllm_ampere_patch_lasimeri
 		fetch_one deepseek_v4_flash_sm120_patch
 		echo "Fetched: ${UPSTREAM_DIR}"
 		return 0
