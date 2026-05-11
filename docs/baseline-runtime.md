@@ -60,6 +60,8 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 When using `MODEL_RUNS_CSV`, you can also supply (optional) quality metadata:
 `PUBLIC_QUALITY_PRIOR`, `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`,
 `PASSED_TASKS`, `TOTAL_TASKS`, `LOCAL_QUALITY_SCORE`, and `QUALITY_SCORE`.
+When any of these fields are set, the local report includes a `Quality Metadata (Local)`
+section to make it harder to forget which quality numbers were used for a comparison.
 
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
