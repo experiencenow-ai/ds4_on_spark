@@ -32,6 +32,10 @@ Supported keys:
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 
+## Validation helper
+
+For callers that populate a `ds4_config_t` directly (not via the parser), `ds4_config_validate` checks basic range/shape constraints (log level range, booleans are `0/1`, non-negative sizes).
+
 ## C string helpers
 
 For CLI-style overrides where keys and values are NUL-terminated strings, `ds4_config_parse_kv_cstr` computes lengths and forwards to `ds4_config_parse_kv`.

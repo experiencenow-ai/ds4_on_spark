@@ -58,6 +58,30 @@ int32_t test_config(void)
 	int32_t unknown;
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
+	if ( ds4_config_validate(&cfg) < 0 )
+		return(-1800);
+	cfg.log_level = -1;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1801);
+	cfg.log_level = 2;
+	cfg.enable_cuda = 2;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1802);
+	cfg.enable_cuda = 0;
+	cfg.cuda_device = -2;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1803);
+	cfg.cuda_device = DS4_CUDA_DEVICE_AUTO;
+	cfg.arena_size = -1;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1804);
+	cfg.arena_size = 0;
+	cfg.log_ring_entries = -1;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-1805);
+	cfg.log_ring_entries = 0;
+	if ( ds4_config_validate(0) >= 0 )
+		return(-1806);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_level","debug") != 0 )
 		return(-60);
 	if ( cfg.log_level != 3 )
