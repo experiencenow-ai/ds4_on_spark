@@ -23,7 +23,7 @@ fi
 BUNDLE_LABEL="${BUNDLE_LABEL:-vllm-matrix}"
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline_matrix}"
 
-ALLOW_RUN="${ALLOW_RUN:-1}"
+ALLOW_RUN="${ALLOW_RUN:-0}"
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 PROMPT="${PROMPT:-Explain Redis streams in one paragraph.}"
 MAX_TOKENS="${MAX_TOKENS:-64}"
@@ -70,4 +70,3 @@ echo "- $bundle_dir/matrix_stderr.txt"
 echo "- $csv_path"
 echo "- $bundle_dir/model_quality_speed_score.md"
 echo "- $bundle_dir/model_quality_speed_score.json"
-

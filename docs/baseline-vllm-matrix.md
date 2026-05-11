@@ -61,6 +61,7 @@ Notes:
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.
 - Do not download large model weights unless explicitly approved.
+- These wrappers default to `ALLOW_RUN=0` so nothing executes on Spark unless you opt in.
 
 ## Matrix TSV format
 
@@ -83,12 +84,12 @@ Template:
 ```text
 # run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
 ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4	
-qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B-DFlash
-qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B-DFlash
-qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B-DFlash
-qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B-DFlash
-qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-DFlash
-qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-DFlash
+qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/z-lab/Qwen3.5-4B-DFlash
+qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/z-lab/Qwen3.5-9B-DFlash
+qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/z-lab/Qwen3.5-27B-DFlash
+qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/z-lab/Qwen3.6-27B-DFlash
+qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/z-lab/Qwen3-Coder-30B-A3B-DFlash
+qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/z-lab/Qwen3.6-35B-A3B-DFlash
 ```
 
 Repo template file: `fixtures/baseline/vllm_matrix_template.tsv`.
