@@ -193,11 +193,20 @@ if [ "${DS4_CONFIG_PATH:-}" != "" ]; then
 		echo "unreadable file: DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
 		err=1
 	else
-		bad_line="$(grep -n -E '^[[:space:]]*[^#[:space:]]' "$DS4_CONFIG_PATH" 2>/dev/null | grep -n -v '=' 2>/dev/null | head -n 1 || true)"
-		if [ "$bad_line" != "" ]; then
-			echo "invalid config syntax (expected key=value or comment): DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
-			echo "$bad_line" >&2
-			err=1
+		scripts_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+		if [ -x "$scripts_dir/ops_ds4_config_check.sh" ]; then
+			if ! "$scripts_dir/ops_ds4_config_check.sh" "$DS4_CONFIG_PATH" >/dev/null 2>&1; then
+				echo "invalid ds4 config: DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
+				"$scripts_dir/ops_ds4_config_check.sh" "$DS4_CONFIG_PATH" >&2 || true
+				err=1
+			fi
+		else
+			bad_line="$(grep -n -E '^[[:space:]]*[^#[:space:]]' "$DS4_CONFIG_PATH" 2>/dev/null | grep -n -v '=' 2>/dev/null | head -n 1 || true)"
+			if [ "$bad_line" != "" ]; then
+				echo "invalid config syntax (expected key=value or comment): DS4_CONFIG_PATH=$DS4_CONFIG_PATH" >&2
+				echo "$bad_line" >&2
+				err=1
+			fi
 		fi
 	fi
 fi

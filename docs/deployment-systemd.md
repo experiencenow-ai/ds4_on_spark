@@ -74,6 +74,8 @@ The staging helper also copies safe ops scripts to `/tmp/ds4-scripts/`; install 
 
 The units use `ConditionPathIsExecutable=` for `/opt/ds4/scripts/ops_ds4_env_check.sh`, `/opt/ds4/scripts/ops_tp2_readiness.sh`, and `/opt/ds4/scripts/ops_collect_support_bundle.sh`; if a unit is skipped, confirm those scripts were installed.
 
+`ops_ds4_env_check.sh` also uses `/opt/ds4/scripts/ops_ds4_config_check.sh` when present to validate `DS4_CONFIG_PATH` (unknown keys warn by default; strict TP=2 preflight fails on unknown keys).
+
 Ensure `/etc/ds4/` and any `/etc/ds4/ds4-*.env` files are readable by the `ds4` service user (recommended: directory `root:ds4 0750`, files `root:ds4 0640`).
 
 The DS4 units create `/var/lib/ds4/ssh/` via `StateDirectory=` so readiness checks can persist SSH host keys under `/var/lib/ds4/ssh/known_hosts` (no manual `mkdir` required).
