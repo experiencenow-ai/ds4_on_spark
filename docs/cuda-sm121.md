@@ -81,6 +81,8 @@ For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compil
 
 Some build systems use the long-form `nvcc --gpu-architecture=...` flag instead of `-arch=...`. The compile-only object `make bin/cuda_sm121_gpuarch_compile_probe.o` is the same source compiled via `--gpu-architecture=sm_121` as a compatibility gate. For an end-to-end link/run smoke check using the long-form flag, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also compiles and runs the minimal probe via `nvcc --gpu-architecture=sm_121`.
 
+For a compile-only “C++20 + flags” toolchain gate (no link, no run), `make bin/cuda_sm121_cxx20_flags_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_cxx20_flags_compile_probe.cu` with `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210` (and if `nvcc` does not define the expected flag macros). `make bin/cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` is the same source compiled via `nvcc --gpu-architecture=sm_121` for build-system compatibility.
+
 When diagnosing toolchain issues, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also prints `ptxas --version` and `nvlink --version` (when present) and emits a small `-Xptxas=-v` compile-only snippet for `-arch=sm_121` so you can confirm which assembler/linker is actually being used on Spark0.
 
 ## Separate Compilation / Device Link (`-rdc=true`)

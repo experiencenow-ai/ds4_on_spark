@@ -15,6 +15,8 @@ This builds and runs only:
 - `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
+- `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
+- `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_probe`
 - `cuda_sm121_arch_report` (prints runtime device CC plus compiled `__CUDA_ARCH__` from an `sm_121` build; expected `1210`)
 
@@ -140,6 +142,8 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_device_props_tiny`
 - `cuda_sm121_compile_probe.o` (compile-only gate)
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121`)
+- `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`)
+- `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121` with C++20 flags)
 - `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)
 - `cuda_sm121_smem_optin` (shared-memory opt-in + max dynamic shared-memory launch gate)
 - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
