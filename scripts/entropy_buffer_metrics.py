@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import sys
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -102,6 +104,43 @@ def _hhi(counts: Dict[str, int]) -> float:
         h += (p * p)
     return(h)
 
+def _entropy_norm_bits(counts: Dict[str, int]) -> float:
+    uniq = len(counts)
+    if uniq <= 1:
+        return(0.0)
+    h = lib.shannon_entropy(counts)
+    return(_safe_div(h, math.log2(float(uniq))))
+
+
+def _effective_num(counts: Dict[str, int]) -> float:
+    h = lib.shannon_entropy(counts)
+    return(pow(2.0, h))
+
+
+def _div_stats(counts: Dict[str, int]) -> Dict[str, Any]:
+    return({
+        "unique": len(counts),
+        "entropy_bits": lib.shannon_entropy(counts),
+        "entropy_norm": _entropy_norm_bits(counts),
+        "effective_num": _effective_num(counts),
+        "top": lib.top_counts(counts),
+    })
+
+
+_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _char_ngrams_norm(text: str, n: int) -> List[str]:
+    if n <= 0:
+        return([])
+    s = lib.normalize_text(text)
+    s = _ALNUM_RE.sub("", s)
+    if len(s) < n:
+        return([])
+    out: List[str] = []
+    for i in range(0, len(s) - n + 1):
+        out.append(s[i:i + n])
+    return(out)
 
 def _distinct_ratio(counts: Dict[str, int]) -> float:
     total = float(sum(counts.values()))
@@ -182,6 +221,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     out_words: List[str] = []
     out_2grams: Dict[str, int] = {}
     out_3grams: Dict[str, int] = {}
+    prompt_char3: Dict[str, int] = {}
+    out_char3: Dict[str, int] = {}
 
     prompt_len_chars: List[int] = []
     prompt_len_words: List[int] = []
@@ -213,6 +254,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 out_2grams[ng] = out_2grams.get(ng, 0) + 1
             for ng in lib.word_ngrams(ws, 3):
                 out_3grams[ng] = out_3grams.get(ng, 0) + 1
+            for ng in _char_ngrams_norm(c.output, 3):
+                out_char3[ng] = out_char3.get(ng, 0) + 1
             flags = _useful_novelty_flags(c.output)
             if len(flags) != 0:
                 novelty_flagged += 1
@@ -228,6 +271,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 prompt_2grams[ng] = prompt_2grams.get(ng, 0) + 1
             for ng in lib.word_ngrams(ws, 3):
                 prompt_3grams[ng] = prompt_3grams.get(ng, 0) + 1
+            for ng in _char_ngrams_norm(c.prompt, 3):
+                prompt_char3[ng] = prompt_char3.get(ng, 0) + 1
         if c.task_id != "" and c.prompt_template_id != "" and c.output != "":
             k = f"{c.task_id}|{c.prompt_template_id}"
             task_template_outputs_norm.setdefault(k, []).append(lib.normalize_text(c.output))
@@ -264,36 +309,12 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     }
 
     diversity = {
-        "task_id": {
-            "unique": len(task_id_counts),
-            "entropy_bits": lib.shannon_entropy(task_id_counts),
-            "top": lib.top_counts(task_id_counts),
-        },
-        "task_family": {
-            "unique": len(task_family_counts),
-            "entropy_bits": lib.shannon_entropy(task_family_counts),
-            "top": lib.top_counts(task_family_counts),
-        },
-        "prompt_template_id": {
-            "unique": len(template_counts),
-            "entropy_bits": lib.shannon_entropy(template_counts),
-            "top": lib.top_counts(template_counts),
-        },
-        "task_family_template_pair": {
-            "unique": len(family_template_counts),
-            "entropy_bits": lib.shannon_entropy(family_template_counts),
-            "top": lib.top_counts(family_template_counts),
-        },
-        "model_id": {
-            "unique": len(model_counts),
-            "entropy_bits": lib.shannon_entropy(model_counts),
-            "top": lib.top_counts(model_counts),
-        },
-        "answer": {
-            "unique": len(answers),
-            "entropy_bits": lib.shannon_entropy(answers),
-            "top": lib.top_counts(answers),
-        },
+        "task_id": _div_stats(task_id_counts),
+        "task_family": _div_stats(task_family_counts),
+        "prompt_template_id": _div_stats(template_counts),
+        "task_family_template_pair": _div_stats(family_template_counts),
+        "model_id": _div_stats(model_counts),
+        "answer": _div_stats(answers),
     }
 
     word_counts: Dict[str, int] = {}
@@ -304,8 +325,10 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         prompt_word_counts[w] = prompt_word_counts.get(w, 0) + 1
     prompt_2gram_total = int(sum(prompt_2grams.values()))
     prompt_3gram_total = int(sum(prompt_3grams.values()))
+    prompt_char3_total = int(sum(prompt_char3.values()))
     out_2gram_total = int(sum(out_2grams.values()))
     out_3gram_total = int(sum(out_3grams.values()))
+    out_char3_total = int(sum(out_char3.values()))
     tokens = {
         "prompt_chars": _len_stats(prompt_len_chars),
         "prompt_words": _len_stats(prompt_len_words),
@@ -327,6 +350,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "prompt_distinct_3": _distinct_ratio(prompt_3grams),
         "prompt_3gram_entropy_bits": lib.shannon_entropy(prompt_3grams),
         "prompt_3gram_top": lib.top_counts(prompt_3grams),
+        "prompt_char_3gram_total": prompt_char3_total,
+        "prompt_char_3gram_unique": len(prompt_char3),
+        "prompt_char_distinct_3": _distinct_ratio(prompt_char3),
+        "prompt_char_3gram_entropy_bits": lib.shannon_entropy(prompt_char3),
+        "prompt_char_3gram_top": lib.top_counts(prompt_char3),
         "output_words_total": len(out_words),
         "output_words_unique": len(word_counts),
         "output_distinct_1": _distinct_ratio(word_counts),
@@ -343,6 +371,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "output_distinct_3": _distinct_ratio(out_3grams),
         "output_3gram_entropy_bits": lib.shannon_entropy(out_3grams),
         "output_3gram_top": lib.top_counts(out_3grams),
+        "output_char_3gram_total": out_char3_total,
+        "output_char_3gram_unique": len(out_char3),
+        "output_char_distinct_3": _distinct_ratio(out_char3),
+        "output_char_3gram_entropy_bits": lib.shannon_entropy(out_char3),
+        "output_char_3gram_top": lib.top_counts(out_char3),
     }
 
     duplicates = {
@@ -433,6 +466,8 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"### {field}\n")
         parts.append(f"- `unique`: {js.get('unique')}")
         parts.append(f"- `entropy_bits`: {js.get('entropy_bits'):.6f}")
+        parts.append(f"- `entropy_norm`: {js.get('entropy_norm'):.6f}")
+        parts.append(f"- `effective_num`: {js.get('effective_num'):.6f}")
         top = js.get("top") or []
         parts.append(_md_list_top(top))
         parts.append("")
@@ -461,6 +496,10 @@ def to_markdown(report: MetricsReport) -> str:
         "prompt_3gram_unique",
         "prompt_distinct_3",
         "prompt_3gram_entropy_bits",
+        "prompt_char_3gram_total",
+        "prompt_char_3gram_unique",
+        "prompt_char_distinct_3",
+        "prompt_char_3gram_entropy_bits",
         "output_words_total",
         "output_words_unique",
         "output_distinct_1",
@@ -474,6 +513,10 @@ def to_markdown(report: MetricsReport) -> str:
         "output_3gram_unique",
         "output_distinct_3",
         "output_3gram_entropy_bits",
+        "output_char_3gram_total",
+        "output_char_3gram_unique",
+        "output_char_distinct_3",
+        "output_char_3gram_entropy_bits",
     ):
         v = report.tokens.get(field)
         if isinstance(v, float):
@@ -486,12 +529,16 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_list_top(report.tokens.get("prompt_2gram_top", [])))
     parts.append("\n### prompt_3gram_top\n")
     parts.append(_md_list_top(report.tokens.get("prompt_3gram_top", [])))
+    parts.append("\n### prompt_char_3gram_top\n")
+    parts.append(_md_list_top(report.tokens.get("prompt_char_3gram_top", [])))
     parts.append("\n### output_word_top\n")
     parts.append(_md_list_top(report.tokens.get("output_word_top", [])))
     parts.append("\n### output_2gram_top\n")
     parts.append(_md_list_top(report.tokens.get("output_2gram_top", [])))
     parts.append("\n### output_3gram_top\n")
     parts.append(_md_list_top(report.tokens.get("output_3gram_top", [])))
+    parts.append("\n### output_char_3gram_top\n")
+    parts.append(_md_list_top(report.tokens.get("output_char_3gram_top", [])))
     parts.append("\n## Duplicates\n")
     for k, v in report.duplicates.items():
         if isinstance(v, float):

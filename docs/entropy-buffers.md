@@ -102,6 +102,7 @@ The scripts compute:
 - **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family`.
 - **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
+- **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
 - **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
@@ -128,6 +129,7 @@ python3 scripts/entropy_buffer_metrics.py \
 python3 scripts/entropy_buffer_recommend.py \
   --history-jsonl fixtures/entropy-buffer/records_mini.jsonl \
   --candidates-jsonl fixtures/entropy-buffer/candidates_mini.jsonl \
+  --avoid-seen-task-id \
   --max-per-family 10 \
   --max-per-template 10 \
   --out-json /tmp/entropy_recommendations.json
