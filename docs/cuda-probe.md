@@ -161,10 +161,11 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_sm121_nvcc_flags_probe` (`-std=c++20` + `--extended-lambda` + `--expt-relaxed-constexpr` gate)
 - `cuda_sm121_nvrtc_jit` / `cuda_sm121_nvrtc_cxx20_jit` (NVRTC → PTX → Driver API module load/launch gates)
 - `cuda_sm121_nvjitlink_jit` (NVRTC → PTX → nvJitLink → CUBIN → Driver API module load/launch gate)
+- Best-effort: build+run `cuda_sm121_fatbin_probe` with `-arch=sm_121a` / `-arch=sm_121f` and with `nvcc --gpu-architecture=sm_121a` / `sm_121f` (variant acceptance + runtime `__CUDA_ARCH__`/`__CUDA_ARCH_LIST__` sanity)
 
 The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
 
-Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed, but best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed; same for best-effort `--gpu-architecture=sm_121a` / `sm_121f`); feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
+Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed); best-effort build+run of `cuda_sm121_fatbin_probe` via `-arch=sm_121a` / `-arch=sm_121f` and `--gpu-architecture=sm_121a` / `sm_121f` succeeds and reports `__CUDA_ARCH_LIST__=1210` and kernel `__CUDA_ARCH__=1210`; feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
 
 ## Spark0: Compile + Run
 
