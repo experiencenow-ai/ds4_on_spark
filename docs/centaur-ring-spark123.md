@@ -1,6 +1,6 @@
-# Centaur HyoR ring rehearsal: Spark1/Spark2/Spark3 (filesystem sim)
+# Centaur HyoR ring rehearsal: Spark1/Spark2/Spark3 (prep + runbook)
 
-Goal: prepare repeatable Spark1/Spark2/Spark3 ring steps **without needing extra hardware yet**.
+Goal: prepare repeatable Spark1/Spark2/Spark3 ring steps **without needing extra hardware yet**, then provide a first “real ring” path once Spark1/2/3 exist.
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
@@ -58,3 +58,29 @@ Decide one of:
 
 Until one of those exists, treat the ring sim as “API/format readiness”, not as a networked deployment.
 
+## “Real ring” option A (recommended for now): rsync-staged ring-step from Spark0
+
+If Spark1/Spark2/Spark3 hardware exists but there is still **no shared filesystem**, use:
+
+- `scripts/centaur_spark_ring_rsync_v73.sh`
+
+This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/2/3) and:
+
+1. Pulls `hyor/node_spark{1,2,3}` roots from the remote Sparks into a local workdir
+2. Runs `hyor-sync-init` + `hyor-sync-publish` + `hyor-ring-step` (metadata + effective) locally across those roots
+3. Pushes the mutated node roots back to the remote Sparks
+
+From your Mac repo root (stream-run on Spark0, passing Spark1/2/3 SSH targets as args):
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>" < ./scripts/centaur_spark_ring_rsync_v73.sh
+```
+
+Notes:
+
+- Use a dedicated `remote_base_dir` (4th arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
+- This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2/3, but it is not a shared-root deployment model.
+
+## “Real ring” option B: shared filesystem for peer roots
+
+If you can provide a shared writable filesystem path visible on Spark0/1/2/3 (NFS, CephFS, etc), set each peer root to a real shared path and run `hyor-ring-step` directly without rsync staging.

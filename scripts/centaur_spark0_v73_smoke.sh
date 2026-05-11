@@ -10,6 +10,8 @@ Environment (recommended):
   CENTAUR_ZIP           Path to centaur_spec_impl_v73.zip (required)
   CENTAUR_WORKDIR       Workspace dir (default: ~/centaur-smoke/v73/run)
   CENTAUR_CATALOG_JSON  Optional path to a model-catalog JSON fixture
+  CENTAUR_PIP_ARGS      Optional extra args for pip install (e.g. "--no-index --find-links=/path/to/wheels")
+  CENTAUR_SKIP_PIP      Set to 1 to skip pip install (assumes venv already has deps)
 
 Example (on Spark0):
   export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip
@@ -40,6 +42,13 @@ need_cmd()
 
 need_cmd python3
 need_cmd unzip
+
+if python3 -c 'import venv' >/dev/null 2>&1; then
+	:
+else
+	echo "python3 venv module missing; on Debian/Ubuntu install python3-venv" >&2
+	exit 2
+fi
 
 zip="${CENTAUR_ZIP:-}"
 if [ "$zip" = "" ]; then
@@ -90,7 +99,16 @@ fi
 
 echo "== pip install (centaur requirements) =="
 "$venv_py" -m pip -V
-"$venv_py" -m pip install -r "$pkgdir/requirements.txt"
+if [ "${CENTAUR_SKIP_PIP:-0}" = "1" ]; then
+	echo "skipping pip install (CENTAUR_SKIP_PIP=1)"
+else
+	pip_args="${CENTAUR_PIP_ARGS:-}"
+	if [ "$pip_args" = "" ]; then
+		"$venv_py" -m pip install -r "$pkgdir/requirements.txt"
+	else
+		"$venv_py" -m pip install $pip_args -r "$pkgdir/requirements.txt"
+	fi
+fi
 
 echo "== centaur package facts =="
 ls -la "$pkgdir" | sed -n '1,20p'

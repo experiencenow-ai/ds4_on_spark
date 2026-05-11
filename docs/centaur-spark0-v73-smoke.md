@@ -34,6 +34,18 @@ ssh $SSH_OPTS spark0@<spark0-host> "cd ~/centaur-smoke/v73 && sh -s" < ./scripts
 
 Artifacts are written under `~/centaur-smoke/v73/run/` on Spark0.
 
+### Optional: faster/offline dependency install
+
+Centaur v73 `requirements.txt` includes `numpy/scipy/scikit-learn`. On Spark0, install can be slow without cached wheels.
+
+If you have a wheelhouse on Spark0, pass:
+
+- `CENTAUR_PIP_ARGS="--no-index --find-links=/path/to/wheels"`
+
+Or to skip install entirely (when re-running in the same venv):
+
+- `CENTAUR_SKIP_PIP=1`
+
 ## What the smoke actually runs
 
 See `scripts/centaur_spark0_v73_smoke.sh` for the fully reproducible command sequence.
@@ -91,3 +103,37 @@ For Centaur bugs, always include:
 - the affected Centaur root directory (e.g. `~/centaur-smoke/v73/run/hyor/controller`)
 - `pip freeze` excerpt for `numpy`, `scipy`, and `scikit-learn`
 
+## Smoke report template (copy/paste)
+
+```text
+Spark0 host: <redacted-hostname>
+Run date (UTC): <yyyy-mm-dd>
+Working dir: <pwd>
+Command:
+  ssh ... "cd ... && sh -s" < ./scripts/centaur_spark0_v73_smoke.sh
+
+Centaur zip:
+  path: <CENTAUR_ZIP>
+  mtime: <ls -la>
+  sha256: <zip_sha256>
+
+Python:
+  python3 -V: <...>
+  venv python: <sys.executable>
+
+Deps:
+  pip freeze (top offenders): <numpy/scipy/scikit-learn versions>
+
+Result:
+  selftest: PASS|FAIL
+  hyor sync/publish/ring-step/effective/apply: PASS|FAIL
+  agent config/announce/runtime/step: PASS|FAIL
+  provider/model catalog: PASS|FAIL
+  benchmark register/record/results: PASS|FAIL
+  dashboard: PASS|FAIL
+
+If FAIL:
+  Classification: Centaur bug | DS4 runtime bug
+  Failing command: <exact centaur.py ...>
+  Tail excerpt (sanitized): <...>
+```
