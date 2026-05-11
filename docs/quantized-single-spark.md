@@ -164,11 +164,19 @@ MTP sidecar example (metadata-only inspection; 2026-05-10):
   - Recorded output: `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json`
   - Summary: `mtp_present=true` and `tensor_key_namespace_guess=deepseek-upstream-mtp-only`, but `mtp_contract.complete=false` with `mtp_tensor_count=32` (compact DS4-tuned sidecar, not a full upstream `mtp.0.*` checkpoint).
 
-To validate a sidecar that is already present on Spark (no downloads; no trunk model load), run the Spark-side contract probe via the baseline runner:
+To validate a sidecar that is already present on Spark (no downloads; no trunk model load), prefer the dedicated Spark-side contract probe runner:
 
 ```sh
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
-scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@aitopatom-9ab9.local
+```
+
+Optional stronger check (still no trunk load): run the combined contract + llama.cpp loader probe (loads the sidecar tensor blob into RAM when `LOAD_WEIGHTS=1`, plus the pinned payload-fingerprint gate):
+
+```sh
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 LOAD_WEIGHTS=1' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@aitopatom-9ab9.local
 ```
 
 Acceptance checks before DS4 can trust MTP:
