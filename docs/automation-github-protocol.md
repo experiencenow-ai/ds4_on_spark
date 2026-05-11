@@ -15,6 +15,7 @@ Each automation owns one branch prefix:
 - `codex/loop-baseline-runtime-*`
 - `codex/loop-build-skeleton-*`
 - `codex/loop-entropy-buffer-*`
+- `codex/loop-judge-elo-*`
 - `codex/loop-scheduler-sim-*`
 - `codex/loop-ops-hardening-*`
 - `codex/loop-centaur-spark-*`

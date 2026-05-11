@@ -138,7 +138,7 @@ The official `deepseek-ai/DeepSeek-V4-Flash` `config.json` shipped on HF does no
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_compress_rates` records the canonical compression-rate mapping used by the Transformers nomenclature (`CSA→4`, `HCA→128`, `sliding→0`).
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `moe.transformers_mlp_layer_types` derives `mlp_layer_types[]` from `num_hash_layers` (`0..num_hash_layers-1 → hash_moe`, remainder → moe).
 
-Cache note (Transformers naming): non-sliding layers map to cache layer types (`DeepseekV4CSACache` for CSA and `DeepseekV4HCACache` for HCA), while sliding-only layers use sliding KV only.
+Cache note (Transformers naming): Transformers documents two cache layer classes for non-sliding blocks — `DeepseekV4CSACache` (CSA) and `DeepseekV4HCACache` (HCA) — selected per `config.layer_types[i]` via `DynamicCache(config=...)`. This is recorded (for external-runtime interpretation only) under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `compat.transformers_cache_layers` (source: [HF Transformers DeepSeek-V4 model doc](https://huggingface.co/docs/transformers/main/model_doc/deepseek_v4)).
 
 ## Logical parameter shapes (from `inference/model.py` + configs)
 

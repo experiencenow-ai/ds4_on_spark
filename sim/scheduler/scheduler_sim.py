@@ -321,6 +321,10 @@ class SimMetrics:
     task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_mtp_draft: List[float] = dataclasses.field(default_factory=list)
     task_queue_wait_ms_mtp_verify: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_interactive: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_batch: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_mtp_draft: List[float] = dataclasses.field(default_factory=list)
+    starved_task_queue_wait_ms_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     chosen_k_interactive: List[int] = dataclasses.field(default_factory=list)
     chosen_k_batch: List[int] = dataclasses.field(default_factory=list)
     chosen_k_total_interactive: List[int] = dataclasses.field(default_factory=list)
@@ -2735,12 +2739,16 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
                 metrics.starved_tasks_started_per_expert[expert_id] += 1
                 if task.mtp_phase == MtpPhase.DRAFT:
                     metrics.starved_tasks_mtp_draft += 1
+                    metrics.starved_task_queue_wait_ms_mtp_draft.append(wait_ms)
                 elif task.mtp_phase == MtpPhase.VERIFY:
                     metrics.starved_tasks_mtp_verify += 1
+                    metrics.starved_task_queue_wait_ms_mtp_verify.append(wait_ms)
                 if task.cls == LatencyClass.INTERACTIVE:
                     metrics.starved_tasks_interactive += 1
+                    metrics.starved_task_queue_wait_ms_interactive.append(wait_ms)
                 else:
                     metrics.starved_tasks_batch += 1
+                    metrics.starved_task_queue_wait_ms_batch.append(wait_ms)
             if task.cls == LatencyClass.INTERACTIVE:
                 metrics.task_queue_wait_ms_interactive.append(wait_ms)
             else:
@@ -3906,6 +3914,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     starved_task_frac_batch = (float(metrics.starved_tasks_batch) / float(len(metrics.task_queue_wait_ms_batch))) if len(metrics.task_queue_wait_ms_batch) != 0 else 0.0
     starved_task_frac_mtp_draft = (float(metrics.starved_tasks_mtp_draft) / float(metrics.tasks_started_mtp_draft)) if metrics.tasks_started_mtp_draft > 0 else 0.0
     starved_task_frac_mtp_verify = (float(metrics.starved_tasks_mtp_verify) / float(metrics.tasks_started_mtp_verify)) if metrics.tasks_started_mtp_verify > 0 else 0.0
+    starved_task_queue_wait_ms_p95 = _p_or_zero((metrics.starved_task_queue_wait_ms_interactive + metrics.starved_task_queue_wait_ms_batch), 0.95)
+    starved_task_queue_wait_ms_p95_interactive = _p_or_zero(metrics.starved_task_queue_wait_ms_interactive, 0.95)
+    starved_task_queue_wait_ms_p95_batch = _p_or_zero(metrics.starved_task_queue_wait_ms_batch, 0.95)
+    starved_task_queue_wait_ms_p95_mtp_draft = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_draft, 0.95)
+    starved_task_queue_wait_ms_p95_mtp_verify = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_verify, 0.95)
     partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
     mtp_mean_accept_len = (float(metrics.mtp_output_tokens) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
@@ -3995,6 +4008,11 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "starved_task_frac_batch": float(starved_task_frac_batch),
             "starved_task_frac_mtp_draft": float(starved_task_frac_mtp_draft),
             "starved_task_frac_mtp_verify": float(starved_task_frac_mtp_verify),
+            "starved_task_queue_wait_ms_p95": float(starved_task_queue_wait_ms_p95),
+            "starved_task_queue_wait_ms_p95_interactive": float(starved_task_queue_wait_ms_p95_interactive),
+            "starved_task_queue_wait_ms_p95_batch": float(starved_task_queue_wait_ms_p95_batch),
+            "starved_task_queue_wait_ms_p95_mtp_draft": float(starved_task_queue_wait_ms_p95_mtp_draft),
+            "starved_task_queue_wait_ms_p95_mtp_verify": float(starved_task_queue_wait_ms_p95_mtp_verify),
             "dropped_tasks_backpressure": float(metrics.dropped_tasks_backpressure),
             "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
             "expert_max_pending_tasks_p95": float(_p_or_zero(metrics.max_pending_per_expert, 0.95)),
