@@ -237,6 +237,12 @@ strict_validate()
     if [ "${DS4_METRICS_PORT:-}" != "" ]; then
         validate_port "DS4_METRICS_PORT" "$DS4_METRICS_PORT" || fail=1
     fi
+    if [ "${DS4_MASTER_PORT:-}" != "" ] && [ "${DS4_METRICS_PORT:-}" != "" ]; then
+        if [ "$DS4_MASTER_PORT" = "$DS4_METRICS_PORT" ]; then
+            echo "strict: DS4_MASTER_PORT and DS4_METRICS_PORT must differ: $DS4_MASTER_PORT" >&2
+            fail=1
+        fi
+    fi
 
     if [ "${DS4_WORLD_SIZE:-}" = "" ]; then
         echo "strict: DS4_WORLD_SIZE is required" >&2
