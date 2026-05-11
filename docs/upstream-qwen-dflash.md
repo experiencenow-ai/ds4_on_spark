@@ -61,6 +61,7 @@ target checkpoint named by its model card.
 | `google/gemma-4-26B-A4B-it` | `462a98a12e28e2cbcfccaf78fe41e3e50235e6ae` | 48.07 GiB | `z-lab/gemma-4-26B-A4B-it-DFlash` | `77d4202772dfe50b2396ec7bac9cfffc7b9e7057` | 0.80 GiB | Promising non-Qwen DFlash pair; multimodal IT target (not directly comparable to DS4/Ling/Qwen text-only runs). |
 | `google/gemma-4-31B-it` | `ba74f5b6c647c0911554e50278d6f6f4477f9010` | 58.25 GiB | `z-lab/gemma-4-31B-it-DFlash` | `eabd648301ce28583cc14757912e5e0f84e152e1` | 2.86 GiB | Larger non-Qwen DFlash pair; multimodal IT target (not directly comparable to DS4/Ling/Qwen text-only runs). |
 | `openai/gpt-oss-20b` | `6cee5e81ee83917806bbde320786a8fb61efebee` | 25.63 GiB | `z-lab/gpt-oss-20b-DFlash` | `d53f6551543204c859e8bbaaddbd15d11b447af9` | 1.46 GiB | Open target/draft pair; good generic DFlash smoke test when Qwen artifacts are not staged. |
+| `moonshotai/Kimi-K2.5` | `4d01dfe0332d63057c186e0b262165819efb6611` | 554.30 GiB | `z-lab/Kimi-K2.5-DFlash` | `e2db14df8337367b5eae8a6c206ea0d7d01a42a8` | 6.48 GiB | **Not single-Spark** (target is 554 GiB); keep as paired DFlash provenance reference only. |
 | `meta-llama/Llama-3.1-8B-Instruct` | gated target | not measured here | `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat` | `d3af30def9601abdd10810aba220d692f0e803f0` | 1.95 GiB | Exploratory; gated target and not directly comparable to DS4/Ling/Qwen. |
 
 No Ling-2.6-flash DFlash drafter was found in the checked Z Lab/Hugging Face
