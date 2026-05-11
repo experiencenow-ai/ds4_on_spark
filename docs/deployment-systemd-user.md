@@ -34,6 +34,9 @@ Enable/start:
 
 ```bash
 systemctl --user start ds4-preflight@spark0.service
+# optional TP=3/TP=4 preflight templates:
+# systemctl --user start ds4-preflight-tp3@spark0.service
+# systemctl --user start ds4-preflight-tp4@spark0.service
 systemctl --user enable --now ds4@spark0.service
 ```
 
@@ -53,4 +56,3 @@ sudo loginctl enable-linger <your-username>
 ```
 
 Do not enable lingering unless you understand the host’s policy and have explicit approval.
-

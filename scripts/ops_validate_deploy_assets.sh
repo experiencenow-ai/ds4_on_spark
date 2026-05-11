@@ -50,6 +50,8 @@ need_file "deploy/systemd/ds4@.service"
 need_file "deploy/systemd/ds4-strict@.service"
 need_file "deploy/systemd/ds4-preflight@.service"
 need_file "deploy/systemd/ds4-preflight-strict@.service"
+need_file "deploy/systemd/ds4-preflight-tp3@.service"
+need_file "deploy/systemd/ds4-preflight-tp3-strict@.service"
 need_file "deploy/systemd/ds4-preflight-tp4@.service"
 need_file "deploy/systemd/ds4-preflight-tp4-strict@.service"
 need_file "deploy/systemd/ds4-support-bundle@.service"
@@ -84,6 +86,7 @@ need_file "scripts/ops_stage_spark_ring.sh"
 need_file "scripts/ops_ds4_env_check.sh"
 need_file "scripts/ops_ds4_config_check.sh"
 need_file "scripts/ops_tp2_readiness.sh"
+need_file "scripts/ops_tp3_readiness.sh"
 need_file "scripts/ops_tp4_readiness.sh"
 need_file "scripts/ops_spark_standalone_check.sh"
 need_file "scripts/ops_spark01_mesh_check.sh"
@@ -102,6 +105,7 @@ sh -n scripts/ops_stage_spark_ring.sh
 sh -n scripts/ops_ds4_env_check.sh
 sh -n scripts/ops_ds4_config_check.sh
 sh -n scripts/ops_tp2_readiness.sh
+sh -n scripts/ops_tp3_readiness.sh
 sh -n scripts/ops_tp4_readiness.sh
 sh -n scripts/ops_spark_standalone_check.sh
 sh -n scripts/ops_spark01_mesh_check.sh

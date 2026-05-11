@@ -67,4 +67,5 @@ Notes:
 - Logging + metrics: `docs/ops-logging-metrics.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=3 network + ports: `docs/ops-spark012-network-ports.md`
-
+- TP=3 readiness checks: `docs/ops-tp3-readiness.md`
+- Three-node operating checklist: `docs/spark-ring-ops-checklist-tp3.md`

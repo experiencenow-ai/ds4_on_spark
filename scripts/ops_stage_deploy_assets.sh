@@ -59,6 +59,7 @@ rsync_run "$root/deploy/config/" "$target:/tmp/ds4-config/"
 rsync_run "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
 rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
 rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_tp3_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_tp4_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_config_check.sh" "$target:/tmp/ds4-scripts/"
@@ -91,6 +92,7 @@ sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-${instance}.env.example /etc/ds4
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-${instance}.conf.example /etc/ds4/ds4-${instance}.conf
 sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_tp3_readiness.sh /opt/ds4/scripts/ops_tp3_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp4_readiness.sh /opt/ds4/scripts/ops_tp4_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_config_check.sh /opt/ds4/scripts/ops_ds4_config_check.sh
@@ -99,6 +101,16 @@ sudo install -m 0755 /tmp/ds4-scripts/ops_collect_support_bundle.sh /opt/ds4/scr
 sudo /opt/ds4/scripts/ops_ds4_env_check.sh -/etc/ds4/ds4.env /etc/ds4/ds4-${instance}.env
 sudo systemctl daemon-reload
 sudo systemctl start ds4-preflight@${instance}.service
+
+== optional (TP=3 preflight checks, human-run) ==
+# Runs safe TP=3 readiness checks (Spark0/Spark1/Spark2); strict fails non-zero on missing/invalid inputs.
+sudo systemctl start ds4-preflight-tp3@${instance}.service
+sudo systemctl start ds4-preflight-tp3-strict@${instance}.service
+
+== optional (TP=4 preflight checks, human-run) ==
+# Runs safe TP=4 readiness checks (Spark0..Spark3); strict fails non-zero on missing/invalid inputs.
+sudo systemctl start ds4-preflight-tp4@${instance}.service
+sudo systemctl start ds4-preflight-tp4-strict@${instance}.service
 
 == optional (strict TP=2 readiness gating, human-run) ==
 # Fails non-zero if required TP=2 inputs are missing/invalid.
@@ -168,4 +180,12 @@ sudo sysctl --system
 # Use only if you are NOT relying on mDNS (`*.local`) and you have a stable wired subnet.
 # Review, then append to /etc/hosts on each Spark:
 cat /tmp/ds4-config/hosts.ds4.spark01.example
+EOF
+
+cat <<EOF
+
+== optional (pin Spark0/Spark1/Spark2 hostnames, human-run) ==
+# Use only if you are NOT relying on mDNS (`*.local`) and you have a stable wired subnet.
+# Review, then append to /etc/hosts on each Spark:
+cat /tmp/ds4-config/hosts.ds4.spark012.example
 EOF
