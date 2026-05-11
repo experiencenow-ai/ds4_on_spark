@@ -118,6 +118,9 @@ generated_tokens = 0
 passed_tasks = None
 total_tasks = None
 local_quality_score = None
+spec_method = None
+spec_model = None
+spec_num_spec_tokens = None
 
 raw_lines = []
 raw_lines.append("utc_start=" + utc_start)
@@ -145,6 +148,18 @@ try:
         speculative_config = json.loads(speculative_config_json)
         if not isinstance(speculative_config, dict):
             raise TypeError("VLLM_SPECULATIVE_CONFIG_JSON must decode to an object")
+        spec_method = speculative_config.get("method")
+        spec_model = speculative_config.get("model")
+        spec_num_spec_tokens = speculative_config.get("num_speculative_tokens")
+        if spec_method is not None:
+            spec_method = str(spec_method)
+        if spec_model is not None:
+            spec_model = str(spec_model)
+        if spec_num_spec_tokens is not None:
+            try:
+                spec_num_spec_tokens = int(spec_num_spec_tokens)
+            except Exception:
+                spec_num_spec_tokens = None
         llm_kwargs["speculative_config"] = speculative_config
     llm = LLM(model=model, tensor_parallel_size=tp, **llm_kwargs)
     loaded = time.monotonic()
@@ -323,6 +338,12 @@ summary.append("generate_wall_s=" + _fmt_float(generate_wall_s))
 summary.append("total_wall_s=" + _fmt_float(total_wall_s))
 summary.append("generated_tokens=%d" % int(generated_tokens))
 summary.append("output_tokens=%d" % int(generated_tokens))
+if spec_method:
+    summary.append("speculative_method=" + str(spec_method))
+if spec_model:
+    summary.append("speculative_draft_model=" + str(spec_model))
+if spec_num_spec_tokens is not None:
+    summary.append("speculative_num_speculative_tokens=%d" % int(spec_num_spec_tokens))
 if passed_tasks is not None and total_tasks is not None:
     summary.append("passed_tasks=%d" % int(passed_tasks))
     summary.append("total_tasks=%d" % int(total_tasks))
