@@ -11,8 +11,9 @@ Type=oneshot
 User=ds4
 Group=ds4
 WorkingDirectory=/opt/ds4
-SyslogIdentifier=ds4-preflight-%i
+SyslogIdentifier=ds4-preflight-strict-%i
 Environment=DS4_INSTANCE=%i
+Environment=DS4_CONFIG_PATH=/etc/ds4/ds4-%i.conf
 EnvironmentFile=-/etc/ds4/ds4.env
 EnvironmentFile=/etc/ds4/ds4-%i.env
 

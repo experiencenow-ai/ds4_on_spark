@@ -4,6 +4,7 @@ set -eu
 target="${1:-}"
 if [ "$target" = "" ]; then
     echo "usage: ops_stage_deploy_assets.sh <user@host> [instance]" >&2
+    echo "note: if instance omitted, inferred from host prefix (e.g. spark0.local -> spark0)" >&2
     echo "env: SSH_OPTS (optional ssh options override)" >&2
     exit 2
 fi
@@ -12,7 +13,8 @@ instance="${2:-}"
 if [ "$instance" = "" ]; then
     case "$target" in
         *@*)
-            instance="${target%%@*}"
+            host="${target#*@}"
+            instance="${host%%.*}"
             ;;
         *)
             instance="${target%%.*}"
