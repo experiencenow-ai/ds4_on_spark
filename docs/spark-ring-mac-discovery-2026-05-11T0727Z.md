@@ -1,6 +1,6 @@
 == meta ==
-Mon May 11 07:33:17 UTC 2026
-git: ff21814
+Mon May 11 07:34:59 UTC 2026
+git: dd2b2fe
 targets: aitopatom-9ab9.local spark1.local spark2.local
 
 == interfaces ==
@@ -25,13 +25,13 @@ default            <redacted-ipv4>      UGScg                 en1
 169.254            link#26            UCS                   en1      !
 169.254            link#10            UCSI                  en0      !
 <redacted-ipv4cidr>       link#26            UCS                   en1      !
-<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1029
-<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1178
-<redacted-ipv4>      <redacted-mac>  UHLWIi                en1   1197
+<redacted-ipv4>      <redacted-mac>  UHLWI                 en1    927
+<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1113
+<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1095
 <redacted-ipv4>      <redacted-mac>   UHLWI                 en1      !
 <redacted-ipv4>/32   link#26            UCS                   en1      !
 <redacted-ipv4>/32   link#26            UCS                   en1      !
-<redacted-ipv4>      <redacted-mac>  UHLWIir               en1   1192
+<redacted-ipv4>      <redacted-mac>  UHLWIir               en1   1191
 <redacted-ipv4>      <redacted-mac>  UHLWbI                en1      !
 <redacted-ipv4cidr>       link#10            UCS                   en0      !
 <redacted-ipv4>/32   link#10            UCS                   en0      !
@@ -97,21 +97,21 @@ default                                 <redacted-ipv6>%utun3                   
 == ssh service browse, 5 seconds ==
 Browsing for _ssh._tcp.local
 DATE: ---Mon 11 May 2026---
- 7:33:17.677  ...STARTING...
+ 7:34:59.635  ...STARTING...
 Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
- 7:33:17.678  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
- 7:33:17.678  Add        3   1 local.               _ssh._tcp.           Mac Studio
- 7:33:17.678  Add        3  26 local.               _ssh._tcp.           Mac Studio
- 7:33:17.678  Add        3  10 local.               _ssh._tcp.           Mac Studio
- 7:33:17.678  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+ 7:34:59.635  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+ 7:34:59.636  Add        3   1 local.               _ssh._tcp.           Mac Studio
+ 7:34:59.636  Add        3  26 local.               _ssh._tcp.           Mac Studio
+ 7:34:59.636  Add        3  10 local.               _ssh._tcp.           Mac Studio
+ 7:34:59.636  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
 
 == mdns resolution, 3 seconds each ==
 -- aitopatom-9ab9.local --
 DATE: ---Mon 11 May 2026---
- 7:33:22.685  ...STARTING...
+ 7:35:04.646  ...STARTING...
 Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
- 7:33:22.685  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
- 7:33:22.685  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+ 7:35:04.647  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+ 7:35:04.647  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
 -- spark1.local --
 -- spark2.local --
 

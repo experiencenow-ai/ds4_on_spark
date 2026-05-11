@@ -1,6 +1,6 @@
 == local meta ==
-Mon May 11 07:30:29 UTC 2026
-git: ff21814
+Mon May 11 07:35:25 UTC 2026
+git: dd2b2fe
 probe args: aitopatom-9ab9.local spark1.local spark2.local
 resolved targets: spark0@aitopatom-9ab9.local spark0@spark1.local spark0@spark2.local
 topology: ring
@@ -11,7 +11,7 @@ known_hosts: spark0@spark2.local -> /private/tmp/ds4_spark_known_hosts.spark2.lo
 
 == target: spark0@aitopatom-9ab9.local ==
 == probe meta ==
-Mon May 11 07:30:29 UTC 2026
+Mon May 11 07:35:26 UTC 2026
 target user: spark0
 
 == identity ==
@@ -19,10 +19,10 @@ aitopatom-9ab9
 Linux aitopatom-9ab9 6.17.0-1014-nvidia #14-Ubuntu SMP PREEMPT_DYNAMIC Tue Mar 17 19:01:40 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
 
 == clock ==
-utc: 2026-05-11T07:30:29Z
-epoch: 1778484629
+utc: 2026-05-11T07:35:26Z
+epoch: 1778484926
 NTPSynchronized=yes
-TimeUSec=Mon 2026-05-11 16:30:29 KST
+TimeUSec=Mon 2026-05-11 16:35:26 KST
 
 == network (links + addrs, compact) ==
 lo               UNKNOWN        <redacted-mac> <LOOPBACK,UP,LOWER_UP> 

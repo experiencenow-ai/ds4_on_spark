@@ -1,6 +1,6 @@
 == meta ==
-Mon May 11 07:33:09 UTC 2026
-git: ff21814
+Mon May 11 07:34:51 UTC 2026
+git: dd2b2fe
 targets: aitopatom-9ab9.local
 
 == interfaces ==
@@ -25,12 +25,13 @@ default            <redacted-ipv4>      UGScg                 en1
 169.254            link#26            UCS                   en1      !
 169.254            link#10            UCSI                  en0      !
 <redacted-ipv4cidr>       link#26            UCS                   en1      !
-<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1037
-<redacted-ipv4>      <redacted-mac>  UHLWIi                en1   1186
+<redacted-ipv4>      <redacted-mac>  UHLWI                 en1    935
+<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1121
+<redacted-ipv4>      <redacted-mac>  UHLWI                 en1   1103
 <redacted-ipv4>      <redacted-mac>   UHLWI                 en1      !
 <redacted-ipv4>/32   link#26            UCS                   en1      !
 <redacted-ipv4>/32   link#26            UCS                   en1      !
-<redacted-ipv4>      <redacted-mac>  UHLWIir               en1   1193
+<redacted-ipv4>      <redacted-mac>  UHLWIir               en1   1199
 <redacted-ipv4>      <redacted-mac>  UHLWbI                en1      !
 <redacted-ipv4cidr>       link#10            UCS                   en0      !
 <redacted-ipv4>/32   link#10            UCS                   en0      !
@@ -59,7 +60,7 @@ default                                 <redacted-ipv6>%utun3                   
 <redacted-ipv6>%en1             <redacted-mac>                        UHLWI                 en1       
 <redacted-ipv6>%en1             <redacted-mac>                       UHLWI                 en1       
 <redacted-ipv6>%en1             <redacted-mac>                       UHLI                  lo0       
-<redacted-ipv6>%en1           <redacted-mac>                       UHLWI                 en1       
+<redacted-ipv6>%en1           <redacted-mac>                       UHLWIi                en1       
 <redacted-ipv6>%awdl0/64                         link#27                                 UCI                 awdl0       
 <redacted-ipv6>%awdl0         <redacted-mac>                       UHLI                  lo0       
 <redacted-ipv6>%llw0/64                          link#28                                 UCI                  llw0       
@@ -88,6 +89,7 @@ default                                 <redacted-ipv6>%utun3                   
 ? (<redacted-ipv4>) on en1 ifscope [ethernet]
 ? (<redacted-ipv4>) on en1 ifscope [ethernet]
 ? (<redacted-ipv4>) on en1 ifscope [ethernet]
+? (<redacted-ipv4>) on en1 ifscope [ethernet]
 ? (<redacted-ipv4>) on en0 ifscope permanent [ethernet]
 ? (<redacted-ipv4>) on en0 ifscope permanent [ethernet]
 ? (<redacted-ipv4>) on en1 ifscope permanent [ethernet]
@@ -95,21 +97,21 @@ default                                 <redacted-ipv6>%utun3                   
 == ssh service browse, 5 seconds ==
 Browsing for _ssh._tcp.local
 DATE: ---Mon 11 May 2026---
- 7:33:09.515  ...STARTING...
+ 7:34:51.519  ...STARTING...
 Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
- 7:33:09.515  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
- 7:33:09.515  Add        3   1 local.               _ssh._tcp.           Mac Studio
- 7:33:09.515  Add        3  26 local.               _ssh._tcp.           Mac Studio
- 7:33:09.515  Add        3  10 local.               _ssh._tcp.           Mac Studio
- 7:33:09.516  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+ 7:34:51.519  Add        3  10 local.               _ssh._tcp.           aitopatom-9ab9 SSH
+ 7:34:51.519  Add        3   1 local.               _ssh._tcp.           Mac Studio
+ 7:34:51.520  Add        3  26 local.               _ssh._tcp.           Mac Studio
+ 7:34:51.520  Add        3  10 local.               _ssh._tcp.           Mac Studio
+ 7:34:51.520  Add        2  26 local.               _ssh._tcp.           aitopatom-9ab9 SSH
 
 == mdns resolution, 3 seconds each ==
 -- aitopatom-9ab9.local --
 DATE: ---Mon 11 May 2026---
- 7:33:14.521  ...STARTING...
+ 7:34:56.526  ...STARTING...
 Timestamp     A/R  Flags         IF  Hostname                               Address                                      TTL
- 7:33:14.522  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
- 7:33:14.522  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
+ 7:34:56.527  Add  40000003      26  aitopatom-9ab9.local.                  <redacted-ipv6>%en1  120
+ 7:34:56.527  Add  40000002      26  aitopatom-9ab9.local.                  <redacted-ipv4>                                120
 
 == route selection (macOS) ==
 -- aitopatom-9ab9.local --
