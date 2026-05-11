@@ -86,6 +86,22 @@ Hard requirements:
 - emits JSON only (no banners / logs on stdout)
 - uses deterministic decode knobs (`temperature=0.0`, `top_k=1`, `top_p=1.0`)
 
+## Patch scaffold in this repo (skeleton; draft compute still TODO)
+
+This repo ships a **skeleton** patch against the pinned Spark fork (`9222e55`) that adds a `llama-ds4-mtp-one-token-draft-probe` binary which:
+
+- loads the trunk GGUF and runs the single verify step (`verify_step_idx=0`) to compute `base_next_token_id`
+- opens the MTP sidecar GGUF in **metadata-only** mode and validates the exact 32 `mtp.0.*` tensors via a generated binder header
+- emits the required JSON contract, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
+
+Patch file:
+
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch`
+
+Convenience runner (clone/patch/build/run are all gated behind `ALLOW_*` env vars):
+
+- `scripts/llamacpp_mtp_one_token_draft_probe_patch.sh`
+
 ## Sidecar binding (avoid guessy dims/types)
 
 Do not hand-write the 32 tensor names, dims, or ggml types. Generate a binder skeleton from the repo-side sidecar probe JSON:
@@ -140,4 +156,3 @@ Even after this probe passes, MTP is not “trusted” until a correctness oracl
 - multi-prompt comparisons must be deterministic under `temperature=0.0`
 
 Track these under the MTP trust gates in `docs/model-contract.md` before enabling MTP in any performance path.
-
