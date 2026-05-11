@@ -12,7 +12,7 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 
 This builds and runs only:
 
-- `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
+- `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support)
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
@@ -30,7 +30,7 @@ Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` in
 
 Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
 
-- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536`
+- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1`
 - `__CUDA_ARCH__=1210`
 
 If a queried device attribute is unavailable (older runtime/toolkit), the scripts print `-1` for that field rather than silently reporting `0`.
@@ -106,6 +106,7 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 - If `compute_121` is advertised, also does a best-effort compile+run via `-gencode arch=compute_121,code=[sm_121,compute_121]` and includes it in the embedded-PTX report (multi-target build-system syntax probe)
 - Always attempts best-effort compile+run for `-arch=sm_121a` and `-arch=sm_121f` (variant targets), and reports whether each target was advertised by `nvcc --list-gpu-code` (`advertised=yes/no/unknown`) (informational; missing `sm_121` remains the hard failure)
 - Prints a `cuda_device_props_tiny`-schema one-line driver/runtime + key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
+  - Includes driver-reserved shared memory per block (`cudaDevAttrReservedSharedMemoryPerBlock`) plus `cudaMallocAsync`/memory-pool support (`cudaDevAttrMemoryPoolsSupported`) when available.
 - Prints the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `gpuarch_sm_121` present, `native` missing; `compute_121` present when built)
 

@@ -420,6 +420,7 @@ int main(int argc,char **argv)
 	int32_t smem_optin = -1,l2_bytes = -1,max_threads_sm = -1,regs_sm = -1;
 	int32_t max_threads_block = -1,max_blocks_sm = -1,smem_sm = -1,regs_block = -1,smem_block_max = -1;
 	int32_t coop_launch = -1,cluster_launch = -1;
+	int32_t smem_reserved_block = -1,mem_pools = -1;
 	cudaDeviceProp prop;
 	uint32_t out = 0;
 	uint32_t *dout = 0;
@@ -453,9 +454,11 @@ int main(int argc,char **argv)
 	(void)get_attr_i32(&smem_block_max,0,cudaDevAttrMaxSharedMemoryPerBlock);
 	(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
 	(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
+	(void)get_attr_i32(&smem_reserved_block,0,cudaDevAttrReservedSharedMemoryPerBlock);
+	(void)get_attr_i32(&mem_pools,0,cudaDevAttrMemoryPoolsSupported);
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
-	printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d coop_launch=%d cluster_launch=%d\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,coop_launch,cluster_launch);
+	printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch);
 
 	rc = ck(cudaMalloc((void **)&dout,sizeof(out)),-4,\"cudaMalloc\");
 	if ( rc != 0 )
