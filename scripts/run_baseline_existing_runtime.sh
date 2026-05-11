@@ -56,7 +56,7 @@ append_model_runs_csv()
     if [ "$MODEL_RUNS_CSV" = "" ] || [ "$summary_path" = "" ] || [ ! -r "$summary_path" ]; then
         return 0
     fi
-    python3 - "$MODEL_RUNS_CSV" "$model" "$ts-$scope" "$scope" "$PUBLIC_QUALITY_PRIOR" "$PUBLIC_QUALITY_BASIS" "$PUBLIC_QUALITY_SOURCE" "$PASSED_TASKS" "$TOTAL_TASKS" "$LOCAL_QUALITY_SCORE" "$QUALITY_SCORE" <<'PY' <"$summary_path" 2>/dev/null || true
+    python3 - "$MODEL_RUNS_CSV" "$model" "$ts-$scope" "$scope" "$PUBLIC_QUALITY_PRIOR" "$PUBLIC_QUALITY_BASIS" "$PUBLIC_QUALITY_SOURCE" "$PASSED_TASKS" "$TOTAL_TASKS" "$LOCAL_QUALITY_SCORE" "$QUALITY_SCORE" "$summary_path" 2>/dev/null <<'PY' || true
 import csv
 import os
 import sys
@@ -72,9 +72,14 @@ passed_tasks = sys.argv[8].strip()
 total_tasks = sys.argv[9].strip()
 local_quality_score = sys.argv[10].strip()
 quality_score = sys.argv[11].strip()
+summary_path = sys.argv[12]
 
 kv = {}
-for raw_line in sys.stdin.read().splitlines():
+try:
+    summary_text = open(summary_path, "r", encoding="utf-8").read()
+except OSError:
+    summary_text = ""
+for raw_line in summary_text.splitlines():
     line = raw_line.strip()
     if not line or "=" not in line:
         continue
