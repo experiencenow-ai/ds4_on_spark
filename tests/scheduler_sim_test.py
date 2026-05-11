@@ -540,6 +540,40 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(s["skipped_stage_frac"]), 0.5, places=6)
         self.assertAlmostEqual(float(s["skipped_stage_frac_verify"]), 0.5, places=6)
 
+    def test_backpressure_zero_admit_policy_stall_retries_instead_of_drop(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1),
+        ]
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+
+        m_skip = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, backpressure_zero_admit_policy="skip"), trace)
+        self.assertEqual(m_skip.dropped_tokens_backpressure, 1)
+
+        m_stall = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, backpressure_zero_admit_policy="stall"), trace)
+        self.assertEqual(m_stall.dropped_tokens_backpressure, 0)
+        self.assertEqual(len(m_stall.token_lat_ms_batch), 2)
+        self.assertAlmostEqual(max(m_stall.token_lat_ms_batch), 2.0, places=6)
+        s = scheduler_sim.compare_summary_jsonable(m_stall)
+        self.assertEqual(int(s["blocked_stages_backpressure_attempts"]), 1)
+
     def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:

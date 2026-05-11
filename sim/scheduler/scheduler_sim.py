@@ -161,6 +161,7 @@ class SimConfig:
     k_signal: str = "global"
     pending_units: str = "tasks"
     backpressure_units: str = "tasks"
+    backpressure_zero_admit_policy: str = "skip"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -229,6 +230,7 @@ class TokenState:
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
+    stage_accounted_idx: int = -1
     admitted_any: bool = False
     metrics_slot: int = -1
     admitted_verify_layer0: int = 0
@@ -358,6 +360,9 @@ class SimMetrics:
     skipped_stages_backpressure_batch: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    blocked_stages_backpressure_attempts: int = 0
+    blocked_stages_backpressure_attempts_interactive: int = 0
+    blocked_stages_backpressure_attempts_batch: int = 0
     skipped_stages_backpressure_per_layer: List[int] = dataclasses.field(default_factory=list)
     skipped_stages_backpressure_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
     skipped_stages_backpressure_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
@@ -709,6 +714,9 @@ class SimMetrics:
                     "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
                     "skipped_backpressure_verify": self.skipped_stages_backpressure_verify,
                     "skipped_backpressure_draft": self.skipped_stages_backpressure_draft,
+                    "blocked_backpressure_attempts": self.blocked_stages_backpressure_attempts,
+                    "blocked_backpressure_attempts_interactive": self.blocked_stages_backpressure_attempts_interactive,
+                    "blocked_backpressure_attempts_batch": self.blocked_stages_backpressure_attempts_batch,
                     "per_layer": [
                         {
                             "layer": int(li),
@@ -3113,6 +3121,10 @@ def run_simulation(
     if backpressure_units not in ("tasks", "work"):
         raise ValueError("backpressure_units must be 'tasks' or 'work'")
 
+    backpressure_zero_admit_policy = cfg.backpressure_zero_admit_policy.strip().lower()
+    if backpressure_zero_admit_policy not in ("skip", "stall"):
+        raise ValueError("backpressure_zero_admit_policy must be 'skip' or 'stall'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -3243,6 +3255,8 @@ def run_simulation(
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
+    stalled_tokens: Deque[int] = deque()
+    stalled_set: set[int] = set()
     max_layers_seen = 1
     for route in trace:
         max_layers_seen = max(max_layers_seen, len(_route_layers(route)))
@@ -3626,6 +3640,28 @@ def run_simulation(
             _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
         return(admitted)
 
+    def _stall_token(tid: int) -> None:
+        if tid in stalled_set:
+            return
+        stalled_set.add(tid)
+        stalled_tokens.append(tid)
+
+    def _retry_stalled(now_ms: float) -> None:
+        if len(stalled_tokens) == 0:
+            return
+        n = len(stalled_tokens)
+        for _ in range(n):
+            tid = stalled_tokens.popleft()
+            stalled_set.discard(tid)
+            ts = tokens.get(tid)
+            if ts is None:
+                continue
+            if ts.done_ms is not None:
+                continue
+            if ts.remaining != 0:
+                continue
+            _advance_token(now_ms, tid)
+
     def _finish_token(now_ms: float, tid: int) -> None:
         ts = tokens[tid]
         if ts.done_ms is not None:
@@ -3683,7 +3719,8 @@ def run_simulation(
         while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
             stage = ts.stages[ts.stage_idx]
             desired_stage = min(stage.k, len(stage.candidates))
-            if desired_stage > 0:
+            first_attempt = (ts.stage_accounted_idx != ts.stage_idx)
+            if desired_stage > 0 and first_attempt:
                 metrics.stages_total += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.stages_total_interactive += 1
@@ -3699,8 +3736,19 @@ def run_simulation(
                         metrics.stages_total_per_layer_verify[stage.layer_index] += 1
                     else:
                         metrics.stages_total_per_layer_draft[stage.layer_index] += 1
+                ts.stage_accounted_idx = ts.stage_idx
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
+                if backpressure_zero_admit_policy == "stall":
+                    pending_limit = _expert_queue_pending_limit_units(cfg, ts.cls, backpressure_units)
+                    if float(pending_limit) > 0.0:
+                        metrics.blocked_stages_backpressure_attempts += 1
+                        if ts.cls == LatencyClass.INTERACTIVE:
+                            metrics.blocked_stages_backpressure_attempts_interactive += 1
+                        else:
+                            metrics.blocked_stages_backpressure_attempts_batch += 1
+                        _stall_token(tid)
+                        return
                 metrics.skipped_stages_backpressure += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.skipped_stages_backpressure_interactive += 1
@@ -4049,6 +4097,8 @@ def run_simulation(
         else:
             raise RuntimeError("unknown event kind")
 
+        if ev.kind == EventKind.TASK_DONE:
+            _retry_stalled(now_ms)
         snapshot_state()
 
     makespan_ms = max((t.done_ms or 0.0) for t in tokens.values()) if len(tokens) != 0 else 0.0
@@ -4369,6 +4419,9 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "skipped_stage_frac_batch": float(skipped_stage_frac_batch),
             "skipped_stage_frac_verify": float(skipped_stage_frac_verify),
             "skipped_stage_frac_draft": float(skipped_stage_frac_draft),
+            "blocked_stages_backpressure_attempts": float(metrics.blocked_stages_backpressure_attempts),
+            "blocked_stages_backpressure_attempts_interactive": float(metrics.blocked_stages_backpressure_attempts_interactive),
+            "blocked_stages_backpressure_attempts_batch": float(metrics.blocked_stages_backpressure_attempts_batch),
         }
 
     for li in range(len(metrics.stages_total_per_layer)):
@@ -4845,6 +4898,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="tasks",
         help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
     )
+    p.add_argument(
+        "--backpressure-zero-admit-policy",
+        type=str,
+        default="skip",
+        choices=("skip", "stall"),
+        help="When a stage cannot admit any tasks because all candidates are at the pending limit: skip (default; counts as a backpressure stage-skip and can drop tokens if all stages skip) or stall (retry the same stage later, modeling upstream queueing; can increase latency/makespan).",
+    )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument(
         "--admit-policy",
@@ -5167,6 +5227,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_signal=args.k_signal,
         pending_units=args.pending_units,
         backpressure_units=args.backpressure_units,
+        backpressure_zero_admit_policy=args.backpressure_zero_admit_policy,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,
