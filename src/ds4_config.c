@@ -199,6 +199,25 @@ int32_t ds4_config_defaults(ds4_config_t *cfg)
 	return(0);
 }
 
+int32_t ds4_config_validate(const ds4_config_t *cfg)
+{
+	if ( cfg == 0 )
+		return(-1);
+	if ( cfg->log_level < DS4_LOG_LEVEL_MIN )
+		return(-2);
+	if ( cfg->log_level > DS4_LOG_LEVEL_MAX )
+		return(-3);
+	if ( cfg->enable_cuda != 0 && cfg->enable_cuda != 1 )
+		return(-4);
+	if ( cfg->cuda_device < DS4_CUDA_DEVICE_AUTO )
+		return(-5);
+	if ( cfg->arena_size < 0 )
+		return(-6);
+	if ( cfg->log_ring_entries < 0 )
+		return(-7);
+	return(0);
+}
+
 static int32_t ds4_trim_env_value(const char *v,const char **out_v,int32_t *out_len)
 {
 	int32_t vlen,i,j;
