@@ -213,6 +213,21 @@ def load_jsonl(paths: Sequence[str]) -> List[Dict[str, Any]]:
 def get_str(obj: Dict[str, Any], *names: str) -> str:
     return(_get_str(obj, *names))
 
+def get_list(obj: Dict[str, Any], *names: str) -> List[str]:
+    for name in names:
+        if name in obj and obj[name] is not None:
+            v = obj[name]
+            if isinstance(v, list):
+                out: List[str] = []
+                for x in v:
+                    s = str(x).strip()
+                    if s != "":
+                        out.append(s)
+                return(out)
+            if isinstance(v, str) and v.strip() != "":
+                return([x.strip() for x in v.split(",") if x.strip() != ""])
+    return([])
+
 
 def _to_float(v: Any) -> Optional[float]:
     if v is None:

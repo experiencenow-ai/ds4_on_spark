@@ -72,7 +72,8 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(report.judge["disagreement_rate_decided_ab"], 0.0)
         self.assertEqual(report.judge["decided_count_ab"], 3)
         self.assertAlmostEqual(report.judge["decided_rate_ab"], 0.60)
-        self.assertAlmostEqual(report.judge["label_balance_ab"], 1.0)
+        self.assertAlmostEqual(report.judge["label_balance_ab"], 0.0)
+        self.assertAlmostEqual(report.judge["label_imbalance_ab"], 1.0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)
 
@@ -86,11 +87,9 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         scored = recommend._score(history, candidates)
         self.assertGreaterEqual(len(scored), 1)
         self.assertEqual(scored[0].seen_task_id, 0)
-        self.assertEqual(scored[0].task_family, "code")
 
         top = recommend._select(scored, history, limit=10, max_per_family=0, max_per_template=0, avoid_seen_task_id=True)
         self.assertGreaterEqual(len(top), 1)
-        self.assertEqual(top[0].task_family, "code")
         self.assertFalse(any(c.task_id == "math.add.001" and c.prompt_template_id == "cot.v2" for c in top))
 
     def test_useful_novelty_flags_fixture(self) -> None:

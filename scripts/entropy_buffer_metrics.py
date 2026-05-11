@@ -243,6 +243,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     family_template_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answers: Dict[str, int] = {}
+    tag_counts: Dict[str, int] = {}
     buffer_ids: Dict[str, int] = {}
     buffer_items: Dict[str, int] = {}
 
@@ -288,6 +289,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         _inc(answers, c.answer)
         if c.answer != "":
             answers_nonempty.append(c.answer)
+        for tag in lib.get_list(c.raw, "tags", "tag"):
+            _inc(tag_counts, tag)
         _inc(buffer_ids, c.buffer_id)
         _inc(buffer_items, c.buffer_item_id)
 
@@ -344,6 +347,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     label_counts: Dict[str, int] = {}
     item_labels: Dict[str, List[str]] = {}
     item_labels_decided_ab: Dict[str, List[str]] = {}
+    item_judge_ids: Dict[str, Dict[str, int]] = {}
     judge_id_counts: Dict[str, int] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
     for c in judge_pairs:
@@ -357,6 +361,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         if item == "":
             item = lib.make_item_id(c.task_id, c.prompt_template_id, c.a_model_id, c.b_model_id)
         item_labels.setdefault(item, []).append(c.label)
+        if item != "" and c.judge_id != "":
+            item_judge_ids.setdefault(item, {})
+            item_judge_ids[item][c.judge_id] = item_judge_ids[item].get(c.judge_id, 0) + 1
         if c.label in ("a", "b"):
             item_labels_decided_ab.setdefault(item, []).append(c.label)
 
@@ -371,6 +378,29 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         if len(labs) >= 2:
             item_disagreements_decided_ab.append(_majority_disagreement(labs))
     disagreement_rate_decided_ab = 0.0 if len(item_disagreements_decided_ab) == 0 else (sum(item_disagreements_decided_ab) / float(len(item_disagreements_decided_ab)))
+
+    item_disagreement_top: List[Dict[str, Any]] = []
+    for item_id, labs in item_labels.items():
+        if len(labs) < 2:
+            continue
+        counts: Dict[str, int] = {}
+        for lab in labs:
+            _inc(counts, lab)
+        labs_ab = item_labels_decided_ab.get(item_id, [])
+        dis_all = _majority_disagreement(labs)
+        dis_ab = 0.0 if len(labs_ab) < 2 else _majority_disagreement(labs_ab)
+        decided_ab = sum(counts.get(k, 0) for k in ("a", "b"))
+        item_disagreement_top.append({
+            "item_id": item_id,
+            "count": len(labs),
+            "label_counts": dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+            "judge_id_unique": len(item_judge_ids.get(item_id, {})),
+            "disagreement_rate": dis_all,
+            "decided_count_ab": decided_ab,
+            "disagreement_rate_decided_ab": dis_ab,
+        })
+    item_disagreement_top.sort(key=lambda x: (-float(x.get("disagreement_rate", 0.0)), -int(x.get("count", 0)), str(x.get("item_id", ""))))
+    item_disagreement_top = item_disagreement_top[:20]
 
     reuse_count = sum(1 for v in buffer_items.values() if v >= 2)
     reuse_events = sum(max(0, v - 1) for v in buffer_items.values())
@@ -388,6 +418,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "task_family_template_pair": _div_stats(family_template_counts),
         "model_id": _div_stats(model_counts),
         "answer": _div_stats(answers),
+        "tags": _div_stats(tag_counts),
     }
 
     word_counts: Dict[str, int] = {}
@@ -487,22 +518,47 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     decided = wins_a + wins_b
     ties = label_counts.get("tie", 0)
     invalid = label_counts.get("invalid", 0)
+    imbalance_ab = 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided))
+    balance_ab = 1.0 - imbalance_ab
+
+    model_pair_top: List[Dict[str, Any]] = []
+    for pair_key, js in pair_summary.items():
+        counts = js.get("label_counts") or {}
+        wins_a_p = int(counts.get("a", 0))
+        wins_b_p = int(counts.get("b", 0))
+        decided_p = wins_a_p + wins_b_p
+        imb_p = 0.0 if decided_p == 0 else (abs(float(wins_a_p - wins_b_p)) / float(decided_p))
+        bal_p = 1.0 - imb_p
+        model_pair_top.append({
+            "pair_key": pair_key,
+            "count": js.get("count", 0),
+            "label_entropy_bits": js.get("label_entropy_bits", 0.0),
+            "label_counts": counts,
+            "decided_count_ab": decided_p,
+            "label_balance_ab": bal_p,
+            "label_imbalance_ab": imb_p,
+        })
+    model_pair_top.sort(key=lambda x: (-int(x.get("count", 0)), str(x.get("pair_key", ""))))
+    model_pair_top = model_pair_top[:20]
+
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
         "pair_item_count": len(item_labels),
+        "item_disagreement_top": item_disagreement_top,
         "disagreement_rate": disagreement_rate,
         "disagreement_rate_decided_ab": disagreement_rate_decided_ab,
         "decided_count_ab": decided,
         "decided_rate_ab": _safe_div(float(decided), float(len(judge_pairs))),
         "tie_rate": _safe_div(float(ties), float(len(judge_pairs))),
         "invalid_rate": _safe_div(float(invalid), float(len(judge_pairs))),
-        "label_balance_ab": 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided)),
-        "label_imbalance_ab": 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided)),
+        "label_balance_ab": balance_ab,
+        "label_imbalance_ab": imbalance_ab,
         "judge_id_unique": len([k for k in judge_id_counts.keys() if k != ""]),
         "judge_id_top": lib.top_counts(judge_id_counts),
         "model_pair_count": len(pair_summary),
         "model_pair_summary": pair_summary,
+        "model_pair_top": model_pair_top,
     }
 
     reuse = {
@@ -538,6 +594,31 @@ def _md_list_top(items: Sequence[Tuple[str, int]], k: int = 10) -> str:
     lines: List[str] = []
     for key, c in items[:k]:
         lines.append(f"- `{key}`: {c}")
+    return("\n".join(lines))
+
+def _md_model_pair_top(items: Sequence[Dict[str, Any]], k: int = 10) -> str:
+    lines: List[str] = []
+    for js in list(items)[:k]:
+        pair = str(js.get("pair_key", ""))
+        count = int(js.get("count", 0))
+        decided_ab = int(js.get("decided_count_ab", 0))
+        bal = float(js.get("label_balance_ab", 0.0))
+        imb = float(js.get("label_imbalance_ab", 0.0))
+        counts = js.get("label_counts") or {}
+        lines.append(f"- `{pair}`: count={count} decided_ab={decided_ab} balance_ab={bal:.6f} imbalance_ab={imb:.6f} labels={counts}")
+    return("\n".join(lines))
+
+def _md_item_disagreement_top(items: Sequence[Dict[str, Any]], k: int = 10) -> str:
+    lines: List[str] = []
+    for js in list(items)[:k]:
+        item_id = str(js.get("item_id", ""))
+        count = int(js.get("count", 0))
+        judges = int(js.get("judge_id_unique", 0))
+        dis = float(js.get("disagreement_rate", 0.0))
+        dis_ab = float(js.get("disagreement_rate_decided_ab", 0.0))
+        decided_ab = int(js.get("decided_count_ab", 0))
+        counts = js.get("label_counts") or {}
+        lines.append(f"- `{item_id}`: count={count} judges={judges} disagree={dis:.6f} disagree_ab={dis_ab:.6f} decided_ab={decided_ab} labels={counts}")
     return("\n".join(lines))
 
 
@@ -645,6 +726,10 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `{k}`: {v}")
     parts.append("\n### judge_id_top\n")
     parts.append(_md_list_top(report.judge.get("judge_id_top", [])))
+    parts.append("\n### model_pair_top\n")
+    parts.append(_md_model_pair_top(report.judge.get("model_pair_top", [])))
+    parts.append("\n### item_disagreement_top\n")
+    parts.append(_md_item_disagreement_top(report.judge.get("item_disagreement_top", [])))
     parts.append("\n## Buffer reuse\n")
     for k in ("buffer_id_unique", "buffer_item_id_unique", "buffer_item_id_reused_unique", "buffer_item_reuse_rate_unique", "buffer_item_reuse_events", "buffer_item_reuse_event_rate", "buffer_item_hhi", "buffer_item_entropy_bits"):
         v = report.reuse.get(k)

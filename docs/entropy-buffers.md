@@ -107,7 +107,8 @@ The scripts compute:
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Runtime / throughput** (optional): `input_tokens`, `output_tokens`, `wall_ms`, plus derived `output_tok_per_s`, `total_tok_per_s`, and `ms_per_output_token`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
-- **Judge label balance**: label histogram + entropy.
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns.
+- **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
   - The report also includes `tie_rate` and `invalid_rate` to help debug judge stability.
 - **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates.
@@ -138,10 +139,15 @@ python3 scripts/entropy_buffer_recommend.py \
   --out-json /tmp/entropy_recommendations.json
 ```
 
+Notes:
+
+- If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
+
 ## Integration notes
 
 - **Judge ELO loop**: should emit `judge_pair` records with stable `item_id`, `a_model_id`, `b_model_id`, and `label`. The entropy tools do not compute ELO; they compute *balance* and *disagreement* that affect ELO stability.
 - **Baseline runtime loop**: should emit `task_run` records with `task_id`, `prompt_template_id`, and `output` (plus optional token/time fields). The entropy tools treat token/time as optional metadata and focus on coverage/degeneracy.
+  - If you have `tags`, include them for better coverage accounting.
 
 ## Risks / limitations
 

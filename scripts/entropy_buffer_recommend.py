@@ -30,14 +30,7 @@ class CandidateScore:
 
 
 def _get_list(obj: Dict[str, Any], *names: str) -> List[str]:
-    for name in names:
-        if name in obj and obj[name] is not None:
-            v = obj[name]
-            if isinstance(v, list):
-                return([str(x) for x in v])
-            if isinstance(v, str) and v.strip() != "":
-                return([x.strip() for x in v.split(",") if x.strip() != ""])
-    return([])
+    return(lib.get_list(obj, *names))
 
 
 def _delta_entropy_for_add(counts: Dict[str, int], key: str) -> float:
@@ -46,6 +39,18 @@ def _delta_entropy_for_add(counts: Dict[str, int], key: str) -> float:
     before = lib.shannon_entropy(counts)
     counts2 = dict(counts)
     counts2[key] = counts2.get(key, 0) + 1
+    after = lib.shannon_entropy(counts2)
+    return(after - before)
+
+def _delta_entropy_for_add_tags(counts: Dict[str, int], tags: List[str]) -> float:
+    if len(tags) == 0:
+        return(0.0)
+    before = lib.shannon_entropy(counts)
+    counts2 = dict(counts)
+    for tag in sorted(set(tags)):
+        if tag == "":
+            continue
+        counts2[tag] = counts2.get(tag, 0) + 1
     after = lib.shannon_entropy(counts2)
     return(after - before)
 
@@ -63,6 +68,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
     hist_family: Dict[str, int] = {}
     hist_template: Dict[str, int] = {}
     hist_pair: Dict[str, int] = {}
+    hist_tags: Dict[str, int] = {}
 
     for obj in history:
         c = lib.canonicalize_record(obj)
@@ -77,6 +83,8 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
         if c.task_family != "" and c.prompt_template_id != "":
             k = f"{c.task_family}|{c.prompt_template_id}"
             hist_pair[k] = hist_pair.get(k, 0) + 1
+        for tag in lib.get_list(c.raw, "tags", "tag"):
+            hist_tags[tag] = hist_tags.get(tag, 0) + 1
 
     scored: List[CandidateScore] = []
     for obj in candidates:
@@ -93,14 +101,19 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
             "task_family": _delta_entropy_for_add(hist_family, task_family),
             "prompt_template_id": _delta_entropy_for_add(hist_template, prompt_template_id),
             "task_family_template_pair": _delta_entropy_for_add(hist_pair, pair_k),
+            "tags": _delta_entropy_for_add_tags(hist_tags, tags),
         }
         score = 0.0
         score += (2.0 * delta["task_family"])
         score += (1.5 * delta["prompt_template_id"])
         score += (1.0 * delta["task_family_template_pair"])
+        score += (0.8 * delta["tags"])
         score += (0.10 * _inv_freq_bonus(fam_c))
         score += (0.05 * _inv_freq_bonus(tmpl_c))
         score += (0.05 * _inv_freq_bonus(pair_c))
+        if len(tags) != 0:
+            tag_bonus = sum(_inv_freq_bonus(hist_tags.get(t, 0)) for t in tags) / float(len(tags))
+            score += (0.05 * tag_bonus)
         if seen != 0:
             score -= 10.0
         scored.append(CandidateScore(
@@ -132,6 +145,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
     hist_family: Dict[str, int] = {}
     hist_template: Dict[str, int] = {}
     hist_pair: Dict[str, int] = {}
+    hist_tags: Dict[str, int] = {}
     for obj in history:
         c = lib.canonicalize_record(obj)
         if c.rtype != "task_run":
@@ -145,6 +159,8 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
         if c.task_family != "" and c.prompt_template_id != "":
             k = f"{c.task_family}|{c.prompt_template_id}"
             hist_pair[k] = hist_pair.get(k, 0) + 1
+        for tag in lib.get_list(c.raw, "tags", "tag"):
+            hist_tags[tag] = hist_tags.get(tag, 0) + 1
 
     family_sel: Dict[str, int] = {}
     template_sel: Dict[str, int] = {}
@@ -168,14 +184,19 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                 "task_family": _delta_entropy_for_add(hist_family, c.task_family),
                 "prompt_template_id": _delta_entropy_for_add(hist_template, c.prompt_template_id),
                 "task_family_template_pair": _delta_entropy_for_add(hist_pair, pair_k),
+                "tags": _delta_entropy_for_add_tags(hist_tags, list(c.tags)),
             }
             score = 0.0
             score += (2.0 * delta["task_family"])
             score += (1.5 * delta["prompt_template_id"])
             score += (1.0 * delta["task_family_template_pair"])
+            score += (0.8 * delta["tags"])
             score += (0.10 * _inv_freq_bonus(hist_family.get(c.task_family, 0)))
             score += (0.05 * _inv_freq_bonus(hist_template.get(c.prompt_template_id, 0)))
             score += (0.05 * _inv_freq_bonus(hist_pair.get(pair_k, 0)))
+            if len(c.tags) != 0:
+                tag_bonus = sum(_inv_freq_bonus(hist_tags.get(t, 0)) for t in c.tags) / float(len(c.tags))
+                score += (0.05 * tag_bonus)
             if c.seen_task_id != 0:
                 score -= 10.0
 
@@ -208,6 +229,9 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
         if best.task_family != "" and best.prompt_template_id != "":
             pair_k = f"{best.task_family}|{best.prompt_template_id}"
             hist_pair[pair_k] = hist_pair.get(pair_k, 0) + 1
+        for tag in best.tags:
+            if tag != "":
+                hist_tags[tag] = hist_tags.get(tag, 0) + 1
 
         remaining = [c for c in remaining if not (c.task_id == best.task_id and c.prompt_template_id == best.prompt_template_id)]
     return(out)
