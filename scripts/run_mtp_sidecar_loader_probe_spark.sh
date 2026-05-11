@@ -18,10 +18,7 @@ mkdir -p "$OUT_DIR"
 echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-repo_rev="unknown"
-if [ -d "$repo_root/.git" ]; then
-	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
-fi
+repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch"
 HELPER_LOCAL="$repo_root/scripts/llamacpp_mtp_sidecar_probe_patch.sh"
