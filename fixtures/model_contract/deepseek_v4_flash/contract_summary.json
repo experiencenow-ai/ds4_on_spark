@@ -249,6 +249,7 @@
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_mask_value": -1,
     "update_semantics": {
+      "compressed_segment_view_expr": "self.compressor.kv_cache = self.kv_cache[:, win:]",
       "compressor_decode_should_compress_expr": "should_compress = (start_pos + 1) % self.compress_ratio == 0",
       "compressor_decode_write_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
       "compressor_freqs_cis_decode_expr": "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)",
@@ -257,7 +258,10 @@
       "compressor_prefill_write_expr": "self.kv_cache[:bsz, :seqlen // ratio] = kv",
       "decode_compressed_update_expr": "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
       "decode_sliding_ring_update_expr": "self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
-      "prefill_sliding_wrap_expr": "cutoff = seqlen % win"
+      "prefill_sliding_wrap_expr": "cutoff = seqlen % win",
+      "prefill_sliding_write_seqlen_gt_win_expr": "self.kv_cache[:bsz, cutoff: win], self.kv_cache[:bsz, :cutoff] = kv[:, -win:].split([win - cutoff, cutoff], dim=1)",
+      "prefill_sliding_write_seqlen_le_win_expr": "self.kv_cache[:bsz, :seqlen] = kv",
+      "topk_offset_expr": "offset = kv.size(1) if start_pos == 0 else win"
     },
     "window_size": 128
   },
@@ -751,6 +755,7 @@
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
     "n_mtp_layers": 1,
     "namespace_prefix": "mtp.{j}.",
+    "num_nextn_predict_layers": 1,
     "semantics": {
       "assert_embed_head_expr": "assert self.embed is not None and self.head is not None",
       "combine_e_and_h_expr": "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)",
@@ -880,6 +885,14 @@
   },
   "tensor_keys": {
     "expected_expert_key_count_per_layer": 1536,
+    "expert_tensor_key_templates": [
+      "ffn.experts.{eid}.w1.weight",
+      "ffn.experts.{eid}.w1.scale",
+      "ffn.experts.{eid}.w2.weight",
+      "ffn.experts.{eid}.w2.scale",
+      "ffn.experts.{eid}.w3.weight",
+      "ffn.experts.{eid}.w3.scale"
+    ],
     "hash_gate_tensor_key_suffix": "ffn.gate.tid2eid",
     "layer_gate": {
       "gate_bias_layer_ids": [
@@ -935,12 +948,73 @@
       "tensor_key_count": 1575
     },
     "mtp_embed_present": false,
+    "mtp_expected_tensor_key_count_breakdown": {
+      "experts": 1536,
+      "required_layer_suffixes": 28,
+      "required_mtp_additional_suffixes": 10,
+      "score_gate_bias": 1
+    },
+    "mtp_expected_tensor_key_count_by_layer_id_ok": {
+      "0": true
+    },
+    "mtp_expected_tensor_key_count_per_layer": 1575,
+    "mtp_forbidden_key_suffixes": [
+      "attn.compressor.",
+      "attn.indexer.",
+      "ffn.gate.tid2eid",
+      "embed.weight",
+      "head.weight"
+    ],
     "mtp_head_present": false,
     "mtp_layer_ids": [
       0
     ],
+    "mtp_required_nonexpert_suffixes": [
+      "attn.attn_sink",
+      "attn.wq_a.weight",
+      "attn.wq_a.scale",
+      "attn.q_norm.weight",
+      "attn.wq_b.weight",
+      "attn.wq_b.scale",
+      "attn.wkv.weight",
+      "attn.wkv.scale",
+      "attn.kv_norm.weight",
+      "attn.wo_a.weight",
+      "attn.wo_a.scale",
+      "attn.wo_b.weight",
+      "attn.wo_b.scale",
+      "attn_norm.weight",
+      "ffn.gate.weight",
+      "ffn.shared_experts.w1.weight",
+      "ffn.shared_experts.w1.scale",
+      "ffn.shared_experts.w2.weight",
+      "ffn.shared_experts.w2.scale",
+      "ffn.shared_experts.w3.weight",
+      "ffn.shared_experts.w3.scale",
+      "ffn_norm.weight",
+      "hc_attn_fn",
+      "hc_attn_base",
+      "hc_attn_scale",
+      "hc_ffn_fn",
+      "hc_ffn_base",
+      "hc_ffn_scale",
+      "e_proj.weight",
+      "e_proj.scale",
+      "h_proj.weight",
+      "h_proj.scale",
+      "enorm.weight",
+      "hnorm.weight",
+      "norm.weight",
+      "hc_head_fn",
+      "hc_head_base",
+      "hc_head_scale",
+      "ffn.gate.bias"
+    ],
     "mtp_score_gate_tensor_key_suffix": "ffn.gate.bias",
     "mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
+    "mtp_tensor_key_count_by_layer_id": {
+      "0": 1575
+    },
     "namespaces": [
       "embed",
       "hc_head_base",

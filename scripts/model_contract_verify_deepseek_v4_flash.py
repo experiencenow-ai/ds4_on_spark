@@ -216,6 +216,21 @@ def main() -> int:
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):
 					failures.append(Failure(17, f"contract summary missing decode sliding-ring update expression containing 'start_pos % win': {contract_summary}"))
+				prefill_wrap_expr = cache_update.get("prefill_sliding_wrap_expr")
+				if not (isinstance(prefill_wrap_expr, str) and "cutoff = seqlen % win" in prefill_wrap_expr):
+					failures.append(Failure(91, f"contract summary missing prefill sliding-window wrap expression containing 'cutoff = seqlen % win': {contract_summary}"))
+				prefill_le_expr = cache_update.get("prefill_sliding_write_seqlen_le_win_expr")
+				if not (isinstance(prefill_le_expr, str) and ":seqlen] = kv" in prefill_le_expr):
+					failures.append(Failure(92, f"contract summary missing prefill sliding-window write expression for seqlen<=win containing ':seqlen] = kv': {contract_summary}"))
+				prefill_gt_expr = cache_update.get("prefill_sliding_write_seqlen_gt_win_expr")
+				if not (isinstance(prefill_gt_expr, str) and "kv[:, -win:].split" in prefill_gt_expr and "win - cutoff" in prefill_gt_expr):
+					failures.append(Failure(93, f"contract summary missing prefill sliding-window wrap write expression for seqlen>win (expected kv[:, -win:].split([...])): {contract_summary}"))
+				seg_view_expr = cache_update.get("compressed_segment_view_expr")
+				if not (isinstance(seg_view_expr, str) and "self.compressor.kv_cache = self.kv_cache[:, win:]" in seg_view_expr):
+					failures.append(Failure(94, f"contract summary missing compressor compressed-segment view expression 'self.compressor.kv_cache = self.kv_cache[:, win:]': {contract_summary}"))
+				topk_offset_expr = cache_update.get("topk_offset_expr")
+				if not (isinstance(topk_offset_expr, str) and "offset = kv.size(1) if start_pos == 0 else win" in topk_offset_expr):
+					failures.append(Failure(95, f"contract summary missing top-k offset selection expression 'offset = kv.size(1) if start_pos == 0 else win': {contract_summary}"))
 				compress_gate_prefill = cache_update.get("compressor_prefill_should_compress_expr")
 				if not (isinstance(compress_gate_prefill, str) and "should_compress = seqlen >= ratio" in compress_gate_prefill):
 					failures.append(Failure(19, f"contract summary missing compressor prefill gate expression 'should_compress = seqlen >= ratio': {contract_summary}"))
@@ -304,6 +319,97 @@ def main() -> int:
 					failures.append(Failure(92, f"contract summary checkpoint_index.weight_map_prefix_fingerprints mismatch (expected prefixes {sorted(expected_prefix.keys())}): {contract_summary}"))
 
 				tk = summary.get("tensor_keys", {})
+				try:
+					n_layers = int(cfg.get("num_hidden_layers", 0))
+				except Exception:
+					n_layers = 0
+				try:
+					n_routed_experts = int(cfg.get("n_routed_experts", 0))
+				except Exception:
+					n_routed_experts = 0
+				compress_ratios = cfg.get("compress_ratios", None)
+
+				# Enforce that tensor_keys.required_* lists correspond to the official safetensors index.
+				if isinstance(compress_ratios, list) and n_layers > 0:
+					if len(compress_ratios) < int(n_layers):
+						failures.append(Failure(116, f"config.json compress_ratios must include at least num_hidden_layers entries (got {len(compress_ratios)} need {n_layers}): {FIX / 'config.json'}"))
+					req_top = tk.get("required_top_level", None)
+					req_layer = tk.get("required_layer_suffixes", None)
+					req_nonzero = tk.get("required_layer_suffixes_compress_ratio_nonzero", None)
+					req_csa = tk.get("required_layer_suffixes_compress_ratio_4", None)
+					expert_templates = tk.get("expert_tensor_key_templates", None)
+					layer_gate = tk.get("layer_gate", {}) if isinstance(tk, dict) else {}
+					hash_ids = layer_gate.get("tid2eid_layer_ids", []) if isinstance(layer_gate, dict) else []
+					score_ids = layer_gate.get("gate_bias_layer_ids", []) if isinstance(layer_gate, dict) else []
+					hash_gate_suffix = tk.get("hash_gate_tensor_key_suffix", "ffn.gate.tid2eid") if isinstance(tk, dict) else "ffn.gate.tid2eid"
+					score_gate_suffix = tk.get("score_gate_tensor_key_suffix", "ffn.gate.bias") if isinstance(tk, dict) else "ffn.gate.bias"
+
+					if not (isinstance(req_top, list) and isinstance(req_layer, list) and isinstance(req_nonzero, list) and isinstance(req_csa, list)):
+						failures.append(Failure(112, f"contract summary missing tensor_keys.required_* lists required for tensor-key verification: {contract_summary}"))
+					else:
+						missing_required: set[str] = set()
+						hash_set = {int(i) for i in hash_ids if isinstance(i, int) or (isinstance(i, str) and i.isdigit())}
+						score_set = {int(i) for i in score_ids if isinstance(i, int) or (isinstance(i, str) and i.isdigit())}
+						if hash_set & score_set:
+							failures.append(Failure(117, f"tensor_keys.layer_gate lists must be disjoint (overlap={sorted(hash_set & score_set)[:10]}): {contract_summary}"))
+						all_gate_layers = sorted(hash_set | score_set)
+						if len(all_gate_layers) != int(n_layers):
+							failures.append(Failure(118, f"tensor_keys.layer_gate lists must cover all layers 0..{n_layers-1} (got {len(all_gate_layers)}): {contract_summary}"))
+
+						for suf in req_top:
+							need = str(suf)
+							if need not in weight_keys:
+								missing_required.add(need)
+
+						for i in range(int(n_layers)):
+							prefix = f"layers.{i}."
+							for suf in req_layer:
+								need = prefix + str(suf)
+								if need not in weight_keys:
+									missing_required.add(need)
+
+							try:
+								ratio = int(compress_ratios[i])
+							except Exception:
+								ratio = 0
+
+							if ratio != 0:
+								for suf in req_nonzero:
+									need = prefix + str(suf)
+									if need not in weight_keys:
+										missing_required.add(need)
+							if ratio == 4:
+								for suf in req_csa:
+									need = prefix + str(suf)
+									if need not in weight_keys:
+										missing_required.add(need)
+
+							hash_gate = prefix + str(hash_gate_suffix)
+							score_gate = prefix + str(score_gate_suffix)
+							if i in hash_set:
+								if hash_gate not in weight_keys:
+									missing_required.add(hash_gate)
+								if score_gate in weight_keys:
+									failures.append(Failure(113, f"unexpected score-gate key present in hash-routed layer {i}: {score_gate}"))
+							if i in score_set:
+								if score_gate not in weight_keys:
+									missing_required.add(score_gate)
+								if hash_gate in weight_keys:
+									failures.append(Failure(114, f"unexpected hash-gate key present in score-routed layer {i}: {hash_gate}"))
+
+							if isinstance(expert_templates, list) and n_routed_experts > 0:
+								for eid in range(int(n_routed_experts)):
+									for tmpl in expert_templates:
+										try:
+											suf = str(tmpl).format(eid=eid)
+										except Exception:
+											continue
+										need = prefix + suf
+										if need not in weight_keys:
+											missing_required.add(need)
+
+						if missing_required:
+							failures.append(Failure(115, f"official checkpoint missing tensor keys implied by tensor_keys.required_* lists (sample={sorted(missing_required)[:20]}): {contract_summary}"))
 				if tk.get("mtp_embed_present") is not False:
 					failures.append(Failure(28, f"contract summary expects no mtp.*.embed.* keys in official checkpoint (tensor_keys.mtp_embed_present=false): {contract_summary}"))
 				if tk.get("mtp_head_present") is not False:
@@ -311,6 +417,83 @@ def main() -> int:
 				mtp_add = tk.get("required_mtp_additional_suffixes", None)
 				if not isinstance(mtp_add, list) or "e_proj.weight" not in mtp_add or "hc_head_fn" not in mtp_add:
 					failures.append(Failure(31, f"contract summary missing MTP tensor-key contract list (tensor_keys.required_mtp_additional_suffixes): {contract_summary}"))
+				else:
+					mtp_expected = tk.get("mtp_expected_tensor_key_count_per_layer", None)
+					try:
+						exp_experts = int(tk.get("expected_expert_key_count_per_layer"))
+						exp_layersuf = int(len(tk.get("required_layer_suffixes", [])))
+						exp_mtpadd = int(len(mtp_add))
+						exp_total = int(exp_experts + exp_layersuf + exp_mtpadd + 1)
+					except Exception:
+						exp_total = None
+					if exp_total is not None and mtp_expected != exp_total:
+						failures.append(Failure(106, f"contract summary tensor_keys.mtp_expected_tensor_key_count_per_layer mismatch (got {mtp_expected!r} expected {exp_total}): {contract_summary}"))
+
+					mtp_counts = tk.get("mtp_tensor_key_count_by_layer_id", None)
+					mtp_ok = tk.get("mtp_expected_tensor_key_count_by_layer_id_ok", None)
+					if not isinstance(mtp_counts, dict) or not isinstance(mtp_ok, dict):
+						failures.append(Failure(107, f"contract summary missing tensor_keys mtp per-layer count objects (mtp_tensor_key_count_by_layer_id / mtp_expected_tensor_key_count_by_layer_id_ok): {contract_summary}"))
+					else:
+						mtp_layer_ids = find_mtp_layer_ids(weight_keys)
+						for mtp_id in mtp_layer_ids:
+							prefix = f"mtp.{mtp_id}."
+							want = sum(1 for k in weight_keys if k.startswith(prefix))
+							got = mtp_counts.get(str(mtp_id))
+							ok = mtp_ok.get(str(mtp_id))
+							if got != want:
+								failures.append(Failure(108, f"contract summary tensor_keys.mtp_tensor_key_count_by_layer_id[{mtp_id}] mismatch (got {got!r} expected {want}): {contract_summary}"))
+								break
+							if ok is not True:
+								failures.append(Failure(109, f"contract summary tensor_keys.mtp_expected_tensor_key_count_by_layer_id_ok[{mtp_id}] must be true: {contract_summary}"))
+								break
+
+						# Enforce MTP tensor-key semantics for the official checkpoint: no compressor/indexer, no tid2eid, and full key coverage.
+						req_layer = tk.get("required_layer_suffixes", None)
+						mtp_gate_suffix = tk.get("mtp_score_gate_tensor_key_suffix", tk.get("score_gate_tensor_key_suffix", "ffn.gate.bias"))
+						forbidden_suffixes = tk.get("mtp_forbidden_key_suffixes", None)
+						expert_templates = tk.get("expert_tensor_key_templates", None)
+						if isinstance(req_layer, list) and isinstance(forbidden_suffixes, list) and n_routed_experts > 0:
+							missing_mtp: set[str] = set()
+							forbidden_mtp: set[str] = set()
+							for mtp_id in mtp_layer_ids:
+								prefix = f"mtp.{mtp_id}."
+								for bad in forbidden_suffixes:
+									bad_s = str(bad)
+									if bad_s.endswith("."):
+										if any(k.startswith(prefix + bad_s) for k in weight_keys):
+											forbidden_mtp.add(prefix + bad_s)
+									else:
+										if (prefix + bad_s) in weight_keys:
+											forbidden_mtp.add(prefix + bad_s)
+
+								for suf in req_layer:
+									need = prefix + str(suf)
+									if need not in weight_keys:
+										missing_mtp.add(need)
+
+								need_gate = prefix + str(mtp_gate_suffix)
+								if need_gate not in weight_keys:
+									missing_mtp.add(need_gate)
+
+								for eid in range(int(n_routed_experts)):
+									for tmpl in expert_templates if isinstance(expert_templates, list) else []:
+										try:
+											suf = str(tmpl).format(eid=eid)
+										except Exception:
+											continue
+										need = prefix + suf
+										if need not in weight_keys:
+											missing_mtp.add(need)
+
+								for suf in mtp_add:
+									need = prefix + str(suf)
+									if need not in weight_keys:
+										missing_mtp.add(need)
+
+							if forbidden_mtp:
+								failures.append(Failure(119, f"official checkpoint contains forbidden MTP tensor keys (sample={sorted(forbidden_mtp)[:20]}): {contract_summary}"))
+							if missing_mtp:
+								failures.append(Failure(120, f"official checkpoint missing required MTP tensor keys (sample={sorted(missing_mtp)[:20]}): {contract_summary}"))
 
 				mtp = summary.get("mtp", {})
 				trust = mtp.get("trust_gates", {}) if isinstance(mtp, dict) else {}
@@ -331,6 +514,18 @@ def main() -> int:
 						if got != want:
 							failures.append(Failure(69, f"contract summary mtp.trust_gates[{k!r}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
 							break
+
+				if isinstance(mtp, dict):
+					try:
+						want_layers = int(cfg.get("num_nextn_predict_layers", 0))
+					except Exception:
+						want_layers = 0
+					got_layers = mtp.get("n_mtp_layers", None)
+					if got_layers != want_layers:
+						failures.append(Failure(110, f"contract summary mtp.n_mtp_layers mismatch (got {got_layers!r} expected {want_layers}): {contract_summary}"))
+					got_alias = mtp.get("num_nextn_predict_layers", None)
+					if got_alias != want_layers:
+						failures.append(Failure(111, f"contract summary mtp.num_nextn_predict_layers mismatch (got {got_alias!r} expected {want_layers}): {contract_summary}"))
 
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):

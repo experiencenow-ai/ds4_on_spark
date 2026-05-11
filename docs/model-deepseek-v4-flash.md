@@ -86,7 +86,7 @@ python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
-  - `num_nextn_predict_layers`: 1
+  - `num_nextn_predict_layers`: 1 (recorded in `contract_summary.json` as `mtp.n_mtp_layers` and `mtp.num_nextn_predict_layers`)
 - YaRN / RoPE scaling (from `config.json` `rope_scaling` and `compress_rope_theta`, plus `inference/config.json`):
   - `rope_theta`: 10000
   - `compress_rope_theta`: 160000
@@ -258,6 +258,7 @@ Runtime update rules:
     - RoPE is applied to the compressed KV using `freqs_cis` slices derived from the upstream expressions (recorded in the contract summary; see below).
 
 These compressor/update semantics are extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.update_semantics.*` so DS4 can enforce them without re-parsing upstream Python.
+In particular, the contract pins the exact prefill sliding-window ring-buffer writes for both `seqlen <= window_size` and the wrap case (`prefill_sliding_write_seqlen_{le,gt}_win_expr`), plus the compressor’s view of the compressed segment (`compressed_segment_view_expr`) and the prefill/decode top-k offset selection (`topk_offset_expr`).
 
 Sparse attention index selection:
 
@@ -567,6 +568,7 @@ Per-layer required suffixes (`tensor_keys.required_layer_suffixes`, appended und
 Expert-key completeness expectation (`contract_summary.json` `tensor_keys.expected_expert_key_count_per_layer`):
 
 - For each layer, there must be `256 experts × 3 linears × 2 tensors (weight+scale) = 1536` expert keys of the form `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` with `eid ∈ [0,255]`.
+- The expert key templates are also recorded as `tensor_keys.expert_tensor_key_templates` (with `{eid}` placeholders) so contract consumers don’t need to re-derive the exact tensor-name patterns.
 
 Cache-compression required suffixes:
 
@@ -594,7 +596,9 @@ MTP block (`mtp.0.*`):
   - `mtp.0.e_proj.{weight,scale}`, `mtp.0.h_proj.{weight,scale}`
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
+- The full non-expert MTP suffix set (required layer suffixes + MTP-only suffixes + score gate bias) is recorded as `tensor_keys.mtp_required_nonexpert_suffixes` for quick contract checks.
 - Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
+- `contract_summary.json` also records the expected per-MTP-layer tensor-key count (`tensor_keys.mtp_expected_tensor_key_count_per_layer`) and the observed counts in the official safetensors index (`tensor_keys.mtp_tensor_key_count_by_layer_id`) so tooling can sanity-check “full upstream `mtp.0.*` preserved?” quickly.
 
 This repo includes a verifier for these invariants: `scripts/model_contract_verify_deepseek_v4_flash.py`.
 
@@ -617,6 +621,13 @@ For each quantized artifact tested, record:
   - `tensor_type_counts` (overall GGUF tensor types present)
   - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
   - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`)
+  - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
+    - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
+    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
+    - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`)
+    - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
+    - `trunk_contract` (`checked`, `complete`) when tensor keys preserve `layers.{i}.*`
+    - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract
 check: prompt rendering must match the encoding oracle, and native DS4 logits
@@ -671,7 +682,7 @@ For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` ca
 python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json
 ```
 
-When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, and `mtp_trust`.
+When run from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), the JSON output also includes `mtp_namespace`, `mtp_contract`, `mtp_preservation`, and `mtp_trust`.
 
 When multiple `--path` values are provided, the tool emits both:
 

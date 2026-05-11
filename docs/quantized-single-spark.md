@@ -24,6 +24,7 @@ tokenizer/chat format, and memory envelope are real.
     - `tensor_key_namespace_guess` + `first_tensor_keys` (quick signal for whether the artifact appears to preserve upstream tensor key namespaces; many GGUF conversions are `llama.cpp`)
     - `trunk_contract` (upstream tensor-key completeness for top-level + `layers.{i}.*`)
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
+    - `mtp_preservation` (structural “preserves upstream `mtp.0.*`?” status derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (structural “complete vs incomplete” status derived from the upstream MTP contract + explicit trust gates; still requires a logits oracle before enabling MTP)
     - `topology_contract` (GGUF header metadata vs expected `hidden_size`, `block_count`, head counts, vocab size, and (when present) RoPE `dimension_count` / `freq_base`)
     - For trunk+sidecar inspections (multiple `--path`), the JSON includes both per-artifact and `combined.*` summaries; use `combined.topology_contract_source_path` to see which GGUF header was used for the combined topology check.
@@ -91,6 +92,12 @@ For each tested quantized artifact, record whether `mtp.0.*` is present:
 
 ```sh
 python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf
+```
+
+When running from this repo (or when `--contract-summary` points at `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`), prefer the contract-aware structural gate:
+
+```sh
+python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf --json --require-mtp-complete
 ```
 
 For Hugging Face-hosted GGUFs, you can capture the same header/tensor-table metadata without downloading the full file (range reads only). Record the `url_prefix_bytes` from the JSON output:
