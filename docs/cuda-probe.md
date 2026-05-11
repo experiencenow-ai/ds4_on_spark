@@ -52,6 +52,12 @@ When you want to run the key “is `sm_121` supported end-to-end?” checks in o
 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_capability_spark0.sh
+```
+
 This runs, in order:
 
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
