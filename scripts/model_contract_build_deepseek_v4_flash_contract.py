@@ -67,6 +67,7 @@ def build_oracle_contract() -> dict:
 			"note": "Tokenizer/chat rendering must match upstream encoding vectors before any logit comparison is meaningful.",
 		},
 		"logits_oracle": {
+			"required": True,
 			"weights_required": True,
 			"prompts_fixture": "oracle/prompts.json",
 			"generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
@@ -79,6 +80,7 @@ def build_oracle_contract() -> dict:
 			"note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
 		},
 		"mtp": {
+			"required": True,
 			"weights_required": True,
 			"generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
 			"acceptance": {

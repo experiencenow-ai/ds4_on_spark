@@ -796,6 +796,7 @@
       "note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
       "output_fixture": "oracle/logits_oracle.json",
       "prompts_fixture": "oracle/prompts.json",
+      "required": true,
       "weights_required": true
     },
     "mtp": {
@@ -805,6 +806,7 @@
         "topk_ids_exact": true
       },
       "generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
+      "required": true,
       "weights_required": true
     }
   },
