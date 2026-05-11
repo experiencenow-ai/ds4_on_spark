@@ -53,6 +53,11 @@ Default local output directory:
   - zip path
   - zip `ls -la` (mtime/size)
   - `zip_sha256` (printed by the smoke; also present in `smoke.log`)
+  - Optional helper (Mac-side) to capture these facts without extracting:
+
+    ```bash
+    sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip
+    ```
 - Python + deps:
   - `python3 -V`
   - `pip freeze` excerpt (at least `numpy`, `scipy`, `scikit-learn`)

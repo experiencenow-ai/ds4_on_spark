@@ -17,12 +17,18 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 - Centaur package zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
   - Zip contains `centaur_spec_impl_v73/` with `centaur.py`, `requirements.txt`, and tests.
   - Do **not** commit the zip or venvs into this repo.
+  - Optional: capture zip facts without extracting (good for bug reports):
+
+    ```bash
+    sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip
+    ```
 
 ## Package facts (captured by the smoke)
 
 The smoke prints “package facts” early in the run so bug reports can include version/dep context even when later steps fail:
 
-- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (example observed in the May 11, 2026 zip: `centaur-impl-0.68`)
+- `zip_sha256`: computed from the zip bytes (for the local zip dated 2026-05-11 02:08 UTC, observed `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`)
+- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (observed in the May 11, 2026 zip: `centaur-impl-0.68`)
 - `requirements.txt`: currently:
   - `numpy>=1.26`
   - `scipy>=1.11`

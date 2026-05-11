@@ -19,6 +19,12 @@ export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 ```
 
+To capture “zip facts” for bug reports (without extracting the zip):
+
+```bash
+sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip
+```
+
 After the run, validate that expected outputs exist (run on Spark0):
 
 ```bash
