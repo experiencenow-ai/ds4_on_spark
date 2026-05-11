@@ -127,6 +127,16 @@ Avoid committing:
 - private IPs / MAC addresses
 - any API keys / tokens (Centaur provider registration should only reference env var names via `--auth-env`, not values)
 
+If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact bundle (log + manifests + dashboard) back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+```
+
+For a fuller bug-report checklist and sanitization guidance, see:
+
+- `docs/centaur-bug-report.md`
+
 ## Bug triage: Centaur vs DS4 runtime
 
 When something fails, label it explicitly:
