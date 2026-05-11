@@ -2120,11 +2120,30 @@ def write_sim_jsonl(path: str, trace: Sequence[TokenRoute], tokens: Sequence[Tok
 
 def _derive_mtp_accept_len(route: TokenRoute, mtp_draft_len: int) -> Optional[int]:
     if route.mtp_accept_len is not None:
-        return(int(route.mtp_accept_len))
+        al = int(route.mtp_accept_len)
+        if al < 1:
+            return(None)
+        if mtp_draft_len > 0 and al > (mtp_draft_len + 1):
+            return(None)
+        return(int(al))
     if route.accepted_mtp is not None:
-        return(int(route.accepted_mtp) + 1)
+        am = int(route.accepted_mtp)
+        if am < 0:
+            return(None)
+        al = (am + 1)
+        if al < 1:
+            return(None)
+        if mtp_draft_len > 0 and al > (mtp_draft_len + 1):
+            return(None)
+        return(int(al))
     if route.rejected_mtp is not None and mtp_draft_len > 0:
-        return((int(mtp_draft_len) - int(route.rejected_mtp)) + 1)
+        rm = int(route.rejected_mtp)
+        if rm < 0 or rm > mtp_draft_len:
+            return(None)
+        al = ((int(mtp_draft_len) - rm) + 1)
+        if al < 1 or al > (mtp_draft_len + 1):
+            return(None)
+        return(int(al))
     return(None)
 
 

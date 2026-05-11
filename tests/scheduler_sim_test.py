@@ -684,6 +684,42 @@ class SchedulerSimTest(unittest.TestCase):
         route0 = json.loads(lines[1])
         self.assertEqual(route0.get("dflash_accept_len"), 2)
 
+    def test_trace_canonicalize_derives_mtp_accept_len_from_rejected_when_draft_len_known(self) -> None:
+        payload = ""
+        payload += json.dumps({"type": "meta", "meta": {"mtp_draft_len": 4}}) + "\n"
+        payload += json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "rejected_mtp": 3}) + "\n"
+        buf = io.StringIO()
+        old_stdin = sys.stdin
+        sys.stdin = io.StringIO(payload)
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(["--trace-jsonl", "-", "--canonicalize-trace-jsonl", "-", "--trace-time-mode", "t_ms", "--mtp-draft-len", "0", "--json"])
+            self.assertEqual(rc, 0)
+        finally:
+            sys.stdin = old_stdin
+        lines = [ln for ln in buf.getvalue().splitlines() if ln.strip() != ""]
+        self.assertGreaterEqual(len(lines), 2)
+        route0 = json.loads(lines[1])
+        self.assertEqual(route0.get("mtp_accept_len"), 2)
+
+    def test_trace_canonicalize_skips_mtp_accept_len_when_rejected_out_of_range(self) -> None:
+        payload = ""
+        payload += json.dumps({"type": "meta", "meta": {"mtp_draft_len": 2}}) + "\n"
+        payload += json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "rejected_mtp": 7}) + "\n"
+        buf = io.StringIO()
+        old_stdin = sys.stdin
+        sys.stdin = io.StringIO(payload)
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = scheduler_sim.main(["--trace-jsonl", "-", "--canonicalize-trace-jsonl", "-", "--trace-time-mode", "t_ms", "--mtp-draft-len", "0", "--json"])
+            self.assertEqual(rc, 0)
+        finally:
+            sys.stdin = old_stdin
+        lines = [ln for ln in buf.getvalue().splitlines() if ln.strip() != ""]
+        self.assertGreaterEqual(len(lines), 2)
+        route0 = json.loads(lines[1])
+        self.assertNotIn("mtp_accept_len", route0)
+
     def test_trace_replay_accounts_dflash_accept_len_from_rejected_when_draft_len_known(self) -> None:
         fd, path = tempfile.mkstemp(prefix="sched_trace_", suffix=".jsonl")
         try:
