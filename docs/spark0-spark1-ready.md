@@ -5,8 +5,8 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` is not reachable yet (as of the 00:24Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11.md`, `docs/spark0-probe-2026-05-11.md`.
+- `spark1.local` is not reachable yet (as of the 00:58Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0058Z.md`, `docs/spark0-probe-2026-05-11T0058Z.md`.
 
 ## Goals
 
@@ -25,6 +25,7 @@ REDACT=1 DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discover
 
 Omit args to use the same default targets.
 The discovery output prints `targets:` so the exact target list is visible in committed excerpts.
+The discovery output also attempts `route -n get <target>` per host, but in locked-down macOS probe environments this may print `route: socket: Operation not permitted`; treat it as best-effort.
 
 If `spark1.local` does not resolve from the Mac yet, keep the probe flow the same but pass whatever Spark1 identifier you do have (a different mDNS name, a wired IPv4, or an IPv6 link-local) and let the scripts record the exact `resolved targets:` and reachability state in the redacted output.
 

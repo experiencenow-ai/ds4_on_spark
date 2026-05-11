@@ -27,24 +27,30 @@ Some automation-provided macOS checkouts have a `.git` worktree that is readable
 Create a local shim repo at `.git-codex/` (not committed) and use it for git operations:
 
 ```bash
-# One-time setup (from repo root, preferred bare gitdir)
-git init --bare .git-codex
+# One-time setup (from repo root, simplest gitdir shim; creates `.git-codex/` as a gitdir)
+git --git-dir=.git-codex init
 git --git-dir=.git-codex --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
 git --git-dir=.git-codex --work-tree=. fetch origin main --depth=50
-git --git-dir=.git-codex --work-tree=. checkout -f origin/main
+git --git-dir=.git-codex --work-tree=. reset --hard origin/main
 
-# Alternative: non-bare layout (creates `.git-codex/.git/`)
+# Alternative: bare gitdir (core.bare=true; still usable with `--work-tree=.`)
+# git init --bare .git-codex
+# git --git-dir=.git-codex --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+# git --git-dir=.git-codex --work-tree=. fetch origin main --depth=50
+# git --git-dir=.git-codex --work-tree=. reset --hard origin/main
+
+# Alternative: non-bare layout with separate workdir (creates `.git-codex/.git/`)
 # git init .git-codex
 # git --git-dir=.git-codex/.git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
 # git --git-dir=.git-codex/.git --work-tree=. fetch origin main --depth=50
-# git --git-dir=.git-codex/.git --work-tree=. checkout -f origin/main
+# git --git-dir=.git-codex/.git --work-tree=. reset --hard origin/main
 ```
 
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
 
 ```bash
 branch="codex/loop-spark-access-YYYYMMDD-short-suffix"
-gitdir=".git-codex" # if you used the non-bare layout, set: gitdir=".git-codex/.git"
+gitdir=".git-codex" # if you used the `.git-codex/.git` layout, set: gitdir=".git-codex/.git"
 git --git-dir="$gitdir" --work-tree=. checkout -b "$branch" origin/main
 git --git-dir="$gitdir" --work-tree=. status --short
 git --git-dir="$gitdir" --work-tree=. add docs/spark-access.md scripts/spark_probe.sh
@@ -101,6 +107,7 @@ This prints:
 - IPv4/IPv6 addresses for `en0`/`en1` (no MAC addresses)
 - `_ssh._tcp` browse results (mDNS instance names)
 - Quick SSH port checks against known targets
+- Per-target macOS route selection (`route -n get ...`) to show which interface is used
 - Optional mDNS resolution output for `*.local` targets
 
 ### Spark Hardware + Toolchain Probe

@@ -21,7 +21,7 @@ Environment:
 Examples:
   ./scripts/mac_spark_discovery.sh
   REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
-  DS4_GIT_DIR=.git-codex/.git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+  DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
   ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
   ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local
 EOF
@@ -113,6 +113,25 @@ for host in $targets; do
 		*)
 			;;
 	esac
+done
+echo
+echo "== route selection (macOS) =="
+for host in $targets; do
+	host_only="${host#*@}"
+	echo "-- $host_only --"
+	if command -v route >/dev/null 2>&1; then
+		out="$(route -n get "$host_only" 2>&1 || true)"
+		if [ "$out" = "" ]; then
+			echo "route: (no output)"
+		else
+			echo "$out" | awk '
+				/^[[:space:]]*(route to:|destination:|gateway:|interface:|ifscope:|flags:|mtu:|recvpipe:|sendpipe:|ssthresh:|rtt,|rttvar:|hopcount:)/ { print; next }
+				/^route: / { print; next }
+			' | head -n 40 || true
+		fi
+	else
+		echo "route not found"
+	fi
 done
 echo
 echo "== known target checks =="
