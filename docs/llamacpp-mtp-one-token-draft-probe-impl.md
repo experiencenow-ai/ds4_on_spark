@@ -94,6 +94,10 @@ This repo ships a **skeleton** patch against the pinned Spark fork (`9222e55`) t
 - commits `base_next_token_id` once (mirrors DS4 “accept one target token, then draft” sequencing) and captures the trunk **pre-`hc_head`** HC tensor via `cb_eval` (`result_pre_hc_head`)
 - opens the MTP sidecar GGUF in **metadata-only** mode by default and validates the exact 32 `mtp.0.*` tensors via a generated binder header
   - optional: pass `--load-sidecar-weights` to load sidecar tensor payloads into the GGUF ggml context (large; use only when needed)
+- optional (still not a real draft): when `--load-sidecar-weights` is set and binding succeeds, computes a **stub** “MTP output head norm” tensor by applying the sidecar `hc_head_*` + `norm.weight` to the captured trunk `result_pre_hc_head` and emits:
+  - `mtp_stub_head_norm_fnv64`
+  - `mtp_stub_head_norm_nbytes`
+  - `mtp_stub_head_norm_shape`
 - emits the required JSON contract, including optional debug keys `trunk_pre_hc_head_fnv64`, `trunk_pre_hc_head_nbytes`, and `trunk_pre_hc_head_shape`, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
 
 Patch file:

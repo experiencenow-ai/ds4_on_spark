@@ -42,6 +42,12 @@ Keep this probe *fast*: it should stop after the first verify step and draft com
 
 Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`.
 
+Optional debug keys (non-normative; used by the skeleton patch to stage wiring work):
+
+- `trunk_token_embd_{fnv64,nbytes,shape}`
+- `trunk_pre_hc_head_{fnv64,nbytes,shape}`
+- `mtp_stub_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
+
 ## Validation
 
 After capturing the JSON, validate its shape (and optionally cross-check `mtp_params` against the sidecar’s derived params):
