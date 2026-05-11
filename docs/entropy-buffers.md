@@ -117,6 +117,7 @@ The scripts compute:
 - **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
   - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
   - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
+- **Run slices** (optional): if `run_id` is present on `task_run` records, the report includes per-run coverage/duplicate/noise summaries and “top runs” to quickly spot regressions.
 
 ## Tools
 

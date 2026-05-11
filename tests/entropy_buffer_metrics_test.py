@@ -47,6 +47,15 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.totals["judge_pair_records"], 5)
         self.assertEqual(report.totals["unknown_records"], 0)
 
+        self.assertEqual(report.runs["run_id_unique"], 1)
+        dup_top = report.runs.get("output_norm_dup_rate_by_run_id_top", [])
+        self.assertGreaterEqual(len(dup_top), 1)
+        self.assertEqual(dup_top[0].get("run_id"), "baseline-20260511-spark0")
+        flagged_top = report.runs.get("flagged_task_run_rate_by_run_id_top", [])
+        self.assertGreaterEqual(len(flagged_top), 1)
+        self.assertEqual(flagged_top[0].get("run_id"), "baseline-20260511-spark0")
+        self.assertAlmostEqual(float(flagged_top[0].get("flagged_task_run_rate", 0.0)), (1.0 / 6.0))
+
         self.assertEqual(report.diversity["task_id"]["unique"], 5)
         self.assertEqual(report.diversity["task_family"]["unique"], 4)
         self.assertEqual(report.diversity["prompt_template_id"]["unique"], 4)
