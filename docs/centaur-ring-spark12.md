@@ -1,22 +1,18 @@
-# Centaur HyoR ring rehearsal: Spark1/Spark2/Spark3 (prep + runbook)
+# Centaur HyoR ring rehearsal: Spark1/Spark2 (3-node ring prep + runbook)
 
-If you only have Spark1/Spark2 (3-node ring total), start with:
-
-- `docs/centaur-ring-spark12.md`
-
-Goal: prepare repeatable Spark1/Spark2/Spark3 ring steps **without needing extra hardware yet**, then provide a first “real ring” path once Spark1/2/3 exist.
+Goal: prepare repeatable Spark1/Spark2 ring steps **without needing a shared filesystem yet**, then provide a first “real ring” path once Spark1/2 exist.
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
-## Spark1/Spark2/Spark3 bring-up checklist (when hardware exists)
+## Spark1/Spark2 bring-up checklist (when hardware exists)
 
-Before attempting a real ring on Spark1/2/3, ensure each node has a local Centaur v73 install footprint (no sudo required):
+Before attempting a real ring on Spark1/2, ensure each node has a local Centaur v73 install footprint (no sudo required):
 
 - `python3` + `python3 -m venv` available
 - `unzip` available
 - A Centaur v73 extraction + venv under a user-writable dir (recommended: `~/centaur-smoke/v73/run/`)
 
-One minimal per-node setup (run on Spark{1,2,3}):
+One minimal per-node setup (run on Spark{1,2}):
 
 ```bash
 mkdir -p ~/centaur-smoke/v73/run
@@ -40,41 +36,39 @@ After the smoke, you should have:
 - `~/centaur-smoke/v73/run/centaur_spec_impl_v73/centaur.py`
 - `~/centaur-smoke/v73/run/venv/bin/python3`
 
-## Run the Spark0-local ring sim
+## Run the Spark0-local ring sim (Spark0/1/2)
 
 On Spark0:
 
 ```bash
 export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
 export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
-sh ./scripts/centaur_spark_ring_sim_v73.sh | tee ~/centaur-smoke/v73/ring_sim/ring_sim.log
+sh ./scripts/centaur_spark_ring_sim_spark12_v73.sh | tee ~/centaur-smoke/v73/ring_sim_spark12/ring_sim.log
 ```
 
-This creates four Centaur roots under:
+This creates three Centaur roots under:
 
-- `~/centaur-smoke/v73/ring_sim/controller`
-- `~/centaur-smoke/v73/ring_sim/spark0`
-- `~/centaur-smoke/v73/ring_sim/spark1`
-- `~/centaur-smoke/v73/ring_sim/spark2`
-- `~/centaur-smoke/v73/ring_sim/spark3`
+- `~/centaur-smoke/v73/ring_sim_spark12/controller`
+- `~/centaur-smoke/v73/ring_sim_spark12/spark0`
+- `~/centaur-smoke/v73/ring_sim_spark12/spark1`
+- `~/centaur-smoke/v73/ring_sim_spark12/spark2`
 
-And then exercises, for Spark1/Spark2/Spark3:
+And then exercises, for Spark1/Spark2:
 
 - `hyor-sync-init` with left/right peer roots
 - `hyor-ring-step --scope metadata`
 - `hyor-ring-step --scope effective`
-- `hyor-sync-apply` materialization to `~/centaur-smoke/v73/ring_sim/effective/spark{1,2,3}`
+- `hyor-sync-apply` materialization to `~/centaur-smoke/v73/ring_sim_spark12/effective/spark{1,2}`
 
 ## What to record for “ring readiness”
 
 Capture these outputs (sanitized) after the sim:
 
-- `ls -la ~/centaur-smoke/v73/ring_sim/effective/spark1`
-- `ls -la ~/centaur-smoke/v73/ring_sim/effective/spark2`
-- `ls -la ~/centaur-smoke/v73/ring_sim/effective/spark3`
-- `python3 -u centaur.py hyor-sync-status` for each root (controller + spark0..spark3)
+- `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective/spark1`
+- `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective/spark2`
+- `python3 -u centaur.py hyor-sync-status` for each root (controller + spark0 + spark1 + spark2)
 
-## Next step (when Spark1/2/3 hardware exists)
+## Next step (when Spark1/2 hardware exists)
 
 Decide one of:
 
@@ -85,39 +79,39 @@ Until one of those exists, treat the ring sim as “API/format readiness”, not
 
 ## “Real ring” option A (recommended for now): rsync-staged ring-step from Spark0
 
-If Spark1/Spark2/Spark3 hardware exists but there is still **no shared filesystem**, use:
+If Spark1/Spark2 hardware exists but there is still **no shared filesystem**, use:
 
-- `scripts/centaur_spark_ring_rsync_v73.sh`
+- `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
 
-This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/2/3) and:
+This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/2) and:
 
-1. Pulls `hyor/node_spark{1,2,3}` roots from the remote Sparks into a local workdir
+1. Pulls `hyor/node_spark{1,2}` roots from the remote Sparks into a local workdir
 2. Runs `hyor-sync-init` + `hyor-sync-publish` + `hyor-ring-step` (metadata + effective) locally across those roots
 3. Pushes the mutated node roots back to the remote Sparks
 
-From your Mac repo root (stream-run on Spark0, passing Spark1/2/3 SSH targets as args):
+From your Mac repo root (stream-run on Spark0, passing Spark1/2 SSH targets as args):
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 ```
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host> spark3@<spark3-host>" < ./scripts/centaur_spark_ring_rsync_v73.sh
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- spark1@<spark1-host> spark2@<spark2-host>" < ./scripts/centaur_spark_ring_rsync_spark12_v73.sh
 ```
 
 Notes:
 
-- Use a dedicated `remote_base_dir` (4th arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
-- This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2/3, but it is not a shared-root deployment model.
+- Use a dedicated `remote_base_dir` (3rd arg) if you want the script to manage a clean namespace on each Spark (it uses `rsync --delete`).
+- This is still a staging workaround; it exercises ring data flow and produces runnable node roots on Spark1/2, but it is not a shared-root deployment model.
 
-### After rsync ring-step: quick node validation (Spark1/2/3)
+### After rsync ring-step: quick node validation (Spark1/2)
 
 On each Spark node, validate the pushed node root exists and is readable:
 
 ```bash
 export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
 export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
-export NODE_ROOT=~/centaur-smoke/v73/ring_node/hyor/node_spark1   # spark2/spark3 accordingly
+export NODE_ROOT=~/centaur-smoke/v73/ring_node/hyor/node_spark1   # spark2 accordingly
 
 "$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-sync-status "$NODE_ROOT" --full
 ```
@@ -132,7 +126,7 @@ ls -la ~/centaur-smoke/v73/ring_node/effective_spark1 | sed -n '1,40p'
 
 ### Optional: HTTP transport for agents (no shared filesystem)
 
-If you want Spark1/2/3 to run `hyor-agent-step` without a shared controller filesystem, use Centaur’s HTTP transport:
+If you want Spark1/2 to run `hyor-agent-step` without a shared controller filesystem, use Centaur’s HTTP transport:
 
 1) On the controller host (typically Spark0), run the HTTP endpoint (human-run, no system service):
 
@@ -156,7 +150,7 @@ Keep this strictly as a smoke: no secrets, no large model downloads, and stop if
 
 ## “Real ring” option B: shared filesystem for peer roots
 
-If you can provide a shared writable filesystem path visible on Spark0/1/2/3 (NFS, CephFS, etc), set each peer root to a real shared path and run `hyor-ring-step` directly without rsync staging.
+If you can provide a shared writable filesystem path visible on Spark0/1/2 (NFS, CephFS, etc), set each peer root to a real shared path and run `hyor-ring-step` directly without rsync staging.
 
 ## Ring issue report template (sanitized)
 
@@ -165,7 +159,7 @@ When the ring sim/rsync run fails, capture:
 - Centaur zip facts: `ls -la` and `sha256` of `centaur_spec_impl_v73.zip`
 - `python3 -V` and `pip freeze` (at least numpy/scipy/scikit-learn)
 - Exact Centaur command lines that failed (copy/paste)
-- Root paths involved (`controller`, `node_spark1/2/3`, and any `effective_*` dirs)
+- Root paths involved (`controller`, `node_spark1/2`, and any `effective_*` dirs)
 
 Then classify:
 
