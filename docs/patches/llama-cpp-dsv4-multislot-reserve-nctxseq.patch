@@ -1,0 +1,18 @@
+diff --git a/src/llama-context.cpp b/src/llama-context.cpp
+index 1b2c3d4e5..6f7a8b9c0 100644
+--- a/src/llama-context.cpp
++++ b/src/llama-context.cpp
+@@ -590,10 +590,12 @@ void llama_context::sched_reserve() {
+     // DeepSeek V4 resumed-prompt chunks use the compressed-attention decode
+     // graph, which is larger than the position-zero prefill graph.
+     if (model.arch == LLM_ARCH_DEEPSEEK4 && n_tokens > 1) {
++        const uint32_t n_ctx_cap = cparams.n_ctx_seq > 0 ? cparams.n_ctx_seq : cparams.n_ctx;
+         const llama_pos reserve_pos0 = std::min<llama_pos>(
+-                cparams.n_ctx > n_tokens ? cparams.n_ctx - n_tokens : n_tokens,
++                n_ctx_cap > n_tokens ? n_ctx_cap - n_tokens : n_tokens,
+                 std::max<uint32_t>(cparams.n_batch, 8u*n_tokens));
+         auto * gf = graph_reserve(n_tokens, n_seqs, n_tokens, mctx.get(),
+                 model.hparams.no_alloc, nullptr, reserve_pos0);
+         if (!gf) {
+             throw std::runtime_error("failed to allocate DeepSeek V4 resumed pp buffers");
+         }
