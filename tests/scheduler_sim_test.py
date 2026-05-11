@@ -630,6 +630,8 @@ class SchedulerSimTest(unittest.TestCase):
             "pending_depth_time_weighted_p95_mtp_draft",
             "pending_depth_time_weighted_p95_mtp_verify",
             "mtp_accept_rate",
+            "mtp_service_slot_ms_draft_frac",
+            "mtp_service_slot_ms_verify_frac",
         ):
             self.assertIn(k, summary)
 
@@ -660,6 +662,42 @@ class SchedulerSimTest(unittest.TestCase):
         m = scheduler_sim.run_simulation(cfg, trace)
         self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_draft[1:] if len(m.pending_depth_hist_mtp_draft) > 1 else [])) or m.pending_depth_hist_mtp_draft_overflow > 0.0)
         self.assertTrue(any(t > 0.0 for t in (m.pending_depth_hist_mtp_verify[1:] if len(m.pending_depth_hist_mtp_verify) > 1 else [])) or m.pending_depth_hist_mtp_verify_overflow > 0.0)
+
+    def test_mtp_service_slot_frac_tracks_draft_and_verify_cost(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                mtp_accept_len=3,
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            mtp_draft_len=2,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            sim_seed=123,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(float(s.get("mtp_service_slot_ms_draft_frac", 0.0)), (0.5 / 1.5), places=6)
+        self.assertAlmostEqual(float(s.get("mtp_service_slot_ms_verify_frac", 0.0)), (1.0 / 1.5), places=6)
 
     def test_expert_load_skew_summary_peaks_when_single_expert_used(self) -> None:
         trace = [scheduler_sim.TokenRoute(t_ms=float(i), cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)) for i in range(60)]

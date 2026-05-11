@@ -398,6 +398,8 @@ class SimMetrics:
     service_slot_ms_total: float = 0.0
     service_slot_ms_interactive: float = 0.0
     service_slot_ms_batch: float = 0.0
+    service_slot_ms_mtp_draft: float = 0.0
+    service_slot_ms_mtp_verify: float = 0.0
     mtp_output_tokens: int = 0
     mtp_verify_steps: int = 0
     mtp_draft_len: int = 0
@@ -528,6 +530,8 @@ class SimMetrics:
                     "service_slot_ms_total": self.service_slot_ms_total,
                     "service_slot_ms_interactive": self.service_slot_ms_interactive,
                     "service_slot_ms_batch": self.service_slot_ms_batch,
+                    "service_slot_ms_mtp_draft": self.service_slot_ms_mtp_draft,
+                    "service_slot_ms_mtp_verify": self.service_slot_ms_mtp_verify,
                     "service_slot_ms_per_output_token": (float(self.service_slot_ms_total) / output_tokens) if output_tokens > 0.0 else 0.0,
                     "mtp_work_units_draft": self.work_units_mtp_draft,
                     "mtp_work_units_verify": self.work_units_mtp_verify,
@@ -562,6 +566,14 @@ class SimMetrics:
                     "accept_prob": self.mtp_accept_prob,
                     "accept_decay": self.mtp_accept_decay,
                     "draft_attempt_policy": self.mtp_draft_attempt_policy,
+                    "service_slot_ms": {
+                        "draft": float(self.service_slot_ms_mtp_draft),
+                        "verify": float(self.service_slot_ms_mtp_verify),
+                    },
+                    "service_slot_frac": {
+                        "draft": (float(self.service_slot_ms_mtp_draft) / float(self.service_slot_ms_total)) if self.service_slot_ms_total > 0.0 else 0.0,
+                        "verify": (float(self.service_slot_ms_mtp_verify) / float(self.service_slot_ms_total)) if self.service_slot_ms_total > 0.0 else 0.0,
+                    },
                     "draft_tokens_total": self.mtp_draft_tokens_total,
                     "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
                     "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
@@ -2653,6 +2665,11 @@ def _start_tasks(now_ms: float, cfg: SimConfig, eq: ExpertQueue, expert_id: int,
             metrics.service_slot_ms_interactive += dt_ms
         else:
             metrics.service_slot_ms_batch += dt_ms
+        if work_units_total > 0.0:
+            if work_units_draft > 0.0:
+                metrics.service_slot_ms_mtp_draft += (dt_ms * (work_units_draft / work_units_total))
+            if work_units_verify > 0.0:
+                metrics.service_slot_ms_mtp_verify += (dt_ms * (work_units_verify / work_units_total))
 
         eq.in_flight += 1
         eq.in_flight_tasks += len(tasks)
@@ -3706,6 +3723,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     starved_task_frac_mtp_verify = (float(metrics.starved_tasks_mtp_verify) / float(metrics.tasks_started_mtp_verify)) if metrics.tasks_started_mtp_verify > 0 else 0.0
     partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
+    mtp_service_slot_draft_frac = (float(metrics.service_slot_ms_mtp_draft) / float(metrics.service_slot_ms_total)) if metrics.service_slot_ms_total > 0.0 else 0.0
+    mtp_service_slot_verify_frac = (float(metrics.service_slot_ms_mtp_verify) / float(metrics.service_slot_ms_total)) if metrics.service_slot_ms_total > 0.0 else 0.0
     dropped_interactive = float(metrics.dropped_tokens_backpressure_interactive)
     denom_interactive = float(metrics.admitted_tokens_interactive + metrics.dropped_tokens_backpressure_interactive)
     drop_frac_interactive = (dropped_interactive / denom_interactive) if denom_interactive > 0.0 else 0.0
@@ -3805,6 +3824,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "pending_depth_time_weighted_p95_mtp_draft": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_draft, metrics.pending_depth_hist_mtp_draft_overflow, 0.95)),
             "pending_depth_time_weighted_p95_mtp_verify": float(_hist_int_percentile(metrics.pending_depth_hist_mtp_verify, metrics.pending_depth_hist_mtp_verify_overflow, 0.95)),
             "mtp_accept_rate": float(mtp_accept_rate),
+            "mtp_service_slot_ms_draft_frac": float(mtp_service_slot_draft_frac),
+            "mtp_service_slot_ms_verify_frac": float(mtp_service_slot_verify_frac),
             "mtp_verify_layer0_skipped_backpressure": float(metrics.mtp_verify_layer0_skipped_backpressure),
             "mtp_verify_layer0_skipped_backpressure_frac": float(float(metrics.mtp_verify_layer0_skipped_backpressure) / float(metrics.mtp_verify_steps)) if metrics.mtp_verify_steps > 0 else 0.0,
             "mtp_accept_len_clamped_backpressure": float(metrics.mtp_accept_len_clamped_backpressure),
