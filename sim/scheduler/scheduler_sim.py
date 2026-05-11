@@ -192,6 +192,7 @@ class Task:
     enqueue_ms: float
     cost_scale: float = 1.0
     mtp_phase: MtpPhase = MtpPhase.NONE
+    layer_index: int = 0
     start_ms: Optional[float] = None
     served_hi: bool = False
 
@@ -415,6 +416,8 @@ class SimMetrics:
     pending_depth_hist_mtp_draft_overflow: float = 0.0
     pending_depth_hist_mtp_verify: List[float] = dataclasses.field(default_factory=list)
     pending_depth_hist_mtp_verify_overflow: float = 0.0
+    pending_depth_hist_per_layer: List[List[float]] = dataclasses.field(default_factory=list)
+    pending_depth_hist_per_layer_overflow: List[float] = dataclasses.field(default_factory=list)
     work_units_total: float = 0.0
     work_units_interactive: float = 0.0
     work_units_batch: float = 0.0
@@ -715,6 +718,27 @@ class SimMetrics:
                             "skipped_backpressure": int(self.skipped_stages_backpressure_per_layer[li]),
                             "skipped_backpressure_verify": int(self.skipped_stages_backpressure_per_layer_verify[li]),
                             "skipped_backpressure_draft": int(self.skipped_stages_backpressure_per_layer_draft[li]),
+                            "pending_depth_time_weighted": {
+                                "max_depth": (len(self.pending_depth_hist_per_layer[li]) - 1)
+                                if li < len(self.pending_depth_hist_per_layer) and len(self.pending_depth_hist_per_layer[li]) != 0
+                                else 0,
+                                "overflow_time_ms": float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                "p50": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.50,
+                                ),
+                                "p95": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.95,
+                                ),
+                                "p99": hist_int_percentile(
+                                    self.pending_depth_hist_per_layer[li] if li < len(self.pending_depth_hist_per_layer) else [],
+                                    float(self.pending_depth_hist_per_layer_overflow[li]) if li < len(self.pending_depth_hist_per_layer_overflow) else 0.0,
+                                    0.99,
+                                ),
+                            },
                         }
                         for li in range(len(self.stages_total_per_layer))
                     ],
@@ -3265,6 +3289,8 @@ def run_simulation(
         pending_depth_hist_mtp_draft_overflow=0.0,
         pending_depth_hist_mtp_verify=[0.0 for _ in range(hist_len)] if hist_len != 0 else [],
         pending_depth_hist_mtp_verify_overflow=0.0,
+        pending_depth_hist_per_layer=[[0.0 for _ in range(hist_len)] for _ in range(max_layers_seen)] if hist_len != 0 else [],
+        pending_depth_hist_per_layer_overflow=[0.0 for _ in range(max_layers_seen)],
         skipped_stages_backpressure_per_layer=[0 for _ in range(max_layers_seen)],
         skipped_stages_backpressure_per_layer_verify=[0 for _ in range(max_layers_seen)],
         skipped_stages_backpressure_per_layer_draft=[0 for _ in range(max_layers_seen)],
@@ -3308,6 +3334,8 @@ def run_simulation(
     last_saturated: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_draft: List[int] = [0 for _ in range(cfg.num_experts)]
     last_pending_mtp_verify: List[int] = [0 for _ in range(cfg.num_experts)]
+    last_pending_per_layer: List[List[int]] = [[0 for _ in range(max_layers_seen)] for _ in range(cfg.num_experts)]
+    pending_per_layer: List[List[int]] = [[0 for _ in range(max_layers_seen)] for _ in range(cfg.num_experts)]
 
     def integrate_areas(now_ms: float) -> None:
         nonlocal last_t_ms
@@ -3381,6 +3409,13 @@ def run_simulation(
                         metrics.pending_depth_hist_mtp_verify_overflow += dt
                     else:
                         metrics.pending_depth_hist_mtp_verify[d_verify] += dt
+                    if len(metrics.pending_depth_hist_per_layer) != 0:
+                        for li in range(max_layers_seen):
+                            d_layer = last_pending_per_layer[e][li]
+                            if d_layer >= hist_len:
+                                metrics.pending_depth_hist_per_layer_overflow[li] += dt
+                            else:
+                                metrics.pending_depth_hist_per_layer[li][d_layer] += dt
         last_t_ms = now_ms
 
     def snapshot_state() -> None:
@@ -3402,6 +3437,8 @@ def run_simulation(
                 last_saturated[e] = 1 if last_pending[e] >= cfg.expert_queue_max else 0
             last_pending_mtp_draft[e] = experts[e].pending_mtp_draft()
             last_pending_mtp_verify[e] = experts[e].pending_mtp_verify()
+            for li in range(max_layers_seen):
+                last_pending_per_layer[e][li] = pending_per_layer[e][li]
             if last_pending[e] > metrics.max_pending_per_expert[e]:
                 metrics.max_pending_per_expert[e] = last_pending[e]
             if last_pending_work[e] > metrics.max_pending_work_per_expert[e]:
@@ -3565,13 +3602,15 @@ def run_simulation(
                     metrics.dropped_tasks_backpressure_batch += 1
                 tokens[tid].dropped_tasks_backpressure += 1
                 continue
-            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase)
+            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase, layer_index=stage.layer_index)
             if route.cls == LatencyClass.INTERACTIVE:
                 eq.hi.append(task)
                 eq.pending_work_hi += float(task.cost_scale)
             else:
                 eq.lo.append(task)
                 eq.pending_work_lo += float(task.cost_scale)
+            if stage.layer_index >= 0 and stage.layer_index < max_layers_seen:
+                pending_per_layer[expert_id][stage.layer_index] += 1
             if task.mtp_phase == MtpPhase.DRAFT:
                 eq.queued_tasks_mtp_draft += 1
             elif task.mtp_phase == MtpPhase.VERIFY:
@@ -3980,6 +4019,13 @@ def run_simulation(
             eq.in_flight_tasks_mtp_verify -= done_verify
 
             for task in ev.tasks:
+                li = int(task.layer_index)
+                if li >= 0 and li < max_layers_seen:
+                    if pending_per_layer[ev.expert_id][li] <= 0:
+                        raise RuntimeError("pending_per_layer underflow")
+                    pending_per_layer[ev.expert_id][li] -= 1
+
+            for task in ev.tasks:
                 tid = task.token_id
                 if tid not in tokens:
                     raise RuntimeError("unknown token_id")
@@ -4078,6 +4124,15 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
         if len(hist_time_ms) == 0:
             return(0)
         return(len(hist_time_ms) - 1)
+
+    def _hist_int_mean(hist_time_ms: Sequence[float], overflow_time_ms: float) -> float:
+        total = float(sum(hist_time_ms)) + float(overflow_time_ms)
+        if total <= 0.0:
+            return(0.0)
+        acc = 0.0
+        for d, t in enumerate(hist_time_ms):
+            acc += (float(d) * float(t))
+        return(float(acc) / total)
 
     makespan_ms = metrics.makespan_ms
     token_tps = (float(metrics.num_tokens) * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
@@ -4332,6 +4387,14 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
         skipped_draft = float(metrics.skipped_stages_backpressure_per_layer_draft[li])
         if total_draft > 0.0 or skipped_draft > 0.0:
             out[f"skipped_stage_frac_layer{li}_draft"] = float((skipped_draft / total_draft) if total_draft > 0.0 else 0.0)
+
+        if li < len(metrics.pending_depth_hist_per_layer) and li < len(metrics.pending_depth_hist_per_layer_overflow):
+            out[f"pending_depth_time_weighted_p95_layer{li}"] = float(
+                _hist_int_percentile(metrics.pending_depth_hist_per_layer[li], float(metrics.pending_depth_hist_per_layer_overflow[li]), 0.95)
+            )
+            out[f"pending_depth_time_weighted_mean_layer{li}"] = float(
+                _hist_int_mean(metrics.pending_depth_hist_per_layer[li], float(metrics.pending_depth_hist_per_layer_overflow[li]))
+            )
 
     return(out)
 

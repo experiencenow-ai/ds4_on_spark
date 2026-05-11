@@ -1045,6 +1045,44 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(s.get("expert_max_pending_tasks_p95", 0.0)), 11.55, places=6)
         self.assertAlmostEqual(float(s.get("expert_max_pending_work_p95", 0.0)), 22.95, places=6)
 
+    def test_summary_json_reports_pending_depth_per_layer_means(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                layers=(
+                    scheduler_sim.LayerRoute(candidates=(0,), k=1),
+                    scheduler_sim.LayerRoute(candidates=(1,), k=1),
+                ),
+            )
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=100,
+            expert_parallelism=1,
+            expert_queue_max=1000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertIn("pending_depth_time_weighted_mean_layer0", s)
+        self.assertIn("pending_depth_time_weighted_mean_layer1", s)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_mean_layer0", 0.0)), 0.005, places=6)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_mean_layer1", 0.0)), 0.005, places=6)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_p95_layer0", 1.0)), 0.0, places=6)
+        self.assertAlmostEqual(float(s.get("pending_depth_time_weighted_p95_layer1", 1.0)), 0.0, places=6)
+
     def test_summary_json_reports_max_queue_p95(self) -> None:
         trace = []
         for _ in range(12):

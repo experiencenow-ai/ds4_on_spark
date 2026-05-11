@@ -62,6 +62,8 @@ This makes per-token latency approximately additive across layers, which better 
 
 Stage skips (layer-local residual-path drops) are summarized under `stages.skipped_backpressure*` in the simulator JSON output.
 
+Per-layer expert congestion is summarized under `stages.per_layer[].pending_depth_time_weighted` (and mirrored in `--summary-json` as `pending_depth_time_weighted_p95_layer{i}` / `pending_depth_time_weighted_mean_layer{i}`) so multi-layer traces can surface which layer(s) actually build queue depth.
+
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.
