@@ -16,6 +16,7 @@ Each automation owns one branch prefix:
 - `codex/loop-build-skeleton-*`
 - `codex/loop-scheduler-sim-*`
 - `codex/loop-ops-hardening-*`
+- `codex/loop-centaur-spark-*`
 
 Do not edit a branch owned by another automation unless explicitly asked in the
 issue or PR thread.
