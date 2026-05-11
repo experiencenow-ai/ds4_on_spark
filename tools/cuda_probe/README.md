@@ -40,7 +40,7 @@ Subset builds:
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
-- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); ends with `schema=3` for parsing).
+- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); includes `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`); ends with `schema=4` for parsing).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o`: compile-only object that requires `nvcc --gpu-architecture=sm_121` support (build-system compatibility gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_flags_compile_probe.o`: compile-only object that requires `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` (DeepGEMM/CUTLASS-style toolchain gate; no runtime needed).
