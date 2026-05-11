@@ -4,6 +4,38 @@ Goal: prepare repeatable Spark1/Spark2 ring steps **without needing a shared fil
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
+## Quickstart (recommended order)
+
+From your Mac (repo root), in order:
+
+1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
+sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+```
+
+2) Stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
+
+```bash
+sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
+ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark1.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+ssh $SSH_OPTS spark2@<spark2-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark2.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+```
+
+3) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
+
+```bash
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- --mode rsync" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
+sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
+
 ## Spark1/Spark2 bring-up checklist (when hardware exists)
 
 Before attempting a real ring on Spark1/2, ensure each node has a local Centaur v73 install footprint (no sudo required):
@@ -24,6 +56,17 @@ Recommended per-node setup (run on Spark{1,2}) using the reproducible setup scri
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark1.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
 ssh $SSH_OPTS spark2@<spark2-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark2.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
+```
+
+Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
+
+- `CENTAUR_PIP_ARGS="--no-index --find-links=/path/to/wheels"`
+- `CENTAUR_SKIP_PIP=1` when re-running in the same venv
+
+Example (Spark1):
+
+```bash
+ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_PIP_ARGS=\"--no-index --find-links=/path/to/wheels\" && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
 ```
 
 Minimal per-node setup (run on Spark{1,2}) if you prefer doing it manually:
@@ -96,10 +139,18 @@ Otherwise it is:
 
 Capture these outputs (sanitized) after the sim:
 
+- The ring scripts print `hyor-sync-status` for each root post-init and post-ring-step; if you set `RING_LOG`, the log is usually sufficient evidence.
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective/spark1`
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective/spark2`
 - `ls -la ~/centaur-smoke/v73/ring_sim_spark12/effective_manifests`
 - `python3 -u centaur.py hyor-sync-status` for each root (controller + spark0 + spark1 + spark2)
+
+To validate expected ring artifacts exist (run on the orchestrator host; Spark0 in the sim case):
+
+```bash
+export RING_RUN_ID="<run_id>"
+sh ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh --mode sim
+```
 
 ## Next step (when Spark1/2 hardware exists)
 
@@ -159,6 +210,13 @@ After a wrapper run, you can fetch a small artifact bundle (log + manifests) bac
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+To validate expected ring artifacts exist on the orchestrator host (Spark0):
+
+```bash
+export RING_RUN_ID="<run_id>"
+sh ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh --mode rsync
 ```
 
 ### After rsync ring-step: quick node validation (Spark1/2)

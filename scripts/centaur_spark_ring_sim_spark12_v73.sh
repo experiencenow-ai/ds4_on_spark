@@ -78,9 +78,16 @@ if [ "$log" != "" ]; then
 	rm -f "$fifo"
 	mkdir -p "$workdir"
 	mkfifo "$fifo"
+	exec 3>&1 4>&2
 	tee "$log" <"$fifo" &
 	teepid="$!"
-	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	cleanup_log()
+	{
+		exec >&3 2>&4
+		rm -f "$fifo"
+		wait "$teepid" 2>/dev/null || true
+	}
+	trap 'cleanup_log' EXIT INT TERM
 	exec >"$fifo" 2>&1
 fi
 
@@ -103,11 +110,48 @@ centaur()
 echo "== ring sim (spark12) workdir =="
 echo "$workdir"
 
+echo "== centaur package facts =="
+"$py" -V
+decomposer_version="$("$py" -c 'import ast,sys
+p=sys.argv[1]
+try:
+    t=open(p,"r",encoding="utf-8",errors="replace").read()
+except Exception:
+    print("")
+    raise SystemExit(0)
+try:
+    m=ast.parse(t)
+except Exception:
+    print("")
+    raise SystemExit(0)
+v=""
+for node in getattr(m,"body",[]):
+    if isinstance(node, ast.Assign):
+        for tgt in getattr(node,"targets",[]):
+            if isinstance(tgt, ast.Name) and tgt.id=="DECOMPOSER_VERSION":
+                val=getattr(node,"value",None)
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    v=val.value
+print(v)' "$centaur_root/centaur.py")"
+if [ "$decomposer_version" = "" ]; then
+	decomposer_version="(unknown)"
+fi
+echo "decomposer_version: $decomposer_version"
+
+echo "== pip freeze (sanitized) =="
+"$py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'
+
 echo "== init roots =="
 centaur hyor-sync-init "$ctrl" --node-id spark0 --node-type "$node_type" --left-peer-root "$s2" --right-peer-root "$s1" --broadcast-peer-root "$s1" --broadcast-peer-root "$s2"
 centaur hyor-sync-init "$s0" --node-id spark0 --node-type "$node_type" --left-peer-root "$s2" --right-peer-root "$s1"
 centaur hyor-sync-init "$s1" --node-id spark1 --node-type "$node_type" --left-peer-root "$s0" --right-peer-root "$s2"
 centaur hyor-sync-init "$s2" --node-id spark2 --node-type "$node_type" --left-peer-root "$s1" --right-peer-root "$s0"
+
+echo "== sync status (post-init) =="
+centaur hyor-sync-status "$ctrl"
+centaur hyor-sync-status "$s0"
+centaur hyor-sync-status "$s1"
+centaur hyor-sync-status "$s2"
 
 echo "== publish baseline + node_type from controller =="
 printf "baseline\n" >"$workdir/publish/baseline/baseline.txt"
@@ -126,6 +170,12 @@ centaur hyor-ring-step "$ctrl" --scope effective
 centaur hyor-ring-step "$s0" --scope effective
 centaur hyor-ring-step "$s1" --scope effective
 centaur hyor-ring-step "$s2" --scope effective
+
+echo "== sync status (post-ring-step) =="
+centaur hyor-sync-status "$ctrl"
+centaur hyor-sync-status "$s0"
+centaur hyor-sync-status "$s1"
+centaur hyor-sync-status "$s2"
 
 echo "== effective manifests (spark1/2) =="
 mkdir -p "$workdir/effective_manifests"

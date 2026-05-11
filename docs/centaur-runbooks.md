@@ -39,6 +39,7 @@ If you only have Spark1/Spark2 (3 nodes total including Spark0), use:
 
 That runbook includes:
 
+- an end-to-end “Quickstart” (Spark0 smoke → Spark1/2 setup → ring rsync → artifact fetch)
 - staging `centaur_spec_impl_v73.zip` to Spark1/2
 - per-node setup via `scripts/centaur_spark_v73_node_setup.sh`
 - Spark0-local ring sim (`hyor-ring-step` across multiple local roots)
@@ -64,6 +65,7 @@ If you also have Spark3, use:
   - `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_rsync_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_validate_ring_artifacts.sh` (runs on orchestrator host)
 - Optional HTTP transport helpers:
   - `scripts/centaur_spark_hyor_controller_http_v73.sh`
   - `scripts/centaur_spark_hyor_agent_http_v73.sh`
