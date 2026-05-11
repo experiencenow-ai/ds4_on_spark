@@ -74,7 +74,16 @@ If the shim setup fails with an error like:
 
 - `error: The following untracked working tree files would be overwritten by checkout/reset`
 
-it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”). In that case, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
+it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”).
+
+Fast path (overwrites the working tree; only do this when `git status` is clean and you are OK discarding any local-only files):
+
+```bash
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
+```
+
+If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
 
 ```bash
 # Seed `.codex_git/` from the current checkout worktree metadata.

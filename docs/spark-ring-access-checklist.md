@@ -13,6 +13,8 @@ If you have 4 nodes (Spark0..Spark3), use the same checklist but add Spark3 to e
 - Confirm whether the environment relies on mDNS (`*.local`) or pinned `/etc/hosts`.
 - From the Mac, confirm each target resolves and port 22 is reachable:
   - `REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local`
+- From Spark nodes, confirm the same peer names resolve inside the ring environment:
+  - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` and reports `ping_resolve_failed` when a node cannot resolve a peer hostname; treat this as a bring-up blocker for any multi-node runbook until name resolution is fixed (either mDNS domain consistency or `/etc/hosts` pinning by a human).
 
 ## 2) SSH Keys + Known Hosts Hygiene
 
