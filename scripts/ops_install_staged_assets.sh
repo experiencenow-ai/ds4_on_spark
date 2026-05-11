@@ -7,7 +7,7 @@ usage()
 ops_install_staged_assets.sh -- install /tmp-staged DS4 deploy assets (human-run)
 
 Usage:
-  ops_install_staged_assets.sh --instance <name> [--dry-run] [--overwrite-config] [--install-timers] [--install-spark-units] [--start-preflight] [--strict]
+  ops_install_staged_assets.sh --instance <name> [--dry-run] [--overwrite-config] [--install-timers] [--install-spark-units] [--start-preflight] [--preflight tp2|tp3|tp4] [--strict]
 
 Environment (optional overrides):
   DS4_STAGED_SYSTEMD_DIR   Default: /tmp/ds4-systemd
@@ -31,6 +31,7 @@ overwrite_config=0
 install_timers=0
 install_spark_units=0
 start_preflight=0
+preflight="tp2"
 strict=0
 
 while [ $# -gt 0 ]; do
@@ -59,6 +60,10 @@ while [ $# -gt 0 ]; do
             start_preflight=1
             shift
             ;;
+        --preflight)
+            preflight="${2:-}"
+            shift 2
+            ;;
         --strict)
             strict=1
             shift
@@ -80,6 +85,16 @@ if [ "$instance" = "" ]; then
     usage >&2
     exit 2
 fi
+
+case "$preflight" in
+    tp2|tp3|tp4)
+        ;;
+    *)
+        echo "invalid --preflight: $preflight (expected tp2|tp3|tp4)" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
 
 run()
 {
@@ -262,10 +277,14 @@ echo
 if [ "$start_preflight" -ne 0 ]; then
     echo "== optional: start preflight =="
     if command -v systemctl >/dev/null 2>&1; then
+        unit_prefix="ds4-preflight"
+        if [ "$preflight" != "tp2" ]; then
+            unit_prefix="ds4-preflight-${preflight}"
+        fi
         if [ "$strict" -ne 0 ]; then
-            run systemctl start "ds4-preflight-strict@${instance}.service"
+            run systemctl start "${unit_prefix}-strict@${instance}.service"
         else
-            run systemctl start "ds4-preflight@${instance}.service"
+            run systemctl start "${unit_prefix}@${instance}.service"
         fi
     else
         echo "skip (systemctl missing)"

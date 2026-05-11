@@ -2,6 +2,9 @@
 
 DeepSeek-V4-Flash “official code/configs” are distributed via the Hugging Face model repo. This project **must not** download or vendor large model artifacts; treat the HF repo as metadata/config only.
 
+- Pinned-at: 2026-05-11 (UTC)
+- Safety policy: use `GIT_LFS_SKIP_SMUDGE=1`, Hugging Face API metadata, or local Spark paths first; large weight fetches require explicit human approval.
+
 ## Sources
 
 - Hugging Face repo: `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash`
@@ -38,6 +41,23 @@ These are tracked as optional GPU-kernel reference points for Spark:
 - `encoding/` (tokenizer-related assets)
 - `inference/` (reference scripts; small, but do not vendor)
 - `DeepSeek_V4.pdf` (technical report)
+
+## Public quality prior (model card, metadata-only)
+
+Record public priors for DeepSeek V4 Flash as a *staging signal* only (benchmark harnesses and evaluation modes differ across vendors and labs, so do not turn these into a “winner” claim without comparability notes).
+
+From the pinned `deepseek-ai/DeepSeek-V4-Flash` model card (`README.md` at commit `6976c7ff1b30a1b2cb7805021b8ba4684041f136`, HF API `last_modified=2026-05-06T04:18:09Z`):
+
+- Benchmarks explicitly named in the “Evaluation Results” tables include: `MMLU`, `MMLU-Redux`, `MMLU-Pro`, `MMMLU`, `CMMLU`, `HumanEval`, `GSM8K`, `MATH`, `LongBench-V2`, `LiveCodeBench`, `SWE Verified`, `SWE Pro`, `SWE Multilingual`, `MCPAtlas Public` / `MCPAtlas`, `Toolathlon`.
+
+Additional public references (non-pinned, URLs only):
+
+- Hugging Face blog post “DeepSeek-V4: a million-token context that agents can actually use” (published 2026-04-24): `https://huggingface.co/blog/deepseekv4`
+- Transformers architecture docs: `https://huggingface.co/docs/transformers/model_doc/deepseek_v4` (notes DeepSeek-V4 was added to Transformers on 2026-05-02).
+
+Sources (pinned revisions):
+
+- `https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash/raw/6976c7ff1b30a1b2cb7805021b8ba4684041f136/README.md`
 
 ## Weight footprint (HF API, no downloads)
 
@@ -122,11 +142,16 @@ Practical contract rule:
 
 - Treat `fixtures/.../inference/config.json` `expert_dtype` as canonical; `config.json` `expert_dtype` may be absent in some upstream revisions.
 
+Chat-template drift watch:
+
+- There is also a “conversational” HF PR ref (`refs/pr/16`, commit `014a5cfe6d1349d3d1096b2f8c15faaaa11819d5`) that is pinned in [`docs/upstream-manifest.md`](upstream-manifest.md) for reproducible inspection of prompt templating additions (for example `chat_template.jinja`) and any config deltas. Treat these changes as potentially runtime-visible (tokenization/prompt formatting), but keep all inspection metadata-only.
+
 Re-check quickly (metadata-only fetch; no weights):
 
 ```bash
 ./scripts/upstream_feature_probe.sh --fetch
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf_pr14
+./scripts/fetch_upstreams.sh deepseek_v4_flash_hf_pr16
 ```
 
 ## Transformers references
@@ -138,6 +163,8 @@ Transformers publishes an architecture + integration reference for `deepseek_v4`
 ## Fetch (metadata only)
 
 The fetch script disables Git LFS smudge/filters (and sets `GIT_LFS_SKIP_SMUDGE=1`) so LFS weights are not downloaded.
+
+The fetch script also reads Hugging Face’s `X-Repo-Commit` header for `main` and pins all subsequent file downloads to that immutable commit hash. This avoids “mixed snapshots” if the HF `main` branch moves mid-fetch.
 
 ```bash
 ./scripts/fetch_upstreams.sh deepseek_v4_flash_hf

@@ -571,6 +571,112 @@ def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 6000 if quick else 30000
+    interactive_output_tps = 500.0
+    batch_output_tps = 20000.0
+
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=float(interactive_output_tps),
+        batch_arrival_rate_tps=float(batch_output_tps),
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    base_trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="class",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    def _scale_trace_time(trace: List[scheduler_sim.TokenRoute], scale: float) -> List[scheduler_sim.TokenRoute]:
+        if scale <= 0.0:
+            raise ValueError("scale must be > 0")
+        return([dataclasses.replace(r, t_ms=(float(r.t_ms) * float(scale))) for r in trace])
+
+    no_mtp_metrics = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, mtp_draft_len=0), base_trace)
+    no_mtp_summary = scheduler_sim.compare_summary_jsonable(no_mtp_metrics)
+
+    draft_len = 3
+    hists: List[Tuple[str, Tuple[float, ...]]] = [
+        ("uniform", (0.25, 0.25, 0.25, 0.25)),
+        ("middle_heavy", (0.1, 0.4, 0.4, 0.1)),
+        ("bimodal_extremes", (0.4, 0.1, 0.1, 0.4)),
+    ]
+
+    variants: List[Dict[str, Any]] = []
+    for name, hist in hists:
+        exp_len = scheduler_sim.expected_mtp_accept_len(
+            draft_len,
+            0.0,
+            1.0,
+            mtp_accept_model="hist",
+            mtp_accept_hist=hist,
+        )
+        trace_scaled = _scale_trace_time(base_trace, float(exp_len))
+        cfg = dataclasses.replace(
+            base_cfg,
+            mtp_draft_len=draft_len,
+            mtp_accept_model="hist",
+            mtp_accept_hist=hist,
+            mtp_draft_cost_scale=0.25,
+            mtp_draft_attempt_policy="stop_at_reject",
+        )
+        m = scheduler_sim.run_simulation(cfg, trace_scaled)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        variants.append(
+            {
+                "name": str(name),
+                "mtp_accept_hist": list(hist),
+                "expected_accept_len": float(exp_len),
+                "trace_time_scale": float(exp_len),
+                "no_mtp": no_mtp_summary,
+                "mtp_hist": s,
+            }
+        )
+
+    return(
+        {
+            "name": "mtp_accept_hist_shape",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "draft_len": int(draft_len),
+            "variants": variants,
+            "recommendation": {
+                "note": "All variants share the same mean accept_len (=2.5) but different shape/variance; if real traces show a heavy tail of short accepts, expect worse queue pressure than mean-only geom fits suggest.",
+                "default_accept_model": "geom",
+                "enable_hist_when_available": True,
+                "reason": "Synthetic overload: accept-length distribution shape (not just mean accept rate) can materially change queue pressure and SLA safety; prefer replaying empirical accept_len histograms once real quantized-runtime traces provide them.",
+            },
+        }
+    )
+
+
 def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
     num_tokens = 12000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
@@ -754,6 +860,72 @@ def _backpressure_units_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _k_controller_smoothing_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 12000 if quick else 60000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=16,
+        num_candidates=4,
+        interactive_arrival_rate_tps=1500.0,
+        batch_arrival_rate_tps=3000.0,
+        interactive_burst_prob=0.05,
+        interactive_burst_scale=50.0,
+        batch_burst_prob=0.05,
+        batch_burst_scale=50.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=512,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=32,
+            q_high=256,
+            ema_alpha=1.0,
+            update_ms=0.0,
+            k_slew=0,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="global",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("smooth_ema_0p2_slew1", {"adaptive_k.ema_alpha": 0.2, "adaptive_k.update_ms": 0.0, "adaptive_k.k_slew": 1}),
+        ("smooth_ema_0p2_update_2ms_slew1", {"adaptive_k.ema_alpha": 0.2, "adaptive_k.update_ms": 2.0, "adaptive_k.k_slew": 1}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "k_controller_smoothing",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "support_k_smoothing_knobs": True,
+                "default_ema_alpha": 0.2,
+                "default_update_ms": 2.0,
+                "default_k_slew": 1,
+                "reason": "Synthetic bursty overload: smoothing the congestion signal (EMA) and rate-limiting/slewing K updates reduces controller churn; calibrate these knobs against real quantized-runtime traces before baking them into runtime defaults.",
+            },
+        }
+    )
+
+
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
         "expert_queue_reserve": _expert_queue_reserve_scenario(quick),
@@ -762,9 +934,11 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "expert_batching": _expert_batching_scenario(quick),
         "admit_policy_skew": _admit_policy_skew_scenario(quick),
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
+        "mtp_accept_hist_shape": _mtp_accept_hist_shape_scenario(quick),
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
         "backpressure_units": _backpressure_units_scenario(quick),
+        "k_controller_smoothing": _k_controller_smoothing_scenario(quick),
     }
     return({"scenarios": scenarios})
 

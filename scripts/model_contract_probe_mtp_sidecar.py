@@ -317,6 +317,26 @@ def must_u32(meta: dict[str, Any], key: str) -> int:
 		raise ValueError(f"metadata {key} is not an int: {v!r}") from e
 
 
+def meta_u32(meta: dict[str, Any], key: str) -> Optional[int]:
+	v = meta.get(key, None)
+	if v is None:
+		return None
+	try:
+		iv = int(v)
+	except Exception:
+		return None
+	if iv < 0:
+		return None
+	return int(iv)
+
+
+def prefer_param(meta_params: dict[str, Optional[int]], derived: dict[str, int], key: str) -> int:
+	mv = meta_params.get(key, None)
+	if mv is not None and int(mv) != 0:
+		return int(mv)
+	return int(derived.get(key, 0))
+
+
 def expect_tensor(
 	errors: list[str],
 	name: str,
@@ -653,37 +673,46 @@ def main() -> int:
 	tmap = {t.name: t for t in tensors}
 	derived = derive_sidecar_params(errors, tmap)
 	out["derived_params"] = derived
-	try:
-		n_embd = must_u32(meta, "deepseek4.embedding_length")
-		n_head = must_u32(meta, "deepseek4.attention.head_count")
-		n_head_dim = must_u32(meta, "deepseek4.attention.key_length")
-		n_lora_q = must_u32(meta, "deepseek4.attention.q_lora_rank")
-		n_lora_o = must_u32(meta, "deepseek4.attention.output_lora_rank")
-		n_out_group = must_u32(meta, "deepseek4.attention.output_group_count")
-		n_expert = must_u32(meta, "deepseek4.expert_count")
-		n_ff_exp = must_u32(meta, "deepseek4.expert_feed_forward_length")
-		n_hc = must_u32(meta, "deepseek4.hyper_connection.count")
-	except KeyError as e:
-		n_embd = n_head = n_head_dim = n_lora_q = n_lora_o = n_out_group = n_expert = n_ff_exp = n_hc = 0
 
-	if n_embd == 0:
-		n_embd = int(derived.get("n_embd", 0))
-	if n_head == 0:
-		n_head = int(derived.get("n_head", 0))
-	if n_head_dim == 0:
-		n_head_dim = int(derived.get("n_head_dim", 0))
-	if n_lora_q == 0:
-		n_lora_q = int(derived.get("n_lora_q", 0))
-	if n_lora_o == 0:
-		n_lora_o = int(derived.get("n_lora_o", 0))
-	if n_out_group == 0:
-		n_out_group = int(derived.get("n_out_group", 0))
-	if n_expert == 0:
-		n_expert = int(derived.get("n_expert", 0))
-	if n_ff_exp == 0:
-		n_ff_exp = int(derived.get("n_ff_exp", 0))
-	if n_hc == 0:
-		n_hc = int(derived.get("n_hc", 0))
+	meta_params: dict[str, Optional[int]] = {
+		"n_embd": meta_u32(meta, "deepseek4.embedding_length"),
+		"n_head": meta_u32(meta, "deepseek4.attention.head_count"),
+		"n_head_dim": meta_u32(meta, "deepseek4.attention.key_length"),
+		"n_lora_q": meta_u32(meta, "deepseek4.attention.q_lora_rank"),
+		"n_lora_o": meta_u32(meta, "deepseek4.attention.output_lora_rank"),
+		"n_out_group": meta_u32(meta, "deepseek4.attention.output_group_count"),
+		"n_expert": meta_u32(meta, "deepseek4.expert_count"),
+		"n_ff_exp": meta_u32(meta, "deepseek4.expert_feed_forward_length"),
+		"n_hc": meta_u32(meta, "deepseek4.hyper_connection.count"),
+		"mtp_layer_count": meta_u32(meta, "deepseek4.mtp_layer_count"),
+		"nextn_predict_layers": meta_u32(meta, "deepseek4.nextn_predict_layers"),
+	}
+	out["metadata_params"] = {k: meta_params[k] for k in sorted(meta_params.keys())}
+
+	if meta_params.get("mtp_layer_count", None) not in (None, 0, 1):
+		errors.append(
+			f"deepseek4.mtp_layer_count is {meta_params.get('mtp_layer_count')}, expected 1 for mtp.0.* sidecar"
+		)
+	if meta_params.get("nextn_predict_layers", None) not in (None, 0, 1):
+		errors.append(
+			f"deepseek4.nextn_predict_layers is {meta_params.get('nextn_predict_layers')}, expected 1 for mtp.0.* sidecar"
+		)
+
+	n_embd = prefer_param(meta_params, derived, "n_embd")
+	n_head = prefer_param(meta_params, derived, "n_head")
+	n_head_dim = prefer_param(meta_params, derived, "n_head_dim")
+	n_lora_q = prefer_param(meta_params, derived, "n_lora_q")
+	n_lora_o = prefer_param(meta_params, derived, "n_lora_o")
+	n_out_group = prefer_param(meta_params, derived, "n_out_group")
+	n_expert = prefer_param(meta_params, derived, "n_expert")
+	n_ff_exp = prefer_param(meta_params, derived, "n_ff_exp")
+	n_hc = prefer_param(meta_params, derived, "n_hc")
+
+	for k in ("n_embd", "n_head", "n_head_dim", "n_lora_q", "n_lora_o", "n_out_group", "n_expert", "n_ff_exp", "n_hc"):
+		mv = meta_params.get(k, None)
+		dv = int(derived.get(k, 0))
+		if mv is not None and int(mv) != 0 and dv != 0 and int(mv) != int(dv):
+			errors.append(f"metadata param {k}={int(mv)} disagrees with derived {k}={int(dv)}")
 
 	if args.expect_deepseek_v4_flash:
 		want = {

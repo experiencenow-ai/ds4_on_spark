@@ -332,7 +332,8 @@
       "mtp_trust": {
         "checked": true,
         "reasons": [
-          "mtp_contract.complete != true"
+          "mtp_contract.complete != true",
+          "mtp_keys_sha256 != official mtp checkpoint fingerprint"
         ],
         "status": "incomplete",
         "trusted": false
@@ -494,7 +495,8 @@
     "mtp_trust": {
       "checked": true,
       "reasons": [
-        "mtp_contract.complete != true"
+        "mtp_contract.complete != true",
+        "mtp_keys_sha256 != official mtp checkpoint fingerprint"
       ],
       "status": "incomplete",
       "trusted": false

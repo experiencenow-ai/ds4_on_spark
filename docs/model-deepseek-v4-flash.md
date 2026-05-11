@@ -6,7 +6,7 @@ This document is **source-derived** from upstream DeepSeek V4 Flash configs and 
 
 Upstream repo: `deepseek-ai/DeepSeek-V4-Flash`
 
-Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`): `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
+Pinned upstream commit (from `X-Repo-Commit` on HF `resolve/main/*`; `scripts/model_contract_fetch_deepseek_v4_flash.sh` pins all downloads to this immutable commit to avoid mixed snapshots): `6976c7ff1b30a1b2cb7805021b8ba4684041f136`
 
 Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4_flash/`):
 
@@ -24,6 +24,39 @@ Notes on config sources:
 
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
+
+## Quick constants (from pinned fixtures)
+
+These are the most frequently referenced **execution-contract** constants, extracted from `fixtures/model_contract/deepseek_v4_flash/config.json` and `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` so DS4 implementers can sanity-check topology/schedule quickly.
+
+Topology:
+
+- `num_hidden_layers=43`, `hidden_size=4096`
+- `num_attention_heads=64`, `num_key_value_heads=1`
+- `head_dim=512` (MLA: `rope_head_dim=64`, `nope_head_dim=448`)
+- `sliding_window=128`
+- `vocab_size=129280`
+
+MoE:
+
+- `n_routed_experts=256`, `n_shared_experts=1`
+- `n_activated_experts=6` (`num_experts_per_tok`)
+- `moe_inter_dim=2048`
+- Hash-gated layers (`ffn.gate.tid2eid`): layer IDs `[0,1,2]` (`num_hash_layers=3`)
+- Score-gated layers (`ffn.gate.bias`): layer IDs `[3..42]`
+
+Attention schedule (main trunk; derived from `compress_ratios`):
+
+- Layer-type counts: `sliding=2`, `csa=21` (`compress_ratio=4`), `hca=20` (`compress_ratio=128`)
+- Sliding-only layer IDs: `[0,1]`
+- CSA layer IDs: `[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42]`
+- HCA layer IDs: `[3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41]`
+- Main compress-ratio schedule (length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
+
+MTP:
+
+- `num_nextn_predict_layers=1` (`mtp.0.*` namespace exists in the official checkpoint key set)
+- MTP compress ratios (length `1`): `[0]` (MTP is sliding-only; no CSA/HCA compressor/indexer tensors should exist under `mtp.0.*`)
 
 ## Source trace (official → pinned fixtures → DS4 contract)
 
@@ -538,6 +571,8 @@ To make the key set easy to reference in downstream tooling (and to detect accid
 - `checkpoint_index.weight_map_num_tensors`
 - `checkpoint_index.weight_map_keys_sha256`
 - `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`)
+- `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256` (convenience copies of the per-prefix `layers` / `mtp` hashes)
+- `mtp.checkpoint_key_fingerprint` (official `mtp.*` subset fingerprint; useful for deciding whether an artifact set plausibly preserves upstream `mtp.0.*`)
 - `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
 
 ### Quantization scale tensor semantics (FP8/FP4)
@@ -775,6 +810,7 @@ Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned anti
 
 As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
 - The same inspection reports `mtp_namespace.has_mtp0=true` and `mtp_trust.status=incomplete` (the `mtp.0.*` prefix exists, but the tensor set does not satisfy the upstream MTP contract).
+- The same inspection also records `mtp_keys_sha256 != fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`, i.e. these compact sidecars do **not** match the official MTP key subset fingerprint.
 
 - Require `mtp_contract.checked == true` and `mtp_contract.complete == true` before claiming an artifact “preserves MTP”.
 - If `mtp_present == true` but `mtp_contract.complete == false`, treat MTP as **incomplete** (disabled/untrusted) until proven otherwise.
@@ -786,6 +822,7 @@ As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scrip
 
 MTP acceptance gates (high-performance / quantized path):
 
+- Fingerprint gate: when `mtp_present==true`, require `mtp_keys_sha256 == fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256` (otherwise the artifact is not the official `mtp.0.*` tensor key subset).
 - Structural gate: `mtp_contract.complete == true` (and `mtp_namespace.has_mtp0 == true`) is necessary to claim the artifact preserves upstream `mtp.0.*`.
 - Oracle gate: even if structurally complete, treat MTP as **untrusted** until a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`; compare both prefill + decode; top-k IDs must match exactly; see `contract_summary.json` `mtp.trust_gates`).
 

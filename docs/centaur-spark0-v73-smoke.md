@@ -72,6 +72,13 @@ Notable outputs:
 - `hyor_dashboard/` (HTML/JSON dashboard output)
 - `smoke.log` (if `CENTAUR_LOG` is set; `centaur_spark0_v73_run.sh` sets it automatically)
 
+To validate the expected artifacts exist (run on Spark0):
+
+```bash
+export CENTAUR_RUN_ID="<run_id>"
+sh ./scripts/centaur_spark0_v73_validate_artifacts.sh
+```
+
 ### Optional: faster/offline dependency install
 
 Centaur v73 `requirements.txt` includes `numpy/scipy/scikit-learn`. On Spark0, install can be slow without cached wheels.

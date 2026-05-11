@@ -8,7 +8,7 @@ This is a **human-run** checklist for operating a 3-node ring layout safely.
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring ...` (stages TP=3 env variants via `DS4_ENV_VARIANT=tp3`)
 - Install staged templates on each Spark:
-  - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight`
+  - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight --preflight tp3`
 - Confirm systemd templates and scripts are present:
   - `/etc/systemd/system/ds4*.service`
   - `/opt/ds4/scripts/ops_tp3_readiness.sh`

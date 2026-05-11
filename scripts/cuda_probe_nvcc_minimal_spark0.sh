@@ -169,10 +169,20 @@ int cuda_arch_list_probe_dummy(void)
 }
 EOF
 
-	try_compile_only() {
-		tag=\"\$1\"
-		arch=\"\$2\"
-		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
+cat > \"$REMOTE_DIR\"/cuda_nvcc_ptx_target_probe.cu <<'EOF'
+#include <stdint.h>
+
+__global__ void cuda_ptx_target_probe(uint32_t *out)
+{
+	if ( out != 0 )
+		out[0] = 0;
+}
+EOF
+
+		try_compile_only() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- compile-only: \${tag} (-arch=\${arch})\"
 		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
 		set +e
 		\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
@@ -267,13 +277,40 @@ try_gencode_only() {
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
 	try_compile_only variant_sm_121a sm_121a
-	try_compile_only variant_sm_121f sm_121f
-		try_compile_only_featureset_macros featureset_compute_121a compute_121a
-		try_compile_only_featureset_macros featureset_compute_121f compute_121f
-	echo
-	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
-	try_arch_list() {
-		tag=\"\$1\"
+		try_compile_only variant_sm_121f sm_121f
+			try_compile_only_featureset_macros featureset_compute_121a compute_121a
+			try_compile_only_featureset_macros featureset_compute_121f compute_121f
+		echo
+		echo \"== nvcc: PTX .target probe (best-effort) ==\"
+		try_ptx_target() {
+			tag=\"\$1\"
+			arch=\"\$2\"
+			echo \"-- ptx: \${tag} (-arch=\${arch})\"
+			set +e
+			\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -ptx -o \"$REMOTE_DIR\"/\"\${tag}\".ptx \"$REMOTE_DIR\"/cuda_nvcc_ptx_target_probe.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"$REMOTE_DIR\"/\"\${tag}\".err
+			rc=\$?
+			set -e
+			if [ \$rc -eq 0 ]; then
+				target_line=\$(grep \"^\\\\.target\" \"$REMOTE_DIR\"/\"\${tag}\".ptx | head -n 1 || true)
+				if [ \"\${target_line}\" = \"\" ]; then
+					target_line=\"(missing)\"
+				fi
+				echo \"\${tag}: OK ptx_target=\${target_line}\"
+			else
+				echo \"\${tag}: FAILED rc=\${rc}\"
+				head -n 40 \"$REMOTE_DIR\"/\"\${tag}\".err || true
+			fi
+		}
+		try_ptx_target ptx_target_sm_121 sm_121
+		try_ptx_target ptx_target_sm_121a sm_121a
+		try_ptx_target ptx_target_sm_121f sm_121f
+		try_ptx_target ptx_target_compute_121 compute_121
+		try_ptx_target ptx_target_compute_121a compute_121a
+		try_ptx_target ptx_target_compute_121f compute_121f
+		echo
+		echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
+		try_arch_list() {
+			tag=\"\$1\"
 		arch=\"\$2\"
 		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
 		echo \"-- compile-only: \${tag} (-arch=\${arch})\"
@@ -527,11 +564,15 @@ __global__ void cuda_arch_probe(uint32_t *out)
 	(void)get_attr_i32(&smem_sm,0,cudaDevAttrMaxSharedMemoryPerMultiprocessor);
 	(void)get_attr_i32(&regs_block,0,cudaDevAttrMaxRegistersPerBlock);
 	(void)get_attr_i32(&smem_block_max,0,cudaDevAttrMaxSharedMemoryPerBlock);
-	(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
-	(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
-	(void)get_attr_i32(&smem_reserved_block,0,cudaDevAttrReservedSharedMemoryPerBlock);
-	(void)get_attr_i32(&mem_pools,0,cudaDevAttrMemoryPoolsSupported);
+		(void)get_attr_i32(&coop_launch,0,cudaDevAttrCooperativeLaunch);
+		(void)get_attr_i32(&cluster_launch,0,cudaDevAttrClusterLaunch);
+		(void)get_attr_i32(&smem_reserved_block,0,cudaDevAttrReservedSharedMemoryPerBlock);
+		(void)get_attr_i32(&mem_pools,0,cudaDevAttrMemoryPoolsSupported);
+	#if defined(CUDA_VERSION) && (CUDA_VERSION >= 12000)
 		(void)get_cu_attr_i32(&tma_map,0,CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED);
+	#else
+		tma_map = -1;
+	#endif
 		mem_bytes = (uint64_t)prop.totalGlobalMem;
 		smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
 		printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d schema=3\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map);
