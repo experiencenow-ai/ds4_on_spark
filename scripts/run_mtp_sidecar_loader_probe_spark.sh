@@ -54,7 +54,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "Set Spark-side env vars via REMOTE_MTP_SIDECAR_ENV:"
 	echo
 	echo "- ALLOW_RUN=1"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (optional; defaults to Spark0-staged artifact if present)"
 	echo
 	echo "Remote contract probe env (recorded):"
 	echo
@@ -78,7 +78,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "- ALLOW_PATCH=1 (apply the sidecar probe patch)"
 	echo "- ALLOW_BUILD=1 (build llama-ds4-mtp-sidecar-probe)"
 	echo "- ALLOW_RUN=1 (run the probe against an already-staged sidecar GGUF)"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (file path; loader probe does not accept URLs)"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (optional; defaults to Spark0-staged artifact if present)"
 	echo
 	echo "Optional Spark-side env vars:"
 	echo
@@ -110,7 +110,23 @@ if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
   exit 0
 fi
 if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)\"
+  for p in \
+    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+  do
+    if [ -r \"$p\" ]; then
+      MTP_SIDECAR_GGUF=\"$p\"
+      export MTP_SIDECAR_GGUF
+      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
+      break
+    fi
+  done
+fi
+if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
+  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\" 1>&2
   exit 0
 fi
 case \"${MTP_SIDECAR_GGUF}\" in
@@ -314,6 +330,22 @@ ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe.patch" \
 
 ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV sh -lc '
 set -eu
+if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
+  for p in \
+    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+  do
+    if [ -r \"$p\" ]; then
+      MTP_SIDECAR_GGUF=\"$p\"
+      export MTP_SIDECAR_GGUF
+      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
+      break
+    fi
+  done
+fi
 PATCH_FILE=\"/tmp/llamacpp_mtp_sidecar_probe.patch\"
 export PATCH_FILE
 /tmp/llamacpp_mtp_sidecar_probe_patch.sh

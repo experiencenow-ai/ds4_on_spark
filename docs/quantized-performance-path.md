@@ -235,8 +235,8 @@ Initial scope:
     - Treat `structural_complete_untrusted` as “MTP weights appear complete, but still requires an MTP logits oracle (`--include-mtp`) before enabling speculative decoding.”
 - expose draft logits/tokens from the runtime or a sidecar path
 - when using a DS4-tuned MTP sidecar (`general.architecture=deepseek4_mtp_support`) on Spark/CUDA llama.cpp forks, validate the sidecar contract first (metadata-only): `docs/llamacpp-mtp-sidecar-probe.md`
-  - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh`
-  - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load): `scripts/run_mtp_sidecar_loader_probe_spark.sh`
+  - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
+  - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load): `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
 - recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-9cb905d-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing

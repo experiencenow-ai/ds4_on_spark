@@ -35,7 +35,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_probe_spark.md"
 	echo "Set env vars on Spark via REMOTE_MTP_SIDECAR_ENV:"
 	echo
 	echo "- ALLOW_RUN=1"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (optional; defaults to Spark0-staged artifact if present)"
 	echo
 	echo "Remote MTP sidecar env:"
 	echo
@@ -67,7 +67,23 @@ if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
   exit 0
 fi
 if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)\"
+  for p in \
+    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+  do
+    if [ -r \"$p\" ]; then
+      MTP_SIDECAR_GGUF=\"$p\"
+      export MTP_SIDECAR_GGUF
+      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
+      break
+    fi
+  done
+fi
+if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
+  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\" 1>&2
   exit 0
 fi
 case \"${MTP_SIDECAR_GGUF}\" in
