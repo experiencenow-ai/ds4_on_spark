@@ -400,11 +400,15 @@ if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
 			export MTP_SIDECAR_GGUF
 			echo "defaulted MTP_SIDECAR_GGUF=$p" 1>&2
 			break
-		fi
-	done
+	fi
+done
 fi
 PATCH_FILE="/tmp/llamacpp_mtp_sidecar_probe.patch"
 export PATCH_FILE
+if [ "${JSON_ONLY:-}" = "" ]; then
+	JSON_ONLY=1
+	export JSON_ONLY
+fi
 /tmp/llamacpp_mtp_sidecar_probe_patch.sh
 SH
 
@@ -424,7 +428,17 @@ decoder = json.JSONDecoder()
 best_doc = None
 best_len = 0
 
+try:
+    doc = json.loads(txt)
+    if isinstance(doc, dict):
+        best_doc = doc
+        best_len = len(txt.encode("utf-8"))
+except Exception:
+    pass
+
 for m in re.finditer(r"^\\{", txt, flags=re.M):
+    if best_doc is not None:
+        break
     idx = m.start()
     try:
         doc, end = decoder.raw_decode(txt[idx:])
@@ -438,7 +452,7 @@ for m in re.finditer(r"^\\{", txt, flags=re.M):
 
 if best_doc is None:
     out["errors"].append(
-        "unable to locate JSON object in stdout; set JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV for machine-parseable output"
+        "unable to locate JSON object in stdout; ensure JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV (runner defaults JSON_ONLY=1 unless overridden)"
     )
     print(json.dumps(out, indent=2, sort_keys=True))
     raise SystemExit(0)
