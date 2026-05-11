@@ -33,23 +33,22 @@ check_ref()
 	local got
 
 	if [[ "${upstream}" == huggingface.co/* ]]; then
-		if [ "${ref}" != "refs/heads/main" ] && [ "${ref}" != "refs/heads/master" ]; then
-			echo "FAIL ${name}: unsupported HF ref: ${ref}" >&2
-			return 1
+		if [ "${ref}" = "refs/heads/main" ] || [ "${ref}" = "refs/heads/master" ]; then
+			local report
+			report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
+			got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
+			if [ -z "${got}" ] || [ "${got}" = "UNKNOWN" ]; then
+				echo "FAIL ${name}: HF API did not return sha" >&2
+				return 1
+			fi
+			if [ "${got}" != "${expected}" ]; then
+				echo "FAIL ${name}: expected ${expected}, got ${got}" >&2
+				return 1
+			fi
+			echo "OK   ${name}"
+			return 0
 		fi
-		local report
-		report="$("${ROOT_DIR}/scripts/upstream_hf_api_report.sh" "${upstream#huggingface.co/}")"
-		got="$(awk '/^sha:/ {print $2}' <<<"${report}")"
-		if [ -z "${got}" ] || [ "${got}" = "UNKNOWN" ]; then
-			echo "FAIL ${name}: HF API did not return sha" >&2
-			return 1
-		fi
-		if [ "${got}" != "${expected}" ]; then
-			echo "FAIL ${name}: expected ${expected}, got ${got}" >&2
-			return 1
-		fi
-		echo "OK   ${name}"
-		return 0
+		# For non-default refs (e.g. HF PR refs), use the git transport.
 	fi
 
 	local out
