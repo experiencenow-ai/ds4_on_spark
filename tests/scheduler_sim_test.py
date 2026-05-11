@@ -366,6 +366,63 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreaterEqual(float(s["k_update_frac_tokens_batch"]), 0.0)
         self.assertLessEqual(float(s["k_update_frac_tokens_batch"]), 1.0)
 
+    def test_summary_includes_task_queue_wait_percentiles(self) -> None:
+        trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+            num_tokens=400,
+            num_experts=4,
+            num_candidates=4,
+            interactive_arrival_rate_tps=200.0,
+            batch_arrival_rate_tps=6000.0,
+            interactive_burst_prob=0.0,
+            interactive_burst_scale=1.0,
+            batch_burst_prob=0.0,
+            batch_burst_scale=1.0,
+            zipf_alpha=1.1,
+            seed=123,
+        )
+        trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+        cfg = scheduler_sim.SimConfig(
+            num_experts=trace_cfg.num_experts,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=4.0,
+            starvation_ms=100.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=2,
+                k_min_batch=1,
+                k_max_batch=2,
+                q_low=8,
+                q_high=96,
+            ),
+            k_mode="controller",
+            k_signal="class",
+            sim_seed=123,
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        for k in (
+            "task_queue_wait_ms_p50_interactive",
+            "task_queue_wait_ms_p95_interactive",
+            "task_queue_wait_ms_p50_batch",
+            "task_queue_wait_ms_p95_batch",
+            "task_queue_wait_ms_p50_mtp_draft",
+            "task_queue_wait_ms_p95_mtp_draft",
+            "task_queue_wait_ms_p50_mtp_verify",
+            "task_queue_wait_ms_p95_mtp_verify",
+            "expert_max_task_queue_wait_ms_p50",
+            "expert_max_task_queue_wait_ms_p95",
+            "expert_max_task_queue_wait_ms_max",
+        ):
+            self.assertIn(k, s)
+            self.assertGreaterEqual(float(s[k]), 0.0)
+        self.assertGreaterEqual(float(s["task_queue_wait_ms_p95_interactive"]), float(s["task_queue_wait_ms_p50_interactive"]))
+        self.assertGreaterEqual(float(s["task_queue_wait_ms_p95_batch"]), float(s["task_queue_wait_ms_p50_batch"]))
+        self.assertGreaterEqual(float(s["expert_max_task_queue_wait_ms_p95"]), float(s["expert_max_task_queue_wait_ms_p50"]))
+        self.assertGreaterEqual(float(s["expert_max_task_queue_wait_ms_max"]), float(s["expert_max_task_queue_wait_ms_p95"]))
+
     def test_stage_skip_totals_count_attempts(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
