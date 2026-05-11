@@ -17,6 +17,8 @@ For convenience on single-GPU bring-up:
   - `scripts/cuda_probe_compile_only_tiny_spark0.sh` performs a best-effort `-fatbin` + `cuobjdump --dump-ptx` check for `-arch=native` and reports whether PTX is embedded (expected missing; treat as a portability signal, not a functional failure).
   - When PTX is present in any of these checks, the scripts print the first PTX `.target` line (`ptx_target_*`) to make the embedded PTX arch explicit in logs.
 
+The probe `tools/cuda_probe/bin/cuda_sm121_arch_list_report` prints `__CUDA_ARCH_LIST__` (and CUDA 13 feature-set macros when present) at runtime for a normal `-arch=sm_121` build, which is handy when diagnosing “what arch list did `nvcc` think we built?” issues.
+
 ### CUDA 13 NVCC Linkage / Visibility Defaults
 
 CUDA 13 changes `nvcc` defaults that can matter for CUTLASS/DeepGEMM-style builds:

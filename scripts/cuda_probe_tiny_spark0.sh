@@ -103,10 +103,11 @@ echo
 	if [ \"$WITH_LINK_PROBES\" != \"0\" ]; then
 		run_retry cuda_sm121_rdc_probe \"$REMOTE_DIR\"/bin/cuda_sm121_rdc_probe
 		run_retry cuda_sm121_dlto_probe \"$REMOTE_DIR\"/bin/cuda_sm121_dlto_probe
-	fi
-	run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
-	"
-}
+		fi
+		run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+		run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+		"
+	}
 
 if [ "$log_path" = "" ]; then
 	main
