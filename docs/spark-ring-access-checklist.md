@@ -50,7 +50,7 @@ Record (for each node):
 ## 6) Bandwidth/Latency (Safe, Non-Secret)
 
 - Use ping RTT as the minimum viable latency check:
-  - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`).
+  - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
 
 ## 7) Safe GPU/Storage Metadata Capture
@@ -67,4 +67,3 @@ Use `REDACT=1` for any committed output.
 - Always generate snapshot docs with `REDACT=1`.
 - Treat hostnames, OS/kernel/toolchain versions, GPU model names, disk model names, and interface names as non-secret.
 - Treat IP addresses, MAC addresses, GPU UUID tokens, and any host keys as sensitive; the probe scripts redact them automatically when `REDACT=1`.
-

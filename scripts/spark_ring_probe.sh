@@ -307,22 +307,28 @@ if [ -r /usr/local/cuda/version.json ]; then
 	[ "$cuda_ver" != "" ] && echo "cuda version.json cuda: $cuda_ver"
 fi
 echo
-if [ "$ring_ping" = "1" ]; then
-	echo "== peer ping (best effort) =="
-	if [ "$#" -eq 0 ]; then
-		echo "peers: (none)"
-	else
-		echo "peers: $*"
-		for peer in "$@"; do
-			printf "%s: " "$peer"
-			if ping -c 2 -W 1 "$peer" >/dev/null 2>&1; then
-				echo "ping_ok"
-			else
-				echo "ping_failed"
-			fi
-		done
+	if [ "$ring_ping" = "1" ]; then
+		echo "== peer ping (best effort, rtt) =="
+		if [ "$#" -eq 0 ]; then
+			echo "peers: (none)"
+		else
+			echo "peers: $*"
+			for peer in "$@"; do
+				out=""
+				if out="$(ping -c 3 -W 1 "$peer" 2>&1)"; then
+					status="ping_ok"
+				else
+					status="ping_failed"
+				fi
+				loss="$(printf "%s\n" "$out" | awk '/packets transmitted/ { for (i=1; i<=NF; i++) if ($i ~ /%/) { print $i; exit } }' || true)"
+				rtt="$(printf "%s\n" "$out" | awk -F' = ' '/^rtt / { print $2; exit }' | sed -E 's/ ms$//' || true)"
+				printf "%s: %s" "$peer" "$status"
+				[ "$loss" != "" ] && printf " loss=%s" "$loss"
+				[ "$rtt" != "" ] && printf " rtt_ms=%s" "$rtt"
+				echo
+			done
+		fi
 	fi
-fi
 REMOTE
 		then
 			:

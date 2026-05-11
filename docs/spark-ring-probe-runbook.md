@@ -39,6 +39,7 @@ If you want each host to ping **all** peers instead of only ring neighbors:
 Notes:
 - The ring probe exits non-zero if any SSH target fails; keep `|| true` when capturing partial state.
 - The output includes `known_hosts:` mapping for reproducibility.
+- The `== peer ping ==` section includes packet loss and RTT summary when available.
 
 ## 3) Deep single-node hardware/toolchain probe (optional; Spark0 recommended)
 
@@ -64,4 +65,3 @@ Minimum “ready for multi-node bring-up” bar:
 - MTU is consistent on the intended fabric (wired vs Wi‑Fi).
 - Ping is successful for the intended topology (ring neighbors or full mesh).
 - GPU inventory and CUDA toolkit facts are captured per node (commit-safe redacted output).
-
