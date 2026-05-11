@@ -20,6 +20,7 @@ class CanonicalRecord:
     raw: Dict[str, Any]
     rtype: str
     run_id: str
+    judge_id: str
     item_id: str
     task_id: str
     task_family: str
@@ -109,6 +110,15 @@ def extract_answer(text: str) -> str:
     return(m.group(1).upper())
 
 
+def make_item_id(task_id: str, prompt_template_id: str, a_model_id: str, b_model_id: str) -> str:
+    parts = [task_id, prompt_template_id]
+    if a_model_id != "" or b_model_id != "":
+        parts.append(f"a={a_model_id}")
+        parts.append(f"b={b_model_id}")
+    parts = [p for p in parts if p != ""]
+    return("|".join(parts))
+
+
 def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
     rtype = _get_str(obj, "type", "record_type")
     rtype = rtype.lower()
@@ -121,6 +131,7 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
             rtype = "unknown"
 
     run_id = _get_str(obj, "run_id", "run", "run_name", "variant")
+    judge_id = _get_str(obj, "judge_id", "judge", "rater_id")
     item_id = _get_str(obj, "item_id", "pair_id", "comparison_id", "id")
 
     task_id = _get_str(obj, "task_id", "task", "task_name")
@@ -147,6 +158,7 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
         raw=dict(obj),
         rtype=rtype,
         run_id=run_id,
+        judge_id=judge_id,
         item_id=item_id,
         task_id=task_id,
         task_family=task_family,

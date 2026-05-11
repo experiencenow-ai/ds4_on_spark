@@ -91,11 +91,40 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]]) -> L
     return(scored)
 
 
+def _select(scored: List[CandidateScore], limit: int, max_per_family: int, max_per_template: int) -> List[CandidateScore]:
+    if limit <= 0:
+        return([])
+    if max_per_family < 0:
+        max_per_family = 0
+    if max_per_template < 0:
+        max_per_template = 0
+
+    family_sel: Dict[str, int] = {}
+    template_sel: Dict[str, int] = {}
+
+    out: List[CandidateScore] = []
+    for c in scored:
+        if len(out) >= limit:
+            break
+        if max_per_family > 0:
+            if family_sel.get(c.task_family, 0) >= max_per_family:
+                continue
+        if max_per_template > 0:
+            if template_sel.get(c.prompt_template_id, 0) >= max_per_template:
+                continue
+        out.append(c)
+        family_sel[c.task_family] = family_sel.get(c.task_family, 0) + 1
+        template_sel[c.prompt_template_id] = template_sel.get(c.prompt_template_id, 0) + 1
+    return(out)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Recommend next entropy-buffer task batch from candidate JSONL.")
     p.add_argument("--history-jsonl", action="append", default=[], help="Past task/judge JSONL (repeatable).")
     p.add_argument("--candidates-jsonl", action="append", default=[], help="Candidate task JSONL (repeatable).")
     p.add_argument("--limit", type=int, default=25, help="Max recommendations.")
+    p.add_argument("--max-per-family", type=int, default=0, help="Hard cap per task_family (0 disables).")
+    p.add_argument("--max-per-template", type=int, default=0, help="Hard cap per prompt_template_id (0 disables).")
     p.add_argument("--out-json", type=str, default="", help="Write recommendations JSON to this path.")
     p.add_argument("--json", action="store_true", help="Print JSON to stdout.")
     args = p.parse_args(list(argv) if argv is not None else None)
@@ -108,7 +137,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     history = lib.load_jsonl(args.history_jsonl)
     candidates = lib.load_jsonl(args.candidates_jsonl)
     scored = _score(history, candidates)
-    top = scored[: max(0, args.limit)]
+    top = _select(scored, max(0, args.limit), args.max_per_family, args.max_per_template)
 
     recs: List[Dict[str, Any]] = []
     for c in top:
@@ -131,6 +160,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "history_records": len(history),
             "candidates_records": len(candidates),
             "limit": args.limit,
+            "max_per_family": args.max_per_family,
+            "max_per_template": args.max_per_template,
         },
     }
 

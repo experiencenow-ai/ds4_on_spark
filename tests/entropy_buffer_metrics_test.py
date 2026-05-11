@@ -26,15 +26,23 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.diversity["task_id"]["unique"], 5)
         self.assertEqual(report.diversity["task_family"]["unique"], 4)
         self.assertEqual(report.diversity["prompt_template_id"]["unique"], 4)
+        self.assertEqual(report.diversity["task_family_template_pair"]["unique"], 4)
         self.assertEqual(report.diversity["model_id"]["unique"], 3)
         self.assertEqual(report.diversity["answer"]["unique"], 3)
 
+        self.assertEqual(report.tokens["prompt_words_total"], 61)
+        self.assertEqual(report.tokens["output_words_total"], 19)
+
         self.assertAlmostEqual(report.duplicates["output_norm_dup_rate"], 0.0)
         self.assertAlmostEqual(report.duplicates["prompt_norm_dup_rate"], (1.0 / 6.0))
+        self.assertEqual(report.duplicates["task_template_groups_ge2"], 1)
 
         self.assertEqual(report.judge["label_counts"]["a"], 3)
         self.assertEqual(report.judge["label_counts"]["tie"], 1)
         self.assertAlmostEqual(report.judge["disagreement_rate"], 0.25)
+        self.assertEqual(report.judge["decided_count_ab"], 3)
+        self.assertAlmostEqual(report.judge["decided_rate_ab"], 0.75)
+        self.assertAlmostEqual(report.judge["label_balance_ab"], 1.0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)
 

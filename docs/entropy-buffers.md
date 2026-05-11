@@ -79,11 +79,12 @@ The scripts compute:
 
 - **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family`.
 - **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
-- **Token / n-gram distribution** (approx): word uni/bi/tri stats + top n-grams + repetition heuristics.
+- **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
+- **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
 - **Judge label balance**: label histogram + entropy.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean.
-- **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present).
+- **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
 - **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
 
@@ -104,6 +105,8 @@ python3 scripts/entropy_buffer_metrics.py \
 python3 scripts/entropy_buffer_recommend.py \
   --history-jsonl fixtures/entropy-buffer/records_mini.jsonl \
   --candidates-jsonl fixtures/entropy-buffer/candidates_mini.jsonl \
+  --max-per-family 10 \
+  --max-per-template 10 \
   --out-json /tmp/entropy_recommendations.json
 ```
 
@@ -116,4 +119,3 @@ python3 scripts/entropy_buffer_recommend.py \
 
 - Token/n-gram metrics are approximate (not model-tokenizer accurate).
 - “Useful novelty” is heuristic; treat flags as triage signals, not ground truth.
-
