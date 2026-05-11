@@ -80,7 +80,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 For each node, capture:
 - GPU inventory (`nvidia-smi` CSV query output: GPU name, bus id, driver version, compute cap when available).
-- Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` `cuda:` when present.
+- Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` (toolkit version) when present.
 - Storage facts (`df -h` + `lsblk` model/size).
 
 Use `REDACT=1` for any committed output.
