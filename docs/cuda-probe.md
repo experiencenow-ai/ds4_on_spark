@@ -74,6 +74,7 @@ When you only need to validate `nvcc` / toolchain support for `-arch=sm_121`:
 This also performs best-effort toolchain-only checks when supported:
 
 - Always attempt best-effort compile-only builds for `sm_121a` / `sm_121f`, and report whether each target was advertised by `nvcc --list-gpu-code` (informational; the hard failure remains missing `sm_121` support).
+- Also attempt the same `sm_121a` / `sm_121f` compile-only probes via the long-form `nvcc --gpu-architecture=...` flag (informational; build-system compatibility check).
 - If `nvcc --list-gpu-arch` advertises `compute_121`, attempt a compile-only build for `-arch=compute_121` (virtual-arch / PTX-target probe).
 - Attempt best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted by the toolchain).
 - Print a best-effort `__CUDA_ARCH_LIST__` snapshot for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` to make NVCC’s implicit “virtual arch list” observable in logs.
@@ -163,7 +164,7 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 
 The runner retries each probe once on failure to smooth over transient Spark0 GPU pressure (for example, primary-context init failures that surface as “out of memory”).
 
-Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed, but best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed); feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
+Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-code` includes `sm_121` (no `sm_121a` / `sm_121f` entries observed, but best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed; same for best-effort `--gpu-architecture=sm_121a` / `sm_121f`); feature-set macro probes for `-arch=compute_121a` / `-arch=compute_121f` currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined; `cuda_sm121_cxx20_probe` reports `__CUDA_ARCH__=1210`; `cuda_sm121_smem_optin` reports `MaxSharedMemoryPerBlockOptin=101376` and passes; `cuda_sm121_tma_bulk_tensor_2d` returns `rc=0`; NVRTC `supportedArchs` includes `121`.
 
 ## Spark0: Compile + Run
 
