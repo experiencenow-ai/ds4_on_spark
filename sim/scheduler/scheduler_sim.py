@@ -169,6 +169,7 @@ class SimConfig:
     mtp_draft_cost_scale: float = 0.25
     mtp_verify_per_draft_cost_scale: float = 0.0
     mtp_draft_attempt_policy: str = "full"
+    dflash_draft_len: int = -1
     batch_max_interactive: int = 1
     batch_max_batch: int = 1
     batch_wait_interactive_ms: float = 0.0
@@ -3241,8 +3242,13 @@ def run_simulation(
     metrics.dflash_accept_len_per_step = [-1 for _ in range(len(trace))]
     metrics.dflash_accepted_per_step = [-1 for _ in range(len(trace))]
     metrics.dflash_rejected_per_step = [-1 for _ in range(len(trace))]
-    dflash_draft_len = infer_dflash_draft_len_from_trace(trace, trace_meta)
-    dflash_draft_len = int(dflash_draft_len) if dflash_draft_len is not None else 0
+    dflash_draft_len = 0
+    if cfg.dflash_draft_len >= 0:
+        dflash_draft_len = int(cfg.dflash_draft_len)
+    else:
+        inferred = infer_dflash_draft_len_from_trace(trace, None)
+        if inferred is not None and int(inferred) > 0:
+            dflash_draft_len = int(inferred)
 
     def _token_first_admit(tid: int) -> None:
         ts = tokens[tid]
@@ -4395,6 +4401,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
+    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from meta.dflash_draft_len or consistent accepted_dflash+rejected_dflash.")
 
     p.add_argument("--k-min-interactive", type=int, default=2)
     p.add_argument("--k-max-interactive", type=int, default=4)
@@ -4506,6 +4513,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if inferred is None:
                 raise SystemExit("--mtp-draft-len=-1 requires meta.mtp_draft_len or consistent accepted_mtp+rejected_mtp in the trace")
             args.mtp_draft_len = int(inferred)
+        if args.dflash_draft_len == -1:
+            inferred = infer_dflash_draft_len_from_trace(trace, trace_meta)
+            if inferred is not None:
+                args.dflash_draft_len = int(inferred)
 
         if args.trace_derive_cost_scale.strip().lower() != "none":
             try:
@@ -4694,6 +4705,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_draft_cost_scale=args.mtp_draft_cost_scale,
         mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
         mtp_draft_attempt_policy=args.mtp_draft_attempt_policy,
+        dflash_draft_len=args.dflash_draft_len,
     )
 
     replay_mode = (args.trace_jsonl != "" or args.trace_csv != "")
