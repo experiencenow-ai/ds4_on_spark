@@ -134,3 +134,4 @@ For sharded GGUF repos, use the grouped report to sum shard sizes:
 - [`docs/upstream-qwen-dflash.md`](upstream-qwen-dflash.md)
 - [`docs/upstream-dflash.md`](upstream-dflash.md)
 - [`docs/upstream-ling-2.6-flash.md`](upstream-ling-2.6-flash.md)
+- [`docs/model-quality-speed.md`](model-quality-speed.md)

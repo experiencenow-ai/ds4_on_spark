@@ -72,6 +72,9 @@ Tasks:
   speculative probes from `docs/upstream-qwen-dflash.md` after Ling-style smoke
   tests are reproducible.
 - Capture command line, context, quant, t/s, TTFT, memory use.
+- Track local quality rows and run `scripts/model_quality_speed_score.py` before
+  making quality/speed tradeoff recommendations across Ling, Qwen, DeepSeek, and
+  DFlash variants.
 - Record failures exactly.
 
 Exit: one baseline report, even if performance is poor, plus one quantized

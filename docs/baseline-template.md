@@ -42,11 +42,28 @@ Baseline type:
 
 ## Results
 
+Quality:
+
+- Public quality prior:
+- Public quality basis/source:
+- Local quality score:
+- Passed tasks:
+- Total tasks:
+- Quality score:
+
 TTFT:
 
 Prefill throughput:
 
 Generation throughput:
+
+Quality-adjusted generation throughput:
+
+Correct task rate:
+
+Tokens per success:
+
+Pareto dominated by:
 
 Memory:
 
