@@ -237,26 +237,26 @@ append_model_runs_csv "llamacpp" "${MODEL_SOURCE:-llamacpp}" "$OUT_DIR/remote_ll
 echo "== running MTP sidecar contract probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod +x /tmp/model_contract_probe_mtp_sidecar.py && $REMOTE_MTP_SIDECAR_ENV sh -lc '
 set -eu
-if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
+if [ \"\${ALLOW_RUN:-0}\" != \"1\" ]; then
   echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
   exit 0
 fi
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
+if [ \"\${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
   echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\"
   exit 0
 fi
-if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
-  echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
+if [ ! -r \"\${MTP_SIDECAR_GGUF}\" ]; then
+  echo \"run skipped: MTP_SIDECAR_GGUF not readable: \${MTP_SIDECAR_GGUF}\"
   exit 0
 fi
-python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"\${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
 ' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
     >"$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" 2>"$OUT_DIR/remote_mtp_sidecar_probe_stderr.txt" || true
 
 {
     echo "## MTP sidecar contract probe (Spark)"
     echo
-    echo "This is a metadata-only sanity check for DS4-tuned MTP sidecars (e.g. `general.architecture=deepseek4_mtp_support` + 32 `mtp.0.*` tensors)."
+    echo 'This is a metadata-only sanity check for DS4-tuned MTP sidecars (e.g. `general.architecture=deepseek4_mtp_support` + 32 `mtp.0.*` tensors).'
     echo "It does not require loading the trunk GGUF or reading tensor payloads into RAM."
     echo
     echo "Summary (best-effort):"

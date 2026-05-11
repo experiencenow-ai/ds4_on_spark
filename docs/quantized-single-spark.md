@@ -151,6 +151,11 @@ The CSV row is derived from the `== baseline summary (approx) ==` block emitted
 by the remote runner. For llama.cpp it now includes `output_tokens` (best-effort
 count from the llama.cpp `eval time = ... / <tokens>` timing line).
 
+Compatibility notes (llama.cpp forks):
+
+- Some V4-capable forks expose `--show-timings` + `--perf` instead of `--timings`. The Spark-side probe auto-detects the supported flags via `llama-cli --help` and parses either the classic `eval time = ... / <tokens>` lines or the fork-style `[ Prompt: <t/s> | Generation: <t/s> ]` summary.
+- The milestone wrapper now shell-quotes values in `REMOTE_LLAMA_ENV` so `MODEL_SOURCE` can include spaces/parentheses without breaking the remote command.
+
 If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
 it forwards the same CSV/quality env vars:
 
