@@ -3783,6 +3783,7 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     dflash_output_tps = (dflash_output_tokens * 1000.0 / makespan_ms) if makespan_ms > 0.0 else 0.0
     dflash_bonus_tokens = float(metrics.dflash_bonus_tokens)
     dflash_accept_rate = (float(metrics.dflash_draft_tokens_accepted) / float(metrics.dflash_draft_tokens_total)) if metrics.dflash_draft_tokens_total > 0 else 0.0
+    dflash_accept_lens = [float(al) for al in metrics.dflash_accept_len_per_step if al > 0]
     dropped = float(metrics.dropped_tokens_backpressure)
     denom = float(metrics.admitted_tokens + metrics.dropped_tokens_backpressure)
     drop_frac = (dropped / denom) if denom > 0.0 else 0.0
@@ -3803,6 +3804,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
     mtp_mean_accept_len = (float(metrics.mtp_output_tokens) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
     mtp_mean_draft_attempt_len = (float(metrics.mtp_draft_tokens_total) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
+    mtp_accept_lens = [float(al) for al in metrics.mtp_accept_len_per_step if al > 0]
+    mtp_draft_attempt_lens = [float(al) for al in metrics.mtp_draft_attempt_len_per_step if al >= 0]
     mtp_service_slot_draft_frac = (float(metrics.service_slot_ms_mtp_draft) / float(metrics.service_slot_ms_total)) if metrics.service_slot_ms_total > 0.0 else 0.0
     mtp_service_slot_verify_frac = (float(metrics.service_slot_ms_mtp_verify) / float(metrics.service_slot_ms_total)) if metrics.service_slot_ms_total > 0.0 else 0.0
     dropped_interactive = float(metrics.dropped_tokens_backpressure_interactive)
@@ -3840,6 +3843,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "dflash_output_token_throughput_tps": float(dflash_output_tps),
             "dflash_bonus_tokens": float(dflash_bonus_tokens),
             "dflash_mean_accept_len": float((dflash_output_tokens / dflash_steps) if dflash_steps > 0.0 else 0.0),
+            "dflash_accept_len_p50": float(_p_or_zero(dflash_accept_lens, 0.50)),
+            "dflash_accept_len_p95": float(_p_or_zero(dflash_accept_lens, 0.95)),
             "dflash_accept_rate": float(dflash_accept_rate),
             "dflash_service_slot_ms_per_output_token": float(dflash_service_per_output_token),
             "service_slot_ms_total": float(metrics.service_slot_ms_total),
@@ -3925,6 +3930,10 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "mtp_accept_rate": float(mtp_accept_rate),
             "mtp_mean_accept_len": float(mtp_mean_accept_len),
             "mtp_mean_draft_attempt_len": float(mtp_mean_draft_attempt_len),
+            "mtp_accept_len_p50": float(_p_or_zero(mtp_accept_lens, 0.50)),
+            "mtp_accept_len_p95": float(_p_or_zero(mtp_accept_lens, 0.95)),
+            "mtp_draft_attempt_len_p50": float(_p_or_zero(mtp_draft_attempt_lens, 0.50)),
+            "mtp_draft_attempt_len_p95": float(_p_or_zero(mtp_draft_attempt_lens, 0.95)),
             "mtp_service_slot_ms_draft_frac": float(mtp_service_slot_draft_frac),
             "mtp_service_slot_ms_verify_frac": float(mtp_service_slot_verify_frac),
             "mtp_verify_layer0_skipped_backpressure": float(metrics.mtp_verify_layer0_skipped_backpressure),

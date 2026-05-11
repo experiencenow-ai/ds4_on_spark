@@ -273,9 +273,46 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(int(s["dflash_output_tokens"]), 3)
         self.assertEqual(int(s["dflash_bonus_tokens"]), 2)
         self.assertAlmostEqual(float(s["dflash_mean_accept_len"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["dflash_accept_len_p50"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["dflash_accept_len_p95"]), 3.0, places=6)
         self.assertAlmostEqual(float(s["dflash_accept_rate"]), 1.0, places=6)
         self.assertAlmostEqual(float(s["dflash_service_slot_ms_per_output_token"]), (1.0 / 3.0), places=6)
 
+    def test_summary_includes_mtp_accept_len_percentiles(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            mtp_draft_len=2,
+            mtp_accept_prob=1.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_attempt_policy="full",
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(float(s["mtp_mean_accept_len"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["mtp_accept_len_p50"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["mtp_accept_len_p95"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["mtp_mean_draft_attempt_len"]), 2.0, places=6)
+        self.assertAlmostEqual(float(s["mtp_draft_attempt_len_p50"]), 2.0, places=6)
+        self.assertAlmostEqual(float(s["mtp_draft_attempt_len_p95"]), 2.0, places=6)
 
     def test_summary_includes_pending_hi_lo_depth_time_weighted(self) -> None:
         trace = [
