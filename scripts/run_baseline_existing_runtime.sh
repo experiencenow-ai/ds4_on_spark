@@ -19,7 +19,7 @@ echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
-if [ -d "$repo_root/.git" ]; then
+if [ -e "$repo_root/.git" ]; then
     repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
