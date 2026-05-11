@@ -75,6 +75,13 @@ sudo systemctl start ds4-preflight-tp4-strict@spark0.service
 
 Details: `docs/ops-tp4-readiness.md`.
 
+If you want strict TP=4 gating on start (recommended for early ring bring-up), enable the topology-specific strict unit:
+
+```bash
+sudo systemctl enable ds4-tp4-strict@spark0.service
+sudo systemctl start  ds4-tp4-strict@spark0.service
+```
+
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`

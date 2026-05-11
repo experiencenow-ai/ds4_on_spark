@@ -105,6 +105,8 @@ echo
 echo "== systemd user templates =="
 need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
+need_file "$systemd_dir/ds4-tp3-strict@.service"
+need_file "$systemd_dir/ds4-tp4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
 need_file "$systemd_dir/ds4-preflight-strict@.service"
 need_file "$systemd_dir/ds4-preflight-tp3@.service"
