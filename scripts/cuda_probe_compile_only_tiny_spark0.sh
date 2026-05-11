@@ -97,6 +97,48 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 	try_variant sm_121f
 
 	echo
+	echo \"== nvcc: __CUDA_ARCH_LIST__ probe (best-effort) ==\"
+	cat > bin/cuda_sm121_arch_list_probe.cu <<'EOF'
+#define STR1(x) #x
+#define STR(x) STR1(x)
+
+#if defined(__CUDA_ARCH_LIST__)
+#pragma message(\"CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
+#else
+#pragma message(\"CUDA_ARCH_LIST=(missing)\")
+#endif
+
+int cuda_arch_list_probe_dummy(void)
+{
+	return(0);
+}
+EOF
+
+	try_arch_list() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		echo \"-- \${tag} (-arch=\${arch})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\${arch} -c -o bin/\${tag}.o bin/cuda_sm121_arch_list_probe.cu 2>bin/\${tag}.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			arch_list=\$(grep -E \"CUDA_ARCH_LIST=\" bin/\${tag}.err | head -n 1 | sed -E 's/^.*CUDA_ARCH_LIST=//' | tr -cd '0-9,')
+			if [ \"\${arch_list}\" = \"\" ]; then
+				arch_list=\"(missing)\"
+			fi
+			echo \"\${tag}: OK __CUDA_ARCH_LIST__=\${arch_list}\"
+		else
+			echo \"\${tag}: FAILED rc=\$rc\"
+			head -n 40 bin/\${tag}.err || true
+		fi
+	}
+
+	try_arch_list arch_list_sm_121 sm_121
+	try_arch_list arch_list_sm_121a sm_121a
+	try_arch_list arch_list_sm_121f sm_121f
+
+	echo
 	echo \"== nvcc: feature-set macro compile (best-effort) ==\"
 	cat > bin/cuda_sm121_featureset_macros_compile_probe.cu <<'EOF'
 #include <stdint.h>

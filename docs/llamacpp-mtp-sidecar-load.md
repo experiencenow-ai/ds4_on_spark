@@ -44,11 +44,16 @@ scripts/run_baseline_existing_runtime.sh spark0@<spark-host>
 If you want a narrower Spark-only probe (no llama.cpp/vLLM baselines), use:
 
 ```bash
-REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
-This runner also accepts an `https://` URL for `MTP_SIDECAR_GGUF` and will validate the sidecar using HTTP range reads (no full download), but it is gated: set `ALLOW_URL=1` explicitly on Spark.
+If Spark0 already has the pinned sidecar staged at
+`/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`, the runner
+defaults `MTP_SIDECAR_GGUF` to that path when it is readable. Override by adding
+`MTP_SIDECAR_GGUF=/abs/path/to/your-sidecar.gguf` to `REMOTE_MTP_SIDECAR_ENV`.
+
+This runner also accepts an `https://` URL for `MTP_SIDECAR_GGUF` and will validate the sidecar using HTTP range reads (no full download), but it is gated: set `ALLOW_URL=1` explicitly on Spark:
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 ALLOW_URL=1 MTP_SIDECAR_GGUF=https://host/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
@@ -59,8 +64,8 @@ If you also want the llama.cpp-side probe (optionally with `LOAD_WEIGHTS=1`) in
 the same report, use:
 
 ```bash
-REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
-REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1 LOAD_WEIGHTS=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1 LOAD_WEIGHTS=1' \
 scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 ```
 

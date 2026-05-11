@@ -122,9 +122,16 @@ env/config is missing or invalid). In strict mode, the script also enforces:
 
 - `DS4_MASTER_ADDR` is not loopback or a wildcard bind address when `DS4_WORLD_SIZE > 1`
 - `DS4_PEER_HOST` is set when `DS4_WORLD_SIZE > 1`
+- `DS4_CONFIG_PATH` parses as DS4 config with no unknown keys (via `ops_ds4_config_check.sh --strict-unknown` when available)
 
 ```bash
 sudo -u ds4 /opt/ds4/scripts/ops_tp2_readiness.sh --strict --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark0.env --self spark0
+```
+
+To validate a DS4 config file directly (safe; no sudo required if readable):
+
+```bash
+/opt/ds4/scripts/ops_ds4_config_check.sh --strict-unknown /etc/ds4/ds4-spark0.conf
 ```
 
 If `DS4_METRICS_PORT` is set and `curl` is available, `ops_tp2_readiness.sh` also

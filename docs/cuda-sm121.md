@@ -46,6 +46,14 @@ These probes are informational; the hard failure for GB10 targeting remains “m
 
 Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, but the feature-set macro probes currently fail because `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` are not defined (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 
+### NVCC `__CUDA_ARCH_LIST__` (Toolchain Introspection)
+
+NVCC defines `__CUDA_ARCH_LIST__` as a comma-separated list of virtual architectures compiled in the current invocation.
+
+Both `scripts/cuda_probe_nvcc_minimal_spark0.sh` and `scripts/cuda_probe_compile_only_tiny_spark0.sh` print a best-effort `__CUDA_ARCH_LIST__` snapshot for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` (tags: `arch_list_sm_121`, `arch_list_sm_121a`, `arch_list_sm_121f`). Use this when you need to confirm what “extra virtual arches” NVCC adds when compiling `sm_121a` / `sm_121f`.
+
+Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): all three probes report `__CUDA_ARCH_LIST__=1210` (so the `a`/`f` suffix does not show up in the macro list).
+
 ### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
 
 For simple builds, `nvcc` accepts a real-arch `-arch=sm_121` shorthand and can embed both `sm_121` SASS and a PTX fallback for JIT.
