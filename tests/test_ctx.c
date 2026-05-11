@@ -38,6 +38,11 @@ int32_t test_ctx(void)
 	cfg.log_ring_entries = 0;
 	if ( ds4_ctx_apply_config(&ctx,&cfg) < 0 )
 		return(-22);
+	cfg.cuda_arena_size = 256;
+	err = ds4_ctx_apply_config(&ctx,&cfg);
+	if ( err >= 0 )
+		return(-27);
+	cfg.cuda_arena_size = 0;
 	cfg.enable_cuda = 1;
 	err = ds4_ctx_apply_config(&ctx,&cfg);
 	if ( ds4_cuda_is_enabled_build() == 0 )

@@ -16,6 +16,7 @@ typedef struct
 	ds4_config_t cfg;
 	ds4_arena_t arena;
 	ds4_log_ring_t log_ring;
+	ds4_cuda_arena_t cuda_arena;
 	int32_t log_ring_ready;
 	int32_t log_ring_attached;
 } ds4_ctx_t;
