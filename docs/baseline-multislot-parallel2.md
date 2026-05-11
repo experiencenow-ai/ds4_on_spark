@@ -26,6 +26,15 @@ Two narrow fixes have been observed as necessary on some forks:
 
 These are external-runtime patches (llama.cpp fork), not changes to `ds4_on_spark`.
 
+Additional fixes have been observed as necessary on some forks but are not yet pinned as patch artifacts in this repo:
+
+3. DeepSeek V4 reserve token count bounded by per-sequence context (avoid reserving more tokens than `n_ctx_seq` can support)
+4. Skip impossible resumed-reserve windows instead of asserting (when computed reserve windows cannot fit the current per-sequence context)
+
+Cross-cutting requirement for interpreting `--parallel 2` results:
+
+5. The DSv4 Flash-Attention pad-to-256 reservation fix (see `docs/baseline-fattn-reservation.md`) should be present, otherwise multi-slot sweeps may silently run in a degraded fallback mode after a reservation failure.
+
 ### Narrow Patch Artifacts
 
 Patch artifacts (apply to the external runtime tree, not this repo):
@@ -88,3 +97,5 @@ Heuristic booleans:
 
 - `swa_stream_view_found`
 - `reserve_cap_n_ctx_seq_found`
+
+Note: the source probe currently only checks for the two pinned patch artifacts above. For fixes (3) and (4), record the exact runtime repo/commit and preserve the server log + probe JSON so the failure mode is explicit.
