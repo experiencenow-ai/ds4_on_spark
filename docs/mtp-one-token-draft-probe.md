@@ -79,6 +79,29 @@ scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 
 This runner does not fetch/build. It only runs the provided command, validates the emitted JSON, and saves the report under `/private/tmp`.
 
+## Implementation checklist (Spark/CUDA llama.cpp fork)
+
+Before running this probe, the Spark/CUDA fork needs a **real** one-token MTP command (the runner only executes what you provide as `MTP_ONE_TOKEN_CMD`):
+
+1. **Sidecar contract gate passes**: the same `mtp_sidecar_path` must pass the Python contract probe (`ok=true`, `missing_tensors=[]`, `extra_tensors=[]`) and the optional llama.cpp sidecar probe (`llama-ds4-mtp-sidecar-probe --json`, `ok=true`).
+2. **Sidecar loader exists (not a trunk model loader)**: load the 32 `mtp.0.*` tensors into a sidecar struct/table (use the repo-generated binder skeleton from `scripts/model_contract_generate_llamacpp_mtp_sidecar_binder.py`; do not guess tensor names/dims).
+3. **Trunk embedding is reused**: the MTP path must reuse the trunk token embedding (the sidecar does not ship an embedding table).
+4. **Draft step is isolated + deterministic**: run exactly 1 verify step (`verify_step_idx=0`) and compute exactly 1 draft token (`gamma=1`) at `temperature=0.0`, `top_k=1`, `top_p=1.0`, fixed seed.
+5. **Separate speculative state**: do not reuse trunk KV/cache state for the draft path; draft state must be independently reset/rolled back (even if the first probe uses a minimal prompt).
+6. **Emit the JSON contract**: output a single JSON object matching this doc + validate it with `scripts/model_contract_validate_mtp_one_token_draft_probe.py` before attempting any acceptance-rate experiments.
+
+## Code pointers (DS4 + llama.cpp fork)
+
+When implementing the actual Spark/CUDA one-token command, avoid “guessy” wiring by following these pinned code pointers:
+
+- DS4 reference behavior + tensor usage (source of truth): `upstreams/ds4/ds4.c`
+  - Sidecar binding + strict layout checks: `mtp_weights_bind(...)`
+  - One-step draft: `metal_graph_eval_mtp_draft_from_hc(...)`
+  - Draft output head (sidecar head + trunk vocab projection): `metal_graph_encode_output_head_mtp(...)`
+- Spark/CUDA llama.cpp fork building blocks (kamnxt @ `9222e55`):
+  - Hyper-connection helpers used by trunk: `src/models/deepseek4.cpp` (`dsv4_hc_pre(...)`, `dsv4_hc_post(...)`, `dsv4_hc_head(...)`)
+  - Trunk logits path uses `model.output` as the vocab projection; DS4’s MTP draft head still uses the trunk vocab matrix.
+
 ## Semantics (reference)
 
 For DeepSeek V4, the MTP module uses separate `e_proj` / `h_proj` projections and applies the `hc_head_*` head in `compute_logits` for draft token selection. Reference: vLLM API docs `vllm.model_executor.models.deepseek_v4_mtp` (DeepSeek V4 MTP draft model).

@@ -301,7 +301,13 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run trace-backed scheduler simulator sweeps against a JSONL trace.")
     p.add_argument("--trace-jsonl", type=str, required=True, help="Input JSONL trace path ('-' for stdin).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", choices=("t_ms", "dt_ms"))
-    p.add_argument("--trace-input-format", type=str, default="runtime", choices=("strict", "runtime"))
+    p.add_argument(
+        "--trace-input-format",
+        type=str,
+        default="runtime",
+        choices=("strict", "runtime"),
+        help="Trace parser input format: strict expects the simulator contract; runtime maps common runtime-field aliases (and with --trace-non-route skip scans non-JSON lines for embedded JSON objects).",
+    )
     p.add_argument("--trace-non-route", type=str, default="skip", choices=("skip", "error"))
     p.add_argument("--trace-route-type", type=str, default="", help="Runtime-format trace: only accept records with obj.type == this value (empty = accept all).")
     p.add_argument("--trace-default-cls", type=str, default="", help="Optional: force a default cls (interactive or batch) when trace records omit it.")

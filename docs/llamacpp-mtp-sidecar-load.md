@@ -26,6 +26,23 @@ In `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@9222e55`:
 
 Net: even after solving the “unknown architecture” error, the fork still needs *new functionality* (not just loader tweaks) to do MTP draft/verify.
 
+## Key implementation reuse (kamnxt fork @ `9222e55`)
+
+The Spark/CUDA fork already contains the DeepSeek V4 hyper-connection building blocks that DS4’s MTP sidecar expects:
+
+- Hyper-connection pre/post/head helpers: `src/models/deepseek4.cpp`
+  - `dsv4_hc_pre(...)`
+  - `dsv4_hc_post(...)`
+  - `dsv4_hc_head(...)`
+- Trunk output path uses: `model.output_hc_{fn,scale,base}`, `model.output_norm`, and `model.output` (vocab projection).
+
+DS4’s MTP output head differs from trunk output in exactly two places:
+
+1) it uses the **sidecar** `mtp.0.hc_head_{fn,scale,base}` instead of trunk `model.output_hc_*`
+2) it uses the **sidecar** `mtp.0.norm.weight` instead of trunk `model.output_norm`
+
+But it still uses the **trunk vocab matrix** for logits (`model.output` in llama.cpp; `base_weights->output` in `antirez/ds4`).
+
 ## Minimum plan to reach the one-token draft probe
 
 ### Step 0: validate the sidecar contract (Spark-safe, no downloads)
@@ -34,19 +51,14 @@ Before touching llama.cpp code, validate the sidecar file you intend to use:
 
 - Repo-side (Hugging Face URL, metadata-only range reads + optional payload sampling): `scripts/model_contract_probe_mtp_sidecar_antirez.sh`
 - Local file convenience runner (writes a small Markdown + JSON bundle under `/private/tmp`): `scripts/run_mtp_sidecar_contract_probe_local.sh /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf`
-- Spark-side (local file already staged on Spark; no downloads): run the baseline runner with:
+- Spark-side (local file already staged on Spark; no downloads): use the *narrow* Spark contract runner:
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
-scripts/run_baseline_existing_runtime.sh spark0@<spark-host>
-```
-
-If you want a narrower Spark-only probe (no llama.cpp/vLLM baselines), use:
-
-```bash
-REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
+
+If you are already running the baseline existing-runtime loop, it can optionally record the same sidecar contract probe section, but prefer the narrow runner above for day-to-day sidecar validation.
 
 If Spark0 already has the pinned sidecar staged at
 `/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf`, the runner
@@ -73,6 +85,7 @@ This runner writes additional artifacts next to the Markdown report:
 
 - `contract_probe.json`: full Python contract probe JSON (when parseable)
 - `loader_probe.json`: full llama.cpp probe JSON (when extracted)
+- `contract_vs_loader_probe_parse.json`: local cross-check summary (`ok=true` only when both probes agree on dims/type/offset/nbytes)
 - `deepseek4_mtp_sidecar.hpp`: generated binder skeleton (only when the contract probe reports `ok=true`)
 
 By default this Spark-only runner also samples 64 bytes from each tensor payload (`--payload-sample-bytes 64`) to catch truncated/corrupt uploads without loading full weights. Override with `REMOTE_MTP_SIDECAR_ARGS='--json --expect-deepseek-v4-flash --payload-sample-bytes 0'` if you need a strictly header-only check.
@@ -108,6 +121,23 @@ Design target: a `struct deepseek4_mtp_sidecar` holding pointers for:
 - attention (MLA-ish low-rank): `attn_norm`, `attn_q_a`, `attn_q_a_norm`, `attn_q_b`, `attn_kv`, `attn_kv_a_norm`, `attn_sinks`, `attn_output_a`, `attn_output_b`
 - ffn (MoE): `ffn_norm`, `ffn_gate_inp`, `exp_probs_b.bias`, `ffn_{gate,up,down}_exps`, `ffn_{gate,up,down}_shexp`
 
+## DS4 draft step reference (antirez/ds4)
+
+DS4’s one-step draft path is concrete and already names the exact tensors used:
+
+- Draft entrypoint: `upstreams/ds4/ds4.c` `metal_graph_eval_mtp_draft_from_hc(...)`
+- Draft output head: `upstreams/ds4/ds4.c` `metal_graph_encode_output_head_mtp(...)`
+
+At a high level, DS4’s draft step does:
+
+1) reuse trunk embedding table to embed the current token
+2) `enorm` → `e_proj` (sidecar) and repeat/expand to HC (`n_hc * n_embd`)
+3) `hnorm` → `h_proj` (sidecar) on the previous HC state and add to the embedded HC input
+4) run one DeepSeek V4 decoder block using the **sidecar** `mtp.0.*` weights and a **separate** MTP KV/raw-cache state
+5) compute draft logits using the **sidecar** `hc_head_*` + `norm`, but the **trunk** vocab projection
+
+This is the exact behavior the one-token wiring gate (`docs/mtp-one-token-draft-probe.md`) should prove on Spark/CUDA llama.cpp before we attempt acceptance metrics.
+
 ### Step 2: MTP KV/cache/state model
 
 MTP is a draft model, not a pure MLP head. It needs attention over the prompt prefix.
@@ -121,11 +151,14 @@ This is the largest unknown in the Spark/CUDA fork because DeepSeek V4’s trunk
 
 ### Step 3: implement the DeepSeek V4 MTP forward + logits
 
-Implement the vLLM-style MTP interface:
+Implement the DS4-style MTP interface:
 
-- `hidden = e_proj(enorm(inputs_embeds)) + h_proj(hnorm(prev_hidden))`
-- pass through a DeepSeek V4 decoder layer using the sidecar weights
-- compute draft logits via the sidecar `hc_head_*` head (not the trunk head)
+- reuse trunk embedding table to compute `inputs_embeds` (the sidecar does **not** ship an embedding table)
+- build the HC-shaped draft input from `(inputs_embeds, prev_hc)` using sidecar `enorm/e_proj` and `hnorm/h_proj` (see DS4 `metal_graph_eval_mtp_draft_from_hc(...)`)
+- run one DeepSeek V4 decoder block using sidecar `mtp.0.*` weights with a separate MTP KV/raw-cache state
+- compute draft logits using:
+  - sidecar `mtp.0.hc_head_{fn,scale,base}` and `mtp.0.norm.weight`
+  - trunk vocab projection (`model.output` in llama.cpp, `base_weights->output` in DS4)
 
 Important: the DS4 sidecar does **not** ship an embedding table. The MTP path must reuse trunk token embeddings (or take `inputs_embeds` from caller).
 

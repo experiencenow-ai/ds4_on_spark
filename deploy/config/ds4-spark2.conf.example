@@ -1,0 +1,24 @@
+# DS4 runtime config example for Spark2 (key=value).
+#
+# Copy to: /etc/ds4/ds4-spark2.conf
+#
+# Parser notes (src/ds4_config.c):
+# - Blank lines are allowed.
+# - Comment lines starting with '#' are allowed.
+# - Non-empty, non-comment lines must be `key=value`.
+#
+# Supported keys today:
+#   - log_level   (error|warn|info|debug or 0..3)
+#   - enable_cuda (0/1, true/false, yes/no, on/off)
+#   - cuda_device (-1=auto, >=0 fixed)
+#   - arena_size (bytes; supports K/M/G suffix; non-negative)
+#   - cuda_arena_size (bytes; supports K/M/G suffix; non-negative; requires enable_cuda=1 when >0)
+#   - log_ring_entries (count; supports K/M/G suffix; non-negative)
+#
+#log_level=info
+#enable_cuda=1
+#cuda_device=-1
+#arena_size=0
+#cuda_arena_size=0
+#log_ring_entries=0
+

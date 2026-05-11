@@ -25,6 +25,35 @@ Notes on config sources:
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
 
+## Contract map (machine-readable `contract_summary.json`)
+
+DS4 tooling should treat `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` as the machine-readable contract and use this document as the human explanation.
+
+Key JSON paths by concern:
+
+- Topology (layers/hidden/heads/vocab): `topology.*`
+- Sliding/CSA/HCA schedule: `attention_schedule.compress_ratios`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
+- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule`
+- MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
+- MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
+- MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)
+- Checkpoint tensor-key invariants + counts: `tensor_keys.*` and `checkpoint_index.*` (including `checkpoint_index.weight_map_prefix_fingerprints.mtp.*` to fingerprint the upstream `mtp.0.*` namespace)
+- Quantization / scale-tensor expectations: `quantization.*` (notably `quantization.inference_config.*` and `quantization.linear_tensor_contract.*`)
+- Tokenizer + encoding invariants: `tokenizer.*` and `encoding_constants.*` (encoding oracle vectors are pinned via `upstream.fixtures_sha256.*`)
+- Correctness oracle requirements: `oracle.*`
+
+Refresh + verify the pinned contract:
+
+```bash
+scripts/model_contract_refresh_deepseek_v4_flash.sh
+```
+
+When interpreting quantized single-Spark external-runtime results, prefer the contract-aware inspectors:
+
+```bash
+python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/model.gguf --json
+```
+
 ## Topology constants (from `config.json` + `inference/config.json`)
 
 - `vocab_size`: 129280

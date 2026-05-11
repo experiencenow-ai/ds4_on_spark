@@ -408,6 +408,13 @@ if isinstance(errs, list):
 print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
+echo "== cross-checking Python contract probe JSON vs llama.cpp probe JSON (local) =="
+python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
+	--contract-probe-json "$OUT_DIR/contract_probe.json" \
+	--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
+	--json \
+	>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+
 {
 	echo "## Loader Probe Results (llama.cpp)"
 	echo
@@ -431,6 +438,34 @@ PY
 	echo "- parsed status: $OUT_DIR/loader_probe_parse.json"
 	echo "- upload helper stderr: $OUT_DIR/remote_loader_upload_helper_stderr.txt"
 	echo "- upload patch stderr: $OUT_DIR/remote_loader_upload_patch_stderr.txt"
+	echo
+} >>"$REPORT_MD"
+
+{
+	echo "## Contract vs Loader Cross-check (local)"
+	echo
+	echo "Command:"
+	echo
+	echo '```'
+	echo "python3 scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py --contract-probe-json $OUT_DIR/contract_probe.json --llamacpp-probe-json $OUT_DIR/loader_probe.json --json"
+	echo '```'
+	echo
+	echo "Stdout:"
+	echo
+	echo '```'
+	sed -n '1,120p' "$OUT_DIR/contract_vs_loader_probe_parse.json" || true
+	echo '```'
+	echo
+	echo "Stderr:"
+	echo
+	echo '```'
+	sed -n '1,120p' "$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+	echo '```'
+	echo
+	echo "Artifacts:"
+	echo
+	echo "- stdout: $OUT_DIR/contract_vs_loader_probe_parse.json"
+	echo "- stderr: $OUT_DIR/contract_vs_loader_probe_stderr.txt"
 	echo
 } >>"$REPORT_MD"
 
