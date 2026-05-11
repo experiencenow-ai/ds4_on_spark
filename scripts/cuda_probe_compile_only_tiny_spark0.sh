@@ -179,13 +179,41 @@ if [ \"\${list_gpu_code}\" = \"\" ]; then
 			fi
 		}
 	
-		try_featureset_macros featureset_compute_121a compute_121a
-		try_featureset_macros featureset_compute_121f compute_121f
+	try_featureset_macros featureset_compute_121a compute_121a
+	try_featureset_macros featureset_compute_121f compute_121f
 
 	echo
-	echo \"== nvcc: compute_121 compile (best-effort) ==\"
-	if [ \"\${list_gpu_arch}\" = \"\" ]; then
-		echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
+	echo \"== nvcc: PTX .target probe (best-effort) ==\"
+	try_ptx_target() {
+		tag=\"\$1\"
+		arch=\"\$2\"
+		echo \"-- ptx: \${tag} (-arch=\${arch})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=\${arch} -ptx -o bin/\${tag}.ptx src/cuda_sm121_compile_probe.cu 2>bin/\${tag}.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			target_line=\$(grep \"^\\\\.target\" bin/\${tag}.ptx | head -n 1 || true)
+			if [ \"\${target_line}\" = \"\" ]; then
+				target_line=\"(missing)\"
+			fi
+			echo \"\${tag}: OK ptx_target=\${target_line}\"
+		else
+			echo \"\${tag}: FAILED rc=\$rc\"
+			head -n 40 bin/\${tag}.err || true
+		fi
+	}
+	try_ptx_target ptx_target_sm_121 sm_121
+	try_ptx_target ptx_target_sm_121a sm_121a
+	try_ptx_target ptx_target_sm_121f sm_121f
+	try_ptx_target ptx_target_compute_121 compute_121
+	try_ptx_target ptx_target_compute_121a compute_121a
+	try_ptx_target ptx_target_compute_121f compute_121f
+
+echo
+echo \"== nvcc: compute_121 compile (best-effort) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping compute_121)\"
 else
 	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
 		echo \"-- compute_121\"
