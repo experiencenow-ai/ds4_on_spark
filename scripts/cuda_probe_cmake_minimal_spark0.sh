@@ -2,9 +2,11 @@
 set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
-SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
+SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_cmake_minimal}"
+log_path="${LOG_PATH:-}"
 
+main() {
 ssh $SSH_OPTS "$target" "set -eu
 CMAKE=\"\"
 echo \"== cmake ==\"
@@ -112,3 +114,21 @@ EOF
 \$CMAKE --build \"$REMOTE_DIR\"/build
 \"$REMOTE_DIR\"/build/ds4_cuda_probe_cmake_sm121
 " 
+}
+
+if [ "$log_path" = "" ]; then
+	main
+	exit 0
+fi
+
+mkdir -p "$(dirname "$log_path")"
+printf "== cuda_probe_cmake_minimal_spark0 log: %s ==\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$log_path"
+tmp_out="$(mktemp "/private/tmp/ds4_cuda_probe_cmake_minimal_out.XXXXXX")"
+set +e
+main >"$tmp_out" 2>&1
+rc=$?
+set -e
+cat "$tmp_out"
+cat "$tmp_out" >> "$log_path"
+rm -f "$tmp_out"
+exit $rc

@@ -23,7 +23,7 @@ run_logged() {
 	fi
 	tmp_out="$(mktemp "/private/tmp/ds4_cuda_probe_capability_out.XXXXXX")"
 	set +e
-	"$@" >"$tmp_out" 2>&1
+	env LOG_PATH= "$@" >"$tmp_out" 2>&1
 	rc=$?
 	set -e
 	cat "$tmp_out"
