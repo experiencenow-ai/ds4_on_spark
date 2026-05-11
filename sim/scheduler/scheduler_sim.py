@@ -375,8 +375,10 @@ class SimMetrics:
     promoted_tasks: int = 0
     forced_batch_starts: int = 0
     max_pending_per_expert: List[int] = dataclasses.field(default_factory=list)
+    max_queue_per_expert: List[int] = dataclasses.field(default_factory=list)
     mean_pending_per_expert: List[float] = dataclasses.field(default_factory=list)
     max_pending_work_per_expert: List[float] = dataclasses.field(default_factory=list)
+    max_queue_work_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_pending_work_per_expert: List[float] = dataclasses.field(default_factory=list)
     mean_utilization_per_expert: List[float] = dataclasses.field(default_factory=list)
     saturated_time_frac_per_expert: List[float] = dataclasses.field(default_factory=list)
@@ -746,6 +748,8 @@ class SimMetrics:
                     "num_experts": len(self.max_pending_per_expert),
                     "max_pending_p50": statistics.median(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
                     "max_pending_max": max(self.max_pending_per_expert) if len(self.max_pending_per_expert) != 0 else 0,
+                    "max_queue_p50": statistics.median(self.max_queue_per_expert) if len(self.max_queue_per_expert) != 0 else 0,
+                    "max_queue_max": max(self.max_queue_per_expert) if len(self.max_queue_per_expert) != 0 else 0,
                     "mean_pending_p50": statistics.median(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "mean_pending_max": max(self.mean_pending_per_expert) if len(self.mean_pending_per_expert) != 0 else 0.0,
                     "tasks_started_total": int(sum(self.tasks_started_per_expert)) if len(self.tasks_started_per_expert) != 0 else 0,
@@ -766,6 +770,8 @@ class SimMetrics:
                     "work": {
                         "max_pending_p50": statistics.median(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
                         "max_pending_max": max(self.max_pending_work_per_expert) if len(self.max_pending_work_per_expert) != 0 else 0.0,
+                        "max_queue_p50": statistics.median(self.max_queue_work_per_expert) if len(self.max_queue_work_per_expert) != 0 else 0.0,
+                        "max_queue_max": max(self.max_queue_work_per_expert) if len(self.max_queue_work_per_expert) != 0 else 0.0,
                         "mean_pending_p50": statistics.median(self.mean_pending_work_per_expert) if len(self.mean_pending_work_per_expert) != 0 else 0.0,
                         "mean_pending_max": max(self.mean_pending_work_per_expert) if len(self.mean_pending_work_per_expert) != 0 else 0.0,
                     },
@@ -3109,8 +3115,10 @@ def run_simulation(
         starved_tasks_started_per_expert=[0 for _ in range(cfg.num_experts)],
         max_task_queue_wait_ms_per_expert=[0.0 for _ in range(cfg.num_experts)],
         max_pending_per_expert=[0 for _ in range(cfg.num_experts)],
+        max_queue_per_expert=[0 for _ in range(cfg.num_experts)],
         mean_pending_per_expert=[0.0 for _ in range(cfg.num_experts)],
         max_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
+        max_queue_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
         mean_pending_work_per_expert=[0.0 for _ in range(cfg.num_experts)],
         mean_utilization_per_expert=[0.0 for _ in range(cfg.num_experts)],
         saturated_time_frac_per_expert=[0.0 for _ in range(cfg.num_experts)],
@@ -3270,6 +3278,12 @@ def run_simulation(
                 metrics.max_pending_per_expert[e] = last_pending[e]
             if last_pending_work[e] > metrics.max_pending_work_per_expert[e]:
                 metrics.max_pending_work_per_expert[e] = float(last_pending_work[e])
+            q_tasks = (last_hi_queue[e] + last_lo_queue[e])
+            if q_tasks > metrics.max_queue_per_expert[e]:
+                metrics.max_queue_per_expert[e] = int(q_tasks)
+            q_work = (float(last_hi_queue_work[e]) + float(last_lo_queue_work[e]))
+            if q_work > metrics.max_queue_work_per_expert[e]:
+                metrics.max_queue_work_per_expert[e] = float(q_work)
 
     evq: List[Event] = []
     seq_ref = [0]
@@ -4055,11 +4069,17 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "expert_max_pending_tasks_p50": float(_p_or_zero(metrics.max_pending_per_expert, 0.50)),
             "expert_max_pending_tasks_p95": float(_p_or_zero(metrics.max_pending_per_expert, 0.95)),
             "expert_max_pending_tasks_max": float(max(metrics.max_pending_per_expert)) if len(metrics.max_pending_per_expert) != 0 else 0.0,
+            "expert_max_queue_tasks_p50": float(_p_or_zero(metrics.max_queue_per_expert, 0.50)),
+            "expert_max_queue_tasks_p95": float(_p_or_zero(metrics.max_queue_per_expert, 0.95)),
+            "expert_max_queue_tasks_max": float(max(metrics.max_queue_per_expert)) if len(metrics.max_queue_per_expert) != 0 else 0.0,
             "expert_mean_pending_tasks_p50": float(_p_or_zero(metrics.mean_pending_per_expert, 0.50)),
             "expert_mean_pending_tasks_p95": float(_p_or_zero(metrics.mean_pending_per_expert, 0.95)),
             "expert_max_pending_work_p50": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.50)),
             "expert_max_pending_work_p95": float(_p_or_zero(metrics.max_pending_work_per_expert, 0.95)),
             "expert_max_pending_work_max": float(max(metrics.max_pending_work_per_expert)) if len(metrics.max_pending_work_per_expert) != 0 else 0.0,
+            "expert_max_queue_work_p50": float(_p_or_zero(metrics.max_queue_work_per_expert, 0.50)),
+            "expert_max_queue_work_p95": float(_p_or_zero(metrics.max_queue_work_per_expert, 0.95)),
+            "expert_max_queue_work_max": float(max(metrics.max_queue_work_per_expert)) if len(metrics.max_queue_work_per_expert) != 0 else 0.0,
             "expert_mean_pending_work_p50": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.50)),
             "expert_mean_pending_work_p95": float(_p_or_zero(metrics.mean_pending_work_per_expert, 0.95)),
             "expert_utilization_p50": float(_p_or_zero(metrics.mean_utilization_per_expert, 0.50)),
