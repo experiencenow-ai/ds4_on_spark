@@ -24,7 +24,7 @@ Environment:
 Examples:
   ./scripts/spark_probe.sh
   REDACT=1 ./scripts/spark_probe.sh | tee /private/tmp/spark0-probe.txt
-  DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+  DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
   REDACT=1 NVIDIA_SMI_FULL=1 ./scripts/spark_probe.sh
   REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local spark0@spark1.local
   SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@spark1.local
@@ -120,6 +120,12 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	if command -v git >/dev/null 2>&1; then
 		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
 		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git" ] && [ -r "$git_worktree/.codex_git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git/.git" ] && [ -r "$git_worktree/.codex_git/.git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git/.git"
+		fi
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
 			git_dir="$git_worktree/.git-codex"
 		fi

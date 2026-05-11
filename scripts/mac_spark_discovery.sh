@@ -21,7 +21,7 @@ Environment:
 Examples:
   ./scripts/mac_spark_discovery.sh
   REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
-  DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
+  DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local
   ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local 10.0.0.2
   ./scripts/mac_spark_discovery.sh spark0@aitopatom-9ab9.local
 EOF
@@ -49,6 +49,12 @@ date -u
 	if command -v git >/dev/null 2>&1; then
 		git_worktree="${DS4_GIT_WORK_TREE:-$PWD}"
 		git_dir="${DS4_GIT_DIR:-}"
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git" ] && [ -r "$git_worktree/.codex_git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git/.git" ] && [ -r "$git_worktree/.codex_git/.git/HEAD" ]; then
+			git_dir="$git_worktree/.codex_git/.git"
+		fi
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
 			git_dir="$git_worktree/.git-codex"
 		fi

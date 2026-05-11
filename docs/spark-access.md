@@ -17,40 +17,40 @@ Current observed Spark identity:
 
 From the Mac repo root, use the scripts in `scripts/` to keep probes consistent and safe-to-commit.
 
-### Git Shim For Read-Only Checkouts (`.git-codex`)
+### Git Shim For Read-Only Checkouts (`.codex_git`)
 
 Some automation-provided macOS checkouts have a `.git` worktree that is readable but not writable (macOS provenance / sandbox restrictions). In that case:
 
 - You may not be able to `git fetch`, create branches, or commit using the checkout’s default `.git` metadata.
 - The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir).
 
-Create a local shim repo at `.git-codex/` (not committed) and use it for git operations:
+Prefer a local shim repo at `.codex_git/` (gitignored by this repo). Older notes and runs may refer to `.git-codex/`; both layouts work.
 
 ```bash
-# One-time setup (from repo root, simplest gitdir shim; creates `.git-codex/` as a gitdir)
-git --git-dir=.git-codex init
-git --git-dir=.git-codex --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
-git --git-dir=.git-codex --work-tree=. fetch origin main --depth=50
-git --git-dir=.git-codex --work-tree=. reset --hard origin/main
+# One-time setup (from repo root, simplest gitdir shim; creates `.codex_git/` as a gitdir)
+git --git-dir=.codex_git init
+git --git-dir=.codex_git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+git --git-dir=.codex_git --work-tree=. fetch origin main --depth=50
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
 
 # Alternative: bare gitdir (core.bare=true; still usable with `--work-tree=.`)
-# git init --bare .git-codex
-# git --git-dir=.git-codex --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
-# git --git-dir=.git-codex --work-tree=. fetch origin main --depth=50
-# git --git-dir=.git-codex --work-tree=. reset --hard origin/main
+# git init --bare .codex_git
+# git --git-dir=.codex_git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+# git --git-dir=.codex_git --work-tree=. fetch origin main --depth=50
+# git --git-dir=.codex_git --work-tree=. reset --hard origin/main
 
-# Alternative: non-bare layout with separate workdir (creates `.git-codex/.git/`)
-# git init .git-codex
-# git --git-dir=.git-codex/.git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
-# git --git-dir=.git-codex/.git --work-tree=. fetch origin main --depth=50
-# git --git-dir=.git-codex/.git --work-tree=. reset --hard origin/main
+# Alternative: non-bare layout with separate workdir (creates `.codex_git/.git/`)
+# git init .codex_git
+# git --git-dir=.codex_git/.git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+# git --git-dir=.codex_git/.git --work-tree=. fetch origin main --depth=50
+# git --git-dir=.codex_git/.git --work-tree=. reset --hard origin/main
 ```
 
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
 
 ```bash
 branch="codex/loop-spark-access-YYYYMMDD-short-suffix"
-gitdir=".git-codex" # if you used the `.git-codex/.git` layout, set: gitdir=".git-codex/.git"
+gitdir=".codex_git" # if you used the `.codex_git/.git` layout, set: gitdir=".codex_git/.git"
 git --git-dir="$gitdir" --work-tree=. checkout -b "$branch" origin/main
 git --git-dir="$gitdir" --work-tree=. status --short
 git --git-dir="$gitdir" --work-tree=. add docs/spark-access.md scripts/spark_probe.sh
@@ -61,8 +61,8 @@ git --git-dir="$gitdir" --work-tree=. push -u origin "$branch"
 When saving committed probe excerpts, prefer:
 
 ```bash
-DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh
-DS4_GIT_DIR=.git-codex DS4_GIT_WORK_TREE=. SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 ./scripts/mac_spark_discovery.sh
+DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
 ```
 
 Notes:
@@ -76,7 +76,7 @@ Notes:
 - `REDACT=1` redaction is delimiter-aware (it will redact actual IP addresses without clobbering non-secret version strings like `0ubuntu0.24.04.1`), and includes both expanded and compressed (`::`) IPv6 forms.
 - Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
 - `scripts/mac_spark_discovery.sh` prints `targets:` so default/explicit targets are visible in committed excerpts.
-- If the checkout's `.git` metadata is not usable (provenance/permission issues), the scripts also check for a local shim gitdir at `.git-codex/` (bare gitdir) or `.git-codex/.git` (non-bare `git init .git-codex` layout), plus `.gitshim/repo/.git` (used by some probe automations). If either exists, set `DS4_GIT_DIR`/`DS4_GIT_WORK_TREE` explicitly so snapshots capture the correct `git: <hash>`. Otherwise, set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
+- If the checkout's `.git` metadata is not usable (provenance/permission issues), the scripts also check for a local shim gitdir at `.codex_git/` or `.git-codex/` (bare gitdir) or `.codex_git/.git` / `.git-codex/.git` (non-bare `git init <dir>` layout), plus `.gitshim/repo/.git` (used by some probe automations). If either exists, set `DS4_GIT_DIR`/`DS4_GIT_WORK_TREE` explicitly so snapshots capture the correct `git: <hash>`. Otherwise, set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
 - `scripts/spark_probe.sh` optional toggles:
   - `NVIDIA_SMI_FULL=1` include full `nvidia-smi` output (verbose, process list)
   - `CUDA_RUNTIME_PROBE=0` skip the tiny `nvcc` compile+run probe
