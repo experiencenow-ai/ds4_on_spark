@@ -11,6 +11,7 @@ REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_GGUF_INSPECT_ENV="${REMOTE_GGUF_INSPECT_ENV:-$REMOTE_LLAMA_ENV}"
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash}"
+RUN_LABEL="${RUN_LABEL:-}"
 MODEL_RUNS_CSV="${MODEL_RUNS_CSV:-}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
@@ -21,6 +22,9 @@ LOCAL_QUALITY_SCORE="${LOCAL_QUALITY_SCORE:-}"
 QUALITY_SCORE="${QUALITY_SCORE:-}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
+if [ "$RUN_LABEL" != "" ]; then
+    OUT_DIR="$OUT_ROOT/$ts-$RUN_LABEL"
+fi
 
 mkdir -p "$OUT_DIR"
 
@@ -57,7 +61,11 @@ append_model_runs_csv()
     if [ "$MODEL_RUNS_CSV" = "" ] || [ "$summary_path" = "" ] || [ ! -r "$summary_path" ]; then
         return 0
     fi
-    python3 - "$MODEL_RUNS_CSV" "$model" "$ts-$scope" "$scope" "$PUBLIC_QUALITY_PRIOR" "$PUBLIC_QUALITY_BASIS" "$PUBLIC_QUALITY_SOURCE" "$PASSED_TASKS" "$TOTAL_TASKS" "$LOCAL_QUALITY_SCORE" "$QUALITY_SCORE" "$summary_path" 2>/dev/null <<'PY' || true
+    run_id="$ts-$scope"
+    if [ "$RUN_LABEL" != "" ]; then
+        run_id="$ts-$RUN_LABEL-$scope"
+    fi
+    python3 - "$MODEL_RUNS_CSV" "$model" "$run_id" "$scope" "$PUBLIC_QUALITY_PRIOR" "$PUBLIC_QUALITY_BASIS" "$PUBLIC_QUALITY_SOURCE" "$PASSED_TASKS" "$TOTAL_TASKS" "$LOCAL_QUALITY_SCORE" "$QUALITY_SCORE" "$summary_path" 2>/dev/null <<'PY' || true
 import csv
 import os
 import sys
@@ -156,6 +164,9 @@ PY
     echo
     echo "- ds4_on_spark commit: $repo_rev"
     echo "- target: $target"
+    if [ "$RUN_LABEL" != "" ]; then
+        echo "- run_label: $RUN_LABEL"
+    fi
     echo
     echo "## Safety Gates"
     echo

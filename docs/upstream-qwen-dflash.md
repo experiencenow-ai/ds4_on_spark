@@ -125,6 +125,18 @@ REMOTE_VLLM_ENV='ALLOW_RUN=1 VLLM_MODEL=/abs/path/Qwen3-Coder-30B-A3B-Instruct-F
 scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 ```
 
+For paired runs, prefer the wrapper so target-only and DFlash share the same
+prompt/token settings and are labeled consistently in `MODEL_RUNS_CSV`:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+RUN_LABEL=qwen3-coder-30b-a3b \
+VLLM_TARGET_MODEL=/abs/path/Qwen3-Coder-30B-A3B-Instruct-FP8 \
+VLLM_DRAFT_MODEL=/abs/path/Qwen3-Coder-30B-A3B-DFlash \
+MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
+```
+
 If the model is not already on Spark0, set `ALLOW_FETCH=1` only after approving
 the large download. Reports record the `REMOTE_*` env values, so do not place
 tokens or secrets there.

@@ -144,6 +144,22 @@ Per-script useful env vars:
 See `docs/upstream-qwen-dflash.md` for Ling, Qwen, and DFlash candidate order,
 artifact sizes, and example vLLM env strings.
 
+### vLLM target-only + DFlash wrapper
+
+For paired Qwen+DFlash probes (and Ling/Qwen target-only runs), prefer the
+wrapper script so the target-only and DFlash runs share the same prompt, token
+budget, and CSV labeling:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+RUN_LABEL=qwen35-27b \
+VLLM_TARGET_MODEL=/abs/path/to/Qwen3.5-27B \
+VLLM_DRAFT_MODEL=/abs/path/to/Qwen3.5-27B-DFlash \
+scripts/run_baseline_vllm_dflash_pair.sh spark0@aitopatom-9ab9.local
+```
+
+If `VLLM_DRAFT_MODEL` is omitted, the wrapper runs target-only and exits.
+
 Use `docs/model-quality-speed.md` and `scripts/model_quality_speed_score.py`
 when comparing multiple model families. Speed claims should include
 `quality_score`, `quality_adjusted_decode_tps`, and Pareto status once local
