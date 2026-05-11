@@ -106,6 +106,7 @@ Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**)
 | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
 | `docs/gguf-inspect-antirez-9cb905d-iq2xxs-chat-v2.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
 | `docs/gguf-inspect-antirez-9cb905d-mtp-sidecar.json` | MTP sidecar GGUF | true | false | compact DS4-tuned sidecar (`mtp_tensor_count=32`), not full upstream `mtp.0.*` |
+| `docs/gguf-inspect-antirez-9cb905d-iq2xxs-chat-v2-mtp-set.json` | trunk+sidecar set | true | false | combined artifact-set view (union key fingerprints); still incomplete MTP |
 
 Refresh the pinned probe outputs reproducibly (header + tensor table Range reads only; refuses servers that don’t honor Range):
 
