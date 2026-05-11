@@ -169,6 +169,19 @@ Compatibility notes (llama.cpp forks):
 - Some V4-capable forks expose `--show-timings` + `--perf` instead of `--timings`. The Spark-side probe auto-detects the supported flags via `llama-cli --help` and parses either the classic `eval time = ... / <tokens>` lines or the fork-style `[ Prompt: <t/s> | Generation: <t/s> ]` summary.
 - The milestone wrapper now shell-quotes values in `REMOTE_LLAMA_ENV` so `MODEL_SOURCE` can include spaces/parentheses without breaking the remote command.
 
+### Flash-attention scheduling signal (best-effort)
+
+When the V4-capable runtime emits `__fattn__-*` log lines, the Spark-side runner
+summarizes them as:
+
+- `fattn_log_lines=<n>`: number of log lines containing `__fattn__`
+- `fattn_unique_nodes=<n>`: count of distinct `__fattn__-<id>` nodes observed
+
+This is **not** a correctness proof, but it is a coarse signal that a Flash
+Attention schedule node executed instead of falling back to a slow path. Always
+preserve `remote_llamacpp_stdout.txt` / `remote_llamacpp_stderr.txt` so the
+fallback reason is visible.
+
 If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
 it forwards the same CSV/quality env vars:
 
