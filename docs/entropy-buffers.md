@@ -168,6 +168,10 @@ Notes:
   - Tune weighting with `--buffer-id-weight` / `--buffer-item-weight` (set to `0` to disable).
 - The recommender also applies a small **penalty** for candidates whose `prompt_template_id` (or `task_family|prompt_template_id`) has a high historical useful-novelty flagged rate or a high historical normalized-output duplicate rate.
   - Tune with `--noise-weight` / `--dup-weight`, or hard-filter with `--max-noise-rate` / `--max-dup-rate`.
+- The output JSON includes a `predicted` block showing:
+  - `coverage_before` / `coverage_after`: entropy stats if you add the selected batch to history (count-only; deterministic).
+  - `coverage_delta`: entropy deltas per dimension (useful for comparing parameter sweeps).
+  - `selected_history_noise_rate_mean` / `selected_history_dup_rate_mean`: expected slice-level penalties for the chosen batch.
 
 ## Integration notes
 

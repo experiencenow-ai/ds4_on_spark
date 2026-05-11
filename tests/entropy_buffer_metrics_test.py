@@ -133,6 +133,14 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(len(top), 1)
         self.assertFalse(any(c.task_id == "math.add.001" and c.prompt_template_id == "cot.v2" for c in top))
 
+        predicted = recommend._predict(history, top)
+        self.assertIn("coverage_before", predicted)
+        self.assertIn("coverage_after", predicted)
+        self.assertIn("coverage_delta", predicted)
+        self.assertGreaterEqual(int((predicted.get("coverage_after") or {}).get("task_family", {}).get("unique", 0)), int((predicted.get("coverage_before") or {}).get("task_family", {}).get("unique", 0)))
+        self.assertIsInstance(float(predicted.get("selected_history_noise_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_dup_rate_mean", 0.0)), float)
+
     def test_useful_novelty_flags_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_flags_mini.jsonl")
