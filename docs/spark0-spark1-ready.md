@@ -5,8 +5,9 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-11)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` is not reachable yet (as of the 03:56Z refresh, it failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0356Z.md`, `docs/spark0-probe-2026-05-11T0356Z.md`.
+- `spark1.local` and `spark2.local` are not reachable yet (as of the 08:22Z refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted snapshots: `docs/spark0-mac-discovery-2026-05-11T0822Z.md`, `docs/spark0-probe-2026-05-11T0822Z.md`.
+- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-11T0822Z.md`, `docs/spark-ring-probe-2026-05-11T0822Z.md`.
 
 ## Goals
 
@@ -14,6 +15,15 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 - Verify CUDA compute capability via multiple sources (`nvidia-smi` query + a tiny `nvcc` runtime probe).
 - Keep committed artifacts safe: redact IP/MAC tokens.
 - Preserve non-secret package/version facts while redacting network identifiers (the probe redaction avoids clobbering version strings like `0ubuntu0.24.04.1`).
+
+## Spark2 / Ring Next Steps
+
+When Spark2 exists (or you want to stage ring readiness), use:
+
+- `docs/spark-ring-access-checklist.md`
+- `docs/spark-ring-probe-runbook.md`
+
+The compact ring probe (`scripts/spark_ring_probe.sh`) is meant to be commit-safe and tolerant of missing nodes (`|| true`).
 
 ## Mac-Side Discovery
 

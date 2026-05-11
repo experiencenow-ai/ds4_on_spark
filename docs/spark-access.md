@@ -66,6 +66,15 @@ git --git-dir=.codex_git --work-tree=. fetch origin --prune
 git --git-dir=.codex_git --work-tree=. reset --hard origin/main
 ```
 
+If copying `index`/`HEAD` from the worktree gitdir is blocked by the environment, a simpler fallback is to seed the shim by committing the existing checkout contents, then immediately reset to `origin/main` (the seed commit is local-only and will be discarded by the reset):
+
+```bash
+git --git-dir=.codex_git --work-tree=. add -A
+git --git-dir=.codex_git --work-tree=. -c user.name=codex -c user.email=codex@example.local commit -m "seed worktree" || true
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+```
+
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
 
 ```bash
@@ -172,6 +181,19 @@ SPARK_SSH_USER=spark0 REDACT=1 ./scripts/spark_probe.sh spark1.local
 ```
 
 If Spark1 uses a different login user or mDNS name, pass `user@host` explicitly.
+
+## Spark Ring (Spark0..Spark2) Access + Probes
+
+For ring bring-up readiness, use the ring checklist + runbook:
+
+- `docs/spark-ring-access-checklist.md`
+- `docs/spark-ring-probe-runbook.md`
+
+The ring probe is a compact, commit-safe snapshot (clock + network + storage + GPU/toolchain facts) plus optional peer ping checks:
+
+```bash
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true
+```
 
 ## Diagnosis
 
