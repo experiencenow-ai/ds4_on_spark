@@ -35,7 +35,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_probe_spark.md"
 	echo "Set env vars on Spark via REMOTE_MTP_SIDECAR_ENV:"
 	echo
 	echo "- ALLOW_RUN=1"
-	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf"
+	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)"
 	echo
 	echo "Remote MTP sidecar env:"
 	echo
@@ -67,14 +67,21 @@ if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
   exit 0
 fi
 if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf\"
+  echo \"run skipped: set MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (or https:// URL)\"
   exit 0
 fi
-if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
-  echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
-  exit 0
-fi
-python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+case \"${MTP_SIDECAR_GGUF}\" in
+  http://*|https://*)
+    python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+    ;;
+  *)
+    if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
+      echo \"run skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\"
+      exit 0
+    fi
+    python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"'
+    ;;
+esac
 ' " <"$repo_root/scripts/model_contract_probe_mtp_sidecar.py" \
 	>"$OUT_DIR/remote_mtp_sidecar_probe_stdout.txt" 2>"$OUT_DIR/remote_mtp_sidecar_probe_stderr.txt" || true
 
