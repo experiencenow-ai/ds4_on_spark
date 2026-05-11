@@ -126,7 +126,7 @@ bw_annotate_dd_line()
 				}
 			}
 		}" | head -n 1 || true)"
-		bps="$(printf "%s\n" "$line" | sed -nE 's/.*\\(([0-9]+)[[:space:]]+bytes\\/sec\\).*/\\1/p' | head -n 1 || true)"
+		bps="$(printf "%s\n" "$line" | tr '()' ' ' | awk "{ for (i=1; i<=NF; i++) { if ( \\$i ~ /^[0-9]+\\$/ && \\$(i+1) == \"bytes/sec\" ) { print \\$i; exit; } } }" | head -n 1 || true)"
 	fi
 	if [ "$bytes" = "" ] && printf "%s\n" "$line" | grep -q " copied,"; then
 		bytes="$(printf "%s\n" "$line" | awk "{ print \$1 }" | head -n 1 || true)"
