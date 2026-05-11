@@ -66,6 +66,15 @@ git --git-dir=.codex_git --work-tree=. fetch origin --prune
 git --git-dir=.codex_git --work-tree=. reset --hard origin/main
 ```
 
+If copying `index`/`HEAD` from the worktree gitdir is blocked by the environment, a simpler fallback is to seed the shim by committing the existing checkout contents, then immediately reset to `origin/main` (the seed commit is local-only and will be discarded by the reset):
+
+```bash
+git --git-dir=.codex_git --work-tree=. add -A
+git --git-dir=.codex_git --work-tree=. -c user.name=codex -c user.email=codex@example.local commit -m "seed worktree" || true
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+```
+
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
 
 ```bash
