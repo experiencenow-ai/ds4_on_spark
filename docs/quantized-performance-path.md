@@ -109,6 +109,14 @@ If the runtime trace does not tag `cls`, force a default for replay:
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-default-cls batch --num-experts 0 --max-tokens 5000
 ```
 
+If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/`rejected_mtp`), generate an MTP-on vs MTP-off replay report (includes both `arrival_units=steps` and `arrival_units=output_tokens`) with:
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
+```
+
+If the same runtime trace also includes speculative-decoding comparator counters (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the report includes a separate `dflash_comparator` block and keeps those counters isolated from DeepSeek MTP acceptance assumptions.
+
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
 
 ```bash
