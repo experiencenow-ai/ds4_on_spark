@@ -154,6 +154,17 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
   - `beta_fast`: 32
   - `beta_slow`: 1
 
+### Config key normalization (Transformers vs inference config)
+
+Upstream publishes two “official” configs with different key naming: `config.json` (Transformers) and `inference/config.json` (reference runtime). External runtimes and conversion pipelines may log either set of keys (`hidden_size` vs `dim`, `num_hidden_layers` vs `n_layers`, etc.).
+
+To avoid guessing, normalize external config/log fields via `fixtures/model_contract/deepseek_v4_flash/contract_summary.json`:
+
+- `compat.fields`: list of `{concept,canonical_path,transformers_key,inference_key}` mappings
+- `compat.by_transformers_key` / `compat.by_inference_key`: reverse-lookup dictionaries
+
+Important quantization note: treat `quantization.inference_config.expert_dtype` (from `inference/config.json`) as the canonical “Flash vs Flash-Base” switch; some upstream revisions omit `expert_dtype` from `config.json`.
+
 ## Attention schedule summary (sliding vs CSA vs HCA)
 
 Upstream encodes the per-layer cache mode as `compress_ratios[]`:
