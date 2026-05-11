@@ -1,0 +1,238 @@
+{
+  "generated_at_utc": "2026-05-11T20:06:41Z",
+  "items": [
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
+      "mtp_contract": null,
+      "mtp_keys_sha256": null,
+      "mtp_present": false,
+      "mtp_preservation": {
+        "preserves": false,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent"
+      },
+      "mtp_tensor_count": 0,
+      "mtp_trust": {
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d/DeepSeek-V4-Flash-Q4_K_M.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": false,
+        "observed": {
+          "dense_primary_type": "F32",
+          "expert_primary_type": "Q4_K"
+        }
+      },
+      "tensor_key_namespace_guess": "llama.cpp",
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "77fa28612383dbd157f5a765749ead1665240ce21c78d8b30479a19e5958802a"
+    },
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
+      "mtp_contract": null,
+      "mtp_keys_sha256": null,
+      "mtp_present": false,
+      "mtp_preservation": {
+        "preserves": false,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent"
+      },
+      "mtp_tensor_count": 0,
+      "mtp_trust": {
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": true,
+        "observed": {
+          "dense_primary_type": "F32",
+          "expert_primary_type": "MXFP4"
+        }
+      },
+      "tensor_key_namespace_guess": "llama.cpp",
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "77fa28612383dbd157f5a765749ead1665240ce21c78d8b30479a19e5958802a"
+    },
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json",
+      "mtp_contract": null,
+      "mtp_keys_sha256": null,
+      "mtp_present": false,
+      "mtp_preservation": {
+        "preserves": false,
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent"
+      },
+      "mtp_tensor_count": 0,
+      "mtp_trust": {
+        "reasons_sample": [
+          "no mtp.* tensors present"
+        ],
+        "status": "absent",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": false,
+        "observed": {
+          "dense_primary_type": "F32",
+          "expert_primary_type": "IQ2_XXS"
+        }
+      },
+      "tensor_key_namespace_guess": "llama.cpp",
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "0d7226bd7c13c2cfa43a16a04b4b9a69b9b0940df4c859030e1de0e74c5c5ddc"
+    },
+    {
+      "artifact_type": "gguf.url",
+      "doc_path": "docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json",
+      "mtp_contract": {
+        "complete": false,
+        "forbidden_present_count": 0,
+        "missing_required_count": 1568
+      },
+      "mtp_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
+      "mtp_present": true,
+      "mtp_preservation": {
+        "preserves": false,
+        "reasons_sample": [
+          "mtp_contract.complete != true"
+        ],
+        "status": "incomplete"
+      },
+      "mtp_tensor_count": 32,
+      "mtp_trust": {
+        "reasons_sample": [
+          "mtp_contract.complete != true",
+          "mtp_keys_sha256 != official mtp checkpoint fingerprint"
+        ],
+        "status": "incomplete",
+        "trusted": false
+      },
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": null,
+        "observed": {
+          "dense_primary_type": "F32",
+          "expert_primary_type": null
+        }
+      },
+      "tensor_key_namespace_guess": "deepseek-upstream-mtp-only",
+      "topology_contract": {
+        "block_count_ok": null,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f"
+    },
+    {
+      "artifact_set": true,
+      "doc_path": "docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2-mtp-set.json",
+      "mtp_contract": {
+        "complete": false,
+        "forbidden_present_count": 0,
+        "missing_required_count": 1568
+      },
+      "mtp_keys_union_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
+      "mtp_present": true,
+      "mtp_preservation": {
+        "preserves": false,
+        "reasons_sample": [
+          "mtp_contract.complete != true"
+        ],
+        "status": "incomplete"
+      },
+      "mtp_trust": {
+        "reasons_sample": [
+          "mtp_contract.complete != true",
+          "mtp_keys_sha256 != official mtp checkpoint fingerprint"
+        ],
+        "status": "incomplete",
+        "trusted": false
+      },
+      "paths": [
+        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+      ],
+      "quantization_contract": {
+        "dense_fp8_like": false,
+        "expected": {
+          "dense_dtype": "fp8",
+          "expert_dtype": "fp4",
+          "scale_fmt": "ue8m0"
+        },
+        "expert_fp4_like": false,
+        "observed": {
+          "dense_primary_type": "F32",
+          "expert_primary_type": "IQ2_XXS"
+        }
+      },
+      "topology_contract": {
+        "block_count_ok": true,
+        "mismatch_count": 0,
+        "mismatches_sample": []
+      },
+      "weight_keys_union_sha256": "82aaaf7e23a219b3f9975619823341f1a87c34e7d92abab4170e1e038bf3fb6d"
+    }
+  ],
+  "pinned_docs": [
+    "gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
+    "gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
+    "gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json",
+    "gguf-inspect-antirez-b0c3326-mtp-sidecar.json",
+    "gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2-mtp-set.json"
+  ]
+}
