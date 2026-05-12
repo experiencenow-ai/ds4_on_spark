@@ -91,6 +91,7 @@ MTP (multi-token prediction) oracle requirements:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --path /abs/path/to/trunk.gguf --path /abs/path/to/mtp_sidecar.gguf --json`
     - For artifact sets, also record `combined.weight_keys_union_sha256` and (when present) `combined.mtp_keys_union_sha256` to fingerprint the union key set across trunk + sidecar inputs.
   - Some DS4-tuned sidecars (e.g. `antirez/deepseek-v4-gguf`) are not full official `mtp.0.*` checkpoints; they use a compact 32‑tensor `mtp.0.*` table for DS4’s MTP path and advertise `general.architecture=deepseek4_mtp_support`. Before attempting to load these in external runtimes, validate the sidecar header/tensor directory (no full model download required):
+    - Machine-readable sidecar contract: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp_sidecar.*` (expected `mtp.0.*` tensor table + pinned payload-sample fingerprint reference). Enforced by `scripts/model_contract_verify_deepseek_v4_flash.py`.
     - For the upstream reference semantics (tensor binding, MTP raw cache, draft/verify/rollback), see `docs/mtp-ds4-reference.md` (pinned `antirez/ds4`).
     - Local file: `python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --expect-deepseek-v4-flash`
     - Convenience runner (local file or `https://` URL, writes a small Markdown + JSON artifact bundle under `/private/tmp`): `scripts/run_mtp_sidecar_contract_probe_local.sh /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf`

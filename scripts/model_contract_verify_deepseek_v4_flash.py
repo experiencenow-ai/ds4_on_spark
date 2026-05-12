@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import ast
 import json
 import re
 import subprocess
@@ -11,6 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
+MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
+MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-b0c3326-payload64.json"
 
 
 def load_json(path: Path):
@@ -45,6 +48,14 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(b"\n")
 	return h.hexdigest()
 
+def sha256_file(path: Path) -> str:
+	h = sha256()
+	with path.open("rb") as f:
+		for chunk in iter(lambda: f.read(1024 * 1024), b""):
+			h.update(chunk)
+	return h.hexdigest()
+
+
 def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
 	for k in weight_keys:
@@ -59,6 +70,61 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 			"keys_sha256": sha256_lines(keys),
 		}
 	return out
+
+
+
+def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path):
+	if not probe_py.exists():
+		return None
+	text = probe_py.read_text(encoding="utf-8")
+	try:
+		mod = ast.parse(text, filename=str(probe_py))
+	except SyntaxError:
+		return None
+
+	found: list[list[str]] = []
+	for node in ast.walk(mod):
+		if not isinstance(node, ast.Assign):
+			continue
+		if len(node.targets) != 1:
+			continue
+		t = node.targets[0]
+		if not isinstance(t, ast.Name) or t.id != "expected_names":
+			continue
+		if not isinstance(node.value, ast.List):
+			continue
+		vals: list[str] = []
+		ok = True
+		for elt in node.value.elts:
+			if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+				vals.append(elt.value)
+			else:
+				ok = False
+				break
+		if ok and vals:
+			found.append(vals)
+	if not found:
+		return None
+	found.sort(key=len, reverse=True)
+	return list(found[0])
+
+
+def payload_samples_fingerprint_lines(reference_doc: dict) -> list[str]:
+	samples = reference_doc.get("payload_samples", None) if isinstance(reference_doc, dict) else None
+	lines: list[str] = []
+	if not isinstance(samples, dict):
+		return lines
+	for name in sorted(samples.keys()):
+		s = samples.get(name, None)
+		if not isinstance(name, str) or not isinstance(s, dict):
+			continue
+		n = s.get("n", None)
+		fnv = s.get("fnv1a64", None)
+		off = s.get("offset", None)
+		if not isinstance(n, int) or not isinstance(fnv, str) or not isinstance(off, int):
+			continue
+		lines.append(f"{name}\t{int(n)}\t{fnv}\t{int(off)}")
+	return lines
 
 def main() -> int:
 	failures: list[Failure] = []
@@ -255,6 +321,40 @@ def main() -> int:
 						failures.append(Failure(130, f"contract summary cache.mtp_cache_kind_by_mtp_layer_id must be a list of length n_mtp_layers={n_mtp_layers_cfg}: {contract_summary}"))
 					elif any(k != "sliding" for k in mtp_kinds):
 						failures.append(Failure(131, f"contract summary cache.mtp_cache_kind_by_mtp_layer_id must be all 'sliding' (MTP is sliding-only): {contract_summary}"))
+				mtp_sidecar = summary.get("mtp_sidecar", {}) if isinstance(summary, dict) else {}
+				if not isinstance(mtp_sidecar, dict):
+					failures.append(Failure(140, f"contract summary missing mtp_sidecar (expected dict): {contract_summary}"))
+				else:
+					want_arch = "deepseek4_mtp_support"
+					if mtp_sidecar.get("general_architecture") != want_arch:
+						failures.append(Failure(141, f"contract summary mtp_sidecar.general_architecture must be {want_arch!r}: {contract_summary}"))
+					want_names = parse_ds4_mtp_sidecar_expected_tensor_names(MTP_SIDECAR_PROBE_PY)
+					got_names = mtp_sidecar.get("expected_tensor_names", None)
+					if want_names is None:
+						failures.append(Failure(142, f"unable to parse expected_names from {MTP_SIDECAR_PROBE_PY}"))
+					elif got_names != want_names:
+						failures.append(Failure(143, f"contract summary mtp_sidecar.expected_tensor_names mismatch vs {MTP_SIDECAR_PROBE_PY}: {contract_summary}"))
+					else:
+						if mtp_sidecar.get("expected_tensor_count") != int(len(want_names)):
+							failures.append(Failure(144, f"contract summary mtp_sidecar.expected_tensor_count mismatch (expected {len(want_names)}): {contract_summary}"))
+						if mtp_sidecar.get("expected_tensor_names_sha256") != sha256_lines(want_names):
+							failures.append(Failure(145, f"contract summary mtp_sidecar.expected_tensor_names_sha256 mismatch: {contract_summary}"))
+
+					ref = mtp_sidecar.get("reference_payload_samples", {})
+					if not isinstance(ref, dict):
+						failures.append(Failure(146, f"contract summary mtp_sidecar.reference_payload_samples must be a dict: {contract_summary}"))
+					else:
+						if ref.get("reference_sha256") != sha256_file(MTP_SIDECAR_REFERENCE_JSON):
+							failures.append(Failure(147, f"contract summary mtp_sidecar.reference_payload_samples.reference_sha256 mismatch: {contract_summary}"))
+						ref_doc = load_json(MTP_SIDECAR_REFERENCE_JSON)
+						ref_lines = payload_samples_fingerprint_lines(ref_doc)
+						if ref.get("payload_sample_bytes") != ref_doc.get("payload_sample_bytes", None):
+							failures.append(Failure(148, f"contract summary mtp_sidecar.reference_payload_samples.payload_sample_bytes mismatch vs {MTP_SIDECAR_REFERENCE_JSON}: {contract_summary}"))
+						if ref.get("payload_samples_count") != int(len(ref_lines)):
+							failures.append(Failure(149, f"contract summary mtp_sidecar.reference_payload_samples.payload_samples_count mismatch (expected {len(ref_lines)}): {contract_summary}"))
+						if ref.get("payload_samples_sha256") != sha256_lines(ref_lines):
+							failures.append(Failure(150, f"contract summary mtp_sidecar.reference_payload_samples.payload_samples_sha256 mismatch: {contract_summary}"))
+
 				cache_update = summary.get("cache", {}).get("update_semantics", {})
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
 				if not (isinstance(ring_expr, str) and "start_pos % win" in ring_expr):

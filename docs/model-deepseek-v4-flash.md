@@ -835,6 +835,8 @@ When multiple `--path` values are provided, the tool emits both:
 
 Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published as a compact 32‑tensor `mtp.0.*` table with `general.architecture=deepseek4_mtp_support` (not a full official `mtp.0.*` checkpoint). Validate these sidecars explicitly before trying to load them in external runtimes:
 
+Machine-readable sidecar contract: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp_sidecar.*` (expected tensor table + pinned payload-sample fingerprint reference).
+
 ```sh
 python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json
 # Or, for metadata-only validation without a full download:
