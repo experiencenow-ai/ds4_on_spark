@@ -2,6 +2,14 @@
 
 This track keeps probe-only CUDA snippets that answer: “Can we compile for and run on GB10 (CC 12.1 / `sm_121`) with the installed CUDA toolkit?”
 
+## Spark0: `sm_121` Gate (Fastest)
+
+When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`):
+
+```bash
+./scripts/cuda_probe_sm121_gate_spark0.sh
+```
+
 ## Spark0: Tiny Smoke (Fast Path)
 
 When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” check:
