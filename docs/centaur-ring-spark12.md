@@ -62,6 +62,12 @@ sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<
 sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
+The fetch helper pulls per-node artifacts (when present):
+
+- `node_setup.log`
+- `pip_freeze.txt` (sanitized)
+- `node_setup_facts.json` (zip/python/requirements + freeze)
+
 4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
 
 	Recommended: one-command evidence loop (node setup → ring rsync → validate → fetch):
@@ -122,6 +128,8 @@ export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
 sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
+
+The fetched per-node directories include `node_setup_facts.json` + `pip_freeze.txt` so you can attach version context to ring failures without rerunning setup.
 
 Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
 

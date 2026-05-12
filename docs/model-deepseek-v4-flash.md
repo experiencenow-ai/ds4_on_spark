@@ -95,7 +95,7 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
 - **Sparse-attn sentinel masking rule**:
   - Upstream source: `inference/kernel.py` (`sparse_attn`; `idx == -1` must behave as `score=-inf` and `kv=0`).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/kernel.py`.
-  - DS4 contract: `contract_summary.json` `cache.topk_mask_value` + `cache.sparse_attn_mask_rule`.
+  - DS4 contract: `contract_summary.json` `cache.topk_mask_value` + `cache.sparse_attn_mask` (with the human summary in `cache.sparse_attn_mask_rule`).
 - **MoE routing + gate tensor semantics**:
   - Upstream source: `inference/model.py` (MoE forward/routing; hash-gated vs score-gated layers).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/model.py`.
@@ -134,10 +134,10 @@ Key JSON paths by concern:
 - Sliding/CSA/HCA schedule: `attention_schedule.main_compress_ratios` + `attention_schedule.mtp_compress_ratios` (raw upstream array: `attention_schedule.compress_ratios`), `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
   - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type`, `attention_schedule.main_layer_ids_by_compress_ratio`, plus direct maps `attention_schedule.main_layer_type_by_layer_id` / `attention_schedule.main_compress_ratio_by_layer_id` and the full (main+MTP) maps `attention_schedule.layer_type_by_layer_id` / `attention_schedule.compress_ratio_by_layer_id`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
-- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
+- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask` (and the human summary in `cache.sparse_attn_mask_rule`; MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
 - MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
-- MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)
+- MTP artifacts + trust gates: `mtp.*` (including `mtp.namespace.*`, `mtp.semantics.*`, and `mtp.trust_gates.*`)
 - Checkpoint tensor-key invariants + counts: `tensor_keys.*` and `checkpoint_index.*` (including `checkpoint_index.weight_map_prefix_fingerprints.mtp.*` to fingerprint the upstream `mtp.0.*` namespace)
 - Quantization / scale-tensor expectations: `quantization.*` (notably `quantization.inference_config.*` and `quantization.linear_tensor_contract.*`)
 - Tokenizer + encoding invariants: `tokenizer.*` and `encoding_constants.*` (encoding oracle vectors are pinned via `upstream.fixtures_sha256.*`)
@@ -162,7 +162,7 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
 - Encoding gate: `oracle.encoding_oracle.required == true` and the pinned vectors under `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` must pass via `scripts/model_contract_verify_deepseek_v4_flash.py`.
 - Topology gate: `topology.*` must match (`n_layers=43`, `hidden_size=4096`, `n_heads=64`, `head_dim=512`, `vocab_size=129280`).
 - Attention schedule gate: `attention_schedule.main_compress_ratios` must match exactly (2 sliding, then CSA/HCA alternation), and `attention_schedule.mtp_compress_ratios` must satisfy `mtp.compress_ratio_rule` (the raw upstream array is also recorded as `attention_schedule.compress_ratios`).
-- Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask_rule`.
+- Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask` (`cache.sparse_attn_mask_rule` is the human summary).
 - MoE routing gate: hash routing (`ffn.gate.tid2eid`, `int32`) applies only to layers `0..n_hash_layers-1`; score routing uses `ffn.gate.bias` for selection only (`moe.hash_routing.*`, `moe.semantics.*`).
 - Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
 - Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
@@ -463,7 +463,7 @@ Reference implementation: `inference/kernel.py` (`sparse_attn`).
 - Sparse top-k index buffers use `topk_mask_value == -1` as a sentinel.
 - When an index is masked (`idx == -1`), the kernel must behave as if `score=-inf` and `kv=0` (i.e. it contributes nothing to the softmax numerator and cannot introduce NaNs via invalid gathers).
 
-These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value` and `cache.sparse_attn_mask_rule`.
+These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value`, `cache.sparse_attn_mask` (machine-readable), and `cache.sparse_attn_mask_rule` (human summary).
 
 ### MLA positional semantics (partial RoPE + inverse on output)
 
@@ -789,6 +789,7 @@ MoE gate conditional keys:
 Per-layer helper views (exact tensor-name + count contract):
 
 - `tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` records the full non-expert suffix list for each trunk layer ID (base + CSA/HCA conditionals + correct gate suffix).
+- `tensor_keys.layer_required_nonexpert_keys_by_layer_id` expands the suffix list into exact checkpoint tensor names (`layers.{i}.*`) so external-runtime tooling can check “missing keys” without re-deriving templates.
 - `tensor_keys.layer_expected_tensor_key_count_by_layer_id` records the expected **total** per-layer tensor-key count (experts + non-expert suffixes).
 - `tensor_keys.layer_tensor_key_count_by_layer_id` records the observed official checkpoint per-layer tensor-key counts.
 - `tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok` is `true` for all trunk layers in the pinned official checkpoint (sanity check that the derived count formulas match reality).
@@ -800,6 +801,7 @@ MTP block (`mtp.0.*`):
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
 - The full non-expert MTP suffix set (required layer suffixes + MTP-only suffixes + score gate bias) is recorded as `tensor_keys.mtp_required_nonexpert_suffixes` for quick contract checks.
+- The expanded “exact tensor names” view is recorded as `tensor_keys.mtp_required_nonexpert_keys_by_layer_id` (and duplicated for convenience under `tensor_keys.mtp0.required_nonexpert_keys`).
 - Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
 - `contract_summary.json` also records the expected per-MTP-layer tensor-key count (`tensor_keys.mtp_expected_tensor_key_count_per_layer`) and the observed counts in the official safetensors index (`tensor_keys.mtp_tensor_key_count_by_layer_id`) so tooling can sanity-check “full upstream `mtp.0.*` preserved?” quickly.
 
@@ -826,12 +828,13 @@ For each quantized artifact tested, record:
   - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`; includes `status ∈ {"native_like","mismatch","unknown"}` plus `dense_fp8_like` / `expert_fp4_like` and `notes_sample`)
   - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
     - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
-    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
+    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`; plus `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when the expanded `tensor_keys.mtp_required_nonexpert_keys_by_layer_id` contract is available)
     - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`, and (when `contract_summary.json` is available) the official `mtp_keys_sha256` fingerprint gate)
     - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
     - `trunk_contract` (`checked`, `complete`) with `trunk_contract.kind`:
       - `kind="deepseek-upstream"`: upstream-style `layers.{i}.*` keys preserved
       - `kind="llama.cpp"`: DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only structural signal)
+      - For upstream-preserving artifacts, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when expanded per-layer key lists are available (quick “exact `layers.{i}.*` non-expert namespace preserved?” signal).
     - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract

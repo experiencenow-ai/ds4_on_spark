@@ -7,8 +7,8 @@ Produced from a Mac checkout of `experiencenow-ai/ds4_on_spark` by running:
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID="20260512T030829Z"
-sh ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@aitopatom-9ab9.local "$CENTAUR_RUN_ID" ~/centaur-smoke/v73 fixtures/centaur-smoke/spark0-v73/"$CENTAUR_RUN_ID"
+sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
+sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID" ~/centaur-smoke/v73 fixtures/centaur-smoke/spark0-v73/"$CENTAUR_RUN_ID"
 ```
 
 Centaur zip (Mac-local):

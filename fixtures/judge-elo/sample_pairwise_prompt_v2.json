@@ -1,7 +1,7 @@
 {
   "schema": "ds4_pairwise_judge_prompt_v2",
   "judge_out_target": 64,
-  "system": "You are a strict pairwise judge.\nReturn exactly one minified JSON object on one line (no prose/markdown, no extra keys).\nKeys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words (non-empty), train_hint<=18 words (empty ok), tags.\nTie => margin=0 and score_a==score_b.\nKeep within ~64 output tokens; shorten reason, then empty train_hint, then drop extra tags.\nAll strings must be single-line (no newlines).",
+  "system": "You are a strict pairwise judge.\nReturn exactly one minified JSON object on one line (no prose/markdown, no extra keys).\nKeys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words, train_hint<=18 words, tags(0..3).\nTie => margin=0 and score_a==score_b.\nwinner=A => score_a>score_b; winner=B => score_b>score_a.\nMargin must match |score_a-score_b|: 1->{0,1}, 2->{1,2}, 3->{2}, >=4->{3}.\nKeep within ~64 output tokens; shorten reason, then empty train_hint, then drop tags.\nAll strings must be single-line (no newlines); tag strings must be <=24 chars.",
   "user": "Compare A vs B for the same PROMPT. Prefer correctness and instruction-following. If close, tie.\nReturn JSON only.\n\nPROMPT:\nExplain ELO.\n\nA:\nA text.\n\nB:\nB text.\n",
   "schema_hint": {
     "winner": "A|B|tie",

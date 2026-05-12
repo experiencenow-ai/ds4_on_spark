@@ -6,7 +6,7 @@ import json
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +54,25 @@ def sha256_lines(lines: list[str]) -> str:
 def sha256_json(obj) -> str:
 	b = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
 	return sha256(b).hexdigest()
+
+def build_sparse_attn_mask_contract(kernel_py: Path) -> dict:
+	text = kernel_py.read_text(encoding="utf-8")
+	expected_lines = (
+		"idxs[i] = T.if_then_else(t * block + i < topk, topk_idxs[by, bx, t * block + i], -1)",
+		"kv_shared[i, j] = T.if_then_else(idxs[i] != -1, kv[by, idxs[i], j], 0)",
+		"acc_s[i, j] = T.if_then_else(idxs[j] != -1, 0, -T.infinity(FP32))",
+	)
+	missing = [line for line in expected_lines if line not in text]
+	if missing:
+		raise RuntimeError(
+			f"sparse_attn mask semantics probe failed; kernel changed? missing={missing} kernel={repo_relpath(kernel_py)}"
+		)
+	return {
+		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/kernel.py (sparse_attn_kernel_ sentinel masking)",
+		"sentinel_index": -1,
+		"masked_kv_fill_value": 0,
+		"masked_score_fill_value": "-inf",
+	}
 
 def build_contract_fingerprints(contract: dict) -> dict:
 	up = contract.get("upstream", {}) if isinstance(contract, dict) else {}
@@ -116,6 +135,7 @@ def build_contract_fingerprints(contract: dict) -> dict:
 			"mtp_cache_kind_by_mtp_layer_id": cache.get("mtp_cache_kind_by_mtp_layer_id"),
 			"mtp_compress_ratio_by_mtp_layer_id": cache.get("mtp_compress_ratio_by_mtp_layer_id"),
 			"sparse_attn_mask_rule": cache.get("sparse_attn_mask_rule"),
+			"sparse_attn_mask": cache.get("sparse_attn_mask"),
 			"topk_mask_value": cache.get("topk_mask_value"),
 			"update_semantics": cache.get("update_semantics"),
 			"topk_index_helpers": cache.get("topk_index_helpers"),
@@ -1364,11 +1384,13 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 	mtp_expected_tensor_key_count_per_layer = (
 		expected_expert_key_count_per_layer + len(required_layer_suffixes) + len(required_mtp_additional_suffixes) + 1
 	)
+	mtp_required_nonexpert_keys_by_layer_id: dict[str, list[str]] = {}
 	mtp_key_count_by_layer_id: dict[str, int] = {}
 	mtp_expected_key_count_by_layer_id_ok: dict[str, bool] = {}
 	for mtp_id in mtp_layer_ids:
 		prefix = f"mtp.{mtp_id}."
 		c = sum(1 for k in weight_keys if k.startswith(prefix))
+		mtp_required_nonexpert_keys_by_layer_id[str(mtp_id)] = [prefix + str(s) for s in mtp_required_nonexpert_suffixes]
 		mtp_key_count_by_layer_id[str(mtp_id)] = int(c)
 		mtp_expected_key_count_by_layer_id_ok[str(mtp_id)] = (int(c) == int(mtp_expected_tensor_key_count_per_layer))
 
@@ -1413,6 +1435,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"mtp0": {
 			"present": mtp0_key_count > 0,
 			"tensor_key_count": mtp0_key_count,
+			"required_nonexpert_keys": mtp_required_nonexpert_keys_by_layer_id.get("0", []) if mtp0_key_count > 0 else [],
 		},
 		"mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
 		"mtp_embed_present": mtp_embed_present,
@@ -1442,6 +1465,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		},
 		"mtp_tensor_key_count_by_layer_id": mtp_key_count_by_layer_id,
 		"mtp_expected_tensor_key_count_by_layer_id_ok": mtp_expected_key_count_by_layer_id_ok,
+		"mtp_required_nonexpert_keys_by_layer_id": mtp_required_nonexpert_keys_by_layer_id,
 		"mtp_forbidden_key_suffixes": mtp_forbidden_key_suffixes,
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
@@ -1504,7 +1528,13 @@ def augment_tensor_key_summary_with_trunk_layer_expectations(
 		key = str(i)
 		ok_by_layer_id[key] = (int(actual_counts[i]) == int(expected_count_by_layer_id[key]))
 
+	required_keys_by_layer_id: dict[str, list[str]] = {}
+	for i in range(n_layers):
+		prefix = f"layers.{i}."
+		required_keys_by_layer_id[str(i)] = [prefix + str(s) for s in required_by_layer_id[str(i)]]
+
 	tensor_keys["layer_required_nonexpert_suffixes_by_layer_id"] = required_by_layer_id
+	tensor_keys["layer_required_nonexpert_keys_by_layer_id"] = required_keys_by_layer_id
 	tensor_keys["layer_expected_tensor_key_count_by_layer_id"] = expected_count_by_layer_id
 	tensor_keys["layer_tensor_key_count_by_layer_id"] = actual_by_layer_id
 	tensor_keys["layer_expected_tensor_key_count_by_layer_id_ok"] = ok_by_layer_id
@@ -1703,6 +1733,9 @@ def build_contract() -> dict:
 					pass
 		mtp_layer_ids_present = sorted(layer_ids)
 		mtp_prefixes_present = sorted(prefixes)
+	mtp_layer_ids_expected = list(range(int(n_mtp_layers)))
+	mtp_prefixes_expected = [f"mtp.{i}." for i in mtp_layer_ids_expected]
+	mtp_official_namespace_complete = (mtp_layer_ids_present == mtp_layer_ids_expected and mtp_prefixes_present == mtp_prefixes_expected)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1755,6 +1788,7 @@ def build_contract() -> dict:
 			fixture_sha[rel] = sha256_file(p)
 
 	mtp_sidecar = build_ds4_mtp_sidecar_contract()
+	sparse_attn_mask = build_sparse_attn_mask_contract(FIX / "inference" / "kernel.py")
 	requested_hf_rev = "main"
 	pinned_hf_rev = requested_hf_rev
 	if isinstance(upstream_commit, str) and len(upstream_commit) == 40:
@@ -1889,6 +1923,7 @@ def build_contract() -> dict:
 			},
 			"topk_mask_value": -1,
 			"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+			"sparse_attn_mask": sparse_attn_mask,
 			"prefill": {
 				"compressed_index_offset": "seqlen",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
@@ -1926,14 +1961,22 @@ def build_contract() -> dict:
 					"mtp": {
 						"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 						"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
-						"compress_ratios": [int(r) for r in mtp_ratios],
-						"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-						"namespace_prefix": "mtp.{j}.",
-						"checkpoint_key_fingerprint": {
-						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
-						"tensor_key_count": mtp_prefix_fp.get("count", None),
-						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					"compress_ratios": [int(r) for r in mtp_ratios],
+					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+					"namespace_prefix": "mtp.{j}.",
+					"namespace": {
+						"expected_layer_ids": mtp_layer_ids_expected,
+						"expected_prefixes": mtp_prefixes_expected,
+						"official_present_layer_ids": mtp_layer_ids_present,
+						"official_present_prefixes": mtp_prefixes_present,
+						"official_complete": bool(mtp_official_namespace_complete),
+						"note": "Expected mtp.* tensor namespace layout derived from config.json num_nextn_predict_layers and validated against the official checkpoint index.",
 					},
+					"checkpoint_key_fingerprint": {
+					"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
+					"tensor_key_count": mtp_prefix_fp.get("count", None),
+					"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+				},
 					"checkpoint_key_examples": {
 						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
 						"layer_ids": mtp_layer_ids_present,

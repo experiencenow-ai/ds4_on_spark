@@ -75,6 +75,9 @@ Default local output directory:
 - Python + deps:
   - `python3 -V`
   - `pip freeze` excerpt (at least `numpy`, `scipy`, `scikit-learn`) or the full `pip_freeze.txt`
+- For Spark1/2 node setup failures (or ring rsync failures that depend on node setup):
+  - `node_setup_facts.json` (zip/python/requirements + freeze; per-node)
+  - `pip_freeze.txt` (sanitized; per-node)
 - Failing sub-step:
   - exact `centaur.py ...` command line
   - a bounded tail excerpt (sanitized)

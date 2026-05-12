@@ -33,10 +33,12 @@ SYSTEM_V1 = (
 SYSTEM_V2 = (
     "You are a strict pairwise judge.\n"
     "Return exactly one minified JSON object on one line (no prose/markdown, no extra keys).\n"
-    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words (non-empty), train_hint<=18 words (empty ok), tags.\n"
+    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words, train_hint<=18 words, tags(0..3).\n"
     "Tie => margin=0 and score_a==score_b.\n"
-    "Keep within ~{judge_out_target} output tokens; shorten reason, then empty train_hint, then drop extra tags.\n"
-    "All strings must be single-line (no newlines)."
+    "winner=A => score_a>score_b; winner=B => score_b>score_a.\n"
+    "Margin must match |score_a-score_b|: 1->{{0,1}}, 2->{{1,2}}, 3->{{2}}, >=4->{{3}}.\n"
+    "Keep within ~{judge_out_target} output tokens; shorten reason, then empty train_hint, then drop tags.\n"
+    "All strings must be single-line (no newlines); tag strings must be <=24 chars."
 )
 
 
@@ -109,7 +111,7 @@ def main() -> None:
     ap.add_argument("--a", required=True, help="path to candidate A output text file")
     ap.add_argument("--b", required=True, help="path to candidate B output text file")
     ap.add_argument("--judge-out-target", type=int, default=64, help="target judge output tokens (budget guidance only)")
-    ap.add_argument("--schema-version", choices=["v1", "v2"], default="v1", help="prompt schema version (default v1)")
+    ap.add_argument("--schema-version", choices=["v1", "v2"], default="v2", help="prompt schema version (default v2)")
     ap.add_argument("--format", choices=["blocks", "json"], default="blocks", help="output format (default blocks)")
     args = ap.parse_args()
 

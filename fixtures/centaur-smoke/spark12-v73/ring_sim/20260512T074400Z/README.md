@@ -17,18 +17,18 @@ On Spark0 (from Mac; streamed):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T074400Z
-sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@aitopatom-9ab9.local
+sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@<spark0-host>
 ```
 
 Validate artifacts (Spark0):
 
 ```bash
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export RING_RUN_ID=20260512T074400Z; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
+ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=20260512T074400Z; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
 ```
 
 Fetch back to this bundle (from Mac):
 
 ```bash
-sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T074400Z "~/centaur-smoke/v73/ring_sim_spark12" fixtures/centaur-smoke/spark12-v73/ring_sim/20260512T074400Z
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> 20260512T074400Z "~/centaur-smoke/v73/ring_sim_spark12" fixtures/centaur-smoke/spark12-v73/ring_sim/20260512T074400Z
 ```
 
