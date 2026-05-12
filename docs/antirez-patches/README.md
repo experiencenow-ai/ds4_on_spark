@@ -46,6 +46,7 @@ Patch verifiers (no CUDA required):
 ```bash
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_mtp_q4k_sidecar_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_multi_model_cache_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
 The verifier will also validate against the repo’s pinned llama.cpp Q4_K test vectors when the fixture file is present:
