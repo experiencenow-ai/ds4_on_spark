@@ -283,6 +283,10 @@ def scan_fattn_reservation(log_path):
         "log_path": log_path,
         "seen_fattn_disabled": False,
         "seen_sched_reserve_cpu_fattn": False,
+        "seen_sched_reserve_fallback": False,
+        "seen_sched_reserve_failure": False,
+        "sched_reserve_fallback_line_count": 0,
+        "sched_reserve_failure_line_count": 0,
         "fattn_line_count": 0,
         "fattn_node_unique": 0,
         "fattn_id_min": None,
@@ -321,6 +325,9 @@ def scan_fattn_reservation(log_path):
     kind_cpu = {}
     kind_cuda = {}
     match_lines = []
+    rx_fattn_disabled = re.compile(r"flash attention.*disabl", flags=re.IGNORECASE)
+    rx_sched_reserve_fallback = re.compile(r"\bfallback\b|\bfall back\b", flags=re.IGNORECASE)
+    rx_sched_reserve_failure = re.compile(r"\bfail(?:ed|ure)?\b|\berror\b|\bunable\b|\bnot supported\b", flags=re.IGNORECASE)
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -328,6 +335,14 @@ def scan_fattn_reservation(log_path):
                 is_match = False
                 if ln.startswith("sched_reserve:"):
                     out["sched_reserve_line_count"] += 1
+                    if rx_sched_reserve_fallback.search(ln) is not None:
+                        out["seen_sched_reserve_fallback"] = True
+                        out["sched_reserve_fallback_line_count"] += 1
+                        is_match = True
+                    if rx_sched_reserve_failure.search(ln) is not None:
+                        out["seen_sched_reserve_failure"] = True
+                        out["sched_reserve_failure_line_count"] += 1
+                        is_match = True
                     m = re.search(r"graph nodes\\s*=\\s*(\\d+)", ln)
                     if m is not None:
                         try:
@@ -346,13 +361,18 @@ def scan_fattn_reservation(log_path):
                             out["sched_reserve_took_ms"] = float(m.group(1))
                         except ValueError:
                             pass
-                if "Flash Attention was auto, set to disabled" in ln:
+                if rx_fattn_disabled.search(ln) is not None:
                     out["seen_fattn_disabled"] = True
                     is_match = True
                 if "Flash Attention tensor is assigned to device CPU" in ln:
                     out["seen_sched_reserve_cpu_fattn"] = True
                     is_match = True
                 if "__fattn__" in ln:
+                    low = ln.lower()
+                    if "fallback" in low or "fall back" in low:
+                        out["seen_sched_reserve_fallback"] = True
+                        out["sched_reserve_fallback_line_count"] += 1
+                        is_match = True
                     out["fattn_line_count"] += 1
                     for m in re.finditer(r"__fattn__-(\\d+)", ln):
                         nodes.add("__fattn__-" + m.group(1))
@@ -374,7 +394,6 @@ def scan_fattn_reservation(log_path):
                             fattn_cuda_dev[did] = fattn_cuda_dev.get(did, 0) + 1
                         except ValueError:
                             pass
-                    low = ln.lower()
                     if "cpu" in low:
                         out["fattn_cpu_line_count"] += 1
                     if "cuda" in low:
