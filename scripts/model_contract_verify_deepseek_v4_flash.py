@@ -1714,22 +1714,22 @@ def main() -> int:
 
 		if mtp_expert_id_seen != set(range(n_routed_experts)):
 			failures.append(Failure(35, f"mtp layer {mtp_id} expert id set mismatch: expected 0..{n_routed_experts-1} got {sorted(mtp_expert_id_seen)[:8]}... ({len(mtp_expert_id_seen)} total)"))
-		expected_expert_key_count = n_routed_experts * 6
-		if mtp_expert_key_count != expected_expert_key_count:
-			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
+			expected_expert_key_count = n_routed_experts * 6
+			if mtp_expert_key_count != expected_expert_key_count:
+				failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
 
-		# MTPBlock-specific projections + norms + HC head.
+			# MTPBlock-specific projections + norms + HC head.
 			for suffix in (
 				"e_proj.weight",
 				"e_proj.scale",
 				"h_proj.weight",
-			"h_proj.scale",
-			"enorm.weight",
-			"hnorm.weight",
-			"norm.weight",
-			"hc_head_fn",
-			"hc_head_base",
-			"hc_head_scale",
+				"h_proj.scale",
+				"enorm.weight",
+				"hnorm.weight",
+				"norm.weight",
+				"hc_head_fn",
+				"hc_head_base",
+				"hc_head_scale",
 			):
 				req_mtp(suffix)
 
