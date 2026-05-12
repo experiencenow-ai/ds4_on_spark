@@ -36,6 +36,8 @@ const char *ds4_config_diag_stage_name(int32_t stage)
 		return("file");
 	if ( stage == DS4_CONFIG_DIAG_STAGE_LOAD )
 		return("load");
+	if ( stage == DS4_CONFIG_DIAG_STAGE_ENV )
+		return("env");
 	return("unknown");
 }
 
@@ -1103,7 +1105,7 @@ int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t 
 	if ( err < 0 )
 	{
 		if ( diag != 0 )
-			ds4_config_diag_set(diag,DS4_CONFIG_DIAG_STAGE_LOAD,0,err,unknown);
+			ds4_config_diag_set(diag,DS4_CONFIG_DIAG_STAGE_ENV,0,err,unknown);
 		return(-5);
 	}
 	if ( out_unknown != 0 )
