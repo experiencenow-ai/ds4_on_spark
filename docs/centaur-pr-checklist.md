@@ -50,6 +50,7 @@ sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-ho
 - Artifacts: `effective_manifests/`, `hyor_effective/`, `hyor_dashboard/`, `smoke.log`
 
 Tip: `scripts/centaur_spark0_v73_fetch_artifacts.sh` is the preferred sanitized bundle.
+Tip: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip` captures zip facts without extracting.
 
 ## Centaur dev bug report notes
 

@@ -31,6 +31,12 @@ To fetch a small sanitized artifact bundle (log + manifests + dashboard) back to
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
+
+```bash
+sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip
+```
+
 ## Spark1/Spark2 (3-node ring total)
 
 If you only have Spark1/Spark2 (3 nodes total including Spark0), use:
