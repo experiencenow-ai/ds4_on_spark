@@ -133,7 +133,13 @@ def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[
             errs = schema.validate_record(obj)
             if len(errs) != 0:
                 continue
-            rows.append((str(obj["pair_id"]), str(obj["model_a"]), str(obj["model_b"]), str(obj["winner"]), int(obj["margin"])))
+            winner = obj.get("winner")
+            margin = obj.get("margin")
+            if winner is None:
+                winner = obj.get("w")
+            if margin is None:
+                margin = obj.get("m")
+            rows.append((str(obj["pair_id"]), str(obj["model_a"]), str(obj["model_b"]), str(winner), int(margin)))
     if sort_by_pair_id:
         # When multiple inputs are merged, a stable ordering avoids nondeterminism.
         # pair_id is required by the schema and should be stable across runs.

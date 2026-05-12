@@ -15,7 +15,7 @@ from scripts import pairwise_judge_validate_decision as decision_validator
 class JudgeEloTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl", "sample_judge_records_v4.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -47,7 +47,7 @@ class JudgeEloTest(unittest.TestCase):
 
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl", "sample_judge_records_v4.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -156,6 +156,14 @@ class JudgeEloTest(unittest.TestCase):
         self.assertAlmostEqual(float(ratings.get("model_mid", 0.0)), 999.899, places=3)
         self.assertAlmostEqual(float(ratings.get("model_fast", 0.0)), 991.364, places=3)
 
+    def test_elo_accepts_record_v4_compact_keys(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v4.jsonl")
+        ratings, _stats = updater.compute_elo([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+        self.assertAlmostEqual(float(ratings.get("model_slow", 0.0)), 1008.736, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_mid", 0.0)), 999.899, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_fast", 0.0)), 991.364, places=3)
+
     def test_join_quality_rows(self) -> None:
         rows = [
             {"model": "model_fast", "decode_tps": "100.0"},
@@ -209,6 +217,25 @@ class JudgeEloTest(unittest.TestCase):
         self.assertTrue(rec.get("parse_valid", False))
         self.assertEqual(rec.get("winner"), "B")
         self.assertEqual(rec.get("margin"), 1)
+
+    def test_wrap_record_v4_emits_compact_keys(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V4,
+            pair_id="p0v4",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        self.assertEqual(rec.get("schema"), schema.SCHEMA_RECORD_V4)
+        self.assertTrue(rec.get("parse_valid", False))
+        self.assertEqual(rec.get("w"), "A")
+        self.assertEqual(rec.get("m"), 2)
+        self.assertNotIn("winner", rec)
 
     def test_validate_decision_accepts_compact_decision_v2_keys(self) -> None:
         decision_v2 = {"w": "tie", "m": 0, "sa": 6, "sb": 6, "r": "Both are acceptable.", "h": "", "t": []}
