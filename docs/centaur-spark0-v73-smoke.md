@@ -179,6 +179,8 @@ if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTA
 sh ./scripts/centaur_spark0_v73_smoke_report.sh "$CENTAUR_RUN_ID" "$bundle_dir" "$bundle_dir/smoke_report.md"
 ```
 
+Note: when you run via `scripts/centaur_spark0_v73_evidence_run.sh`, the local bundle directory also includes `smoke.local.log` (the Mac-side wrapper log) which contains the exact `ssh ...` command used to run the smoke. The report helper will include that line when present.
+
 To pack a fetched bundle into a commit-ready fixtures directory (after review/redaction), run:
 
 ```bash
