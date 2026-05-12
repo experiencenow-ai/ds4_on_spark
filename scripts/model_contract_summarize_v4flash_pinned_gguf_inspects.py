@@ -14,9 +14,9 @@ DEFAULT_OUT = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash" / "pinn
 PINNED_DOCS = [
 	"gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
 	"gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
-	"gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json",
-	"gguf-inspect-antirez-b0c3326-mtp-sidecar.json",
-	"gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2-mtp-set.json",
+	"gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json",
+	"gguf-inspect-antirez-c566ab6-mtp-sidecar.json",
+	"gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json",
 ]
 
 

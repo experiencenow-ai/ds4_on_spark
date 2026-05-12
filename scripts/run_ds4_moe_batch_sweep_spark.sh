@@ -14,6 +14,7 @@ OUT_DIR=${OUT_DIR:-/tmp/ds4_moe_batch_sweep}
 BATCHES=${BATCHES:-"16 32 64 100 128 256 512 1024 2048"}
 SSH_KNOWN_HOSTS=${SSH_KNOWN_HOSTS:-/private/tmp/ds4_spark_known_hosts}
 SSH_OPTS=${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SSH_KNOWN_HOSTS"}
+SET_PREFILL_CHUNK=${SET_PREFILL_CHUNK:-1}
 
 remote_q() {
     printf "%s" "$1" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/"
@@ -28,7 +29,12 @@ run_variant() {
             set -eu
             mkdir -p $(remote_q "$OUT_DIR")
             cd $(remote_q "$DS4_DIR")
-            $env_prefix DS4_CUDA_MOE_PROFILE=1 ./ds4-bench \
+            if [ $(remote_q "$SET_PREFILL_CHUNK") = '1' ]; then
+                prefill_env=\"DS4_METAL_PREFILL_CHUNK=$b\"
+            else
+                prefill_env=\"\"
+            fi
+            env \$prefill_env $env_prefix DS4_CUDA_MOE_PROFILE=1 ./ds4-bench \
                 -m $(remote_q "$MODEL_GGUF") \
                 --chat-prompt-file $(remote_q "$PROMPT_FILE") \
                 --cuda \
