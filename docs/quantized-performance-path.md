@@ -31,6 +31,14 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
+- Optional stronger loader-side check (still no trunk load): run the combined contract + llama.cpp sidecar loader probe runner. This can build/run `llama-ds4-mtp-sidecar-probe` (gated) and optionally `--load-weights` the sidecar tensor blob into RAM to ensure all 32 tensors have readable payloads.
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
+```
+
 - Only after the sidecar contract passes, run the llama.cpp **one-token** MTP wiring probe (gamma=1) runner (still gated; see `docs/mtp-one-token-draft-probe.md`):
 
 ```bash

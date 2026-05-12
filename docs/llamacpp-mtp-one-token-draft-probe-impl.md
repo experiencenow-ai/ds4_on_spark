@@ -149,6 +149,12 @@ Important invariant:
 
 When implementing the one-token probe in the Spark/CUDA fork, use DS4 as the source of truth for **operation order** and which weights participate in the draft step.
 
+To print the pinned DS4 `gamma=1` draft call sequence excerpt (with line numbers and raw-cache frontier bookkeeping), run:
+
+```bash
+ALLOW_FETCH=1 scripts/extract_ds4_mtp_gamma1_steps.sh
+```
+
 Pinned DS4 implementation locations (see `docs/mtp-ds4-reference.md` for the upstream pin and additional context):
 
 - `upstreams/ds4/ds4.c:12612`: `metal_graph_eval_mtp_draft_from_hc(...)` (draft-step orchestration; embed/proj + MTP block + logits readback)
