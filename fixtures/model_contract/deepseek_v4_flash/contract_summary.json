@@ -1470,7 +1470,7 @@
   "contract_fingerprints": {
     "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
     "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
-    "execution_contract_sha256": "d389ac51f60192ba1431264b7eaedc3e8050e4d5813fa441d78a36243a72ebd0",
+    "execution_contract_sha256": "bad6d30a8463a77d4e25980afebe123122b061473dea1b74b5b8cd0d890c7e44",
     "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
     "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
     "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
@@ -1948,6 +1948,22 @@
         128,
         128
       ]
+    },
+    "gguf_compat": {
+      "dense_fp8_like_evidence_categories": [
+        "attn",
+        "ffn_other",
+        "shared_expert_packed",
+        "shared_experts",
+        "top_level"
+      ],
+      "dense_fp8_like_type_prefixes": [
+        "F8_"
+      ],
+      "expert_fp4_like_types": [
+        "MXFP4"
+      ],
+      "note": "Heuristic mapping used by scripts/model_contract_inspect_quantized_artifact.py to interpret GGUF tensor types vs DeepSeek V4 Flash inference_config dtype/expert_dtype expectations."
     },
     "inference_config": {
       "dtype": "fp8",

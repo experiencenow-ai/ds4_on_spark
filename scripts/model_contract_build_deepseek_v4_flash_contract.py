@@ -2066,6 +2066,12 @@ def build_contract() -> dict:
 						"fp4_block_size": fp4_block_size,
 					},
 				},
+				"gguf_compat": {
+					"dense_fp8_like_type_prefixes": ["F8_"],
+					"dense_fp8_like_evidence_categories": ["attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"],
+					"expert_fp4_like_types": ["MXFP4"],
+					"note": "Heuristic mapping used by scripts/model_contract_inspect_quantized_artifact.py to interpret GGUF tensor types vs DeepSeek V4 Flash inference_config dtype/expert_dtype expectations.",
+				},
 					**inf_model,
 				},
 				**enc,
