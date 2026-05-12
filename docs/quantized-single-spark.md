@@ -8,7 +8,7 @@ in `docs/quantized-performance-path.md`. A slow or low-quality first token
 stream is useful if it proves the model artifact, runtime, CUDA path,
 tokenizer/chat format, and memory envelope are real.
 
-Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-11.md`.
+Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-12.md`.
 
 To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
 
@@ -332,7 +332,11 @@ If it loads and generates, rerun with:
 
 ## Example Baseline Report
 
-- `docs/baseline-quantized-single-spark0-2026-05-11.md` records a Spark0 run that:
+- `docs/baseline-quantized-single-spark0-2026-05-12.md` records a Spark0 run that:
+  - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
+  - captures the read-only patch probes (including `fattn_patch_probe.pad256_found=true`)
+  - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)
+- `docs/baseline-quantized-single-spark0-2026-05-11.md` records an earlier Spark0 run that:
   - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
   - captures `scripts/model_contract_inspect_quantized_artifact.py --json` output (MTP absent)
   - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)
