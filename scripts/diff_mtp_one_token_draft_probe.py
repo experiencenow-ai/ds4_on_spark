@@ -18,12 +18,25 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-CAPTURE_KEYS = [
+DEFAULT_CAPTURE_KEYS = [
 	"trunk_token_embd",
 	"trunk_pre_hc_head",
 	"mtp_stub_input_hc",
 	"mtp_stub_head_norm",
 ]
+
+
+def _capture_prefixes(obj: dict[str, Any]) -> set[str]:
+	out: set[str] = set()
+	for k in obj.keys():
+		if not isinstance(k, str):
+			continue
+		if not k.endswith("_fnv64"):
+			continue
+		prefix = k[: -len("_fnv64")]
+		if prefix:
+			out.add(prefix)
+	return out
 
 
 def _load_json(path: Path) -> Any:
@@ -96,8 +109,13 @@ def diff_one_token_mtp_probes(
 	else:
 		out["notes"].append("token ID comparison disabled")
 
-	# Optional debug captures: compare when present in either probe.
-	for prefix in CAPTURE_KEYS:
+	# Optional debug captures: compare any `*_fnv64` captures when present in either probe.
+	# This lets new intermediate captures be added without patching this script.
+	prefixes = sorted(_capture_prefixes(a) | _capture_prefixes(b))
+	if not prefixes:
+		prefixes = list(DEFAULT_CAPTURE_KEYS)
+
+	for prefix in prefixes:
 		fnv_key = f"{prefix}_fnv64"
 		nbytes_key = f"{prefix}_nbytes"
 		shape_key = f"{prefix}_shape"
@@ -162,4 +180,3 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-

@@ -70,11 +70,9 @@ By default this requires:
 
 - `base_next_token_id` match
 - `mtp_draft_token_id` match
-- when present, the optional debug capture fingerprints match:
-  - `trunk_token_embd_*`
-  - `trunk_pre_hc_head_*`
-  - `mtp_stub_input_hc_*`
-  - `mtp_stub_head_norm_*`
+- when present, any optional debug capture fingerprints match (all keys ending in `*_fnv64`, plus matching `*_nbytes` and `*_shape` companions). Common early captures:
+  - `trunk_token_embd_*` / `trunk_pre_hc_head_*`
+  - `mtp_stub_input_hc_*` / `mtp_stub_head_norm_*`
 
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
 

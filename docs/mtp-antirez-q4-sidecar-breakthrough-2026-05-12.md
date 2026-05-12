@@ -50,7 +50,7 @@ python3 scripts/verify_antirez_ds4_q4k_dot_math.py
 
 - **First-draft agreement** is still a separate problem: “finite logits” is necessary but not sufficient.
 - The patch intentionally leaves the optimized CUDA MoE down fast path (`Q2_K`) unchanged; `Q4_K` uses a slower fallback until a dedicated kernel is validated.
-- Multi-model caching is still incomplete: a real weight-cache should be keyed by `(model_map, fd, offset, bytes)` (or equivalent) rather than assuming a single global map.
+- Multi-model caching is still incomplete: the patch in this repo keys ranges by `(model_map, fd, offset)`, but a fully robust cache likely also needs `bytes` (or an equivalent range key) rather than assuming a single global map.
 - Even with the sidecar map treated as “secondary”, CUDA caching structures must not be keyed only by `offset`; otherwise trunk and sidecar offsets can alias under `DS4_CUDA_WEIGHT_CACHE=1` and produce silent wrong-weight reads.
 
 ## Next experiment (recommended)

@@ -13,7 +13,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
 - `ds4-3630e64-cuda-multi-model-cache.patch`
   - Target: `antirez/ds4@3630e64`
   - Purpose:
-    - fix CUDA weight-cache keying so cached ranges are keyed by `(model_map, offset)` (not just `offset`)
+    - fix CUDA weight-cache keying so cached ranges are keyed by `(model_map, fd, offset)` (not just `offset`)
     - avoids trunk/sidecar cache collisions when `DS4_CUDA_WEIGHT_CACHE=1` (or when fd-caching is enabled)
 
 Apply (example):
