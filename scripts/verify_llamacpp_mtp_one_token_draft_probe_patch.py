@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
+import re
 import sys
+from pathlib import Path
 
 
 def _die(msg: str) -> None:
@@ -53,12 +55,21 @@ def _extract_added_hunk(patch_text: str, needle: str) -> tuple[str, int, list[st
 	return hunk_hdr, n_decl, added
 
 
+def _expected_runtime_commit(patch_path: str) -> str | None:
+	name = Path(patch_path).name
+	m = re.search(r"deepseek-v4-flash-cuda-spark-([0-9a-f]+)-mtp-one-token", name)
+	if m:
+		return m.group(1)
+	return None
+
+
 def main() -> None:
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--patch", required=True)
 	args = ap.parse_args()
 
 	patch_text = _read_text(args.patch)
+	expected_commit = _expected_runtime_commit(args.patch)
 
 	cpp_header = (
 		"diff --git a/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp "
@@ -71,6 +82,18 @@ def main() -> None:
 		)
 
 	joined = "\n".join(added) + "\n"
+	if expected_commit is not None:
+		runtime_lines = [ln for ln in added if "runtime_commit" in ln]
+		if len(runtime_lines) != 1:
+			_die(f"expected exactly one runtime_commit printf line, got {len(runtime_lines)}")
+		m = re.search(r',\s*"([0-9a-f]{7,})"\);', runtime_lines[0])
+		if not m:
+			_die(f"failed to parse runtime_commit from line: {runtime_lines[0]!r}")
+		actual_commit = m.group(1)
+		if actual_commit != expected_commit:
+			_die(
+				f"runtime_commit mismatch: expected {expected_commit} (from filename), got {actual_commit}"
+			)
 	if "TODO: implement gamma=1 MTP draft compute" not in joined:
 		_die("one-token probe cpp hunk missing expected TODO marker (patch likely truncated)")
 
