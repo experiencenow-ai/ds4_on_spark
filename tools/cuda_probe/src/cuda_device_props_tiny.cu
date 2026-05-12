@@ -56,6 +56,13 @@ __global__ void write_cuda_arch(uint32_t *out)
 #endif
 }
 
+__device__ __constant__ uint32_t ds4_cuda_arch_const =
+#if defined(__CUDA_ARCH__)
+	(uint32_t)__CUDA_ARCH__;
+#else
+	0U;
+#endif
+
 int main(int argc,char **argv)
 {
 	int32_t count = 0,rc = 0,driver_v = -1,runtime_v = -1,clock_khz = -1,mem_clock_khz = -1;
@@ -108,16 +115,20 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
-	if ( cudaMalloc((void **)&d_arch,(size_t)sizeof(uint32_t)) == cudaSuccess )
+	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
-		if ( cudaMemset(d_arch,0,(size_t)sizeof(uint32_t)) == cudaSuccess )
+		cuda_arch = 0;
+		if ( cudaMalloc((void **)&d_arch,(size_t)sizeof(uint32_t)) == cudaSuccess )
 		{
-			write_cuda_arch<<<1,1>>>(d_arch);
-			if ( cudaGetLastError() == cudaSuccess )
-				(void)cudaMemcpy(&cuda_arch,d_arch,(size_t)sizeof(uint32_t),cudaMemcpyDeviceToHost);
+			if ( cudaMemset(d_arch,0,(size_t)sizeof(uint32_t)) == cudaSuccess )
+			{
+				write_cuda_arch<<<1,1>>>(d_arch);
+				if ( cudaGetLastError() == cudaSuccess )
+					(void)cudaMemcpy(&cuda_arch,d_arch,(size_t)sizeof(uint32_t),cudaMemcpyDeviceToHost);
+			}
+			cudaFree(d_arch);
+			d_arch = 0;
 		}
-		cudaFree(d_arch);
-		d_arch = 0;
 	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;

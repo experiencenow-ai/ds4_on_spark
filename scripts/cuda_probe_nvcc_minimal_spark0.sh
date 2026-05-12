@@ -541,6 +541,13 @@ __global__ void cuda_arch_probe(uint32_t *out)
 #endif
 }
 
+__device__ __constant__ uint32_t ds4_cuda_arch_const =
+#if defined(__CUDA_ARCH__)
+	(uint32_t)__CUDA_ARCH__;
+#else
+	0U;
+#endif
+
 __global__ void cuda_kernel_launch_tiny(void)
 {
 	if ( ((int32_t)threadIdx.x) == 0 )
@@ -606,13 +613,17 @@ int main(int argc,char **argv)
 	rc = ck(cudaDeviceSynchronize(),-5,\"cudaDeviceSynchronize\");
 	if ( rc != 0 )
 		return(rc);
-	if ( cudaMalloc((void **)&dout,sizeof(cuda_arch)) == cudaSuccess )
+	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
-		cuda_arch_probe<<<1,1>>>(dout);
-		if ( cudaGetLastError() == cudaSuccess )
-			(void)cudaMemcpy(&cuda_arch,dout,sizeof(cuda_arch),cudaMemcpyDeviceToHost);
-		(void)cudaFree(dout);
-		dout = 0;
+		cuda_arch = 0;
+		if ( cudaMalloc((void **)&dout,sizeof(cuda_arch)) == cudaSuccess )
+		{
+			cuda_arch_probe<<<1,1>>>(dout);
+			if ( cudaGetLastError() == cudaSuccess )
+				(void)cudaMemcpy(&cuda_arch,dout,sizeof(cuda_arch),cudaMemcpyDeviceToHost);
+			(void)cudaFree(dout);
+			dout = 0;
+		}
 	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
