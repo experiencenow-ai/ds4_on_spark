@@ -2,6 +2,8 @@
 
 This track keeps probe-only CUDA snippets that answer: “Can we compile for and run on GB10 (CC 12.1 / `sm_121`) with the installed CUDA toolkit?”
 
+All `scripts/cuda_probe*_spark0.sh` default to unique `REMOTE_DIR` paths on Spark0 using `REMOTE_TAG` (timestamp + PID) so concurrent runs do not clobber `/tmp/ds4_cuda_probe_*` directories. To make the remote directory names deterministic (useful for debugging), set `REMOTE_TAG=manual` (or set `REMOTE_DIR` explicitly).
+
 ## Spark0: `sm_121` Gate (Fastest)
 
 When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
@@ -124,7 +126,7 @@ To capture a full log file on the Mac (without relying on `tee` + shell `pipefai
 LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_capability_spark0.sh
 ```
 
-The capability sweep also sets per-step `REMOTE_DIR` values (including the cuBLASLt step) using a unique `REMOTE_TAG` so concurrent runs do not clobber `/tmp/ds4_cuda_probe_*` directories on Spark0. To make the remote directory names deterministic (useful for debugging), set:
+The capability sweep also sets per-step `REMOTE_DIR` values (including the cuBLASLt step) using a unique `REMOTE_TAG`. To make the remote directory names deterministic (useful for debugging), set:
 
 ```bash
 REMOTE_TAG=manual ./scripts/cuda_probe_capability_spark0.sh
