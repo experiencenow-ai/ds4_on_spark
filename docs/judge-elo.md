@@ -24,6 +24,7 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
   - diff=2 ⇒ margin ∈ {1,2}
   - diff=3 ⇒ margin = 2
   - diff≥4 ⇒ margin = 3
+  - strict mode also enforces compact tags: `len(tags) <= 3`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
@@ -103,10 +104,22 @@ To validate raw judge output (extracting the first JSON object if wrapped in ext
 python3 scripts/pairwise_judge_validate_decision.py --in <judge.txt>
 ```
 
+To enforce strict margin/score consistency + compact tags during validation, add `--strict`:
+
+```bash
+python3 scripts/pairwise_judge_validate_decision.py --strict --in <judge.txt>
+```
+
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 
 ```bash
 python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
+```
+
+To enforce strict margin/score consistency + compact tags while wrapping, add `--strict`:
+
+```bash
+python3 scripts/pairwise_judge_record.py --strict --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
 ```
 
 ## Offline ELO

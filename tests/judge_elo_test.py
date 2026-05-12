@@ -177,6 +177,7 @@ class JudgeEloTest(unittest.TestCase):
             decision_text="  \n" + json.dumps(decision, separators=(",", ":")) + "\n",
             tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
             latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
         )
         self.assertTrue(rec.get("parse_valid", False))
         self.assertEqual(rec.get("winner"), "A")
@@ -190,8 +191,24 @@ class JudgeEloTest(unittest.TestCase):
             decision_text="WINNER=A margin=2",
             tokens=None,
             latency_ms=None,
+            strict=False,
         )
         self.assertFalse(rec.get("parse_valid", True))
+
+    def test_wrap_record_strict_rejects_inconsistent_margin(self) -> None:
+        decision = {"winner": "A", "margin": 0, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            pair_id="p_strict",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens=None,
+            latency_ms=None,
+            strict=True,
+        )
+        self.assertFalse(rec.get("parse_valid", True))
+        self.assertIn("margin must be in", str(rec.get("parse_error", "")))
 
     def test_validate_decision_cli_ok(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -205,6 +222,17 @@ class JudgeEloTest(unittest.TestCase):
             self.assertEqual(res.returncode, 0)
             out = json.loads(res.stdout.strip())
             self.assertEqual(out.get("winner"), "tie")
+
+    def test_validate_decision_cli_strict_rejects_inconsistent_margin(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_validate_decision.py")
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "judge.txt")
+            decision = {"winner": "A", "margin": 0, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "", "tags": ["factuality"]}
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(decision, separators=(",", ":"), ensure_ascii=False) + "\n")
+            res = subprocess.run(["python3", script, "--strict", "--in", path], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 2)
 
     def test_validate_decision_cli_bad(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -330,6 +358,7 @@ class JudgeEloTest(unittest.TestCase):
             decision_text="not json\nline2\rline3",
             tokens=None,
             latency_ms=None,
+            strict=False,
         )
         self.assertFalse(rec.get("parse_valid", True))
         raw = str(rec.get("raw", ""))

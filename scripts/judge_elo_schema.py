@@ -32,6 +32,7 @@ def _is_int(v: Any) -> bool:
 def _words(s: str) -> int:
     return len([w for w in s.strip().split() if w != ""])
 
+
 def _has_newline(s: str) -> bool:
     return ("\n" in s) or ("\r" in s)
 
@@ -177,6 +178,36 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
     return errs
 
 
+def validate_decision_strict_extra(obj: Dict[str, Any]) -> List[str]:
+    """Additional strict-mode constraints for decision objects.
+
+    These checks are intentionally not part of validate_decision() so harnesses
+    can choose between permissive parsing (for debugging) and strict parsing
+    (for baseline-quality joins).
+    """
+    errs: List[str] = []
+    winner = obj.get("winner")
+    score_a = obj.get("score_a")
+    score_b = obj.get("score_b")
+    margin = obj.get("margin")
+
+    if isinstance(winner, str) and winner in ("A", "B"):
+        if _is_int(score_a) and _is_int(score_b):
+            diff = abs(int(score_a) - int(score_b))
+            if diff <= 0:
+                errs.append("non-tie winners require score_a!=score_b")
+            if _is_int(margin):
+                allowed = _allowed_margins_for_score_diff(int(diff))
+                if int(margin) not in allowed:
+                    errs.append(f"margin must be in {list(allowed)} for score diff {diff}")
+
+    tags_v = obj.get("tags")
+    if isinstance(tags_v, list) and len(tags_v) > 3:
+        errs.append("tags must have at most 3 entries (strict)")
+
+    return errs
+
+
 def validate_record(obj: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
     if "schema" not in obj:
@@ -288,18 +319,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
             errs.append("parse_error must be <= 128 chars")
 
     if parse_valid is True:
-        winner = obj.get("winner")
-        score_a = obj.get("score_a")
-        score_b = obj.get("score_b")
-        margin = obj.get("margin")
-        if isinstance(winner, str) and winner in ("A", "B"):
-            if _is_int(score_a) and _is_int(score_b) and _is_int(margin):
-                diff = abs(int(score_a) - int(score_b))
-                if diff <= 0:
-                    errs.append("non-tie winners require score_a!=score_b")
-                allowed = _allowed_margins_for_score_diff(int(diff))
-                if int(margin) not in allowed:
-                    errs.append(f"margin must be in {list(allowed)} for score diff {diff}")
+        errs.extend(validate_decision_strict_extra(obj))
 
     return errs
 
