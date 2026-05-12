@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import subprocess
@@ -119,6 +120,42 @@ class JudgeEloTest(unittest.TestCase):
                 "--out-dir",
                 td,
             ])
+
+    def test_join_quality_cli_bundle(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        records = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        baseline = os.path.join(root, "fixtures", "judge-elo", "sample_baseline_rows.csv")
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        join_script = os.path.join(root, "scripts", "judge_elo_join_quality.py")
+        with tempfile.TemporaryDirectory() as td:
+            elo_dir = os.path.join(td, "elo")
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                records,
+                "--out-dir",
+                elo_dir,
+                "--strict",
+            ])
+            out_csv = os.path.join(td, "joined.csv")
+            subprocess.check_call([
+                "python3",
+                join_script,
+                "--in",
+                baseline,
+                "--bundle",
+                os.path.join(elo_dir, "bundle.json"),
+                "--out",
+                out_csv,
+                "--require-all",
+            ])
+            with open(out_csv, "r", encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual(len(rows), 3)
+            for row in rows:
+                self.assertNotEqual(row.get("quality_score", "").strip(), "")
+                self.assertEqual(row.get("quality_source", ""), "judge_elo_logistic_v1")
 
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
