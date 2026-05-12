@@ -29,7 +29,7 @@ The sizes below are taken from Git LFS pointer metadata (no GGUF downloads), as 
 | K | `cchuter/llama.cpp` `feat/v4-port` (`19b63dc368dfef6db6783e5ba3143927b7ed1c96`) | `teamblobfish/DeepSeek-V4-Flash-GGUF` IQ1_M-XL shards (`3efdad27c080100655fe90b4b9b39224d0e300b4`) | MIT / MIT | 63.2 | Plausible | Still significant headroom for KV/cache vs ~70–100 GiB candidates; sharded artifact. |
 | F | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `Preyazz/DeepSeek-V4-Flash-GGUF` Q2_K (`6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d`) | MIT / MIT | 96.2 | Plausible but tight | Leaves limited headroom for KV/cache; `wip/deepseek-v4-support` is explicitly “reference/WIP” upstream (PR `#22378` was closed). |
 | G | `nisparks/llama.cpp` `wip/deepseek-v4-support` (`9d364087024da141510267e6b269ee495ca45176`) | `lovedheart/DeepSeek-V4-Flash-GGUF` Q2_K shards (`cd42deba41ac0536e68b125dfc367197b0ec3038`) | MIT / **UNKNOWN** | 93.6 | Plausible but tight (license blocker) | Treat as blocked until a human verifies licensing; also sharded. |
-| H | `antirez/ds4` (`99a5c13ba82e05bd2e47a90cdf4825fc7840cf96`) | `antirez/deepseek-v4-gguf` IQ2XXS (`b0c3326275d2207e25e42bc8ac0704952466b5bb`) | MIT / MIT | 80.8 | Not Spark-ready (runtime mismatch) | `ds4` is Metal-first (macOS); useful for semantics/KV-cache reference, but not a direct Spark runtime today. |
+| H | `antirez/ds4` (`920f9872ec98602e899c1f0bfec9f2f0f6103017`) | `antirez/deepseek-v4-gguf` IQ2XXS (`b0c3326275d2207e25e42bc8ac0704952466b5bb`) | MIT / MIT | 80.8 | Plausible | Upstream `ds4` now includes a CUDA path and reports DGX Spark GB10 q2 `7047` prompt tokens at `343.81` prefill t/s + `13.75` generation t/s. Reproduce locally before treating as our result. |
 
 Fixture provenance note:
 
@@ -71,6 +71,19 @@ These are community conversions distributed as `*.safetensors` shards. This repo
 - Keep the manifest pins current and reproducible (`./scripts/upstream_verify_pins.sh`).
 - Keep GGUF candidates metadata-only (HF LFS pointer/HTTP API reports only).
 - For “one Spark produces tokens”, prioritize GGUF artifacts in the ~70–85 GiB range paired with a Spark-targeted V4-capable runtime fork.
+- Compare `antirez/ds4` CUDA/Spark against the current llama.cpp/vLLM DS4 paths under the same prompt, context, token count, thinking mode, and quality task rows:
+
+```bash
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+DS4_DIR=/remote/path/to/ds4 \
+MODEL_GGUF=/remote/path/to/ds4flash.gguf \
+PROMPT="Explain Redis streams in one paragraph." \
+CTX=32768 \
+N_TOKENS=256 \
+EXTRA_ARGS="--nothink" \
+ALLOW_RUN=1 \
+scripts/run_baseline_antirez_ds4_spark.sh spark0@aitopatom-9ab9.local
+```
 
 ## References
 
