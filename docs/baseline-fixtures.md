@@ -10,7 +10,7 @@ This repo does not vendor model weights. Baseline scripts intentionally avoid do
 
 ## Fixture Inventory (by baseline)
 
-### A) `antirez/ds4` (Mac / Metal reference)
+### A) `antirez/ds4` (Mac / Metal and Spark / CUDA reference)
 
 Required upstream artifacts (see upstream `download_model.sh`):
 
@@ -20,6 +20,8 @@ Required upstream artifacts (see upstream `download_model.sh`):
 Notes:
 
 - Upstream defaults to `./ds4flash.gguf` in the ds4 repo directory.
+- For Spark comparisons, stage the same fixture on the remote Spark host and
+  point `scripts/run_baseline_antirez_ds4_spark.sh` at it with `MODEL_GGUF`.
 - The ds4 upstream download script pulls from Hugging Face and may require an auth token; this repo's baseline scripts intentionally do **not** run it automatically.
 
 Local placement guidance:
@@ -29,6 +31,7 @@ Local placement guidance:
   - exact upstream commit hash of `antirez/ds4`
   - exact command used to download (if any)
   - sha256 + size of each GGUF
+  - backend (`Metal` or `CUDA/Spark`), prompt, context, token count, and thinking mode
 
 ### B) `llama.cpp` (Spark / CUDA baseline)
 
