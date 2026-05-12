@@ -20,9 +20,11 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `WITH_SM121_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does end-to-end build+run via both `nvcc -arch=sm_121` and `nvcc --gpu-architecture=sm_121` (useful for build systems that use the long-form flag spelling)
 - `WITH_COMPUTE121_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does a best-effort end-to-end build+run via `-arch=compute_121` (PTX-only + driver JIT on Spark0; useful for forward-compat packaging decisions)
 - `WITH_GENCODE_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does a best-effort end-to-end build+run via explicit `-gencode arch=compute_121,code=sm_121` + `-gencode arch=compute_121,code=compute_121` (fatbin SASS+PTX packaging gate)
+- `scripts/cuda_probe_capability_spark0.sh` enables the device-props best-effort `compute_121` and `-gencode` build+run checks by default; set `WITH_DEVICE_PROPS_COMPUTE121_RUN=0` / `WITH_DEVICE_PROPS_GENCODE_RUN=0` to skip them
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` also includes a best-effort compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr` (CUTLASS/DeepGEMM-style nvcc flags) for `sm_121` (and `compute_121` when advertised)
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` validates that CMake (>= 3.18) can configure/build a minimal CUDA project with `CMAKE_CUDA_ARCHITECTURES="121"` and run it on GB10 (`__CUDA_ARCH__=1210`) without shipping the repo
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o` is a compile-only toolchain gate for build systems that use `nvcc --gpu-architecture=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
+- `tools/cuda_probe/bin/cuda_sm121_gpuarch_code_compile_probe.o` is a compile-only toolchain gate for build systems that split `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
 - `scripts/cuda_probe_tiny_spark0.sh` also includes an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate when `compute_121` is advertised (fast signal for “fatbin PTX+SASS packaging is broken” failures)
 - CUDA 13 “variant targets”:

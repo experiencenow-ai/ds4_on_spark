@@ -213,6 +213,24 @@ EOF
 		fi
 	}
 
+	try_compile_only_gpuarch_code() {
+		tag=\"\$1\"
+		va=\"\$2\"
+		code=\"\$3\"
+		echo \"-- compile-only: \${tag} (--gpu-architecture=\${va} --gpu-code=\${code})\"
+		err_path=\"$REMOTE_DIR\"/\"\${tag}\".err
+		set +e
+		\$NVCC -O2 -std=c++17 --gpu-architecture=\"\${va}\" --gpu-code=\"\${code}\" -c -o \"$REMOTE_DIR\"/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_nvcc_compile_only.cu >\"$REMOTE_DIR\"/\"\${tag}\".out 2>\"\${err_path}\"
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"\${tag}: OK\"
+		else
+			echo \"\${tag}: FAILED rc=\${rc}\"
+			head -n 40 \"\${err_path}\" || true
+		fi
+	}
+
 	try_compile_only_cxx20_flags() {
 		tag=\"\$1\"
 		arch=\"\$2\"
@@ -275,6 +293,7 @@ try_gencode_only() {
 
 	try_compile_only arch_sm_121 sm_121
 	try_compile_only_gpuarch gpuarch_sm_121 sm_121
+	try_compile_only_gpuarch_code gpuarch_code_compute_121_sm_121 compute_121 sm_121
 	try_compile_only_cxx20_flags arch_sm_121_cxx20_flags sm_121
 	try_compile_only variant_sm_121a sm_121a
 		try_compile_only variant_sm_121f sm_121f

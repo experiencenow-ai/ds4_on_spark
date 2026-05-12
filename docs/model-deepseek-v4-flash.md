@@ -376,6 +376,12 @@ Runtime update rules:
 These compressor/update semantics are extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.update_semantics.*` so DS4 can enforce them without re-parsing upstream Python.
 In particular, the contract pins the exact prefill sliding-window ring-buffer writes for both `seqlen <= window_size` and the wrap case (`prefill_sliding_write_seqlen_{le,gt}_win_expr`), plus the compressor’s view of the compressed segment (`compressed_segment_view_expr`) and the prefill/decode top-k offset selection (`topk_offset_expr`).
 
+To guard against silent drift in the sliding/CSA/HCA KV update rules, this repo also pins the relevant forward-path implementations verbatim (plus sha256 fingerprints) in `contract_summary.json` under `cache.semantics.source_helpers.*`:
+
+- `compressor_forward` (prefill vs decode compression gates + cache writes)
+- `indexer_forward` (CSA-only scoring path + top-k selection)
+- `attention_forward` (sliding ring update + prefill wrap + top-k concat)
+
 Sparse attention index selection:
 
 - Always attends to the sliding window (`get_window_topk_idxs(...)`).
@@ -435,6 +441,11 @@ These MLA/cache update semantics are also extracted (source-derived) into `fixtu
 
 - `mla.*` records the presence of the extra per-token Q normalization and the output de-rotation marker.
 - `cache.update_semantics.*` records the decode-time KV ring-buffer update expression (`start_pos % win`) and the compressed-cache update expression (`start_pos // ratio`).
+
+To avoid silent RoPE / YaRN drift (common when porting `view_as_complex` rotary code to CUDA or C++), the contract also pins the exact upstream helper implementations (verbatim source lines + sha256) in `contract_summary.json`:
+
+- `mla.source_helpers.precompute_freqs_cis` (YaRN smoothing + `torch.polar` complex frequency table)
+- `mla.source_helpers.apply_rotary_emb` (complex multiply + `inverse=True` conjugate de-rotation + `y.copy_` in-place writeback)
 
 ### Attention scaling + activation QAT constants
 

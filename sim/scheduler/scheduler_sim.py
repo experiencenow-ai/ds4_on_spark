@@ -176,6 +176,7 @@ class SimConfig:
     mtp_draft_cost_scale: float = 0.25
     mtp_verify_per_draft_cost_scale: float = 0.0
     mtp_draft_attempt_policy: str = "full"
+    mtp_draft_queue_cls: str = "inherit"
     dflash_draft_len: int = -1
     dflash_draft_cost_scale: float = 0.0
     batch_max_interactive: int = 1
@@ -204,9 +205,11 @@ class StagePlan:
     scores: Optional[Tuple[float, ...]]
     k: int
     cost_scale: float
+    queue_cls: LatencyClass
     mtp_phase: MtpPhase
     is_verify: bool
     layer_index: int
+    micro_index: int
 
 
 @dataclass
@@ -227,6 +230,7 @@ class TokenState:
     skipped_stages_backpressure_draft: int = 0
     mtp_verify_layer0_skipped_backpressure: bool = False
     mtp_accept_len_clamped_backpressure: bool = False
+    mtp_draft_layer0_skipped_backpressure: bool = False
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
@@ -454,6 +458,7 @@ class SimMetrics:
     mtp_pos_accepted: List[int] = dataclasses.field(default_factory=list)
     mtp_verify_layer0_skipped_backpressure: int = 0
     mtp_accept_len_clamped_backpressure: int = 0
+    mtp_draft_layer0_skipped_backpressure: int = 0
     dflash_steps: int = 0
     dflash_output_tokens: int = 0
     dflash_draft_cost_scale: float = 0.0
@@ -619,6 +624,7 @@ class SimMetrics:
                     "draft_tokens_accepted": self.mtp_draft_tokens_accepted,
                     "draft_tokens_rejected": self.mtp_draft_tokens_rejected,
                     "bonus_tokens": self.mtp_bonus_tokens,
+                    "draft_layer0_skipped_backpressure": self.mtp_draft_layer0_skipped_backpressure,
                     "verify_layer0_skipped_backpressure": self.mtp_verify_layer0_skipped_backpressure,
                     "accept_len_clamped_backpressure": self.mtp_accept_len_clamped_backpressure,
                     "tasks_started": {
@@ -2210,6 +2216,7 @@ def write_sim_jsonl(path: str, trace: Sequence[TokenRoute], tokens: Sequence[Tok
                     "output_len": int(ts.output_len),
                     "mtp_accept_len": int(ts.mtp_accept_len),
                     "mtp_draft_attempt_len": int(ts.mtp_draft_attempt_len),
+                    "mtp_draft_layer0_skipped_backpressure": bool(ts.mtp_draft_layer0_skipped_backpressure),
                     "mtp_verify_layer0_skipped_backpressure": bool(ts.mtp_verify_layer0_skipped_backpressure),
                     "mtp_accept_len_clamped_backpressure": bool(ts.mtp_accept_len_clamped_backpressure),
                     "trace_decode_ms": ts.trace_decode_ms,
@@ -3342,6 +3349,9 @@ def run_simulation(
         mtp_draft_attempt_policy = cfg.mtp_draft_attempt_policy.strip().lower()
         if mtp_draft_attempt_policy not in ("full", "stop_at_reject"):
             raise ValueError("mtp_draft_attempt_policy must be 'full' or 'stop_at_reject'")
+        mtp_draft_queue_cls = cfg.mtp_draft_queue_cls.strip().lower()
+        if mtp_draft_queue_cls not in ("inherit", "interactive", "batch", "hi", "lo"):
+            raise ValueError("mtp_draft_queue_cls must be one of: inherit, interactive, batch, hi, lo")
         accept_model = str(cfg.mtp_accept_model).strip().lower()
         if accept_model not in ("geom", "hist"):
             raise ValueError("mtp_accept_model must be 'geom' or 'hist'")
@@ -3362,6 +3372,7 @@ def run_simulation(
             raise ValueError("mtp_verify_per_draft_cost_scale must be >= 0")
     else:
         mtp_draft_attempt_policy = "full"
+        mtp_draft_queue_cls = "inherit"
 
     _validate_trace_expert_ids(trace, cfg.num_experts)
 
@@ -3757,9 +3768,8 @@ def run_simulation(
             metrics.dflash_draft_tokens_total += (int(route.accepted_dflash) + int(route.rejected_dflash))
 
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
-        route = trace[tid]
         admitted = 0
-        pending_limit = _expert_queue_pending_limit_units(cfg, route.cls, backpressure_units)
+        pending_limit = _expert_queue_pending_limit_units(cfg, stage.queue_cls, backpressure_units)
         for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores):
             if admitted >= stage.k:
                 break
@@ -3770,14 +3780,14 @@ def run_simulation(
                 pending_now = float(eq.pending())
             if pending_now >= float(pending_limit):
                 metrics.dropped_tasks_backpressure += 1
-                if route.cls == LatencyClass.INTERACTIVE:
+                if stage.queue_cls == LatencyClass.INTERACTIVE:
                     metrics.dropped_tasks_backpressure_interactive += 1
                 else:
                     metrics.dropped_tasks_backpressure_batch += 1
                 tokens[tid].dropped_tasks_backpressure += 1
                 continue
-            task = Task(token_id=tid, cls=route.cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase, layer_index=stage.layer_index)
-            if route.cls == LatencyClass.INTERACTIVE:
+            task = Task(token_id=tid, cls=stage.queue_cls, enqueue_ms=now_ms, cost_scale=stage.cost_scale, mtp_phase=stage.mtp_phase, layer_index=stage.layer_index)
+            if stage.queue_cls == LatencyClass.INTERACTIVE:
                 eq.hi.append(task)
                 eq.pending_work_hi += float(task.cost_scale)
             else:
@@ -3792,7 +3802,7 @@ def run_simulation(
             tokens[tid].remaining += 1
             tokens[tid].admitted_tasks_total += 1
             metrics.admitted_tasks += 1
-            if route.cls == LatencyClass.INTERACTIVE:
+            if stage.queue_cls == LatencyClass.INTERACTIVE:
                 metrics.admitted_tasks_interactive += 1
             else:
                 metrics.admitted_tasks_batch += 1
@@ -3905,7 +3915,7 @@ def run_simulation(
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
                 if backpressure_zero_admit_policy == "stall":
-                    pending_limit = _expert_queue_pending_limit_units(cfg, ts.cls, backpressure_units)
+                    pending_limit = _expert_queue_pending_limit_units(cfg, stage.queue_cls, backpressure_units)
                     if float(pending_limit) > 0.0:
                         metrics.blocked_stages_backpressure_attempts += 1
                         if ts.cls == LatencyClass.INTERACTIVE:
@@ -3914,6 +3924,20 @@ def run_simulation(
                             metrics.blocked_stages_backpressure_attempts_batch += 1
                         _stall_token(tid)
                         return
+                if cfg.mtp_draft_len > 0 and stage.mtp_phase == MtpPhase.DRAFT:
+                    if stage.layer_index == 0:
+                        if not ts.mtp_draft_layer0_skipped_backpressure:
+                            metrics.mtp_draft_layer0_skipped_backpressure += 1
+                            ts.mtp_draft_layer0_skipped_backpressure = True
+                    if ts.mtp_draft_attempt_len > stage.micro_index:
+                        ts.mtp_draft_attempt_len = stage.micro_index
+                    max_accept = int(stage.micro_index) + 1
+                    if ts.mtp_accept_len > max_accept:
+                        if not ts.mtp_accept_len_clamped_backpressure:
+                            metrics.mtp_accept_len_clamped_backpressure += 1
+                        ts.mtp_accept_len = max_accept
+                        ts.output_len = ts.mtp_accept_len
+                        ts.mtp_accept_len_clamped_backpressure = True
                 metrics.skipped_stages_backpressure += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.skipped_stages_backpressure_interactive += 1
@@ -3945,10 +3969,12 @@ def run_simulation(
                     ts.admitted_verify_layer0 = admitted
                     ts.desired_verify_layer0 = desired_layer
                     if cfg.mtp_draft_len > 0 and desired_layer > 0 and admitted == 0:
-                        metrics.mtp_verify_layer0_skipped_backpressure += 1
-                        ts.mtp_verify_layer0_skipped_backpressure = True
+                        if not ts.mtp_verify_layer0_skipped_backpressure:
+                            metrics.mtp_verify_layer0_skipped_backpressure += 1
+                            ts.mtp_verify_layer0_skipped_backpressure = True
                         if ts.mtp_accept_len > 1:
-                            metrics.mtp_accept_len_clamped_backpressure += 1
+                            if not ts.mtp_accept_len_clamped_backpressure:
+                                metrics.mtp_accept_len_clamped_backpressure += 1
                             ts.mtp_accept_len = 1
                             ts.output_len = 1
                             ts.mtp_accept_len_clamped_backpressure = True
@@ -4139,6 +4165,7 @@ def run_simulation(
             ts.output_len = accept_len if mtp_enabled else 1
             ts.mtp_verify_layer0_skipped_backpressure = False
             ts.mtp_accept_len_clamped_backpressure = False
+            ts.mtp_draft_layer0_skipped_backpressure = False
 
             micro_tokens = (draft_attempt_len + 1) if mtp_enabled else 1
             layers = _route_layers(route)
@@ -4148,9 +4175,14 @@ def run_simulation(
                 is_verify = ((not mtp_enabled) or micro_i == draft_attempt_len)
                 cost_scale = base_cost_scale
                 mtp_phase = MtpPhase.NONE
+                queue_cls = route.cls
                 if mtp_enabled and micro_i < draft_attempt_len:
                     cost_scale *= cfg.mtp_draft_cost_scale
                     mtp_phase = MtpPhase.DRAFT
+                    if mtp_draft_queue_cls in ("batch", "lo"):
+                        queue_cls = LatencyClass.BATCH
+                    elif mtp_draft_queue_cls in ("interactive", "hi"):
+                        queue_cls = LatencyClass.INTERACTIVE
                 elif mtp_enabled and micro_i == draft_attempt_len and cfg.mtp_verify_per_draft_cost_scale > 0.0:
                     cost_scale *= (1.0 + (cfg.mtp_verify_per_draft_cost_scale * float(draft_attempt_len)))
                     mtp_phase = MtpPhase.VERIFY
@@ -4169,9 +4201,11 @@ def run_simulation(
                             scores=lr.scores,
                             k=layer_k,
                             cost_scale=stage_cost_scale,
+                            queue_cls=queue_cls,
                             mtp_phase=mtp_phase,
                             is_verify=is_verify,
                             layer_index=li,
+                            micro_index=micro_i,
                         )
                     )
 
@@ -4599,6 +4633,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "mtp_draft_attempt_len_p95": float(_p_or_zero(mtp_draft_attempt_lens, 0.95)),
             "mtp_service_slot_ms_draft_frac": float(mtp_service_slot_draft_frac),
             "mtp_service_slot_ms_verify_frac": float(mtp_service_slot_verify_frac),
+            "mtp_draft_layer0_skipped_backpressure": float(metrics.mtp_draft_layer0_skipped_backpressure),
+            "mtp_draft_layer0_skipped_backpressure_frac": float(float(metrics.mtp_draft_layer0_skipped_backpressure) / float(metrics.mtp_verify_steps)) if metrics.mtp_verify_steps > 0 else 0.0,
             "mtp_verify_layer0_skipped_backpressure": float(metrics.mtp_verify_layer0_skipped_backpressure),
             "mtp_verify_layer0_skipped_backpressure_frac": float(float(metrics.mtp_verify_layer0_skipped_backpressure) / float(metrics.mtp_verify_steps)) if metrics.mtp_verify_steps > 0 else 0.0,
             "mtp_accept_len_clamped_backpressure": float(metrics.mtp_accept_len_clamped_backpressure),
@@ -5054,6 +5090,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
+    p.add_argument("--mtp-draft-queue-cls", type=str, default="inherit", help="MTP: queueing/priority class for draft micro-tokens: inherit (default), batch, or interactive. batch models draft work as lower priority vs verify work.")
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from dflash_accept_len, meta.dflash_draft_len, or consistent accepted_dflash+rejected_dflash.")
     p.add_argument(
         "--dflash-draft-cost-scale",
@@ -5433,6 +5470,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mtp_draft_cost_scale=args.mtp_draft_cost_scale,
         mtp_verify_per_draft_cost_scale=args.mtp_verify_per_draft_cost_scale,
         mtp_draft_attempt_policy=args.mtp_draft_attempt_policy,
+        mtp_draft_queue_cls=args.mtp_draft_queue_cls,
         dflash_draft_len=args.dflash_draft_len,
         dflash_draft_cost_scale=args.dflash_draft_cost_scale,
     )

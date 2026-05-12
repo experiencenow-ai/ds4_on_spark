@@ -163,6 +163,7 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
   - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
   - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
+  - To model draft work as lower priority (so it can be backpressured without blocking verify work), set `--mtp-draft-queue-cls batch` (default is `inherit`; `lo`/`hi` are accepted aliases for `batch`/`interactive`).
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
   - Default `--mtp-accept-model geom` accepts draft position `i` with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
@@ -175,6 +176,7 @@ Notes:
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
 - Queueing effects are broken down by phase in the metrics JSON under `mtp.task_queue_wait_ms.{draft,verify}` and `mtp.starved_task_frac.{draft,verify}` (useful for spotting draft-induced verify starvation).
 - Phase-specific queue pressure is summarized under `mtp.pending_depth_time_weighted.{draft,verify}` (time-weighted per-expert pending depth while draft/verify tasks are queued or in flight).
+- If a draft **layer0** stage admits `0` tasks due to backpressure, the simulator clamps `mtp_draft_attempt_len` and conservatively clamps `mtp_accept_len` to at most `(draft_pos + 1)` and reports `mtp.draft_layer0_skipped_backpressure` / `mtp.accept_len_clamped_backpressure`.
 - If the verify **layer0** stage admits `0` tasks due to backpressure (all candidates full), the simulator conservatively clamps `mtp_accept_len` to `1` (treat as “no drafts accepted”) and reports `mtp.verify_layer0_skipped_backpressure` / `mtp.accept_len_clamped_backpressure` (also surfaced in `--summary-json`).
 
 ### Arrival Rate Units (MTP Comparisons)
@@ -408,6 +410,26 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl 
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+### DS4 `ffn_moe_topk` Dumps (Route-Only Fixture)
+
+Antirez DS4 can dump `ffn_moe_topk` as binary int32 files (`*.i32`) per layer. These dumps contain real expert routes but **no timestamps**, so any `t_ms`/`dt_ms` fields used for simulator replay are synthetic.
+
+Convert a dump directory into a multi-layer scheduler trace (one JSONL record per token, with `layers[]`):
+
+```bash
+python3 scripts/ds4_topk_dump_to_trace_jsonl.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --out-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl \
+  --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
+```
+
+Then run the standard trace sweep / recommendations loop:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl --trace-input-format strict --trace-time-mode dt_ms --num-experts 256 --max-tokens 2000
+python3 sim/scheduler/recommendations.py --trace-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl --trace-input-format strict --trace-time-mode dt_ms --num-experts 256 --max-tokens 2000 --mtp-draft-len 2 --mtp-accept-prob 0.7 --mtp-accept-decay 0.6
+```
+
 If your runtime logs prefix/suffix JSON objects with plain text (for example `INFO route={...}`), `--trace-input-format runtime --trace-non-route skip` also scans each line for embedded JSON objects. `trace_extract.py` offers the same behavior via `--extract-substrings 1` (default).
 
 When using `--trace-input-format runtime` (or `trace_extract.py`), timestamps may be emitted as `t_ms` / `t_us` / `t_ns` (absolute) or `dt_ms` / `dt_us` / `dt_ns` (delta). The extractor normalizes them into millisecond `t_ms` / `dt_ms` fields in the strict simulator trace contract.
@@ -569,7 +591,7 @@ The first useful runtime patch can be instrumentation-only. Expert queueing
 should be enabled only after replay shows a throughput win without unacceptable
 interactive p95, starvation, or partial-admit regressions.
 
-When replaying real traces with `python3 sim/scheduler/recommendations.py --trace-jsonl ...`, prefer the report’s `evidence` block as a quick go/no-go sanity check (`evidence.expert_queueing` and, when MTP counters exist, `evidence.mtp`).
+When replaying real traces with `python3 sim/scheduler/recommendations.py --trace-jsonl ...`, prefer the report’s `evidence` block as a quick go/no-go sanity check (`evidence.expert_queueing`, and when MTP counters exist: `evidence.mtp` plus the draft-priority sweep `evidence.mtp_draft_queue_cls`).
 
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
 

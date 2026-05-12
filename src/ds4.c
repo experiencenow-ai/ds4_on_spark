@@ -1,5 +1,7 @@
 #include "ds4/ds4.h"
 
+#include <limits.h>
+
 ds4_version_t ds4_version(void)
 {
 	ds4_version_t v;
@@ -7,6 +9,23 @@ ds4_version_t ds4_version(void)
 	v.v1 = (uint32_t)DS4_VERSION_V1;
 	v.v2 = (uint32_t)DS4_VERSION_V2;
 	return(v);
+}
+
+int32_t ds4_ctx_auto_arena_bytes(const ds4_config_t *cfg,int32_t *out_bytes)
+{
+	int64_t bytes64;
+	if ( cfg == 0 )
+		return(-1);
+	if ( out_bytes == 0 )
+		return(-2);
+	*out_bytes = 0;
+	if ( cfg->log_ring_entries <= 0 )
+		return(0);
+	bytes64 = ((int64_t)cfg->log_ring_entries * (int64_t)sizeof(ds4_log_entry_t));
+	if ( bytes64 > (int64_t)INT32_MAX )
+		return(-3);
+	*out_bytes = (int32_t)bytes64;
+	return(0);
 }
 
 int32_t ds4_ctx_log_ring_init(ds4_ctx_t *ctx,ds4_log_entry_t *entries,int32_t entry_count)

@@ -674,8 +674,15 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	compress_freqs_prefill = find_first_line_containing(text, "freqs_cis = self.freqs_cis[:cutoff:ratio]")
 	compress_freqs_decode = find_first_line_containing(text, "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)")
 
+	precompute_freqs_lines = extract_function_source_lines(text, "precompute_freqs_cis")
+	apply_rotary_lines = extract_function_source_lines(text, "apply_rotary_emb")
+
 	win_topk_lines = extract_function_source_lines(text, "get_window_topk_idxs")
 	compress_topk_lines = extract_function_source_lines(text, "get_compress_topk_idxs")
+
+	compressor_forward_lines = extract_class_method_source_lines(text, "Compressor", "forward")
+	indexer_forward_lines = extract_class_method_source_lines(text, "Indexer", "forward")
+	attention_forward_lines = extract_class_method_source_lines(text, "Attention", "forward")
 
 	return {
 		"mla": {
@@ -686,6 +693,17 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"output_derotate_expr": o_derotate,
 			"q_rope_apply_expr": rope_q,
 			"kv_rope_apply_expr": rope_kv,
+			"source_helpers": {
+				"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (precompute_freqs_cis, apply_rotary_emb)",
+				"precompute_freqs_cis": {
+					"source_lines": precompute_freqs_lines,
+					"source_lines_sha256": sha256_lines(precompute_freqs_lines) if isinstance(precompute_freqs_lines, list) else None,
+				},
+				"apply_rotary_emb": {
+					"source_lines": apply_rotary_lines,
+					"source_lines_sha256": sha256_lines(apply_rotary_lines) if isinstance(apply_rotary_lines, list) else None,
+				},
+			},
 		},
 		"cache_update_semantics": {
 			"decode_sliding_ring_update_expr": kv_decode_ring,
@@ -712,6 +730,21 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"get_compress_topk_idxs": {
 				"source_lines": compress_topk_lines,
 				"source_lines_sha256": sha256_lines(compress_topk_lines) if isinstance(compress_topk_lines, list) else None,
+			},
+		},
+		"cache_source_helpers": {
+			"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor.forward, Indexer.forward, Attention.forward)",
+			"compressor_forward": {
+				"source_lines": compressor_forward_lines,
+				"source_lines_sha256": sha256_lines(compressor_forward_lines) if isinstance(compressor_forward_lines, list) else None,
+			},
+			"indexer_forward": {
+				"source_lines": indexer_forward_lines,
+				"source_lines_sha256": sha256_lines(indexer_forward_lines) if isinstance(indexer_forward_lines, list) else None,
+			},
+			"attention_forward": {
+				"source_lines": attention_forward_lines,
+				"source_lines_sha256": sha256_lines(attention_forward_lines) if isinstance(attention_forward_lines, list) else None,
 			},
 		},
 	}
@@ -1567,6 +1600,9 @@ def build_contract() -> dict:
 				"mtp_compress_ratio_by_mtp_layer_id": [int(r) for r in mtp_ratios],
 				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
 				"topk_index_helpers": sem.get("cache_topk_index_helpers", {}) if isinstance(sem, dict) else {},
+				"semantics": {
+					"source_helpers": sem.get("cache_source_helpers", {}) if isinstance(sem, dict) else {},
+				},
 				"compression_semantics": {
 					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)",
 					"overlap_rule": "overlap = (compress_ratio == 4)",

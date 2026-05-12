@@ -6,6 +6,7 @@ SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChec
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_llamacpp_mtp_one_token_probe}"
 REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV="${REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV:-}"
+LLAMA_COMMIT="${LLAMA_COMMIT:-94073e2}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -23,9 +24,24 @@ elif [ -e "$repo_root/.git" ]; then
 fi
 
 HELPER_LOCAL="$repo_root/scripts/llamacpp_mtp_one_token_draft_probe_patch.sh"
-PATCH_LOCAL="${PATCH_LOCAL:-$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-one-token-draft-probe-skeleton.patch}"
+PATCH_LOCAL="${PATCH_LOCAL:-}"
+if [ "$PATCH_LOCAL" = "" ]; then
+	PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-${LLAMA_COMMIT}-mtp-one-token-draft-probe-skeleton.patch"
+fi
+if [ ! -r "$PATCH_LOCAL" ] && [ "$LLAMA_COMMIT" = "94073e2" ] && [ -r "$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch" ]; then
+	PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch"
+fi
 
 REPORT_MD="$OUT_DIR/llamacpp_mtp_one_token_draft_probe_spark.md"
+
+REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV_EFFECTIVE="$REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV"
+case " $REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV_EFFECTIVE " in
+	*" LLAMA_COMMIT="*)
+		;;
+	*)
+		REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV_EFFECTIVE="$REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV_EFFECTIVE LLAMA_COMMIT=$LLAMA_COMMIT"
+		;;
+esac
 
 {
 	echo "# llama.cpp One-Token MTP Draft Probe (Spark)"
@@ -34,6 +50,7 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_one_token_draft_probe_spark.md"
 	echo
 	echo "- ds4_on_spark commit: $repo_rev"
 	echo "- target: $target"
+	echo "- llama_commit: $LLAMA_COMMIT"
 	echo "- patch: $PATCH_LOCAL"
 	echo
 	echo "## Safety Gates"
@@ -52,6 +69,8 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_one_token_draft_probe_spark.md"
 	echo "- TRUNK_GGUF=/abs/path/to/trunk.gguf (defaults to Spark0-staged antirez IQ2XXS trunk if readable)"
 	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (defaults to Spark0-staged sidecar if readable)"
 	echo
+	echo "Recommended preflight (no trunk load): run `scripts/run_mtp_sidecar_loader_probe_spark.sh` first to validate the sidecar contract + (optionally) the llama.cpp-side sidecar probe before enabling `ALLOW_RUN=1` here."
+	echo
 	echo "Optional Spark-side env vars:"
 	echo
 	echo "- LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark"
@@ -67,7 +86,7 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_one_token_draft_probe_spark.md"
 	echo "Do not put secrets in REMOTE_* env values; this report records them."
 	echo
 	echo '```'
-	echo "$REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV"
+	echo "$REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV_EFFECTIVE"
 	echo '```'
 	echo
 	echo "## Spark Host Info"
@@ -153,7 +172,7 @@ ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_one_token_draft_probe.patch" \
 	<"$PATCH_LOCAL" \
 	>"$OUT_DIR/remote_upload_patch_stdout.txt" 2>"$OUT_DIR/remote_upload_patch_stderr.txt" || true
 
-ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV sh -lc '
+ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV_EFFECTIVE sh -lc '
 set -eu
 PATCH_FILE=\"/tmp/llamacpp_mtp_one_token_draft_probe.patch\"
 export PATCH_FILE

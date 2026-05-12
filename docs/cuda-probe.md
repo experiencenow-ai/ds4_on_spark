@@ -20,7 +20,7 @@ When you want the one-line `schema=4` device summary without shipping `tools/cud
 
 This compiles a single tiny `.cu` file directly on Spark0 with `nvcc -arch=native` and prints the same `cuda drv=... schema=4` line as `tools/cuda_probe/bin/cuda_device_props_tiny`.
 
-It also includes compile-only `-arch=sm_121` and `nvcc --gpu-architecture=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
+It also includes compile-only `-arch=sm_121`, `nvcc --gpu-architecture=sm_121`, and `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
 
 To make the “end-to-end link+run via `sm_121`” path explicit (not just compile-only), run:
 
@@ -59,6 +59,7 @@ This builds and runs only:
 - `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support)
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
+- `cuda_sm121_gpuarch_code_compile_probe.o` (compile-only gate for build systems that split `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cluster_dims_attr_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `-arch=sm_121`; cluster/CUTLASS-style toolchain gate)
@@ -113,7 +114,7 @@ REMOTE_TAG=manual ./scripts/cuda_probe_capability_spark0.sh
 This runs, in order:
 
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
-- `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile gates + end-to-end `-arch=sm_121` / `nvcc --gpu-architecture=sm_121` build+run)
+- `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile gates + end-to-end `-arch=sm_121` / `nvcc --gpu-architecture=sm_121` build+run; best-effort `-arch=compute_121` and `-gencode` build+run)
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` (no repo transfer; CMake build-system gate)
 - `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
@@ -148,6 +149,18 @@ To keep the device-props “`sm_121` end-to-end” builds off (compile-only gate
 
 ```bash
 WITH_DEVICE_PROPS_SM121_RUN=0 ./scripts/cuda_probe_capability_spark0.sh
+```
+
+To skip the best-effort `-arch=compute_121` “PTX-only + driver JIT” build+run inside the device-props step, set:
+
+```bash
+WITH_DEVICE_PROPS_COMPUTE121_RUN=0 ./scripts/cuda_probe_capability_spark0.sh
+```
+
+To skip the best-effort explicit `-gencode` fatbin build+run inside the device-props step, set:
+
+```bash
+WITH_DEVICE_PROPS_GENCODE_RUN=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
 Observed on Spark0 (2026-05-11): `scripts/cuda_probe_capability_spark0.sh` completes end-to-end on CUDA 13.0 `V13.0.88`, including NVRTC (`supportedArchs` includes `121`), nvJitLink, TMA tensor-map encode, and cluster launch probes.
@@ -250,6 +263,7 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_device_props_tiny`
 - `cuda_sm121_compile_probe.o` (compile-only gate)
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121`)
+- `cuda_sm121_gpuarch_code_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121`)
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121` with C++20 flags)
 - `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)

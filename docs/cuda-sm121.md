@@ -104,7 +104,12 @@ When `nvcc --list-gpu-arch` is supported and advertises `compute_121`, that same
 
 For a compile-only toolchain gate (no link, no run), `make bin/cuda_sm121_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_compile_probe.cu` with `-arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210`.
 
-Some build systems use the long-form `nvcc --gpu-architecture=...` flag instead of `-arch=...`. The compile-only object `make bin/cuda_sm121_gpuarch_compile_probe.o` is the same source compiled via `--gpu-architecture=sm_121` as a compatibility gate. For an end-to-end link/run smoke check using the long-form flag, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also compiles and runs the minimal probe via `nvcc --gpu-architecture=sm_121`.
+Some build systems use long-form `nvcc` flags instead of `-arch=...`:
+
+- `make bin/cuda_sm121_gpuarch_compile_probe.o` is the same source compiled via `nvcc --gpu-architecture=sm_121` (compatibility gate).
+- `make bin/cuda_sm121_gpuarch_code_compile_probe.o` is the same source compiled via `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (compatibility gate for split arch/code builds).
+
+For an end-to-end link/run smoke check using the long-form `--gpu-architecture=sm_121` spelling, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also compiles and runs the minimal probe via `nvcc --gpu-architecture=sm_121`.
 
 For a compile-only “C++20 + flags” toolchain gate (no link, no run), `make bin/cuda_sm121_cxx20_flags_compile_probe.o` compiles `tools/cuda_probe/src/cuda_sm121_cxx20_flags_compile_probe.cu` with `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` and fails the build if the device pass does not see `__CUDA_ARCH__=1210` (and if `nvcc` does not define the expected flag macros). `make bin/cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` is the same source compiled via `nvcc --gpu-architecture=sm_121` for build-system compatibility.
 

@@ -86,6 +86,11 @@ The entropy tools also accept the compact record envelope used by the judge-ELO 
   "parse_valid": true,
   "winner": "A",
   "margin": 2,
+  "score_a": 8,
+  "score_b": 6,
+  "reason": "A follows instructions and is more correct.",
+  "train_hint": "Fix key factual errors; keep the format strict.",
+  "tags": ["format","factuality"],
   "judge_model": "judge.v1",
   "tokens": { "judge_in": 128, "judge_out": 64 },
   "latency_ms": { "judge": 1500 }
