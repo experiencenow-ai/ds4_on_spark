@@ -60,6 +60,8 @@ Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_s
 
 Notes:
 
+- In read-only worktree checkouts, create a `.codex_git/` gitdir shim (see `docs/spark-access.md`); the probe runners will use it to record the `ds4_on_spark commit` in reports.
+
 - The helper is now **truly gated**: it does not `git fetch` / `git checkout` unless `ALLOW_FETCH=1` or `ALLOW_PATCH=1` is set.
 - When `JSON_ONLY=1` is set, common preflight failures (missing `LLAMA_DIR`, missing probe binary, unreadable `MTP_SIDECAR_GGUF`, etc.) emit a small JSON object (`ok=false`, `errors[]`) so Spark runners can parse failures deterministically.
 
