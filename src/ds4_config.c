@@ -53,6 +53,25 @@ const char *ds4_config_diag_stage_name(int32_t stage)
 	return("unknown");
 }
 
+const char *ds4_config_env_err_var(int32_t err)
+{
+	if ( err == -1 )
+		return("cfg");
+	if ( err == -2 || err == -3 )
+		return("DS4_LOG_LEVEL");
+	if ( err == -6 || err == -7 )
+		return("DS4_ENABLE_CUDA");
+	if ( err == -10 || err == -11 || err == -12 )
+		return("DS4_CUDA_DEVICE");
+	if ( err == -13 || err == -14 || err == -15 )
+		return("DS4_ARENA_SIZE");
+	if ( err == -16 || err == -17 || err == -18 )
+		return("DS4_LOG_RING_ENTRIES");
+	if ( err == -19 || err == -20 || err == -21 )
+		return("DS4_CUDA_ARENA_SIZE");
+	return(0);
+}
+
 int32_t ds4_config_diag_format(const ds4_config_diag_t *d,char *out,int32_t cap)
 {
 	const char *stage;
