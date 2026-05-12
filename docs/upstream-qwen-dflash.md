@@ -163,6 +163,7 @@ Staging ladder note (cost control):
 Repo helper (fill in staged paths, then run the bundle wrapper):
 
 - `fixtures/baseline/vllm_ling_qwen_dflash_ladder_spark0.tsv`
+  - Optional per-row `public_quality_*` TSV columns are supported; leave them blank until a human records priors.
 
 1. Run a no-download vLLM package/CUDA probe on Spark0.
 2. If a target is already present on Spark0, run a short target-only generation

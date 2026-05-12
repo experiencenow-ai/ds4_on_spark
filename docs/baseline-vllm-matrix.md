@@ -84,10 +84,10 @@ Notes:
 
 ## Matrix TSV format
 
-Tab-separated values with 6 columns:
+Tab-separated values with 6 required columns plus 3 optional per-row quality-metadata columns:
 
 ```text
-run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
+run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir	public_quality_prior	public_quality_basis	public_quality_source
 ```
 
 Rules:
@@ -97,18 +97,19 @@ Rules:
 - `draft_model_dir` may be empty to run target-only.
 - `scope_target` and `scope_dflash` may be empty; defaults are `vllm_target` and `vllm_dflash`.
 - Use absolute Spark paths for `target_model_dir` / `draft_model_dir`.
+- Optional `public_quality_*` columns override the global `PUBLIC_QUALITY_*` env vars for that row.
 
 Template:
 
 ```text
-# run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
-ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4	
-qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/z-lab/Qwen3.5-4B-DFlash
-qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/z-lab/Qwen3.5-9B-DFlash
-qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/z-lab/Qwen3.5-27B-DFlash
-qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/z-lab/Qwen3.6-27B-DFlash
-qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/z-lab/Qwen3-Coder-30B-A3B-DFlash
-qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/z-lab/Qwen3.6-35B-A3B-DFlash
+# run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir	public_quality_prior	public_quality_basis	public_quality_source
+ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4			
+qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/z-lab/Qwen3.5-4B-DFlash			
+qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/z-lab/Qwen3.5-9B-DFlash			
+qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/z-lab/Qwen3.5-27B-DFlash			
+qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/z-lab/Qwen3.6-27B-DFlash			
+qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/z-lab/Qwen3-Coder-30B-A3B-DFlash			
+qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/z-lab/Qwen3.6-35B-A3B-DFlash			
 ```
 
 Repo template file: `fixtures/baseline/vllm_matrix_template.tsv`.

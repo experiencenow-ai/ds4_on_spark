@@ -12,19 +12,19 @@
 # Replace all /ABS/PATH/ON/SPARK0 entries with real staged paths on Spark0.
 # Keep prompt/context/token settings constant across the ladder.
 
-run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
+run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir	public_quality_prior	public_quality_basis	public_quality_source
 
 # Ling: target-only first (after any Ling result, ensure this row exists).
-ling26-flash-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/ABS/PATH/ON/SPARK0/inclusionAI/Ling-2.6-flash-int4	
+ling26-flash-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/ABS/PATH/ON/SPARK0/inclusionAI/Ling-2.6-flash-int4			
 
 # Cheap paired DFlash plumbing (use when 27B artifacts are not staged).
-qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.5-4B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.5-4B-DFlash
-qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.5-9B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.5-9B-DFlash
+qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.5-4B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.5-4B-DFlash			
+qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.5-9B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.5-9B-DFlash			
 
 # Base Qwen 27B ladder (run target-only first, then the exact paired drafter).
-qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.5-27B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.5-27B-DFlash
-qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.6-27B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.6-27B-DFlash
+qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.5-27B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.5-27B-DFlash			
+qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.6-27B	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.6-27B-DFlash			
 
 # A3B ladder (keep separate quality/speed scoring from DeepSeek V4 Flash).
-qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/ABS/PATH/ON/SPARK0/Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/ABS/PATH/ON/SPARK0/z-lab/Qwen3-Coder-30B-A3B-DFlash
-qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.6-35B-A3B-FP8	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.6-35B-A3B-DFlash
+qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/ABS/PATH/ON/SPARK0/Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/ABS/PATH/ON/SPARK0/z-lab/Qwen3-Coder-30B-A3B-DFlash			
+qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/ABS/PATH/ON/SPARK0/Qwen/Qwen3.6-35B-A3B-FP8	/ABS/PATH/ON/SPARK0/z-lab/Qwen3.6-35B-A3B-DFlash			
