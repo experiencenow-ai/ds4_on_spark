@@ -19,6 +19,11 @@ Use the wrapper that validates once, then stages to Spark0/Spark1/Spark2:
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+As part of staging, the helper also runs a **staged env audit** (safe) to catch common ring misconfigurations early:
+
+- Validates `/tmp/ds4-config/ds4-<instance>.env.example` has consistent `DS4_WORLD_SIZE`, unique `DS4_RANK`, and a consistent `DS4_RING_HOSTS`.
+- Script: `scripts/ops_spark_ring_staged_env_audit.sh`
+
 On each Spark, you should now have:
 
 - `/tmp/ds4-systemd/` and `/tmp/ds4-systemd-user/`
