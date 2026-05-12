@@ -1085,10 +1085,24 @@ def compute_mtp_trust(
 	mtp_keys_sha256: Optional[str],
 ) -> dict[str, Any]:
 	if not mtp_present:
-		return {"checked": True, "trusted": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+		return {
+			"checked": True,
+			"trusted": False,
+			"status": "absent",
+			"reasons": ["no mtp.* tensors present"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
-		return {"checked": False, "trusted": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+		return {
+			"checked": False,
+			"trusted": False,
+			"status": "unknown",
+			"reasons": ["mtp_contract not checked"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	trust_gates = None
 	if isinstance(contract_summary, dict):
@@ -1106,6 +1120,10 @@ def compute_mtp_trust(
 		if expected_mtp_keys_sha256 is None:
 			expected_mtp_keys_sha256 = contract_summary.get("checkpoint_index", {}).get("weight_map_mtp_keys_sha256", None)
 
+	mtp_keys_sha256_match_official = None
+	if expected_mtp_keys_sha256 is not None and mtp_keys_sha256 is not None:
+		mtp_keys_sha256_match_official = (mtp_keys_sha256 == expected_mtp_keys_sha256)
+
 	# Namespace contract: MTP must preserve the expected `mtp.{j}.` prefixes (and
 	# include mtp.0.* when the contract expects mtp ids starting at 0).
 	if isinstance(contract_summary, dict):
@@ -1119,6 +1137,8 @@ def compute_mtp_trust(
 					"trusted": False,
 					"status": "namespace_incomplete",
 					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 				}
 			if trust_gates.get("artifact_requires_mtp_namespace_has_mtp0") is True and ns.get("has_mtp0") is not True:
 				return {
@@ -1126,6 +1146,8 @@ def compute_mtp_trust(
 					"trusted": False,
 					"status": "namespace_missing_mtp0",
 					"reasons": ["mtp_namespace.has_mtp0 != true"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 				}
 
 	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
@@ -1138,6 +1160,8 @@ def compute_mtp_trust(
 			"trusted": False,
 			"status": "incomplete",
 			"reasons": reasons,
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 		}
 
 	if (
@@ -1154,6 +1178,8 @@ def compute_mtp_trust(
 			"trusted": False,
 			"status": "fingerprint_mismatch",
 			"reasons": reasons,
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 		}
 
 	reasons = ["structural mtp.* keys complete"]
@@ -1165,6 +1191,8 @@ def compute_mtp_trust(
 		"trusted": False,
 		"status": "structural_complete_untrusted",
 		"reasons": reasons,
+		"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+		"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 	}
 
 def compute_mtp_preservation(
@@ -1175,32 +1203,24 @@ def compute_mtp_preservation(
 	mtp_keys_sha256: Optional[str],
 ) -> dict[str, Any]:
 	if not mtp_present:
-		return {"checked": True, "preserves": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+		return {
+			"checked": True,
+			"preserves": False,
+			"status": "absent",
+			"reasons": ["no mtp.* tensors present"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
-		return {"checked": False, "preserves": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
-
-	if isinstance(mtp_namespace, dict):
-		expected_ids = mtp_namespace.get("expected_layer_ids", [])
-		if isinstance(expected_ids, list) and len(expected_ids) > 0:
-			if mtp_namespace.get("expected_complete") is not True:
-				missing = mtp_namespace.get("missing_expected_layer_ids", [])
-				return {
-					"checked": True,
-					"preserves": False,
-					"status": "namespace_incomplete",
-					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
-				}
-			if mtp_namespace.get("has_mtp0") is not True:
-				return {
-					"checked": True,
-					"preserves": False,
-					"status": "namespace_missing_mtp0",
-					"reasons": ["mtp_namespace.has_mtp0 != true"],
-				}
-
-	if mtp_contract.get("complete") is not True:
-		return {"checked": True, "preserves": False, "status": "incomplete", "reasons": ["mtp_contract.complete != true"]}
+		return {
+			"checked": False,
+			"preserves": False,
+			"status": "unknown",
+			"reasons": ["mtp_contract not checked"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	expected_mtp_keys_sha256 = None
 	trust_gates = None
@@ -1213,6 +1233,43 @@ def compute_mtp_preservation(
 		trust_gates = contract_summary.get("mtp", {}).get("trust_gates", None)
 	if not isinstance(trust_gates, dict):
 		trust_gates = {}
+
+	mtp_keys_sha256_match_official = None
+	if expected_mtp_keys_sha256 is not None and mtp_keys_sha256 is not None:
+		mtp_keys_sha256_match_official = (mtp_keys_sha256 == expected_mtp_keys_sha256)
+
+	if isinstance(mtp_namespace, dict):
+		expected_ids = mtp_namespace.get("expected_layer_ids", [])
+		if isinstance(expected_ids, list) and len(expected_ids) > 0:
+			if mtp_namespace.get("expected_complete") is not True:
+				missing = mtp_namespace.get("missing_expected_layer_ids", [])
+				return {
+					"checked": True,
+					"preserves": False,
+					"status": "namespace_incomplete",
+					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
+				}
+			if mtp_namespace.get("has_mtp0") is not True:
+				return {
+					"checked": True,
+					"preserves": False,
+					"status": "namespace_missing_mtp0",
+					"reasons": ["mtp_namespace.has_mtp0 != true"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
+				}
+
+	if mtp_contract.get("complete") is not True:
+		return {
+			"checked": True,
+			"preserves": False,
+			"status": "incomplete",
+			"reasons": ["mtp_contract.complete != true"],
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
+		}
 
 	if (
 		trust_gates.get("artifact_requires_mtp_keys_sha256_match_official", True) is True
@@ -1227,9 +1284,18 @@ def compute_mtp_preservation(
 			"reasons": [
 				f"mtp_keys_sha256 != official mtp checkpoint fingerprint (expected={expected_mtp_keys_sha256} observed={mtp_keys_sha256})"
 			],
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": False,
 		}
 
-	return {"checked": True, "preserves": True, "status": "complete", "reasons": ["mtp.* keys satisfy upstream contract"]}
+	return {
+		"checked": True,
+		"preserves": True,
+		"status": "complete",
+		"reasons": ["mtp.* keys satisfy upstream contract"],
+		"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+		"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
+	}
 
 
 def inspect_safetensors_index(path: Path) -> InspectResult:

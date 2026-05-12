@@ -74,6 +74,8 @@
       "mtp_present": false,
       "mtp_preservation": {
         "checked": true,
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "preserves": false,
         "reasons": [
           "no mtp.* tensors present"
@@ -84,6 +86,8 @@
       "mtp_tensor_type_counts": {},
       "mtp_trust": {
         "checked": true,
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "reasons": [
           "no mtp.* tensors present"
         ],
@@ -348,6 +352,8 @@
       "mtp_present": true,
       "mtp_preservation": {
         "checked": true,
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
         "preserves": false,
         "reasons": [
           "mtp_contract.complete != true"
@@ -362,6 +368,8 @@
       },
       "mtp_trust": {
         "checked": true,
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
         "reasons": [
           "mtp_contract.complete != true",
           "mtp_keys_sha256 != official mtp checkpoint fingerprint"
@@ -532,6 +540,8 @@
     "mtp_present": true,
     "mtp_preservation": {
       "checked": true,
+      "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+      "mtp_keys_sha256_match_official": false,
       "preserves": false,
       "reasons": [
         "mtp_contract.complete != true"
@@ -546,6 +556,8 @@
     },
     "mtp_trust": {
       "checked": true,
+      "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+      "mtp_keys_sha256_match_official": false,
       "reasons": [
         "mtp_contract.complete != true",
         "mtp_keys_sha256 != official mtp checkpoint fingerprint"
