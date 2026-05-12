@@ -19,7 +19,7 @@ Rules:
 - Inline comments are supported when `#` begins a token (start-of-line or preceded by whitespace).
 - Unknown keys are ignored by default.
 - For strict parsing (unknown keys are errors), use `ds4_config_parse_mem_ex` / `ds4_config_parse_file_ex` with `DS4_CONFIG_PARSE_STRICT_UNKNOWN`.
-- For parse diagnostics (line number + underlying parse error), use `ds4_config_parse_mem_ex_diag` / `ds4_config_parse_file_ex_diag` (and `ds4_config_load_auto_ex_diag` for the combined defaults+file+env helper). These fill a `ds4_config_diag_t` (1-based line numbers for `*_MEM`/`*_FILE` stages).
+- For parse diagnostics (line number + underlying parse error), use `ds4_config_parse_mem_ex_diag` / `ds4_config_parse_file_ex_diag` (and `ds4_config_load_auto_ex_diag` for the combined defaults+file+env helper). These fill a `ds4_config_diag_t` (1-based line numbers for `*_MEM`/`*_FILE` stages). Use `ds4_config_diag_stage_name` / `ds4_config_diag_format` to render the diagnostic for CLI/log output.
 - When `out_unknown` is provided, `*_ex` functions report the unknown-key count even when strict parsing returns an error.
 
 Supported keys:

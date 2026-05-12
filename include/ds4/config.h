@@ -34,6 +34,8 @@ typedef struct
 
 DS4_EXTERN_C_BEGIN
 int32_t ds4_config_diag_init(ds4_config_diag_t *d);
+const char *ds4_config_diag_stage_name(int32_t stage);
+int32_t ds4_config_diag_format(const ds4_config_diag_t *d,char *out,int32_t cap);
 int32_t ds4_config_defaults(ds4_config_t *cfg);
 int32_t ds4_config_validate(const ds4_config_t *cfg);
 int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const char *v,int32_t vlen);

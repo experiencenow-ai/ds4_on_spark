@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -208,6 +209,13 @@ int32_t test_config(void)
 		return(-206);
 	if ( diag.unknown != 1 )
 		return(-207);
+	if ( strcmp(ds4_config_diag_stage_name(diag.stage),"mem") != 0 )
+		return(-208);
+	n = ds4_config_diag_format(&diag,out,(int32_t)sizeof(out));
+	if ( n < 0 )
+		return(-209);
+	if ( strcmp(out,"stage=mem line=2 err=-11 unknown=1") != 0 )
+		return(-210);
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-101);
 	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )

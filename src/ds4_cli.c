@@ -291,24 +291,30 @@ static int32_t ds4_cli_dump_config(const ds4_config_t *cfg)
 
 static void ds4_cli_print_config_diag(const ds4_config_diag_t *d,int32_t strict_cfg,int32_t unknown)
 {
+	char diag_buf[128];
+	int32_t n;
+	diag_buf[0] = 0;
+	n = ds4_config_diag_format(d,diag_buf,(int32_t)sizeof(diag_buf));
+	if ( n < 0 || n >= (int32_t)sizeof(diag_buf) )
+		diag_buf[0] = 0;
 	if ( strict_cfg != 0 )
 	{
 		if ( unknown > 0 )
 		{
-			if ( d != 0 && d->line > 0 )
-				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys (line %d)\n",unknown,d->line);
+			if ( diag_buf[0] != 0 )
+				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys (%s)\n",unknown,diag_buf);
 			else
 				fprintf(stderr,"ds4_cli: failed to load config (strict): %d unknown keys\n",unknown);
 			return;
 		}
-		if ( d != 0 && d->line > 0 )
-			fprintf(stderr,"ds4_cli: failed to load config (strict) (line %d)\n",d->line);
+		if ( diag_buf[0] != 0 )
+			fprintf(stderr,"ds4_cli: failed to load config (strict): %s\n",diag_buf);
 		else
 			fprintf(stderr,"ds4_cli: failed to load config (strict)\n");
 		return;
 	}
-	if ( d != 0 && d->line > 0 )
-		fprintf(stderr,"ds4_cli: failed to load config (line %d)\n",d->line);
+	if ( diag_buf[0] != 0 )
+		fprintf(stderr,"ds4_cli: failed to load config: %s\n",diag_buf);
 	else
 		fprintf(stderr,"ds4_cli: failed to load config\n");
 }

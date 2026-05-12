@@ -16,6 +16,49 @@ int32_t ds4_config_diag_init(ds4_config_diag_t *d)
 	return(0);
 }
 
+const char *ds4_config_diag_stage_name(int32_t stage)
+{
+	if ( stage == DS4_CONFIG_DIAG_STAGE_NONE )
+		return("none");
+	if ( stage == DS4_CONFIG_DIAG_STAGE_MEM )
+		return("mem");
+	if ( stage == DS4_CONFIG_DIAG_STAGE_FILE )
+		return("file");
+	if ( stage == DS4_CONFIG_DIAG_STAGE_LOAD )
+		return("load");
+	return("unknown");
+}
+
+int32_t ds4_config_diag_format(const ds4_config_diag_t *d,char *out,int32_t cap)
+{
+	const char *stage;
+	int32_t line,err,unknown,n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	stage = "none";
+	line = 0;
+	err = 0;
+	unknown = 0;
+	if ( d != 0 )
+	{
+		stage = ds4_config_diag_stage_name(d->stage);
+		line = d->line;
+		err = d->err;
+		unknown = d->unknown;
+	}
+	if ( stage == 0 )
+		stage = "?";
+	n = (int32_t)snprintf(out,(size_t)cap,"stage=%s line=%d err=%d unknown=%d",stage,line,err,unknown);
+	if ( n < 0 )
+		return(-3);
+	out[cap - 1] = 0;
+	if ( n >= cap )
+		return(-4);
+	return(n);
+}
+
 static void ds4_config_diag_set(ds4_config_diag_t *d,int32_t stage,int32_t line,int32_t err,int32_t unknown)
 {
 	if ( d == 0 )
