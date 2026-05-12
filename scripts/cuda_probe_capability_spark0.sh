@@ -5,9 +5,13 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 with_device_props_minimal="${WITH_DEVICE_PROPS_MINIMAL:-1}"
+with_device_props_sm121_run="${WITH_DEVICE_PROPS_SM121_RUN:-1}"
+with_device_props_compute121_run="${WITH_DEVICE_PROPS_COMPUTE121_RUN:-0}"
+with_device_props_gencode_run="${WITH_DEVICE_PROPS_GENCODE_RUN:-0}"
 with_kernel_tiny="${WITH_KERNEL_TINY:-1}"
 with_cmake_minimal="${WITH_CMAKE_MINIMAL:-1}"
 log_path="${LOG_PATH:-}"
+remote_tag="${REMOTE_TAG:-"$(date -u +%Y%m%d-%H%M%S)-$$"}"
 
 log_line() {
 	line="$*"
@@ -39,26 +43,26 @@ if [ "$log_path" != "" ]; then
 fi
 
 log_line "== cuda probe capability: nvcc minimal (no repo transfer) =="
-run_logged "$repo_root/scripts/cuda_probe_nvcc_minimal_spark0.sh" "$target"
+run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_nvcc_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_nvcc_minimal_spark0.sh" "$target"
 
 if [ "${with_device_props_minimal}" = "1" ]; then
 	log_line "== cuda probe capability: device props minimal (no repo transfer) =="
-	run_logged "$repo_root/scripts/cuda_probe_device_props_minimal_spark0.sh" "$target"
+	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_device_props_minimal_${remote_tag}" WITH_SM121_RUN="${with_device_props_sm121_run}" WITH_COMPUTE121_RUN="${with_device_props_compute121_run}" WITH_GENCODE_RUN="${with_device_props_gencode_run}" "$repo_root/scripts/cuda_probe_device_props_minimal_spark0.sh" "$target"
 fi
 
 
 if [ "${with_cmake_minimal}" = "1" ]; then
 	log_line "== cuda probe capability: cmake minimal (no repo transfer) =="
-	run_logged "$repo_root/scripts/cuda_probe_cmake_minimal_spark0.sh" "$target"
+	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_cmake_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_cmake_minimal_spark0.sh" "$target"
 fi
 
 log_line "== cuda probe capability: tiny build+run =="
-run_logged "$repo_root/scripts/cuda_probe_tiny_spark0.sh" "$target"
+run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_tiny_${remote_tag}" "$repo_root/scripts/cuda_probe_tiny_spark0.sh" "$target"
 
 log_line "== cuda probe capability: tiny compile-only (variants + PTX embed probes) =="
-run_logged "$repo_root/scripts/cuda_probe_compile_only_tiny_spark0.sh" "$target"
+run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_compile_only_tiny_${remote_tag}" "$repo_root/scripts/cuda_probe_compile_only_tiny_spark0.sh" "$target"
 
 if [ "${with_kernel_tiny}" = "1" ]; then
 	log_line "== cuda probe capability: kernel-tiny gates (CUTLASS/DeepGEMM plumbing) =="
-	run_logged "$repo_root/scripts/cuda_probe_kernel_tiny_spark0.sh" "$target"
+	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_kernel_tiny_${remote_tag}" "$repo_root/scripts/cuda_probe_kernel_tiny_spark0.sh" "$target"
 fi
