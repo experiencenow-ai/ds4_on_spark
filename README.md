@@ -1,10 +1,15 @@
 # ds4_on_spark
 
-Purpose-built DeepSeek V4 Flash inference work for NVIDIA DGX Spark / GB10.
+Spark local-inference performance lab for NVIDIA DGX Spark / GB10 (repo name is historical shorthand).
 
-This repository starts from the design review in `docs/implementation-plan.md`:
-a narrow engine, correctness-gated first, optimized for 2x Spark before any
-4x topology or broader model support.
+Primary tracks:
+
+- DeepSeek V4 Flash target-only throughput + correctness work (keep DeepSeek claims isolated).
+- Comparator targets (Qwen/Ling/Gemma/GLM-class) to ground quality/speed tradeoffs (target-only until paired).
+- Speculative decoding / MTP / DFlash draft+target pairs (keep DFlash claims isolated; do not mix with target-only wins).
+- Spark/Blackwell runtime work (llama.cpp/vLLM/SGLang/CUDA/TE/CUTLASS references as needed).
+
+The repository starts from `docs/implementation-plan.md`; correctness gating remains non-negotiable, but the scope is broader than a single-model bring-up.
 
 ## Current Status
 
@@ -36,4 +41,3 @@ a narrow engine, correctness-gated first, optimized for 2x Spark before any
 
 Correctness comes before speed. Every kernel and scheduling optimization should
 be gated by reproducible logits, traces, or benchmark evidence.
-
