@@ -18,4 +18,5 @@ int32_t ds4_pool_alloc_zero(ds4_pool_t *p,void **out);
 int32_t ds4_pool_free(ds4_pool_t *p,void *ptr);
 int32_t ds4_pool_free_count(ds4_pool_t *p,int32_t *out);
 int32_t ds4_pool_used_count(ds4_pool_t *p,int32_t *out);
+int32_t ds4_pool_validate(const ds4_pool_t *p);
 DS4_EXTERN_C_END

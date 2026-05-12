@@ -32,6 +32,7 @@ Notes:
 
 - The pool does not currently detect double-free; keep ownership disciplined at call sites.
 - The pool stores its free list inside the blocks themselves; a freed block’s first 4 bytes are used for internal bookkeeping.
+- For debug/unit tests, `ds4_pool_validate` can sanity-check the free list (e.g. catch double-free cycles).
 
 ## Ring Buffer (`ds4_ring_t`)
 
