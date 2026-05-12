@@ -5,8 +5,20 @@ target_note="llama.cpp Spark fork: one-token MTP draft probe (skeleton patch)"
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark}"
 LLAMA_REPO="${LLAMA_REPO:-https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git}"
-LLAMA_COMMIT="${LLAMA_COMMIT:-9222e55}"
-PATCH_FILE="${PATCH_FILE:-$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch}"
+LLAMA_COMMIT="${LLAMA_COMMIT:-94073e2}"
+if [ "${PATCH_FILE:-}" = "" ]; then
+	case "$LLAMA_COMMIT" in
+		9222e55)
+			PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch"
+			;;
+		94073e2)
+			PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-one-token-draft-probe-skeleton.patch"
+			;;
+		*)
+			PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-one-token-draft-probe-skeleton.patch"
+			;;
+	esac
+fi
 
 TRUNK_GGUF="${TRUNK_GGUF:-}"
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"

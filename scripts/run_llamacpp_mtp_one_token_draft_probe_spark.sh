@@ -22,8 +22,8 @@ elif [ -e "$repo_root/.git" ]; then
 	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
-PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch"
 HELPER_LOCAL="$repo_root/scripts/llamacpp_mtp_one_token_draft_probe_patch.sh"
+PATCH_LOCAL="${PATCH_LOCAL:-$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-one-token-draft-probe-skeleton.patch}"
 
 REPORT_MD="$OUT_DIR/llamacpp_mtp_one_token_draft_probe_spark.md"
 
@@ -56,7 +56,7 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_one_token_draft_probe_spark.md"
 	echo
 	echo "- LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark"
 	echo "- LLAMA_REPO=https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git"
-	echo "- LLAMA_COMMIT=9222e55"
+	echo "- LLAMA_COMMIT=94073e2"
 	echo "- PROMPT='Hello.'"
 	echo "- SEED=1234"
 	echo "- LOAD_SIDECAR_WEIGHTS=1 (loads sidecar tensor payloads into RAM)"
@@ -236,4 +236,3 @@ fi
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
-
