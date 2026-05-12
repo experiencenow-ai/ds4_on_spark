@@ -71,6 +71,8 @@ Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "
 - `DS4_CONFIG_PATH` (default config file path when no `path` is provided; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
 - `DS4_CONFIG` (inline config text; newline-delimited `key=value` pairs, parsed like a config file; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
 
+For programmatic introspection (no allocation), `ds4_config_env_var_count`, `ds4_config_env_var`, and `ds4_config_env_var_help` expose the supported environment variable list and one-line hints. The CLI also supports `ds4_cli --dump-config-env` and `ds4_cli --dump-config-env-help`.
+
 ## Load order helper
 
 For callers that want a single entrypoint, `ds4_config_load` applies configuration in this order:
