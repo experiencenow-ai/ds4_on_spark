@@ -171,6 +171,14 @@ If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact b
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"; fi
+sh ./scripts/centaur_spark0_v73_bundle_validate.sh "$CENTAUR_RUN_ID" "$bundle_dir"
+```
+
 Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
 
 ```bash
