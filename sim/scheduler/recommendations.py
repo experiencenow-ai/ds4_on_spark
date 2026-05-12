@@ -223,7 +223,7 @@ def run_runtime_trace_mtp_ablation(
 
 
 def _expert_queue_reserve_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -282,7 +282,7 @@ def _expert_queue_reserve_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _mtp_efficiency_sweep(quick: bool) -> Dict[str, Any]:
-    num_tokens = 6000 if quick else 25000
+    num_tokens = 1500 if quick else 25000
     trace_cfg = scheduler_sim.HotsetTraceConfig(
         num_tokens=num_tokens,
         num_experts=16,
@@ -369,7 +369,7 @@ def _mtp_efficiency_sweep(quick: bool) -> Dict[str, Any]:
 
 
 def _adaptive_k_batch_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -433,7 +433,7 @@ def _adaptive_k_batch_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _expert_batching_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 6000 if quick else 30000
+    num_tokens = 1500 if quick else 30000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -554,7 +554,7 @@ def _admit_policy_skew_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     interactive_output_tps = 500.0
     batch_output_tps = 20000.0
 
@@ -658,7 +658,7 @@ def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
 
 
 def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 6000 if quick else 30000
+    num_tokens = 1500 if quick else 30000
     interactive_output_tps = 500.0
     batch_output_tps = 20000.0
 
@@ -764,7 +764,7 @@ def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=16,
@@ -824,7 +824,7 @@ def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _batch_starvation_knobs_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -884,7 +884,7 @@ def _batch_starvation_knobs_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _backpressure_units_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -947,7 +947,7 @@ def _backpressure_units_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _k_controller_smoothing_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=16,
@@ -1013,7 +1013,7 @@ def _k_controller_smoothing_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _backpressure_zero_admit_policy_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
