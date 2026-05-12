@@ -12,6 +12,7 @@ int32_t test_cuda(void)
 	void *dev,*host;
 	int32_t dev_count,cur_dev;
 	float ms;
+	char msg0[128];
 	st0 = ds4_cuda_ok();
 	if ( ds4_cuda_is_ok(st0) == 0 )
 		return(-1);
@@ -24,6 +25,16 @@ int32_t test_cuda(void)
 	s = ds4_cuda_errstr(st1);
 	if ( s == 0 )
 		return(-4);
+	if ( ds4_cuda_status_format(st0,msg0,(int32_t)sizeof(msg0)) <= 0 || msg0[0] == 0 )
+		return(-200);
+	if ( ds4_cuda_status_format(st1,msg0,(int32_t)sizeof(msg0)) <= 0 || msg0[0] == 0 )
+		return(-201);
+	if ( ds4_cuda_status_format(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED),msg0,(int32_t)sizeof(msg0)) <= 0 || msg0[0] == 0 )
+		return(-202);
+	if ( ds4_cuda_status_format(st0,0,1) != -1 )
+		return(-203);
+	if ( ds4_cuda_status_format(st0,msg0,0) != -2 )
+		return(-204);
 	cur_dev = -2;
 	st0 = ds4_cuda_get_device(&cur_dev);
 	s = ds4_cuda_errstr(st0);
