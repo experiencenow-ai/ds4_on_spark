@@ -474,6 +474,17 @@ def main() -> None:
 
     write_summary_md(args.out_dir, meta=meta, budget=budget, rows=rows)
 
+    bundle = {
+        "schema": schema.SCHEMA_BUNDLE_V1,
+        "meta": meta,
+        "budget": budget,
+        "quality_map": {r.model: float(r.quality_score) for r in rows},
+        "leaderboard": [r.__dict__ for r in rows],
+    }
+    with open(os.path.join(args.out_dir, "bundle.json"), "w", encoding="utf-8") as f:
+        json.dump(bundle, f, indent=2, sort_keys=True)
+        f.write("\n")
+
 
 if __name__ == "__main__":
     main()
