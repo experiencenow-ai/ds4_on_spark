@@ -51,6 +51,12 @@ scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 ```
 
+- Before any acceptance or speedup claims, capture an **oracle** one-token probe JSON (for example from `antirez/ds4`, patched as needed) and diff it against the candidate probe JSON:
+
+```bash
+python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
 Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
 
 ## Gate 1: Real Quantized Generation

@@ -58,6 +58,26 @@ python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-jso
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json --sidecar-probe-json /path/to/mtp_sidecar_probe.json
 ```
 
+## Oracle diff (required before acceptance sweeps)
+
+Once you have **two** probe JSON blobs (oracle + candidate), diff them before running any acceptance/throughput experiments:
+
+```bash
+python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
+By default this requires:
+
+- `base_next_token_id` match
+- `mtp_draft_token_id` match
+- when present, the optional debug capture fingerprints match:
+  - `trunk_token_embd_*`
+  - `trunk_pre_hc_head_*`
+  - `mtp_stub_input_hc_*`
+  - `mtp_stub_head_norm_*`
+
+If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
+
 ## Spark runner (llama.cpp skeleton patch; available now)
 
 This repo ships a **gated** Spark runner that can clone/patch/build/run the current llama.cpp *skeleton* one-token probe patch (pinned to `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@9222e55`) and then validate the emitted JSON locally:

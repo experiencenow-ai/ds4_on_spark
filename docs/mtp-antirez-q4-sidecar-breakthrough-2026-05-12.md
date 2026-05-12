@@ -57,3 +57,7 @@ python3 scripts/verify_antirez_ds4_q4k_dot_math.py
 
 1) Use `antirez/ds4` (patched) as the **oracle** to export intermediate tensors/logits for a single prompt + `gamma=1` draft.
 2) Add a llama.cpp Spark/CUDA probe to emit the same intermediate tensors and diff them against the oracle before running acceptance sweeps.
+
+Practical first step: have both probes emit the same one-token JSON schema and run the strict diff tool:
+
+- `python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json`
