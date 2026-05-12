@@ -39,6 +39,13 @@ and run:
 
 This ensures all 32 `mtp.0.*` tensors exist and have readable payloads, without involving the trunk GGUF.
 
+3) (Recommended) Extract the fork’s DeepSeek4 “reuse points” with line numbers from your local checkout so the one-token MTP patch can call existing primitives (HC mix, attention path, MoE, output head) instead of re-implementing them:
+
+```bash
+LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark \
+scripts/extract_llamacpp_deepseek4_mtp_reuse_points.sh
+```
+
 ## Output contract (what to emit)
 
 The probe binary/command must emit **exactly one JSON object** to stdout matching `docs/mtp-one-token-draft-probe.md`, at minimum:
