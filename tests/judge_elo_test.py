@@ -37,6 +37,12 @@ class JudgeEloTest(unittest.TestCase):
             obj = json.load(f)
         self.assertEqual(schema.validate_prompt(obj), [])
 
+    def test_prompt_rejects_extra_keys(self) -> None:
+        msg = prompt_builder.build_messages(prompt="p", a="a", b="b", judge_out_target=64, schema_version="v2")
+        msg["extra"] = 1
+        errs = schema.validate_prompt(msg)
+        self.assertTrue(any("unexpected key in prompt" in str(e) for e in errs))
+
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
@@ -181,6 +187,27 @@ class JudgeEloTest(unittest.TestCase):
         )
         self.assertTrue(rec.get("parse_valid", False))
         self.assertEqual(rec.get("winner"), "A")
+
+    def test_decision_rejects_extra_keys(self) -> None:
+        decision = {"winner": "A", "margin": 1, "score_a": 7, "score_b": 6, "reason": "A is better.", "train_hint": "", "tags": [], "extra": 123}
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("unexpected key" in str(e) for e in errs))
+
+    def test_record_rejects_extra_keys(self) -> None:
+        decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+        rec = record_wrap.build_record(
+            pair_id="p_extra",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        rec["extra"] = 1
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("unexpected key in record" in str(e) for e in errs))
 
     def test_wrap_record_parse_invalid(self) -> None:
         rec = record_wrap.build_record(

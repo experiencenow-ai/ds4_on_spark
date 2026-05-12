@@ -6,11 +6,17 @@
   "additionalProperties": true,
   "required": [
     "schema",
+    "inputs",
     "records",
+    "parse_valid_true",
+    "parse_valid_false",
     "matches_used",
+    "matches_skipped_invalid_schema",
+    "unique_models",
     "k",
     "scale",
     "sort_by_pair_id",
+    "strict",
     "quality_mode",
     "quality_source",
     "judge_out_target_tokens"
@@ -19,6 +25,13 @@
     "schema": {
       "type": "string",
       "const": "ds4_judge_elo_meta_v1"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "records": {
       "type": "integer",
@@ -32,6 +45,18 @@
       "type": "integer",
       "minimum": 0
     },
+    "parse_valid_false": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "matches_skipped_invalid_schema": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unique_models": {
+      "type": "integer",
+      "minimum": 0
+    },
     "k": {
       "type": "number"
     },
@@ -39,6 +64,9 @@
       "type": "number"
     },
     "sort_by_pair_id": {
+      "type": "boolean"
+    },
+    "strict": {
       "type": "boolean"
     },
     "quality_mode": {
