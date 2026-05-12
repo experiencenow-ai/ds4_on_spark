@@ -83,7 +83,7 @@ def redact_user_paths(s: str) -> str:
     if not s:
         return s
     s=re.sub(r"/Users/[^/]+/","/Users/<redacted>/",s)
-    s=re.sub(r"\\b/home/[^/]+/","/home/<redacted>/",s)
+    s=re.sub(r"/home/[^/]+/","/home/<redacted>/",s)
     return s
 
 def read_json(path: str):
@@ -103,6 +103,10 @@ def read_text(path: str):
 facts=read_json(facts_path) or {}
 freeze=read_text(freeze_path)
 log=read_text(log_path)
+
+facts_present=os.path.exists(facts_path)
+freeze_present=os.path.exists(freeze_path)
+log_present=os.path.exists(log_path)
 
 zip_path=redact_user_paths(facts.get("zip_path","") or "")
 zip_sha256=facts.get("zip_sha256","") or ""
@@ -178,6 +182,10 @@ lines.append("")
 lines.append("## Bundle location (Mac)")
 lines.append("")
 lines.append(f"- `local_bundle_dir`: `{redact_user_paths(bundle_dir)}`")
+lines.append("- evidence files:")
+lines.append(f"  - `smoke.log`: {'present' if log_present else 'missing'}")
+lines.append(f"  - `smoke_facts.json`: {'present' if facts_present else 'missing'}")
+lines.append(f"  - `pip_freeze.txt`: {'present' if freeze_present else 'missing'}")
 lines.append("")
 lines.append("## Centaur package facts")
 lines.append("")
