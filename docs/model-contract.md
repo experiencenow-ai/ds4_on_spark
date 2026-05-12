@@ -163,6 +163,7 @@ Recommended DS4 comparison rule (when enabling DS4 gating):
 Machine-readable MTP gating:
 
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.namespace` (expected `mtp.{j}.*` prefixes + expected MTP layer IDs, validated against the official checkpoint index) so tooling can reason about “does this artifact preserve upstream `mtp.0.*`?” without scraping docs.
 - `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).
 - When `mtp_present==true`, `mtp_trust` reports whether `mtp_keys_sha256` matches the official MTP subset fingerprint (`contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`). For machine checks, prefer `mtp_trust.mtp_keys_sha256_match_official` (and `mtp_trust.expected_mtp_keys_sha256`) over scraping `mtp_trust.reasons[]`; machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
 

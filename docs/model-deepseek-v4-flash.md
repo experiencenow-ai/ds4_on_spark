@@ -137,7 +137,7 @@ Key JSON paths by concern:
 - Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask` (and the human summary in `cache.sparse_attn_mask_rule`; MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
 - MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
-- MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)
+- MTP artifacts + trust gates: `mtp.*` (including `mtp.namespace.*`, `mtp.semantics.*`, and `mtp.trust_gates.*`)
 - Checkpoint tensor-key invariants + counts: `tensor_keys.*` and `checkpoint_index.*` (including `checkpoint_index.weight_map_prefix_fingerprints.mtp.*` to fingerprint the upstream `mtp.0.*` namespace)
 - Quantization / scale-tensor expectations: `quantization.*` (notably `quantization.inference_config.*` and `quantization.linear_tensor_contract.*`)
 - Tokenizer + encoding invariants: `tokenizer.*` and `encoding_constants.*` (encoding oracle vectors are pinned via `upstream.fixtures_sha256.*`)

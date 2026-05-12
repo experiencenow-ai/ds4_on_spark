@@ -1151,6 +1151,21 @@ def main() -> int:
 								if not (isinstance(v, list) and all(isinstance(x, str) and x.startswith("mtp.") for x in v)):
 									failures.append(Failure(188, f"contract summary mtp.checkpoint_key_examples.{k} must be a list of mtp.* strings or null: {contract_summary}"))
 									break
+						ns = mtp.get("namespace", None)
+						if not isinstance(ns, dict):
+							failures.append(Failure(189, f"contract summary mtp.namespace must be an object when num_nextn_predict_layers>0: {contract_summary}"))
+						else:
+							want_prefixes = [f"mtp.{i}." for i in expected_layer_ids]
+							if ns.get("expected_layer_ids") != expected_layer_ids:
+								failures.append(Failure(190, f"contract summary mtp.namespace.expected_layer_ids mismatch (got {ns.get('expected_layer_ids')!r} expected {expected_layer_ids}): {contract_summary}"))
+							elif ns.get("expected_prefixes") != want_prefixes:
+								failures.append(Failure(191, f"contract summary mtp.namespace.expected_prefixes mismatch (got {ns.get('expected_prefixes')!r} expected {want_prefixes}): {contract_summary}"))
+							elif ns.get("official_present_layer_ids") != expected_layer_ids:
+								failures.append(Failure(192, f"contract summary mtp.namespace.official_present_layer_ids mismatch (got {ns.get('official_present_layer_ids')!r} expected {expected_layer_ids}): {contract_summary}"))
+							elif ns.get("official_present_prefixes") != want_prefixes:
+								failures.append(Failure(193, f"contract summary mtp.namespace.official_present_prefixes mismatch (got {ns.get('official_present_prefixes')!r} expected {want_prefixes}): {contract_summary}"))
+							elif ns.get("official_complete") is not True:
+								failures.append(Failure(194, f"contract summary mtp.namespace.official_complete must be true when num_nextn_predict_layers>0: {contract_summary}"))
 
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):
