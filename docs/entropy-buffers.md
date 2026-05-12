@@ -119,6 +119,7 @@ The scripts compute:
 - **Task-template diversity**: unique counts + entropy over `task_id|prompt_template_id` pairs (useful for spotting repeated reruns of the same task+template).
 - **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
+  - Reports both raw entropy (`*_entropy_bits`) and normalized entropy (`*_entropy_norm`) plus `*_effective_num` for easier cross-corpus comparisons.
 - **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
 - **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
@@ -126,7 +127,7 @@ The scripts compute:
   - Also reports instrumentation coverage rates: `input_tokens_present_task_run_rate`, `output_tokens_present_task_run_rate`, and `wall_ms_present_task_run_rate`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
   - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
-- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns.
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
 - **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
@@ -134,6 +135,7 @@ The scripts compute:
 - **Judge budget / stability stats** (when present): `parse_valid_rate`, `judge_in_tokens`, `judge_out_tokens`, `judge_latency_ms`, plus `judge_out_budget_le_target_rate` (default target = 64).
   - Also reports slice-join coverage rates for judge records: `task_family_nonempty_judge_pair_rate`, `prompt_template_id_nonempty_judge_pair_rate`, and `task_family_template_pair_nonempty_judge_pair_rate`.
 - **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates (summary + top repeated pairs).
+  - Includes cross-model collapse diagnostics: `task_template_model_collapse_top` flags `task_id|prompt_template_id` groups where multiple `model_id`s produced too-few unique normalized outputs.
 - **Duplicate-output concentration**: top normalized-output dup rates by `prompt_template_id`, by `task_family|prompt_template_id`, and by `buffer_item_id` to spot template-level collapse or buffer-item degeneracy.
 - **Per-model degeneracy**: top normalized-output duplicate rates and useful-novelty flagged rates by `model_id`.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).

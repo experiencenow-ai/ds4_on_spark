@@ -1,0 +1,6 @@
+{"type":"meta","meta":{"note":"Mini fixture for task-template model output collapse metrics.","schema":"entropy-buffer.v1"}}
+{"type":"task_run","task_id":"collapse.task.001","task_family":"mcq","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Pick A or B.","output":"A","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:collapse.task.001:plain.v1"}
+{"type":"task_run","task_id":"collapse.task.001","task_family":"mcq","prompt_template_id":"plain.v1","model_id":"mB","prompt":"Pick A or B.","output":"A","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:collapse.task.001:plain.v1"}
+{"type":"task_run","task_id":"collapse.task.001","task_family":"mcq","prompt_template_id":"plain.v1","model_id":"mC","prompt":"Pick A or B.","output":"A","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:collapse.task.001:plain.v1"}
+{"type":"task_run","task_id":"collapse.task.002","task_family":"mcq","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Pick A or B.","output":"A","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:collapse.task.002:plain.v1"}
+{"type":"task_run","task_id":"collapse.task.002","task_family":"mcq","prompt_template_id":"plain.v1","model_id":"mB","prompt":"Pick A or B.","output":"B","buffer_id":"entropy.v1","buffer_item_id":"entropy.v1:collapse.task.002:plain.v1"}

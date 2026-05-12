@@ -380,6 +380,31 @@ def _task_template_dup_rate_top(task_template_outputs_norm: Dict[str, List[str]]
         })
     return(out)
 
+def _task_template_model_collapse_top(task_template_outputs_norm: Dict[str, List[str]], task_template_models: Dict[str, set], task_template_family: Dict[str, str], k: int = 10) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for key, outs in task_template_outputs_norm.items():
+        models = task_template_models.get(key, set())
+        model_unique = len(models)
+        if model_unique < 2 or len(outs) == 0:
+            continue
+        out_unique = len(set(outs))
+        collapse = 0.0 if model_unique == 0 else (1.0 - (float(out_unique) / float(model_unique)))
+        if collapse <= 0.0:
+            continue
+        task_id, tmpl = _split_pair_key(key)
+        items.append({
+            "task_id_template_pair": key,
+            "task_id": task_id,
+            "task_family": task_template_family.get(key, ""),
+            "prompt_template_id": tmpl,
+            "count": len(outs),
+            "model_id_unique": model_unique,
+            "output_norm_unique": out_unique,
+            "collapse_rate": collapse,
+        })
+    items.sort(key=lambda x: (-float(x.get("collapse_rate", 0.0)), -int(x.get("model_id_unique", 0)), -int(x.get("count", 0)), str(x.get("task_id_template_pair", ""))))
+    return(items[:k])
+
 
 def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     canon: List[lib.CanonicalRecord] = []
@@ -409,6 +434,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     prompts_norm: List[str] = []
 
     task_template_outputs_norm: Dict[str, List[str]] = {}
+    task_template_models: Dict[str, set] = {}
+    task_template_family: Dict[str, str] = {}
 
     prompt_words: List[str] = []
     prompt_2grams: Dict[str, int] = {}
@@ -604,11 +631,16 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         if c.task_id != "" and c.prompt_template_id != "" and c.output != "":
             k = f"{c.task_id}|{c.prompt_template_id}"
             task_template_outputs_norm.setdefault(k, []).append(lib.normalize_text(c.output))
+            if c.model_id != "":
+                task_template_models.setdefault(k, set()).add(c.model_id)
+            if task_template_family.get(k, "") == "" and c.task_family != "":
+                task_template_family[k] = c.task_family
 
     label_counts: Dict[str, int] = {}
     item_labels: Dict[str, List[str]] = {}
     item_labels_decided_ab: Dict[str, List[str]] = {}
     item_judge_ids: Dict[str, Dict[str, int]] = {}
+    item_pair_key: Dict[str, str] = {}
     judge_id_counts: Dict[str, int] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
     tmpl_label_counts: Dict[str, Dict[str, int]] = {}
@@ -657,6 +689,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         item = c.item_id
         if item == "":
             item = lib.make_item_id(c.task_id, c.prompt_template_id, c.a_model_id, c.b_model_id)
+        if item != "" and c.a_model_id != "" and c.b_model_id != "":
+            item_pair_key[item] = f"{c.a_model_id}|{c.b_model_id}"
         item_labels.setdefault(item, []).append(c.label)
         if item != "" and c.judge_id != "":
             item_judge_ids.setdefault(item, {})
@@ -733,6 +767,30 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     item_disagreement_top.sort(key=lambda x: (-float(x.get("disagreement_rate", 0.0)), -int(x.get("count", 0)), str(x.get("item_id", ""))))
     item_disagreement_top = item_disagreement_top[:20]
 
+    pair_item_disagreements: Dict[str, List[float]] = {}
+    pair_item_disagreements_ab: Dict[str, List[float]] = {}
+    for item_id, labs in item_labels.items():
+        if len(labs) < 2:
+            continue
+        pair_key = item_pair_key.get(item_id, "")
+        if pair_key == "":
+            continue
+        pair_item_disagreements.setdefault(pair_key, []).append(_majority_disagreement(labs))
+        labs_ab = item_labels_decided_ab.get(item_id, [])
+        if len(labs_ab) >= 2:
+            pair_item_disagreements_ab.setdefault(pair_key, []).append(_majority_disagreement(labs_ab))
+
+    pair_disagree_summary: Dict[str, Dict[str, Any]] = {}
+    for pair_key, ds in pair_item_disagreements.items():
+        mean_all = 0.0 if len(ds) == 0 else (sum(ds) / float(len(ds)))
+        ds_ab = pair_item_disagreements_ab.get(pair_key, [])
+        mean_ab = 0.0 if len(ds_ab) == 0 else (sum(ds_ab) / float(len(ds_ab)))
+        pair_disagree_summary[pair_key] = {
+            "pair_item_count": len(ds),
+            "disagreement_rate": mean_all,
+            "disagreement_rate_decided_ab": mean_ab,
+        }
+
     reuse_count = sum(1 for v in buffer_items.values() if v >= 2)
     reuse_events = sum(max(0, v - 1) for v in buffer_items.values())
     totals = {
@@ -797,42 +855,58 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "prompt_distinct_1": _distinct_ratio(prompt_word_counts),
         "prompt_top_word_frac": 0.0 if len(prompt_words) == 0 else (float(max(prompt_word_counts.values())) / float(len(prompt_words))),
         "prompt_word_entropy_bits": lib.shannon_entropy(prompt_word_counts),
+        "prompt_word_entropy_norm": _entropy_norm_bits(prompt_word_counts),
+        "prompt_word_effective_num": _effective_num(prompt_word_counts),
         "prompt_word_top": lib.top_counts(prompt_word_counts),
         "prompt_2gram_total": prompt_2gram_total,
         "prompt_2gram_unique": len(prompt_2grams),
         "prompt_distinct_2": _distinct_ratio(prompt_2grams),
         "prompt_2gram_entropy_bits": lib.shannon_entropy(prompt_2grams),
+        "prompt_2gram_entropy_norm": _entropy_norm_bits(prompt_2grams),
+        "prompt_2gram_effective_num": _effective_num(prompt_2grams),
         "prompt_2gram_top": lib.top_counts(prompt_2grams),
         "prompt_3gram_total": prompt_3gram_total,
         "prompt_3gram_unique": len(prompt_3grams),
         "prompt_distinct_3": _distinct_ratio(prompt_3grams),
         "prompt_3gram_entropy_bits": lib.shannon_entropy(prompt_3grams),
+        "prompt_3gram_entropy_norm": _entropy_norm_bits(prompt_3grams),
+        "prompt_3gram_effective_num": _effective_num(prompt_3grams),
         "prompt_3gram_top": lib.top_counts(prompt_3grams),
         "prompt_char_3gram_total": prompt_char3_total,
         "prompt_char_3gram_unique": len(prompt_char3),
         "prompt_char_distinct_3": _distinct_ratio(prompt_char3),
         "prompt_char_3gram_entropy_bits": lib.shannon_entropy(prompt_char3),
+        "prompt_char_3gram_entropy_norm": _entropy_norm_bits(prompt_char3),
+        "prompt_char_3gram_effective_num": _effective_num(prompt_char3),
         "prompt_char_3gram_top": lib.top_counts(prompt_char3),
         "output_words_total": len(out_words),
         "output_words_unique": len(word_counts),
         "output_distinct_1": _distinct_ratio(word_counts),
         "output_top_word_frac": 0.0 if len(out_words) == 0 else (float(max(word_counts.values())) / float(len(out_words))),
         "output_word_entropy_bits": lib.shannon_entropy(word_counts),
+        "output_word_entropy_norm": _entropy_norm_bits(word_counts),
+        "output_word_effective_num": _effective_num(word_counts),
         "output_word_top": lib.top_counts(word_counts),
         "output_2gram_total": out_2gram_total,
         "output_2gram_unique": len(out_2grams),
         "output_distinct_2": _distinct_ratio(out_2grams),
         "output_2gram_entropy_bits": lib.shannon_entropy(out_2grams),
+        "output_2gram_entropy_norm": _entropy_norm_bits(out_2grams),
+        "output_2gram_effective_num": _effective_num(out_2grams),
         "output_2gram_top": lib.top_counts(out_2grams),
         "output_3gram_total": out_3gram_total,
         "output_3gram_unique": len(out_3grams),
         "output_distinct_3": _distinct_ratio(out_3grams),
         "output_3gram_entropy_bits": lib.shannon_entropy(out_3grams),
+        "output_3gram_entropy_norm": _entropy_norm_bits(out_3grams),
+        "output_3gram_effective_num": _effective_num(out_3grams),
         "output_3gram_top": lib.top_counts(out_3grams),
         "output_char_3gram_total": out_char3_total,
         "output_char_3gram_unique": len(out_char3),
         "output_char_distinct_3": _distinct_ratio(out_char3),
         "output_char_3gram_entropy_bits": lib.shannon_entropy(out_char3),
+        "output_char_3gram_entropy_norm": _entropy_norm_bits(out_char3),
+        "output_char_3gram_effective_num": _effective_num(out_char3),
         "output_char_3gram_top": lib.top_counts(out_char3),
     }
 
@@ -852,6 +926,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "task_template_output_norm_dup_rate_mean": 0.0 if len(task_template_dup_rates) == 0 else (sum(task_template_dup_rates) / float(len(task_template_dup_rates))),
         "task_template_output_norm_dup_rate_max": 0.0 if len(task_template_dup_rates) == 0 else max(task_template_dup_rates),
         "task_template_output_norm_dup_rate_top": _task_template_dup_rate_top(task_template_outputs_norm, k=20),
+        "task_template_model_collapse_top": _task_template_model_collapse_top(task_template_outputs_norm, task_template_models, task_template_family, k=20),
     })
 
     pair_summary: Dict[str, Any] = {}
@@ -861,6 +936,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             "label_counts": dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))),
             "label_entropy_bits": lib.shannon_entropy(counts),
         }
+        if pair_key in pair_disagree_summary:
+            pair_summary[pair_key].update(pair_disagree_summary[pair_key])
 
     wins_a = label_counts.get("a", 0)
     wins_b = label_counts.get("b", 0)
@@ -886,6 +963,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             "decided_count_ab": decided_p,
             "label_balance_ab": bal_p,
             "label_imbalance_ab": imb_p,
+            "pair_item_count": js.get("pair_item_count", 0),
+            "disagreement_rate": js.get("disagreement_rate", 0.0),
+            "disagreement_rate_decided_ab": js.get("disagreement_rate_decided_ab", 0.0),
         })
     model_pair_top.sort(key=lambda x: (-int(x.get("count", 0)), str(x.get("pair_key", ""))))
     model_pair_top = model_pair_top[:20]
@@ -1039,11 +1119,14 @@ def _md_model_pair_top(items: Sequence[Dict[str, Any]], k: int = 10) -> str:
     for js in list(items)[:k]:
         pair = str(js.get("pair_key", ""))
         count = int(js.get("count", 0))
+        pair_items = int(js.get("pair_item_count", 0) or 0)
         decided_ab = int(js.get("decided_count_ab", 0))
         bal = float(js.get("label_balance_ab", 0.0))
         imb = float(js.get("label_imbalance_ab", 0.0))
+        dis = float(js.get("disagreement_rate", 0.0))
+        dis_ab = float(js.get("disagreement_rate_decided_ab", 0.0))
         counts = js.get("label_counts") or {}
-        lines.append(f"- `{pair}`: count={count} decided_ab={decided_ab} balance_ab={bal:.6f} imbalance_ab={imb:.6f} labels={counts}")
+        lines.append(f"- `{pair}`: count={count} pair_items={pair_items} decided_ab={decided_ab} balance_ab={bal:.6f} imbalance_ab={imb:.6f} disagree={dis:.6f} disagree_ab={dis_ab:.6f} labels={counts}")
     return("\n".join(lines))
 
 def _md_item_disagreement_top(items: Sequence[Dict[str, Any]], k: int = 10) -> str:
@@ -1194,6 +1277,9 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### task_template_output_norm_dup_rate_top\n")
     for js in report.duplicates.get("task_template_output_norm_dup_rate_top", [])[:10]:
         parts.append(f"- `{js.get('task_id')}` `{js.get('prompt_template_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### task_template_model_collapse_top\n")
+    for js in report.duplicates.get("task_template_model_collapse_top", [])[:10]:
+        parts.append(f"- `{js.get('task_id')}` `{js.get('prompt_template_id')}`: collapse_rate={float(js.get('collapse_rate', 0.0)):.6f} models={int(js.get('model_id_unique', 0) or 0)} output_unique={int(js.get('output_norm_unique', 0) or 0)} count={int(js.get('count', 0) or 0)} family={js.get('task_family')}")
     parts.append("\n### output_norm_dup_rate_by_model_id_top\n")
     for js in report.duplicates.get("output_norm_dup_rate_by_model_id_top", [])[:10]:
         parts.append(f"- `{js.get('model_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
