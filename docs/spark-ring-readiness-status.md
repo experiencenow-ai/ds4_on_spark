@@ -14,6 +14,16 @@ Status as of `2026-05-12T1502Z` (UTC).
   - `docs/spark-ring-node-facts-spark1.local-2026-05-12T1502Z.md`
   - `docs/spark-ring-node-facts-spark2.local-2026-05-12T1502Z.md`
 
+## Latest smoke verification (non-committed)
+
+As of `2026-05-12T1532Z` (UTC), the Spark0 facts-only probe still runs cleanly and reports the same core CUDA/toolchain facts (GB10, `compute_cap=12.1`, `nvcc 13.0.88`, driver `580.142`). No new snapshot docs were committed to avoid churn.
+
+Command run (commit-safe output, not committed):
+
+```bash
+DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
+```
+
 ## Ring readiness matrix
 
 | Item | Spark0 (`aitopatom-9ab9.local`) | Spark1 (`spark1.local`) | Spark2 (`spark2.local`) |
