@@ -107,7 +107,15 @@ echo "model_source=$MODEL_SOURCE"
 echo "model_quant=$MODEL_QUANT"
 ls -lh "$MODEL_GGUF" || true
 wc -c "$MODEL_GGUF" || true
-command -v sha256sum >/dev/null 2>&1 && sha256sum "$MODEL_GGUF" || true
+MODEL_SHA256=""
+MODEL_SHA256_LINE=""
+if command -v sha256sum >/dev/null 2>&1; then
+    MODEL_SHA256_LINE="$(sha256sum "$MODEL_GGUF" 2>/dev/null || true)"
+    if [ "$MODEL_SHA256_LINE" != "" ]; then
+        echo "$MODEL_SHA256_LINE"
+        MODEL_SHA256="$(printf %s "$MODEL_SHA256_LINE" | awk '{print $1}' || true)"
+    fi
+fi
 echo
 
 LOG_RAW="$OUT_DIR/llama_cli.log"
@@ -118,10 +126,10 @@ echo "runtime_label=$RUNTIME_LABEL"
 echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS <timings-flags> $EXTRA_ARGS"
 echo
 
-python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT"
+python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$MODEL_SHA256"
 import json, os, resource, re, subprocess, sys, time, shlex
 
-llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant = sys.argv[1:]
+llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, model_sha256 = sys.argv[1:]
 
 help_text = ""
 try:
@@ -393,9 +401,16 @@ for tl in timings_lines:
 
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
+summary_lines.append("llama_cli=%s" % llama_cli)
 summary_lines.append("runtime_label=%s" % runtime_label)
 summary_lines.append("model_source=%s" % model_source)
 summary_lines.append("model_quant=%s" % model_quant)
+summary_lines.append("model_gguf=%s" % model)
+if model_sha256:
+    summary_lines.append("model_sha256=%s" % model_sha256)
+summary_lines.append("ctx=%s" % ctx)
+summary_lines.append("n_tokens=%s" % n_tokens)
+summary_lines.append("n_gpu_layers=%s" % ngl)
 try:
     summary_lines.append("model_size_bytes=%d" % int(os.path.getsize(model)))
 except OSError:
