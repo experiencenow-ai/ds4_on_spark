@@ -56,3 +56,5 @@ The run's low generation rate is not meaningful yet because it includes first-us
 3. Compare MTP intermediate tensors against a CPU or llama.cpp reference for `e_proj`, `h_proj`, MTP attention, routed MoE, and head logits.
 4. Once first-token draft agreement is plausible, run an acceptance sweep with `--mtp-draft 2`, strict verifier enabled, and fixed prompts.
 5. Only after correctness is established, replace the scalar `Q4_K` fallback with a q8-activation/tiled path.
+
+See also: `docs/antirez-patches/ds4-cuda-multi-model-range-key.patch` (cache keying by `(model_map, offset)` as a minimal step toward a real multi-model cache).

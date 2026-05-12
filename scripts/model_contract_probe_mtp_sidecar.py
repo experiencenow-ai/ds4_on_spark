@@ -2,6 +2,7 @@
 
 import io
 import json
+import base64
 import struct
 import sys
 from argparse import ArgumentParser
@@ -472,6 +473,11 @@ def main() -> int:
 		default=0,
 		help="When >0, attempt to range-read/sample this many bytes from the start of each tensor payload (never downloads full weights).",
 	)
+	parser.add_argument(
+		"--payload-sample-include-bytes",
+		action="store_true",
+		help="When set with --json and --payload-sample-bytes, include base64-encoded payload sample bytes in the JSON output (can be large).",
+	)
 	parser.add_argument("--max-bytes", type=int, default=(16 * 1024 * 1024), help="Max bytes to fetch when using --url (default: 16777216).")
 	parser.add_argument("--timeout-s", type=int, default=20, help="HTTP timeout seconds for --url (default: 20).")
 	parser.add_argument(
@@ -815,7 +821,10 @@ def main() -> int:
 					if len(b) != want:
 						errors.append(f"payload sample short read for {t.name}: got {len(b)} bytes, expected {want}")
 						continue
-					out["payload_samples"][t.name] = {"offset": abs_off, "n": want, "fnv1a64": sample_hash_fnv1a64(b)}
+					entry: dict[str, Any] = {"offset": abs_off, "n": want, "fnv1a64": sample_hash_fnv1a64(b)}
+					if args.payload_sample_include_bytes:
+						entry["bytes_b64"] = base64.b64encode(b).decode("ascii")
+					out["payload_samples"][t.name] = entry
 		else:
 			url = str(args.url)
 			timeout_s = int(args.timeout_s)
@@ -830,7 +839,10 @@ def main() -> int:
 				if len(b) != want:
 					errors.append(f"payload sample short fetch for {t.name}: got {len(b)} bytes, expected {want}")
 					continue
-				out["payload_samples"][t.name] = {"offset": abs_off, "n": want, "fnv1a64": sample_hash_fnv1a64(b)}
+				entry = {"offset": abs_off, "n": want, "fnv1a64": sample_hash_fnv1a64(b)}
+				if args.payload_sample_include_bytes:
+					entry["bytes_b64"] = base64.b64encode(b).decode("ascii")
+				out["payload_samples"][t.name] = entry
 
 	out["ok"] = (len(errors) == 0)
 	out["errors"] = errors
