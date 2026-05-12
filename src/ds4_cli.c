@@ -403,7 +403,7 @@ int main(int argc,char **argv)
 			return(0);
 		}
 		ds4_cli_usage(stderr,argv != 0 ? argv[0] : 0);
-			return(2);
+		return(2);
 	}
 	if ( dump_keys != 0 )
 	{
