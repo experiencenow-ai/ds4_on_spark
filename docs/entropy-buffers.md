@@ -131,7 +131,7 @@ The scripts compute:
 - **Judge budget / stability stats** (when present): `parse_valid_rate`, `judge_in_tokens`, `judge_out_tokens`, `judge_latency_ms`, plus `judge_out_budget_le_target_rate` (default target = 64).
   - Also reports slice-join coverage rates for judge records: `task_family_nonempty_judge_pair_rate`, `prompt_template_id_nonempty_judge_pair_rate`, and `task_family_template_pair_nonempty_judge_pair_rate`.
 - **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates (summary + top repeated pairs).
-- **Duplicate-output concentration**: top normalized-output dup rates by `prompt_template_id` and by `task_family|prompt_template_id` to spot template-level collapse.
+- **Duplicate-output concentration**: top normalized-output dup rates by `prompt_template_id`, by `task_family|prompt_template_id`, and by `buffer_item_id` to spot template-level collapse or buffer-item degeneracy.
 - **Per-model degeneracy**: top normalized-output duplicate rates and useful-novelty flagged rates by `model_id`.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
   - Also reports logging coverage rates (`buffer_id_nonempty_task_run_rate`, `buffer_item_id_nonempty_task_run_rate`) plus `buffer_id` concentration (`buffer_id_hhi`, `buffer_id_entropy_bits`, `buffer_id_top`).

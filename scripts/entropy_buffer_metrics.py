@@ -460,6 +460,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     model_out_total: Dict[str, int] = {}
     model_out_uniq: Dict[str, int] = {}
     model_out_seen: Dict[str, set] = {}
+    buffer_item_out_total: Dict[str, int] = {}
+    buffer_item_out_uniq: Dict[str, int] = {}
+    buffer_item_out_seen: Dict[str, set] = {}
 
     for c in task_runs:
         tmpl = c.prompt_template_id
@@ -567,6 +570,13 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 if out_h not in model_out_seen[mid]:
                     model_out_seen[mid].add(out_h)
                     model_out_uniq[mid] = model_out_uniq.get(mid, 0) + 1
+            if c.buffer_item_id != "":
+                bi = c.buffer_item_id
+                buffer_item_out_total[bi] = buffer_item_out_total.get(bi, 0) + 1
+                buffer_item_out_seen.setdefault(bi, set())
+                if out_h not in buffer_item_out_seen[bi]:
+                    buffer_item_out_seen[bi].add(out_h)
+                    buffer_item_out_uniq[bi] = buffer_item_out_uniq.get(bi, 0) + 1
         if c.prompt != "":
             prompts_norm.append(lib.normalize_text(c.prompt))
             ws = lib.words(c.prompt)
@@ -981,6 +991,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "output_norm_dup_rate_by_prompt_template_id_top": _dup_rate_top(template_out_total, template_out_uniq, "prompt_template_id", k=10),
         "output_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_out_total, pair_out_uniq, "task_family_template_pair", k=10),
         "output_norm_dup_rate_by_model_id_top": _dup_rate_top(model_out_total, model_out_uniq, "model_id", k=10),
+        "output_norm_dup_rate_by_buffer_item_id_top": _dup_rate_top(buffer_item_out_total, buffer_item_out_uniq, "buffer_item_id", k=10),
     })
 
     return(MetricsReport(
@@ -1164,6 +1175,9 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### output_norm_dup_rate_by_model_id_top\n")
     for js in report.duplicates.get("output_norm_dup_rate_by_model_id_top", [])[:10]:
         parts.append(f"- `{js.get('model_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### output_norm_dup_rate_by_buffer_item_id_top\n")
+    for js in report.duplicates.get("output_norm_dup_rate_by_buffer_item_id_top", [])[:10]:
+        parts.append(f"- `{js.get('buffer_item_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
