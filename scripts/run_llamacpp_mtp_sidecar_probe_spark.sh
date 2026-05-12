@@ -179,6 +179,12 @@ if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
     fi
   done
 fi
+case \"${MTP_SIDECAR_GGUF:-}\" in
+  http://*|https://*)
+    echo \"run skipped: MTP_SIDECAR_GGUF is a URL; llama.cpp loader probe requires a readable local file (stage it on Spark and pass a path)\" 1>&2
+    exit 0
+    ;;
+esac
 PATCH_FILE=\"/tmp/llamacpp_mtp_sidecar_probe.patch\"
 export PATCH_FILE
 /tmp/llamacpp_mtp_sidecar_probe_patch.sh
