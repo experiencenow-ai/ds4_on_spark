@@ -341,6 +341,42 @@ def _div_stats(counts: Dict[str, int]) -> Dict[str, Any]:
         "top": lib.top_counts(counts),
     })
 
+def _variation_top(by_group: Dict[str, Dict[str, int]], key_name: str, min_count: int = 2, k: int = 10) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    ent_norms: List[float] = []
+    uniqs: List[int] = []
+    for key, counts in by_group.items():
+        if key == "" or counts is None:
+            continue
+        total = int(sum(counts.values()))
+        if total < int(min_count):
+            continue
+        ent_bits = lib.shannon_entropy(counts)
+        ent_norm = _entropy_norm_bits(counts)
+        uniq = len(counts)
+        items.append({
+            key_name: key,
+            "count": total,
+            "unique": uniq,
+            "entropy_bits": ent_bits,
+            "entropy_norm": ent_norm,
+            "effective_num": _effective_num(counts),
+            "hhi": _hhi(counts),
+            "top": lib.top_counts(counts, k=5),
+        })
+        ent_norms.append(float(ent_norm))
+        uniqs.append(int(uniq))
+    items.sort(key=lambda x: (-float(x.get("entropy_norm", 0.0)), -int(x.get("count", 0) or 0), str(x.get(key_name, ""))))
+    return({
+        "min_count": int(min_count),
+        "groups_ge_min_count": len(items),
+        "entropy_norm_mean": 0.0 if len(ent_norms) == 0 else (sum(ent_norms) / float(len(ent_norms))),
+        "entropy_norm_max": 0.0 if len(ent_norms) == 0 else float(max(ent_norms)),
+        "unique_mean": 0.0 if len(uniqs) == 0 else (float(sum(uniqs)) / float(len(uniqs))),
+        "unique_max": 0 if len(uniqs) == 0 else int(max(uniqs)),
+        "top": items[:k],
+    })
+
 def _safe_log2(x: int) -> float:
     if x <= 1:
         return(0.0)
@@ -627,6 +663,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     task_template_outputs_norm: Dict[str, List[str]] = {}
     task_template_models: Dict[str, set] = {}
     task_template_family: Dict[str, str] = {}
+    task_template_answer_letter_counts: Dict[str, Dict[str, int]] = {}
 
     prompt_words: List[str] = []
     prompt_2grams: Dict[str, int] = {}
@@ -718,14 +755,19 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         _inc(template_counts, c.prompt_template_id)
         if c.task_family != "" and c.prompt_template_id != "":
             _inc(family_template_counts, f"{c.task_family}|{c.prompt_template_id}")
+        task_template_k = ""
         if c.task_id != "" and c.prompt_template_id != "":
-            _inc(task_template_counts, f"{c.task_id}|{c.prompt_template_id}")
+            task_template_k = f"{c.task_id}|{c.prompt_template_id}"
+            _inc(task_template_counts, task_template_k)
         _inc(model_counts, c.model_id)
         _inc(answers, c.answer)
         letter = lib.answer_letter(c.answer)
         if letter != "":
             _inc(answer_letters, letter)
             answer_letters_nonempty += 1
+            if task_template_k != "":
+                task_template_answer_letter_counts.setdefault(task_template_k, {})
+                _inc(task_template_answer_letter_counts[task_template_k], letter)
         if c.prompt_template_id != "" and c.model_id != "":
             _inc(template_model_counts, f"{c.prompt_template_id}|{c.model_id}")
         if c.task_family != "" and c.model_id != "":
@@ -1180,6 +1222,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             "nonempty_task_run_rate": 0.0 if len(task_runs) == 0 else (float(answer_letters_nonempty) / float(len(task_runs))),
             "hhi": _hhi(answer_letters),
         }),
+        "letter_variation_by_task_id_template_pair": _variation_top(task_template_answer_letter_counts, "task_id_template_pair", min_count=2, k=20),
     })
     diversity["answer"] = ans
     diversity["conditional"] = {
@@ -1657,6 +1700,24 @@ def to_markdown(report: MetricsReport) -> str:
                     else:
                         parts.append(f"- `{k}`: {v}")
                 parts.append(_md_list_top(letter.get("top", [])))
+            var = js.get("letter_variation_by_task_id_template_pair")
+            if isinstance(var, dict) and len(var) != 0:
+                parts.append("\n#### answer.letter_variation_by_task_id_template_pair\n")
+                parts.append(f"- `min_count`: {int(var.get('min_count', 0) or 0)}")
+                parts.append(f"- `groups_ge_min_count`: {int(var.get('groups_ge_min_count', 0) or 0)}")
+                parts.append(f"- `entropy_norm_mean`: {float(var.get('entropy_norm_mean', 0.0) or 0.0):.6f}")
+                parts.append(f"- `entropy_norm_max`: {float(var.get('entropy_norm_max', 0.0) or 0.0):.6f}")
+                parts.append(f"- `unique_mean`: {float(var.get('unique_mean', 0.0) or 0.0):.6f}")
+                parts.append(f"- `unique_max`: {int(var.get('unique_max', 0) or 0)}")
+                for js2 in (var.get("top") or [])[:10]:
+                    key = str(js2.get("task_id_template_pair", ""))
+                    if key == "":
+                        continue
+                    cnt = int(js2.get("count", 0) or 0)
+                    uniq = int(js2.get("unique", 0) or 0)
+                    ent = float(js2.get("entropy_norm", 0.0) or 0.0)
+                    tops = js2.get("top") or []
+                    parts.append(f"- `{key}`: count={cnt} unique={uniq} entropy_norm={ent:.6f} top={tops}")
     cond = report.diversity.get("conditional") or {}
     if isinstance(cond, dict) and len(cond) != 0:
         parts.append("\n### conditional\n")

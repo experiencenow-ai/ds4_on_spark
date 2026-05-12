@@ -206,6 +206,24 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(float(letter.get("effective_num", 0.0)), 3.0, places=6)
         self.assertAlmostEqual(float(letter.get("hhi", 0.0)), (1.0 / 3.0), places=6)
 
+    def test_answer_letter_variation_by_task_template_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_answer_letter_variation_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        ans = report.diversity.get("answer") or {}
+        var = ans.get("letter_variation_by_task_id_template_pair") or {}
+        self.assertEqual(int(var.get("min_count", 0) or 0), 2)
+        self.assertEqual(int(var.get("groups_ge_min_count", 0) or 0), 2)
+        self.assertAlmostEqual(float(var.get("entropy_norm_max", 0.0) or 0.0), 0.9182958340544896, places=6)
+        self.assertAlmostEqual(float(var.get("entropy_norm_mean", 0.0) or 0.0), 0.4591479170272448, places=6)
+        self.assertEqual(int(var.get("unique_max", 0) or 0), 2)
+
+        top = var.get("top") or []
+        self.assertGreaterEqual(len(top), 1)
+        self.assertEqual(top[0].get("task_id_template_pair"), "mcq.1|mcq.v1")
+
     def test_token_slice_entropy_lists_exist(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_token_slices_mini.jsonl")
