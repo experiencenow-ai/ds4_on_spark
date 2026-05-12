@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_judge_elo_budget_v1",
+  "description": "Token/latency/parse-validity budgeting summary emitted by scripts/judge_elo_update.py.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "records",
+    "parse_valid_true",
+    "parse_valid_false",
+    "tokens",
+    "latency_ms",
+    "judge_out_budget"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "ds4_judge_elo_budget_v1"
+    },
+    "records": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parse_valid_true": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parse_valid_false": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens": {
+      "type": "object"
+    },
+    "latency_ms": {
+      "type": "object"
+    },
+    "judge_out_budget": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "target_tokens",
+        "count_with_tokens",
+        "count_le_target",
+        "fraction_le_target"
+      ],
+      "properties": {
+        "target_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "count_with_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "count_le_target": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fraction_le_target": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    }
+  }
+}

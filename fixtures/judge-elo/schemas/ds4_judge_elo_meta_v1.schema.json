@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_judge_elo_meta_v1",
+  "description": "Metadata summary emitted by scripts/judge_elo_update.py (strict constraints live in the python implementation).",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "records",
+    "matches_used",
+    "k",
+    "scale",
+    "sort_by_pair_id",
+    "quality_mode",
+    "quality_source",
+    "judge_out_target_tokens"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "ds4_judge_elo_meta_v1"
+    },
+    "records": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "matches_used": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parse_valid_true": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "k": {
+      "type": "number"
+    },
+    "scale": {
+      "type": "number"
+    },
+    "sort_by_pair_id": {
+      "type": "boolean"
+    },
+    "quality_mode": {
+      "type": "string",
+      "enum": [
+        "logistic",
+        "minmax"
+      ]
+    },
+    "quality_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "judge_out_target_tokens": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}
