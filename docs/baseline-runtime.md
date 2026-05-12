@@ -17,6 +17,10 @@ This baseline track is designed to capture **exact command lines**, **model arti
 - memory usage (CPU RSS + GPU memory snapshot)
 - failure modes (exact stderr / return codes)
 
+For llama.cpp-style runs, the Spark-side benchmark script also records the `llama_print_timings` wall-clock breakdown (when the runtime supports timings flags) into the baseline summary key/value block:
+
+- `load_time_s`, `sample_time_s`, `prompt_eval_s`, `eval_time_s`, `total_time_s`
+
 For multi-model comparisons (Ling/Qwen/DFlash/etc), add a quality axis before
 interpreting speed. See `docs/model-quality-speed.md` and run
 `scripts/model_quality_speed_score.py` on the aggregated CSV.
