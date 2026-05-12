@@ -107,7 +107,7 @@ Use a strict system instruction:
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
-To reduce judge output tokens further, use `--decision-version v2` to request the compact-key decision object (`w,m,sa,sb,r,h,t`) and let the offline tools canonicalize it.
+By default it uses `--decision-version v2` to request the compact-key decision object (`w,m,sa,sb,r,h,t`) and let the offline tools canonicalize it; use `--decision-version v1` to request verbose keys.
 For lower judge **input** token overhead, use `--schema-version v2` (default; it avoids embedding the JSON shape in the user message).
 Prompt schema v2 also includes the strict margin/score consistency + `tags<=3` constraints in the system message to reduce `parse_valid=false` rates under strict validation.
 For harnesses, use `--format json` to emit a single JSON object with `{system,user}` fields.
