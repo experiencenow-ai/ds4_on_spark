@@ -38,6 +38,18 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(j.rtype, "judge_pair")
         self.assertEqual(j.judge_id, "judge.vX")
 
+    def test_answer_extraction_accepts_answer_is_variants(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_answer_is_mini.jsonl")
+        records = lib.load_jsonl([path])
+        canon = [lib.canonicalize_record(x) for x in records]
+        self.assertEqual(canon[0].answer, "B")
+        self.assertEqual(canon[0].answer_source, "extract")
+        self.assertEqual(canon[1].answer, "42")
+        self.assertEqual(canon[1].answer_source, "extract")
+        self.assertEqual(canon[2].answer, "")
+        self.assertEqual(canon[2].answer_source, "missing")
+
     def test_metrics_from_mini_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")

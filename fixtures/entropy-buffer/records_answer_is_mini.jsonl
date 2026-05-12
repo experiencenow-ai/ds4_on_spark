@@ -1,0 +1,3 @@
+{"type":"task_run","run_id":"hist.answer_is.mini","task_id":"mcq.answer_is.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q1","output":"The answer is B."}
+{"type":"task_run","run_id":"hist.answer_is.mini","task_id":"math.answer_is.001","task_family":"math","prompt_template_id":"plain.v1","model_id":"mX","prompt":"Add 40+2.","output":"Answer is 42."}
+{"type":"task_run","run_id":"hist.answer_is.mini","task_id":"mcq.no_extract.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"mX","prompt":"Q2","output":"Option B is wrong; option C is right."}

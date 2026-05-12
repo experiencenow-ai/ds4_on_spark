@@ -15,7 +15,9 @@ _WORD_RE = re.compile(r"[A-Za-z0-9]+")
 _WS_RE = re.compile(r"\s+")
 _ANSWER_NUMERIC_RE = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*$")
 _ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*[\(\[]?([A-Z])[\)\].]?\s*$")
-_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
+_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
+_ANSWER_IS_LETTER_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s+is\s+[\(\[]?([A-Z])[\)\].]?\b")
+_ANSWER_IS_NUMERIC_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s+is\s+(-?\d+(?:\.\d+)?)\b")
 
 
 @dataclass
@@ -117,9 +119,15 @@ def extract_answer(text: str) -> str:
     if m is not None:
         return(m.group(1).upper())
     m = _ANSWER_MARKED_RE.search(text)
-    if m is None:
-        return("")
-    return(m.group(1).upper())
+    if m is not None:
+        return(m.group(1).upper())
+    m = _ANSWER_IS_LETTER_RE.search(text)
+    if m is not None:
+        return(m.group(1).upper())
+    m = _ANSWER_IS_NUMERIC_RE.search(text)
+    if m is not None:
+        return(m.group(1))
+    return("")
 
 
 def make_item_id(task_id: str, prompt_template_id: str, a_model_id: str, b_model_id: str) -> str:
