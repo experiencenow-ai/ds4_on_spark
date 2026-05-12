@@ -24,11 +24,19 @@ before the native FP4/FP8 loader and dual-Spark TP path are complete.
 
 If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven MTP path), add an explicit correctness gate *before* any acceptance/perf claims:
 
-- Validate the staged MTP sidecar contract (Spark-safe; header + tensor table only; no trunk load):
+- Validate the staged MTP sidecar **contract** (Spark-safe; header + tensor table only; no trunk load):
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
+```
+
+- Recommended stronger gate (still no trunk load): run the combined **contract + loader** probe. This validates the 32 `mtp.0.*` tensors twice (Python contract probe + llama.cpp-side probe binary) and cross-checks the JSON inventories. The output directory includes a machine-readable `summary.json`.
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 ```
 
 - Only after the sidecar contract passes, run the llama.cpp **one-token** MTP wiring probe (gamma=1) runner (still gated; see `docs/mtp-one-token-draft-probe.md`):
