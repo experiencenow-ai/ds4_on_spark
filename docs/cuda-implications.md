@@ -12,6 +12,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
   - `cuda drv=13000 rt=13000` (CUDA 13.0 driver/runtime ABI)
   - `mp=48`, `l2=25165824` (24 MiB), `mem=128518373376` (~119.7 GiB), `clock_khz=2418000`, `mem_clock_khz=8533000`
   - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `smem_reserved_block=1024`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`, `mem_pools=1`, `tma_map=1`
+  - If Spark0’s GPU is busy/unavailable or VRAM is fully allocated, the script treats the “run” portion as best-effort and can skip those runs; the schema line still prints (with `cuda_arch=0` when the optional arch capture can’t run).
   - If any `cudaDeviceGetAttribute` query is unavailable (or CUDA headers are too old to define a given driver-attribute enum constant), the one-line schema uses `-1` for that field (to avoid silently reporting `0`).
 - CMake build-system baseline (2026-05-12, via `scripts/cuda_probe_cmake_minimal_spark0.sh`): `cmake version 3.28.3`; C++ host compiler `GNU 13.3.0`; `nvcc` CUDA 13.0 `V13.0.88`; all tested `CMAKE_CUDA_ARCHITECTURES` cases build and run (`__CUDA_ARCH__=1210`), and the verbose logs show:
   - `CMAKE_CUDA_ARCHITECTURES="121"`: `--generate-code=arch=compute_121,code=[compute_121,sm_121]` (PTX + SASS)

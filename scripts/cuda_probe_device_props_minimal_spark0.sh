@@ -161,18 +161,16 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
-	rc = ck(cudaMalloc((void **)&d_arch,sizeof(uint32_t)),-3,\"cudaMalloc(d_arch)\");
-	if ( rc == 0 )
+	if ( cudaMalloc((void **)&d_arch,sizeof(uint32_t)) == cudaSuccess )
 	{
-		rc = ck(cudaMemset(d_arch,0,sizeof(uint32_t)),-4,\"cudaMemset(d_arch)\");
-		if ( rc == 0 )
+		if ( cudaMemset(d_arch,0,sizeof(uint32_t)) == cudaSuccess )
 		{
 			write_cuda_arch<<<1,1>>>(d_arch);
-			rc = ck(cudaGetLastError(),-5,\"write_cuda_arch launch\");
-			if ( rc == 0 )
-				(void)ck(cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost),-6,\"cudaMemcpy(cuda_arch)\");
+			if ( cudaGetLastError() == cudaSuccess )
+				(void)cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost);
 		}
 		cudaFree(d_arch);
+		d_arch = 0;
 	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
