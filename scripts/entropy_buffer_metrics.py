@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import binascii
 import json
 import math
 import re
@@ -320,6 +321,62 @@ def _distinct_ratio(counts: Dict[str, int]) -> float:
         return(0.0)
     return(float(len(counts)) / total)
 
+def _bucket_idx(text: str, buckets: int) -> int:
+    if buckets <= 0:
+        return(0)
+    h = int(binascii.crc32(text.encode("utf-8")) & 0xffffffff)
+    return(int(h % int(buckets)))
+
+def _bucket_stats(buckets: Sequence[int]) -> Dict[str, Any]:
+    total = int(sum(int(x) for x in buckets))
+    if total <= 0:
+        return({
+            "count": 0,
+            "unique": 0,
+            "distinct_1": 0.0,
+            "entropy_bits": 0.0,
+            "entropy_norm": 0.0,
+            "effective_num": 0.0,
+        })
+    uniq = int(sum(1 for x in buckets if int(x) > 0))
+    totalf = float(total)
+    h = 0.0
+    for c in buckets:
+        cc = int(c)
+        if cc <= 0:
+            continue
+        p = float(cc) / totalf
+        h -= (p * math.log(p, 2))
+    hnorm = 0.0 if uniq <= 1 else _safe_div(h, math.log2(float(uniq)))
+    return({
+        "count": total,
+        "unique": uniq,
+        "distinct_1": float(uniq) / totalf,
+        "entropy_bits": h,
+        "entropy_norm": hnorm,
+        "effective_num": pow(2.0, h),
+    })
+
+def _bucket_slice_summary(by_key: Dict[str, List[int]], key_counts: Dict[str, int], key_name: str, min_count: int = 50, k: int = 10) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    for key in sorted(by_key.keys()):
+        if key == "":
+            continue
+        stats = _bucket_stats(by_key.get(key) or [])
+        stats[key_name] = key
+        stats["count"] = int(key_counts.get(key, stats.get("count", 0) or 0))
+        items.append(stats)
+
+    count_top = list(items)
+    count_top.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get(key_name, ""))))
+    low = [x for x in items if int(x.get("count", 0) or 0) >= int(min_count)]
+    low.sort(key=lambda x: (float(x.get("entropy_norm", 0.0) or 0.0), -int(x.get("count", 0) or 0), str(x.get(key_name, ""))))
+    return({
+        "min_count": int(min_count),
+        "count_top": count_top[:k],
+        "low_entropy_norm_top": low[:k],
+    })
+
 def _rate_top(totals: Dict[str, int], flagged: Dict[str, int], key_name: str, k: int = 10) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     for key, total in totals.items():
@@ -450,6 +507,20 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     prompt_len_words: List[int] = []
     output_len_chars: List[int] = []
     output_len_words: List[int] = []
+
+    tmpl_output_word_buckets: Dict[str, List[int]] = {}
+    tmpl_output_word_counts: Dict[str, int] = {}
+    model_output_word_buckets: Dict[str, List[int]] = {}
+    model_output_word_counts: Dict[str, int] = {}
+    tmpl_output_char3_buckets: Dict[str, List[int]] = {}
+    tmpl_output_char3_counts: Dict[str, int] = {}
+    model_output_char3_buckets: Dict[str, List[int]] = {}
+    model_output_char3_counts: Dict[str, int] = {}
+
+    tmpl_prompt_word_buckets: Dict[str, List[int]] = {}
+    tmpl_prompt_word_counts: Dict[str, int] = {}
+    tmpl_prompt_char3_buckets: Dict[str, List[int]] = {}
+    tmpl_prompt_char3_counts: Dict[str, int] = {}
 
     input_tokens: List[float] = []
     output_tokens: List[float] = []
@@ -586,8 +657,27 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 out_2grams[ng] = out_2grams.get(ng, 0) + 1
             for ng in lib.word_ngrams(ws, 3):
                 out_3grams[ng] = out_3grams.get(ng, 0) + 1
-            for ng in _char_ngrams_norm(c.output, 3):
+            char3 = _char_ngrams_norm(c.output, 3)
+            for ng in char3:
                 out_char3[ng] = out_char3.get(ng, 0) + 1
+            if tmpl != "":
+                tmpl_output_word_buckets.setdefault(tmpl, [0] * 128)
+                for w in ws:
+                    tmpl_output_word_buckets[tmpl][_bucket_idx(w, 128)] += 1
+                tmpl_output_word_counts[tmpl] = tmpl_output_word_counts.get(tmpl, 0) + len(ws)
+                tmpl_output_char3_buckets.setdefault(tmpl, [0] * 128)
+                for ng in char3:
+                    tmpl_output_char3_buckets[tmpl][_bucket_idx(ng, 128)] += 1
+                tmpl_output_char3_counts[tmpl] = tmpl_output_char3_counts.get(tmpl, 0) + len(char3)
+            if mid != "":
+                model_output_word_buckets.setdefault(mid, [0] * 128)
+                for w in ws:
+                    model_output_word_buckets[mid][_bucket_idx(w, 128)] += 1
+                model_output_word_counts[mid] = model_output_word_counts.get(mid, 0) + len(ws)
+                model_output_char3_buckets.setdefault(mid, [0] * 128)
+                for ng in char3:
+                    model_output_char3_buckets[mid][_bucket_idx(ng, 128)] += 1
+                model_output_char3_counts[mid] = model_output_char3_counts.get(mid, 0) + len(char3)
 
             out_norm = lib.normalize_text(c.output)
             out_h = lib.text_sha1(out_norm)
@@ -626,8 +716,18 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 prompt_2grams[ng] = prompt_2grams.get(ng, 0) + 1
             for ng in lib.word_ngrams(ws, 3):
                 prompt_3grams[ng] = prompt_3grams.get(ng, 0) + 1
-            for ng in _char_ngrams_norm(c.prompt, 3):
+            char3 = _char_ngrams_norm(c.prompt, 3)
+            for ng in char3:
                 prompt_char3[ng] = prompt_char3.get(ng, 0) + 1
+            if tmpl != "":
+                tmpl_prompt_word_buckets.setdefault(tmpl, [0] * 128)
+                for w in ws:
+                    tmpl_prompt_word_buckets[tmpl][_bucket_idx(w, 128)] += 1
+                tmpl_prompt_word_counts[tmpl] = tmpl_prompt_word_counts.get(tmpl, 0) + len(ws)
+                tmpl_prompt_char3_buckets.setdefault(tmpl, [0] * 128)
+                for ng in char3:
+                    tmpl_prompt_char3_buckets[tmpl][_bucket_idx(ng, 128)] += 1
+                tmpl_prompt_char3_counts[tmpl] = tmpl_prompt_char3_counts.get(tmpl, 0) + len(char3)
         if c.task_id != "" and c.prompt_template_id != "" and c.output != "":
             k = f"{c.task_id}|{c.prompt_template_id}"
             task_template_outputs_norm.setdefault(k, []).append(lib.normalize_text(c.output))
@@ -793,11 +893,68 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
 
     reuse_count = sum(1 for v in buffer_items.values() if v >= 2)
     reuse_events = sum(max(0, v - 1) for v in buffer_items.values())
+    task_run_run_id_present = sum(1 for c in task_runs if c.run_id != "")
+    task_run_prompt_present = sum(1 for c in task_runs if c.prompt != "")
+    task_run_output_present = sum(1 for c in task_runs if c.output != "")
+    judge_pair_judge_id_present = sum(1 for c in judge_pairs if c.judge_id != "")
+    judge_pair_item_id_present = sum(1 for c in judge_pairs if c.item_id != "")
+    judge_pair_model_a_present = sum(1 for c in judge_pairs if c.a_model_id != "")
+    judge_pair_model_b_present = sum(1 for c in judge_pairs if c.b_model_id != "")
     totals = {
         "records_total": len(canon),
         "task_run_records": len(task_runs),
         "judge_pair_records": len(judge_pairs),
         "unknown_records": unknown,
+    }
+    totals["field_coverage"] = {
+        "task_run": {
+            "run_id_present_task_runs": int(task_run_run_id_present),
+            "run_id_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(task_run_run_id_present) / float(len(task_runs))),
+            "task_id_present_task_runs": int(sum(task_id_counts.values())),
+            "task_id_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(sum(task_id_counts.values())) / float(len(task_runs))),
+            "task_family_present_task_runs": int(sum(task_family_counts.values())),
+            "task_family_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(sum(task_family_counts.values())) / float(len(task_runs))),
+            "prompt_template_id_present_task_runs": int(sum(template_counts.values())),
+            "prompt_template_id_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(sum(template_counts.values())) / float(len(task_runs))),
+            "model_id_present_task_runs": int(sum(model_counts.values())),
+            "model_id_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(sum(model_counts.values())) / float(len(task_runs))),
+            "prompt_present_task_runs": int(task_run_prompt_present),
+            "prompt_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(task_run_prompt_present) / float(len(task_runs))),
+            "output_present_task_runs": int(task_run_output_present),
+            "output_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(task_run_output_present) / float(len(task_runs))),
+            "answer_present_task_runs": int(answer_task_runs_nonempty),
+            "answer_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(answer_task_runs_nonempty) / float(len(task_runs))),
+            "buffer_id_present_task_runs": int(buffer_id_present),
+            "buffer_id_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(buffer_id_present) / float(len(task_runs))),
+            "buffer_item_id_present_task_runs": int(buffer_item_id_present),
+            "buffer_item_id_present_task_run_rate": 0.0 if len(task_runs) == 0 else (float(buffer_item_id_present) / float(len(task_runs))),
+        },
+        "judge_pair": {
+            "judge_id_present_judge_pairs": int(judge_pair_judge_id_present),
+            "judge_id_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_pair_judge_id_present) / float(len(judge_pairs))),
+            "item_id_present_judge_pairs": int(judge_pair_item_id_present),
+            "item_id_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_pair_item_id_present) / float(len(judge_pairs))),
+            "task_family_present_judge_pairs": int(judge_task_family_present),
+            "task_family_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_task_family_present) / float(len(judge_pairs))),
+            "prompt_template_id_present_judge_pairs": int(judge_prompt_template_present),
+            "prompt_template_id_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_prompt_template_present) / float(len(judge_pairs))),
+            "task_family_template_pair_present_judge_pairs": int(judge_family_template_pair_present),
+            "task_family_template_pair_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_family_template_pair_present) / float(len(judge_pairs))),
+            "model_a_present_judge_pairs": int(judge_pair_model_a_present),
+            "model_a_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_pair_model_a_present) / float(len(judge_pairs))),
+            "model_b_present_judge_pairs": int(judge_pair_model_b_present),
+            "model_b_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_pair_model_b_present) / float(len(judge_pairs))),
+            "label_present_judge_pairs": int(sum(label_counts.values())),
+            "label_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(sum(label_counts.values())) / float(len(judge_pairs))),
+            "parse_valid_present_judge_pairs": int(parse_valid_true + parse_valid_false),
+            "parse_valid_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(parse_valid_true + parse_valid_false) / float(len(judge_pairs))),
+            "tokens_judge_in_present_judge_pairs": int(len(judge_in_tokens)),
+            "tokens_judge_in_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(len(judge_in_tokens)) / float(len(judge_pairs))),
+            "tokens_judge_out_present_judge_pairs": int(len(judge_out_tokens)),
+            "tokens_judge_out_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(len(judge_out_tokens)) / float(len(judge_pairs))),
+            "latency_ms_judge_present_judge_pairs": int(len(judge_latency_ms)),
+            "latency_ms_judge_present_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(len(judge_latency_ms)) / float(len(judge_pairs))),
+        },
     }
 
     diversity = {
@@ -908,6 +1065,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "output_char_3gram_entropy_norm": _entropy_norm_bits(out_char3),
         "output_char_3gram_effective_num": _effective_num(out_char3),
         "output_char_3gram_top": lib.top_counts(out_char3),
+    }
+    tokens["slices"] = {
+        "output_word_by_prompt_template_id": _bucket_slice_summary(tmpl_output_word_buckets, tmpl_output_word_counts, "prompt_template_id"),
+        "output_word_by_model_id": _bucket_slice_summary(model_output_word_buckets, model_output_word_counts, "model_id"),
+        "output_char_3gram_by_prompt_template_id": _bucket_slice_summary(tmpl_output_char3_buckets, tmpl_output_char3_counts, "prompt_template_id"),
+        "output_char_3gram_by_model_id": _bucket_slice_summary(model_output_char3_buckets, model_output_char3_counts, "model_id"),
+        "prompt_word_by_prompt_template_id": _bucket_slice_summary(tmpl_prompt_word_buckets, tmpl_prompt_word_counts, "prompt_template_id"),
+        "prompt_char_3gram_by_prompt_template_id": _bucket_slice_summary(tmpl_prompt_char3_buckets, tmpl_prompt_char3_counts, "prompt_template_id"),
     }
 
     duplicates = {
@@ -1164,7 +1329,19 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("# Entropy Buffer Metrics\n")
     parts.append("## Totals\n")
     for k, v in report.totals.items():
+        if k in ("field_coverage",):
+            continue
         parts.append(f"- `{k}`: {v}")
+    fc = report.totals.get("field_coverage") or {}
+    if isinstance(fc, dict) and len(fc) != 0:
+        parts.append("\n### field_coverage.task_run\n")
+        tr = fc.get("task_run") or {}
+        for key in sorted(tr.keys()):
+            parts.append(f"- `{key}`: {tr.get(key)}")
+        parts.append("\n### field_coverage.judge_pair\n")
+        jp = fc.get("judge_pair") or {}
+        for key in sorted(jp.keys()):
+            parts.append(f"- `{key}`: {jp.get(key)}")
     parts.append("\n## Runs\n")
     parts.append(f"- `run_id_unique`: {int(report.runs.get('run_id_unique', 0) or 0)}")
     parts.append("\n### low_pair_entropy_norm_by_run_id_top\n")
@@ -1260,6 +1437,14 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_list_top(report.tokens.get("output_3gram_top", [])))
     parts.append("\n### output_char_3gram_top\n")
     parts.append(_md_list_top(report.tokens.get("output_char_3gram_top", [])))
+    slices = report.tokens.get("slices") or {}
+    if isinstance(slices, dict) and len(slices) != 0:
+        parts.append("\n### tokens.slices.output_word_by_prompt_template_id.low_entropy_norm_top\n")
+        for row in ((slices.get("output_word_by_prompt_template_id") or {}).get("low_entropy_norm_top") or [])[:10]:
+            parts.append(f"- `{row.get('prompt_template_id')}`: entropy_norm={float(row.get('entropy_norm', 0.0)):.6f} distinct_1={float(row.get('distinct_1', 0.0)):.6f} count={int(row.get('count', 0) or 0)} unique={int(row.get('unique', 0) or 0)}")
+        parts.append("\n### tokens.slices.output_word_by_model_id.low_entropy_norm_top\n")
+        for row in ((slices.get("output_word_by_model_id") or {}).get("low_entropy_norm_top") or [])[:10]:
+            parts.append(f"- `{row.get('model_id')}`: entropy_norm={float(row.get('entropy_norm', 0.0)):.6f} distinct_1={float(row.get('distinct_1', 0.0)):.6f} count={int(row.get('count', 0) or 0)} unique={int(row.get('unique', 0) or 0)}")
     parts.append("\n## Duplicates\n")
     for k, v in report.duplicates.items():
         if isinstance(v, list):

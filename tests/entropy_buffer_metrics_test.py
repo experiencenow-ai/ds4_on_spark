@@ -61,6 +61,16 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.totals["judge_pair_records"], 5)
         self.assertEqual(report.totals["unknown_records"], 0)
 
+        fc = report.totals.get("field_coverage") or {}
+        tr = fc.get("task_run") or {}
+        jp = fc.get("judge_pair") or {}
+        self.assertEqual(int(tr.get("answer_present_task_runs", 0)), 4)
+        self.assertAlmostEqual(float(tr.get("answer_present_task_run_rate", 0.0)), (4.0 / 6.0))
+        self.assertEqual(int(jp.get("judge_id_present_judge_pairs", 0)), 4)
+        self.assertEqual(int(jp.get("parse_valid_present_judge_pairs", 0)), 1)
+        self.assertEqual(int(jp.get("task_family_present_judge_pairs", 0)), 4)
+        self.assertEqual(int(jp.get("prompt_template_id_present_judge_pairs", 0)), 4)
+
         self.assertEqual(report.runs["run_id_unique"], 1)
         dup_top = report.runs.get("output_norm_dup_rate_by_run_id_top", [])
         self.assertGreaterEqual(len(dup_top), 1)
@@ -145,6 +155,24 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual((report.tokens.get("ms_per_output_token") or {}).get("count", 0), 2)
         self.assertAlmostEqual(float((report.tokens.get("ms_per_output_token") or {}).get("mean", 0.0)), (58.3333333333), places=4)
         self.assertAlmostEqual(float((report.tokens.get("output_tok_per_s") or {}).get("mean", 0.0)), (17.5), places=4)
+
+    def test_token_slice_entropy_lists_exist(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_token_slices_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        slices = report.tokens.get("slices", {})
+        by_tmpl = slices.get("output_word_by_prompt_template_id", {})
+        low = by_tmpl.get("low_entropy_norm_top", [])
+        self.assertGreaterEqual(len(low), 1)
+        self.assertEqual(low[0].get("prompt_template_id"), "low.v1")
+        self.assertAlmostEqual(float(low[0].get("entropy_norm", 1.0)), 0.0)
+
+        by_model = slices.get("output_word_by_model_id", {})
+        lowm = by_model.get("low_entropy_norm_top", [])
+        self.assertGreaterEqual(len(lowm), 1)
+        self.assertEqual(lowm[0].get("model_id"), "m_low")
 
     def test_judge_budget_metrics_from_fixture(self) -> None:
         root = _repo_root()

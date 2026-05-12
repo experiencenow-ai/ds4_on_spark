@@ -121,6 +121,7 @@ The scripts compute:
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
   - Reports both raw entropy (`*_entropy_bits`) and normalized entropy (`*_entropy_norm`) plus `*_effective_num` for easier cross-corpus comparisons.
 - **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
+- **Token distribution slices** (approx): hashed-bucket word + char-3gram entropy by `prompt_template_id` and by `model_id`, with “low entropy” tops to flag template/model lexical collapse even when outputs are not exact duplicates.
 - **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Runtime / throughput** (optional): `input_tokens`, `output_tokens`, `wall_ms`, plus derived `output_tok_per_s`, `total_tok_per_s`, and `ms_per_output_token`.
@@ -145,6 +146,7 @@ The scripts compute:
   - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
 - **Useful coverage (clean outputs)**: recomputes diversity + duplicate rates after excluding task-runs flagged by useful-novelty filters (a quick “effective coverage” view).
 - **Run slices** (optional): if `run_id` is present on `task_run` records, the report includes per-run coverage/duplicate/noise summaries and “top runs” to quickly spot regressions.
+- **Field coverage**: per-record-type presence rates for the key fields required by slices (task IDs/templates/models, judge IDs/labels, buffer IDs, and optional token/latency instrumentation). This helps validate baseline-runtime and judge-ELO ingestion.
 
 ## Tools
 
@@ -211,4 +213,5 @@ Notes:
 ## Risks / limitations
 
 - Token/n-gram metrics are approximate (not model-tokenizer accurate).
+- Token slice entropy uses hashed buckets for bounded memory; treat values as relative signals, not exact vocab entropy.
 - “Useful novelty” is heuristic; treat flags as triage signals, not ground truth.
