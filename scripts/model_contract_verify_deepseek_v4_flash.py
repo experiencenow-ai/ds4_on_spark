@@ -704,6 +704,13 @@ def main() -> int:
 					failures.append(Failure(91, f"contract summary checkpoint_index.weight_map_prefix_fingerprints must be an object: {contract_summary}"))
 				elif got_prefix != expected_prefix:
 					failures.append(Failure(92, f"contract summary checkpoint_index.weight_map_prefix_fingerprints mismatch (expected prefixes {sorted(expected_prefix.keys())}): {contract_summary}"))
+				else:
+					want_layers = int((expected_prefix.get("layers", {}) or {}).get("count", 0))
+					want_mtp = int((expected_prefix.get("mtp", {}) or {}).get("count", 0))
+					if chk.get("weight_map_layers_tensor_key_count") != want_layers:
+						failures.append(Failure(28, f"contract summary checkpoint_index.weight_map_layers_tensor_key_count mismatch (expected {want_layers}): {contract_summary}"))
+					if chk.get("weight_map_mtp_tensor_key_count") != want_mtp:
+						failures.append(Failure(29, f"contract summary checkpoint_index.weight_map_mtp_tensor_key_count mismatch (expected {want_mtp}): {contract_summary}"))
 
 				tk = summary.get("tensor_keys", {})
 				try:
