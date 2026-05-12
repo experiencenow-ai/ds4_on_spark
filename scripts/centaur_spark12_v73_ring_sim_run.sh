@@ -57,6 +57,15 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
 
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
 ssh_preflight()
 {
 	if ssh $SSH_OPTS "$target" "true" >/dev/null 2>&1; then
@@ -109,6 +118,16 @@ fi
 if [ "$ring_workdir" = "" ]; then
 	ring_workdir="\$HOME/centaur-smoke/v73/ring_sim_spark12"
 fi
+if [ "$remote_workdir" != "" ]; then
+	case "$ring_workdir" in
+		*ring_sim_spark12*|*ring_sim_*|*ring_rsync_*|*ring_node*)
+			;;
+		*centaur-smoke/v73|*centaur-smoke/v73/|~/centaur-smoke/v73|~/centaur-smoke/v73/|\$HOME/centaur-smoke/v73|\$HOME/centaur-smoke/v73/)
+			echo "note: remote_ring_workdir looks like the v73 base dir; using ring_sim_spark12 under it" >&2
+			ring_workdir="$ring_workdir/ring_sim_spark12"
+			;;
+	esac
+fi
 ring_workdir_abs="$(ssh $SSH_OPTS "$target" "mkdir -p $ring_workdir && cd $ring_workdir && pwd -P")"
 remote_log="${RING_LOG:-}"
 if [ "$remote_log" = "" ]; then
@@ -142,6 +161,9 @@ echo "ssh $SSH_OPTS $target \"$ssh_cmd\" < $ring"
 if [ "$local_log" = "" ]; then
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$ring"
 else
+	need_cmd tee
+	need_cmd dirname
+	mkdir -p "$(dirname -- "$local_log")"
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$ring" 2>&1 | tee "$local_log"
 fi
 
