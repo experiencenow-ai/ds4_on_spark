@@ -156,6 +156,7 @@ For a CSV-first workflow, use `scripts/judge_elo_join_quality.py` to attach `qua
 
 ```bash
 python3 scripts/judge_elo_update.py --in <judge_records.jsonl> --out-dir <elo_out_dir> --strict
-python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --bundle <elo_out_dir>/bundle.json --out <baseline_with_quality.csv>
+# (equivalently) python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
 python3 scripts/model_quality_speed_score.py --in <baseline_with_quality.csv> --out-md <scored.md>
 ```
