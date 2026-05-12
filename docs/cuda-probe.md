@@ -107,6 +107,7 @@ LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./
 This runs, in order:
 
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
+- `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile gates)
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` (no repo transfer; CMake build-system gate)
 - `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
@@ -122,6 +123,12 @@ To skip the CMake build-system gate (faster), run:
 
 ```bash
 WITH_CMAKE_MINIMAL=0 ./scripts/cuda_probe_capability_spark0.sh
+```
+
+To skip the device-props minimal gate (faster), run:
+
+```bash
+WITH_DEVICE_PROPS_MINIMAL=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
 Observed on Spark0 (2026-05-11): `scripts/cuda_probe_capability_spark0.sh` completes end-to-end on CUDA 13.0 `V13.0.88`, including NVRTC (`supportedArchs` includes `121`), nvJitLink, TMA tensor-map encode, and cluster launch probes.

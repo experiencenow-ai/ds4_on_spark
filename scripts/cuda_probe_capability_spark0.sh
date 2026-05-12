@@ -4,6 +4,7 @@ set -eu
 target="${1:-spark0@aitopatom-9ab9.local}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+with_device_props_minimal="${WITH_DEVICE_PROPS_MINIMAL:-1}"
 with_kernel_tiny="${WITH_KERNEL_TINY:-1}"
 with_cmake_minimal="${WITH_CMAKE_MINIMAL:-1}"
 log_path="${LOG_PATH:-}"
@@ -39,6 +40,12 @@ fi
 
 log_line "== cuda probe capability: nvcc minimal (no repo transfer) =="
 run_logged "$repo_root/scripts/cuda_probe_nvcc_minimal_spark0.sh" "$target"
+
+if [ "${with_device_props_minimal}" = "1" ]; then
+	log_line "== cuda probe capability: device props minimal (no repo transfer) =="
+	run_logged "$repo_root/scripts/cuda_probe_device_props_minimal_spark0.sh" "$target"
+fi
+
 
 if [ "${with_cmake_minimal}" = "1" ]; then
 	log_line "== cuda probe capability: cmake minimal (no repo transfer) =="
