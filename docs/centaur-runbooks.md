@@ -17,12 +17,21 @@ From your Mac (repo root):
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
-sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
+export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or `scp` (fallback).
 
-After the run, validate that expected outputs exist (run on Spark0):
+The evidence helper runs:
+
+- stage + smoke (streamed)
+- Spark0 artifact validation
+- Mac-side artifact fetch into `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`)
+
+If you prefer running the pieces manually, see `docs/centaur-spark0-v73-smoke.md`.
+
+After a manual run, validate that expected outputs exist (run on Spark0):
 
 ```bash
 ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_RUN_ID=...; sh -s" < ./scripts/centaur_spark0_v73_validate_artifacts.sh
