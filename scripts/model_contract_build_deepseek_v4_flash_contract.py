@@ -1575,23 +1575,25 @@ def build_contract() -> dict:
 				**moe_hash_sem,
 			},
 			},
-				"mtp": {
-					"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
-					"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
-					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-					"namespace_prefix": "mtp.{j}.",
-					"checkpoint_key_fingerprint": {
+					"mtp": {
+						"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
+						"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
+						"compress_ratios": [int(r) for r in mtp_ratios],
+						"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+						"namespace_prefix": "mtp.{j}.",
+						"checkpoint_key_fingerprint": {
 						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
 						"tensor_key_count": mtp_prefix_fp.get("count", None),
 						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
 					},
 					"semantics": mtp_sem,
-					"trust_gates": {
-						"artifact_requires_mtp_contract_complete": True,
-						"artifact_requires_namespace_prefix": "mtp.{j}.",
-						"artifact_requires_mtp_namespace_expected_complete": True,
-						"artifact_requires_mtp_namespace_has_mtp0": True,
-						"oracle_requires_include_mtp": True,
+						"trust_gates": {
+							"artifact_requires_mtp_contract_complete": True,
+							"artifact_requires_mtp_keys_sha256_match_official": True,
+							"artifact_requires_namespace_prefix": "mtp.{j}.",
+							"artifact_requires_mtp_namespace_expected_complete": True,
+							"artifact_requires_mtp_namespace_has_mtp0": True,
+							"oracle_requires_include_mtp": True,
 						"oracle_requires_mtp_trace": True,
 						"oracle_generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
 						"acceptance_requires_prefill_and_decode": True,
