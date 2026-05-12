@@ -69,6 +69,8 @@ echo "== centaur v73 stage to $target =="
 echo "remote_dir: $remote_dir"
 
 ssh_run "$target" "mkdir -p $remote_dir"
+remote_dir_abs="$(ssh_run "$target" "cd $remote_dir && pwd -P")"
+echo "remote_dir_abs: $remote_dir_abs"
 rsync_run "$zip" "$target:$remote_dir/centaur_spec_impl_v73.zip"
 
 if [ -f "$catalog" ]; then
@@ -76,4 +78,3 @@ if [ -f "$catalog" ]; then
 else
 	echo "note: catalog fixture not found; skipping: $catalog" >&2
 fi
-

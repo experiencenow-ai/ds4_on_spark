@@ -271,17 +271,21 @@ EOF
 fi
 centaur hyor-provider-register "$ctrldir" unit --kind open_source_catalog --catalog-url "$catalog_json" --notes spark0-v73-smoke --force
 centaur hyor-model-catalog-import "$ctrldir" unit "$catalog_json" --default-model-class code --default-access-mode download --default-strength code_edit --force
-centaur hyor-model-catalog "$ctrldir" --full
+model_catalog_full_json="$workdir/hyor_model_catalog_full.json"
+centaur hyor-model-catalog "$ctrldir" --full >"$model_catalog_full_json"
+sed -n '1,80p' "$model_catalog_full_json"
 
 echo "== hyor: benchmark suite + record + results =="
 centaur hyor-benchmark-suite-register "$ctrldir" spark0_smoke_suite --task-type code_edit --model-class code --metric quality_score --metric cost_score --notes spark0-v73-smoke --force
 
-catalog_key="$(centaur hyor-model-catalog "$ctrldir" --full | "$venv_py" - <<'PY'
+catalog_key="$("$venv_py" - "$model_catalog_full_json" <<'PY'
 import json
 import sys
 
+path=sys.argv[1]
 try:
-    data=json.load(sys.stdin)
+    with open(path,"r",encoding="utf-8") as f:
+        data=json.load(f)
 except Exception:
     print("")
     raise SystemExit(0)

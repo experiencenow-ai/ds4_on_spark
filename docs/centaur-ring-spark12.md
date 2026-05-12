@@ -17,6 +17,10 @@ sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+If you want a known-good reference bundle for what “PASS” looks like, see:
+
+- `fixtures/centaur-smoke/spark0-v73/20260512T030829Z/`
+
 2) Stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
 
 ```bash
