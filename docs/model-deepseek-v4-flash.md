@@ -485,6 +485,7 @@ Score-routed layers:
 These MoE gating rules are also extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under:
 
 - `moe.semantics` (score computation + normalization + scaling expressions)
+- `moe.semantics.source_helpers` (verbatim `Gate.forward` and `MoE.forward` source lines + sha256 for exact routing semantics)
 - `moe.hash_routing` (hash-gating enable/indices expressions + `tid2eid` shape/dtype)
 
 ## Hyper-Connections (mHC)

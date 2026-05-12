@@ -65,6 +65,8 @@ See `docs/build-cuda.md`.
 
 Tests are a single executable (`ds4_tests`) that calls per-module test functions and returns non-zero on failure.
 
+In addition to runtime checks, the test build also compiles a small “header smoke” object library to ensure each public header in `include/ds4/*.h` is self-contained (compiles when included as the only project header in a translation unit).
+
 Use the Makefile wrapper on macOS:
 
 ```bash

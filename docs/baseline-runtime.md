@@ -153,6 +153,28 @@ Notes:
 - If `DS4_DIR` is missing, set `ALLOW_FETCH=1` to clone `antirez/ds4` into `./upstreams/ds4` (ignored by git).
 - The ds4 upstream model download step is intentionally **not** automated here; see `docs/baseline-fixtures.md`.
 
+## One-command entrypoint (Spark remote: antirez/ds4)
+
+Run from the Mac after `antirez/ds4` and a DS4-compatible GGUF are already
+staged on the Spark host:
+
+```sh
+MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
+DS4_DIR=/remote/path/to/ds4 \
+MODEL_GGUF=/remote/path/to/ds4flash.gguf \
+PROMPT="Explain Redis streams in one paragraph." \
+CTX=32768 \
+N_TOKENS=256 \
+EXTRA_ARGS="--nothink" \
+ALLOW_RUN=1 \
+scripts/run_baseline_antirez_ds4_spark.sh spark0@aitopatom-9ab9.local
+```
+
+Use this to compare native `antirez/ds4` CUDA/Spark performance against the
+current llama.cpp/vLLM Spark rows. Keep `PROMPT`, `CTX`, `N_TOKENS`, thinking
+mode, fixture hash, and quality-task metadata aligned before making a
+quality/speed claim.
+
 ## Script knobs (common)
 
 All baseline scripts share the same safety gates:
@@ -170,6 +192,7 @@ Per-script useful env vars:
 - `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM` (skip irrelevant probes for faster multi-model loops)
 - `scripts/run_baseline_existing_runtime.sh`: `FETCH_LLAMA_OUT_DIR=1` (opt-in: fetch the remote llama.cpp runner `out_dir` tarball to preserve `fattn_cli_probe.json` + raw logs locally)
 - `scripts/run_baseline_ds4_macos.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`
+- `scripts/run_baseline_antirez_ds4_spark.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, remote `DS4_DIR`, remote `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `SSH_OPTS`
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`

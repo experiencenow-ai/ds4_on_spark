@@ -1,0 +1,28 @@
+{
+  "applied_layers": [
+    {
+      "entry_count": 1,
+      "layer": "baseline",
+      "manifest_id": "baseline-all-8c9dcce87e449998133d",
+      "selector": "all"
+    },
+    {
+      "entry_count": 1,
+      "layer": "node_type",
+      "manifest_id": "node_type-default-617e424b6adb0019861c",
+      "selector": "default"
+    }
+  ],
+  "effective_hash": "sha256:0ede8f5f2f91e5dcaeabcde43cf8e9b28928942bb70267eeb80684763916b5d2",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "generated_unix_us": 1778555321813394,
+  "manifest_ids": [
+    "baseline-all-8c9dcce87e449998133d",
+    "node_type-default-617e424b6adb0019861c"
+  ],
+  "node_id": "spark0",
+  "node_type": "default",
+  "total_size_bytes": 19,
+  "version": 1
+}

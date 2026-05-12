@@ -5,6 +5,7 @@ Date (UTC):
 Baseline type:
 
 - [ ] antirez/ds4 (Mac / Metal)
+- [ ] antirez/ds4 (Spark / CUDA)
 - [ ] llama.cpp (Spark / CUDA)
 - [ ] vLLM (Spark / reference)
 - [ ] Ling 2.6 Flash target-only (Spark / vLLM or SGLang)

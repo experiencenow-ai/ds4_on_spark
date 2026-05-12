@@ -69,18 +69,20 @@ echo "== centaur v73 stage to $target =="
 echo "remote_dir: $remote_dir"
 
 ssh_run "$target" "mkdir -p $remote_dir"
+remote_dir_abs="$(ssh_run "$target" "cd $remote_dir && pwd -P")"
+echo "remote_dir_abs: $remote_dir_abs"
 rsync_run "$zip" "$target:$remote_dir/centaur_spec_impl_v73.zip"
 rsync_run "$catalog_src" "$target:$remote_dir/unit_model_catalog.json"
 
 cat <<EOF
 
 == next (on Spark0, human-run; no sudo) ==
-cd $remote_dir
-export CENTAUR_ZIP="$remote_dir/centaur_spec_impl_v73.zip"
-export CENTAUR_CATALOG_JSON="$remote_dir/unit_model_catalog.json"
+cd $remote_dir_abs
+export CENTAUR_ZIP="$remote_dir_abs/centaur_spec_impl_v73.zip"
+export CENTAUR_CATALOG_JSON="$remote_dir_abs/unit_model_catalog.json"
 
 # Run the smoke script by streaming it over SSH from this repo:
 # (run this from your Mac repo root)
-ssh $SSH_OPTS "$target" "cd $remote_dir && sh -s" < "$root/scripts/centaur_spark0_v73_smoke.sh"
+ssh $SSH_OPTS "$target" "cd $remote_dir_abs && sh -s" < "$root/scripts/centaur_spark0_v73_smoke.sh"
 
 EOF
