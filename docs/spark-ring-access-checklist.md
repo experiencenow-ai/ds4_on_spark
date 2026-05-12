@@ -65,6 +65,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 ## 6) Bandwidth/Latency (Safe, Non-Secret)
 
 - Use ping RTT as the minimum viable latency check:
+  - `./scripts/mac_spark_discovery.sh` prints `== ping (mac->targets, compact) ==` (Mac→target RTT/loss; no SSH required).
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
 - The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
 - Optional (no installs): quick Mac<->Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):

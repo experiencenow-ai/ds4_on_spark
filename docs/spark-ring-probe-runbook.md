@@ -38,6 +38,7 @@ This captures:
 - mDNS `_ssh._tcp` browse
 - per-target `dns-sd -G` resolution (best-effort)
 - TCP/22 reachability checks
+- ping RTT/loss summary from the Mac (`== ping (mac->targets, compact) ==`)
 
 ## 2) Ring probe snapshot (per-node identity + clock + network + GPU/storage facts)
 
