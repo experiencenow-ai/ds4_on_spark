@@ -75,6 +75,10 @@ def main():
         "swa_stream_view_matches": [],
         "reserve_cap_n_ctx_seq_found": False,
         "reserve_cap_n_ctx_seq_matches": [],
+        "reserve_bound_tokens_found": False,
+        "reserve_bound_tokens_matches": [],
+        "skip_impossible_windows_found": False,
+        "skip_impossible_windows_matches": [],
         "patch_artifacts": [],
         "notes": [],
     }
@@ -107,6 +111,19 @@ def main():
         ("deepseek_v4_resumed_pp", re.compile(r"DeepSeek\s+V4\s+resumed", re.IGNORECASE)),
     ]
 
+    reserve_bound_patterns = [
+        ("n_ctx_seq", re.compile(r"\bn_ctx_seq\b")),
+        ("min_call", re.compile(r"\bstd::min\s*\(|\bGGML_MIN\s*\(", re.IGNORECASE)),
+        ("reserve_token_sym", re.compile(r"\breserve_(pos0|pos1|tokens|n|len)\b|\bn_reserve\b|\bn_tokens_reserve\b|\breserve_tokens\b", re.IGNORECASE)),
+    ]
+
+    skip_window_patterns = [
+        ("n_ctx_seq", re.compile(r"\bn_ctx_seq\b")),
+        ("reserve_pos", re.compile(r"\breserve_pos(0|1)\b")),
+        ("control_flow", re.compile(r"\bcontinue\b|\breturn\b|\bbreak\b")),
+        ("skip_word", re.compile(r"\bskip\b", re.IGNORECASE)),
+    ]
+
     if os.path.exists(deepseek4_path):
         rel = os.path.relpath(deepseek4_path, llama_dir)
         result["files_checked"].append(rel)
@@ -131,6 +148,24 @@ def main():
             if has_reserve and has_seq:
                 result["reserve_cap_n_ctx_seq_found"] = True
             result["reserve_cap_n_ctx_seq_matches"].append({"file": rel, "matches": ms})
+
+        ms_bound = scan_file(context_path, reserve_bound_patterns, max_matches=160)
+        if ms_bound:
+            has_seq = any(m["pattern"] == "n_ctx_seq" for m in ms_bound)
+            has_min = any(m["pattern"] == "min_call" for m in ms_bound)
+            has_sym = any(m["pattern"] == "reserve_token_sym" for m in ms_bound)
+            if has_seq and has_min and has_sym:
+                result["reserve_bound_tokens_found"] = True
+            result["reserve_bound_tokens_matches"].append({"file": rel, "matches": ms_bound})
+
+        ms_skip = scan_file(context_path, skip_window_patterns, max_matches=160)
+        if ms_skip:
+            has_seq = any(m["pattern"] == "n_ctx_seq" for m in ms_skip)
+            has_pos = any(m["pattern"] == "reserve_pos" for m in ms_skip)
+            has_flow = any(m["pattern"] == "control_flow" for m in ms_skip)
+            if has_seq and has_pos and has_flow:
+                result["skip_impossible_windows_found"] = True
+            result["skip_impossible_windows_matches"].append({"file": rel, "matches": ms_skip})
     else:
         result["notes"].append("missing src/llama-context.cpp")
 
