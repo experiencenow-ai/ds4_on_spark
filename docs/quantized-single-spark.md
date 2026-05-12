@@ -17,6 +17,11 @@ Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-
 - The run records exact runtime source, runtime commit, model source, quant,
   file size, sha256, command line, context length, token count, TTFT, tokens/sec
   where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+- The run preserves the baseline-summary key/value block (so `decode_tps`,
+  `total_wall_s`, and `output_tokens` are recoverable for later scoring), plus
+  the read-only patch probes when enabled (`LLAMA_FATTN_PATCH_PROBE=1`,
+  `LLAMA_MULTISLOT_PATCH_PROBE=1`) so the report says whether the runtime likely
+  contains the FA pad-to-256 reservation fix and the multi-slot reserve/SWA fixes.
 - Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
@@ -70,6 +75,48 @@ llama.cpp should be treated as unproven for V4 Flash until verified.
 For any community artifact, record provenance rather than trusting the model
 card summary: HF repo, revision, file list, file sizes, sha256, declared base
 model, declared license, required runtime fork, and any conversion command.
+
+### Staged artifact discovery (no downloads)
+
+If multiple V4 Flash GGUFs are already staged on Spark0, pick the smallest
+credible one (usually `Q2_K`) for the first token-producing run.
+
+No-download discovery commands (Mac → Spark0; metadata only):
+
+```sh
+ssh spark0@aitopatom-9ab9.local "ls -lh /home/spark0/models/ds4/*.gguf 2>/dev/null | sort -k5 -h"
+```
+
+If you want an exact byte count (better for comparing near-ties), prefer `wc -c`:
+
+```sh
+ssh spark0@aitopatom-9ab9.local "for f in /home/spark0/models/ds4/*.gguf; do [ -r \"$f\" ] || continue; wc -c \"$f\"; done | sort -n | head"
+```
+
+If you want the quantized single-Spark wrapper to do this automatically (still
+metadata-only; no downloads), you can omit `MODEL_GGUF` and provide a glob:
+
+```sh
+MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
+LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
+By default the wrapper excludes likely non-trunk artifacts (`MTP`, `DFlash`,
+`draft`, `sidecar`) via `MODEL_GGUF_EXCLUDE_EGREP`. Override it when you
+intentionally want a different selection policy.
+
+If you want to force the selection into a “credible minimum” quant band (for
+example, prefer `Q2_K` or `IQ2XXS` over tiny test artifacts), set
+`MODEL_GGUF_INCLUDE_EGREP` and the wrapper will select the smallest match after
+the exclude filter:
+
+```sh
+MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
+MODEL_GGUF_INCLUDE_EGREP='Q2_K|IQ2XXS' \
+LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
 
 ## MTP (multi-token prediction) expectations
 
@@ -142,11 +189,19 @@ MTP sidecar example (metadata-only inspection; 2026-05-10):
   - Recorded output: `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json`
   - Summary: `mtp_present=true` and `tensor_key_namespace_guess=deepseek-upstream-mtp-only`, but `mtp_contract.complete=false` with `mtp_tensor_count=32` (compact DS4-tuned sidecar, not a full upstream `mtp.0.*` checkpoint).
 
-To validate a sidecar that is already present on Spark (no downloads; no trunk model load), run the Spark-side contract probe via the baseline runner:
+To validate a sidecar that is already present on Spark (no downloads; no trunk model load), prefer the dedicated Spark-side contract probe runner:
 
 ```sh
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
-scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
+scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@aitopatom-9ab9.local
+```
+
+Optional stronger check (still no trunk load): run the combined contract + llama.cpp loader probe (loads the sidecar tensor blob into RAM when `LOAD_WEIGHTS=1`, plus the pinned payload-fingerprint gate):
+
+```sh
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1 MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 LOAD_WEIGHTS=1' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@aitopatom-9ab9.local
 ```
 
 Acceptance checks before DS4 can trust MTP:
@@ -177,7 +232,9 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 
 The CSV row is derived from the `== baseline summary (approx) ==` block emitted
 by the remote runner. For llama.cpp it now includes `output_tokens` (best-effort
-count from the llama.cpp `eval time = ... / <tokens>` timing line).
+count from the llama.cpp `eval time = ... / <tokens>` timing line), plus
+canonical aliases `ttft_s`, `total_wall_s`, and `decode_tps` for cross-runtime
+comparisons.
 
 Compatibility notes (llama.cpp forks):
 
@@ -196,6 +253,31 @@ This is **not** a correctness proof, but it is a coarse signal that a Flash
 Attention schedule node executed instead of falling back to a slow path. Always
 preserve `remote_llamacpp_stdout.txt` / `remote_llamacpp_stderr.txt` so the
 fallback reason is visible.
+
+### Patch-status probes (read-only; recommended)
+
+To track the current Spark-side runtime state for the DSv4 Flash Attention
+pad-to-256 reservation fix and the multi-slot reserve/SWA fixes, enable the
+read-only source probes in the baseline runner:
+
+- `LLAMA_FATTN_PATCH_PROBE=1` (pad-to-256 reservation fix probe)
+- `LLAMA_MULTISLOT_PATCH_PROBE=1` (multi-slot reserve/SWA fix probe)
+
+`scripts/run_quantized_single_spark.sh` enables both probes by default. Set
+either env var to `0` to skip.
+
+The wrapper also defaults to `SKIP_MTP_SIDECAR=1` and `SKIP_VLLM=1` so a
+milestone run only does: GGUF metadata inspection (optional), llama.cpp run, and
+the read-only patch probes. Set either to `0` to include those extra probes.
+
+The probes scan `LLAMA_DIR` on Spark. If your `LLAMA_CLI` looks like
+`.../build*/bin/llama-cli`, the milestone wrapper infers `LLAMA_DIR` from that
+path. Otherwise, set `LLAMA_DIR=/abs/path/to/llama.cpp/tree` (Spark path) in the
+Mac environment so the probes scan the right runtime tree.
+
+`scripts/run_baseline_existing_runtime.sh` also forwards `LLAMA_DIR` into the
+Spark-side llama.cpp runner so the printed `== llama.cpp revision ==` line
+matches the tree that `LLAMA_CLI` points at.
 
 If you prefer the milestone wrapper (same run shape, with fewer knobs to type),
 it forwards the same CSV/quality env vars:

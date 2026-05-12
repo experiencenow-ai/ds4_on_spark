@@ -1,8 +1,6 @@
-# Spark Ring Access Checklist (Spark0..Spark2)
+# Spark Ring Access Checklist (Ordered Spark Inventory)
 
-This is a **human-run** access + probe checklist for a 3-node Spark ring. It is safe-by-default (no `sudo`, no service changes, no writes outside `/private/tmp` on the Mac).
-
-If you have 4 nodes (Spark0..Spark3), use the same checklist but add Spark3 to every matrix and command line.
+This is a **human-run** access + probe checklist for the current Spark ring. It is safe-by-default (no `sudo`, no service changes, no writes outside `/private/tmp` on the Mac). Treat the ordered host list as the inventory; when a Spark is added, append it to the list used by the probe commands.
 
 ## 1) Hostnames + Resolution
 
@@ -13,6 +11,8 @@ If you have 4 nodes (Spark0..Spark3), use the same checklist but add Spark3 to e
 - Confirm whether the environment relies on mDNS (`*.local`) or pinned `/etc/hosts`.
 - From the Mac, confirm each target resolves and port 22 is reachable:
   - `REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local`
+- From Spark nodes, confirm the same peer names resolve inside the ring environment:
+  - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` and reports `ping_resolve_failed` when a node cannot resolve a peer hostname; treat this as a bring-up blocker for any multi-node runbook until name resolution is fixed (either mDNS domain consistency or `/etc/hosts` pinning by a human).
 
 ## 2) SSH Keys + Known Hosts Hygiene
 
@@ -26,12 +26,14 @@ If you have 4 nodes (Spark0..Spark3), use the same checklist but add Spark3 to e
 
 - Verify each node’s UTC time is sane and NTP is synchronized (or at least consistent):
   - Use `./scripts/spark_ring_probe.sh` output `== clock ==` (prints UTC + epoch + `timedatectl` fields when available).
-- If skew is large, treat it as a blocker for distributed experiments (TP>1) until a human fixes time sync.
+- Rule of thumb: if `skew_s (remote-local)` exceeds about `±1s`, treat it as a blocker for distributed experiments (TP>1) until a human fixes time sync.
 
 ## 4) Address Matrix (Wired + Wi‑Fi + v4/v6)
 
 Capture a non-secret identity snapshot suitable for commit:
 
+- One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts):
+  - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
 - Mac-side interface + route snapshot:
   - `REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local`
 - Per-node interface + address snapshot (redacted):
@@ -41,6 +43,7 @@ Record (for each node):
 - Primary SSH-reachable name (and whether it’s IPv4, IPv6 link-local, or routed v4).
 - Wired interface name(s) and MTU (jumbo vs standard).
 - Wi‑Fi interface name(s) and MTU.
+- Use the ring probe `== network (iface matrix, compact) ==` section to join interface `state`/`mtu`/`speed` with per-interface v4/v6 addresses (already redacted).
 
 Optional: write down the matrix (fill with redacted values as needed):
 
@@ -67,6 +70,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 - Optional (no installs): quick Mac<->Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
   - `BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true`
   - The probe reports one-way best-effort throughput for `down` (remote→mac) and `up` (mac→remote). Keep `BW_MB` small (e.g. `8` or `16`) and do not run this in tight loops.
+  - When SSH cannot connect (DNS, routing, auth), the probe prints `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`) to make bring-up blockers obvious in commit-safe snapshots.
 - If you later add a bandwidth tool (e.g. `iperf3`) by human action, document it in a separate runbook; do not install packages from automation loops.
 - If `iperf3` is already present on all nodes, you can do a quick throughput check (do not commit raw IPs; summarize results or redact manually):
   - On receiver: `iperf3 -s`
@@ -77,7 +81,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 For each node, capture:
 - GPU inventory (`nvidia-smi` CSV query output: GPU name, bus id, driver version, compute cap when available).
-- Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` `cuda:` when present.
+- Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` (toolkit version) when present.
 - Storage facts (`df -h` + `lsblk` model/size).
 
 Use `REDACT=1` for any committed output.
@@ -86,4 +90,4 @@ Use `REDACT=1` for any committed output.
 
 - Always generate snapshot docs with `REDACT=1`.
 - Treat hostnames, OS/kernel/toolchain versions, GPU model names, disk model names, and interface names as non-secret.
-- Treat IP addresses, MAC addresses, GPU UUID tokens, and any host keys as sensitive; the probe scripts redact them automatically when `REDACT=1`.
+- Treat IP addresses (including CIDR), MAC addresses, GPU UUID tokens, and any host keys as sensitive; the probe scripts redact them automatically when `REDACT=1`.

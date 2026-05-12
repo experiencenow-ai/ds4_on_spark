@@ -20,6 +20,25 @@ priority is to add measurable performance layers around that working path:
 This can get us most of the way to a usable high-performance quantized product
 before the native FP4/FP8 loader and dual-Spark TP path are complete.
 
+## Gate 0: MTP sidecar + one-token wiring (no full downloads)
+
+If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven MTP path), add an explicit correctness gate *before* any acceptance/perf claims:
+
+- Validate the staged MTP sidecar contract (Spark-safe; header + tensor table only; no trunk load):
+
+```bash
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
+```
+
+- Only after the sidecar contract passes, run the llama.cpp **one-token** MTP wiring probe (gamma=1) runner (still gated; see `docs/mtp-one-token-draft-probe.md`):
+
+```bash
+scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
+
 ## Gate 1: Real Quantized Generation
 
 Before scheduler or MTP work, capture one successful run from
@@ -118,6 +137,18 @@ python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --tr
 
 If the same runtime trace also includes speculative-decoding comparator counters (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the report includes a separate `dflash_comparator` block and keeps those counters isolated from DeepSeek MTP acceptance assumptions.
 
+If the runtime trace omits `cost_scale` but includes `kv_tokens` or `decode_ms`, you can ask the ablation tool to derive a simple proxy cost_scale before replay (helps explore work-weighted pending/backpressure signals later):
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-derive-cost-scale kv_tokens_p50 > /tmp/runtime_mtp_ablation.json
+```
+
+If the trace includes a speculative-decoding comparator and you have (or want to assume) a draft-overhead multiplier for it, set `--dflash-draft-cost-scale` so the report’s `dflash_*_adjusted` metrics include that crude overhead model:
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --dflash-draft-cost-scale 0.25 > /tmp/runtime_mtp_ablation.json
+```
+
 For token-level debugging (trace-vs-model mismatches, drops, stage skips, MTP accept lengths), also dump per-step results:
 
 ```bash
@@ -173,7 +204,7 @@ Trace JSONL fields:
 - `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - Runtime traces may emit microsecond/nanosecond variants (`t_us` / `t_ns` or `dt_us` / `dt_ns`); `--trace-input-format runtime` (or `trace_extract.py`) normalizes them into millisecond `t_ms` / `dt_ms` fields.
 - `cls`: `"interactive"` or `"batch"` (runtime input format also accepts integer class IDs `0` (interactive) and `1` (batch), normalized by `--trace-input-format runtime` / `trace_extract.py`)
-- `candidates`: ordered expert candidates for that token
+- `candidates`: ordered expert candidates for that token. For minimal router logs, `--trace-input-format runtime` (or `trace_extract.py`) also accepts a single chosen expert alias like `expert_id` / `chosen_expert` and normalizes it into `candidates=[expert_id]`.
 - `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
   - `candidates`: ordered expert candidates for that layer (required)
   - `scores`: optional per-candidate scores (same length as that layer's `candidates`)

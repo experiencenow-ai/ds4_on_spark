@@ -1,4 +1,10 @@
-# Ops: TP=4 Readiness Checks (Safe)
+# Example Ops: TP=4 Readiness Checks (Safe)
+
+Use the readiness doc matching the active inventory. The current 3-node example is:
+
+- `docs/ops-tp3-readiness.md`
+
+This file is retained as a 4-node/TP=4 example, not as a source of truth for the active inventory.
 
 TP=4 here means 4-node distributed execution (Spark0 + Spark1 + Spark2 + Spark3).
 

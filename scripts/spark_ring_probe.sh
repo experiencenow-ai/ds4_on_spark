@@ -239,13 +239,15 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		i=$((i + 1))
 		kh="$(known_hosts_for_target "$target")"
 		peers="$(peer_hosts_for_index "$i")"
+		local_epoch="$(date -u +%s 2>/dev/null || date +%s)"
 		echo "== target: $target =="
-		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" $peers 2>&1 <<'REMOTE'
+		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers 2>&1 <<'REMOTE'
 set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
 ring_ping="${1:-0}"
-shift || true
+local_epoch="${2:-0}"
+shift 2 || true
 echo "== probe meta =="
 date -u
 echo "target user: $(id -un 2>/dev/null || true)"
@@ -256,9 +258,17 @@ uname -a
 echo
 echo "== clock =="
 date -u +"utc: %Y-%m-%dT%H:%M:%SZ"
-date -u +"epoch: %s"
+remote_epoch="$(date -u +%s 2>/dev/null || date +%s)"
+echo "epoch: $remote_epoch"
+if [ "$local_epoch" != "0" ] && [ "$remote_epoch" != "" ]; then
+	skew_s=$((remote_epoch - local_epoch))
+	echo "skew_s (remote-local): $skew_s"
+fi
 if command -v timedatectl >/dev/null 2>&1; then
 	timedatectl show -p NTPSynchronized -p SystemClockSynchronized -p NTPService -p TimeUSec 2>/dev/null || true
+fi
+if command -v chronyc >/dev/null 2>&1; then
+	chronyc tracking 2>/dev/null | grep -E "^(Reference ID|Stratum|Ref time|System time|Last offset|RMS offset|Frequency|Skew|Root delay|Root dispersion|Update interval|Leap status)" | head -n 40 || true
 fi
 echo
 echo "== network (links + addrs, compact) =="
@@ -309,6 +319,31 @@ if command -v ip >/dev/null 2>&1; then
 		printf "%s mtu=%s state=%s\n", name, mtu, state
 	}' | head -n 80 || true
 	echo
+	echo "== network (iface matrix, compact) =="
+	if [ -d /sys/class/net ]; then
+		for iface in $(ls /sys/class/net 2>/dev/null || true); do
+			if [ "$iface" = "lo" ]; then
+				continue
+			fi
+			state="$(ip -o link show dev "$iface" 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="state") { print $(i+1); exit } }' || true)"
+			mtu="$(ip -o link show dev "$iface" 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="mtu") { print $(i+1); exit } }' || true)"
+			speed="$(cat "/sys/class/net/$iface/speed" 2>/dev/null || true)"
+			duplex="$(cat "/sys/class/net/$iface/duplex" 2>/dev/null || true)"
+			v4="$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{ print $4 }' | paste -sd "," - 2>/dev/null | head -c 200 || true)"
+			v6="$(ip -6 -o addr show dev "$iface" 2>/dev/null | awk '{ print $4 }' | paste -sd "," - 2>/dev/null | head -c 200 || true)"
+			[ "$state" = "" ] && state="?"
+			[ "$mtu" = "" ] && mtu="?"
+			[ "$speed" = "" ] && speed="?"
+			[ "$speed" = "-1" ] && speed="unknown"
+			[ "$duplex" = "" ] && duplex="?"
+			[ "$v4" = "" ] && v4="-"
+			[ "$v6" = "" ] && v6="-"
+			echo "$iface state=$state mtu=$mtu speed_mbps=$speed duplex=$duplex v4=$v4 v6=$v6"
+		done | head -n 80 || true
+	else
+		echo "/sys/class/net not found"
+	fi
+	echo
 	ip -4 -br addr 2>/dev/null || true
 	echo
 	ip -6 -br addr 2>/dev/null || true
@@ -320,9 +355,21 @@ else
 fi
 echo
 echo "== storage (df, lsblk model/size) =="
-df -h 2>/dev/null | head -n 60 || true
-if command -v lsblk >/dev/null 2>&1; then
-	lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT,FSTYPE 2>/dev/null | head -n 120 || true
+	df -h 2>/dev/null | head -n 60 || true
+	if command -v lsblk >/dev/null 2>&1; then
+		echo "== disks (summary) =="
+		lsblk_out="$(lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null || true)"
+		if [ "$lsblk_out" != "" ]; then
+			printf "%s\n" "$lsblk_out" | awk 'NR==1{print;next} $1 !~ /^loop[0-9]+$/ {print}' | head -n 40 || true
+		else
+			echo "lsblk: (no output)"
+		fi
+		echo
+		echo "== lsblk (mounts, no loop, capped) =="
+		lsblk_out="$(lsblk -o NAME,TYPE,SIZE,MODEL,MOUNTPOINT,FSTYPE 2>/dev/null || true)"
+		if [ "$lsblk_out" != "" ]; then
+			printf "%s\n" "$lsblk_out" | awk 'NR==1{print;next} $1 !~ /^loop[0-9]+$/ {print}' | head -n 120 || true
+	fi
 fi
 echo
 echo "== gpu/toolchain facts (compact) =="
@@ -357,8 +404,35 @@ fi
 echo "nvcc path: $nvcc_path"
 [ "$nvcc_path" != "" ] && "$nvcc_path" --version 2>/dev/null | head -n 5 || true
 if [ -r /usr/local/cuda/version.json ]; then
-	cuda_ver="$(sed -nE "s/^[[:space:]]*\\\"cuda\\\"[[:space:]]*:[[:space:]]*\\\"([^\\\"]+)\\\".*/\\1/p" /usr/local/cuda/version.json | head -n 1 || true)"
-	[ "$cuda_ver" != "" ] && echo "cuda version.json cuda: $cuda_ver"
+	cuda_ver=""
+	if command -v python3 >/dev/null 2>&1; then
+		cuda_ver="$(python3 - <<'PY' 2>/dev/null || true
+import json,sys,re
+p="/usr/local/cuda/version.json"
+try:
+    d=json.load(open(p))
+except Exception:
+    sys.exit(0)
+v=""
+if isinstance(d,dict):
+    cuda=d.get("cuda")
+    if isinstance(cuda,dict):
+        v=cuda.get("version","")
+    elif isinstance(cuda,str):
+        v=cuda
+    if not v and isinstance(d.get("version"),str):
+        v=d.get("version","")
+if isinstance(v,str):
+    m=re.search(r"[0-9]+(?:[.][0-9]+)+",v)
+    if m:
+        sys.stdout.write(m.group(0))
+PY
+)"
+	fi
+	if [ "$cuda_ver" = "" ]; then
+		cuda_ver="$(sed -nE "s/.*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9]+(\\.[0-9]+)+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
+	fi
+	[ "$cuda_ver" != "" ] && echo "cuda version.json: $cuda_ver"
 fi
 echo
 	if [ "$ring_ping" = "1" ]; then
@@ -407,13 +481,14 @@ REMOTE
 	fi
 } >"$tmp"
 
-if [ "${REDACT:-0}" = "1" ]; then
-	sed -E \
-		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
-		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
-		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
-		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
-		"$tmp"
+	if [ "${REDACT:-0}" = "1" ]; then
+		sed -E \
+			-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3}\/[0-9]{1,2})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4cidr>\4/g' \
+			-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
+			-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+			-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
+			-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+			"$tmp"
 else
 	cat "$tmp"
 fi

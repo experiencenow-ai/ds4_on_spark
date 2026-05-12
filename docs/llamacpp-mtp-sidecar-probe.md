@@ -60,6 +60,8 @@ Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_s
 
 Notes:
 
+- In read-only worktree checkouts, create a `.codex_git/` gitdir shim (see `docs/spark-access.md`); the probe runners will use it to record the `ds4_on_spark commit` in reports.
+
 - The helper is now **truly gated**: it does not `git fetch` / `git checkout` unless `ALLOW_FETCH=1` or `ALLOW_PATCH=1` is set.
 - When `JSON_ONLY=1` is set, common preflight failures (missing `LLAMA_DIR`, missing probe binary, unreadable `MTP_SIDECAR_GGUF`, etc.) emit a small JSON object (`ok=false`, `errors[]`) so Spark runners can parse failures deterministically.
 
@@ -100,6 +102,11 @@ Pinned reference runner:
 ```bash
 ./scripts/model_contract_probe_mtp_sidecar_antirez.sh
 ```
+
+Notes:
+
+- The script prints the probe JSON to stdout (so you can pipe it).
+- When payload sampling is enabled (default `PAYLOAD_SAMPLE_BYTES=64`), it also runs the pinned payload fingerprint gate and prints the gate JSON to stderr. Disable with `FINGERPRINT_GATE=0` or `PAYLOAD_SAMPLE_BYTES=0`.
 
 Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-b0c3326.json`.
 

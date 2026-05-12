@@ -112,7 +112,7 @@ Key JSON paths by concern:
 - Sliding/CSA/HCA schedule: `attention_schedule.compress_ratios`, `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
   - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type` and `attention_schedule.main_layer_ids_by_compress_ratio`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
-- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule`
+- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
 - MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
 - MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)
@@ -175,6 +175,7 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
   - `num_experts_per_tok` / `n_activated_experts`: 6
   - `moe_intermediate_size` / `moe_inter_dim`: 2048
   - `swiglu_limit`: 10.0 (clamps expert activations in the reference code)
+    - Contract pin: `contract_summary.json` records `moe.swiglu_limit` plus the exact clamp expressions under `moe.semantics.swiglu_clamp_*` so external runtimes can’t silently diverge.
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
@@ -226,6 +227,8 @@ The official `deepseek-ai/DeepSeek-V4-Flash` `config.json` shipped on HF does no
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `attention_schedule.transformers_compress_rates` records the canonical compression-rate mapping used by the Transformers nomenclature (`CSA→4`, `HCA→128`, `sliding→0`).
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `moe.transformers_mlp_layer_types` derives `mlp_layer_types[]` from `num_hash_layers` (`0..num_hash_layers-1 → hash_moe`, remainder → moe).
 
+For external-runtime interpretation, `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `compat.by_transformers_key` also maps Transformers-style config keys (`layer_types`, `compress_rates` / legacy `compress_rate_{csa,hca}`, and `mlp_layer_types`) onto these canonical DS4 contract paths so logs/configs can be normalized without guessing.
+
 Cache note (Transformers naming): Transformers documents two cache layer classes for non-sliding blocks — `DeepseekV4CSACache` (CSA) and `DeepseekV4HCACache` (HCA) — selected per `config.layer_types[i]` via `DynamicCache(config=...)`. This is recorded (for external-runtime interpretation only) under `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `compat.transformers_cache_layers` (source: [HF Transformers DeepSeek-V4 model doc](https://huggingface.co/docs/transformers/main/model_doc/deepseek_v4)).
 
 ## Logical parameter shapes (from `inference/model.py` + configs)
@@ -249,6 +252,11 @@ Per-layer attention (`layers.{i}.attn.*`):
 - `wo_a.weight`: `[o_groups*o_lora_rank, (num_attention_heads*head_dim)/o_groups]` (grouped low-rank O factor A)
 - `wo_b.weight`: `[hidden_size, o_groups*o_lora_rank]` (low-rank O factor B)
 
+Scale tensors for FP8 trunk linears:
+
+- The official checkpoint includes `*.scale` tensors for the FP8 trunk linears above (`wq_a`, `wq_b`, `wkv`, `wo_a`, `wo_b`).
+- Their logical shapes are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `tensor_shapes.per_layer.attn.*.scale` (derived from the upstream `Linear` scale rule in `inference/model.py` with `block_size=128`).
+
 Per-layer MoE (`layers.{i}.ffn.*`):
 
 - `gate.weight`: `[n_routed_experts, hidden_size]`
@@ -258,6 +266,11 @@ Per-layer MoE (`layers.{i}.ffn.*`):
   - `w1`: `[moe_inter_dim, hidden_size]`
   - `w2`: `[hidden_size, moe_inter_dim]`
   - `w3`: `[moe_inter_dim, hidden_size]`
+
+Expert scale tensors (FP4):
+
+- The official checkpoint includes `experts.{eid}.w{1,2,3}.scale` and `shared_experts.w{1,2,3}.scale` (FP4 expert linears).
+- Their logical shapes are recorded in `contract_summary.json` under `tensor_shapes.per_layer.moe` and follow the upstream FP4 rule: `[out_features, in_features//32]` (`fp4_block_size=32`).
 
 MTP (`mtp.{j}.*`):
 
@@ -374,6 +387,21 @@ Important indexing details (from `Attention.forward`):
 
 - Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
 - Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
+
+### Top-k index matrix helpers (exact semantics)
+
+Reference implementation: `inference/model.py` (`get_window_topk_idxs`, `get_compress_topk_idxs`).
+
+These helpers define the *exact* sparse-attention gather indices (including `-1` sentinel placement) for both prefill (`start_pos==0`) and decode (`start_pos>0`) paths:
+
+- `get_window_topk_idxs(window_size, bsz, seqlen, start_pos)`:
+  - Prefill: constructs a causal sliding-window matrix for each token position, clamping indices below 0 and masking indices greater than the current token as `-1`.
+  - Decode: produces a 1×`window_size` matrix that either pads with `-1` (when `0 < start_pos < window_size-1`) or rotates indices modulo `window_size` (when `start_pos >= window_size-1`).
+- `get_compress_topk_idxs(ratio, bsz, seqlen, start_pos, offset)`:
+  - Prefill: builds a causal compressed-index matrix of width `seqlen // ratio`, masking entries not yet available at a given token position as `-1`, then adds `offset`.
+  - Decode: uses `torch.arange(0, (start_pos + 1) // ratio) + offset` (a growing linear range into the compressed segment).
+
+To avoid re-parsing upstream Python in every consumer, this repo pins these helper definitions verbatim (plus sha256 fingerprints) in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_index_helpers.*`.
 
 ### Sparse attention masking rule (sentinel indices)
 
@@ -570,6 +598,7 @@ To make the key set easy to reference in downstream tooling (and to detect accid
 
 - `checkpoint_index.weight_map_num_tensors`
 - `checkpoint_index.weight_map_keys_sha256`
+- `checkpoint_index.weight_map_top_level_keys_sha256`, `checkpoint_index.weight_map_top_level_tensor_key_count` (fingerprint/count for the non-`layers.*` / non-`mtp.*` top-level keys like `embed.weight` and `head.weight`)
 - `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`)
 - `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256` (convenience copies of the per-prefix `layers` / `mtp` hashes)
 - `mtp.checkpoint_key_fingerprint` (official `mtp.*` subset fingerprint; useful for deciding whether an artifact set plausibly preserves upstream `mtp.0.*`)
@@ -695,6 +724,13 @@ MoE gate conditional keys:
 - Hash layers: require `ffn.gate.tid2eid` and forbid `ffn.gate.bias` (`tensor_keys.layer_gate.tid2eid_layer_ids == [0,1,2]`).
 - Score layers: require `ffn.gate.bias` and forbid `ffn.gate.tid2eid` (`tensor_keys.layer_gate.gate_bias_layer_ids == [3..42]`).
 
+Per-layer helper views (exact tensor-name + count contract):
+
+- `tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` records the full non-expert suffix list for each trunk layer ID (base + CSA/HCA conditionals + correct gate suffix).
+- `tensor_keys.layer_expected_tensor_key_count_by_layer_id` records the expected **total** per-layer tensor-key count (experts + non-expert suffixes).
+- `tensor_keys.layer_tensor_key_count_by_layer_id` records the observed official checkpoint per-layer tensor-key counts.
+- `tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok` is `true` for all trunk layers in the pinned official checkpoint (sanity check that the derived count formulas match reality).
+
 MTP block (`mtp.0.*`):
 
 - Includes the same attention/MoE/HC keys as a score-routed sliding-only layer, plus:
@@ -798,6 +834,8 @@ When multiple `--path` values are provided, the tool emits both:
 - a stable fingerprint of the union key set across the artifact set (`combined.weight_keys_union_sha256` and, when present, `combined.mtp_keys_union_sha256`)
 
 Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published as a compact 32‑tensor `mtp.0.*` table with `general.architecture=deepseek4_mtp_support` (not a full official `mtp.0.*` checkpoint). Validate these sidecars explicitly before trying to load them in external runtimes:
+
+Machine-readable sidecar contract: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp_sidecar.*` (expected tensor table + pinned payload-sample fingerprint reference).
 
 ```sh
 python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json

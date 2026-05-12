@@ -61,6 +61,27 @@ Key signals (from the report JSON):
 
 Recommendation (synthetic): keep a **work-weighted backpressure** option available for real trace replay when `cost_scale` is meaningful (or derivable from `kv_tokens` / `decode_ms`). Do not default to work backpressure until real quantized-runtime traces show it improves starvation and interactive tail without an unacceptable drop/partial-admit tradeoff.
 
+## Backpressure Zero-Admit Policy (Skip vs Stall)
+
+Scenario: two-stream overload with reservation enabled (`expert_queue_reserve_interactive=16`), fixed batch `K=2`, and a small per-expert queue (`expert_queue_max=128`). Compare:
+
+- baseline: `backpressure_zero_admit_policy=skip` (drop a stage when all candidates are saturated; token may drop if every stage skips)
+- variant: `backpressure_zero_admit_policy=stall` (retry the blocked stage later to model upstream queueing)
+
+Key signals (from the report JSON):
+
+- `drop_frac_tokens`:
+  - skip: `0.732225`
+  - stall: `0.0`
+- `token_p95_batch_ms` (batch tail latency):
+  - skip: `163.9802753753623`
+  - stall: `3967.405404100289`
+- `blocked_stages_backpressure_attempts`:
+  - skip: `0.0`
+  - stall: `1298816.0`
+
+Recommendation (synthetic): keep **`skip`** as the default for early experiments so overload regimes surface as explicit drops/partial-admit rather than extreme queueing latency. Treat **`stall`** as a separate upstream-queueing mode to evaluate on real quantized-runtime traces when drops are unacceptable and queueing latency bounds are well-defined.
+
 ## Expert Batching (Per-Expert Microbatching)
 
 Scenario: two-stream overload with reservation enabled (`expert_queue_reserve_interactive=16`) and a simple service model with per-batch overhead:
@@ -251,10 +272,17 @@ These are synthetic signals only. The next gating artifact for scheduler work is
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --summary-json
 ```
 
-If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/`rejected_mtp`), you can run a quick MTP-on vs MTP-off ablation report (includes both `arrival_units=steps` and `arrival_units=output_tokens`) via:
+You can run a runtime-trace report that always includes a small scheduler knob sweep (`scheduler_sweeps`) for backpressure/queueing policies, and when the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/`rejected_mtp`) it also includes an MTP-on vs MTP-off ablation (both `arrival_units=steps` and `arrival_units=output_tokens`) via:
 
 ```bash
 python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
 ```
 
-If the trace also includes a speculative-decoding comparator (for example a target+DFlash run) via `dflash_accept_len` or `accepted_dflash`/`rejected_dflash`, the same report includes a separate `dflash_comparator` block that summarizes acceptance and reports a `service_slot_ms_per_output_token_ratio_vs_target_only` upper-bound efficiency ratio (comparator draft compute is not modeled).
+If the trace also includes a speculative-decoding comparator (for example a target+DFlash run) via `dflash_accept_len` or `accepted_dflash`/`rejected_dflash`, the same report includes a separate `dflash_comparator` block that summarizes acceptance and reports efficiency ratios without mixing the comparator into DeepSeek MTP acceptance assumptions. If you set `--dflash-draft-cost-scale`, the report also emits an `_adjusted` ratio that applies a crude per-step draft overhead model (still treat comparator ratios as approximate).
+
+Optional knobs for runtime traces:
+
+```bash
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --trace-derive-cost-scale kv_tokens_p50
+python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --dflash-draft-cost-scale 0.25
+```

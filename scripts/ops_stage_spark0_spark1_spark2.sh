@@ -4,121 +4,22 @@ set -eu
 usage()
 {
 	cat <<'EOF'
-ops_stage_spark0_spark1_spark2.sh -- stage DS4 deploy assets to Spark0/Spark1/Spark2 (Mac-side)
+ops_stage_spark0_spark1_spark2.sh -- compatibility wrapper for Spark ring staging
 
-Usage:
-  ops_stage_spark0_spark1_spark2.sh [--mesh-check] [--topology ring|full] [--tcp <port>]... [--instance0 <name>] [--instance1 <name>] [--instance2 <name>] <spark0_user@host> <spark1_user@host> <spark2_user@host>
+Prefer the inventory-driven command for new work:
 
-Environment:
-  SSH_OPTS   Optional ssh options override.
+  ops_stage_spark_ring.sh [--mesh-check] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
 
-Notes:
-  - Non-destructive; intended to run from the repo root (Mac-side).
-  - Runs `ops_validate_deploy_assets.sh` once, then stages to all three Sparks.
-  - Defaults instances to `spark0`..`spark2` (do not rely on ssh username inference).
-  - `--mesh-check` runs `ops_spark012_mesh_check.sh` before staging.
+This legacy name delegates all arguments to ops_stage_spark_ring.sh.
 EOF
 }
 
-mesh_check=0
-topology="ring"
-tcp_ports=""
-instance0="spark0"
-instance1="spark1"
-instance2="spark2"
-
-while [ $# -gt 0 ]; do
-	case "$1" in
-		--mesh-check)
-			mesh_check=1
-			shift
-			;;
-		--topology)
-			topology="${2:-}"
-			shift 2
-			;;
-		--tcp)
-			tcp_ports="$tcp_ports ${2:-}"
-			shift 2
-			;;
-		--instance0)
-			instance0="${2:-}"
-			shift 2
-			;;
-		--instance1)
-			instance1="${2:-}"
-			shift 2
-			;;
-		--instance2)
-			instance2="${2:-}"
-			shift 2
-			;;
-		-h|--help)
-			usage
-			exit 0
-			;;
-		*)
-			break
-			;;
-	esac
-done
-
-case "$topology" in
-	ring|full)
-		;;
-	*)
-		echo "invalid --topology: $topology (expected ring|full)" >&2
-		exit 2
+case "${1:-}" in
+	-h|--help)
+		usage
+		exit 0
 		;;
 esac
 
-if [ "$#" -ne 3 ]; then
-	usage >&2
-	exit 2
-fi
-
-spark0="$1"
-spark1="$2"
-spark2="$3"
-
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-
-echo "== stage spark012 deploy assets (Mac-side) =="
-date -Is 2>/dev/null || date || true
-echo "topology=$topology"
-echo "spark0: $spark0 (instance=$instance0)"
-echo "spark1: $spark1 (instance=$instance1)"
-echo "spark2: $spark2 (instance=$instance2)"
-echo
-
-if [ -x "$root/scripts/ops_validate_deploy_assets.sh" ]; then
-	"$root/scripts/ops_validate_deploy_assets.sh"
-	echo
-fi
-
-if [ "$mesh_check" -ne 0 ]; then
-	echo "== mesh check (Mac-side, optional) =="
-	set -- "$spark0" "$spark1" "$spark2"
-	if [ "$topology" != "" ]; then
-		set -- --topology "$topology" "$@"
-	fi
-	for p in $tcp_ports; do
-		set -- --tcp "$p" "$@"
-	done
-	"$root/scripts/ops_spark012_mesh_check.sh" "$@"
-	echo
-fi
-
-echo "== stage spark0 =="
-DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp3 "$root/scripts/ops_stage_deploy_assets.sh" "$spark0" "$instance0"
-echo
-
-echo "== stage spark1 =="
-DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp3 "$root/scripts/ops_stage_deploy_assets.sh" "$spark1" "$instance1"
-echo
-
-echo "== stage spark2 =="
-DS4_SKIP_VALIDATE=1 DS4_ENV_VARIANT=tp3 "$root/scripts/ops_stage_deploy_assets.sh" "$spark2" "$instance2"
-echo
-
-echo "== done =="
+exec "$root/scripts/ops_stage_spark_ring.sh" "$@"

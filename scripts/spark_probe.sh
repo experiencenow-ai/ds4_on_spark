@@ -180,6 +180,16 @@ hostname
 id
 uname -a
 echo
+echo "== clock =="
+date -u +"utc: %Y-%m-%dT%H:%M:%SZ"
+date -u +"epoch: %s"
+if command -v timedatectl >/dev/null 2>&1; then
+	timedatectl show -p NTPSynchronized -p SystemClockSynchronized -p NTPService -p TimeUSec 2>/dev/null || true
+fi
+if command -v chronyc >/dev/null 2>&1; then
+	chronyc tracking 2>/dev/null | grep -E "^(Reference ID|Stratum|Ref time|System time|Last offset|RMS offset|Frequency|Skew|Root delay|Root dispersion|Update interval|Leap status)" | head -n 40 || true
+fi
+echo
 echo "== os =="
 if [ -r /etc/os-release ]; then
 	cat /etc/os-release
@@ -772,7 +782,33 @@ command -v readlink >/dev/null 2>&1 && readlink -f /usr/local/cuda 2>/dev/null |
 [ -e /usr/local/cuda/version.txt ] && cat /usr/local/cuda/version.txt || true
 cuda_json_ver=""
 if [ -r /usr/local/cuda/version.json ]; then
-	cuda_json_ver="$(sed -nE "s/^[[:space:]]*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9.]+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
+	if command -v python3 >/dev/null 2>&1; then
+		cuda_json_ver="$(python3 - <<'PY' 2>/dev/null || true
+import json,sys,re
+p="/usr/local/cuda/version.json"
+try:
+    d=json.load(open(p))
+except Exception:
+    sys.exit(0)
+v=""
+if isinstance(d,dict):
+    cuda=d.get("cuda")
+    if isinstance(cuda,dict):
+        v=cuda.get("version","")
+    elif isinstance(cuda,str):
+        v=cuda
+    if not v and isinstance(d.get("version"),str):
+        v=d.get("version","")
+if isinstance(v,str):
+    m=re.search(r"[0-9]+(?:[.][0-9]+)+",v)
+    if m:
+        sys.stdout.write(m.group(0))
+PY
+)"
+	fi
+	if [ "$cuda_json_ver" = "" ]; then
+		cuda_json_ver="$(sed -nE "s/.*\\\"version\\\"[[:space:]]*:[[:space:]]*\\\"([0-9]+(\\.[0-9]+)+)\\\".*/\\1/p" /usr/local/cuda/version.json 2>/dev/null | head -n 1 || true)"
+	fi
 	if [ "$spark_probe_summary" != "1" ]; then
 		echo
 		echo "== cuda version.json (capped) =="
@@ -1087,6 +1123,7 @@ ls -l /dev/nvidia* 2>/dev/null | head -n 80 || true
 
 if [ "${REDACT:-0}" = "1" ]; then
 	sed -E \
+		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3}\/[0-9]{1,2})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4cidr>\4/g' \
 		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
 		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \

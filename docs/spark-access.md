@@ -7,11 +7,15 @@ Current observed Spark identity:
 - SSH port: reachable on port 22
 - Link-local IPv6: reachable through the Mac wired interface
 - Spark wired IPv4: configured by user as `<redacted-ipv4>`
-- Mac wired IPv4 observed during bootstrap: `<redacted-ipv4>/16`
-- Mac Wi-Fi IPv4 observed during bootstrap: `<redacted-ipv4>/24`
-- Spark Wi-Fi IPv4 observed during probe: `<redacted-ipv4>/24`
+- Mac wired IPv4 observed during bootstrap: `<redacted-ipv4cidr>`
+- Mac Wi-Fi IPv4 observed during bootstrap: `<redacted-ipv4cidr>`
+- Spark Wi-Fi IPv4 observed during probe: `<redacted-ipv4cidr>`
 - Spark wired interface: `enP7s7`, MTU 9000
 - SSH key authentication from the Mac is now working for `spark0`.
+- GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
+- CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
+- Latest commit-safe snapshot set: `2026-05-12T0122Z` (`docs/spark-ring-*-2026-05-12T0122Z.md`, `docs/spark0-probe-facts-2026-05-12T0122Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0122Z.md`
 
 ## Reproducible Probes
 
@@ -74,7 +78,16 @@ If the shim setup fails with an error like:
 
 - `error: The following untracked working tree files would be overwritten by checkout/reset`
 
-it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”). In that case, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
+it usually means the shim gitdir has no index yet (so it sees your existing checkout as “untracked”).
+
+Fast path (overwrites the working tree; only do this when `git status` is clean and you are OK discarding any local-only files):
+
+```bash
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
+```
+
+If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
 
 ```bash
 # Seed `.codex_git/` from the current checkout worktree metadata.
@@ -126,7 +139,7 @@ Notes:
 - When multiple targets are passed to `scripts/spark_probe.sh`, the probe continues even if a target is unreachable; it prints `ssh: failed rc=...` plus a `== probe summary ==` with `ssh failures: N`. The script exits non-zero if any target fails, so append `|| true` when you want to save partial output (e.g. Spark0 ok, Spark1 offline).
 - The Spark probe prints `ssh opts:` so SSH behavior is explicit in committed excerpts.
 - Use `REDACT=1` for any output you plan to commit.
-- `REDACT=1` redaction is delimiter-aware (it will redact actual IP addresses without clobbering non-secret version strings like `0ubuntu0.24.04.1`), and includes both expanded and compressed (`::`) IPv6 forms.
+- `REDACT=1` redaction is delimiter-aware (it will redact IPv4, IPv4 CIDR, MACs, and IPv6 without clobbering non-secret version strings like `0ubuntu0.24.04.1`).
 - Both scripts print the current git short hash when run inside a git worktree, to make snapshots traceable to a specific script version.
 - `scripts/mac_spark_discovery.sh` prints `targets:` so default/explicit targets are visible in committed excerpts.
 - If the checkout's `.git` metadata is not usable (provenance/permission issues), the scripts also check for a local shim gitdir at `.codex_git/` or `.git-codex/` (bare gitdir) or `.codex_git/.git` / `.git-codex/.git` (non-bare `git init <dir>` layout), plus `.gitshim/repo/.git` (used by some probe automations). If either exists, set `DS4_GIT_DIR`/`DS4_GIT_WORK_TREE` explicitly so snapshots capture the correct `git: <hash>`. Otherwise, set `DS4_GIT_DIR=/path/to/.git` so the scripts can still print the correct `git: <hash>` for the scripts you are running. If your `DS4_GIT_DIR` is not tied to the current working directory, also set `DS4_GIT_WORK_TREE=/path/to/worktree` (defaults to `$PWD`).
@@ -162,6 +175,15 @@ This prints:
 - Quick SSH port checks against known targets
 - Per-target macOS route selection (`route -n get ...`) to show which interface is used
 - Optional mDNS resolution output for `*.local` targets
+
+### Spark Ring Snapshot Set (one command)
+
+To produce a full, commit-safe snapshot set for ring bring-up (mac discovery + ring probe + MTU + bandwidth + Spark0 facts), use:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
 
 ### Spark Hardware + Toolchain Probe
 

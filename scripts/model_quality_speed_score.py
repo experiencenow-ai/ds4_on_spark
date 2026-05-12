@@ -32,6 +32,7 @@ class ScoreRow:
     total_tasks: Optional[float]
     passed_tasks: Optional[float]
     correct_task_rate: Optional[float]
+    correct_tasks_per_s: Optional[float]
     quality_adjusted_decode_tps: Optional[float]
     quality_adjusted_prefill_tps: Optional[float]
     tokens_per_success: Optional[float]
@@ -110,7 +111,8 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
         output_tokens = _float(row, "output_tokens", "generated_tokens")
         total_tasks = _float(row, "total_tasks", "local_total")
         passed_tasks = _float(row, "passed_tasks", "local_passed")
-        correct_task_rate = _ratio(passed_tasks, total_wall_s)
+        correct_task_rate = _ratio(passed_tasks, total_tasks)
+        correct_tasks_per_s = _ratio(passed_tasks, total_wall_s)
         qfrac = None if quality_score is None else (quality_score / 100.0)
         qad = None if qfrac is None or decode_tps is None else (qfrac * decode_tps)
         qap = None if qfrac is None or prefill_tps is None else (qfrac * prefill_tps)
@@ -135,6 +137,7 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
             total_tasks=total_tasks,
             passed_tasks=passed_tasks,
             correct_task_rate=correct_task_rate,
+            correct_tasks_per_s=correct_tasks_per_s,
             quality_adjusted_decode_tps=qad,
             quality_adjusted_prefill_tps=qap,
             tokens_per_success=tokens_per_success,
@@ -202,6 +205,7 @@ def rows_to_dicts(rows: Sequence[ScoreRow]) -> List[Dict[str, Any]]:
             "passed_tasks": row.passed_tasks,
             "total_tasks": row.total_tasks,
             "correct_task_rate": row.correct_task_rate,
+            "correct_tasks_per_s": row.correct_tasks_per_s,
             "quality_adjusted_decode_tps": row.quality_adjusted_decode_tps,
             "quality_adjusted_prefill_tps": row.quality_adjusted_prefill_tps,
             "tokens_per_success": row.tokens_per_success,
@@ -214,14 +218,14 @@ def rows_to_dicts(rows: Sequence[ScoreRow]) -> List[Dict[str, Any]]:
 
 def print_markdown(rows: Sequence[ScoreRow]) -> None:
     ordered = sorted(rows, key=lambda r: (r.quality_adjusted_decode_tps is not None, r.quality_adjusted_decode_tps or -1.0), reverse=True)
-    print("| model | run | scope | quality | source | passed/total | decode t/s | wall s | out tok | quality-adjusted t/s | correct tasks/s | tokens/success | Pareto |")
-    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    print("| model | run | scope | quality | source | passed/total | decode t/s | wall s | out tok | quality-adjusted t/s | correct rate | tasks/s | tokens/success | Pareto |")
+    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for row in ordered:
         pareto = "yes" if row.dominated_by == "" and row.quality_score is not None else f"no: {row.dominated_by}"
         passed_total = ""
         if row.passed_tasks is not None and row.total_tasks is not None:
             passed_total = f"{int(row.passed_tasks)}/{int(row.total_tasks)}"
-        print("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+        print("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
             row.model,
             row.run_id,
             row.scope,
@@ -233,6 +237,7 @@ def print_markdown(rows: Sequence[ScoreRow]) -> None:
             _fmt(row.output_tokens),
             _fmt(row.quality_adjusted_decode_tps),
             _fmt(row.correct_task_rate),
+            _fmt(row.correct_tasks_per_s),
             _fmt(row.tokens_per_success),
             pareto,
         ))
@@ -248,7 +253,7 @@ def read_csv(path: str) -> List[Dict[str, str]]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Score model quality/speed tradeoffs from a baseline CSV.")
     p.add_argument("csv_path", help="CSV path, or '-' for stdin")
-    p.add_argument("--speed-field", default="decode_tps", choices=("decode_tps", "prefill_tps", "correct_task_rate", "quality_adjusted_decode_tps", "quality_adjusted_prefill_tps"))
+    p.add_argument("--speed-field", default="decode_tps", choices=("decode_tps", "prefill_tps", "correct_task_rate", "correct_tasks_per_s", "quality_adjusted_decode_tps", "quality_adjusted_prefill_tps"))
     p.add_argument("--json", action="store_true", help="Emit JSON instead of markdown")
     args = p.parse_args(argv)
     rows = score_rows(read_csv(args.csv_path), args.speed_field)

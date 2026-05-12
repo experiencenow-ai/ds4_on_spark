@@ -1,8 +1,15 @@
-# Centaur HyoR ring rehearsal: Spark1/Spark2/Spark3 (prep + runbook)
+# Example Centaur HyoR ring rehearsal: Spark1/Spark2/Spark3
 
-If you only have Spark1/Spark2 (3-node ring total), start with:
+Prefer the inventory-driven scripts for new work:
+
+- `scripts/centaur_spark_ring_sim_v73.sh` with `SPARK_NODE_COUNT=<N>`
+- `scripts/centaur_spark_ring_rsync_v73.sh <spark1> [spark2 ...]`
+
+The current 3-node example remains:
 
 - `docs/centaur-ring-spark12.md`
+
+This file is retained as a 4-node example, not as a source of truth for the current inventory.
 
 Goal: prepare repeatable Spark1/Spark2/Spark3 ring steps **without needing extra hardware yet**, then provide a first “real ring” path once Spark1/2/3 exist.
 

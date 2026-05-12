@@ -254,22 +254,48 @@ else
 	have_m_flag="0"
 fi
 
+classify_ping_fail()
+{
+	out="$1"
+	case "$out" in
+		*"Name or service not known"*|*"Temporary failure in name resolution"*|*"unknown host"*)
+			echo "resolve_failed"
+			;;
+		*"No route to host"*|*"Network is unreachable"*)
+			echo "no_route"
+			;;
+		*"Frag needed"*|*"Packet too big"*|*"Message too long"*|*"mtu="*)
+			echo "mtu_blocked"
+			;;
+		*"100% packet loss"*|*"Request timeout"*|*"time out"*)
+			echo "timeout"
+			;;
+		*"Destination Host Unreachable"*|*"Destination Net Unreachable"*)
+			echo "unreachable"
+			;;
+		*)
+			echo "fail"
+			;;
+	esac
+	return 0
+}
+
 for peer in "$@"; do
 	echo "-- $peer --"
 	payloads="$(printf "%s" "$payloads_csv" | tr ',' ' ' | tr -s ' ' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
 	for sz in $payloads; do
 		label="payload=${sz}"
 		if [ "$have_m_flag" = "1" ]; then
-			if ping -c 1 -W 1 -M do -s "$sz" "$peer" >/dev/null 2>&1; then
+			if out="$(ping -c 1 -W 1 -M do -s "$sz" "$peer" 2>&1)"; then
 				echo "$label: ok"
 			else
-				echo "$label: fail"
+				echo "$label: fail status=$(classify_ping_fail "$out")"
 			fi
 		else
-			if ping -c 1 -W 1 -s "$sz" "$peer" >/dev/null 2>&1; then
+			if out="$(ping -c 1 -W 1 -s "$sz" "$peer" 2>&1)"; then
 				echo "$label: ok (no DF)"
 			else
-				echo "$label: fail"
+				echo "$label: fail status=$(classify_ping_fail "$out")"
 			fi
 		fi
 	done
@@ -290,13 +316,14 @@ REMOTE
 	fi
 } >"$tmp"
 
-if [ "${REDACT:-0}" = "1" ]; then
-	sed -E \
-		-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
-		-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
-		-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
-		-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
-		"$tmp"
+	if [ "${REDACT:-0}" = "1" ]; then
+		sed -E \
+			-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3}\/[0-9]{1,2})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4cidr>\4/g' \
+			-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
+			-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+			-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
+			-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+			"$tmp"
 else
 	cat "$tmp"
 fi

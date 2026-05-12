@@ -161,6 +161,7 @@ class SimConfig:
     k_signal: str = "global"
     pending_units: str = "tasks"
     backpressure_units: str = "tasks"
+    backpressure_zero_admit_policy: str = "skip"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -229,6 +230,7 @@ class TokenState:
     stage_idx: int = 0
     stage_total: int = 1
     stages: Optional[Tuple[StagePlan, ...]] = None
+    stage_accounted_idx: int = -1
     admitted_any: bool = False
     metrics_slot: int = -1
     admitted_verify_layer0: int = 0
@@ -358,6 +360,9 @@ class SimMetrics:
     skipped_stages_backpressure_batch: int = 0
     skipped_stages_backpressure_verify: int = 0
     skipped_stages_backpressure_draft: int = 0
+    blocked_stages_backpressure_attempts: int = 0
+    blocked_stages_backpressure_attempts_interactive: int = 0
+    blocked_stages_backpressure_attempts_batch: int = 0
     skipped_stages_backpressure_per_layer: List[int] = dataclasses.field(default_factory=list)
     skipped_stages_backpressure_per_layer_verify: List[int] = dataclasses.field(default_factory=list)
     skipped_stages_backpressure_per_layer_draft: List[int] = dataclasses.field(default_factory=list)
@@ -709,6 +714,9 @@ class SimMetrics:
                     "skipped_backpressure_batch": self.skipped_stages_backpressure_batch,
                     "skipped_backpressure_verify": self.skipped_stages_backpressure_verify,
                     "skipped_backpressure_draft": self.skipped_stages_backpressure_draft,
+                    "blocked_backpressure_attempts": self.blocked_stages_backpressure_attempts,
+                    "blocked_backpressure_attempts_interactive": self.blocked_stages_backpressure_attempts_interactive,
+                    "blocked_backpressure_attempts_batch": self.blocked_stages_backpressure_attempts_batch,
                     "per_layer": [
                         {
                             "layer": int(li),
@@ -2330,6 +2338,83 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             }
         )
 
+    def accept_len_histogram(accept_lens_in: Sequence[float], draft_len: int) -> Optional[Dict[str, object]]:
+        if len(accept_lens_in) == 0 or int(draft_len) <= 0:
+            return(None)
+        dl = int(draft_len)
+        counts: List[int] = [0 for _ in range(dl + 1)]
+        invalid = 0
+        for v in accept_lens_in:
+            if isinstance(v, (int, float)) == False:
+                invalid += 1
+                continue
+            al = int(v)
+            if float(al) != float(v):
+                invalid += 1
+                continue
+            if al < 1 or al > (dl + 1):
+                invalid += 1
+                continue
+            counts[al - 1] += 1
+        total = int(sum(counts))
+        prob: List[float] = [0.0 for _ in range(dl + 1)]
+        if total > 0:
+            prob = [float(c) / float(total) for c in counts]
+        return(
+            {
+                "draft_len": int(dl),
+                "total": int(total),
+                "invalid": int(invalid),
+                "accept_len_values": [i + 1 for i in range(dl + 1)],
+                "counts": counts,
+                "prob": prob,
+            }
+        )
+
+    def accept_len_derived_rates(accept_lens_in: Sequence[float], draft_len: int) -> Optional[Dict[str, object]]:
+        hist = accept_len_histogram(accept_lens_in, draft_len)
+        if hist is None:
+            return(None)
+        if not isinstance(hist.get("counts"), list):
+            return(None)
+        counts = hist.get("counts")
+        if not isinstance(counts, list):
+            return(None)
+        dl = int(hist.get("draft_len", 0))
+        if dl <= 0:
+            return(None)
+        total = int(hist.get("total", 0))
+        if total <= 0:
+            return(None)
+
+        accept_tokens = 0
+        accept_len_sum = 0
+        for i, c in enumerate(counts):
+            if not isinstance(c, int):
+                return(None)
+            if c <= 0:
+                continue
+            al = (i + 1)
+            accept_len_sum += (al * int(c))
+            accept_tokens += ((al - 1) * int(c))
+
+        mean_accept_len = float(accept_len_sum) / float(total)
+        mean_accepted_tokens = float(accept_tokens) / float(total)
+        accept_rate = mean_accepted_tokens / float(dl)
+        reject_frac = float(counts[0]) / float(total) if len(counts) >= 1 else 0.0
+        bonus_frac = float(counts[dl]) / float(total) if len(counts) >= (dl + 1) else 0.0
+        return(
+            {
+                "draft_len": int(dl),
+                "total": int(total),
+                "mean_accept_len": float(mean_accept_len),
+                "mean_accepted_tokens": float(mean_accepted_tokens),
+                "accept_rate": float(accept_rate),
+                "reject_frac": float(reject_frac),
+                "bonus_frac": float(bonus_frac),
+            }
+        )
+
     num_i = 0
     num_b = 0
     t_ms: List[float] = []
@@ -2467,8 +2552,24 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["k"] = summarize(k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
+        hist = accept_len_histogram(accept_lens, int(mtp_draft_len))
+        if hist is None and meta is not None:
+            inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+            if inferred_mtp_draft_len is not None:
+                hist = accept_len_histogram(accept_lens, int(inferred_mtp_draft_len))
+        if hist is not None:
+            out["mtp_accept_len_hist"] = hist
+            rates = accept_len_derived_rates(accept_lens, int(hist.get("draft_len", 0)))
+            if rates is not None:
+                out["mtp_accept_derived"] = rates
     if len(dflash_accept_lens) != 0:
         out["dflash_accept_len_derived"] = summarize(dflash_accept_lens)
+        hist = accept_len_histogram(dflash_accept_lens, int(dflash_draft_len))
+        if hist is not None:
+            out["dflash_accept_len_hist"] = hist
+            rates = accept_len_derived_rates(dflash_accept_lens, int(hist.get("draft_len", 0)))
+            if rates is not None:
+                out["dflash_accept_derived"] = rates
     if len(decode_ms) != 0:
         out["decode_ms"] = summarize(decode_ms)
     if len(token_index_vals) != 0:
@@ -2523,7 +2624,22 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
             gamma = g
         elif gamma != g:
             return(None)
-    return(gamma)
+    if gamma is not None:
+        return(gamma)
+
+    max_accept_len = 0
+    for r in trace:
+        if r.mtp_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.mtp_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+
+    # mtp_accept_len is the output-token count per verify step (>=1). A draft length of gamma implies:
+    #   1 <= accept_len <= (gamma + 1)
+    # If a trace only includes accept_len=1 (all rejects), gamma is underdetermined; pick gamma=1 so we can
+    # still run an MTP-on replay without violating bounds.
+    return(max(1, int(max_accept_len) - 1))
 
 
 def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
@@ -2541,7 +2657,17 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
             gamma = g
         elif gamma != g:
             return(None)
-    return(gamma)
+    if gamma is not None:
+        return(gamma)
+
+    max_accept_len = 0
+    for r in trace:
+        if r.dflash_accept_len is None:
+            continue
+        max_accept_len = max(max_accept_len, int(r.dflash_accept_len))
+    if max_accept_len <= 0:
+        return(None)
+    return(max(1, int(max_accept_len) - 1))
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -3113,6 +3239,10 @@ def run_simulation(
     if backpressure_units not in ("tasks", "work"):
         raise ValueError("backpressure_units must be 'tasks' or 'work'")
 
+    backpressure_zero_admit_policy = cfg.backpressure_zero_admit_policy.strip().lower()
+    if backpressure_zero_admit_policy not in ("skip", "stall"):
+        raise ValueError("backpressure_zero_admit_policy must be 'skip' or 'stall'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -3243,6 +3373,8 @@ def run_simulation(
 
     experts: List[ExpertQueue] = [ExpertQueue() for _ in range(cfg.num_experts)]
     tokens: Dict[int, TokenState] = {}
+    stalled_tokens: Deque[int] = deque()
+    stalled_set: set[int] = set()
     max_layers_seen = 1
     for route in trace:
         max_layers_seen = max(max_layers_seen, len(_route_layers(route)))
@@ -3626,6 +3758,33 @@ def run_simulation(
             _start_tasks(now_ms, cfg, eq, expert_id, evq, seq_ref, metrics)
         return(admitted)
 
+    def _stall_token(tid: int) -> None:
+        if tid in stalled_set:
+            return
+        stalled_set.add(tid)
+        stalled_tokens.append(tid)
+
+    def _retry_stalled(now_ms: float) -> None:
+        if len(stalled_tokens) == 0:
+            return
+        # Avoid O(N^2) retry storms under sustained overload (stall policy can accumulate many blocked tokens).
+        # We retry a bounded number per TASK_DONE event; blocked tokens stay in the deque until they can admit.
+        retry_budget = len(stalled_tokens)
+        max_retry = max(32, int(cfg.num_experts) * max(1, int(cfg.expert_parallelism)))
+        if retry_budget > max_retry:
+            retry_budget = max_retry
+        for _ in range(retry_budget):
+            tid = stalled_tokens.popleft()
+            stalled_set.discard(tid)
+            ts = tokens.get(tid)
+            if ts is None:
+                continue
+            if ts.done_ms is not None:
+                continue
+            if ts.remaining != 0:
+                continue
+            _advance_token(now_ms, tid)
+
     def _finish_token(now_ms: float, tid: int) -> None:
         ts = tokens[tid]
         if ts.done_ms is not None:
@@ -3683,7 +3842,8 @@ def run_simulation(
         while ts.remaining == 0 and ts.done_ms is None and ts.stage_idx < ts.stage_total:
             stage = ts.stages[ts.stage_idx]
             desired_stage = min(stage.k, len(stage.candidates))
-            if desired_stage > 0:
+            first_attempt = (ts.stage_accounted_idx != ts.stage_idx)
+            if desired_stage > 0 and first_attempt:
                 metrics.stages_total += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.stages_total_interactive += 1
@@ -3699,8 +3859,19 @@ def run_simulation(
                         metrics.stages_total_per_layer_verify[stage.layer_index] += 1
                     else:
                         metrics.stages_total_per_layer_draft[stage.layer_index] += 1
+                ts.stage_accounted_idx = ts.stage_idx
             admitted = _enqueue_stage(now_ms, tid, stage)
             if admitted == 0 and desired_stage > 0:
+                if backpressure_zero_admit_policy == "stall":
+                    pending_limit = _expert_queue_pending_limit_units(cfg, ts.cls, backpressure_units)
+                    if float(pending_limit) > 0.0:
+                        metrics.blocked_stages_backpressure_attempts += 1
+                        if ts.cls == LatencyClass.INTERACTIVE:
+                            metrics.blocked_stages_backpressure_attempts_interactive += 1
+                        else:
+                            metrics.blocked_stages_backpressure_attempts_batch += 1
+                        _stall_token(tid)
+                        return
                 metrics.skipped_stages_backpressure += 1
                 if ts.cls == LatencyClass.INTERACTIVE:
                     metrics.skipped_stages_backpressure_interactive += 1
@@ -4049,6 +4220,8 @@ def run_simulation(
         else:
             raise RuntimeError("unknown event kind")
 
+        if ev.kind == EventKind.TASK_DONE:
+            _retry_stalled(now_ms)
         snapshot_state()
 
     makespan_ms = max((t.done_ms or 0.0) for t in tokens.values()) if len(tokens) != 0 else 0.0
@@ -4369,6 +4542,9 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "skipped_stage_frac_batch": float(skipped_stage_frac_batch),
             "skipped_stage_frac_verify": float(skipped_stage_frac_verify),
             "skipped_stage_frac_draft": float(skipped_stage_frac_draft),
+            "blocked_stages_backpressure_attempts": float(metrics.blocked_stages_backpressure_attempts),
+            "blocked_stages_backpressure_attempts_interactive": float(metrics.blocked_stages_backpressure_attempts_interactive),
+            "blocked_stages_backpressure_attempts_batch": float(metrics.blocked_stages_backpressure_attempts_batch),
         }
 
     for li in range(len(metrics.stages_total_per_layer)):
@@ -4791,7 +4967,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--sla-interactive-ms", type=float, default=0.0, help="Token SLA: count interactive tokens with latency > this (0 = disabled).")
     p.add_argument("--sla-batch-ms", type=float, default=0.0, help="Token SLA: count batch tokens with latency > this (0 = disabled).")
     p.add_argument("--sim-seed", type=int, default=1, help="Simulation seed (used for MTP accept/reject sampling).")
-    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (requires accepted_mtp+rejected_mtp or meta.mtp_draft_len).")
+    p.add_argument("--mtp-draft-len", type=int, default=0, help="MTP: number of draft tokens per verify step (0 = disabled). Replay: use -1 to infer from trace/meta (uses mtp_accept_len, accepted_mtp+rejected_mtp, or meta.mtp_draft_len).")
     p.add_argument("--mtp-accept-prob", type=float, default=0.0, help="MTP: conditional accept probability for draft position 0 (within [0,1]).")
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="MTP: conditional accept probability decay factor per draft position (>0, <1 biases early accept).")
     p.add_argument(
@@ -4810,7 +4986,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
     p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
-    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from meta.dflash_draft_len or consistent accepted_dflash+rejected_dflash.")
+    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from dflash_accept_len, meta.dflash_draft_len, or consistent accepted_dflash+rejected_dflash.")
     p.add_argument(
         "--dflash-draft-cost-scale",
         type=float,
@@ -4844,6 +5020,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=str,
         default="tasks",
         help="Backpressure capacity units: tasks (default) caps queued+in-flight tasks per expert; work caps queued+in-flight sum(cost_scale) per expert (use with meaningful cost_scale in traces).",
+    )
+    p.add_argument(
+        "--backpressure-zero-admit-policy",
+        type=str,
+        default="skip",
+        choices=("skip", "stall"),
+        help="When a stage cannot admit any tasks because all candidates are at the pending limit: skip (default; counts as a backpressure stage-skip and can drop tokens if all stages skip) or stall (retry the same stage later, modeling upstream queueing; can increase latency/makespan).",
     )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument(
@@ -5167,6 +5350,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         k_signal=args.k_signal,
         pending_units=args.pending_units,
         backpressure_units=args.backpressure_units,
+        backpressure_zero_admit_policy=args.backpressure_zero_admit_policy,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,

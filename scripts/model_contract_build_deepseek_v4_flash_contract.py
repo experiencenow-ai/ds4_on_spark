@@ -14,6 +14,8 @@ FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
 DEFAULT_OUT = FIX / "contract_summary.json"
 INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
+MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
+MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-b0c3326-payload64.json"
 
 
 def load_json(path: Path):
@@ -42,6 +44,103 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(line.encode("utf-8"))
 		h.update(b"\n")
 	return h.hexdigest()
+
+
+
+def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path) -> Optional[list[str]]:
+	if not probe_py.exists():
+		return None
+	text = probe_py.read_text(encoding="utf-8")
+	try:
+		mod = ast.parse(text, filename=str(probe_py))
+	except SyntaxError:
+		return None
+
+	found: list[list[str]] = []
+	for node in ast.walk(mod):
+		if not isinstance(node, ast.Assign):
+			continue
+		if len(node.targets) != 1:
+			continue
+		t = node.targets[0]
+		if not isinstance(t, ast.Name) or t.id != "expected_names":
+			continue
+		if not isinstance(node.value, ast.List):
+			continue
+		vals: list[str] = []
+		ok = True
+		for elt in node.value.elts:
+			if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+				vals.append(elt.value)
+			else:
+				ok = False
+				break
+		if ok and vals:
+			found.append(vals)
+	if not found:
+		return None
+	found.sort(key=len, reverse=True)
+	return list(found[0])
+
+
+def parse_ds4_mtp_sidecar_payload_samples_fingerprint(reference_json: Path) -> dict:
+	if not reference_json.exists():
+		return {
+			"reference_json": str(reference_json),
+			"reference_sha256": None,
+			"payload_sample_bytes": None,
+			"payload_samples_count": None,
+			"payload_samples_sha256": None,
+		}
+
+	try:
+		doc = load_json(reference_json)
+	except Exception:
+		return {
+			"reference_json": str(reference_json),
+			"reference_sha256": sha256_file(reference_json),
+			"payload_sample_bytes": None,
+			"payload_samples_count": None,
+			"payload_samples_sha256": None,
+		}
+
+	sample_bytes = doc.get("payload_sample_bytes", None) if isinstance(doc, dict) else None
+	samples = doc.get("payload_samples", None) if isinstance(doc, dict) else None
+
+	lines: list[str] = []
+	if isinstance(samples, dict):
+		for name in sorted(samples.keys()):
+			s = samples.get(name, None)
+			if not isinstance(name, str) or not isinstance(s, dict):
+				continue
+			n = s.get("n", None)
+			fnv = s.get("fnv1a64", None)
+			off = s.get("offset", None)
+			if not isinstance(n, int) or not isinstance(fnv, str) or not isinstance(off, int):
+				continue
+			lines.append(f"{name}\t{int(n)}\t{fnv}\t{int(off)}")
+
+	out_sha = sha256_lines(lines) if lines else None
+	return {
+		"reference_json": str(reference_json),
+		"reference_sha256": sha256_file(reference_json),
+		"payload_sample_bytes": int(sample_bytes) if isinstance(sample_bytes, int) else None,
+		"payload_samples_count": int(len(lines)) if lines else None,
+		"payload_samples_sha256": out_sha,
+	}
+
+
+def build_ds4_mtp_sidecar_contract() -> dict:
+	expected = parse_ds4_mtp_sidecar_expected_tensor_names(MTP_SIDECAR_PROBE_PY)
+	expected_sha = sha256_lines(expected) if isinstance(expected, list) else None
+	return {
+		"reference_source": "scripts/model_contract_probe_mtp_sidecar.py (DS4-tuned sidecar tensor table)",
+		"general_architecture": "deepseek4_mtp_support",
+		"expected_tensor_names": expected,
+		"expected_tensor_names_sha256": expected_sha,
+		"expected_tensor_count": int(len(expected)) if isinstance(expected, list) else None,
+		"reference_payload_samples": parse_ds4_mtp_sidecar_payload_samples_fingerprint(MTP_SIDECAR_REFERENCE_JSON),
+	}
 
 def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
@@ -91,7 +190,7 @@ def build_oracle_contract() -> dict:
 		},
 	}
 
-def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
+def build_tensor_shapes(cfg: dict, inf: dict, inf_model: dict) -> dict:
 	dim = int(cfg["hidden_size"])
 	vocab_size = int(cfg["vocab_size"])
 	n_heads = int(cfg["num_attention_heads"])
@@ -110,6 +209,25 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 	index_n_heads = int(inf["index_n_heads"])
 	index_head_dim = int(inf["index_head_dim"])
 
+	inf_consts = inf_model.get("inference_model_constants", {}) if isinstance(inf_model, dict) else {}
+	block_size = inf_consts.get("block_size", None) if isinstance(inf_consts, dict) else None
+	fp4_block_size = inf_consts.get("fp4_block_size", None) if isinstance(inf_consts, dict) else None
+	if not isinstance(block_size, int):
+		block_size = None
+	if not isinstance(fp4_block_size, int):
+		fp4_block_size = None
+
+	def fp8_scale_shape(out_features: int, in_features: int) -> list[int]:
+		assert block_size is not None
+		return [
+			(int(out_features) + int(block_size) - 1) // int(block_size),
+			(int(in_features) + int(block_size) - 1) // int(block_size),
+		]
+
+	def fp4_scale_shape(out_features: int, in_features: int) -> list[int]:
+		assert fp4_block_size is not None
+		return [int(out_features), int(in_features) // int(fp4_block_size)]
+
 	return {
 		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (logical/unsharded shapes)",
 		"top_level": {
@@ -124,12 +242,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			"attn": {
 				"attn_sink": [n_heads],
 				"wq_a.weight": [q_lora_rank, dim],
+				"wq_a.scale": fp8_scale_shape(q_lora_rank, dim) if block_size is not None else None,
 				"q_norm.weight": [q_lora_rank],
 				"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+				"wq_b.scale": fp8_scale_shape(n_heads * head_dim, q_lora_rank) if block_size is not None else None,
 				"wkv.weight": [head_dim, dim],
+				"wkv.scale": fp8_scale_shape(head_dim, dim) if block_size is not None else None,
 				"kv_norm.weight": [head_dim],
 				"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+				"wo_a.scale": fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups) if block_size is not None else None,
 				"wo_b.weight": [dim, o_groups * o_lora_rank],
+				"wo_b.scale": fp8_scale_shape(dim, o_groups * o_lora_rank) if block_size is not None else None,
 				"attn_norm.weight": [dim],
 			},
 			"compressor": {
@@ -143,6 +266,7 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 			"indexer": {
 				"note": "Indexer tensors exist only for CSA layers (compress_ratio==4).",
 				"wq_b.weight": [index_n_heads * index_head_dim, q_lora_rank],
+				"wq_b.scale": fp8_scale_shape(index_n_heads * index_head_dim, q_lora_rank) if block_size is not None else None,
 				"weights_proj.weight": [index_n_heads, dim],
 				"compressor": {
 					"ape.shape_formula": "[compress_ratio, (1+overlap)*index_head_dim]",
@@ -156,11 +280,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"gate.tid2eid": [vocab_size, n_activated_experts],
 				"gate.bias": [n_routed_experts],
 				"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+				"experts.{eid}.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 				"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+				"experts.{eid}.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"shared_experts.w1.weight": [moe_inter_dim, dim],
+				"shared_experts.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				"shared_experts.w2.weight": [dim, moe_inter_dim],
+				"shared_experts.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 				"shared_experts.w3.weight": [moe_inter_dim, dim],
+				"shared_experts.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 			},
 			"hyper_connections": {
 				"hc_mult": hc_mult,
@@ -180,12 +310,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 				"attn": {
 					"attn_sink": [n_heads],
 					"wq_a.weight": [q_lora_rank, dim],
+					"wq_a.scale": fp8_scale_shape(q_lora_rank, dim) if block_size is not None else None,
 					"q_norm.weight": [q_lora_rank],
 					"wq_b.weight": [n_heads * head_dim, q_lora_rank],
+					"wq_b.scale": fp8_scale_shape(n_heads * head_dim, q_lora_rank) if block_size is not None else None,
 					"wkv.weight": [head_dim, dim],
+					"wkv.scale": fp8_scale_shape(head_dim, dim) if block_size is not None else None,
 					"kv_norm.weight": [head_dim],
 					"wo_a.weight": [o_groups * o_lora_rank, (n_heads * head_dim) // o_groups],
+					"wo_a.scale": fp8_scale_shape(o_groups * o_lora_rank, (n_heads * head_dim) // o_groups) if block_size is not None else None,
 					"wo_b.weight": [dim, o_groups * o_lora_rank],
+					"wo_b.scale": fp8_scale_shape(dim, o_groups * o_lora_rank) if block_size is not None else None,
 					"attn_norm.weight": [dim],
 				},
 				"compressor": {
@@ -196,11 +331,17 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 					"gate.tid2eid": [vocab_size, n_activated_experts],
 					"gate.bias": [n_routed_experts],
 					"experts.{eid}.w1.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"experts.{eid}.w2.weight": [dim, moe_inter_dim],
+					"experts.{eid}.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 					"experts.{eid}.w3.weight": [moe_inter_dim, dim],
+					"experts.{eid}.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"shared_experts.w1.weight": [moe_inter_dim, dim],
+					"shared_experts.w1.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 					"shared_experts.w2.weight": [dim, moe_inter_dim],
+					"shared_experts.w2.scale": fp4_scale_shape(dim, moe_inter_dim) if fp4_block_size is not None else None,
 					"shared_experts.w3.weight": [moe_inter_dim, dim],
+					"shared_experts.w3.scale": fp4_scale_shape(moe_inter_dim, dim) if fp4_block_size is not None else None,
 				},
 				"hyper_connections": {
 					"hc_mult": hc_mult,
@@ -222,7 +363,9 @@ def build_tensor_shapes(cfg: dict, inf: dict) -> dict:
 		},
 		"mtp": {
 			"e_proj.weight": [dim, dim],
+			"e_proj.scale": fp8_scale_shape(dim, dim) if block_size is not None else None,
 			"h_proj.weight": [dim, dim],
+			"h_proj.scale": fp8_scale_shape(dim, dim) if block_size is not None else None,
 			"enorm.weight": [dim],
 			"hnorm.weight": [dim],
 			"norm.weight": [dim],
@@ -448,6 +591,31 @@ def find_first_line_containing(text: str, needle: str) -> Optional[str]:
 			return raw.strip()
 	return None
 
+def extract_function_source_lines(text: str, func_name: str) -> Optional[list[str]]:
+	try:
+		mod = ast.parse(text)
+	except Exception:
+		return None
+	lines = text.splitlines()
+	for node in mod.body:
+		if not isinstance(node, ast.FunctionDef):
+			continue
+		if node.name != func_name:
+			continue
+		start = node.lineno
+		if node.decorator_list:
+			start = min((getattr(d, "lineno", start) for d in node.decorator_list))
+		end = getattr(node, "end_lineno", None)
+		if not isinstance(start, int) or not isinstance(end, int) or start <= 0 or end <= 0:
+			return None
+		if end < start or end > len(lines):
+			return None
+		out = [ln.rstrip() for ln in lines[start - 1 : end]]
+		while out and out[-1] == "":
+			out.pop()
+		return out
+	return None
+
 def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
@@ -468,6 +636,9 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	compress_decode_write = find_first_line_containing(text, "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)")
 	compress_freqs_prefill = find_first_line_containing(text, "freqs_cis = self.freqs_cis[:cutoff:ratio]")
 	compress_freqs_decode = find_first_line_containing(text, "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)")
+
+	win_topk_lines = extract_function_source_lines(text, "get_window_topk_idxs")
+	compress_topk_lines = extract_function_source_lines(text, "get_compress_topk_idxs")
 
 	return {
 		"mla": {
@@ -494,6 +665,18 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"compressor_freqs_cis_prefill_expr": compress_freqs_prefill,
 			"compressor_freqs_cis_decode_expr": compress_freqs_decode,
 		},
+		"cache_topk_index_helpers": {
+			"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (get_window_topk_idxs, get_compress_topk_idxs)",
+			"sentinel_index": -1,
+			"get_window_topk_idxs": {
+				"source_lines": win_topk_lines,
+				"source_lines_sha256": sha256_lines(win_topk_lines) if isinstance(win_topk_lines, list) else None,
+			},
+			"get_compress_topk_idxs": {
+				"source_lines": compress_topk_lines,
+				"source_lines_sha256": sha256_lines(compress_topk_lines) if isinstance(compress_topk_lines, list) else None,
+			},
+		},
 	}
 
 def parse_inference_moe_semantics(model_py: Path) -> dict:
@@ -506,6 +689,9 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 	score_sigmoid = find_first_line_containing(text, "scores = scores.sigmoid")
 	score_sqrtsoftplus = find_first_line_containing(text, "scores = F.softplus(scores).sqrt()")
 	expert_fp32 = find_first_line_containing(text, "gate = self.w1(x).float()")
+	swiglu_gate = find_first_line_containing(text, "if self.swiglu_limit > 0:")
+	swiglu_up_clamp = find_first_line_containing(text, "up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)")
+	swiglu_gate_clamp = find_first_line_containing(text, "gate = torch.clamp(gate, max=self.swiglu_limit)")
 
 	return {
 		"gate_scores_fp32_expr": score_fp32,
@@ -518,6 +704,9 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 			"sqrtsoftplus": score_sqrtsoftplus,
 		},
 		"expert_compute_fp32_expr": expert_fp32,
+		"swiglu_clamp_enabled_expr": swiglu_gate,
+		"swiglu_clamp_up_expr": swiglu_up_clamp,
+		"swiglu_clamp_gate_expr": swiglu_gate_clamp,
 	}
 
 def parse_inference_moe_hash_routing(model_py: Path) -> dict:
@@ -957,6 +1146,69 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
 
+
+def augment_tensor_key_summary_with_trunk_layer_expectations(
+	tensor_keys: dict[str, Any],
+	weight_keys: list[str],
+	compress_ratios_main: list[int],
+	n_hash_layers: int,
+) -> None:
+	required_layer_suffixes = tensor_keys.get("required_layer_suffixes", None)
+	required_nonzero = tensor_keys.get("required_layer_suffixes_compress_ratio_nonzero", None)
+	required_ratio4 = tensor_keys.get("required_layer_suffixes_compress_ratio_4", None)
+	expected_expert = tensor_keys.get("expected_expert_key_count_per_layer", None)
+	hash_gate_suffix = tensor_keys.get("hash_gate_tensor_key_suffix", "ffn.gate.tid2eid")
+	score_gate_suffix = tensor_keys.get("score_gate_tensor_key_suffix", "ffn.gate.bias")
+
+	if not isinstance(required_layer_suffixes, list):
+		return
+	if not isinstance(required_nonzero, list) or not isinstance(required_ratio4, list):
+		return
+	if not isinstance(expected_expert, int) or expected_expert <= 0:
+		return
+
+	n_layers = len(compress_ratios_main)
+	required_by_layer_id: dict[str, list[str]] = {}
+	expected_count_by_layer_id: dict[str, int] = {}
+	for i in range(n_layers):
+		try:
+			ratio_i = int(compress_ratios_main[i])
+		except Exception:
+			ratio_i = 0
+		req = list(required_layer_suffixes)
+		if ratio_i != 0:
+			req += list(required_nonzero)
+		if ratio_i == 4:
+			req += list(required_ratio4)
+		req.append(str(hash_gate_suffix if i < int(n_hash_layers) else score_gate_suffix))
+		required_by_layer_id[str(i)] = req
+		expected_count_by_layer_id[str(i)] = int(expected_expert + len(req))
+
+	actual_counts = [0 for _ in range(n_layers)]
+	for k in weight_keys:
+		if not k.startswith("layers."):
+			continue
+		parts = k.split(".", 2)
+		if len(parts) < 3:
+			continue
+		try:
+			i = int(parts[1])
+		except Exception:
+			continue
+		if 0 <= i < n_layers:
+			actual_counts[i] += 1
+
+	actual_by_layer_id: dict[str, int] = {str(i): int(actual_counts[i]) for i in range(n_layers)}
+	ok_by_layer_id: dict[str, bool] = {}
+	for i in range(n_layers):
+		key = str(i)
+		ok_by_layer_id[key] = (int(actual_counts[i]) == int(expected_count_by_layer_id[key]))
+
+	tensor_keys["layer_required_nonexpert_suffixes_by_layer_id"] = required_by_layer_id
+	tensor_keys["layer_expected_tensor_key_count_by_layer_id"] = expected_count_by_layer_id
+	tensor_keys["layer_tensor_key_count_by_layer_id"] = actual_by_layer_id
+	tensor_keys["layer_expected_tensor_key_count_by_layer_id_ok"] = ok_by_layer_id
+
 def build_compat_mappings() -> dict:
 	# Source-derived aliases between:
 	# - Transformers-style config.json fields (fixtures/.../config.json)
@@ -977,11 +1229,46 @@ def build_compat_mappings() -> dict:
 		{"concept": "o_lora_rank", "transformers_key": "o_lora_rank", "inference_key": "o_lora_rank", "canonical_path": "topology.o_lora_rank"},
 		{"concept": "sliding_window", "transformers_key": "sliding_window", "inference_key": "window_size", "canonical_path": "topology.sliding_window"},
 		{"concept": "compress_ratios", "transformers_key": "compress_ratios", "inference_key": "compress_ratios", "canonical_path": "attention_schedule.compress_ratios"},
+		{
+			"concept": "layer_types",
+			"transformers_key": "layer_types",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_main_layer_types",
+			"note": "Transformers DeepseekV4Config.layer_types is a per-trunk-layer attention schedule (length num_hidden_layers). DS4 also records the MTP schedule separately under attention_schedule.transformers_mtp_layer_types.",
+		},
+		{
+			"concept": "compress_rates",
+			"transformers_key": "compress_rates",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_compress_rates",
+			"note": "Transformers exposes per-layer-type compression rates as compress_rates; DS4 derives them from the pinned compress_ratios contract (CSA->4, HCA->128, sliding->0).",
+		},
+		{
+			"concept": "compress_rate_csa",
+			"transformers_key": "compress_rate_csa",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
+			"note": "Legacy Transformers config kwarg; folded into compress_rates at __post_init__ time.",
+		},
+		{
+			"concept": "compress_rate_hca",
+			"transformers_key": "compress_rate_hca",
+			"inference_key": None,
+			"canonical_path": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
+			"note": "Legacy Transformers config kwarg; folded into compress_rates at __post_init__ time.",
+		},
 		{"concept": "moe_inter_dim", "transformers_key": "moe_intermediate_size", "inference_key": "moe_inter_dim", "canonical_path": "moe.moe_inter_dim"},
 		{"concept": "n_routed_experts", "transformers_key": "n_routed_experts", "inference_key": "n_routed_experts", "canonical_path": "moe.n_routed_experts"},
 		{"concept": "n_shared_experts", "transformers_key": "n_shared_experts", "inference_key": "n_shared_experts", "canonical_path": "moe.n_shared_experts"},
 		{"concept": "n_activated_experts", "transformers_key": "num_experts_per_tok", "inference_key": "n_activated_experts", "canonical_path": "moe.n_activated_experts"},
 		{"concept": "n_hash_layers", "transformers_key": "num_hash_layers", "inference_key": "n_hash_layers", "canonical_path": "moe.n_hash_layers"},
+		{
+			"concept": "mlp_layer_types",
+			"transformers_key": "mlp_layer_types",
+			"inference_key": None,
+			"canonical_path": "moe.transformers_mlp_layer_types",
+			"note": "Transformers DeepseekV4Config.mlp_layer_types is a per-trunk-layer MoE schedule (length num_hidden_layers). DS4 derives it from num_hash_layers for interpreting external runtimes.",
+		},
 		{"concept": "route_scale", "transformers_key": "routed_scaling_factor", "inference_key": "route_scale", "canonical_path": "moe.route_scale"},
 		{"concept": "scoring_func", "transformers_key": "scoring_func", "inference_key": "score_func", "canonical_path": "moe.scoring_func"},
 		{"concept": "num_nextn_predict_layers", "transformers_key": "num_nextn_predict_layers", "inference_key": None, "canonical_path": "mtp.n_mtp_layers"},
@@ -1068,12 +1355,21 @@ def build_contract() -> dict:
 	weight_map = idx.get("weight_map", {})
 	weight_keys = sorted(weight_map.keys())
 	tensor_keys = build_tensor_key_summary(weight_keys, n_layers, int(cfg["n_routed_experts"]))
+	augment_tensor_key_summary_with_trunk_layer_expectations(
+		tensor_keys,
+		weight_keys,
+		[int(x) for x in compress_ratios[:n_layers]],
+		int(cfg["num_hash_layers"]),
+	)
 	weight_map_files = [str(v) for v in weight_map.values()]
 	weight_map_file_counts = Counter(weight_map_files)
 	weight_map_keys_sha256 = sha256_lines(weight_keys)
+	top_level_keys = [k for k in weight_keys if not (k.startswith("layers.") or k.startswith("mtp."))]
+	weight_map_top_level_keys_sha256 = sha256_lines(sorted(top_level_keys))
 	weight_map_prefix_fingerprints = build_weight_key_prefix_fingerprints(weight_keys)
 	mtp_prefix_fp = weight_map_prefix_fingerprints.get("mtp", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
+	top_level_tensor_key_count = sum(int(v.get("count", 0)) for k, v in weight_map_prefix_fingerprints.items() if k not in ("layers", "mtp") and isinstance(v, dict))
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1125,6 +1421,8 @@ def build_contract() -> dict:
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
 
+	mtp_sidecar = build_ds4_mtp_sidecar_contract()
+
 	contract = {
 		"format_version": 1,
 		"model": "deepseek_v4_flash",
@@ -1147,6 +1445,7 @@ def build_contract() -> dict:
 				"upstream_commit_txt": "upstream_commit.txt",
 			},
 		},
+		"mtp_sidecar": mtp_sidecar,
 		"compat": build_compat_mappings(),
 		"oracle": build_oracle_contract(),
 		"mla": sem.get("mla", {}) if isinstance(sem, dict) else {},
@@ -1164,7 +1463,7 @@ def build_contract() -> dict:
 			"o_lora_rank": int(cfg["o_lora_rank"]),
 			"sliding_window": int(cfg["sliding_window"]),
 		},
-		"tensor_shapes": build_tensor_shapes(cfg, inf),
+		"tensor_shapes": build_tensor_shapes(cfg, inf, inf_model),
 		"yarn_rope": {
 			"rope_theta": float(cfg.get("rope_theta", 10000)),
 			"compress_rope_theta": float(cfg.get("compress_rope_theta", inf.get("compress_rope_theta", 0))),
@@ -1203,7 +1502,12 @@ def build_contract() -> dict:
 				"window_size": window_size,
 				"kv_cache_size_formula": "window_size + (max_seq_len // compress_ratio if compress_ratio else 0)",
 				"kv_cache_shape": "[max_batch_size, kv_cache_size, head_dim]",
+				"layer_cache_kind_by_layer_id": list(layer_types),
+				"layer_compress_ratio_by_layer_id": [int(r) for r in compress_ratios[:n_layers]],
+				"mtp_cache_kind_by_mtp_layer_id": [layer_type_from_ratio(int(r)) for r in mtp_ratios],
+				"mtp_compress_ratio_by_mtp_layer_id": [int(r) for r in mtp_ratios],
 				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
+				"topk_index_helpers": sem.get("cache_topk_index_helpers", {}) if isinstance(sem, dict) else {},
 				"compression_semantics": {
 					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)",
 					"overlap_rule": "overlap = (compress_ratio == 4)",
@@ -1250,6 +1554,7 @@ def build_contract() -> dict:
 			"moe_inter_dim": int(cfg["moe_intermediate_size"]),
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
+			"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"score_layer_ids": moe_score_layer_ids,
 			"transformers_mlp_layer_types": transformers_mlp_layer_types,
@@ -1347,6 +1652,8 @@ def build_contract() -> dict:
 				"checkpoint_index": {
 					"weight_map_num_tensors": int(len(weight_keys)),
 					"weight_map_keys_sha256": weight_map_keys_sha256,
+					"weight_map_top_level_keys_sha256": weight_map_top_level_keys_sha256,
+					"weight_map_top_level_tensor_key_count": int(top_level_tensor_key_count),
 					"weight_map_prefix_fingerprints": weight_map_prefix_fingerprints,
 					"weight_map_layers_keys_sha256": layers_prefix_fp.get("keys_sha256", None),
 					"weight_map_mtp_keys_sha256": mtp_prefix_fp.get("keys_sha256", None),

@@ -5,13 +5,23 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 ## Run From The Mac (ships to Spark0)
 
 - Fast path: `./scripts/cuda_probe_tiny_spark0.sh`
+- No-transfer device-props only: `./scripts/cuda_probe_device_props_minimal_spark0.sh`
 - Compile-only fast path: `./scripts/cuda_probe_compile_only_tiny_spark0.sh`
 - Kernel bring-up tiny (no cuBLASLt): `./scripts/cuda_probe_kernel_tiny_spark0.sh`
 - Full suite: `./scripts/cuda_probe_spark0.sh` and `./scripts/cuda_probe_compile_only_spark0.sh`
 
+For an explicit “`sm_121` link+run” check in the no-transfer device-props script:
+
+```bash
+WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+The fast path `scripts/cuda_probe_tiny_spark0.sh` also includes an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate when `nvcc --list-gpu-arch` is supported and advertises `compute_121` (quick “fatbin PTX+SASS packaging works” signal).
+
 To capture deterministic logs on the Mac without relying on `tee`/`pipefail`, set `LOG_PATH`:
 
 ```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_device_props_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_device_props_minimal_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_nvcc_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_nvcc_minimal_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_cmake_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_cmake_minimal_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_tiny_spark0.sh
@@ -38,7 +48,7 @@ Subset builds:
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
-- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); ends with `schema=3` for parsing).
+- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); includes `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`); ends with `schema=4` for parsing).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o`: compile-only object that requires `nvcc --gpu-architecture=sm_121` support (build-system compatibility gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_flags_compile_probe.o`: compile-only object that requires `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` (DeepGEMM/CUTLASS-style toolchain gate; no runtime needed).

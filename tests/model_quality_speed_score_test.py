@@ -34,8 +34,9 @@ class ModelQualitySpeedScoreTest(unittest.TestCase):
         rows = scorer.score_rows(self._rows(
             "model,passed_tasks,total_tasks,total_wall_s,output_tokens,public_quality_prior\n"
             "qwen,4,5,20,400,72\n"
-        ), speed_field="correct_task_rate")
-        self.assertAlmostEqual(rows[0].correct_task_rate or 0.0, 0.2)
+        ), speed_field="correct_tasks_per_s")
+        self.assertAlmostEqual(rows[0].correct_task_rate or 0.0, 0.8)
+        self.assertAlmostEqual(rows[0].correct_tasks_per_s or 0.0, 0.2)
         self.assertAlmostEqual(rows[0].tokens_per_success or 0.0, 100.0)
         self.assertAlmostEqual(rows[0].wall_s_per_success or 0.0, 5.0)
 

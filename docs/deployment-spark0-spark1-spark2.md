@@ -27,10 +27,10 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
-Recommended (stages all 3 Sparks, avoids instance-name mistakes):
+Recommended (ordered inventory; this example stages three Sparks):
 
 ```bash
-./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 # optional: add --tcp 29500 --tcp 9090
 ```
 
@@ -43,7 +43,7 @@ DS4_ENV_VARIANT=tp3 ./scripts/ops_stage_deploy_assets.sh spark2@<spark2-host> sp
 Notes:
 
 - Staging is non-destructive; it copies templates + example configs to `/tmp/` on each Spark.
-- `--mesh-check` runs a best-effort reachability check first (`scripts/ops_spark012_mesh_check.sh`).
+- `--mesh-check` runs a best-effort reachability check first (`scripts/ops_spark_ring_mesh_check.sh`).
 - For stable host key handling, set `SSH_OPTS` to use a dedicated known-hosts file (or use `deploy/config/ssh_config.ds4.spark012.example`).
 
 ## On Each Spark: Install Systemd + Config

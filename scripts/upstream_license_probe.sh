@@ -18,6 +18,8 @@ Notes:
   - For Hugging Face repos, licenses are often declared in the model card
     (`README.md`) instead of a standalone `LICENSE` file. For non-UNKNOWN HF
     entries, this probe accepts `README.md` as the “license carrier”.
+  - For HF rows whose declared license is UNKNOWN, this probe still reports
+    whether `README.md` is reachable so a human can inspect it for license text.
 EOF
 }
 
@@ -79,6 +81,17 @@ hf_declared_license()
 	awk '/^license:/ {print $2}' <<<"${report}"
 }
 
+hf_readme_present()
+{
+	local upstream="$1"
+	local commit="$2"
+
+	if probe_one "${upstream}" "${commit}" "README.md"; then
+		return 0
+	fi
+	return 1
+}
+
 LICENSE_PATHS=(
 	"LICENSE"
 	"LICENSE.txt"
@@ -104,19 +117,31 @@ while IFS=$'\t' read -r name upstream commit declared; do
 	if [ -n "${found}" ]; then
 		printf "OK   %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "${found}"
 	else
-		if [[ "${upstream}" == huggingface.co/* ]] && [[ "${declared:-UNKNOWN}" != UNKNOWN* ]]; then
-			if probe_one "${upstream}" "${commit}" "README.md"; then
-				printf "OK   %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "README.md"
-				continue
+		if [[ "${upstream}" == huggingface.co/* ]]; then
+			readme_present="0"
+			if hf_readme_present "${upstream}" "${commit}"; then
+				readme_present="1"
 			fi
+
 			api_license="$(hf_declared_license "${upstream}" || true)"
 			if [ -n "${api_license}" ] && [ "${api_license}" != "UNKNOWN" ]; then
 				printf "OK   %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "HF_API_LICENSE:${api_license}"
 				continue
 			fi
-		fi
 
-		printf "MISS %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "${declared:-UNKNOWN}"
+			if [ "${readme_present}" = "1" ] && [[ "${declared:-UNKNOWN}" != UNKNOWN* ]]; then
+				printf "OK   %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "README.md"
+				continue
+			fi
+
+			if [ "${readme_present}" = "1" ]; then
+				printf "MISS %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "${declared:-UNKNOWN} (README.md present)"
+			else
+				printf "MISS %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "${declared:-UNKNOWN}"
+			fi
+		else
+			printf "MISS %s\t%s\t%s\t%s\n" "${name}" "${upstream}" "${commit}" "${declared:-UNKNOWN}"
+		fi
 		case "${declared:-UNKNOWN}" in
 			UNKNOWN*|"DeepSeek (link)")
 				;;

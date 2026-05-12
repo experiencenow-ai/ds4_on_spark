@@ -1,4 +1,10 @@
-# Ops: Spark Ring Network + Ports (Spark0..Spark3)
+# Example Ops: Spark Ring Network + Ports (Spark0..Spark3)
+
+Use the network doc matching the active inventory. The current 3-node example is:
+
+- `docs/ops-spark012-network-ports.md`
+
+This file is retained as a 4-node/TP=4 example, not as a source of truth for the active inventory.
 
 This is a **human-run** reference for the expected network shape and the ports DS4 will use during future TP=4 bring-up.
 
@@ -49,4 +55,3 @@ sudo systemctl start ds4-preflight-tp4@spark2.service
 For read-only routing + firewall inspection commands (some require `sudo`), see:
 
 - `docs/ops-firewall-routing-inspection.md`
-

@@ -1,4 +1,4 @@
-# Deployment Layout (Spark0/Spark1/Spark2)
+# Deployment Layout (Ordered Spark Inventory)
 
 This repo does not apply changes to Sparks automatically. Treat everything here
 as **human-run** instructions and templates.
@@ -8,18 +8,19 @@ as **human-run** instructions and templates.
 This repo supports three deployment shapes:
 
 - Spark0/Spark1 (TP=2): `docs/deployment-spark0-spark1.md`
-- Spark0/Spark1/Spark2 (TP=3 prep): `docs/deployment-spark0-spark1-spark2.md`
-- Spark0..Spark3 ring (TP=4 prep): `docs/deployment-spark-ring.md`
+- Three-node prep example: `docs/deployment-spark0-spark1-spark2.md`
+- TP=4 ring prep example: `docs/deployment-spark-ring.md`
 
 This document focuses on the **shared filesystem + systemd layout** and the
 repeatable bring-up patterns that apply to all of the above.
 
 ## Host Roles (Recommended Convention)
 
+Use `spark<N>` instance names in rank order:
+
 - Spark0: rank 0 (`ds4@spark0`)
 - Spark1: rank 1 (`ds4@spark1`)
-- Spark2: rank 2 (`ds4@spark2`) (TP=3+)
-- Spark3: rank 3 (`ds4@spark3`) (TP=4 ring)
+- SparkN: rank N (`ds4@sparkN`)
 
 Keep hostnames stable. Prefer mDNS (`*.local`) early; switch to wired IPv4 once
 the wired subnet is standardized.

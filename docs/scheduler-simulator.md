@@ -38,6 +38,8 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
+By default, when a stage cannot admit any tasks because all candidates are at the pending limit, the simulator treats it as a **stage skip** (and a token can be dropped if every stage skips). To model upstream queueing instead, set `--backpressure-zero-admit-policy stall` to retry the same stage at later times (higher latency/makespan, fewer drops).
+
 By default, backpressure is enforced in *task* units (each admitted expert task counts as `1`). When traces include a meaningful `cost_scale` (or `layers[].cost_scale`), you can instead enforce backpressure in *work* units via:
 
 - `--backpressure-units work`: cap `sum(cost_scale)` of queued + in-flight work per expert (still using `--expert-queue-max` / `--expert-queue-reserve-interactive` as the capacity in the same units)
@@ -361,6 +363,7 @@ JSONL reads one JSON object per line (use `--trace-jsonl -` to read from stdin) 
 - `cls` (`"interactive"` or `"batch"`)
 - `candidates` (list[int]): ordered expert candidates
   - Replay requires `--num-experts > expert_id_range.max` (see `--trace-summary`); the simulator rejects out-of-range expert IDs with a clear error.
+  - For minimal router logs, `--trace-input-format runtime` (or `sim/scheduler/trace_extract.py`) also accepts a single chosen expert alias like `expert_id` / `chosen_expert` and normalizes it into `candidates=[expert_id]`.
 - Inline metadata records are also accepted in JSONL and ignored by the simulator's event stream:
   - `{"type":"meta","meta":{...}}` (preferred), or
   - `{"meta":{...}}` when no other routing fields are present
@@ -551,6 +554,8 @@ Optional fields should be added when available:
 - `expert_batch_size`: observed batch size for the dispatched expert work
 - `decode_ms`: measured decode latency for this token
 - `kv_tokens`: KV/cache token count at this step
+
+If your runtime logs already contain stable `accepted_mtp`+`rejected_mtp` (or `accepted_dflash`+`rejected_dflash`) counters, `sim/scheduler/trace_extract.py` can infer `mtp_draft_len` / `dflash_draft_len` and emit them in the extracted trace meta header so replay can use `--mtp-draft-len -1` (and `--dflash-draft-len -1`) without hand-editing.
 
 The first useful runtime patch can be instrumentation-only. Expert queueing
 should be enabled only after replay shows a throughput win without unacceptable

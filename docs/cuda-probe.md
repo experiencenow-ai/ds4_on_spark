@@ -10,6 +10,44 @@ When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” ch
 ./scripts/cuda_probe_tiny_spark0.sh
 ```
 
+## Spark0: Device Props Minimal (No Repo Transfer)
+
+When you want the one-line `schema=4` device summary without shipping `tools/cuda_probe/` to Spark0:
+
+```bash
+./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+This compiles a single tiny `.cu` file directly on Spark0 with `nvcc -arch=native` and prints the same `cuda drv=... schema=4` line as `tools/cuda_probe/bin/cuda_device_props_tiny`.
+
+It also includes compile-only `-arch=sm_121` and `nvcc --gpu-architecture=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
+
+To make the “end-to-end link+run via `sm_121`” path explicit (not just compile-only), run:
+
+```bash
+WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+This additionally builds and runs the same tiny probe via `nvcc -arch=sm_121` and `nvcc --gpu-architecture=sm_121`.
+
+To validate “PTX-only + driver JIT” for GB10 (toolchain emits `compute_121` PTX, Spark0 JITs to `sm_121`), run:
+
+```bash
+WITH_COMPUTE121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+To validate “fatbin packaging” via explicit `-gencode` (embed both `sm_121` SASS and `compute_121` PTX), run:
+
+```bash
+WITH_GENCODE_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” gate:
+
+```bash
+./scripts/cuda_probe_cublaslt_tiny_spark0.sh
+```
+
 To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
 
 ```bash
@@ -24,6 +62,7 @@ This builds and runs only:
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cluster_dims_attr_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `-arch=sm_121`; cluster/CUTLASS-style toolchain gate)
+- `nvcc -gencode arch=compute_121,code=[sm_121,compute_121]` compile-only gate (runs when `nvcc --list-gpu-arch` is supported and advertises `compute_121`; fails if multi-code `-gencode` packaging is broken)
 - `cuda_sm121_probe`
 - `cuda_sm121_rdc_probe` (separate compilation + device link smoke test for `sm_121`)
 - `cuda_sm121_dlto_probe` (device LTO (`-dlto`) smoke test for `sm_121`)
@@ -47,8 +86,7 @@ Observed on Spark0 (2026-05-11): CUDA 13.0 `V13.0.88`; `nvcc --list-gpu-arch` in
 
 Example (from `scripts/cuda_probe_nvcc_minimal_spark0.sh`):
 
-- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 bus_width_bits=256 async_engines=1 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 max_persisting_l2=18874368 max_apw=134217728 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1 tma_map=1 schema=3`
-- `__CUDA_ARCH__=1210`
+- `cuda drv=13000 rt=13000 count=1 dev0="NVIDIA GB10" cc=12.1 mp=48 warp=32 clock_khz=2418000 mem_clock_khz=8533000 bus_width_bits=256 async_engines=1 mem=128518373376 smem_block=49152 smem_block_max=49152 smem_optin=101376 smem_sm=102400 smem_reserved_block=1024 l2=25165824 max_persisting_l2=18874368 max_apw=134217728 maxthr_block=1024 maxthr_sm=1536 maxblocks_sm=24 regs_block=65536 regs_sm=65536 mem_pools=1 coop_launch=1 cluster_launch=1 tma_map=1 cuda_arch=1210 schema=4`
 
 If a queried `cudaDeviceGetAttribute` or driver-attribute field is unavailable (older runtime/toolkit/driver API, or CUDA headers too old to define the driver-attribute enum constant), the scripts print `-1` for that field rather than silently reporting `0`.
 
@@ -333,7 +371,7 @@ Observed:
 - `nvcc -arch=compute_121 -c` compile-only probe succeeds when `compute_121` is advertised (toolchain PTX-target gate)
 - `cluster_dims_attr_compile: OK` for a kernel annotated with `__cluster_dims__(2,1,1)` (toolchain accepts cluster annotations for `sm_121`)
 - `cuobjdump --dump-ptx` shows PTX embedded for `-arch=sm_121`, and missing for `-arch=native` (expected portability signal)
-- `nvcc --gpu-architecture=sm_121` compiles, links, and runs the minimal probe (prints `__CUDA_ARCH__=1210`; PTX embedded)
+- `nvcc --gpu-architecture=sm_121` compiles, links, and runs the minimal probe (schema line includes `cuda_arch=1210`; PTX embedded)
 - CMake config/build/run with `CMAKE_CUDA_ARCHITECTURES="121"` prints `__CUDA_ARCH__=1210`
 - When PTX is present, scripts also print the first PTX `.target` line (`ptx_target_*`) for quick arch verification.
 - Device is reported as `NVIDIA GB10` with `cc=12.1`

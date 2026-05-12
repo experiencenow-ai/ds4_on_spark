@@ -52,8 +52,34 @@ def run_runtime_trace_mtp_ablation(
     expert_queue_max: int = 128,
     expert_parallelism: int = 1,
     service_ms: float = 1.0,
+    starvation_ms: float = 50.0,
+    trace_derive_cost_scale: str = "none",
+    trace_speedup: float = 1.0,
+    dflash_draft_len: int = -1,
+    dflash_draft_cost_scale: Optional[float] = None,
 ) -> Dict[str, Any]:
     meta = dict(trace_meta or {})
+
+    def _reserve_default(qmax: int) -> int:
+        if int(qmax) <= 0:
+            return(0)
+        return(min(16, int(qmax)))
+
+    def _trace_has_any_cost_scale(trace_in: Sequence[scheduler_sim.TokenRoute]) -> bool:
+        for r in trace_in:
+            if r.cost_scale is not None:
+                return(True)
+            if r.layers is None:
+                continue
+            for lr in r.layers:
+                if lr.cost_scale is not None:
+                    return(True)
+        return(False)
+
+    if trace_derive_cost_scale.strip().lower() != "none":
+        trace = scheduler_sim.derive_trace_cost_scale(trace, trace_derive_cost_scale, meta_out=meta)
+    if float(trace_speedup) != 1.0:
+        trace = scheduler_sim.scale_trace_speedup(trace, float(trace_speedup))
 
     inferred_num_experts = scheduler_sim.infer_num_experts_from_trace(trace, meta)
     if inferred_num_experts is None or int(inferred_num_experts) <= 0:
@@ -61,6 +87,11 @@ def run_runtime_trace_mtp_ablation(
 
     any_mtp = any((r.mtp_accept_len is not None or r.accepted_mtp is not None or r.rejected_mtp is not None) for r in trace)
     any_dflash = any((r.dflash_accept_len is not None or r.accepted_dflash is not None or r.rejected_dflash is not None) for r in trace)
+    if any_dflash and int(dflash_draft_len) != -1:
+        meta["dflash_draft_len"] = int(dflash_draft_len)
+    if any_dflash and dflash_draft_cost_scale is not None:
+        meta["dflash_draft_cost_scale"] = float(dflash_draft_cost_scale)
+
     mtp_draft_len = 0
     if any_mtp:
         inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
@@ -69,12 +100,19 @@ def run_runtime_trace_mtp_ablation(
         mtp_draft_len = int(inferred_mtp_draft_len)
 
     k_mode = "trace" if _trace_has_full_k(trace) else "controller"
+    dflash_cost_scale = 0.0
+    if any_dflash:
+        if isinstance(meta.get("dflash_draft_cost_scale"), (int, float)):
+            dflash_cost_scale = float(meta["dflash_draft_cost_scale"])
+        if dflash_cost_scale < 0.0:
+            raise ValueError("meta.dflash_draft_cost_scale must be >= 0")
+
     base_cfg = scheduler_sim.SimConfig(
         num_experts=int(inferred_num_experts),
         expert_parallelism=int(expert_parallelism),
         expert_queue_max=int(expert_queue_max),
         service_ms=float(service_ms),
-        starvation_ms=50.0,
+        starvation_ms=float(starvation_ms),
         hi_burst=0,
         promote_ms=0.0,
         adaptive_k=scheduler_sim.AdaptiveKConfig(
@@ -89,13 +127,55 @@ def run_runtime_trace_mtp_ablation(
         k_signal="global",
         sim_seed=123,
         mtp_draft_len=int(mtp_draft_len),
+        dflash_draft_len=int(meta.get("dflash_draft_len", -1)) if any_dflash else -1,
+        dflash_draft_cost_scale=float(dflash_cost_scale) if any_dflash else 0.0,
     )
 
     trace_summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=int(mtp_draft_len), meta=meta)
+
+    trace_sched = scheduler_sim.strip_trace_mtp_fields(trace)
+    cfg_sched = dataclasses.replace(base_cfg, mtp_draft_len=0)
+    reserve_n = _reserve_default(int(expert_queue_max))
+    has_cost_scale = _trace_has_any_cost_scale(trace)
+    has_interactive = any(r.cls == scheduler_sim.LatencyClass.INTERACTIVE for r in trace_sched)
+    has_batch = any(r.cls == scheduler_sim.LatencyClass.BATCH for r in trace_sched)
+
+    sched_variants: List[Tuple[str, Dict[str, object]]] = [
+        ("stall_zero_admit", {"backpressure_zero_admit_policy": "stall"}),
+    ]
+    qhalf = max(1, int(expert_queue_max) // 2)
+    qdouble = int(expert_queue_max) * 2
+    if int(qhalf) != int(expert_queue_max):
+        sched_variants.append((f"queue_max_{int(qhalf)}", {"expert_queue_max": int(qhalf)}))
+    if int(qdouble) != int(expert_queue_max):
+        sched_variants.append((f"queue_max_{int(qdouble)}", {"expert_queue_max": int(qdouble)}))
+    if has_cost_scale:
+        sched_variants.append(("work_units", {"pending_units": "work", "backpressure_units": "work"}))
+    if has_interactive and has_batch and reserve_n > 0:
+        sched_variants.append((f"reserve_interactive_{int(reserve_n)}", {"expert_queue_reserve_interactive": int(reserve_n), "k_signal": "class"}))
+
+    if int(expert_queue_max) > 1:
+        q_low = max(1, int(expert_queue_max) // 4)
+        q_high = max(int(q_low), int(expert_queue_max) // 2)
+        sched_variants.append(
+            (
+                "adaptive_k_batch2",
+                {
+                    "adaptive_k.k_max_batch": 2,
+                    "adaptive_k.q_low": int(q_low),
+                    "adaptive_k.q_high": int(q_high),
+                    "k_signal": "candidates",
+                },
+            )
+        )
+
     out: Dict[str, Any] = {
         "name": "runtime_trace_mtp_ablation",
         "trace_summary": trace_summary,
         "base_cfg": dataclasses.asdict(base_cfg),
+        "scheduler_sweeps": {
+            "arrival_units_steps": scheduler_sim.compare_simulation_summaries(cfg_sched, trace_sched, sched_variants, arrival_units="steps"),
+        },
         "results": {},
     }
 
@@ -108,12 +188,15 @@ def run_runtime_trace_mtp_ablation(
             base_summary = scheduler_sim.compare_summary_jsonable(base_metrics)
             denom = float(base_summary.get("service_slot_ms_per_output_token", 0.0))
             numer = float(base_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+            numer_adj = float(base_summary.get("dflash_service_slot_ms_per_output_token_adjusted", 0.0))
             ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+            ratio_adj = (numer_adj / denom) if denom > 0.0 and numer_adj > 0.0 else 0.0
             out["dflash_comparator"] = {
                 "present": True,
-                "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. Draft compute for the comparator is not modeled; treat efficiency ratios as upper bounds.",
+                "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. If dflash_draft_cost_scale is 0 or omitted, the adjusted comparator metrics equal the unadjusted values (treat as an optimistic upper bound).",
                 "summary": base_summary,
                 "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
+                "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted": float(ratio_adj),
             }
         return(out)
 
@@ -126,18 +209,21 @@ def run_runtime_trace_mtp_ablation(
         mtp_off_summary = out["results"]["arrival_units_steps"]["variants"]["mtp_off"]["summary"]
         denom = float(mtp_off_summary.get("service_slot_ms_per_output_token", 0.0))
         numer = float(mtp_off_summary.get("dflash_service_slot_ms_per_output_token", 0.0))
+        numer_adj = float(mtp_off_summary.get("dflash_service_slot_ms_per_output_token_adjusted", 0.0))
         ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+        ratio_adj = (numer_adj / denom) if denom > 0.0 and numer_adj > 0.0 else 0.0
         out["dflash_comparator"] = {
             "present": True,
-            "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. Draft compute for the comparator is not modeled; treat efficiency ratios as upper bounds.",
+            "note": "DFlash comparator metrics are kept separate from DeepSeek MTP. If dflash_draft_cost_scale is 0 or omitted, the adjusted comparator metrics equal the unadjusted values (treat as an optimistic upper bound).",
             "summary": mtp_off_summary,
             "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
+            "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted": float(ratio_adj),
         }
     return(out)
 
 
 def _expert_queue_reserve_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -196,7 +282,7 @@ def _expert_queue_reserve_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _mtp_efficiency_sweep(quick: bool) -> Dict[str, Any]:
-    num_tokens = 6000 if quick else 25000
+    num_tokens = 1500 if quick else 25000
     trace_cfg = scheduler_sim.HotsetTraceConfig(
         num_tokens=num_tokens,
         num_experts=16,
@@ -283,7 +369,7 @@ def _mtp_efficiency_sweep(quick: bool) -> Dict[str, Any]:
 
 
 def _adaptive_k_batch_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -347,7 +433,7 @@ def _adaptive_k_batch_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _expert_batching_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 6000 if quick else 30000
+    num_tokens = 1500 if quick else 30000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -468,7 +554,7 @@ def _admit_policy_skew_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     interactive_output_tps = 500.0
     batch_output_tps = 20000.0
 
@@ -572,7 +658,7 @@ def _mtp_congestion_sweep(quick: bool) -> Dict[str, Any]:
 
 
 def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 6000 if quick else 30000
+    num_tokens = 1500 if quick else 30000
     interactive_output_tps = 500.0
     batch_output_tps = 20000.0
 
@@ -678,7 +764,7 @@ def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=16,
@@ -738,7 +824,7 @@ def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _batch_starvation_knobs_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -798,7 +884,7 @@ def _batch_starvation_knobs_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _backpressure_units_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 8000 if quick else 40000
+    num_tokens = 2000 if quick else 40000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=8,
@@ -861,7 +947,7 @@ def _backpressure_units_scenario(quick: bool) -> Dict[str, Any]:
 
 
 def _k_controller_smoothing_scenario(quick: bool) -> Dict[str, Any]:
-    num_tokens = 12000 if quick else 60000
+    num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
         num_tokens=num_tokens,
         num_experts=16,
@@ -926,6 +1012,67 @@ def _k_controller_smoothing_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _backpressure_zero_admit_policy_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 2000 if quick else 40000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=500.0,
+        batch_arrival_rate_tps=20000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=2,
+            k_max_batch=2,
+            q_low=0,
+            q_high=0,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="class",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+        backpressure_zero_admit_policy="skip",
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("stall", {"backpressure_zero_admit_policy": "stall"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "backpressure_zero_admit_policy",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "default_policy": "skip",
+                "experimental_policy": "stall",
+                "reason": "Synthetic saturation: stalling avoids token drops when all candidates are saturated, but it can sharply increase latency/makespan; treat stall as an upstream-queueing mode to evaluate on real traces before adopting in runtime.",
+            },
+        }
+    )
+
+
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
         "expert_queue_reserve": _expert_queue_reserve_scenario(quick),
@@ -938,6 +1085,7 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
         "backpressure_units": _backpressure_units_scenario(quick),
+        "backpressure_zero_admit_policy": _backpressure_zero_admit_policy_scenario(quick),
         "k_controller_smoothing": _k_controller_smoothing_scenario(quick),
     }
     return({"scenarios": scenarios})
@@ -959,6 +1107,14 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--trace-default-cls", type=str, default="", help="When --trace-jsonl records omit latency class, force all extracted records to this cls (interactive or batch).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace time field mode: t_ms (default) or dt_ms.")
     p.add_argument("--max-tokens", type=int, default=0, help="Optional cap on number of trace records to read (0 = no cap).")
+    p.add_argument("--trace-derive-cost-scale", type=str, default="none", choices=("none", "kv_tokens_p50", "decode_ms_p50"))
+    p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace time by 1/speedup (>= 1 makes arrivals faster).")
+    p.add_argument("--expert-queue-max", type=int, default=128)
+    p.add_argument("--expert-parallelism", type=int, default=1)
+    p.add_argument("--service-ms", type=float, default=1.0)
+    p.add_argument("--starvation-ms", type=float, default=50.0)
+    p.add_argument("--dflash-draft-len", type=int, default=-1, help="Optional: override/inject meta.dflash_draft_len for runtime-trace comparator accounting (-1 = keep/infer).")
+    p.add_argument("--dflash-draft-cost-scale", type=float, default=-1.0, help="Optional: draft-cost multiplier for the speculative-decoding comparator (-1 = use meta if present, 0 = disable overhead adjustment).")
     return(p.parse_args(argv))
 
 
@@ -977,7 +1133,21 @@ def main(argv: List[str] | None = None) -> int:
         )
         if int(args.max_tokens) > 0:
             trace = list(trace[: int(args.max_tokens)])
-        out = run_runtime_trace_mtp_ablation(trace=trace, trace_meta=meta)
+        dflash_cost_scale: Optional[float] = None
+        if float(args.dflash_draft_cost_scale) >= 0.0:
+            dflash_cost_scale = float(args.dflash_draft_cost_scale)
+        out = run_runtime_trace_mtp_ablation(
+            trace=trace,
+            trace_meta=meta,
+            expert_queue_max=int(args.expert_queue_max),
+            expert_parallelism=int(args.expert_parallelism),
+            service_ms=float(args.service_ms),
+            starvation_ms=float(args.starvation_ms),
+            trace_derive_cost_scale=str(args.trace_derive_cost_scale),
+            trace_speedup=float(args.trace_speedup),
+            dflash_draft_len=int(args.dflash_draft_len),
+            dflash_draft_cost_scale=dflash_cost_scale,
+        )
     else:
         out = run_recommendations(quick=bool(args.quick))
     print(json.dumps(out, sort_keys=True))

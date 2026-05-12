@@ -8,10 +8,17 @@ import json
 import sys
 
 from sim.scheduler import scheduler_sim
+from sim.scheduler import recommendations
 from sim.scheduler import trace_extract
 
 
 class SchedulerSimTest(unittest.TestCase):
+    _recommendations_quick_cache = None
+
+    def _recommendations_quick(self):
+        if SchedulerSimTest._recommendations_quick_cache is None:
+            SchedulerSimTest._recommendations_quick_cache = recommendations.run_recommendations(quick=True)
+        return SchedulerSimTest._recommendations_quick_cache
     def test_synthetic_trace_deterministic(self) -> None:
         cfg = scheduler_sim.TraceConfig(
             num_tokens=10,
@@ -238,6 +245,101 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    def test_trace_summary_accept_len_histogram_is_emitted_and_validates_range(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=1),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=2),
+            scheduler_sim.TokenRoute(t_ms=2.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,), mtp_accept_len=3),
+            scheduler_sim.TokenRoute(t_ms=3.0, cls=scheduler_sim.LatencyClass.INTERACTIVE, candidates=(0,), mtp_accept_len=10),
+        ]
+        summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=2, meta={})
+        hist = summary.get("mtp_accept_len_hist")
+        self.assertIsNotNone(hist)
+        if not isinstance(hist, dict):
+            return
+        self.assertEqual(hist.get("draft_len"), 2)
+        self.assertEqual(hist.get("accept_len_values"), [1, 2, 3])
+        self.assertEqual(hist.get("counts"), [1, 1, 1])
+        self.assertEqual(hist.get("total"), 3)
+        self.assertEqual(hist.get("invalid"), 1)
+        derived = summary.get("mtp_accept_derived")
+        self.assertIsNotNone(derived)
+        if not isinstance(derived, dict):
+            return
+        self.assertEqual(derived.get("draft_len"), 2)
+        self.assertEqual(derived.get("total"), 3)
+        self.assertAlmostEqual(float(derived.get("mean_accept_len", 0.0)), 2.0, places=6)
+        self.assertAlmostEqual(float(derived.get("mean_accepted_tokens", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(derived.get("accept_rate", 0.0)), 0.5, places=6)
+        self.assertAlmostEqual(float(derived.get("reject_frac", 0.0)), (1.0 / 3.0), places=6)
+        self.assertAlmostEqual(float(derived.get("bonus_frac", 0.0)), (1.0 / 3.0), places=6)
+
+    def test_trace_extract_runtime_separates_mtp_and_dflash_accept_counters(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0, 1]},
+            "mtp": {"accept_len": 2, "accepted": 1, "rejected": 0},
+            "dflash": {"accept_len": 4, "accepted": 3, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        if rec is None:
+            return
+        self.assertEqual(rec.get("mtp_accept_len"), 2)
+        self.assertEqual(rec.get("accepted_mtp"), 1)
+        self.assertEqual(rec.get("rejected_mtp"), 0)
+        self.assertEqual(rec.get("dflash_accept_len"), 4)
+        self.assertEqual(rec.get("accepted_dflash"), 3)
+        self.assertEqual(rec.get("rejected_dflash"), 0)
+
+    def test_trace_extract_does_not_treat_dflash_accept_len_as_mtp(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {"candidates": [0]},
+            "dflash": {"accept_len": 3, "accepted": 2, "rejected": 0},
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        if rec is None:
+            return
+        self.assertNotIn("mtp_accept_len", rec)
+        self.assertNotIn("accepted_mtp", rec)
+        self.assertNotIn("rejected_mtp", rec)
+        self.assertEqual(rec.get("dflash_accept_len"), 3)
+
+    def test_runtime_trace_ablation_applies_dflash_cost_scale_from_meta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                dflash_accept_len=3,
+                accepted_dflash=2,
+                rejected_dflash=0,
+            )
+        ]
+        out = recommendations.run_runtime_trace_mtp_ablation(
+            trace=trace,
+            trace_meta={"num_experts": 1, "dflash_draft_cost_scale": 0.5},
+            expert_queue_max=10_000,
+            expert_parallelism=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+        )
+        dflash = out.get("dflash_comparator")
+        self.assertIsInstance(dflash, dict)
+        if not isinstance(dflash, dict):
+            return
+        summary = dflash.get("summary")
+        self.assertIsInstance(summary, dict)
+        if not isinstance(summary, dict):
+            return
+        self.assertAlmostEqual(float(summary.get("dflash_draft_cost_scale", 0.0)), 0.5, places=6)
+        ratio_adj = float(dflash.get("service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0))
+        self.assertGreater(ratio_adj, 0.0)
 
     def test_summary_json_emits_per_layer_stage_skip_fractions(self) -> None:
         trace = [
@@ -539,6 +641,40 @@ class SchedulerSimTest(unittest.TestCase):
         s = scheduler_sim.compare_summary_jsonable(m)
         self.assertAlmostEqual(float(s["skipped_stage_frac"]), 0.5, places=6)
         self.assertAlmostEqual(float(s["skipped_stage_frac_verify"]), 0.5, places=6)
+
+    def test_backpressure_zero_admit_policy_stall_retries_instead_of_drop(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1),
+        ]
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+
+        m_skip = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, backpressure_zero_admit_policy="skip"), trace)
+        self.assertEqual(m_skip.dropped_tokens_backpressure, 1)
+
+        m_stall = scheduler_sim.run_simulation(dataclasses.replace(base_cfg, backpressure_zero_admit_policy="stall"), trace)
+        self.assertEqual(m_stall.dropped_tokens_backpressure, 0)
+        self.assertEqual(len(m_stall.token_lat_ms_batch), 2)
+        self.assertAlmostEqual(max(m_stall.token_lat_ms_batch), 2.0, places=6)
+        s = scheduler_sim.compare_summary_jsonable(m_stall)
+        self.assertEqual(int(s["blocked_stages_backpressure_attempts"]), 1)
 
     def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
         tmp_path = ""
@@ -1242,6 +1378,28 @@ class SchedulerSimTest(unittest.TestCase):
             scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), accepted_mtp=0, rejected_mtp=2),
         ]
         self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
+
+    def test_infer_mtp_draft_len_from_trace_from_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=3),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=1),
+        ]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 2)
+
+    def test_infer_mtp_draft_len_from_trace_accept_len_all_rejects_defaults_to_one(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), mtp_accept_len=1)]
+        self.assertEqual(scheduler_sim.infer_mtp_draft_len_from_trace(trace), 1)
+
+    def test_infer_dflash_draft_len_from_trace_from_accept_len(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=4),
+            scheduler_sim.TokenRoute(t_ms=1.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=1),
+        ]
+        self.assertEqual(scheduler_sim.infer_dflash_draft_len_from_trace(trace), 3)
+
+    def test_infer_dflash_draft_len_from_trace_accept_len_all_rejects_defaults_to_one(self) -> None:
+        trace = [scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0, 1), dflash_accept_len=1)]
+        self.assertEqual(scheduler_sim.infer_dflash_draft_len_from_trace(trace), 1)
 
     def test_trace_replay_auto_num_experts_and_mtp_draft_len(self) -> None:
         tmp_path = ""
@@ -3635,6 +3793,19 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(rec["kv_tokens"], 2048)
         self.assertEqual(rec["expert_batch_size"], 8)
 
+    def test_trace_extract_accepts_single_expert_aliases(self) -> None:
+        obj = {"t_ms": 0.0, "cls": "batch", "expert_id": 7}
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec["candidates"], [7])
+
+        obj2 = {"t_ms": 0.0, "cls": "batch", "route": {"chosen_expert": 3}}
+        rec2 = trace_extract.extract_route_record(obj2)
+        self.assertIsNotNone(rec2)
+        assert rec2 is not None
+        self.assertEqual(rec2["candidates"], [3])
+
     def test_trace_extract_maps_numeric_cls_to_latency_class(self) -> None:
         obj = {"t_ms": 0.0, "cls": 0, "candidates": [7, 3, 19]}
         rec = trace_extract.extract_route_record(obj)
@@ -3783,6 +3954,24 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["candidates"], [0])
 
+    def test_trace_extract_infer_meta_reports_num_experts_and_draft_lens(self) -> None:
+        routes = [
+            {"t_ms": 0.0, "cls": "batch", "candidates": [0, 3], "accepted_mtp": 2, "rejected_mtp": 1, "accepted_dflash": 1, "rejected_dflash": 0},
+            {"t_ms": 1.0, "cls": "batch", "candidates": [2], "accepted_mtp": 2, "rejected_mtp": 1},
+        ]
+        inferred = trace_extract.infer_meta_from_extracted_routes(routes)
+        self.assertEqual(inferred.get("num_experts"), 4)
+        self.assertEqual(inferred.get("mtp_draft_len"), 3)
+        self.assertEqual(inferred.get("dflash_draft_len"), 1)
+
+    def test_trace_extract_infer_meta_ignores_inconsistent_draft_len(self) -> None:
+        routes = [
+            {"t_ms": 0.0, "cls": "batch", "candidates": [0], "accepted_mtp": 2, "rejected_mtp": 1},
+            {"t_ms": 1.0, "cls": "batch", "candidates": [1], "accepted_mtp": 3, "rejected_mtp": 1},
+        ]
+        inferred = trace_extract.infer_meta_from_extracted_routes(routes)
+        self.assertNotIn("mtp_draft_len", inferred)
+
     def test_trace_extract_default_cls_fills_missing_cls(self) -> None:
         obj = {"t_ms": 0.0, "candidates": [0]}
         self.assertIsNone(trace_extract.extract_route_record(obj))
@@ -3858,9 +4047,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(out[1]["candidates"], [1])
 
     def test_recommendations_quick_expert_queue_reserve_prevents_interactive_drops(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["expert_queue_reserve"]
         base = scenario["results"]["baseline"]["summary"]
         no_reserve = scenario["results"]["variants"]["no_reserve"]["summary"]
@@ -3868,9 +4055,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(float(no_reserve["drop_frac_tokens_interactive"]), 0.0)
 
     def test_recommendations_quick_mtp_sweep_has_breakeven(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         sweep = out["scenarios"]["mtp_efficiency_sweep"]["sweep"]
         self.assertGreaterEqual(len(sweep), 3)
         worst = float(sweep[0]["service_slot_ms_per_output_token_ratio_vs_no_mtp"])
@@ -3879,9 +4064,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLess(best, 1.0)
 
     def test_recommendations_quick_adaptive_k_batch_avoids_fixed_batch_k2_drop_spike(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["adaptive_k_batch"]
         base = scenario["results"]["baseline"]["summary"]
         fixed_hi = scenario["results"]["variants"]["batch_k_fixed_2"]["summary"]
@@ -3891,14 +4074,21 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreaterEqual(fixed_hi_drop, (base_drop + 0.05))
 
     def test_recommendations_quick_mtp_congestion_sweep_stop_at_reject_reduces_overhead_at_zero_accept(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         sweep = out["scenarios"]["mtp_congestion_sweep"]["sweep"]
         row0 = next(r for r in sweep if float(r["accept_prob"]) == 0.0)
         full = row0["mtp_full"]
         stop = row0["mtp_stop_at_reject"]
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
+
+    def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
+        out = self._recommendations_quick()
+        scenario = out["scenarios"]["backpressure_zero_admit_policy"]
+        base = scenario["results"]["baseline"]["summary"]
+        stall = scenario["results"]["variants"]["stall"]["summary"]
+        self.assertLess(float(stall["drop_frac_tokens"]), float(base["drop_frac_tokens"]))
+        self.assertGreater(float(stall["blocked_stages_backpressure_attempts"]), 0.0)
+        self.assertGreater(float(stall["token_p95_batch_ms"]), float(base["token_p95_batch_ms"]))
 
     def test_recommendations_runtime_trace_mtp_ablation_runs(self) -> None:
         from sim.scheduler import recommendations
@@ -3913,6 +4103,8 @@ class SchedulerSimTest(unittest.TestCase):
         out = recommendations.run_runtime_trace_mtp_ablation(trace=trace, trace_meta={})
         self.assertEqual(out["name"], "runtime_trace_mtp_ablation")
         self.assertIn("trace_summary", out)
+        self.assertIn("scheduler_sweeps", out)
+        self.assertIn("arrival_units_steps", out["scheduler_sweeps"])
         self.assertIn("results", out)
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])
@@ -4315,9 +4507,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(s.get("promoted_task_frac", -1.0)), 0.25, places=9)
 
     def test_recommendations_quick_expert_batching_reduces_service_per_output_token(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["expert_batching"]
         base = scenario["results"]["baseline"]["summary"]
         b4 = scenario["results"]["variants"]["batch_max_batch_4"]["summary"]

@@ -102,11 +102,11 @@ def main():
     result["llama_rev"] = git_rev(llama_dir)
 
     pad_patterns = [
-        ("ggml_pad_256", re.compile(r"GGML_PAD\\(\\s*n_tokens\\s*,\\s*256\\s*\\)")),
-        ("head_dim_512", re.compile(r"n_embd_head_k\\s*==\\s*512")),
-        ("is_prefill", re.compile(r"\\bis_prefill\\b")),
-        ("n_comp_eq_0", re.compile(r"\\bn_comp\\s*==\\s*0\\b")),
-        ("flash_attn", re.compile(r"\\bflash_attn\\b")),
+        ("ggml_pad_256", re.compile(r"GGML_PAD\(\s*n_tokens\s*,\s*256\s*\)")),
+        ("head_dim_512", re.compile(r"n_embd_head_k\s*==\s*512")),
+        ("is_prefill", re.compile(r"\bis_prefill\b")),
+        ("n_comp_eq_0", re.compile(r"\bn_comp\s*==\s*0\b")),
+        ("flash_attn", re.compile(r"\bflash_attn\b")),
     ]
 
     want = {"deepseek4.cpp", "ggml-cuda.cu"}
@@ -130,8 +130,13 @@ def main():
             if has_pad:
                 result["pad256_matches"].append({"file": rel, "matches": ms})
 
-    # Debug-print removal check (best-effort): presence indicates the patch is *not* applied.
-    cuda_debug_rx = re.compile(r"\\bREJECT\\b|\\bACCEPT\\b")
+    # Debug-print scan (best-effort): informational only.
+    #
+    # Historical note: some fattn reservation debugging patches introduced or removed
+    # REJECT/ACCEPT stderr prints in `ggml-cuda.cu`, but those tokens may appear in
+    # other contexts too. Treat this as an extra signal, not as a definitive
+    # "patch present/absent" gate.
+    cuda_debug_rx = re.compile(r"\bREJECT\b|\bACCEPT\b")
     cuda_debug_hits = []
     for path in candidates:
         if not path.endswith("ggml-cuda.cu"):

@@ -22,7 +22,11 @@ echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
-if [ -e "$repo_root/.git" ]; then
+if [ -d "$repo_root/.codex_git" ]; then
+	repo_rev="$(GIT_DIR="$repo_root/.codex_git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
+elif [ -d "$repo_root/.git2/.git" ]; then
+	repo_rev="$(GIT_DIR="$repo_root/.git2/.git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
+elif [ -e "$repo_root/.git" ]; then
 	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 

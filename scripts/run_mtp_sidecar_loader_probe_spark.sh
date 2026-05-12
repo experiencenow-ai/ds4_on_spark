@@ -8,6 +8,7 @@ OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_loader_probe}"
 
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
+ALLOW_FETCH_DS4="${ALLOW_FETCH_DS4:-0}"
 SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-}"
 if [ "$SIDECAR_EXPECT_FILE_SIZE" != "" ]; then
 	case " $REMOTE_MTP_SIDECAR_ARGS " in
@@ -29,7 +30,11 @@ echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
-if [ -e "$repo_root/.git" ]; then
+if [ -d "$repo_root/.codex_git" ]; then
+	repo_rev="$(GIT_DIR="$repo_root/.codex_git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
+elif [ -d "$repo_root/.git2/.git" ]; then
+	repo_rev="$(GIT_DIR="$repo_root/.git2/.git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
+elif [ -e "$repo_root/.git" ]; then
 	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
@@ -70,6 +75,7 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo "Optional local env vars:"
 	echo
 	echo "- SIDECAR_EXPECT_FILE_SIZE=3807602400 (pins the staged sidecar file size; appended as --expect-file-size)"
+	echo "- ALLOW_FETCH_DS4=1 (fetch pinned `antirez/ds4` locally to validate the expected 32-tensor list vs ds4 binder)"
 	echo
 	echo "Remote contract probe env (recorded):"
 	echo
@@ -325,6 +331,21 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_consistency.py" 
 } >>"$REPORT_MD"
 
 echo "== verifying expected tensor list against upstream ds4 binder (local) =="
+DS4_C="$repo_root/upstreams/ds4/ds4.c"
+if [ ! -r "$DS4_C" ]; then
+	if [ "$ALLOW_FETCH_DS4" = "1" ]; then
+		echo "== fetching pinned upstream ds4 (local; best-effort) =="
+		"$repo_root/scripts/fetch_upstreams.sh" ds4 \
+			>"$OUT_DIR/local_fetch_ds4_stdout.txt" 2>"$OUT_DIR/local_fetch_ds4_stderr.txt" || true
+	else
+		printf '%s\n' "skipped: $DS4_C missing (set ALLOW_FETCH_DS4=1 to fetch pinned antirez/ds4)" \
+			>"$OUT_DIR/local_fetch_ds4_stdout.txt"
+		printf '%s\n' "" >"$OUT_DIR/local_fetch_ds4_stderr.txt"
+	fi
+else
+	printf '%s\n' "present: $DS4_C" >"$OUT_DIR/local_fetch_ds4_stdout.txt"
+	printf '%s\n' "" >"$OUT_DIR/local_fetch_ds4_stderr.txt"
+fi
 python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --json \
 	>"$OUT_DIR/local_ds4_tensor_contract_stdout.txt" 2>"$OUT_DIR/local_ds4_tensor_contract_stderr.txt" || true
 
@@ -351,6 +372,8 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --jso
 	echo
 	echo "Artifacts:"
 	echo
+	echo "- upstream fetch stdout: $OUT_DIR/local_fetch_ds4_stdout.txt"
+	echo "- upstream fetch stderr: $OUT_DIR/local_fetch_ds4_stderr.txt"
 	echo "- stdout: $OUT_DIR/local_ds4_tensor_contract_stdout.txt"
 	echo "- stderr: $OUT_DIR/local_ds4_tensor_contract_stderr.txt"
 	echo
@@ -381,11 +404,15 @@ if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then
 			export MTP_SIDECAR_GGUF
 			echo "defaulted MTP_SIDECAR_GGUF=$p" 1>&2
 			break
-		fi
-	done
+	fi
+done
 fi
 PATCH_FILE="/tmp/llamacpp_mtp_sidecar_probe.patch"
 export PATCH_FILE
+if [ "${JSON_ONLY:-}" = "" ]; then
+	JSON_ONLY=1
+	export JSON_ONLY
+fi
 /tmp/llamacpp_mtp_sidecar_probe_patch.sh
 SH
 
@@ -405,7 +432,17 @@ decoder = json.JSONDecoder()
 best_doc = None
 best_len = 0
 
+try:
+    doc = json.loads(txt)
+    if isinstance(doc, dict):
+        best_doc = doc
+        best_len = len(txt.encode("utf-8"))
+except Exception:
+    pass
+
 for m in re.finditer(r"^\\{", txt, flags=re.M):
+    if best_doc is not None:
+        break
     idx = m.start()
     try:
         doc, end = decoder.raw_decode(txt[idx:])
@@ -419,7 +456,7 @@ for m in re.finditer(r"^\\{", txt, flags=re.M):
 
 if best_doc is None:
     out["errors"].append(
-        "unable to locate JSON object in stdout; set JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV for machine-parseable output"
+        "unable to locate JSON object in stdout; ensure JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV (runner defaults JSON_ONLY=1 unless overridden)"
     )
     print(json.dumps(out, indent=2, sort_keys=True))
     raise SystemExit(0)

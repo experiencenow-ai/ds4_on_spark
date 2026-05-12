@@ -14,12 +14,17 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
   - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `smem_reserved_block=1024`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`, `mem_pools=1`, `tma_map=1`
   - If any `cudaDeviceGetAttribute` query is unavailable (or CUDA headers are too old to define a given driver-attribute enum constant), the one-line schema uses `-1` for that field (to avoid silently reporting `0`).
 - CMake build-system baseline (2026-05-11, via `scripts/cuda_probe_cmake_minimal_spark0.sh`): `cmake version 3.28.3`; C++ host compiler `GNU 13.3.0`; `CMAKE_CUDA_ARCHITECTURES="121"` builds and runs (`__CUDA_ARCH__=1210`).
-- `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + bus width + async engine count + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support), plus `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`), ending with `schema=3` for parsing
-- `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints the same one-line limits schema without shipping `tools/cuda_probe/` (useful when repo transfer is blocked), plus `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`), ending with `schema=3` for parsing
+- `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + bus width + async engine count + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support), plus `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`) and `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`), ending with `schema=4` for parsing
+- `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints the same one-line limits schema without shipping `tools/cuda_probe/` (useful when repo transfer is blocked), plus `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`) and `cuda_arch`, ending with `schema=4` for parsing
+- `scripts/cuda_probe_device_props_minimal_spark0.sh` is a narrower “device props + `sm_121` compile-only gate” no-transfer script that prints the one-line `schema=4` summary (useful for quick inventory checks)
+- `WITH_SM121_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does end-to-end build+run via both `nvcc -arch=sm_121` and `nvcc --gpu-architecture=sm_121` (useful for build systems that use the long-form flag spelling)
+- `WITH_COMPUTE121_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does a best-effort end-to-end build+run via `-arch=compute_121` (PTX-only + driver JIT on Spark0; useful for forward-compat packaging decisions)
+- `WITH_GENCODE_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does a best-effort end-to-end build+run via explicit `-gencode arch=compute_121,code=sm_121` + `-gencode arch=compute_121,code=compute_121` (fatbin SASS+PTX packaging gate)
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` also includes a best-effort compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr` (CUTLASS/DeepGEMM-style nvcc flags) for `sm_121` (and `compute_121` when advertised)
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` validates that CMake (>= 3.18) can configure/build a minimal CUDA project with `CMAKE_CUDA_ARCHITECTURES="121"` and run it on GB10 (`__CUDA_ARCH__=1210`) without shipping the repo
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o` is a compile-only toolchain gate for build systems that use `nvcc --gpu-architecture=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
+- `scripts/cuda_probe_tiny_spark0.sh` also includes an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate when `compute_121` is advertised (fast signal for “fatbin PTX+SASS packaging is broken” failures)
 - CUDA 13 “variant targets”:
   - Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` / `sm_121f`.
   - Best-effort compile-only and build+run for `-arch=sm_121a` and `-arch=sm_121f` both succeed on Spark0 (treat as “optional compatibility”; do not rely on `nvcc --list-gpu-code` advertising them).
@@ -74,6 +79,7 @@ Implication:
 
 Probe:
 
+- `./scripts/cuda_probe_cublaslt_tiny_spark0.sh`: Spark0 “cuBLASLt only” fast path (builds `cuda_device_props_tiny`, `cuda_sm121_arch_report`, and the cuBLASLt smoke probes).
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E4M3) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E5M2) matmul smoke test on Spark0.
