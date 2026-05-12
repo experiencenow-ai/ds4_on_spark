@@ -61,6 +61,8 @@ Override config fields from the command line:
 ./build_cli/ds4_cli --log-level debug --cuda --cuda-device 0 --arena-size 4096 --cuda-arena-size 256m --log-ring-entries 64 --dump-config
 ```
 
+Size fields accept `k`/`m`/`g` (powers of 1024) and `KiB`/`MiB`/`GiB` suffixes (e.g. `256MiB`).
+
 Smoke-test ctx init and log-ring capture (static arena, one log line):
 
 ```bash
