@@ -3173,7 +3173,13 @@ def _sample_mtp_accept_len(cfg: SimConfig, rng: random.Random, metrics: SimMetri
     return(accepted_draft + 1)
 
 
-def _record_mtp_accept_len(cfg: SimConfig, metrics: SimMetrics, accept_len: int, draft_attempt_policy: str) -> None:
+def _record_mtp_accept_len(
+    cfg: SimConfig,
+    metrics: SimMetrics,
+    accept_len: int,
+    draft_attempt_policy: str,
+    attempted_override: Optional[int] = None,
+) -> None:
     if cfg.mtp_draft_len <= 0:
         return
     draft_len = cfg.mtp_draft_len
@@ -3188,6 +3194,8 @@ def _record_mtp_accept_len(cfg: SimConfig, metrics: SimMetrics, accept_len: int,
         attempted += 1
     if attempted > draft_len:
         attempted = draft_len
+    if draft_attempt_policy == "trace" and attempted_override is not None:
+        attempted = max(0, min(draft_len, int(attempted_override)))
 
     for i in range(attempted):
         metrics.mtp_pos_attempted[i] += 1
@@ -3347,8 +3355,8 @@ def run_simulation(
         raise ValueError("dflash_draft_cost_scale must be >= 0")
     if cfg.mtp_draft_len > 0:
         mtp_draft_attempt_policy = cfg.mtp_draft_attempt_policy.strip().lower()
-        if mtp_draft_attempt_policy not in ("full", "stop_at_reject"):
-            raise ValueError("mtp_draft_attempt_policy must be 'full' or 'stop_at_reject'")
+        if mtp_draft_attempt_policy not in ("full", "stop_at_reject", "trace"):
+            raise ValueError("mtp_draft_attempt_policy must be 'full', 'stop_at_reject', or 'trace'")
         mtp_draft_queue_cls = cfg.mtp_draft_queue_cls.strip().lower()
         if mtp_draft_queue_cls not in ("inherit", "interactive", "batch", "hi", "lo"):
             raise ValueError("mtp_draft_queue_cls must be one of: inherit, interactive, batch, hi, lo")
@@ -3390,8 +3398,8 @@ def run_simulation(
         if (route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None) and cfg.mtp_draft_len <= 0:
             raise ValueError("trace route mtp fields require mtp_draft_len > 0")
         if route.accepted_mtp is not None and route.rejected_mtp is not None:
-            if (route.accepted_mtp + route.rejected_mtp) != cfg.mtp_draft_len:
-                raise ValueError("trace route accepted_mtp + rejected_mtp must equal mtp_draft_len")
+            if (route.accepted_mtp + route.rejected_mtp) > cfg.mtp_draft_len:
+                raise ValueError("trace route accepted_mtp + rejected_mtp must be <= mtp_draft_len")
 
         layers = _route_layers(route)
         if k_mode == "trace" and route.k is None:
@@ -3740,7 +3748,8 @@ def run_simulation(
         metrics.mtp_output_tokens += ts.mtp_accept_len
         route = trace[tid]
         if route.mtp_accept_len is not None or route.accepted_mtp is not None or route.rejected_mtp is not None:
-            _record_mtp_accept_len(cfg, metrics, ts.mtp_accept_len, mtp_draft_attempt_policy)
+            attempted_override = ts.mtp_draft_attempt_len if mtp_draft_attempt_policy == "trace" else None
+            _record_mtp_accept_len(cfg, metrics, ts.mtp_accept_len, mtp_draft_attempt_policy, attempted_override=attempted_override)
         ts.mtp_accounted = True
 
     def _maybe_account_token_dflash(tid: int) -> None:
@@ -4147,6 +4156,9 @@ def run_simulation(
                 draft_attempt_len = cfg.mtp_draft_len
                 if mtp_draft_attempt_policy == "stop_at_reject":
                     draft_attempt_len = _mtp_attempted_draft_len(cfg.mtp_draft_len, accept_len)
+                elif mtp_draft_attempt_policy == "trace":
+                    if route.accepted_mtp is not None and route.rejected_mtp is not None:
+                        draft_attempt_len = max(0, min(cfg.mtp_draft_len, int(route.accepted_mtp + route.rejected_mtp)))
 
             ts = tokens[tid]
             ts.remaining = 0
@@ -5089,7 +5101,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="MTP: per-task cost scaling for draft tokens relative to verify tokens (>0).")
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0, help="MTP: extra verify cost scale per drafted token (verify_cost *= 1 + this*draft_len).")
-    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts) or stop_at_reject (only compute the draft prefix up to the first rejection).")
+    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", help="MTP: draft compute policy: full (always compute mtp_draft_len drafts), stop_at_reject (only compute the draft prefix up to the first rejection), or trace (when the trace provides accepted_mtp+rejected_mtp <= mtp_draft_len, compute only that many drafts; otherwise falls back to full).")
     p.add_argument("--mtp-draft-queue-cls", type=str, default="inherit", help="MTP: queueing/priority class for draft micro-tokens: inherit (default), batch, or interactive. batch models draft work as lower priority vs verify work.")
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Trace replay: optional draft length gamma for a speculative-decoding comparator logged under dflash_* fields. When > 0, the simulator can derive dflash_accept_len from rejected_dflash via (gamma - rejected_dflash) + 1 when accepted_dflash is missing. -1 (default) auto-infers from dflash_accept_len, meta.dflash_draft_len, or consistent accepted_dflash+rejected_dflash.")
     p.add_argument(
