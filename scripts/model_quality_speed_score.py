@@ -37,6 +37,14 @@ class ScoreRow:
     quality_adjusted_prefill_tps: Optional[float]
     tokens_per_success: Optional[float]
     wall_s_per_success: Optional[float]
+    speculative_method: str
+    speculative_draft_model: str
+    speculative_num_speculative_tokens: Optional[float]
+    spec_decode_num_drafts: Optional[float]
+    spec_decode_num_draft_tokens: Optional[float]
+    spec_decode_num_accepted_tokens: Optional[float]
+    spec_decode_mean_accept_len: Optional[float]
+    spec_decode_accept_rate: Optional[float]
     dominated_by: str = ""
 
 
@@ -118,6 +126,14 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
         qap = None if qfrac is None or prefill_tps is None else (qfrac * prefill_tps)
         tokens_per_success = _ratio(output_tokens, passed_tasks)
         wall_s_per_success = _ratio(total_wall_s, passed_tasks)
+        speculative_method = _get(row, "speculative_method")
+        speculative_draft_model = _get(row, "speculative_draft_model")
+        speculative_num_speculative_tokens = _float(row, "speculative_num_speculative_tokens")
+        spec_decode_num_drafts = _float(row, "spec_decode_num_drafts")
+        spec_decode_num_draft_tokens = _float(row, "spec_decode_num_draft_tokens")
+        spec_decode_num_accepted_tokens = _float(row, "spec_decode_num_accepted_tokens")
+        spec_decode_mean_accept_len = _float(row, "spec_decode_mean_accept_len")
+        spec_decode_accept_rate = _float(row, "spec_decode_accept_rate")
         scored.append(ScoreRow(
             raw=dict(row),
             model=model,
@@ -142,6 +158,14 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
             quality_adjusted_prefill_tps=qap,
             tokens_per_success=tokens_per_success,
             wall_s_per_success=wall_s_per_success,
+            speculative_method=speculative_method,
+            speculative_draft_model=speculative_draft_model,
+            speculative_num_speculative_tokens=speculative_num_speculative_tokens,
+            spec_decode_num_drafts=spec_decode_num_drafts,
+            spec_decode_num_draft_tokens=spec_decode_num_draft_tokens,
+            spec_decode_num_accepted_tokens=spec_decode_num_accepted_tokens,
+            spec_decode_mean_accept_len=spec_decode_mean_accept_len,
+            spec_decode_accept_rate=spec_decode_accept_rate,
         ))
     mark_pareto(scored, speed_field)
     return(scored)
@@ -210,6 +234,14 @@ def rows_to_dicts(rows: Sequence[ScoreRow]) -> List[Dict[str, Any]]:
             "quality_adjusted_prefill_tps": row.quality_adjusted_prefill_tps,
             "tokens_per_success": row.tokens_per_success,
             "wall_s_per_success": row.wall_s_per_success,
+            "speculative_method": row.speculative_method,
+            "speculative_draft_model": row.speculative_draft_model,
+            "speculative_num_speculative_tokens": row.speculative_num_speculative_tokens,
+            "spec_decode_num_drafts": row.spec_decode_num_drafts,
+            "spec_decode_num_draft_tokens": row.spec_decode_num_draft_tokens,
+            "spec_decode_num_accepted_tokens": row.spec_decode_num_accepted_tokens,
+            "spec_decode_mean_accept_len": row.spec_decode_mean_accept_len,
+            "spec_decode_accept_rate": row.spec_decode_accept_rate,
             "dominated_by": row.dominated_by,
         }
         out.append(d)

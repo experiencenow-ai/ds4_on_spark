@@ -263,6 +263,11 @@ output_tokens = _get("output_tokens", "generated_tokens", "token_trace_events", 
 speculative_method = _get("speculative_method")
 speculative_draft_model = _get("speculative_draft_model")
 speculative_num_speculative_tokens = _get("speculative_num_speculative_tokens")
+spec_decode_num_drafts = _get("spec_decode_num_drafts")
+spec_decode_num_draft_tokens = _get("spec_decode_num_draft_tokens")
+spec_decode_num_accepted_tokens = _get("spec_decode_num_accepted_tokens")
+spec_decode_mean_accept_len = _get("spec_decode_mean_accept_len")
+spec_decode_accept_rate = _get("spec_decode_accept_rate")
 
 if not any([
     public_quality_prior,
@@ -280,6 +285,11 @@ if not any([
     speculative_method,
     speculative_draft_model,
     speculative_num_speculative_tokens,
+    spec_decode_num_drafts,
+    spec_decode_num_draft_tokens,
+    spec_decode_num_accepted_tokens,
+    spec_decode_mean_accept_len,
+    spec_decode_accept_rate,
 ]):
     raise SystemExit(0)
 
@@ -302,6 +312,11 @@ row = {
     "speculative_method": speculative_method,
     "speculative_draft_model": speculative_draft_model,
     "speculative_num_speculative_tokens": speculative_num_speculative_tokens,
+    "spec_decode_num_drafts": spec_decode_num_drafts,
+    "spec_decode_num_draft_tokens": spec_decode_num_draft_tokens,
+    "spec_decode_num_accepted_tokens": spec_decode_num_accepted_tokens,
+    "spec_decode_mean_accept_len": spec_decode_mean_accept_len,
+    "spec_decode_accept_rate": spec_decode_accept_rate,
 }
 
 header = [
@@ -323,6 +338,11 @@ header = [
     "speculative_method",
     "speculative_draft_model",
     "speculative_num_speculative_tokens",
+    "spec_decode_num_drafts",
+    "spec_decode_num_draft_tokens",
+    "spec_decode_num_accepted_tokens",
+    "spec_decode_mean_accept_len",
+    "spec_decode_accept_rate",
 ]
 
 need_header = True
@@ -333,11 +353,31 @@ if os.path.exists(csv_path):
         need_header = True
 
 os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+effective_header = list(header)
+if not need_header:
+    try:
+        with open(csv_path, "r", encoding="utf-8", newline="") as rf:
+            r = csv.DictReader(rf)
+            existing_header = list(r.fieldnames or [])
+            if existing_header:
+                effective_header = existing_header + [h for h in header if h not in existing_header]
+                if effective_header != existing_header:
+                    rows_existing = list(r)
+                    tmp_path = csv_path + ".tmp"
+                    with open(tmp_path, "w", encoding="utf-8", newline="") as wf:
+                        w2 = csv.DictWriter(wf, fieldnames=effective_header)
+                        w2.writeheader()
+                        for erow in rows_existing:
+                            w2.writerow({k: (erow.get(k, "") if erow is not None else "") for k in effective_header})
+                    os.replace(tmp_path, csv_path)
+    except Exception:
+        pass
+
 with open(csv_path, "a", encoding="utf-8", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=header)
+    w = csv.DictWriter(f, fieldnames=effective_header)
     if need_header:
         w.writeheader()
-    w.writerow({k: row.get(k, "") for k in header})
+    w.writerow({k: row.get(k, "") for k in effective_header})
 PY
 }
 
@@ -410,6 +450,14 @@ for raw_line in open(run_ids_path, "r", encoding="utf-8").read().splitlines():
         "decode_tps",
         "total_wall_s",
         "output_tokens",
+        "speculative_method",
+        "speculative_draft_model",
+        "speculative_num_speculative_tokens",
+        "spec_decode_num_drafts",
+        "spec_decode_num_draft_tokens",
+        "spec_decode_num_accepted_tokens",
+        "spec_decode_mean_accept_len",
+        "spec_decode_accept_rate",
         "quality_adjusted_decode_tps",
         "correct_task_rate",
         "correct_tasks_per_s",
