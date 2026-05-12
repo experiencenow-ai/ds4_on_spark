@@ -492,6 +492,31 @@ def find_first_line_containing(text: str, needle: str) -> Optional[str]:
 			return raw.strip()
 	return None
 
+def extract_function_source_lines(text: str, func_name: str) -> Optional[list[str]]:
+	try:
+		mod = ast.parse(text)
+	except Exception:
+		return None
+	lines = text.splitlines()
+	for node in mod.body:
+		if not isinstance(node, ast.FunctionDef):
+			continue
+		if node.name != func_name:
+			continue
+		start = node.lineno
+		if node.decorator_list:
+			start = min((getattr(d, "lineno", start) for d in node.decorator_list))
+		end = getattr(node, "end_lineno", None)
+		if not isinstance(start, int) or not isinstance(end, int) or start <= 0 or end <= 0:
+			return None
+		if end < start or end > len(lines):
+			return None
+		out = [ln.rstrip() for ln in lines[start - 1 : end]]
+		while out and out[-1] == "":
+			out.pop()
+		return out
+	return None
+
 def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
@@ -512,6 +537,9 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	compress_decode_write = find_first_line_containing(text, "self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)")
 	compress_freqs_prefill = find_first_line_containing(text, "freqs_cis = self.freqs_cis[:cutoff:ratio]")
 	compress_freqs_decode = find_first_line_containing(text, "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)")
+
+	win_topk_lines = extract_function_source_lines(text, "get_window_topk_idxs")
+	compress_topk_lines = extract_function_source_lines(text, "get_compress_topk_idxs")
 
 	return {
 		"mla": {
@@ -537,6 +565,18 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"compressor_decode_write_expr": compress_decode_write,
 			"compressor_freqs_cis_prefill_expr": compress_freqs_prefill,
 			"compressor_freqs_cis_decode_expr": compress_freqs_decode,
+		},
+		"cache_topk_index_helpers": {
+			"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (get_window_topk_idxs, get_compress_topk_idxs)",
+			"sentinel_index": -1,
+			"get_window_topk_idxs": {
+				"source_lines": win_topk_lines,
+				"source_lines_sha256": sha256_lines(win_topk_lines) if isinstance(win_topk_lines, list) else None,
+			},
+			"get_compress_topk_idxs": {
+				"source_lines": compress_topk_lines,
+				"source_lines_sha256": sha256_lines(compress_topk_lines) if isinstance(compress_topk_lines, list) else None,
+			},
 		},
 	}
 
@@ -1359,6 +1399,7 @@ def build_contract() -> dict:
 				"mtp_cache_kind_by_mtp_layer_id": [layer_type_from_ratio(int(r)) for r in mtp_ratios],
 				"mtp_compress_ratio_by_mtp_layer_id": [int(r) for r in mtp_ratios],
 				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
+				"topk_index_helpers": sem.get("cache_topk_index_helpers", {}) if isinstance(sem, dict) else {},
 				"compression_semantics": {
 					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)",
 					"overlap_rule": "overlap = (compress_ratio == 4)",

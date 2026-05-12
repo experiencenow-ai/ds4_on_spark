@@ -491,6 +491,41 @@
       "window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)"
     },
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+    "topk_index_helpers": {
+      "get_compress_topk_idxs": {
+        "source_lines": [
+          "@lru_cache(2)",
+          "def get_compress_topk_idxs(ratio: int, bsz: int, seqlen: int, start_pos: int, offset: int):",
+          "    if start_pos > 0:",
+          "        matrix = torch.arange(0, (start_pos + 1) // ratio) + offset",
+          "    else:",
+          "        matrix = torch.arange(seqlen // ratio).repeat(seqlen, 1)",
+          "        mask = matrix >= torch.arange(1, seqlen + 1).unsqueeze(1) // ratio",
+          "        matrix = torch.where(mask, -1, matrix + offset)",
+          "    return matrix.unsqueeze(0).expand(bsz, -1, -1)"
+        ],
+        "source_lines_sha256": "2e6cf4584c0cd57c032f209e8d9d8b977eb0e63266d85a9a164bd76062b88a04"
+      },
+      "get_window_topk_idxs": {
+        "source_lines": [
+          "@lru_cache(1)",
+          "def get_window_topk_idxs(window_size: int, bsz: int, seqlen: int, start_pos: int):",
+          "    if start_pos >= window_size - 1:",
+          "        start_pos %= window_size",
+          "        matrix = torch.cat([torch.arange(start_pos + 1, window_size),  torch.arange(0, start_pos + 1)], dim=0)",
+          "    elif start_pos > 0:",
+          "        matrix = F.pad(torch.arange(start_pos + 1), (0, window_size - start_pos - 1), value=-1)",
+          "    else:",
+          "        base = torch.arange(seqlen).unsqueeze(1)",
+          "        matrix = (base - window_size + 1).clamp(0) + torch.arange(min(seqlen, window_size))",
+          "        matrix = torch.where(matrix > base, -1, matrix)",
+          "    return matrix.unsqueeze(0).expand(bsz, -1, -1)"
+        ],
+        "source_lines_sha256": "fd6cc7dd812ea93400a13fc9dc0c5f923501992e0c648d88c3112faed23a8efa"
+      },
+      "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (get_window_topk_idxs, get_compress_topk_idxs)",
+      "sentinel_index": -1
+    },
     "topk_mask_value": -1,
     "update_semantics": {
       "compressed_segment_view_expr": "self.compressor.kv_cache = self.kv_cache[:, win:]",

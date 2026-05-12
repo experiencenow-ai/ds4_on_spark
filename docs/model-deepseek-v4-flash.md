@@ -387,6 +387,21 @@ Important indexing details (from `Attention.forward`):
 - Prefill uses `kv` (length `seqlen`) concatenated with `kv_compress` (length `seqlen // ratio` when present). Compressed indices are offset by `seqlen`.
 - Decode uses `kv_cache` directly; compressed indices are offset by `window_size` (the compressed segment starts at `kv_cache[:, window_size:]`).
 
+### Top-k index matrix helpers (exact semantics)
+
+Reference implementation: `inference/model.py` (`get_window_topk_idxs`, `get_compress_topk_idxs`).
+
+These helpers define the *exact* sparse-attention gather indices (including `-1` sentinel placement) for both prefill (`start_pos==0`) and decode (`start_pos>0`) paths:
+
+- `get_window_topk_idxs(window_size, bsz, seqlen, start_pos)`:
+  - Prefill: constructs a causal sliding-window matrix for each token position, clamping indices below 0 and masking indices greater than the current token as `-1`.
+  - Decode: produces a 1×`window_size` matrix that either pads with `-1` (when `0 < start_pos < window_size-1`) or rotates indices modulo `window_size` (when `start_pos >= window_size-1`).
+- `get_compress_topk_idxs(ratio, bsz, seqlen, start_pos, offset)`:
+  - Prefill: builds a causal compressed-index matrix of width `seqlen // ratio`, masking entries not yet available at a given token position as `-1`, then adds `offset`.
+  - Decode: uses `torch.arange(0, (start_pos + 1) // ratio) + offset` (a growing linear range into the compressed segment).
+
+To avoid re-parsing upstream Python in every consumer, this repo pins these helper definitions verbatim (plus sha256 fingerprints) in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_index_helpers.*`.
+
 ### Sparse attention masking rule (sentinel indices)
 
 Reference implementation: `inference/kernel.py` (`sparse_attn`).

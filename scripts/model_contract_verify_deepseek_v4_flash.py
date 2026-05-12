@@ -274,6 +274,49 @@ def main() -> int:
 				topk_offset_expr = cache_update.get("topk_offset_expr")
 				if not (isinstance(topk_offset_expr, str) and "offset = kv.size(1) if start_pos == 0 else win" in topk_offset_expr):
 					failures.append(Failure(95, f"contract summary missing top-k offset selection expression 'offset = kv.size(1) if start_pos == 0 else win': {contract_summary}"))
+				topk_helpers = cache_obj.get("topk_index_helpers", None)
+				if not isinstance(topk_helpers, dict):
+					failures.append(Failure(132, f"contract summary cache.topk_index_helpers must be an object: {contract_summary}"))
+				else:
+					if topk_helpers.get("sentinel_index") != -1:
+						failures.append(Failure(133, f"contract summary cache.topk_index_helpers.sentinel_index must be -1: {contract_summary}"))
+					ref = topk_helpers.get("reference_source")
+					if not (isinstance(ref, str) and ref):
+						failures.append(Failure(134, f"contract summary cache.topk_index_helpers.reference_source must be a non-empty string: {contract_summary}"))
+					win_obj = topk_helpers.get("get_window_topk_idxs", None)
+					win_lines = win_obj.get("source_lines") if isinstance(win_obj, dict) else None
+					if not (isinstance(win_lines, list) and all(isinstance(x, str) for x in win_lines) and win_lines):
+						failures.append(Failure(135, f"contract summary cache.topk_index_helpers.get_window_topk_idxs.source_lines missing or invalid: {contract_summary}"))
+					else:
+						if win_obj.get("source_lines_sha256") != sha256_lines(win_lines):
+							failures.append(Failure(136, f"contract summary cache.topk_index_helpers.get_window_topk_idxs.source_lines_sha256 mismatch: {contract_summary}"))
+						src = "\n".join(win_lines)
+						need = [
+							"def get_window_topk_idxs",
+							"start_pos %= window_size",
+							"value=-1",
+							"torch.where(matrix > base, -1, matrix)",
+							"return matrix.unsqueeze(0).expand(bsz, -1, -1)",
+						]
+						if any(n not in src for n in need):
+							failures.append(Failure(137, f"contract summary cache.topk_index_helpers.get_window_topk_idxs source missing required markers: {contract_summary}"))
+					comp_obj = topk_helpers.get("get_compress_topk_idxs", None)
+					comp_lines = comp_obj.get("source_lines") if isinstance(comp_obj, dict) else None
+					if not (isinstance(comp_lines, list) and all(isinstance(x, str) for x in comp_lines) and comp_lines):
+						failures.append(Failure(138, f"contract summary cache.topk_index_helpers.get_compress_topk_idxs.source_lines missing or invalid: {contract_summary}"))
+					else:
+						if comp_obj.get("source_lines_sha256") != sha256_lines(comp_lines):
+							failures.append(Failure(139, f"contract summary cache.topk_index_helpers.get_compress_topk_idxs.source_lines_sha256 mismatch: {contract_summary}"))
+						src = "\n".join(comp_lines)
+						need = [
+							"def get_compress_topk_idxs",
+							"matrix = torch.arange(0, (start_pos + 1) // ratio) + offset",
+							"mask = matrix >= torch.arange(1, seqlen + 1).unsqueeze(1) // ratio",
+							"torch.where(mask, -1, matrix + offset)",
+							"return matrix.unsqueeze(0).expand(bsz, -1, -1)",
+						]
+						if any(n not in src for n in need):
+							failures.append(Failure(140, f"contract summary cache.topk_index_helpers.get_compress_topk_idxs source missing required markers: {contract_summary}"))
 				compress_gate_prefill = cache_update.get("compressor_prefill_should_compress_expr")
 				if not (isinstance(compress_gate_prefill, str) and "should_compress = seqlen >= ratio" in compress_gate_prefill):
 					failures.append(Failure(19, f"contract summary missing compressor prefill gate expression 'should_compress = seqlen >= ratio': {contract_summary}"))
