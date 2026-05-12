@@ -125,6 +125,8 @@ static int32_t ds4_gguf_take_value(const uint8_t *buf,int32_t len,int32_t *off,i
 	uint64_t n;
 	uint32_t t_u32;
 	int32_t t;
+	int64_t bytes64;
+	int32_t bytes;
 	if ( buf == 0 )
 		return(-1);
 	if ( off == 0 )
@@ -165,13 +167,45 @@ static int32_t ds4_gguf_take_value(const uint8_t *buf,int32_t len,int32_t *off,i
 		if ( n > (uint64_t)INT32_MAX )
 			return(-11);
 		if ( t == DS4_GGUF_TYPE_UINT8 || t == DS4_GGUF_TYPE_INT8 || t == DS4_GGUF_TYPE_BOOL )
-			o += (int32_t)n;
+		{
+			bytes64 = (int64_t)n;
+			if ( bytes64 > (int64_t)INT32_MAX )
+				return(-17);
+			bytes = (int32_t)bytes64;
+			if ( o > (len - bytes) )
+				return(-18);
+			o += bytes;
+		}
 		else if ( t == DS4_GGUF_TYPE_UINT16 || t == DS4_GGUF_TYPE_INT16 )
-			o += ((int32_t)n * 2);
+		{
+			bytes64 = ((int64_t)n * 2);
+			if ( bytes64 > (int64_t)INT32_MAX )
+				return(-19);
+			bytes = (int32_t)bytes64;
+			if ( o > (len - bytes) )
+				return(-20);
+			o += bytes;
+		}
 		else if ( t == DS4_GGUF_TYPE_UINT32 || t == DS4_GGUF_TYPE_INT32 || t == DS4_GGUF_TYPE_FLOAT32 )
-			o += ((int32_t)n * 4);
+		{
+			bytes64 = ((int64_t)n * 4);
+			if ( bytes64 > (int64_t)INT32_MAX )
+				return(-21);
+			bytes = (int32_t)bytes64;
+			if ( o > (len - bytes) )
+				return(-22);
+			o += bytes;
+		}
 		else if ( t == DS4_GGUF_TYPE_UINT64 || t == DS4_GGUF_TYPE_INT64 || t == DS4_GGUF_TYPE_FLOAT64 )
-			o += ((int32_t)n * 8);
+		{
+			bytes64 = ((int64_t)n * 8);
+			if ( bytes64 > (int64_t)INT32_MAX )
+				return(-23);
+			bytes = (int32_t)bytes64;
+			if ( o > (len - bytes) )
+				return(-24);
+			o += bytes;
+		}
 		else if ( t == DS4_GGUF_TYPE_STRING )
 		{
 			int32_t i;
