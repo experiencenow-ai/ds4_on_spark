@@ -1,5 +1,7 @@
 #include "ds4/arena.h"
 
+#include <string.h>
+
 static int32_t ds4_align_up_i32(int32_t x,int32_t a,int32_t *out)
 {
 	int32_t m;
@@ -139,5 +141,42 @@ int32_t ds4_arena_alloc(ds4_arena_t *a,int32_t size,int32_t align,void **out)
 	if ( used3 < 0 )
 		return(-9);
 	a->used = used3;
+	return(0);
+}
+
+int32_t ds4_arena_alloc_n(ds4_arena_t *a,int32_t count,int32_t elem_size,int32_t align,void **out)
+{
+	int64_t bytes_64;
+	int32_t bytes;
+	if ( a == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( count <= 0 )
+		return(-3);
+	if ( elem_size <= 0 )
+		return(-4);
+	bytes_64 = ((int64_t)count * (int64_t)elem_size);
+	if ( bytes_64 > (int64_t)INT32_MAX )
+		return(-5);
+	bytes = (int32_t)bytes_64;
+	if ( bytes <= 0 )
+		return(-6);
+	if ( ds4_arena_alloc(a,bytes,align,out) < 0 )
+		return(-7);
+	return(0);
+}
+
+int32_t ds4_arena_alloc_zero(ds4_arena_t *a,int32_t size,int32_t align,void **out)
+{
+	void *p;
+	if ( a == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( ds4_arena_alloc(a,size,align,&p) < 0 )
+		return(-3);
+	memset(p,0,(size_t)size);
+	*out = p;
 	return(0);
 }
