@@ -8,6 +8,7 @@ OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_loader_probe}"
 
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash --payload-sample-bytes 64}"
+LLAMA_COMMIT="${LLAMA_COMMIT:-94073e2}"
 ALLOW_FETCH_DS4="${ALLOW_FETCH_DS4:-0}"
 SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-}"
 if [ "$SIDECAR_EXPECT_FILE_SIZE" != "" ]; then
@@ -38,10 +39,22 @@ elif [ -e "$repo_root/.git" ]; then
 	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
-PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch"
+PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-${LLAMA_COMMIT}-mtp-sidecar-probe.patch"
+if [ ! -r "$PATCH_LOCAL" ] && [ "$LLAMA_COMMIT" = "94073e2" ] && [ -r "$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch" ]; then
+	PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch"
+fi
 HELPER_LOCAL="$repo_root/scripts/llamacpp_mtp_sidecar_probe_patch.sh"
 
 REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
+
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE="$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV"
+case " $REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE " in
+	*" LLAMA_COMMIT="*)
+		;;
+	*)
+		REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE="$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE LLAMA_COMMIT=$LLAMA_COMMIT"
+		;;
+esac
 
 {
 	echo "# MTP Sidecar Loader Probe (Spark)"
@@ -50,6 +63,8 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo
 	echo "- ds4_on_spark commit: $repo_rev"
 	echo "- target: $target"
+	echo "- llama_commit: $LLAMA_COMMIT"
+	echo "- llama_patch_local: $PATCH_LOCAL"
 	echo
 	echo "## What This Does"
 	echo
@@ -105,14 +120,14 @@ REPORT_MD="$OUT_DIR/mtp_sidecar_loader_probe_spark.md"
 	echo
 	echo "- LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark"
 	echo "- LLAMA_REPO=https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git"
-	echo "- LLAMA_COMMIT=94073e2"
+	echo "- LLAMA_COMMIT=$LLAMA_COMMIT"
 	echo "- PAYLOAD_SAMPLE_BYTES=64"
 	echo "- LOAD_WEIGHTS=1"
 	echo
 	echo "Remote loader probe env (recorded):"
 	echo
 	echo '```'
-	echo "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV"
+	echo "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE"
 	echo '```'
 	echo
 	echo "## Spark Host Info"
@@ -388,7 +403,7 @@ ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe.patch" \
 	<"$PATCH_LOCAL" \
 	>"$OUT_DIR/remote_loader_upload_patch_stdout.txt" 2>"$OUT_DIR/remote_loader_upload_patch_stderr.txt" || true
 
-ssh $SSH_OPTS "$target" "env $REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV sh -s" \
+ssh $SSH_OPTS "$target" "env $REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE sh -s" \
 	>"$OUT_DIR/remote_loader_probe_stdout.txt" 2>"$OUT_DIR/remote_loader_probe_stderr.txt" <<'SH' || true
 set -eu
 if [ "${MTP_SIDECAR_GGUF:-}" = "" ]; then

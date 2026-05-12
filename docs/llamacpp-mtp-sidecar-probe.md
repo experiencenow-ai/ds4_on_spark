@@ -32,6 +32,10 @@ Legacy patch (for older checkouts):
 
 - `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
 
+Spark runners in this repo select the matching patch file based on
+`LLAMA_COMMIT` (default `94073e2`). To validate against the original observed
+failure commit, run with `LLAMA_COMMIT=9222e55`.
+
 ## Apply + build (Spark)
 
 ```bash
