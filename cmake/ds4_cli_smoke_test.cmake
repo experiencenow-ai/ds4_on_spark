@@ -169,6 +169,46 @@ if(DS4_MODE STREQUAL "config_strict_unknown_reject")
 	return()
 endif()
 
+if(DS4_MODE STREQUAL "config_env_inline_dump")
+	execute_process(
+		COMMAND "${CMAKE_COMMAND}" -E env "DS4_CONFIG=log_level=debug" "${DS4_CLI_PATH}" --dump-config
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_level=debug" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_level=debug'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "config_env_path_dump")
+	set(_ds4_cfg "${DS4_TMP_DIR}/ds4_cli_smoke_env.conf")
+	file(WRITE "${_ds4_cfg}" "log_level=debug\nenable_cuda=0\n")
+	execute_process(
+		COMMAND "${CMAKE_COMMAND}" -E env "DS4_CONFIG_PATH=${_ds4_cfg}" "${DS4_CLI_PATH}" --dump-config
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_level=debug" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_level=debug'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "enable_cuda=0" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'enable_cuda=0'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
 if(DS4_MODE STREQUAL "version_semver")
 	execute_process(
 		COMMAND "${DS4_CLI_PATH}" --version
