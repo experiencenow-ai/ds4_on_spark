@@ -33,10 +33,12 @@ SYSTEM_V1 = (
 SYSTEM_V2 = (
     "You are a strict pairwise judge.\n"
     "Return exactly one minified JSON object on one line (no prose/markdown, no extra keys).\n"
-    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words (non-empty), train_hint<=18 words (empty ok), tags.\n"
+    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words, train_hint<=18 words, tags(0..3).\n"
     "Tie => margin=0 and score_a==score_b.\n"
-    "Keep within ~{judge_out_target} output tokens; shorten reason, then empty train_hint, then drop extra tags.\n"
-    "All strings must be single-line (no newlines)."
+    "winner=A => score_a>score_b; winner=B => score_b>score_a.\n"
+    "Margin must match |score_a-score_b|: 1->{{0,1}}, 2->{{1,2}}, 3->{{2}}, >=4->{{3}}.\n"
+    "Keep within ~{judge_out_target} output tokens; shorten reason, then empty train_hint, then drop tags.\n"
+    "All strings must be single-line (no newlines); tag strings must be <=24 chars."
 )
 
 
