@@ -1181,6 +1181,14 @@
       "reference_source": "https://huggingface.co/docs/transformers/main/model_doc/deepseek_v4 (Cache layers; accessed 2026-05-11)"
     }
   },
+  "contract_fingerprints": {
+    "attention_schedule_sha256": "c27b3e3b1b6dc39965103b3b9f094cf702eb832c66136688f3db7cd00f4efa01",
+    "cache_semantics_sha256": "918d2f3d3dc5836016ca389492a24064fa01964ee913ef04059e1e59457c35e0",
+    "execution_contract_sha256": "0ad3e3a319d3afb01da224a974ab0d596c0d455beee7bcd477a040988ca675f6",
+    "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
+    "tokenizer_encoding_sha256": "1da9e95cc3cf428098ead91e8d84e54689ba83c52e1079cf2a31c21ff4fa445f",
+    "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
+  },
   "encoding_constants": {
     "assistant_msg_template": "{reasoning}{content}{tool_calls}<\uff5cend\u2581of\u2581sentence\uff5c>",
     "assistant_msg_wo_eos_template": "{reasoning}{content}{tool_calls}",
