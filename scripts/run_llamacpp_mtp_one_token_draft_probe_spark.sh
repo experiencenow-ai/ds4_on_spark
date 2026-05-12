@@ -256,3 +256,41 @@ fi
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
+
+python3 - "$OUT_DIR" "$REPORT_MD" 2>/dev/null <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+out_dir = Path(sys.argv[1])
+report_md = Path(sys.argv[2])
+
+def read_json(p: Path):
+	try:
+		return json.loads(p.read_text(encoding="utf-8"))
+	except Exception:
+		return None
+
+probe_parse = read_json(out_dir / "mtp_one_token_probe_parse.json") or {}
+probe_validate = read_json(out_dir / "mtp_one_token_probe_validate.json") or {}
+
+probe_ok = bool(probe_parse.get("ok", False))
+validate_ok = bool(probe_validate.get("ok", False))
+
+summary = {
+	"ok": bool(probe_ok and validate_ok),
+	"probe_ok": probe_ok,
+	"validate_ok": validate_ok,
+	"artifacts": {
+		"report_md": str(report_md),
+		"probe_json": str(out_dir / "mtp_one_token_probe.json"),
+		"probe_parse_json": str(out_dir / "mtp_one_token_probe_parse.json"),
+		"validate_json": str(out_dir / "mtp_one_token_probe_validate.json"),
+		"validate_stderr": str(out_dir / "mtp_one_token_probe_validate_stderr.txt"),
+	},
+	"probe_parse": probe_parse,
+	"validate": probe_validate,
+}
+
+(out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
