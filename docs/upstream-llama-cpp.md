@@ -3,8 +3,8 @@
 ## Source
 
 - Repo: `https://github.com/ggml-org/llama.cpp`
-- Ref: `refs/tags/b9110`
-- Commit: `ef22b3e4ac9444d1dca1c44164861e0317b5579d`
+- Ref: `refs/tags/b9124`
+- Commit: `7bfe120c210c04e7b53d1e9eca8b92acd4ab252f`
 - License: MIT (see upstream `LICENSE`)
 
 ## Why we track it (Spark relevance)
@@ -80,9 +80,9 @@ Patch assets:
 
 ## Upstream build/docs pointers
 
-- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/install.md`
-- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/build.md`
-- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9110/docs/docker.md`
+- Install options: `https://github.com/ggml-org/llama.cpp/blob/b9124/docs/install.md`
+- Build guide: `https://github.com/ggml-org/llama.cpp/blob/b9124/docs/build.md`
+- Docker guide: `https://github.com/ggml-org/llama.cpp/blob/b9124/docs/docker.md`
 
 ## Build notes (Spark relevance, high level)
 
