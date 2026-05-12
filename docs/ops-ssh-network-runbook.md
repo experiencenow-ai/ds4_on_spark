@@ -104,7 +104,8 @@ Optional: you can also run staged TP readiness checks (safe; runs the readiness 
 Optional: you can also add staged readiness to the one-shot ops snapshot (safe; combines mesh + status + staged readiness):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --topology ring \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --staged-readiness --staged-readiness-strict --topology ring \
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 

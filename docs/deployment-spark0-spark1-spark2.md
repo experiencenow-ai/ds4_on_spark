@@ -65,7 +65,8 @@ Optional (recommended): run staged TP readiness checks after staging (safe; no s
 Or run staged readiness via the snapshot helper (safe; adds readiness to the Mac-side mesh+status snapshot):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
