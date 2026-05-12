@@ -94,6 +94,26 @@ def _extract_code_block_after(section_text: str, anchor: str) -> str:
         return _extract_first_code_block(section_text)
     return _extract_first_code_block(section_text[pos:])
 
+def _parse_scored_summary(scored_summary_text: str) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    found = False
+    for raw in scored_summary_text.splitlines():
+        line = raw.strip()
+        if not found:
+            if line.startswith("== scored summary"):
+                found = True
+            continue
+        if line.startswith("== "):
+            break
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        if k:
+            out[k] = v
+    return out
+
 def _parse_quality_metadata(report_md: str) -> Dict[str, str]:
     section = _extract_section(report_md, "Quality Metadata (Local)")
     out: Dict[str, str] = {}
@@ -191,6 +211,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     gguf_inspect_path = out_dir / "remote_gguf_inspect_stdout.txt"
     fattn_probe_path = out_dir / "remote_fattn_patch_probe_stdout.txt"
     multislot_probe_path = out_dir / "remote_multislot_patch_probe_stdout.txt"
+    scored_summary_path = out_dir / "model_quality_speed_scored_summary.txt"
 
     report_md = _read_text(report_md_path)
     remote_llama_stdout = _read_text(remote_llama_stdout_path)
@@ -221,6 +242,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     inspect = _read_json(gguf_inspect_path)
     quality_kv = _parse_quality_metadata(report_md)
+    scored_kv = _parse_scored_summary(_read_text(scored_summary_path))
     mtp_present = None if not inspect else bool(inspect.get("mtp_present", False))
     arch = None
     file_type = None
@@ -320,6 +342,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append(f"- passed_tasks: {_na(quality_kv.get('passed_tasks'))}")
     lines.append(f"- total_tasks: {_na(quality_kv.get('total_tasks'))}")
     lines.append(f"- quality_score: {_na(quality_kv.get('quality_score'))}")
+    lines.append("")
+    lines.append("Quality/Speed scoring (from `scripts/model_quality_speed_score.py`, when available):")
+    lines.append("")
+    if scored_kv:
+        lines.append(f"- quality_adjusted_decode_tps: `{_fmt_float(scored_kv.get('quality_adjusted_decode_tps', '')) if scored_kv.get('quality_adjusted_decode_tps') else 'NA'}`")
+        lines.append(f"- correct_task_rate: `{_fmt_float(scored_kv.get('correct_task_rate', '')) if scored_kv.get('correct_task_rate') else 'NA'}`")
+        lines.append(f"- tokens_per_success: `{_fmt_float(scored_kv.get('tokens_per_success', '')) if scored_kv.get('tokens_per_success') else 'NA'}`")
+        lines.append(f"- dominated_by: `{scored_kv.get('dominated_by', '') or 'NA'}`")
+    else:
+        lines.append("- NA (missing `model_quality_speed_scored_summary.txt`; set `MODEL_RUNS_CSV` for the run)")
     lines.append("")
     lines.append("GGUF contract inspector (metadata-only):")
     lines.append("")

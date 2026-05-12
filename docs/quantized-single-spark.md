@@ -18,6 +18,8 @@ OUT_DIR=/private/tmp/ds4_on_spark_baseline/<ts>-<optional-label>
 python3 scripts/render_quantized_single_spark_report.py "$OUT_DIR" --write "docs/baseline-quantized-single-spark0-YYYY-MM-DD.md"
 ```
 
+If `MODEL_RUNS_CSV` is unset, `scripts/run_quantized_single_spark.sh` defaults it to `$OUT_ROOT/model_runs.csv` so the run emits `model_quality_speed_scored_summary.txt` for later quality/speed comparisons.
+
 ## Definition of Done
 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family
