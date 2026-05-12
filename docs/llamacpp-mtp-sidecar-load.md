@@ -97,6 +97,8 @@ REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 AL
 scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 ```
 
+Note: `scripts/run_mtp_sidecar_loader_probe_spark.sh` only attempts the llama.cpp-side probe when the Python contract probe returns `ok=true` (to avoid building/running against a bad or skipped sidecar).
+
 To reproduce against the original observed fork revision (`9222e55`), set
 `LLAMA_COMMIT=9222e55` (the runner selects/uploads the matching patch file and
 injects `LLAMA_COMMIT` into the Spark-side env unless you already set it):
