@@ -247,6 +247,32 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_runtime_trace_ablation_markdown_smoke(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [0], "accepted_mtp": 1, "rejected_mtp": 1}))
+            f.write("\n")
+        try:
+            meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, meta_out=meta)
+            out = recommendations.run_runtime_trace_mtp_ablation(
+                name="markdown_smoke",
+                trace=trace,
+                trace_meta=meta,
+                expert_queue_max=8,
+                expert_parallelism=1,
+                service_ms=1.0,
+                starvation_ms=50.0,
+                mtp_draft_len=-1,
+            )
+            md = recommendations.format_runtime_trace_ablation_markdown(out)
+            self.assertIn("# Scheduler Simulator Runtime Trace Report", md)
+            self.assertIn("- mtp: present", md)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_ds4_topk_dump_to_trace_jsonl_emits_layers_and_synthetic_dt(self) -> None:
         from array import array
 
