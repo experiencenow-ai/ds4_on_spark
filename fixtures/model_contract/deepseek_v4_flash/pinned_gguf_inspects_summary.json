@@ -1,9 +1,10 @@
 {
-  "generated_at_utc": "2026-05-12T06:57:24Z",
+  "generated_at_utc": "2026-05-12T07:05:00Z",
   "items": [
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
+      "ds4_mtp_sidecar_contract": null,
       "mtp_contract": null,
       "mtp_keys_sha256": null,
       "mtp_layer_ids": [],
@@ -72,6 +73,7 @@
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
+      "ds4_mtp_sidecar_contract": null,
       "mtp_contract": null,
       "mtp_keys_sha256": null,
       "mtp_layer_ids": [],
@@ -144,6 +146,7 @@
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json",
+      "ds4_mtp_sidecar_contract": null,
       "mtp_contract": null,
       "mtp_keys_sha256": null,
       "mtp_layer_ids": [],
@@ -212,6 +215,14 @@
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json",
+      "ds4_mtp_sidecar_contract": {
+        "complete": true,
+        "expected_general_architecture": "deepseek4_mtp_support",
+        "expected_tensor_count": 32,
+        "general_architecture": "deepseek4_mtp_support",
+        "missing_expected_count": 0,
+        "unexpected_present_count": 0
+      },
       "mtp_contract": {
         "complete": false,
         "forbidden_present_count": 0,
@@ -288,6 +299,8 @@
     {
       "artifact_set": true,
       "doc_path": "docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json",
+      "ds4_mtp_sidecar_complete": true,
+      "ds4_mtp_sidecar_present": true,
       "mtp_contract": {
         "complete": false,
         "forbidden_present_count": 0,

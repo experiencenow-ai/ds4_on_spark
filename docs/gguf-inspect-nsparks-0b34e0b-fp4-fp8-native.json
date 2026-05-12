@@ -1,5 +1,11 @@
 {
   "artifact_type": "gguf.url",
+  "ds4_mtp_sidecar_contract": {
+    "candidate": false,
+    "checked": false,
+    "expected_general_architecture": "deepseek4_mtp_support",
+    "reason": "artifact does not look like a DS4-tuned MTP sidecar (no arch match and no expected tensor names present)"
+  },
   "first_mtp_keys": [],
   "first_tensor_keys": [
     "token_embd.weight",
