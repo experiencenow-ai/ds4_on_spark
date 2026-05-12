@@ -12,7 +12,7 @@ This runbook produces **commit-safe** (redacted) snapshots for ring bring-up. It
 
 ## Quickstart: one-shot snapshot set (recommended)
 
-This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets).
+This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + SSH latency + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets).
 
 For three-node ring bring-up, prefer `--topology full` (peer ping to all) and `SPARK_NODE_FACTS=1` (one facts file per host):
 
@@ -102,6 +102,19 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 ```
 
 This is purely a sanity check (ssh + crypto overhead included). Avoid running it in tight loops; keep `BW_MB` small.
+
+## 2d) SSH latency probe snapshot (optional; Mac<->host, no ICMP required)
+
+When ICMP ping is blocked/flaky but SSH key auth works, use an SSH wall-time measurement as a best-effort latency signal:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+(LAT_ITERS=3 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_latency.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-latency-probe-${stamp}.md"
+```
+
+Notes:
+- This includes TCP + SSH handshake overhead; it is not an ICMP RTT.
+- Keep `LAT_ITERS` small (e.g. `3` or `5`) to avoid generating noise.
 
 ## 3) Deep single-node hardware/toolchain probe (optional; Spark0 recommended)
 

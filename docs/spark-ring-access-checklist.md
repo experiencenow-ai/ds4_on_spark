@@ -16,6 +16,7 @@ REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git 
 Quick validation targets (paste-friendly stanzas):
 - `docs/spark-ring-mac-discovery-<stamp>.md`: `== known target checks ==`, `== ping (mac->targets, compact) ==`
 - `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==`, `== network (iface matrix, compact) ==`, `== cuda/toolchain facts (summary) ==`
+- `docs/spark-ring-latency-probe-<stamp>.md`: `ssh_latency_ms_p50` (SSH wall-time, no ICMP required)
 - `docs/spark-ring-mtu-probe-<stamp>.md`: MTU DF-ping payload pass/fail matrix
 - `docs/spark-ring-bw-probe-<stamp>.md`: `bw up/down` smoke numbers (best-effort)
 - `docs/spark-ring-node-facts-<host>-<stamp>.md`: stable per-node GPU/CUDA/storage facts
@@ -31,7 +32,7 @@ For a three-node ring, treat these as the “ready” bar, with the probe output
 | Clock sync | `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==` | `skew span_s <= 1` and (when available) `NTPSynchronized=yes` |
 | Ethernet/Wi‑Fi matrix | `docs/spark-ring-probe-<stamp>.md`: `== network (iface matrix, compact) ==` | ifnames + MTU + speed + redacted v4/v6 captured for each node |
 | MTU (end-to-end) | `docs/spark-ring-mtu-probe-<stamp>.md` | Intended fabric passes DF payloads (jumbo vs standard) |
-| Latency (best-effort) | `docs/spark-ring-mac-discovery-<stamp>.md`: ping; `docs/spark-ring-probe-<stamp>.md`: `== peer ping ==` | RTT/loss is acceptable and peer names resolve for the chosen topology |
+| Latency (best-effort) | `docs/spark-ring-mac-discovery-<stamp>.md`: ping; `docs/spark-ring-probe-<stamp>.md`: `== peer ping ==`; `docs/spark-ring-latency-probe-<stamp>.md`: SSH wall-time | RTT/loss is acceptable and peer names resolve for the chosen topology |
 | Bandwidth (smoke) | `docs/spark-ring-bw-probe-<stamp>.md` | Mac↔host smoke numbers recorded (best-effort) |
 | GPU + storage facts | `docs/spark-ring-node-facts-<host>-<stamp>.md` | `cuda/toolchain facts` + `df/lsblk` present per node |
 
