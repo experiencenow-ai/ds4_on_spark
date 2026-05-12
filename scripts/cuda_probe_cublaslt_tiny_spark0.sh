@@ -73,7 +73,7 @@ echo
 echo \"== build (cublaslt-tiny) ==\"
 cd \"$REMOTE_DIR\"
 make clean
-make bin/cuda_device_props_tiny bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_cublaslt_fp8_smoke bin/cuda_cublaslt_fp8_e5m2_smoke bin/cuda_cublaslt_fp4_smoke
+make bin/cuda_device_props_tiny bin/cuda_sm121_arch_report bin/cuda_cublaslt_smoke bin/cuda_cublaslt_smoke_gpuarch_code bin/cuda_cublaslt_smoke_gencode bin/cuda_cublaslt_fp8_smoke bin/cuda_cublaslt_fp8_e5m2_smoke bin/cuda_cublaslt_fp4_smoke
 
 echo
 run_retry() {
@@ -95,6 +95,8 @@ run_retry() {
 run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
 run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 run_retry cuda_cublaslt_smoke \"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke
+run_retry cuda_cublaslt_smoke_gpuarch_code \"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke_gpuarch_code
+run_retry cuda_cublaslt_smoke_gencode \"$REMOTE_DIR\"/bin/cuda_cublaslt_smoke_gencode
 run_retry cuda_cublaslt_fp8_smoke \"$REMOTE_DIR\"/bin/cuda_cublaslt_fp8_smoke
 
 echo \"== run: cuda_cublaslt_fp8_e5m2_smoke ==\"
@@ -131,4 +133,3 @@ cat "$tmp_out"
 cat "$tmp_out" >> "$log_path"
 rm -f "$tmp_out"
 exit $rc
-

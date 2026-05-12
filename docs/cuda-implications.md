@@ -84,6 +84,8 @@ Probe:
 - `./scripts/cuda_probe_cublaslt_tiny_spark0.sh`: Spark0 “cuBLASLt only” fast path (builds `cuda_device_props_tiny`, `cuda_sm121_arch_report`, and the cuBLASLt smoke probes).
 - `./scripts/cuda_probe_capability_spark0.sh`: includes the cuBLASLt smoke gate by default; set `WITH_CUBLASLT_TINY=0` to skip it when you only want kernel/toolchain probes.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke_gpuarch_code`: same probe, but built via `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (flag-split build-system gate).
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke_gencode`: same probe, but built via explicit `-gencode` for `sm_121` + `compute_121` PTX (fatbin packaging gate).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E4M3) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E5M2) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP4 (E2M1) matmul smoke test on Spark0 (best-effort capability probe).
