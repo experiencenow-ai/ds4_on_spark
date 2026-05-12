@@ -190,12 +190,13 @@ All baseline scripts share the same safety gates:
 
 Per-script useful env vars:
 
-- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`
+- `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `OUT_DIR_OVERRIDE` (optional: force a deterministic local output directory), `SSH_OPTS`
 - `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_OPENAI_STREAM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL_ID` (CSV label override; avoids absolute Spark paths)
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE`, `OPENAI_STREAM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
 - `scripts/run_baseline_existing_runtime.sh`: `OPENAI_STREAM_MODEL_ID` (CSV label override; avoids server-specific model aliases)
 - `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM`, `SKIP_OPENAI_STREAM` (skip irrelevant probes for faster multi-model loops)
+- `scripts/run_baseline_existing_runtime.sh`: `REQUIRE_GGUF_TRUNK_COMPLETE=1` (optional: fail unless `remote_gguf_inspect_stdout.txt` reports `trunk_contract.complete=true`)
 - `scripts/run_baseline_existing_runtime.sh`: `FETCH_LLAMA_OUT_DIR=1` (opt-in: fetch the remote llama.cpp runner `out_dir` tarball to preserve `fattn_cli_probe.json` + raw logs locally)
 - `scripts/run_baseline_ds4_macos.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`
 - `scripts/run_baseline_antirez_ds4_spark.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, remote `DS4_DIR`, remote `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `SSH_OPTS`
