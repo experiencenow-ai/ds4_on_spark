@@ -537,7 +537,7 @@ new file mode 100644
 index 0000000..00ef001
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,659 @@
+@@ -0,0 +1,765 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -602,6 +602,96 @@ index 0000000..00ef001
 +        return std::string();
 +    }
 +    return std::string(buf, (size_t) n);
++}
++
++struct tensor_capture;
++
++static bool compute_argmax_logits_from_output(
++        const tensor_capture & embd,
++        const llama_model * model,
++        int32_t * out_token_id,
++        std::string * err) {
++    if (out_token_id == nullptr) {
++        if (err != nullptr) *err = "null out_token_id";
++        return false;
++    }
++    *out_token_id = -1;
++
++    if (model == nullptr || model->output == nullptr) {
++        if (err != nullptr) *err = "missing model output tensor";
++        return false;
++    }
++    if (!embd.got) {
++        if (err != nullptr) *err = "missing embd capture";
++        return false;
++    }
++    if (embd.type != GGML_TYPE_F32) {
++        if (err != nullptr) *err = "embd is not f32";
++        return false;
++    }
++    if (!(embd.ne0 == (int64_t) model->hparams.n_embd && embd.ne1 == 1 && embd.ne2 == 1)) {
++        if (err != nullptr) *err = "embd has unexpected shape";
++        return false;
++    }
++
++    ggml_init_params ip = {};
++    ip.mem_size = 256 * 1024 * 1024;
++    ip.mem_buffer = nullptr;
++    ip.no_alloc = false;
++
++    ggml_context * ctx = ggml_init(ip);
++    if (ctx == nullptr) {
++        if (err != nullptr) *err = "ggml_init failed";
++        return false;
++    }
++
++    ggml_tensor * x = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, embd.ne0, 1);
++    if (x == nullptr || x->data == nullptr) {
++        if (err != nullptr) *err = "failed to alloc embd input";
++        ggml_free(ctx);
++        return false;
++    }
++    if (embd.bytes.size() != ggml_nbytes(x)) {
++        if (err != nullptr) *err = "embd nbytes mismatch";
++        ggml_free(ctx);
++        return false;
++    }
++    std::memcpy(x->data, embd.bytes.data(), embd.bytes.size());
++
++    if (model->output->data == nullptr) {
++        if (err != nullptr) *err = "model output tensor has null data (consider overriding output\\.weight to CPU buft)";
++        ggml_free(ctx);
++        return false;
++    }
++
++    ggml_tensor * logits = ggml_mul_mat(ctx, model->output, x);
++    if (logits == nullptr) {
++        if (err != nullptr) *err = "failed to build logits";
++        ggml_free(ctx);
++        return false;
++    }
++
++    ggml_cgraph * gf = ggml_new_graph(ctx);
++    ggml_build_forward_expand(gf, logits);
++    ggml_graph_compute_with_ctx(ctx, gf, 1);
++
++    if (logits->type != GGML_TYPE_F32) {
++        if (err != nullptr) *err = "logits output is not f32";
++        ggml_free(ctx);
++        return false;
++    }
++
++    const int32_t n_vocab = (int32_t) logits->ne[0];
++    if (n_vocab <= 0) {
++        if (err != nullptr) *err = "logits n_vocab <= 0";
++        ggml_free(ctx);
++        return false;
++    }
++    const float * p = (const float *) logits->data;
++    *out_token_id = argmax_f32(p, n_vocab);
++
++    ggml_free(ctx);
++    return (*out_token_id >= 0);
 +}
 +
 +struct tensor_capture {
@@ -1057,6 +1147,12 @@ index 0000000..00ef001
 +    llama_model_params model_params = llama_model_default_params();
 +    model_params.n_gpu_layers = 99;
 +
++    static llama_model_tensor_buft_override tensor_overrides[] = {
++        { "output\\.weight", ggml_backend_cpu_buffer_type() },
++        { nullptr, nullptr },
++    };
++    model_params.tensor_buft_overrides = tensor_overrides;
++
 +    llama_model * model = llama_model_load_from_file(trunk_path.c_str(), model_params);
 +    if (model == nullptr) {
 +        errors.push_back("failed to load trunk model");
@@ -1171,6 +1267,9 @@ index 0000000..00ef001
 +        errors.push_back(std::string("sidecar bind failed: ") + bind_err);
 +    }
 +
++    int32_t mtp_stub_token_id = -1;
++    std::string mtp_stub_token;
++
 +    if (load_sidecar_weights && bind_ok) {
 +        std::string stub_err;
 +        if (!compute_stub_mtp_input_hc(caps.token_embd, caps.pre_hc_head, sidecar, model->hparams, &stub_input_hc, &stub_err)) {
@@ -1178,6 +1277,13 @@ index 0000000..00ef001
 +        }
 +        if (!compute_stub_mtp_output_head_norm(caps.pre_hc_head, sidecar, model->hparams, &stub_head_norm, &stub_err)) {
 +            errors.push_back(std::string("stub output head compute failed: ") + stub_err);
++        }
++        if (stub_head_norm.got) {
++            if (!compute_argmax_logits_from_output(stub_head_norm, model, &mtp_stub_token_id, &stub_err)) {
++                errors.push_back(std::string("stub head-only draft token failed: ") + stub_err);
++            } else {
++                mtp_stub_token = token_to_piece(vocab, (llama_token) mtp_stub_token_id);
++            }
 +        }
 +    } else {
 +        errors.push_back("stub mtp compute skipped (requires --load-sidecar-weights + successful bind)");
@@ -1189,7 +1295,7 @@ index 0000000..00ef001
 +    errors.push_back("TODO: implement gamma=1 MTP draft compute using sidecar weights + MTP KV/raw-cache state");
 +
 +    if (json) {
-+        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, mtp_stub_token_id, mtp_stub_token, caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +    }
 +
 +    llama_free(ctx);
