@@ -782,7 +782,7 @@ Official-source safetensors **do** include the MTP namespace:
 
 - `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json` contains `mtp.0.*` (1,575 tensor keys as of the pinned upstream commit).
 
-As of 2026-05-11, metadata-only inspections of pinned community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
+As of the pinned metadata-only GGUF snapshot (`fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` `generated_at_utc=2026-05-12T02:38:41Z`), inspections of community GGUF trunk artifacts (see `docs/quantized-single-spark.md`) reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp`, i.e. they did not preserve the upstream `mtp.0.*` tensor namespace.
 
 Recorded probe outputs (range-read header + tensor table only; no full downloads):
 
@@ -793,7 +793,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
 
-Pinned GGUF MTP status snapshot (as of 2026-05-11; derived from the JSON probe outputs above):
+Pinned GGUF MTP status snapshot (derived from `fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` `generated_at_utc=2026-05-12T02:38:41Z`; built from the JSON probe outputs above):
 
 | Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_contract.complete` | `mtp_trust.status` |
 |---|---|---:|---:|---:|---|
@@ -846,7 +846,7 @@ python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co
 Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-b0c3326.json`.
 Recorded `model_contract_inspect_quantized_artifact.py` output (same pinned antirez sidecar; metadata-only range read): `docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json`.
 
-As of 2026-05-11, metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
+As of the same pinned snapshot (`generated_at_utc=2026-05-12T02:38:41Z`), metadata-only inspection of the pinned antirez sidecar (`scripts/model_contract_inspect_quantized_artifact.py --url ... --json`) reports `mtp_present=true` but `mtp_contract.complete=false` with only `mtp_tensor_count=32` (i.e. the sidecar is **not** a full upstream `mtp.0.*` checkpoint).
 - The same inspection reports `mtp_namespace.has_mtp0=true` and `mtp_trust.status=incomplete` (the `mtp.0.*` prefix exists, but the tensor set does not satisfy the upstream MTP contract).
 - The same inspection also records `mtp_keys_sha256 != fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`, i.e. these compact sidecars do **not** match the official MTP key subset fingerprint.
 
