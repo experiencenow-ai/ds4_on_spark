@@ -307,7 +307,7 @@ echo
 				echo "columns: index,gpu_name,pci.bus_id,driver_version,memory.total"
 				q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 				[ "$q" != "" ] && echo "$q"
-				echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+				echo "note: nvidia-smi compute_cap field not supported; falling back to nvidia-smi -q (and nvcc runtime probe when available)"
 			fi
 		else
 			echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
@@ -318,7 +318,7 @@ echo
 				echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
 				q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 				[ "$q" != "" ] && echo "$q"
-				echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+				echo "note: nvidia-smi compute_cap field not supported; falling back to nvidia-smi -q (and nvcc runtime probe when available)"
 			fi
 		fi
 	else
