@@ -1,7 +1,7 @@
 # Centaur on Spark: v73 smoke + ring sim status (2026-05-12)
 
-This records one reproducible Spark0 v73 smoke run and one Spark0-local 3-node
-ring simulation run using the Centaur spec-impl v73 zip.
+This records reproducible Spark0 v73 smoke runs and Spark0-local 3-node ring
+simulation runs using the Centaur spec-impl v73 zip.
 
 Safety constraints: no `sudo`, no system services, no secrets, and no model
 weight downloads.
@@ -34,6 +34,20 @@ Sanitized bundle (commit-safe):
 
 - `fixtures/centaur-smoke/spark0-v73/20260512T073455Z/`
 
+Re-verified run (not checked in; artifacts fetched locally):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export CENTAUR_RUN_ID=20260512T093838Z
+sh ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local ~/centaur-smoke/v73 /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z/smoke.local.log
+ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export CENTAUR_RUN_ID=20260512T093838Z; sh -s" < ./scripts/centaur_spark0_v73_validate_artifacts.sh
+sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T093838Z ~/centaur-smoke/v73 /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z
+```
+
+Local bundle path:
+
+- `/private/tmp/centaur-smoke/spark0-v73/20260512T093838Z/`
+
 ## Spark12 ring sim (Spark0-local, PASS)
 
 Spark commands run (from Mac; streamed):
@@ -50,8 +64,21 @@ Sanitized bundle (commit-safe):
 
 - `fixtures/centaur-smoke/spark12-v73/ring_sim/20260512T074400Z/`
 
+Re-verified run (not checked in; artifacts fetched locally):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export RING_RUN_ID=20260512T094444Z
+sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@aitopatom-9ab9.local
+ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export RING_RUN_ID=20260512T094444Z; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T094444Z
+```
+
+Local bundle path:
+
+- `/private/tmp/centaur-ring-sim/spark12-v73/20260512T094444Z/`
+
 ## Bug notes
 
 - Centaur bugs observed: none in these runs (selftest + HyoR + provider/catalog + benchmark + dashboard all PASS).
 - DS4 runtime/host issues observed: none (wheels were available; no source builds).
-
