@@ -60,60 +60,6 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 		}
 	return out
 
-
-
-def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path):
-	if not probe_py.exists():
-		return None
-	text = probe_py.read_text(encoding="utf-8")
-	try:
-		mod = ast.parse(text, filename=str(probe_py))
-	except SyntaxError:
-		return None
-
-	found: list[list[str]] = []
-	for node in ast.walk(mod):
-		if not isinstance(node, ast.Assign):
-			continue
-		if len(node.targets) != 1:
-			continue
-		t = node.targets[0]
-		if not isinstance(t, ast.Name) or t.id != "expected_names":
-			continue
-		if not isinstance(node.value, ast.List):
-			continue
-		vals: list[str] = []
-		ok = True
-		for elt in node.value.elts:
-			if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-				vals.append(elt.value)
-			else:
-				ok = False
-				break
-		if ok and vals:
-			found.append(vals)
-	if not found:
-		return None
-	found.sort(key=len, reverse=True)
-	return list(found[0])
-
-
-def payload_samples_fingerprint_lines(reference_doc: dict) -> list[str]:
-	samples = reference_doc.get("payload_samples", None) if isinstance(reference_doc, dict) else None
-	lines: list[str] = []
-	if not isinstance(samples, dict):
-		return lines
-	for name in sorted(samples.keys()):
-		s = samples.get(name, None)
-		if not isinstance(name, str) or not isinstance(s, dict):
-			continue
-		n = s.get("n", None)
-		fnv = s.get("fnv1a64", None)
-		off = s.get("offset", None)
-		if not isinstance(n, int) or not isinstance(fnv, str) or not isinstance(off, int):
-			continue
-		lines.append(f"{name}\t{int(n)}\t{fnv}\t{int(off)}")
-	return lines
 def main() -> int:
 	failures: list[Failure] = []
 
