@@ -17,6 +17,11 @@ Current fixtures:
 We also commit *small, sanitized* Centaur smoke artifact bundles for reproducibility and bug reports.
 These are not inputs, but they are intentionally bounded (no venvs, no zips, no secrets, no model weights).
 
+Newer bundles may also include:
+
+- `smoke_facts.json` (structured zip/python/pip/requirements facts)
+- `pip_freeze.txt` (sanitized dependency versions)
+
 To create new commit-ready bundles from fetched artifacts (after review/redaction), use:
 
 - Spark0 smoke: `scripts/centaur_spark0_v73_fixture_pack.sh`

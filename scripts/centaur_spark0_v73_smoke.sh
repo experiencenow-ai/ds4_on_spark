@@ -219,8 +219,9 @@ sed -n '1,120p' "$freeze_file"
 
 echo "== write smoke facts (json) =="
 facts_json="$workdir/smoke_facts.json"
-"$venv_py" - "$zip" "$zip_sha256" "$decomposer_version" "$workdir" "$freeze_file" >"$facts_json" <<'PY'
+"$venv_py" - "$zip" "$zip_sha256" "$decomposer_version" "$workdir" "$freeze_file" "$pkgdir/requirements.txt" >"$facts_json" <<'PY'
 import json
+import os
 import platform
 import sys
 from datetime import datetime, timezone
@@ -230,6 +231,7 @@ zip_sha256=sys.argv[2]
 decomposer_version=sys.argv[3]
 workdir=sys.argv[4]
 freeze_path=sys.argv[5]
+requirements_path=sys.argv[6]
 
 pip_freeze=[]
 try:
@@ -241,10 +243,51 @@ try:
 except Exception:
     pip_freeze=[]
 
+req_lines=[]
+req_sha256=""
+try:
+    import hashlib
+
+    h=hashlib.sha256()
+    with open(requirements_path,"rb") as f:
+        b=f.read()
+    h.update(b)
+    req_sha256=h.hexdigest()
+    t=b.decode("utf-8","replace").splitlines()
+    for line in t:
+        line=line.strip()
+        if not line:
+            continue
+        req_lines.append(line)
+except Exception:
+    req_lines=[]
+    req_sha256=""
+
+zip_stat={}
+try:
+    st=os.stat(zip_path)
+    zip_stat={
+        "size_bytes": int(st.st_size),
+        "mtime_utc": datetime.fromtimestamp(st.st_mtime,timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+except Exception:
+    zip_stat={}
+
+pip_info={}
+try:
+    import pip  # type: ignore
+
+    pip_info={
+        "version": getattr(pip,"__version__", ""),
+    }
+except Exception:
+    pip_info={}
+
 out={
     "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "zip_path": zip_path,
     "zip_sha256": zip_sha256,
+    "zip_stat": zip_stat,
     "decomposer_version": decomposer_version,
     "workdir": workdir,
     "python": {
@@ -252,6 +295,12 @@ out={
         "executable": sys.executable,
         "platform": platform.platform(),
         "machine": platform.machine(),
+    },
+    "pip": pip_info,
+    "requirements": {
+        "path": requirements_path,
+        "sha256": req_sha256,
+        "lines": req_lines,
     },
     "pip_freeze": pip_freeze,
 }

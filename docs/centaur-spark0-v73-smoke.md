@@ -157,8 +157,9 @@ When saving a smoke excerpt for PRs/issues, capture:
 
 - The exact Spark0 command line and working directory (`pwd`, `CENTAUR_ZIP`, `CENTAUR_WORKDIR`)
 - `python3 -V` and venv python path
-- `pip freeze` output
+- `pip freeze` output (or attach `pip_freeze.txt` if present)
 - `sha256` of the Centaur zip (the smoke prints it as `zip_sha256: ...`)
+- `smoke_facts.json` (when present; structured zip/python/pip context)
 - Command outputs for each failing sub-step (bounded tails)
 
 Avoid committing:

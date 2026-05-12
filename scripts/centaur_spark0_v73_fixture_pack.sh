@@ -112,8 +112,12 @@ copy_one "$local_in/pip_freeze.txt" "$fixtures_out/"
 
 zip_path=""
 zip_sha256=""
+zip_mtime=""
+zip_size=""
 decomposer_version=""
 py_ver=""
+pip_ver=""
+req_sha256=""
 numpy_ver=""
 scipy_ver=""
 sklearn_ver=""
@@ -151,6 +155,34 @@ except Exception:
 print(d.get("zip_sha256","") or "")
 PY
 )"
+		zip_mtime="$(python3 - "$fixtures_out/smoke_facts.json" <<'PY'
+import json,sys
+p=sys.argv[1]
+try:
+    d=json.load(open(p,"r",encoding="utf-8",errors="replace"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+st=(d.get("zip_stat") or {})
+print(st.get("mtime_utc","") or "")
+PY
+)"
+		zip_size="$(python3 - "$fixtures_out/smoke_facts.json" <<'PY'
+import json,sys
+p=sys.argv[1]
+try:
+    d=json.load(open(p,"r",encoding="utf-8",errors="replace"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+st=(d.get("zip_stat") or {})
+v=st.get("size_bytes")
+if v is None:
+    print("")
+else:
+    print(str(v))
+PY
+)"
 		decomposer_version="$(python3 - "$fixtures_out/smoke_facts.json" <<'PY'
 import json,sys
 p=sys.argv[1]
@@ -172,6 +204,30 @@ except Exception:
     raise SystemExit(0)
 py=(d.get("python") or {}).get("version") or ""
 print(py)
+PY
+)"
+		pip_ver="$(python3 - "$fixtures_out/smoke_facts.json" <<'PY'
+import json,sys
+p=sys.argv[1]
+try:
+    d=json.load(open(p,"r",encoding="utf-8",errors="replace"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+pip=(d.get("pip") or {}).get("version") or ""
+print(pip)
+PY
+)"
+		req_sha256="$(python3 - "$fixtures_out/smoke_facts.json" <<'PY'
+import json,sys
+p=sys.argv[1]
+try:
+    d=json.load(open(p,"r",encoding="utf-8",errors="replace"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+r=(d.get("requirements") or {}).get("sha256") or ""
+print(r)
 PY
 )"
 	fi
@@ -200,12 +256,16 @@ sh ./scripts/centaur_spark0_v73_fixture_pack.sh "$run_id"
 Centaur zip (from \`smoke.log\`, when present):
 
 - Path: \`${zip_path:-"(unknown)"}\`
+- Mtime (UTC): \`${zip_mtime:-"(unknown)"}\`
+- Size (bytes): \`${zip_size:-"(unknown)"}\`
 - \`zip_sha256\`: \`${zip_sha256:-"(unknown)"}\`
 - \`decomposer_version\`: \`${decomposer_version:-"(unknown)"}\`
 
 Spark0 environment (from \`smoke.log\`, when present):
 
 - \`python3 -V\`: \`${py_ver:-"(unknown)"}\`
+- \`pip\`: \`${pip_ver:-"(unknown)"}\`
+- \`requirements.txt sha256\`: \`${req_sha256:-"(unknown)"}\`
 - \`numpy\`: \`${numpy_ver:-"(unknown)"}\`
 - \`scipy\`: \`${scipy_ver:-"(unknown)"}\`
 - \`scikit-learn\`: \`${sklearn_ver:-"(unknown)"}\`
