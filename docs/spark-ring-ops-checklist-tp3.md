@@ -10,6 +10,10 @@ For a one-page readiness rubric (what “ready” means, and what blocks a run),
 
 - `docs/spark-ring-ops-readiness-tp3.md`
 
+For run log conventions and snapshot redaction guidance, see:
+
+- `docs/ops-run-notes.md`
+
 ## Bring-up (Once)
 
 - Pick stable hostnames for Spark0/Spark1/Spark2 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark012.example`).

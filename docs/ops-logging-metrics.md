@@ -29,6 +29,10 @@ If you need to capture a repeatable snapshot for debugging (systemd + journald +
 
 - `docs/ops-support-bundle.md`
 
+If you want a lightweight, repeatable **run log** (recommended), use the Mac-side snapshot helper and follow the run note hygiene guidance:
+
+- `docs/ops-run-notes.md`
+
 If file logs are needed, use `/var/log/ds4/` and ensure log rotation is in
 place before a soak test. Example: `deploy/config/logrotate.ds4.conf.example`.
 

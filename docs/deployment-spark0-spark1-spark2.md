@@ -121,6 +121,7 @@ See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layo
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`
 - Logging + metrics: `docs/ops-logging-metrics.md`
+- Run notes + snapshot hygiene: `docs/ops-run-notes.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=3 network + ports: `docs/ops-spark012-network-ports.md`
 - TP=3 readiness checks: `docs/ops-tp3-readiness.md`
