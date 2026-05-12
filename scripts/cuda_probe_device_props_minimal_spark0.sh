@@ -3,7 +3,9 @@ set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
-REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_device_props_minimal}"
+remote_tag="${REMOTE_TAG:-"$(date -u +%Y%m%d-%H%M%S)-$$"}"
+default_remote_dir="/tmp/ds4_cuda_probe_device_props_minimal_${remote_tag}"
+REMOTE_DIR="${REMOTE_DIR:-${default_remote_dir}}"
 log_path="${LOG_PATH:-}"
 with_sm121_run="${WITH_SM121_RUN:-0}"
 with_compute121_run="${WITH_COMPUTE121_RUN:-0}"

@@ -11,6 +11,8 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 - Kernel bring-up tiny (no cuBLASLt): `./scripts/cuda_probe_kernel_tiny_spark0.sh`
 - Full suite: `./scripts/cuda_probe_spark0.sh` and `./scripts/cuda_probe_compile_only_spark0.sh`
 
+All Spark0 scripts default to unique `REMOTE_DIR` paths on Spark0 using `REMOTE_TAG` (timestamp + PID) so concurrent runs do not clobber `/tmp/ds4_cuda_probe_*` directories. To make remote directory names deterministic (useful for debugging), set `REMOTE_TAG=manual` (or set `REMOTE_DIR` explicitly).
+
 For an explicit “`sm_121` link+run” check in the no-transfer device-props script:
 
 ```bash
