@@ -4107,6 +4107,8 @@ class SchedulerSimTest(unittest.TestCase):
         out = recommendations.run_runtime_trace_mtp_ablation(trace=trace, trace_meta={})
         self.assertEqual(out["name"], "runtime_trace_mtp_ablation")
         self.assertIn("trace_summary", out)
+        self.assertIn("scheduler_sweeps", out)
+        self.assertIn("arrival_units_steps", out["scheduler_sweeps"])
         self.assertIn("results", out)
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])

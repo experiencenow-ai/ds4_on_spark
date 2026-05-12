@@ -60,6 +60,22 @@ def run_runtime_trace_mtp_ablation(
 ) -> Dict[str, Any]:
     meta = dict(trace_meta or {})
 
+    def _reserve_default(qmax: int) -> int:
+        if int(qmax) <= 0:
+            return(0)
+        return(min(16, int(qmax)))
+
+    def _trace_has_any_cost_scale(trace_in: Sequence[scheduler_sim.TokenRoute]) -> bool:
+        for r in trace_in:
+            if r.cost_scale is not None:
+                return(True)
+            if r.layers is None:
+                continue
+            for lr in r.layers:
+                if lr.cost_scale is not None:
+                    return(True)
+        return(False)
+
     if trace_derive_cost_scale.strip().lower() != "none":
         trace = scheduler_sim.derive_trace_cost_scale(trace, trace_derive_cost_scale, meta_out=meta)
     if float(trace_speedup) != 1.0:
@@ -116,10 +132,50 @@ def run_runtime_trace_mtp_ablation(
     )
 
     trace_summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=int(mtp_draft_len), meta=meta)
+
+    trace_sched = scheduler_sim.strip_trace_mtp_fields(trace)
+    cfg_sched = dataclasses.replace(base_cfg, mtp_draft_len=0)
+    reserve_n = _reserve_default(int(expert_queue_max))
+    has_cost_scale = _trace_has_any_cost_scale(trace)
+    has_interactive = any(r.cls == scheduler_sim.LatencyClass.INTERACTIVE for r in trace_sched)
+    has_batch = any(r.cls == scheduler_sim.LatencyClass.BATCH for r in trace_sched)
+
+    sched_variants: List[Tuple[str, Dict[str, object]]] = [
+        ("stall_zero_admit", {"backpressure_zero_admit_policy": "stall"}),
+    ]
+    qhalf = max(1, int(expert_queue_max) // 2)
+    qdouble = int(expert_queue_max) * 2
+    if int(qhalf) != int(expert_queue_max):
+        sched_variants.append((f"queue_max_{int(qhalf)}", {"expert_queue_max": int(qhalf)}))
+    if int(qdouble) != int(expert_queue_max):
+        sched_variants.append((f"queue_max_{int(qdouble)}", {"expert_queue_max": int(qdouble)}))
+    if has_cost_scale:
+        sched_variants.append(("work_units", {"pending_units": "work", "backpressure_units": "work"}))
+    if has_interactive and has_batch and reserve_n > 0:
+        sched_variants.append((f"reserve_interactive_{int(reserve_n)}", {"expert_queue_reserve_interactive": int(reserve_n), "k_signal": "class"}))
+
+    if int(expert_queue_max) > 1:
+        q_low = max(1, int(expert_queue_max) // 4)
+        q_high = max(int(q_low), int(expert_queue_max) // 2)
+        sched_variants.append(
+            (
+                "adaptive_k_batch2",
+                {
+                    "adaptive_k.k_max_batch": 2,
+                    "adaptive_k.q_low": int(q_low),
+                    "adaptive_k.q_high": int(q_high),
+                    "k_signal": "candidates",
+                },
+            )
+        )
+
     out: Dict[str, Any] = {
         "name": "runtime_trace_mtp_ablation",
         "trace_summary": trace_summary,
         "base_cfg": dataclasses.asdict(base_cfg),
+        "scheduler_sweeps": {
+            "arrival_units_steps": scheduler_sim.compare_simulation_summaries(cfg_sched, trace_sched, sched_variants, arrival_units="steps"),
+        },
         "results": {},
     }
 
