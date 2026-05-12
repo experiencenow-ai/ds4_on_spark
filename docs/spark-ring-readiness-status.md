@@ -1,14 +1,14 @@
 # Spark Ring Readiness Status (Spark0..Spark2)
 
-Status as of `2026-05-12T0056Z` (UTC).
+Status as of `2026-05-12T0122Z` (UTC).
 
 ## Latest commit-safe snapshots
 
-- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-12T0056Z.md`
-- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-12T0056Z.md`
-- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-12T0056Z.md`
-- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T0056Z.md`
-- Spark0 facts-only probe: `docs/spark0-probe-facts-2026-05-12T0056Z.md`
+- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-12T0122Z.md`
+- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-12T0122Z.md`
+- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-12T0122Z.md`
+- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T0122Z.md`
+- Spark0 facts-only probe: `docs/spark0-probe-facts-2026-05-12T0122Z.md`
 
 ## Ring readiness matrix
 
@@ -21,7 +21,7 @@ Status as of `2026-05-12T0056Z` (UTC).
 | MTU captured | OK (wired `9000`, wifi `1500`) | missing | missing |
 | Peer ping RTT/loss | partial (peers unresolved) | missing | missing |
 | Bandwidth smoke test | OK (Mac<->Spark0) | missing | missing |
-| GPU + CUDA facts captured | OK (GB10, `compute_cap=12.1`, `nvcc 13.0.88`, `cuda 13.0.3`) | missing | missing |
+| GPU + CUDA facts captured | OK (GB10, `compute_cap=12.1`, `nvcc 13.0.88`, `cuda 13.0.3`; PCIe link fields show Gen1 x1 but `-q` shows Gen5 x16 max) | missing | missing |
 | Storage facts captured | OK (redacted) | missing | missing |
 
 ## When Spark1/Spark2 appear (minimum next actions)
