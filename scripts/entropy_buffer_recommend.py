@@ -291,7 +291,7 @@ def _history_rates(history: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dic
         if pair_k != "":
             pair_total[pair_k] = pair_total.get(pair_k, 0) + 1
 
-        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        flags = lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)
         if len(flags) != 0:
             if tmpl != "":
                 tmpl_flagged[tmpl] = tmpl_flagged.get(tmpl, 0) + 1

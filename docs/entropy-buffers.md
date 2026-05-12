@@ -44,6 +44,7 @@ Notes:
 
 - `answer` is optional but unlocks answer-option diversity metrics.
 - `buffer_id` / `buffer_item_id` are optional but unlock reuse metrics.
+- `useful_novelty_flags` / `useful_novelty_flagged` are optional; `scripts/entropy_buffer_filter.py` can add them deterministically for auditability.
 - Token/latency instrumentation can also be provided in nested form:
   - `tokens: {prompt, completion}` or `tokens: {in, out}` (aliases supported)
   - `latency_ms: {total}` or `latency_ms: {wall}` (best-effort)
@@ -142,7 +143,7 @@ The scripts compute:
 - **Per-model degeneracy**: top normalized-output duplicate rates and useful-novelty flagged rates by `model_id`.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
   - Also reports logging coverage rates (`buffer_id_nonempty_task_run_rate`, `buffer_item_id_nonempty_task_run_rate`) plus `buffer_id` concentration (`buffer_id_hhi`, `buffer_id_entropy_bits`, `buffer_id_top`).
-- **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
+- **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition). If `task_run` records include `useful_novelty_flags`, the metrics + recommender treat them as authoritative (else they recompute).
   - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
   - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
 - **Useful coverage (clean outputs)**: recomputes diversity + duplicate rates after excluding task-runs flagged by useful-novelty filters (a quick “effective coverage” view).
@@ -196,6 +197,25 @@ python3 scripts/entropy_buffer_gaps.py \
   --in-jsonl fixtures/entropy-buffer/records_gaps_mini.jsonl \
   --out-json /tmp/entropy_gaps.json \
   --out-md /tmp/entropy_gaps.md
+```
+
+### Annotate or filter useful-novelty flagged outputs
+
+Use this when you want to persist heuristic flags (for pipeline auditability) or to drop obviously noisy `task_run` records before computing downstream diversity metrics.
+
+```bash
+python3 scripts/entropy_buffer_filter.py \
+  --in-jsonl fixtures/entropy-buffer/records_filter_mini.jsonl \
+  --out-jsonl /tmp/entropy_filter_annotated.jsonl
+```
+
+To drop flagged task runs:
+
+```bash
+python3 scripts/entropy_buffer_filter.py \
+  --in-jsonl fixtures/entropy-buffer/records_filter_mini.jsonl \
+  --drop-flagged-task-runs \
+  --out-jsonl /tmp/entropy_filter_clean.jsonl
 ```
 
 ### Recommend next tasks (coverage maximization)
