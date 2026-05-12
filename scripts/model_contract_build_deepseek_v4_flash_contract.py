@@ -242,7 +242,7 @@ def build_ds4_mtp_sidecar_contract() -> dict:
 		"reference_payload_samples": parse_ds4_mtp_sidecar_payload_samples_fingerprint(MTP_SIDECAR_REFERENCE_JSON),
 	}
 
-def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
 	for k in weight_keys:
 		prefix = k.split(".", 1)[0]
@@ -251,9 +251,20 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	out: dict[str, dict] = {}
 	for prefix in sorted(prefix_to_keys.keys()):
 		keys = sorted(prefix_to_keys[prefix])
+		first_sample: Optional[list[str]] = None
+		last_sample: Optional[list[str]] = None
+		try:
+			n = int(sample_n)
+		except Exception:
+			n = 0
+		if n > 0 and len(keys) > 0:
+			first_sample = list(keys[:n])
+			last_sample = list(keys[-n:])
 		out[prefix] = {
 			"count": int(len(keys)),
 			"keys_sha256": sha256_lines(keys),
+			"first_keys_sample": first_sample,
+			"last_keys_sample": last_sample,
 		}
 	return out
 
@@ -679,6 +690,73 @@ def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int)
 			"decoder": summarize_tok_component(tok.get("decoder")),
 		}
 	}
+
+def parse_tokenizer_added_token_ids(tokenizer_json: Path) -> Optional[dict[str, int]]:
+	if not tokenizer_json.exists():
+		return None
+
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return None
+
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	if not isinstance(added_tokens, list):
+		return None
+
+	out: dict[str, int] = {}
+	for t in added_tokens:
+		if not isinstance(t, dict):
+			continue
+		content = t.get("content", None)
+		tid = t.get("id", None)
+		if not isinstance(content, str) or not isinstance(tid, int):
+			continue
+		out[content] = int(tid)
+	return out
+
+def build_encoding_token_ids(tokenizer_json: Path, encoding_constants: object) -> Optional[dict]:
+	if not isinstance(encoding_constants, dict):
+		return None
+
+	ids = parse_tokenizer_added_token_ids(tokenizer_json)
+	if not isinstance(ids, dict) or not ids:
+		return None
+
+	def tok_id(token: object) -> Optional[int]:
+		if not isinstance(token, str):
+			return None
+		val = ids.get(token, None)
+		if not isinstance(val, int):
+			return None
+		return int(val)
+
+	out: dict[str, object] = {
+		"reference_source": f"{repo_relpath(tokenizer_json)}:added_tokens",
+	}
+
+	for k in (
+		"bos_token",
+		"eos_token",
+		"user_sp_token",
+		"assistant_sp_token",
+		"latest_reminder_sp_token",
+		"thinking_start_token",
+		"thinking_end_token",
+		"dsml_token",
+	):
+		out[k] = tok_id(encoding_constants.get(k))
+
+	ds_task = encoding_constants.get("ds_task_sp_tokens", None)
+	if isinstance(ds_task, dict):
+		out_task: dict[str, object] = {}
+		for name in sorted(ds_task.keys()):
+			out_task[str(name)] = tok_id(ds_task.get(name))
+		out["ds_task_sp_tokens"] = out_task
+	else:
+		out["ds_task_sp_tokens"] = None
+
+	return out
 
 
 def layer_type_from_ratio(ratio: int) -> str:
@@ -1570,6 +1648,7 @@ def build_contract() -> dict:
 	moe_hash_sem = parse_inference_moe_hash_routing(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	mtp_sem = parse_inference_mtp_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
+	encoding_token_ids = build_encoding_token_ids(FIX / "tokenizer.json", enc.get("encoding_constants") if isinstance(enc, dict) else None)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
 	compress_ratios = list(cfg["compress_ratios"])
@@ -1606,6 +1685,24 @@ def build_contract() -> dict:
 	mtp_prefix_fp = weight_map_prefix_fingerprints.get("mtp", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	top_level_tensor_key_count = sum(int(v.get("count", 0)) for k, v in weight_map_prefix_fingerprints.items() if k not in ("layers", "mtp") and isinstance(v, dict))
+
+	mtp_weight_keys = [k for k in weight_keys if k.startswith("mtp.")]
+	mtp_layer_ids_present: list[int] = []
+	mtp_prefixes_present: list[str] = []
+	if mtp_weight_keys:
+		layer_ids: set[int] = set()
+		prefixes: set[str] = set()
+		for k in mtp_weight_keys:
+			parts = k.split(".", 2)
+			if len(parts) >= 2:
+				try:
+					layer_id = int(parts[1])
+					layer_ids.add(layer_id)
+					prefixes.add(f"mtp.{layer_id}.")
+				except ValueError:
+					pass
+		mtp_layer_ids_present = sorted(layer_ids)
+		mtp_prefixes_present = sorted(prefixes)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1724,14 +1821,18 @@ def build_contract() -> dict:
 				},
 			},
 		},
-		"attention_schedule": {
-			"compress_ratios": [int(r) for r in compress_ratios],
-			"main_compress_ratios": [int(r) for r in compress_ratios[:n_layers]],
-			"main_layer_types": layer_types,
-			"main_layer_ids_by_type": layer_ids_by_type,
-			"main_layer_ids_by_compress_ratio": layer_ids_by_compress_ratio,
-			"transformers_main_layer_types": transformers_layer_types,
-			"transformers_layer_types": transformers_layer_types_full,
+			"attention_schedule": {
+				"compress_ratios": [int(r) for r in compress_ratios],
+				"main_compress_ratios": [int(r) for r in compress_ratios[:n_layers]],
+				"main_layer_types": layer_types,
+				"main_layer_type_by_layer_id": {str(i): str(layer_types[i]) for i in range(n_layers)},
+				"main_compress_ratio_by_layer_id": {str(i): int(compress_ratios[i]) for i in range(n_layers)},
+				"layer_type_by_layer_id": {str(i): layer_type_from_ratio(int(compress_ratios[i])) for i in range(n_layers + len(mtp_ratios))},
+				"compress_ratio_by_layer_id": {str(i): int(compress_ratios[i]) for i in range(n_layers + len(mtp_ratios))},
+				"main_layer_ids_by_type": layer_ids_by_type,
+				"main_layer_ids_by_compress_ratio": layer_ids_by_compress_ratio,
+				"transformers_main_layer_types": transformers_layer_types,
+				"transformers_layer_types": transformers_layer_types_full,
 			"transformers_compress_rates": {
 				"compressed_sparse_attention": 4,
 				"heavily_compressed_attention": 128,
@@ -1833,6 +1934,13 @@ def build_contract() -> dict:
 						"tensor_key_count": mtp_prefix_fp.get("count", None),
 						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
 					},
+					"checkpoint_key_examples": {
+						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
+						"layer_ids": mtp_layer_ids_present,
+						"prefixes": mtp_prefixes_present,
+						"first_keys_sample": list(mtp_weight_keys[:10]) if mtp_weight_keys else None,
+						"last_keys_sample": list(mtp_weight_keys[-10:]) if mtp_weight_keys else None,
+					},
 					"semantics": mtp_sem,
 						"trust_gates": {
 							"artifact_requires_mtp_contract_complete": True,
@@ -1873,6 +1981,7 @@ def build_contract() -> dict:
 					"eos_token_id": int(cfg["eos_token_id"]),
 					"pad_token_is_eos": True,
 					"encoding_oracle_dir": "encoding/tests",
+					"encoding_token_ids": encoding_token_ids,
 					**tok_json_sum,
 				},
 			"quantization": {

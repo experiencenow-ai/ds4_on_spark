@@ -38,6 +38,12 @@ Topology:
 - `sliding_window=128`
 - `vocab_size=129280`
 
+Tokenizer / encoding (special-token IDs are derived from `tokenizer.json` and recorded machine-readably under `contract_summary.json` `tokenizer.encoding_token_ids`):
+
+- `<think>`=`128821`, `</think>`=`128822`
+- `<｜User｜>`=`128803`, `<｜Assistant｜>`=`128804`, `<｜latest_reminder｜>`=`128828`, `｜DSML｜`=`128825`
+- Quick-task tokens: `<｜action｜>`=`128829`, `<｜query｜>`=`128830`, `<｜authority｜>`=`128831`, `<｜domain｜>`=`128832`, `<｜title｜>`=`128836`, `<｜read_url｜>`=`128845`
+
 MoE:
 
 - `n_routed_experts=256`, `n_shared_experts=1`
@@ -126,7 +132,7 @@ Key JSON paths by concern:
 
 - Topology (layers/hidden/heads/vocab): `topology.*`
 - Sliding/CSA/HCA schedule: `attention_schedule.main_compress_ratios` + `attention_schedule.mtp_compress_ratios` (raw upstream array: `attention_schedule.compress_ratios`), `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
-  - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type` and `attention_schedule.main_layer_ids_by_compress_ratio`
+  - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type`, `attention_schedule.main_layer_ids_by_compress_ratio`, plus direct maps `attention_schedule.main_layer_type_by_layer_id` / `attention_schedule.main_compress_ratio_by_layer_id` and the full (main+MTP) maps `attention_schedule.layer_type_by_layer_id` / `attention_schedule.compress_ratio_by_layer_id`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
 - Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
@@ -416,7 +422,12 @@ To guard against silent drift in the sliding/CSA/HCA KV update rules, this repo 
 - `indexer_forward` (CSA-only scoring path + top-k selection)
 - `attention_forward` (sliding ring update + prefill wrap + top-k concat)
 
-For run-report interpretation (including quantized single-Spark external runtimes), `contract_summary.json` also carries short cache semantics summaries under `cache.semantics.{kv_layout,sparse_topk_rule,sliding_summary,csa_summary,hca_summary}` so tooling can explain sliding vs CSA vs HCA behavior without scraping Markdown.
+For run-report interpretation (including quantized single-Spark external runtimes), `contract_summary.json` also carries compact cache semantics summaries under `cache.semantics.*`:
+
+- `cache.semantics.reference_source`: pinned upstream source for the summary
+- `cache.semantics.kv_layout`: exact “sliding ring + compressed linear segment” layout + indexing model
+- `cache.semantics.sparse_topk_rule`: exact top‑k index selection/offset rules (prefill vs decode; CSA vs HCA)
+- `cache.semantics.{sliding_summary,csa_summary,hca_summary}`: short layer-kind summaries for tooling/UI
 
 Sparse attention index selection:
 
@@ -647,9 +658,10 @@ To make the key set easy to reference in downstream tooling (and to detect accid
 - `checkpoint_index.weight_map_num_tensors`
 - `checkpoint_index.weight_map_keys_sha256`
 - `checkpoint_index.weight_map_top_level_keys_sha256`, `checkpoint_index.weight_map_top_level_tensor_key_count` (fingerprint/count for the non-`layers.*` / non-`mtp.*` top-level keys like `embed.weight` and `head.weight`)
-- `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`)
+- `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`; includes small `first_keys_sample`/`last_keys_sample` lists for debugging)
 - `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256` (convenience copies of the per-prefix `layers` / `mtp` hashes)
 - `mtp.checkpoint_key_fingerprint` (official `mtp.*` subset fingerprint; useful for deciding whether an artifact set plausibly preserves upstream `mtp.0.*`)
+- `mtp.checkpoint_key_examples` (debug-only: official `mtp.*` layer IDs/prefixes plus small `first_keys_sample`/`last_keys_sample` lists)
 - `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
 
 ### Quantization scale tensor semantics (FP8/FP4)
