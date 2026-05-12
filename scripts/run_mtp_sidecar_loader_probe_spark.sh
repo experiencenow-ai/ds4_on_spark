@@ -121,6 +121,7 @@ esac
 	echo "- LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark"
 	echo "- LLAMA_REPO=https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git"
 	echo "- LLAMA_COMMIT=$LLAMA_COMMIT"
+	echo "- CUDACXX=/abs/path/to/nvcc (optional; overrides auto-detect if CMake cannot find CUDA)"
 	echo "- PAYLOAD_SAMPLE_BYTES=64"
 	echo "- LOAD_WEIGHTS=1"
 	echo

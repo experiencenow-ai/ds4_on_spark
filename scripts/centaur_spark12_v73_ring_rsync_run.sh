@@ -26,6 +26,7 @@ Environment:
   RING_APPLY       Set to 1 to materialize+push effective dirs to Spark1/2
   RING_TRACE       Set to 1 to enable remote shell tracing (prints exact commands)
   RING_SKIP_STAGE  Set to 1 to skip staging the v73 zip to Spark1/2
+  RING_SKIP_PREFLIGHT Set to 1 to skip SSH preflight checks
 
 Notes:
   - remote_base_dir is a directory on Spark1/2 used for ring node roots.
@@ -73,6 +74,19 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
 
+ssh_preflight()
+{
+	t="$1"
+	if ssh $SSH_OPTS "$t" "true" >/dev/null 2>&1; then
+		echo "preflight: ssh ok: $t"
+		return 0
+	fi
+	echo "preflight: ssh failed: $t" >&2
+	echo "hint: check DNS/SSH reachability and keys; try:" >&2
+	echo "  REDACT=1 ./scripts/mac_spark_discovery.sh $(printf "%s" "$t" | sed 's/^[^@]*@//')" >&2
+	return 1
+}
+
 if [ "$remote_base" = "" ]; then
 	remote_base="~/centaur-smoke/v73/ring_node"
 fi
@@ -101,6 +115,15 @@ echo "spark0_ring_workdir: $ring_workdir"
 echo "spark0_ring_log: $remote_log"
 if [ "$local_log" != "" ]; then
 	echo "local_log: $local_log"
+fi
+
+if [ "${RING_SKIP_PREFLIGHT:-0}" != "1" ]; then
+	echo "== preflight ssh =="
+	ssh_preflight "$spark0" || exit 21
+	ssh_preflight "$spark1" || exit 22
+	ssh_preflight "$spark2" || exit 23
+else
+	echo "== skip preflight (RING_SKIP_PREFLIGHT=1) =="
 fi
 
 if [ "${RING_SKIP_STAGE:-0}" != "1" ]; then

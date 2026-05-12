@@ -74,6 +74,11 @@ fi
 
 "$stage" "$target" "$remote_dir"
 
+# Resolve remote_dir to an absolute path so downstream exports/tests work even
+# when callers pass `~/...`.
+remote_dir="$(ssh $SSH_OPTS "$target" "cd $remote_dir && pwd -P")"
+echo "remote_dir_abs: $remote_dir"
+
 remote_zip="$remote_dir/centaur_spec_impl_v73.zip"
 remote_catalog="$remote_dir/unit_model_catalog.json"
 

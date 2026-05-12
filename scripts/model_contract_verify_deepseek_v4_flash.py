@@ -475,6 +475,56 @@ def main() -> int:
 				moe_sem = summary.get("moe", {}).get("semantics", {})
 				if moe_sem.get("bias_affects_selection_only_comment") is None:
 					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
+				helpers = moe_sem.get("source_helpers", None)
+				if not isinstance(helpers, dict):
+					failures.append(Failure(151, f"contract summary moe.semantics.source_helpers must be an object: {contract_summary}"))
+				else:
+					ref = helpers.get("reference_source")
+					if not (isinstance(ref, str) and ref):
+						failures.append(Failure(152, f"contract summary moe.semantics.source_helpers.reference_source must be a non-empty string: {contract_summary}"))
+					gate_obj = helpers.get("gate_forward", None)
+					gate_lines = gate_obj.get("source_lines") if isinstance(gate_obj, dict) else None
+					if not (isinstance(gate_lines, list) and all(isinstance(x, str) for x in gate_lines) and gate_lines):
+						failures.append(Failure(153, f"contract summary moe.semantics.source_helpers.gate_forward.source_lines missing or invalid: {contract_summary}"))
+					else:
+						if gate_obj.get("source_lines_sha256") != sha256_lines(gate_lines):
+							failures.append(Failure(154, f"contract summary moe.semantics.source_helpers.gate_forward.source_lines_sha256 mismatch: {contract_summary}"))
+						src = "\n".join(gate_lines)
+						need = [
+							"def forward(",
+							"original_scores = scores",
+							"Bias shifts scores for expert selection",
+							"indices = self.tid2eid[input_ids]",
+							"indices = scores.topk",
+							"weights = original_scores.gather",
+							"weights /= weights.sum",
+							"weights *= self.route_scale",
+							"return weights, indices",
+						]
+						if any(n not in src for n in need):
+							failures.append(Failure(155, f"contract summary moe.semantics.source_helpers.gate_forward source missing required markers: {contract_summary}"))
+					moe_obj = helpers.get("moe_forward", None)
+					moe_lines = moe_obj.get("source_lines") if isinstance(moe_obj, dict) else None
+					if not (isinstance(moe_lines, list) and all(isinstance(x, str) for x in moe_lines) and moe_lines):
+						failures.append(Failure(156, f"contract summary moe.semantics.source_helpers.moe_forward.source_lines missing or invalid: {contract_summary}"))
+					else:
+						if moe_obj.get("source_lines_sha256") != sha256_lines(moe_lines):
+							failures.append(Failure(157, f"contract summary moe.semantics.source_helpers.moe_forward.source_lines_sha256 mismatch: {contract_summary}"))
+						src = "\n".join(moe_lines)
+						need = [
+							"def forward(",
+							"x = x.view(-1, self.dim)",
+							"weights, indices = self.gate(",
+							"counts = torch.bincount",
+							"for i in range(self.experts_start_idx, self.experts_end_idx):",
+							"idx, top = torch.where(indices == i)",
+							"if world_size > 1:",
+							"dist.all_reduce",
+							"y += self.shared_experts(x)",
+							"return y.type_as(x).view(shape)",
+						]
+						if any(n not in src for n in need):
+							failures.append(Failure(158, f"contract summary moe.semantics.source_helpers.moe_forward source missing required markers: {contract_summary}"))
 				moe = summary.get("moe", {})
 				if isinstance(moe, dict):
 					swiglu = moe.get("swiglu_limit", None)

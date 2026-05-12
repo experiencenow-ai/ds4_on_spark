@@ -76,6 +76,7 @@ rsync_run()
 	rsync -av -e "ssh $SSH_OPTS" "$@"
 }
 
+remote_dir="$(ssh_run "$target" "mkdir -p $remote_dir && cd $remote_dir && pwd -P")"
 remote_run_dir="$remote_dir/run/$run_id"
 
 echo "== centaur v73 fetch artifacts =="

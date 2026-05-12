@@ -1,0 +1,1843 @@
+== centaur v73 smoke (spark0) ==
+zip: /home/spark0/centaur-smoke/v73/centaur_spec_impl_v73.zip
+workdir: /home/spark0/centaur-smoke/v73/run/20260512T030829Z
+pwd: /home/spark0/centaur-smoke/v73
+-rw-r--r-- 1 spark0 spark0 385391 May 11 11:08 /home/spark0/centaur-smoke/v73/centaur_spec_impl_v73.zip
+zip_sha256: 3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a
+== python ==
+Python 3.12.3
+executable: /usr/bin/python3
+platform: Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39
+== unpack centaur ==
+== centaur package facts ==
+total 1736
+drwxr-xr-x 4 spark0 spark0    4096 May 11 10:01 .
+drwxrwxr-x 7 spark0 spark0    4096 May 12 12:08 ..
+-rw-r--r-- 1 spark0 spark0  120076 May 11 09:52 README.md
+-rw-r--r-- 1 spark0 spark0 1631291 May 11 09:51 centaur.py
+drwxr-xr-x 2 spark0 spark0    4096 May 10 17:52 docs
+-rw-r--r-- 1 spark0 spark0      42 May 10 17:52 requirements.txt
+drwxr-xr-x 2 spark0 spark0    4096 May 11 10:01 tests
+decomposer_version: centaur-impl-0.68
+requirements.txt:
+numpy>=1.26
+scipy>=1.11
+scikit-learn>=1.4
+== venv ==
+== pip install (centaur requirements) ==
+pip 24.0 from /home/spark0/centaur-smoke/v73/run/20260512T030829Z/venv/lib/python3.12/site-packages/pip (python 3.12)
+Collecting numpy>=1.26 (from -r /home/spark0/centaur-smoke/v73/run/20260512T030829Z/centaur_spec_impl_v73/requirements.txt (line 1))
+  Using cached numpy-2.4.4-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (6.6 kB)
+Collecting scipy>=1.11 (from -r /home/spark0/centaur-smoke/v73/run/20260512T030829Z/centaur_spec_impl_v73/requirements.txt (line 2))
+  Using cached scipy-1.17.1-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (62 kB)
+Collecting scikit-learn>=1.4 (from -r /home/spark0/centaur-smoke/v73/run/20260512T030829Z/centaur_spec_impl_v73/requirements.txt (line 3))
+  Using cached scikit_learn-1.8.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl.metadata (11 kB)
+Collecting joblib>=1.3.0 (from scikit-learn>=1.4->-r /home/spark0/centaur-smoke/v73/run/20260512T030829Z/centaur_spec_impl_v73/requirements.txt (line 3))
+  Using cached joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+Collecting threadpoolctl>=3.2.0 (from scikit-learn>=1.4->-r /home/spark0/centaur-smoke/v73/run/20260512T030829Z/centaur_spec_impl_v73/requirements.txt (line 3))
+  Using cached threadpoolctl-3.6.0-py3-none-any.whl.metadata (13 kB)
+Using cached numpy-2.4.4-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (15.7 MB)
+Using cached scipy-1.17.1-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (32.9 MB)
+Using cached scikit_learn-1.8.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl (8.7 MB)
+Using cached joblib-1.5.3-py3-none-any.whl (309 kB)
+Using cached threadpoolctl-3.6.0-py3-none-any.whl (18 kB)
+Installing collected packages: threadpoolctl, numpy, joblib, scipy, scikit-learn
+Successfully installed joblib-1.5.3 numpy-2.4.4 scikit-learn-1.8.0 scipy-1.17.1 threadpoolctl-3.6.0
+== pip freeze (sanitized) ==
+joblib==1.5.3
+numpy==2.4.4
+scikit-learn==1.8.0
+scipy==1.17.1
+threadpoolctl==3.6.0
+== centaur selftest ==
+{
+  "checks": [
+    {
+      "name": "assemble",
+      "ok": true
+    },
+    {
+      "issues": [],
+      "name": "verify",
+      "ok": true
+    },
+    {
+      "name": "split_flatten",
+      "ok": true
+    },
+    {
+      "comparison": {
+        "content_mismatches": [],
+        "extra_in_right": [],
+        "file_count": 2,
+        "left_root": "/tmp/centaur-selftest-yjm881gz/source",
+        "matching_file_count": 2,
+        "missing_from_right": [],
+        "mode_mismatches": [],
+        "right_root": "/tmp/centaur-selftest-yjm881gz/flat",
+        "status": "success"
+      },
+      "name": "c_bash_transform_materialize_compare",
+      "ok": true
+    },
+    {
+      "name": "procedure",
+      "ok": true
+    },
+    {
+      "name": "local_sandbox",
+      "ok": true
+    },
+    {
+      "name": "required_dry_dependencies",
+      "ok": true,
+      "status": {
+        "available": true,
+        "dependency_mode": "required-local-module",
+        "format": "centaur-dry-dependencies-v1",
+        "install_command": "python3 -m pip install -r requirements.txt",
+        "missing": [],
+        "modules": [
+          {
+            "available": true,
+            "module": "numpy",
+            "package": "numpy",
+            "version": "2.4.4"
+          },
+          {
+            "available": true,
+            "module": "sklearn",
+            "package": "scikit-learn",
+            "version": "1.8.0"
+          }
+        ],
+        "required_backend": "sklearn"
+      }
+    },
+    {
+      "name": "required_dry_optimizer",
+      "ok": true
+    },
+    {
+      "name": "hyor_spark_distribution",
+      "ok": true
+    },
+    {
+      "name": "procedure_episode_context_packet",
+      "ok": true
+    },
+    {
+      "name": "tool_evidence_reduction",
+      "ok": true
+    },
+    {
+      "name": "tool_diagnostic_fingerprint_memory",
+      "ok": true
+    },
+    {
+      "name": "shorthand_context_codec",
+      "ok": true
+    },
+    {
+      "name": "tool_shorthand_compact_evidence",
+      "ok": true
+    },
+    {
+      "name": "state_machine_tool_verification_evidence",
+      "ok": ".centaur/tool_runs/tr_a84639ec9aae48bdbf7fa7500b8cf2b8/combined.log"
+    },
+    {
+      "name": "state_machine_fitness_and_procedure_trend",
+      "ok": true
+    },
+    {
+      "name": "task_plan_model_selection_observation_retention",
+      "ok": true
+    },
+    {
+      "name": "procedure_work_queue",
+      "ok": true
+    },
+    {
+      "name": "procedure_work_proposal_apply",
+      "ok": true
+    },
+    {
+      "name": "procedure_approval_policy",
+      "ok": true
+    },
+    {
+      "name": "procedure_work_section_patch",
+      "ok": true
+    },
+    {
+      "name": "procedure_work_synthesized_proposal",
+      "ok": [
+        {
+          "contract_impact": "contract_change",
+          "environment": {
+            "node_type": "gpu_128g_cuda"
+          },
+          "environment_label": "node_type=gpu_128g_cuda",
+          "evidence_hashes": [],
+          "failure_signature": "selftest failure",
+          "first_observed_unix_us": 1778555318793050,
+          "fix_summary": "selftest fix",
+          "kind": "known_failure_fix",
+          "last_observed_unix_us": 1778555318793050,
+          "lesson_key": "sha256:6c0e39e1d2d15",
+          "observation_count": 1,
+          "observation_hashes": [
+            "sha256:6062387b58928aaaf06d33232b487c0a90d37cf9299a92516a5ae97a1a0d64b9"
+          ],
+          "statuses": [
+            "failure"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "procedure_work_polished_observation_patch",
+      "ok": true
+    },
+    {
+      "name": "procedure_work_structured_proc_patch",
+      "ok": true
+    },
+    {
+      "name": "procedure_work_reverify_matrix",
+      "ok": true
+    },
+    {
+      "name": "model_supply_chain_provider_catalog_benchmark_adoption",
+      "ok": true
+    },
+    {
+      "name": "executor_install_execute_benchmark_runner",
+      "ok": true
+    },
+    {
+      "name": "provider_budget_api_usage_gate",
+      "ok": true
+    },
+    {
+      "name": "node_announcement_autoregistration",
+      "ok": true
+    },
+    {
+      "name": "controller_configured_agent_dashboard",
+      "ok": true
+    },
+    {
+      "name": "state_machine_step_all_loop",
+      "ok": true
+    },
+    {
+      "name": "iteration_dry_review_controller_loop_command",
+      "ok": true
+    },
+    {
+      "name": "controller_http_command",
+      "ok": true
+    },
+    {
+      "name": "hmac_signed_http_transport",
+      "ok": true
+    },
+    {
+      "name": "agent_http_discovery_autoregistration",
+      "ok": true
+    },
+    {
+      "name": "project_curriculum_next_milestone",
+      "ok": true
+    },
+    {
+      "name": "project_curriculum_expansion",
+      "ok": true
+    },
+    {
+      "name": "project_milestone_verification",
+      "ok": true
+    },
+    {
+      "name": "project_candidate_score_highwater",
+      "ok": true
+    },
+    {
+      "name": "hyor_supervisor_project_autopilot",
+      "ok": true
+    },
+    {
+      "name": "complexity_metric",
+      "ok": true
+    },
+    {
+      "name": "complexity_trend_and_drilldown",
+      "ok": true
+    },
+    {
+      "group_count": 23,
+      "name": "test_group_manifest",
+      "ok": true,
+      "test_count": 148
+    }
+  ],
+  "failed": [],
+  "status": "success"
+}
+== hyor: init controller/node workspaces ==
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_distribution/state.json",
+  "selectors": {},
+  "status": "success"
+}
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0/.centaur/hyor_distribution/state.json",
+  "selectors": {},
+  "status": "success"
+}
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_distribution",
+  "selectors": {}
+}
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0/.centaur/hyor_distribution",
+  "selectors": {}
+}
+== hyor: publish baseline + node_type ==
+{
+  "entry_count": 1,
+  "format": "centaur-hyor-distribution-manifest-v1",
+  "layer": "baseline",
+  "manifest_hash": "sha256:8c9dcce87e449998133d89a3be948e5b49fab4c2bc9cdc2516c2f703e902e631",
+  "manifest_id": "baseline-all-8c9dcce87e449998133d",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_distribution/manifests/baseline-all-8c9dcce87e449998133d.json",
+  "selector": "all",
+  "status": "success"
+}
+{
+  "entry_count": 1,
+  "format": "centaur-hyor-distribution-manifest-v1",
+  "layer": "node_type",
+  "manifest_hash": "sha256:617e424b6adb0019861cd38b6ac7af669c02072c0f0fc0293630d05a05aa0814",
+  "manifest_id": "node_type-default-617e424b6adb0019861c",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_distribution/manifests/node_type-default-617e424b6adb0019861c.json",
+  "selector": "default",
+  "status": "success"
+}
+== hyor: ring-step (metadata) ==
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 1,
+  "peers": [
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 0
+      },
+      "scope": "metadata",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+  "scope": "metadata",
+  "status": "success",
+  "total": {
+    "copied": 2,
+    "missing": 0,
+    "skipped": 2
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 1,
+  "peers": [
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "metadata",
+      "side": "left"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+  "scope": "metadata",
+  "status": "success",
+  "total": {
+    "copied": 0,
+    "missing": 0,
+    "skipped": 4
+  }
+}
+== hyor: ring-step (effective) ==
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 1,
+  "peers": [
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "effective",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+  "scope": "effective",
+  "status": "success",
+  "total": {
+    "copied": 2,
+    "missing": 0,
+    "skipped": 6
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 1,
+  "peers": [
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "scope": "effective",
+      "side": "left"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+  "scope": "effective",
+  "status": "success",
+  "total": {
+    "copied": 0,
+    "missing": 0,
+    "skipped": 8
+  }
+}
+== hyor: effective + apply (node view) ==
+{
+  "applied_layers": [
+    {
+      "entry_count": 1,
+      "layer": "baseline",
+      "manifest_id": "baseline-all-8c9dcce87e449998133d",
+      "selector": "all"
+    },
+    {
+      "entry_count": 1,
+      "layer": "node_type",
+      "manifest_id": "node_type-default-617e424b6adb0019861c",
+      "selector": "default"
+    }
+  ],
+  "effective_hash": "sha256:0ede8f5f2f91e5dcaeabcde43cf8e9b28928942bb70267eeb80684763916b5d2",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "generated_unix_us": 1778555321813394,
+  "manifest_ids": [
+    "baseline-all-8c9dcce87e449998133d",
+    "node_type-default-617e424b6adb0019861c"
+  ],
+  "node_id": "spark0",
+  "node_type": "default",
+  "total_size_bytes": 19,
+  "version": 1
+}
+{
+  "effective_hash": "sha256:b552c4758d374683cb6ff519628b6105ec79dc762e4564b0114790f9bc00c8e1",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "manifest_count": 2,
+  "manifest_path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_effective/spark0/.centaur_effective_manifest.json",
+  "node_id": "spark0",
+  "node_type": "default",
+  "output_dir": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_effective/spark0",
+  "status": "success",
+  "written": [
+    "baseline.txt",
+    "model.txt"
+  ]
+}
+total 20
+drwxrwxr-x 2 spark0 spark0 4096 May 12 12:08 .
+drwxrwxr-x 3 spark0 spark0 4096 May 12 12:08 ..
+-rw-rw-r-- 1 spark0 spark0 1589 May 12 12:08 .centaur_effective_manifest.json
+-rw-rw-r-- 1 spark0 spark0    9 May 12 12:08 baseline.txt
+-rw-rw-r-- 1 spark0 spark0   10 May 12 12:08 model.txt
+== hyor: agent config write (no internet; no executor) ==
+{
+  "config": {
+    "allow_no_executor": true,
+    "announce_before_poll": true,
+    "auth_token_env": null,
+    "broadcast_after_poll": false,
+    "controller_auth_env": null,
+    "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+    "controller_timeout_seconds": 30,
+    "controller_url": null,
+    "effective_output_dir": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_effective/spark0",
+    "executor_command": null,
+    "executor_timeout_seconds": 300,
+    "format": "centaur-hyor-node-agent-config-v1",
+    "http_timeout_seconds": 30,
+    "internet_enabled": false,
+    "lease_ms": 30000,
+    "module_activation_gib": null,
+    "module_health_state": "healthy",
+    "module_id": null,
+    "module_kv_gib": "1",
+    "module_model_class": "cheap_worker",
+    "module_model_id": "local-worker",
+    "module_priority_class": "standard",
+    "module_type": "single",
+    "module_weight_gib": "1",
+    "node_id": "spark0",
+    "node_type": "default",
+    "notes": "spark0-v73-smoke",
+    "poll_limit": 1,
+    "provider_ids": [],
+    "ring_scope": "metadata",
+    "sync_after_poll": true,
+    "sync_before_poll": true,
+    "transport": "filesystem",
+    "updated_unix_us": 1778555322321226,
+    "version": 1
+  },
+  "format": "centaur-hyor-node-agent-config-v1",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0/.centaur/hyor_node_agent_config.json",
+  "status": "success"
+}
+{
+  "allow_no_executor": true,
+  "announce_before_poll": true,
+  "auth_token_env": null,
+  "broadcast_after_poll": false,
+  "controller_auth_env": null,
+  "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+  "controller_timeout_seconds": 30,
+  "controller_url": null,
+  "effective_output_dir": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_effective/spark0",
+  "executor_command": null,
+  "executor_timeout_seconds": 300,
+  "format": "centaur-hyor-node-agent-config-v1",
+  "http_timeout_seconds": 30,
+  "internet_enabled": false,
+  "lease_ms": 30000,
+  "module_activation_gib": null,
+  "module_health_state": "healthy",
+  "module_id": null,
+  "module_kv_gib": "1",
+  "module_model_class": "cheap_worker",
+  "module_model_id": "local-worker",
+  "module_priority_class": "standard",
+  "module_type": "single",
+  "module_weight_gib": "1",
+  "node_id": "spark0",
+  "node_type": "default",
+  "notes": "spark0-v73-smoke",
+  "poll_limit": 1,
+  "provider_ids": [],
+  "ring_scope": "metadata",
+  "sync_after_poll": true,
+  "sync_before_poll": true,
+  "transport": "filesystem",
+  "updated_unix_us": 1778555322321226,
+  "version": 1
+}
+== hyor: node announce + runtime init ==
+{
+  "announcement": {
+    "agent_config_hash": "sha256:ddbddb76556786015335eaa37b496abf12e37973269e5512e661b9ca97538085",
+    "announcement_hash": "sha256:2d87e3c963340154b619645d6f07aff12e79b3c62b3e212af2741a77a6f3548a",
+    "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+    "controller_url": null,
+    "created_unix_us": 1778555322840216,
+    "fingerprint": {
+      "cpu_count": 20,
+      "disk_free_bytes": 3630196342784,
+      "disk_total_bytes": 4030802149376,
+      "hostname": "aitopatom-9ab9",
+      "machine": "aarch64",
+      "memory_bytes": 128518373376,
+      "memory_gib": 119.692,
+      "pid": 1218850,
+      "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+      "processor": "aarch64",
+      "python_version": "3.12.3",
+      "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+      "system": "Linux"
+    },
+    "format": "centaur-hyor-node-announcement-v1",
+    "internet_enabled": false,
+    "local_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+    "module": null,
+    "node_id": "spark0",
+    "node_type": "default",
+    "notes": "spark0-v73-smoke",
+    "provider_ids": [],
+    "transport": "filesystem",
+    "version": 1
+  },
+  "controller_result": {
+    "format": "centaur-hyor-node-announcement-v1",
+    "module_result": null,
+    "node_id": "spark0",
+    "node_type": "default",
+    "record": {
+      "announcement": {
+        "agent_config_hash": "sha256:ddbddb76556786015335eaa37b496abf12e37973269e5512e661b9ca97538085",
+        "announcement_hash": "sha256:2d87e3c963340154b619645d6f07aff12e79b3c62b3e212af2741a77a6f3548a",
+        "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+        "controller_url": null,
+        "created_unix_us": 1778555322840216,
+        "fingerprint": {
+          "cpu_count": 20,
+          "disk_free_bytes": 3630196342784,
+          "disk_total_bytes": 4030802149376,
+          "hostname": "aitopatom-9ab9",
+          "machine": "aarch64",
+          "memory_bytes": 128518373376,
+          "memory_gib": 119.692,
+          "pid": 1218850,
+          "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+          "processor": "aarch64",
+          "python_version": "3.12.3",
+          "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+          "system": "Linux"
+        },
+        "format": "centaur-hyor-node-announcement-v1",
+        "internet_enabled": false,
+        "local_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+        "module": null,
+        "node_id": "spark0",
+        "node_type": "default",
+        "notes": "spark0-v73-smoke",
+        "provider_ids": [],
+        "transport": "filesystem",
+        "version": 1
+      },
+      "announcement_hash": "sha256:2d87e3c963340154b619645d6f07aff12e79b3c62b3e212af2741a77a6f3548a",
+      "created_unix_us": 1778555322840624,
+      "details": {
+        "module_id": null,
+        "node_id": "spark0"
+      },
+      "format": "centaur-hyor-node-announcement-v1",
+      "node_id": "spark0",
+      "node_type": "default",
+      "previous_record_hash": null,
+      "record_hash": "sha256:dd7dc4aa6e222e7a84ea821b9067e46b26728e37a270446db4b7e7d751b99c3e",
+      "status": "applied"
+    },
+    "status": "success",
+    "topology": {
+      "fixed_node_count": null,
+      "format": "centaur-hyor-topology-v1",
+      "healthy_module_count": 0,
+      "healthy_node_count": 1,
+      "model_classes": {},
+      "module_count": 0,
+      "node_count": 1,
+      "node_count_mode": "dynamic_inventory"
+    }
+  },
+  "format": "centaur-hyor-node-announcement-v1",
+  "status": "success",
+  "transport": "filesystem"
+}
+{
+  "by_node": {
+    "spark0": 1
+  },
+  "format": "centaur-hyor-node-announcement-v1",
+  "latest_record_hash": "sha256:dd7dc4aa6e222e7a84ea821b9067e46b26728e37a270446db4b7e7d751b99c3e",
+  "recent": [
+    {
+      "announcement": {
+        "agent_config_hash": "sha256:ddbddb76556786015335eaa37b496abf12e37973269e5512e661b9ca97538085",
+        "announcement_hash": "sha256:2d87e3c963340154b619645d6f07aff12e79b3c62b3e212af2741a77a6f3548a",
+        "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+        "controller_url": null,
+        "created_unix_us": 1778555322840216,
+        "fingerprint": {
+          "cpu_count": 20,
+          "disk_free_bytes": 3630196342784,
+          "disk_total_bytes": 4030802149376,
+          "hostname": "aitopatom-9ab9",
+          "machine": "aarch64",
+          "memory_bytes": 128518373376,
+          "memory_gib": 119.692,
+          "pid": 1218850,
+          "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+          "processor": "aarch64",
+          "python_version": "3.12.3",
+          "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+          "system": "Linux"
+        },
+        "format": "centaur-hyor-node-announcement-v1",
+        "internet_enabled": false,
+        "local_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+        "module": null,
+        "node_id": "spark0",
+        "node_type": "default",
+        "notes": "spark0-v73-smoke",
+        "provider_ids": [],
+        "transport": "filesystem",
+        "version": 1
+      },
+      "announcement_hash": "sha256:2d87e3c963340154b619645d6f07aff12e79b3c62b3e212af2741a77a6f3548a",
+      "created_unix_us": 1778555322840624,
+      "details": {
+        "module_id": null,
+        "node_id": "spark0"
+      },
+      "format": "centaur-hyor-node-announcement-v1",
+      "node_id": "spark0",
+      "node_type": "default",
+      "previous_record_hash": null,
+      "record_hash": "sha256:dd7dc4aa6e222e7a84ea821b9067e46b26728e37a270446db4b7e7d751b99c3e",
+      "status": "applied"
+    }
+  ],
+  "record_count": 1
+}
+{
+  "available_kv_bytes": 0,
+  "busy_module_count": 0,
+  "fixed_node_count": null,
+  "format": "centaur-hyor-runtime-v1",
+  "leased_running_count": 0,
+  "model_class_kv": {},
+  "module_runtime_count": 0,
+  "node_count_mode": "dynamic_inventory",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_runtime.json",
+  "present_module_count": 0,
+  "queue_counts": {
+    "completed": 0,
+    "deferred": 0,
+    "escalated": 0,
+    "failed": 0,
+    "queued": 0,
+    "running": 0
+  },
+  "reserved_kv_bytes": 0,
+  "status": "success",
+  "task_count": 0,
+  "topology": {
+    "fixed_node_count": null,
+    "format": "centaur-hyor-topology-v1",
+    "healthy_module_count": 0,
+    "healthy_node_count": 1,
+    "model_classes": {},
+    "module_count": 0,
+    "node_count": 1,
+    "node_count_mode": "dynamic_inventory"
+  },
+  "total_kv_budget_bytes": 0
+}
+{
+  "created_unix_us": 1778555323353761,
+  "fixed_node_count": null,
+  "format": "centaur-hyor-runtime-v1",
+  "module_runtime": {},
+  "node_count_mode": "dynamic_inventory",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_runtime.json",
+  "queues": {
+    "completed": [],
+    "deferred": [],
+    "escalated": [],
+    "failed": [],
+    "queued": [],
+    "running": []
+  },
+  "runtime_present": true,
+  "tasks": {},
+  "updated_unix_us": 1778555323353770,
+  "version": 1
+}
+== hyor: agent step (expected to be idle) ==
+{
+  "agent_result": {
+    "execution_count": 0,
+    "executions": [],
+    "format": "centaur-hyor-node-protocol-v1",
+    "lease_result": {
+      "format": "centaur-hyor-node-protocol-v1",
+      "lease_count": 0,
+      "node_id": "spark0",
+      "runtime": {
+        "available_kv_bytes": 0,
+        "busy_module_count": 0,
+        "fixed_node_count": null,
+        "format": "centaur-hyor-runtime-v1",
+        "leased_running_count": 0,
+        "model_class_kv": {},
+        "module_runtime_count": 0,
+        "node_count_mode": "dynamic_inventory",
+        "present_module_count": 0,
+        "queue_counts": {
+          "completed": 0,
+          "deferred": 0,
+          "escalated": 0,
+          "failed": 0,
+          "queued": 0,
+          "running": 0
+        },
+        "reserved_kv_bytes": 0,
+        "task_count": 0,
+        "topology": {
+          "fixed_node_count": null,
+          "format": "centaur-hyor-topology-v1",
+          "healthy_module_count": 0,
+          "healthy_node_count": 1,
+          "model_classes": {},
+          "module_count": 0,
+          "node_count": 1,
+          "node_count_mode": "dynamic_inventory"
+        },
+        "total_kv_budget_bytes": 0
+      },
+      "skipped": [],
+      "status": "success",
+      "work_items": []
+    },
+    "node_id": "spark0",
+    "status": "success"
+  },
+  "announcement_result": {
+    "announcement": {
+      "agent_config_hash": "sha256:ddbddb76556786015335eaa37b496abf12e37973269e5512e661b9ca97538085",
+      "announcement_hash": "sha256:d84e020d8ba9669cc91e91101499f2b785cdc243aa942525538c37bf63c3daec",
+      "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+      "controller_url": null,
+      "created_unix_us": 1778555323891345,
+      "fingerprint": {
+        "cpu_count": 20,
+        "disk_free_bytes": 3630196318208,
+        "disk_total_bytes": 4030802149376,
+        "hostname": "aitopatom-9ab9",
+        "machine": "aarch64",
+        "memory_bytes": 128518373376,
+        "memory_gib": 119.692,
+        "pid": 1218855,
+        "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+        "processor": "aarch64",
+        "python_version": "3.12.3",
+        "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+        "system": "Linux"
+      },
+      "format": "centaur-hyor-node-announcement-v1",
+      "internet_enabled": false,
+      "local_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+      "module": null,
+      "node_id": "spark0",
+      "node_type": "default",
+      "notes": "spark0-v73-smoke",
+      "provider_ids": [],
+      "transport": "filesystem",
+      "version": 1
+    },
+    "controller_result": {
+      "format": "centaur-hyor-node-announcement-v1",
+      "module_result": null,
+      "node_id": "spark0",
+      "node_type": "default",
+      "record": {
+        "announcement": {
+          "agent_config_hash": "sha256:ddbddb76556786015335eaa37b496abf12e37973269e5512e661b9ca97538085",
+          "announcement_hash": "sha256:d84e020d8ba9669cc91e91101499f2b785cdc243aa942525538c37bf63c3daec",
+          "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+          "controller_url": null,
+          "created_unix_us": 1778555323891345,
+          "fingerprint": {
+            "cpu_count": 20,
+            "disk_free_bytes": 3630196318208,
+            "disk_total_bytes": 4030802149376,
+            "hostname": "aitopatom-9ab9",
+            "machine": "aarch64",
+            "memory_bytes": 128518373376,
+            "memory_gib": 119.692,
+            "pid": 1218855,
+            "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+            "processor": "aarch64",
+            "python_version": "3.12.3",
+            "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+            "system": "Linux"
+          },
+          "format": "centaur-hyor-node-announcement-v1",
+          "internet_enabled": false,
+          "local_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+          "module": null,
+          "node_id": "spark0",
+          "node_type": "default",
+          "notes": "spark0-v73-smoke",
+          "provider_ids": [],
+          "transport": "filesystem",
+          "version": 1
+        },
+        "announcement_hash": "sha256:d84e020d8ba9669cc91e91101499f2b785cdc243aa942525538c37bf63c3daec",
+        "created_unix_us": 1778555323901257,
+        "details": {
+          "module_id": null,
+          "node_id": "spark0"
+        },
+        "format": "centaur-hyor-node-announcement-v1",
+        "node_id": "spark0",
+        "node_type": "default",
+        "previous_record_hash": "sha256:dd7dc4aa6e222e7a84ea821b9067e46b26728e37a270446db4b7e7d751b99c3e",
+        "record_hash": "sha256:a8757b3b439bbe238accb03273732e4186f88ca0fe5d953c2706f19bb15e704f",
+        "status": "applied"
+      },
+      "status": "success",
+      "topology": {
+        "fixed_node_count": null,
+        "format": "centaur-hyor-topology-v1",
+        "healthy_module_count": 0,
+        "healthy_node_count": 1,
+        "model_classes": {},
+        "module_count": 0,
+        "node_count": 1,
+        "node_count_mode": "dynamic_inventory"
+      }
+    },
+    "format": "centaur-hyor-node-announcement-v1",
+    "status": "success",
+    "transport": "filesystem"
+  },
+  "applied_effective": {
+    "effective_hash": "sha256:566c3e4c3f46b00061aaffd74e0db6f17ae2ddf30cae38822c1b036837b223f0",
+    "file_count": 2,
+    "format": "centaur-hyor-distribution-effective-v1",
+    "manifest_count": 2,
+    "manifest_path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_effective/spark0/.centaur_effective_manifest.json",
+    "node_id": "spark0",
+    "node_type": "default",
+    "output_dir": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_effective/spark0",
+    "status": "success",
+    "written": [
+      "baseline.txt",
+      "model.txt"
+    ]
+  },
+  "broadcast_result": null,
+  "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+  "controller_url": null,
+  "format": "centaur-hyor-node-agent-config-v1",
+  "local_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+  "node_id": "spark0",
+  "node_type": "default",
+  "outbox": {
+    "created_unix_us": 1778555323903154,
+    "event": {
+      "agent_result": {
+        "execution_count": 0,
+        "lease_count": 0
+      },
+      "controller_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+      "controller_url": null
+    },
+    "format": "centaur-hyor-distribution-outbox-v1",
+    "kind": "agent_step",
+    "node_id": "spark0",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0/.centaur/hyor_distribution/outbox/spark0/1778555323903154-f0a65bf001c442be89b637c97fdccfc0.json",
+    "record_hash": "sha256:19a3d15501d585f0ac039d8607447873dbd9515b11457daf1eecc21825c52a3f",
+    "status": "success",
+    "version": 1
+  },
+  "post_sync": {
+    "format": "centaur-hyor-distribution-v1",
+    "peer_count": 1,
+    "peers": [
+      {
+        "copy_objects": false,
+        "peer_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+        "pull": {
+          "copied": 0,
+          "missing": 0,
+          "skipped": 2
+        },
+        "push": {
+          "copied": 0,
+          "missing": 0,
+          "skipped": 2
+        },
+        "scope": "metadata",
+        "side": "left"
+      }
+    ],
+    "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+    "scope": "metadata",
+    "status": "success",
+    "total": {
+      "copied": 0,
+      "missing": 0,
+      "skipped": 4
+    }
+  },
+  "pre_sync": {
+    "format": "centaur-hyor-distribution-v1",
+    "peer_count": 1,
+    "peers": [
+      {
+        "copy_objects": false,
+        "peer_root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+        "pull": {
+          "copied": 0,
+          "missing": 0,
+          "skipped": 2
+        },
+        "push": {
+          "copied": 0,
+          "missing": 0,
+          "skipped": 2
+        },
+        "scope": "metadata",
+        "side": "left"
+      }
+    ],
+    "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+    "scope": "metadata",
+    "status": "success",
+    "total": {
+      "copied": 0,
+      "missing": 0,
+      "skipped": 4
+    }
+  },
+  "status": "success"
+}
+== hyor: provider + model catalog registration (no downloads) ==
+{
+  "format": "centaur-hyor-provider-registry-v1",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_provider_registry.json",
+  "provider": {
+    "auth_env_names": [],
+    "capabilities": [],
+    "catalog_url": "/home/spark0/centaur-smoke/v73/unit_model_catalog.json",
+    "cost_per_million_input_tokens": null,
+    "cost_per_million_output_tokens": null,
+    "enabled": true,
+    "endpoint_url": null,
+    "kind": "open_source_catalog",
+    "monthly_budget_usd": null,
+    "notes": "spark0-v73-smoke",
+    "provider_id": "unit",
+    "rate_limit_per_minute": null,
+    "updated_unix_us": 1778555324178724
+  },
+  "provider_id": "unit",
+  "status": "success"
+}
+{
+  "format": "centaur-hyor-model-catalog-v1",
+  "imported": [
+    {
+      "access_mode": "download",
+      "catalog_key": "unit__576441fad99b56ee",
+      "model_id": "unit/test-model"
+    }
+  ],
+  "imported_count": 1,
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_model_catalog.json",
+  "skipped": [],
+  "skipped_count": 0,
+  "source_id": "unit",
+  "status": "success"
+}
+{
+  "by_access_mode": {
+    "download": 1
+  },
+  "by_model_class": {
+    "code": 1
+  },
+  "candidate_count": 1,
+  "format": "centaur-hyor-model-catalog-v1",
+  "imports": [
+    {
+      "allow_network": false,
+      "catalog_reference": "/home/spark0/centaur-smoke/v73/unit_model_catalog.json",
+      "created_unix_us": 1778555324446722,
+      "imported_count": 1,
+      "provider_id": null,
+      "skipped_count": 0,
+      "source_id": "unit"
+    }
+  ],
+  "match_count": 1,
+  "matches": [
+    {
+      "access_mode": "download",
+      "candidate": {
+        "access_mode": "download",
+        "api_model_id": null,
+        "catalog_key": "unit__576441fad99b56ee",
+        "context_tokens": 1024,
+        "cost_per_million_input_tokens": null,
+        "cost_per_million_output_tokens": null,
+        "discovered_unix_us": 1778555324446720,
+        "display_name": "unit test model (no weights)",
+        "download_urls": [],
+        "install_methods": [
+          "manual"
+        ],
+        "license": null,
+        "memory_bytes": null,
+        "model_class": "code",
+        "model_id": "unit/test-model",
+        "notes": "Synthetic catalog entry for Spark0 Centaur v73 smoke; no downloads.",
+        "parameter_count_b": null,
+        "provider_id": "unit",
+        "quality_tag": "unknown",
+        "quantization": null,
+        "raw_candidate_hash": "sha256:7c258e8d45893a581a18d2ba3801d33da8516d9aabe70c22567a71dbec4855f0",
+        "runtime": null,
+        "source_id": "unit",
+        "strengths": [
+          "code_edit"
+        ],
+        "tokenizer_sha256": null,
+        "tokenizer_url": null,
+        "weaknesses": []
+      },
+      "catalog_key": "unit__576441fad99b56ee",
+      "model_class": "code",
+      "model_id": "unit/test-model",
+      "provider_id": "unit",
+      "quality_tag": "unknown",
+      "strengths": [
+        "code_edit"
+      ]
+    }
+  ],
+  "rejected": [],
+  "rejected_count": 0,
+  "requirements": {
+    "access_mode": [],
+    "avoided_weaknesses": [],
+    "max_memory_gib": null,
+    "min_context_tokens": 0,
+    "min_quality_tag": "unknown",
+    "model_class": null,
+    "required_strengths": []
+  }
+}
+== hyor: benchmark suite + record + results ==
+{
+  "format": "centaur-hyor-model-benchmark-suite-v1",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_model_benchmark_suites.json",
+  "status": "success",
+  "suite": {
+    "metrics": [
+      "cost_score",
+      "input_tokens_per_second",
+      "latency_ms",
+      "memory_gib",
+      "output_tokens_per_second",
+      "quality_score"
+    ],
+    "model_class": "code",
+    "notes": "spark0-v73-smoke",
+    "procedures": [],
+    "prompt_files": [],
+    "suite_id": "spark0_smoke_suite",
+    "task_type": "code_edit",
+    "updated_unix_us": 1778555324959974
+  },
+  "suite_id": "spark0_smoke_suite"
+}
+{
+  "format": "centaur-hyor-model-benchmark-result-v1",
+  "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_model_benchmark_results.ndjson",
+  "record": {
+    "adoption_score": 45.0,
+    "benchmark_result_id": "benchmark-f3d64dc50584423eabbe993ad4305b47",
+    "catalog_key": "unit__576441fad99b56ee",
+    "cost_score": 0.5,
+    "created_unix_us": 1778555325248521,
+    "format": "centaur-hyor-model-benchmark-result-v1",
+    "input_tokens_per_second": 0.0,
+    "latency_ms": 0.0,
+    "memory_bytes": 0,
+    "metrics": {},
+    "model_id": "unit/test-model",
+    "node_id": "spark0",
+    "notes": "spark0-v73-smoke",
+    "output_tokens_per_second": 0.0,
+    "previous_record_hash": null,
+    "quality_score": 0.5,
+    "record_hash": "sha256:ac98bd52b6dd8ae3ad0adea79dbaa0a445b92ac39bce078d2fe5a338657cff09",
+    "status": "success",
+    "suite_id": "spark0_smoke_suite",
+    "tokens_in": 1,
+    "tokens_out": 1
+  },
+  "status": "success"
+}
+{
+  "best_by_catalog": {
+    "unit__576441fad99b56ee": {
+      "adoption_score": 45.0,
+      "benchmark_result_id": "benchmark-f3d64dc50584423eabbe993ad4305b47",
+      "model_id": "unit/test-model",
+      "node_id": "spark0",
+      "suite_id": "spark0_smoke_suite"
+    }
+  },
+  "by_status": {
+    "success": 1
+  },
+  "format": "centaur-hyor-model-benchmark-result-v1",
+  "record_count": 1,
+  "records": [
+    {
+      "adoption_score": 45.0,
+      "benchmark_result_id": "benchmark-f3d64dc50584423eabbe993ad4305b47",
+      "catalog_key": "unit__576441fad99b56ee",
+      "cost_score": 0.5,
+      "created_unix_us": 1778555325248521,
+      "format": "centaur-hyor-model-benchmark-result-v1",
+      "input_tokens_per_second": 0.0,
+      "latency_ms": 0.0,
+      "memory_bytes": 0,
+      "metrics": {},
+      "model_id": "unit/test-model",
+      "node_id": "spark0",
+      "notes": "spark0-v73-smoke",
+      "output_tokens_per_second": 0.0,
+      "previous_record_hash": null,
+      "quality_score": 0.5,
+      "record_hash": "sha256:ac98bd52b6dd8ae3ad0adea79dbaa0a445b92ac39bce078d2fe5a338657cff09",
+      "status": "success",
+      "suite_id": "spark0_smoke_suite",
+      "tokens_in": 1,
+      "tokens_out": 1
+    }
+  ]
+}
+== hyor: dashboard ==
+{
+  "format": "centaur-hyor-controller-dashboard-v1",
+  "html_path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_dashboard/dashboard.html",
+  "json_path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor_dashboard/dashboard.json",
+  "snapshot": {
+    "api_usage": {
+      "accounting_month": "2026-05",
+      "by_provider": {},
+      "format": "centaur-hyor-api-usage-v1",
+      "provider_filter": null,
+      "record_count": 0,
+      "status": "success",
+      "total_estimated_cost_usd": 0
+    },
+    "benchmark_results": {
+      "best_by_catalog": {
+        "unit__576441fad99b56ee": {
+          "adoption_score": 45.0,
+          "benchmark_result_id": "benchmark-f3d64dc50584423eabbe993ad4305b47",
+          "model_id": "unit/test-model",
+          "node_id": "spark0",
+          "suite_id": "spark0_smoke_suite"
+        }
+      },
+      "by_status": {
+        "success": 1
+      },
+      "format": "centaur-hyor-model-benchmark-result-v1",
+      "record_count": 1
+    },
+    "complexity_trend": {
+      "baseline_score_delta": null,
+      "best": null,
+      "direction": "lower_is_better",
+      "format": "centaur-complexity-trend-v1",
+      "functions_over_100_delta": null,
+      "functions_over_50_delta": null,
+      "latest": null,
+      "max_function_lines_delta": null,
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/complexity_trend.ndjson",
+      "previous_score_delta": null,
+      "record_count": 0,
+      "repeated_normalized_blocks_delta": null,
+      "returned_count": 0,
+      "status": "success",
+      "trend": "insufficient_data",
+      "version": 1
+    },
+    "controller_events": {
+      "event_count": 0,
+      "format": "centaur-hyor-controller-event-v1",
+      "recent": []
+    },
+    "created_unix_us": 1778555325763066,
+    "distribution": {
+      "distribution_present": true,
+      "format": "centaur-hyor-distribution-v1",
+      "layer_counts": {
+        "baseline": 1,
+        "node_type": 1
+      },
+      "manifest_count": 2,
+      "object_bytes": 19,
+      "object_count": 2,
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_distribution",
+      "selectors": {
+        "baseline": [
+          "all"
+        ],
+        "node_type": [
+          "default"
+        ]
+      }
+    },
+    "episodes": {
+      "actor_counts": {},
+      "average_cost_score": null,
+      "average_quality_score": null,
+      "format": "centaur-episode-record-v1",
+      "record_count": 0,
+      "state_machine_counts": {},
+      "status_counts": {},
+      "total_duration_us": 0,
+      "total_tokens_in": 0,
+      "total_tokens_out": 0
+    },
+    "executors": {
+      "by_kind": {},
+      "executor_count": 0,
+      "executors": {},
+      "format": "centaur-hyor-executor-registry-v1"
+    },
+    "format": "centaur-hyor-controller-dashboard-v1",
+    "install_results": {
+      "by_status": {},
+      "format": "centaur-hyor-model-install-result-v1",
+      "record_count": 0,
+      "records": []
+    },
+    "iteration_dry_reviews": {
+      "format": "centaur-iteration-dry-review-v1",
+      "latest_duplicate_function_group_count": null,
+      "latest_oversized_function_count": null,
+      "latest_repeated_block_group_count": null,
+      "latest_review_hash": null,
+      "latest_status": null,
+      "recent": [],
+      "review_count": 0
+    },
+    "model_catalog": {
+      "by_access_mode": {
+        "download": 1
+      },
+      "by_model_class": {
+        "code": 1
+      },
+      "candidate_count": 1,
+      "format": "centaur-hyor-model-catalog-v1",
+      "match_count": 0,
+      "matches": [],
+      "rejected_count": 1,
+      "requirements": {
+        "access_mode": [],
+        "avoided_weaknesses": [],
+        "max_memory_gib": null,
+        "min_context_tokens": 0,
+        "min_quality_tag": "low",
+        "model_class": null,
+        "required_strengths": []
+      }
+    },
+    "model_profiles": {
+      "by_model_class": {},
+      "by_node_id": {},
+      "format": "centaur-hyor-model-profile-v1",
+      "profile_count": 0
+    },
+    "node_announcements": {
+      "by_node": {
+        "spark0": 2
+      },
+      "format": "centaur-hyor-node-announcement-v1",
+      "latest_record_hash": "sha256:a8757b3b439bbe238accb03273732e4186f88ca0fe5d953c2706f19bb15e704f",
+      "recent": [
+        {
+          "announcement_hash": "sha256:2d87e3c963340154b619645d6f07aff12e79b3c62b3e212af2741a77a6f3548a",
+          "created_unix_us": 1778555322840624,
+          "node_id": "spark0",
+          "node_type": "default",
+          "record_hash": "sha256:dd7dc4aa6e222e7a84ea821b9067e46b26728e37a270446db4b7e7d751b99c3e",
+          "status": "applied"
+        },
+        {
+          "announcement_hash": "sha256:d84e020d8ba9669cc91e91101499f2b785cdc243aa942525538c37bf63c3daec",
+          "created_unix_us": 1778555323901257,
+          "node_id": "spark0",
+          "node_type": "default",
+          "record_hash": "sha256:a8757b3b439bbe238accb03273732e4186f88ca0fe5d953c2706f19bb15e704f",
+          "status": "applied"
+        }
+      ],
+      "record_count": 2
+    },
+    "node_discoveries": {
+      "by_node": {},
+      "by_status": {},
+      "format": "centaur-hyor-node-discovery-v1",
+      "latest_record_hash": null,
+      "recent": [],
+      "record_count": 0
+    },
+    "procedure_approval_policy": {
+      "allow_override": true,
+      "format": "centaur-procedure-approval-v1",
+      "min_approvals": 1,
+      "note": "local operator default: approval gate is disabled unless explicitly enabled",
+      "require_approval_for_apply": false,
+      "trusted_approvers": [],
+      "version": 1
+    },
+    "procedure_approvals": {
+      "by_decision": {},
+      "by_proposal": {},
+      "by_reviewer": {},
+      "format": "centaur-procedure-approval-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/procedure_approvals.ndjson",
+      "policy": {
+        "allow_override": true,
+        "format": "centaur-procedure-approval-v1",
+        "min_approvals": 1,
+        "note": "local operator default: approval gate is disabled unless explicitly enabled",
+        "require_approval_for_apply": false,
+        "trusted_approvers": [],
+        "version": 1
+      },
+      "record_count": 0,
+      "total_record_count": 0
+    },
+    "procedure_changes": {
+      "by_procedure": {},
+      "by_status": {},
+      "format": "centaur-procedure-change-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/procedure_change_proposals.ndjson",
+      "proposal_count": 0,
+      "record_count": 0
+    },
+    "procedure_registry_full": {
+      "format": "centaur-procedure-registry-v1",
+      "procedures": {},
+      "version": 2
+    },
+    "procedure_work_queue": {
+      "by_action": {},
+      "by_procedure": {},
+      "by_status": {},
+      "format": "centaur-procedure-work-queue-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/procedure_work_queue.ndjson",
+      "record_count": 0,
+      "work_item_count": 0
+    },
+    "procedures": {
+      "by_authority": {},
+      "deprecated_count": 0,
+      "format": "centaur-procedure-registry-v1",
+      "procedure_count": 0,
+      "required_count": 0,
+      "variant_count": 0
+    },
+    "project_curriculum": {
+      "by_project": {},
+      "by_status": {},
+      "format": "centaur-project-curriculum-proposal-v1",
+      "latest": null,
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/project_curriculum_proposals.ndjson",
+      "proposal_count": 0,
+      "status": "success"
+    },
+    "project_highwater": {
+      "format": "centaur-project-highwater-v1",
+      "project_count": 0,
+      "projects": {},
+      "record_count": 0,
+      "rejected_count": 0,
+      "status": "success"
+    },
+    "project_scores": {
+      "by_project": {},
+      "format": "centaur-project-score-v1",
+      "latest": null,
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/project_scores.ndjson",
+      "record_count": 0,
+      "status": "success",
+      "survivor_count": 0
+    },
+    "project_verifications": {
+      "by_status": {},
+      "format": "centaur-project-verification-v1",
+      "latest": null,
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/project_verifications.ndjson",
+      "record_count": 0,
+      "status": "success"
+    },
+    "projects": {
+      "by_status": {},
+      "format": "centaur-project-registry-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/projects.json",
+      "project_count": 0,
+      "projects": [],
+      "selected_count": 0,
+      "status": "success"
+    },
+    "projects_full": {
+      "by_status": {},
+      "format": "centaur-project-registry-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/projects.json",
+      "project_count": 0,
+      "projects": [],
+      "selected_count": 0,
+      "status": "success"
+    },
+    "provider_usage": {
+      "accounting_month": "2026-05",
+      "billing_period": "2026-05",
+      "by_provider": {},
+      "format": "centaur-hyor-api-usage-v1",
+      "provider_filter": null,
+      "provider_id": null,
+      "record_count": 0,
+      "status": "success",
+      "total_estimated_cost_usd": 0
+    },
+    "providers": {
+      "by_kind": {
+        "open_source_catalog": 1
+      },
+      "enabled_count": 1,
+      "format": "centaur-hyor-provider-registry-v1",
+      "provider_count": 1
+    },
+    "recent_telemetry": [],
+    "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller",
+    "runtime": {
+      "available_kv_bytes": 0,
+      "busy_module_count": 0,
+      "fixed_node_count": null,
+      "format": "centaur-hyor-runtime-v1",
+      "leased_running_count": 0,
+      "model_class_kv": {},
+      "module_runtime_count": 0,
+      "node_count_mode": "dynamic_inventory",
+      "present_module_count": 0,
+      "queue_counts": {
+        "completed": 0,
+        "deferred": 0,
+        "escalated": 0,
+        "failed": 0,
+        "queued": 0,
+        "running": 0
+      },
+      "reserved_kv_bytes": 0,
+      "task_count": 0,
+      "topology": {
+        "fixed_node_count": null,
+        "format": "centaur-hyor-topology-v1",
+        "healthy_module_count": 0,
+        "healthy_node_count": 1,
+        "model_classes": {},
+        "module_count": 0,
+        "node_count": 1,
+        "node_count_mode": "dynamic_inventory"
+      },
+      "total_kv_budget_bytes": 0
+    },
+    "runtime_full": {
+      "created_unix_us": 1778555323353761,
+      "fixed_node_count": null,
+      "format": "centaur-hyor-runtime-v1",
+      "module_runtime": {},
+      "node_count_mode": "dynamic_inventory",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_runtime.json",
+      "queues": {
+        "completed": [],
+        "deferred": [],
+        "escalated": [],
+        "failed": [],
+        "queued": [],
+        "running": []
+      },
+      "runtime_present": true,
+      "tasks": {},
+      "updated_unix_us": 1778555323902549,
+      "version": 1
+    },
+    "shorthand": {
+      "by_category": {
+        "context": 3,
+        "json_key": 2,
+        "procedure": 5,
+        "project": 3,
+        "runtime": 2,
+        "scoring": 2,
+        "state_machine": 4,
+        "telemetry": 1,
+        "tool": 10
+      },
+      "codes": [
+        "@cmd",
+        "@cost",
+        "@ctxsav",
+        "@cwd",
+        "@diag",
+        "@dur",
+        "@env",
+        "@fc",
+        "@fmt",
+        "@fp",
+        "@hashref",
+        "@mid",
+        "@next",
+        "@ns",
+        "@obs",
+        "@pid",
+        "@proc",
+        "@prop",
+        "@qual",
+        "@raw",
+        "@rawout",
+        "@rawsha",
+        "@rc",
+        "@rid",
+        "@run",
+        "@sid",
+        "@sm",
+        "@st",
+        "@tc",
+        "@tr",
+        "@vercmd",
+        "@work"
+      ],
+      "entry_count": 32,
+      "format": "centaur-shorthand-registry-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/shorthand_registry.json",
+      "policy": {
+        "ad_hoc_abbreviations_allowed": false,
+        "default_include_glossary": false,
+        "lossless_only": true,
+        "notes": "Use shorthand as a reversible shared codec for structured context, not as model-invented slang."
+      },
+      "status": "success"
+    },
+    "state_machine_runs": {
+      "by_state_machine": {},
+      "by_status": {},
+      "event_count": 0,
+      "format": "centaur-state-machine-run-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/state_machine_runs.ndjson",
+      "recent": [],
+      "run_count": 0
+    },
+    "status": "success",
+    "supervisor": {
+      "by_type": {},
+      "event_count": 0,
+      "format": "centaur-hyor-supervisor-v1",
+      "latest_event_hash": null,
+      "latest_event_type": null,
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_supervisor_events.ndjson",
+      "recent": [],
+      "status": "success"
+    },
+    "telemetry": {
+      "event_counts": {},
+      "format": "centaur-hyor-telemetry-v1",
+      "model_counts": {},
+      "record_count": 0,
+      "status_counts": {}
+    },
+    "test_groups": {
+      "format": "centaur-test-group-manifest-v1",
+      "group_count": 0,
+      "groups": [],
+      "status": "missing_tests",
+      "test_count": 0
+    },
+    "test_runs": {
+      "by_status": {},
+      "format": "centaur-test-run-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/test_runs.ndjson",
+      "recent": [],
+      "record_count": 0,
+      "returned_count": 0,
+      "total_context_saved_bytes": 0
+    },
+    "tool_contracts": {
+      "by_kind": {
+        "build": 2,
+        "command": 1,
+        "test": 3
+      },
+      "contract_count": 6,
+      "contract_ids": [
+        "build_diagnostics",
+        "cargo_test_failures",
+        "command_summary",
+        "pytest_failures",
+        "test_failures",
+        "typescript_diagnostics"
+      ],
+      "format": "centaur-tool-contract-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/tool_contracts.json"
+    },
+    "tool_fingerprints": {
+      "fingerprint_count": 0,
+      "format": "centaur-tool-diagnostic-fingerprint-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/tool_diagnostic_fingerprints.ndjson",
+      "record_count": 0,
+      "top": []
+    },
+    "tool_runs": {
+      "by_kind": {},
+      "by_status": {},
+      "format": "centaur-tool-run-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/tool_runs.ndjson",
+      "recent": [],
+      "record_count": 0,
+      "total_context_saved_bytes": 0,
+      "total_raw_bytes": 0,
+      "total_reduced_bytes": 0
+    },
+    "tool_shorthand": {
+      "default_profile_id": "tool_evidence_v1",
+      "format": "centaur-tool-shorthand-v1",
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/tool_shorthand_profiles.json",
+      "profile_count": 1,
+      "profile_ids": [
+        "tool_evidence_v1"
+      ],
+      "status": "success"
+    },
+    "topology": {
+      "fixed_node_count": null,
+      "format": "centaur-hyor-topology-v1",
+      "healthy_module_count": 0,
+      "healthy_node_count": 1,
+      "model_classes": {},
+      "module_count": 0,
+      "node_count": 1,
+      "node_count_mode": "dynamic_inventory"
+    },
+    "topology_full": {
+      "fixed_node_count": null,
+      "format": "centaur-hyor-topology-v1",
+      "inventory_present": true,
+      "node_count_mode": "dynamic_inventory",
+      "nodes": {
+        "spark0": {
+          "accelerator": "spark-class",
+          "agent_config_hash": "sha256:ddbddb76556786015335eaa37b496abf12e37973269e5512e661b9ca97538085",
+          "agent_transport": "filesystem",
+          "announcement_hash": "sha256:d84e020d8ba9669cc91e91101499f2b785cdc243aa942525538c37bf63c3daec",
+          "controller_url": null,
+          "cpu_cores": 20,
+          "fingerprint": {
+            "cpu_count": 20,
+            "disk_free_bytes": 3630196318208,
+            "disk_total_bytes": 4030802149376,
+            "hostname": "aitopatom-9ab9",
+            "machine": "aarch64",
+            "memory_bytes": 128518373376,
+            "memory_gib": 119.692,
+            "pid": 1218855,
+            "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+            "processor": "aarch64",
+            "python_version": "3.12.3",
+            "root": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/node_spark0",
+            "system": "Linux"
+          },
+          "health_state": "healthy",
+          "interconnect": [
+            "filesystem"
+          ],
+          "internet_enabled": false,
+          "last_seen_unix_us": 1778555323891682,
+          "memory_bytes": 128518306398,
+          "modules": {},
+          "node_id": "spark0",
+          "node_type": "default",
+          "provider_ids": [],
+          "tags": [
+            "auto_announced"
+          ]
+        }
+      },
+      "notes": [],
+      "path": "/home/spark0/centaur-smoke/v73/run/20260512T030829Z/hyor/controller/.centaur/hyor_topology.json",
+      "version": 1
+    }
+  },
+  "status": "success"
+}
+total 52
+drwxrwxr-x 2 spark0 spark0  4096 May 12 12:08 .
+drwxrwxr-x 9 spark0 spark0  4096 May 12 12:08 ..
+-rw-rw-r-- 1 spark0 spark0 26240 May 12 12:08 dashboard.html
+-rw-rw-r-- 1 spark0 spark0 16074 May 12 12:08 dashboard.json
+== done ==
+workdir: /home/spark0/centaur-smoke/v73/run/20260512T030829Z
