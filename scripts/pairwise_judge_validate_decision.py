@@ -40,14 +40,18 @@ def parse_and_validate_decision_text(text: str, strict: bool) -> Tuple[Optional[
     obj, perr = schema.parse_json_object_loose(text)
     if obj is None:
         return None, str(perr)
-    errs = schema.validate_decision(obj)
+    canon, cerrs = schema.canonicalize_decision_obj(obj)
+    if canon is None:
+        return None, "; ".join(cerrs)
+    errs = list(cerrs)
+    errs.extend(schema.validate_decision(canon))
     if len(errs) != 0:
         return None, "; ".join(errs)
     if strict:
-        extra = schema.validate_decision_strict_extra(obj)
+        extra = schema.validate_decision_strict_extra(canon)
         if len(extra) != 0:
             return None, "; ".join(extra)
-    return obj, ""
+    return canon, ""
 
 
 def main() -> None:

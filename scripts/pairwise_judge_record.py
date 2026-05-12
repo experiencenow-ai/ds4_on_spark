@@ -97,9 +97,32 @@ def build_record(
                 raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs))
         return rec
 
-    errs = schema.validate_decision(obj)
+    canon, cerrs = schema.canonicalize_decision_obj(obj)
+    if canon is None:
+        rec_bad: Dict[str, Any] = {
+            "schema": str(record_schema),
+            "pair_id": pair_id,
+            "model_a": model_a,
+            "model_b": model_b,
+            "judge_model": judge_model,
+            "parse_valid": False,
+            "raw": _one_line(json.dumps(obj, separators=(",", ":"), ensure_ascii=False))[:512],
+            "parse_error": _one_line("; ".join(cerrs))[:128],
+        }
+        if tokens is not None:
+            rec_bad["tokens"] = tokens
+        if latency_ms is not None:
+            rec_bad["latency_ms"] = latency_ms
+        if schema_v2 or schema_v3:
+            errs_bad = schema.validate_record(rec_bad)
+            if len(errs_bad) != 0:
+                raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs_bad))
+        return rec_bad
+
+    errs = list(cerrs)
+    errs.extend(schema.validate_decision(canon))
     if len(errs) == 0 and strict_effective:
-        errs.extend(schema.validate_decision_strict_extra(obj))
+        errs.extend(schema.validate_decision_strict_extra(canon))
     if len(errs) != 0:
         rec2: Dict[str, Any] = {
             "schema": str(record_schema),
@@ -108,7 +131,7 @@ def build_record(
             "model_b": model_b,
             "judge_model": judge_model,
             "parse_valid": False,
-            "raw": _one_line(json.dumps(obj, separators=(",", ":"), ensure_ascii=False))[:512],
+            "raw": _one_line(json.dumps(canon, separators=(",", ":"), ensure_ascii=False))[:512],
             "parse_error": _one_line("; ".join(errs))[:128],
         }
         if tokens is not None:
@@ -130,7 +153,7 @@ def build_record(
         "parse_valid": True,
     }
     for k in ("winner", "margin", "score_a", "score_b", "reason", "train_hint", "tags"):
-        rec3[k] = obj.get(k)
+        rec3[k] = canon.get(k)
     if tokens is not None:
         rec3["tokens"] = tokens
     if latency_ms is not None:
