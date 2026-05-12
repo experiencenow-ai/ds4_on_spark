@@ -171,6 +171,16 @@ python3 scripts/entropy_buffer_diff.py \
   --out-md /tmp/entropy_diff.md
 ```
 
+### Canonicalize mixed logs to a stable JSONL schema
+
+Use this as a bridge when upstream logs are loosely-shaped or when you need stable `item_id` generation for judge records.
+
+```bash
+python3 scripts/entropy_buffer_canonicalize.py \
+  --in-jsonl fixtures/entropy-buffer/records_canonicalize_mini.jsonl \
+  --out-jsonl /tmp/entropy_canonical.jsonl
+```
+
 ### Recommend next tasks (coverage maximization)
 
 ```bash
@@ -207,8 +217,10 @@ Notes:
 ## Integration notes
 
 - **Judge ELO loop**: should emit `judge_pair` records with stable `item_id`, `a_model_id`, `b_model_id`, and `label`. The entropy tools do not compute ELO; they compute *balance* and *disagreement* that affect ELO stability.
+- If the judge loop emits compact envelopes or missing `item_id`, run `scripts/entropy_buffer_canonicalize.py` to normalize and generate a stable `item_id` (from `task_id|prompt_template_id|a_model_id|b_model_id`).
 - **Baseline runtime loop**: should emit `task_run` records with `task_id`, `prompt_template_id`, and `output` (plus optional token/time fields). The entropy tools treat token/time as optional metadata and focus on coverage/degeneracy.
   - If you have `tags`, include them for better coverage accounting.
+  - If token/time fields are nested or inconsistently named, `scripts/entropy_buffer_canonicalize.py` can lift them into `input_tokens`/`output_tokens`/`wall_ms`.
 
 ## Risks / limitations
 

@@ -3,6 +3,7 @@ import os
 import unittest
 
 from scripts import entropy_buffer_lib as lib
+from scripts import entropy_buffer_canonicalize as canonicalize
 from scripts import entropy_buffer_diff as diff
 from scripts import entropy_buffer_metrics as metrics
 from scripts import entropy_buffer_recommend as recommend
@@ -37,6 +38,28 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         })
         self.assertEqual(j.rtype, "judge_pair")
         self.assertEqual(j.judge_id, "judge.vX")
+
+    def test_canonicalize_tool_emits_item_id_and_instrumentation(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_canonicalize_mini.jsonl")
+        records = lib.load_jsonl([path])
+        out = canonicalize.canonicalize_records(records)
+
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0].get("type"), "task_run")
+        self.assertEqual(out[0].get("answer"), "B")
+        self.assertEqual(out[0].get("answer_source"), "extract")
+        self.assertEqual(int(out[0].get("input_tokens", 0)), 12)
+        self.assertEqual(int(out[0].get("output_tokens", 0)), 3)
+        self.assertAlmostEqual(float(out[0].get("wall_ms", 0.0)), 1000.0)
+
+        self.assertEqual(out[1].get("type"), "judge_pair")
+        self.assertEqual(out[1].get("item_id"), "math.add.001|mcq.v1|a=m1|b=m2")
+        toks = out[1].get("tokens") or {}
+        lats = out[1].get("latency_ms") or {}
+        self.assertEqual(int(toks.get("judge_in", 0)), 128)
+        self.assertEqual(int(toks.get("judge_out", 0)), 64)
+        self.assertAlmostEqual(float(lats.get("judge", 0.0)), 1500.0)
 
     def test_answer_extraction_accepts_answer_is_variants(self) -> None:
         root = _repo_root()
