@@ -77,6 +77,7 @@ Use a strict system instruction:
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
+For harnesses, use `--format json` to emit a single JSON object with `{system,user}` fields.
 
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 

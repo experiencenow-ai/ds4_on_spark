@@ -255,6 +255,41 @@ class JudgeEloTest(unittest.TestCase):
             self.assertEqual(obj.get("latency_ms"), {"judge": 123})
             self.assertEqual(schema.validate_record(obj), [])
 
+    def test_pairwise_judge_prompt_cli_json_format(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_prompt.py")
+        with tempfile.TemporaryDirectory() as td:
+            p_path = os.path.join(td, "prompt.txt")
+            a_path = os.path.join(td, "a.txt")
+            b_path = os.path.join(td, "b.txt")
+            with open(p_path, "w", encoding="utf-8") as f:
+                f.write("Explain what ELO rating means.\n")
+            with open(a_path, "w", encoding="utf-8") as f:
+                f.write("Elo is a rating system used for head-to-head games.\n")
+            with open(b_path, "w", encoding="utf-8") as f:
+                f.write("ELO is a ranking thing.\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--prompt",
+                p_path,
+                "--a",
+                a_path,
+                "--b",
+                b_path,
+                "--judge-out-target",
+                "64",
+                "--format",
+                "json",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertEqual(obj.get("schema"), "ds4_pairwise_judge_prompt_v1")
+            self.assertIn("system", obj)
+            self.assertIn("user", obj)
+            self.assertIn("schema_hint", obj)
+            self.assertIn("Return minified JSON only", str(obj.get("system", "")))
+            self.assertIn("PROMPT:", str(obj.get("user", "")))
+
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
