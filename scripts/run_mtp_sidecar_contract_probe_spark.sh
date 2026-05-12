@@ -224,3 +224,37 @@ fi
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
+
+python3 - "$OUT_DIR" "$REPORT_MD" 2>/dev/null <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+out_dir = Path(sys.argv[1])
+report_md = Path(sys.argv[2])
+
+def read_json(p: Path):
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+contract_parse = read_json(out_dir / "contract_probe_parse.json") or {}
+fingerprint_gate = read_json(out_dir / "contract_probe_fingerprint_gate.json") or {}
+
+summary = {
+    "ok": bool(contract_parse.get("ok", False)),
+    "contract_ok": bool(contract_parse.get("ok", False)),
+    "fingerprint_gate_ok": bool(fingerprint_gate.get("ok", False)),
+    "artifacts": {
+        "report_md": str(report_md),
+        "contract_probe_json": str(out_dir / "contract_probe.json"),
+        "contract_probe_parse_json": str(out_dir / "contract_probe_parse.json"),
+        "fingerprint_gate_json": str(out_dir / "contract_probe_fingerprint_gate.json"),
+    },
+    "contract_probe": contract_parse,
+    "fingerprint_gate": fingerprint_gate,
+}
+
+(out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
