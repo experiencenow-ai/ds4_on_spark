@@ -1455,10 +1455,22 @@
       "reference_source": "https://huggingface.co/docs/transformers/main/model_doc/deepseek_v4 (Cache layers; accessed 2026-05-11)"
     }
   },
+  "config_summary": {
+    "attention_bias": false,
+    "attention_dropout": 0.0,
+    "hidden_act": "silu",
+    "initializer_range": 0.02,
+    "max_position_embeddings": 1048576,
+    "rms_norm_eps": 1e-06,
+    "tie_word_embeddings": false,
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.57.1",
+    "use_cache": true
+  },
   "contract_fingerprints": {
     "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
     "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
-    "execution_contract_sha256": "6a633d40fc6925bbf01dbe90c8c6562eb11e4426f223ddd3a3f0ae92fa59e437",
+    "execution_contract_sha256": "d389ac51f60192ba1431264b7eaedc3e8050e4d5813fa441d78a36243a72ebd0",
     "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
     "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
     "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"

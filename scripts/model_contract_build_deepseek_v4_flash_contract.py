@@ -84,6 +84,7 @@ def build_contract_fingerprints(contract: dict) -> dict:
 
 	exec_subset = {
 		"model": contract.get("model"),
+		"config_summary": contract.get("config_summary", {}),
 		"upstream": {
 			"hf_repo_id": up.get("hf_repo_id"),
 			"hf_revision_pinned": up.get("hf_revision_pinned"),
@@ -1822,6 +1823,18 @@ def build_contract() -> dict:
 		"compat": build_compat_mappings(),
 		"oracle": build_oracle_contract(),
 		"mla": sem.get("mla", {}) if isinstance(sem, dict) else {},
+		"config_summary": {
+			"attention_bias": bool(cfg.get("attention_bias", False)),
+			"attention_dropout": float(cfg.get("attention_dropout", 0.0)),
+			"hidden_act": str(cfg.get("hidden_act", "")),
+			"initializer_range": float(cfg.get("initializer_range", 0.0)),
+			"max_position_embeddings": int(cfg.get("max_position_embeddings", 0)),
+			"rms_norm_eps": float(cfg.get("rms_norm_eps", 0.0)),
+			"tie_word_embeddings": bool(cfg.get("tie_word_embeddings", False)),
+			"torch_dtype": str(cfg.get("torch_dtype", "")),
+			"transformers_version": str(cfg.get("transformers_version", "")),
+			"use_cache": bool(cfg.get("use_cache", True)),
+		},
 		"topology": {
 			"vocab_size": int(cfg["vocab_size"]),
 			"hidden_size": int(cfg["hidden_size"]),

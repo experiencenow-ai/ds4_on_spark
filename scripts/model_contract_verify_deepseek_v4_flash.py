@@ -190,6 +190,25 @@ def main() -> int:
 		else:
 			try:
 				summary = load_json(contract_summary)
+				cfg_summary = summary.get("config_summary", None) if isinstance(summary, dict) else None
+				if not isinstance(cfg_summary, dict):
+					failures.append(Failure(30, f"contract summary missing config_summary (expected object): {contract_summary}"))
+				else:
+					want_cfg_summary = {
+						"attention_bias": bool(cfg.get("attention_bias", False)),
+						"attention_dropout": float(cfg.get("attention_dropout", 0.0)),
+						"hidden_act": str(cfg.get("hidden_act", "")),
+						"initializer_range": float(cfg.get("initializer_range", 0.0)),
+						"max_position_embeddings": int(cfg.get("max_position_embeddings", 0)),
+						"rms_norm_eps": float(cfg.get("rms_norm_eps", 0.0)),
+						"tie_word_embeddings": bool(cfg.get("tie_word_embeddings", False)),
+						"torch_dtype": str(cfg.get("torch_dtype", "")),
+						"transformers_version": str(cfg.get("transformers_version", "")),
+						"use_cache": bool(cfg.get("use_cache", True)),
+					}
+					if cfg_summary != want_cfg_summary:
+						failures.append(Failure(31, f"contract summary config_summary mismatch (expected pinned fixtures/config.json semantics): {contract_summary}"))
+
 				up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
 				fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
 				if not isinstance(fixture_sha, dict):
