@@ -1733,6 +1733,9 @@ def build_contract() -> dict:
 					pass
 		mtp_layer_ids_present = sorted(layer_ids)
 		mtp_prefixes_present = sorted(prefixes)
+	mtp_layer_ids_expected = list(range(int(n_mtp_layers)))
+	mtp_prefixes_expected = [f"mtp.{i}." for i in mtp_layer_ids_expected]
+	mtp_official_namespace_complete = (mtp_layer_ids_present == mtp_layer_ids_expected and mtp_prefixes_present == mtp_prefixes_expected)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1958,14 +1961,22 @@ def build_contract() -> dict:
 					"mtp": {
 						"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 						"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
-						"compress_ratios": [int(r) for r in mtp_ratios],
-						"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-						"namespace_prefix": "mtp.{j}.",
-						"checkpoint_key_fingerprint": {
-						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
-						"tensor_key_count": mtp_prefix_fp.get("count", None),
-						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					"compress_ratios": [int(r) for r in mtp_ratios],
+					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+					"namespace_prefix": "mtp.{j}.",
+					"namespace": {
+						"expected_layer_ids": mtp_layer_ids_expected,
+						"expected_prefixes": mtp_prefixes_expected,
+						"official_present_layer_ids": mtp_layer_ids_present,
+						"official_present_prefixes": mtp_prefixes_present,
+						"official_complete": bool(mtp_official_namespace_complete),
+						"note": "Expected mtp.* tensor namespace layout derived from config.json num_nextn_predict_layers and validated against the official checkpoint index.",
 					},
+					"checkpoint_key_fingerprint": {
+					"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
+					"tensor_key_count": mtp_prefix_fp.get("count", None),
+					"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+				},
 					"checkpoint_key_examples": {
 						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
 						"layer_ids": mtp_layer_ids_present,
