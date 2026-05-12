@@ -19,6 +19,7 @@ Environment:
   STAMP               Override stamp (default: date -u +%Y-%m-%dT%H%MZ)
   DOCS_DIR            Output directory (default: docs)
   REDACT              Redact IP/MAC/GPU UUID tokens (default: 1)
+  ALLOW_OVERWRITE=1   Allow overwriting existing snapshot files (default: 0; fails fast if files exist)
   SPARK_SSH_USER      Default SSH user for host-only args (default: spark0)
   SPARK_KNOWN_HOSTS_PER_HOST   Default: 1
   DS4_GIT_DIR/DS4_GIT_WORK_TREE Optional git hash source for probe meta
@@ -49,6 +50,7 @@ done
 
 DOCS_DIR="${DOCS_DIR:-docs}"
 REDACT="${REDACT:-1}"
+ALLOW_OVERWRITE="${ALLOW_OVERWRITE:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-1}"
 
@@ -71,6 +73,7 @@ echo "stamp: $stamp"
 echo "targets: $targets"
 echo "docs dir: $DOCS_DIR"
 echo "REDACT: $REDACT"
+echo "ALLOW_OVERWRITE: $ALLOW_OVERWRITE"
 echo "SPARK_SSH_USER: $SPARK_SSH_USER"
 echo "SPARK_KNOWN_HOSTS_PER_HOST: $SPARK_KNOWN_HOSTS_PER_HOST"
 echo
@@ -79,6 +82,10 @@ for host in $targets; do
 	host_only="${host#*@}"
 	safe_h="$(printf "%s" "$host_only" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
 	out="${DOCS_DIR}/spark-ring-node-facts-${safe_h}-${stamp}.md"
+	if [ -e "$out" ] && [ "$ALLOW_OVERWRITE" != "1" ]; then
+		echo "error: would overwrite existing file: $out (set ALLOW_OVERWRITE=1 to allow)" >&2
+		exit 3
+	fi
 	echo "writing: $out"
 	(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh "$host" || true) >"$out"
 done

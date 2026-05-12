@@ -2,6 +2,8 @@
 
 This is a **human-run** access + probe checklist for the current Spark ring. It is safe-by-default (no `sudo`, no service changes, no writes outside `/private/tmp` on the Mac). Treat the ordered host list as the inventory; when a Spark is added, append it to the list used by the probe commands.
 
+For new node onboarding (Spark1/Spark2 bring-up), see `docs/spark-ring-node-bringup.md`.
+
 ## 1) Hostnames + Resolution
 
 - Decide stable identities for each node:
