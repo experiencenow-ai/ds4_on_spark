@@ -42,6 +42,16 @@ json_err()
 	fi
 }
 
+json_skip()
+{
+	msg="$1"
+	if [ "$JSON_ONLY" = "1" ]; then
+		printf '{\n  "ok": false,\n  "skipped": true,\n  "reason": %s,\n  "errors": [%s]\n}\n' "\"$msg\"" "\"$msg\""
+	else
+		echo "$msg" 1>&2
+	fi
+}
+
 if [ "$JSON_ONLY" != "1" ]; then
 	echo "== $target_note =="
 	date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
@@ -170,6 +180,9 @@ fi
 if [ "$ALLOW_RUN" != "1" ]; then
 	if [ "$JSON_ONLY" != "1" ]; then
 		echo "run skipped (set ALLOW_RUN=1 and MTP_SIDECAR_GGUF=/abs/path/to/sidecar.gguf)"
+	fi
+	if [ "$JSON_ONLY" = "1" ]; then
+		json_skip "run skipped (set ALLOW_RUN=1 and MTP_SIDECAR_GGUF=/abs/path/to/sidecar.gguf)"
 	fi
 	exit 0
 fi
