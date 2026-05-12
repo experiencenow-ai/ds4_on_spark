@@ -12,6 +12,8 @@ The build skeleton aims for predictable, static allocation. Most call sites shou
 - `ds4_arena_alloc_zero_n`: `count*elem_size` array allocation with overflow checks and zero-fill.
 - `ds4_arena_mark` / `ds4_arena_release`: coarse rollback to a prior mark.
 - `ds4_arena_reset`: discard all allocations.
+- `ds4_arena_validate`: basic sanity checks for diagnostics/debug.
+- `ds4_arena_bytes_left`: remaining capacity helper (no allocation).
 
 Typical usage: allocate per-request scratch memory, or build fixed-size graphs without per-node `malloc`.
 
