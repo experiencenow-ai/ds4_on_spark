@@ -24,6 +24,35 @@ SCHEMA_LEADERBOARD_V1 = "judge_elo_leaderboard_v1"
 
 WINNERS = ("A", "B", "tie")
 
+DECISION_FIELDS = ("winner", "margin", "score_a", "score_b", "reason", "train_hint", "tags")
+_DECISION_FIELD_SET = set(DECISION_FIELDS)
+
+RECORD_FIELDS = (
+    "schema",
+    "pair_id",
+    "task_id",
+    "sample_id",
+    "judge_model",
+    "model_a",
+    "model_b",
+    "parse_valid",
+    "winner",
+    "margin",
+    "score_a",
+    "score_b",
+    "reason",
+    "train_hint",
+    "tags",
+    "raw",
+    "parse_error",
+    "tokens",
+    "latency_ms",
+)
+_RECORD_FIELD_SET = set(RECORD_FIELDS)
+
+PROMPT_FIELDS = ("schema", "judge_out_target", "system", "user", "schema_hint")
+_PROMPT_FIELD_SET = set(PROMPT_FIELDS)
+
 
 def _is_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
@@ -112,6 +141,10 @@ class JudgeDecision:
 
 def validate_decision(obj: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
+    extra = [k for k in obj.keys() if k not in _DECISION_FIELD_SET]
+    if len(extra) != 0:
+        for k in sorted(extra):
+            errs.append(f"unexpected key in decision: {k}")
     winner = _as_str(obj.get("winner"), "winner", errs)
     if winner != "" and winner not in WINNERS:
         errs.append("winner must be one of: A, B, tie")
@@ -208,8 +241,19 @@ def validate_decision_strict_extra(obj: Dict[str, Any]) -> List[str]:
     return errs
 
 
+def _decision_view_from_record(obj: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for k in DECISION_FIELDS:
+        out[k] = obj.get(k)
+    return out
+
+
 def validate_record(obj: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
+    extra = [k for k in obj.keys() if k not in _RECORD_FIELD_SET]
+    if len(extra) != 0:
+        for k in sorted(extra):
+            errs.append(f"unexpected key in record: {k}")
     if "schema" not in obj:
         errs.append("schema is required")
     else:
@@ -227,7 +271,7 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         return errs
 
     if parse_valid:
-        errs.extend(validate_decision(obj))
+        errs.extend(validate_decision(_decision_view_from_record(obj)))
     else:
         # When invalid, encourage preserving the raw judge output for debugging.
         raw = obj.get("raw")
@@ -371,6 +415,10 @@ def validate_prompt(obj: Any) -> List[str]:
     errs: List[str] = []
     if not isinstance(obj, dict):
         return ["prompt must be an object"]
+    extra = [k for k in obj.keys() if k not in _PROMPT_FIELD_SET]
+    if len(extra) != 0:
+        for k in sorted(extra):
+            errs.append(f"unexpected key in prompt: {k}")
     schema_v = _as_str(obj.get("schema"), "schema", errs)
     if schema_v != "" and schema_v not in (SCHEMA_PROMPT_V1, SCHEMA_PROMPT_V2):
         errs.append(f"schema must be {SCHEMA_PROMPT_V1!r} or {SCHEMA_PROMPT_V2!r}")

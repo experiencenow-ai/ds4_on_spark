@@ -19,6 +19,7 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
+- No extra keys: the decision validator rejects unknown fields.
 - Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
   - diff=1 ⇒ margin ∈ {0,1}
   - diff=2 ⇒ margin ∈ {1,2}
@@ -40,6 +41,7 @@ Required fields:
 - `pair_id`: stable identifier for this comparison
 - `model_a`, `model_b`: model identifiers (strings)
 - `parse_valid`: boolean (whether the judge decision JSON was parsed successfully)
+- No extra keys: unknown top-level fields are invalid (keep metadata in the defined optional fields).
 
 If `parse_valid` is `true`, these must also be present:
 - decision fields: `winner`, `margin`, `score_a`, `score_b`, `reason`, `train_hint`, `tags`
