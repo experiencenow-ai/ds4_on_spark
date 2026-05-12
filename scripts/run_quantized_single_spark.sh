@@ -10,6 +10,7 @@ SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChec
 
 MODEL_GGUF_GLOB="${MODEL_GGUF_GLOB:-}"
 MODEL_GGUF_EXCLUDE_EGREP="${MODEL_GGUF_EXCLUDE_EGREP:-MTP|DFlash|dflash|draft|sidecar}"
+MODEL_GGUF_INCLUDE_EGREP="${MODEL_GGUF_INCLUDE_EGREP:-}"
 
 resolve_model_gguf()
 {
@@ -21,7 +22,7 @@ resolve_model_gguf()
         exit 2
     fi
     echo "resolving MODEL_GGUF from remote glob (no downloads): $MODEL_GGUF_GLOB" >&2
-    MODEL_GGUF="$(ssh $SSH_OPTS "$target" "set -eu; best_path=\"\"; best_size=\"\"; for f in $MODEL_GGUF_GLOB; do [ -r \"\\$f\" ] || continue; b=\"\\$(basename \"\\$f\")\"; if echo \"\\$b\" | egrep -qi \"${MODEL_GGUF_EXCLUDE_EGREP}\"; then continue; fi; sz=\"\\$(wc -c <\"\\$f\" 2>/dev/null || echo 0)\"; case \"\\$sz\" in ''|*[!0-9]*) sz=0;; esac; if [ \"\\$sz\" -le 0 ]; then continue; fi; if [ \"\\$best_size\" = \"\" ] || [ \"\\$sz\" -lt \"\\$best_size\" ]; then best_size=\"\\$sz\"; best_path=\"\\$f\"; fi; done; if [ \"\\$best_path\" = \"\" ]; then echo \"no readable gguf candidates under glob (after exclude regex): $MODEL_GGUF_GLOB\" >&2; exit 11; fi; printf %s \"\\$best_path\"")"
+    MODEL_GGUF="$(ssh $SSH_OPTS "$target" "set -eu; best_path=\"\"; best_size=\"\"; for f in $MODEL_GGUF_GLOB; do [ -r \"\\$f\" ] || continue; b=\"\\$(basename \"\\$f\")\"; if echo \"\\$b\" | egrep -qi \"${MODEL_GGUF_EXCLUDE_EGREP}\"; then continue; fi; if [ \"${MODEL_GGUF_INCLUDE_EGREP}\" != \"\" ]; then if ! echo \"\\$b\" | egrep -qi \"${MODEL_GGUF_INCLUDE_EGREP}\"; then continue; fi; fi; sz=\"\\$(wc -c <\"\\$f\" 2>/dev/null || echo 0)\"; case \"\\$sz\" in ''|*[!0-9]*) sz=0;; esac; if [ \"\\$sz\" -le 0 ]; then continue; fi; if [ \"\\$best_size\" = \"\" ] || [ \"\\$sz\" -lt \"\\$best_size\" ]; then best_size=\"\\$sz\"; best_path=\"\\$f\"; fi; done; if [ \"\\$best_path\" = \"\" ]; then if [ \"${MODEL_GGUF_INCLUDE_EGREP}\" != \"\" ]; then echo \"no readable gguf candidates under glob (after exclude+include regex): $MODEL_GGUF_GLOB\" >&2; else echo \"no readable gguf candidates under glob (after exclude regex): $MODEL_GGUF_GLOB\" >&2; fi; exit 11; fi; printf %s \"\\$best_path\"")"
     if [ "$MODEL_GGUF" = "" ]; then
         echo "failed to resolve MODEL_GGUF from $MODEL_GGUF_GLOB" >&2
         exit 2
