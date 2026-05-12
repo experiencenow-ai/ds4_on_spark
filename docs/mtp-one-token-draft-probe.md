@@ -114,6 +114,8 @@ REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALL
 scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
 ```
 
+As of 2026-05-12 this runner emits `ok=true` on Spark0 with the staged antirez trunk + `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` sidecar. The helper sets `DS4_MTP_PROBE=1` by default because upstream `antirez/ds4` only drafts in the normal `draft=1` eval path when probe logging is enabled or `--mtp-draft` is greater than one.
+
 ## Spark runner (when the fork has a real one-token command)
 
 When the Spark/CUDA llama.cpp fork has a one-token probe command available, run it on Spark and record artifacts using:

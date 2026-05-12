@@ -355,7 +355,14 @@ If these ports are not reachable between Sparks, stop and fix network access bef
 1) On the controller host (typically Spark0), run the controller HTTP endpoint (human-run, no system service):
 
 ```bash
-"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-controller-http ~/centaur-smoke/v73/run/hyor/controller --host 0.0.0.0 --port 8765
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+controller_root="$RING_WORKDIR/run/$RING_RUN_ID/controller"
+
+# Recommended: initialize runtime state for the controller root before serving HTTP.
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-runtime-init "$controller_root" --force
+
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-controller-http "$controller_root" --host 0.0.0.0 --port 8765
 ```
 
 2) On each node, write an HTTP-configured agent config into the node root and start the node agent HTTP endpoint:
@@ -374,7 +381,11 @@ export CONTROLLER_URL="http://<spark0-host>:8765"
 3) On the controller, discover the nodes via their agent HTTP endpoints (this registers them in controller state):
 
 ```bash
-"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-node-discover ~/centaur-smoke/v73/run/hyor/controller --seed-url http://<spark1-host>:8766 --seed-url http://<spark2-host>:8767
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+controller_root="$RING_WORKDIR/run/$RING_RUN_ID/controller"
+
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-node-discover "$controller_root" --seed-url http://<spark1-host>:8766 --seed-url http://<spark2-host>:8767
 ```
 
 4) Then run one agent step on each node (it reads the local config and uses `controller_url`):
@@ -393,7 +404,9 @@ You will need **three terminals** (or `tmux`) because the HTTP servers run until
 Terminal 1 (Mac): controller HTTP on Spark0:
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller 0.0.0.0 8765 0" < ./scripts/centaur_spark_hyor_controller_http_v73.sh
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export RING_WORKDIR=\"$RING_WORKDIR\"; export RING_RUN_ID=\"$RING_RUN_ID\"; export HYOR_RUNTIME_INIT=1; sh -s -- '' 0.0.0.0 8765 0" < ./scripts/centaur_spark_hyor_controller_http_v73.sh
 ```
 
 Terminal 2 (Mac): agent HTTP on Spark1:
@@ -413,7 +426,9 @@ ssh $SSH_OPTS spark2@<spark2-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/
 Once all three are running, from a **fourth** terminal (or after stopping the controller with `ctrl-c` and restarting it later), discover the nodes on Spark0:
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller http://<spark1-host>:8766 http://<spark2-host>:8767" < ./scripts/centaur_spark_hyor_node_discover_v73.sh
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export RING_WORKDIR=\"$RING_WORKDIR\"; export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- http://<spark1-host>:8766 http://<spark2-host>:8767" < ./scripts/centaur_spark_hyor_node_discover_v73.sh
 ```
 
 Then, on each node (Spark1 and Spark2), run one agent step:

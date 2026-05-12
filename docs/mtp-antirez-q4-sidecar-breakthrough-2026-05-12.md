@@ -92,6 +92,24 @@ REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV="ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALL
 scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
 ```
 
+Spark0 result after fixing the patch stack and forcing the `draft=1` probe path with `DS4_MTP_PROBE=1`:
+
+```text
+ok=true
+prompt="Explain Redis streams in one paragraph."
+base_next_token_id=2581
+base_next_token="We"
+mtp_draft_token_id=1309
+mtp_draft_token=" need"
+trunk_token_embd_fnv64=34fd30df58128d4a
+trunk_pre_hc_head_fnv64=c1214dfabd8ab5f0
+mtp_input_hc_fnv64=a42bc106f8ea8b6a
+mtp_block_out_hc_fnv64=af8a8ecc3efbaf40
+mtp_head_norm_fnv64=e95d14bfa2882d8d
+```
+
+This means the patched `antirez/ds4` CUDA path can now serve as the one-token oracle for candidate runtime work. The first observed draft does not need to match the base token; it is the MTP token proposed after committing that base token.
+
 Diff oracle vs candidate:
 
 ```bash
@@ -106,8 +124,7 @@ scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
 
 ## Remaining gates
 
-1. Build and run the patched antirez oracle on Spark0.
-2. Add matching one-token MTP captures to the candidate runtime.
-3. Diff `e_proj`, `h_proj`, MTP attention, routed MoE, head norm, and logits fingerprints.
-4. Once first-token agreement is plausible, run an acceptance sweep with `--mtp-draft 2`, strict verifier enabled, and fixed prompts.
-5. Replace the diagnostic `Q4_K` fallback with a tiled/q8-activation CUDA path only after correctness is locked.
+1. Add matching one-token MTP captures to the candidate runtime.
+2. Diff `e_proj`, `h_proj`, MTP attention, routed MoE, head norm, and logits fingerprints against the antirez oracle JSON.
+3. Once one-token agreement is established, run an acceptance sweep with `--mtp-draft 2`, strict verifier enabled, and fixed prompts.
+4. Replace the diagnostic `Q4_K` fallback with a tiled/q8-activation CUDA path only after correctness is locked.
