@@ -903,6 +903,7 @@
       "moe_intermediate_size": "moe.moe_inter_dim",
       "n_routed_experts": "moe.n_routed_experts",
       "n_shared_experts": "moe.n_shared_experts",
+      "norm_topk_prob": "moe.norm_topk_prob",
       "num_attention_heads": "topology.num_attention_heads",
       "num_experts_per_tok": "moe.n_activated_experts",
       "num_hash_layers": "moe.n_hash_layers",
@@ -926,6 +927,7 @@
       "routed_scaling_factor": "moe.route_scale",
       "scoring_func": "moe.scoring_func",
       "sliding_window": "topology.sliding_window",
+      "topk_method": "moe.topk_method",
       "vocab_size": "topology.vocab_size"
     },
     "fields": [
@@ -1079,6 +1081,20 @@
         "transformers_key": "scoring_func"
       },
       {
+        "canonical_path": "moe.topk_method",
+        "concept": "topk_method",
+        "inference_key": null,
+        "note": "Transformers-only MoE routing knob (e.g. noaux_tc); the pinned reference inference/model.py does not consume this field.",
+        "transformers_key": "topk_method"
+      },
+      {
+        "canonical_path": "moe.norm_topk_prob",
+        "concept": "norm_topk_prob",
+        "inference_key": null,
+        "note": "Transformers-only MoE knob controlling top-k probability normalization; recorded to interpret external runtimes/configs without guessing.",
+        "transformers_key": "norm_topk_prob"
+      },
+      {
         "canonical_path": "mtp.n_mtp_layers",
         "concept": "num_nextn_predict_layers",
         "inference_key": null,
@@ -1184,7 +1200,7 @@
   "contract_fingerprints": {
     "attention_schedule_sha256": "c27b3e3b1b6dc39965103b3b9f094cf702eb832c66136688f3db7cd00f4efa01",
     "cache_semantics_sha256": "918d2f3d3dc5836016ca389492a24064fa01964ee913ef04059e1e59457c35e0",
-    "execution_contract_sha256": "0ad3e3a319d3afb01da224a974ab0d596c0d455beee7bcd477a040988ca675f6",
+    "execution_contract_sha256": "ecb389d7a494e50ed6eb6c0391a5928324e966bf8a26d4849e7a92ac77a42583",
     "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
     "tokenizer_encoding_sha256": "1da9e95cc3cf428098ead91e8d84e54689ba83c52e1079cf2a31c21ff4fa445f",
     "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
@@ -1308,6 +1324,7 @@
     "n_hash_layers": 3,
     "n_routed_experts": 256,
     "n_shared_experts": 1,
+    "norm_topk_prob": true,
     "route_scale": 1.5,
     "score_gate_tensor_key": "layers.{i}.ffn.gate.bias",
     "score_layer_ids": [
@@ -1419,6 +1436,7 @@
       "weights_scale_expr": "weights *= self.route_scale"
     },
     "swiglu_limit": 10.0,
+    "topk_method": "noaux_tc",
     "transformers_mlp_layer_types": [
       "hash_moe",
       "hash_moe",

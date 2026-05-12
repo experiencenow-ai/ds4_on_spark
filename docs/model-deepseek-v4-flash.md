@@ -43,6 +43,7 @@ MoE:
 - `n_routed_experts=256`, `n_shared_experts=1`
 - `n_activated_experts=6` (`num_experts_per_tok`)
 - `moe_inter_dim=2048`
+- Transformers config MoE knobs: `topk_method="noaux_tc"`, `norm_topk_prob=true` (recorded under `contract_summary.json` `moe.topk_method` / `moe.norm_topk_prob` for external-runtime config interpretation; upstream `inference/model.py` does not consume these fields)
 - Hash-gated layers (`ffn.gate.tid2eid`): layer IDs `[0,1,2]` (`num_hash_layers=3`)
 - Score-gated layers (`ffn.gate.bias`): layer IDs `[3..42]`
 
@@ -93,6 +94,7 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
   - Upstream source: `inference/model.py` (MoE forward/routing; hash-gated vs score-gated layers).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/model.py`.
   - DS4 contract: `contract_summary.json` `moe.*` and the tensor-name invariants under `tensor_keys.layer_gate.*`.
+  - Transformers config-only routing knobs (`config.json` `topk_method`, `norm_topk_prob`) are recorded in `contract_summary.json` `moe.topk_method` / `moe.norm_topk_prob` and surfaced via `compat.by_transformers_key` for interpreting external runtime configs without guessing.
 - **MTP execution path + tensor namespace expectations**:
   - Upstream source: `inference/model.py` (`MTPBlock` and how it binds to `mtp.0.*` weights) plus the official checkpoint key set.
   - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and `fixtures/model_contract/deepseek_v4_flash/model.safetensors.index.json`.
