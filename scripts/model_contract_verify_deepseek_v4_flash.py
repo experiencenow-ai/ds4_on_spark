@@ -429,6 +429,79 @@ def main() -> int:
 						]
 						if any(n not in src for n in need):
 							failures.append(Failure(140, f"contract summary cache.topk_index_helpers.get_compress_topk_idxs source missing required markers: {contract_summary}"))
+
+				cache_sem = cache_obj.get("semantics", None)
+				if not isinstance(cache_sem, dict):
+					failures.append(Failure(165, f"contract summary cache.semantics must be an object: {contract_summary}"))
+				else:
+					helpers = cache_sem.get("source_helpers", None)
+					if not isinstance(helpers, dict):
+						failures.append(Failure(166, f"contract summary cache.semantics.source_helpers must be an object: {contract_summary}"))
+					else:
+						ref = helpers.get("reference_source")
+						if not (isinstance(ref, str) and ref):
+							failures.append(Failure(167, f"contract summary cache.semantics.source_helpers.reference_source must be a non-empty string: {contract_summary}"))
+
+						comp_obj = helpers.get("compressor_forward", None)
+						comp_lines = comp_obj.get("source_lines") if isinstance(comp_obj, dict) else None
+						if not (isinstance(comp_lines, list) and all(isinstance(x, str) for x in comp_lines) and comp_lines):
+							failures.append(Failure(168, f"contract summary cache.semantics.source_helpers.compressor_forward.source_lines missing or invalid: {contract_summary}"))
+						else:
+							if comp_obj.get("source_lines_sha256") != sha256_lines(comp_lines):
+								failures.append(Failure(169, f"contract summary cache.semantics.source_helpers.compressor_forward.source_lines_sha256 mismatch: {contract_summary}"))
+							src = "\n".join(comp_lines)
+							need = [
+								"def forward(",
+								"if start_pos == 0:",
+								"should_compress = seqlen >= ratio",
+								"should_compress = (start_pos + 1) % self.compress_ratio == 0",
+								"self.kv_cache[:bsz, :seqlen // ratio] = kv",
+								"self.kv_cache[:bsz, start_pos // ratio] = kv.squeeze(1)",
+								"return kv",
+							]
+							if any(n not in src for n in need):
+								failures.append(Failure(170, f"contract summary cache.semantics.source_helpers.compressor_forward source missing required markers: {contract_summary}"))
+
+						idx_obj = helpers.get("indexer_forward", None)
+						idx_lines = idx_obj.get("source_lines") if isinstance(idx_obj, dict) else None
+						if not (isinstance(idx_lines, list) and all(isinstance(x, str) for x in idx_lines) and idx_lines):
+							failures.append(Failure(171, f"contract summary cache.semantics.source_helpers.indexer_forward.source_lines missing or invalid: {contract_summary}"))
+						else:
+							if idx_obj.get("source_lines_sha256") != sha256_lines(idx_lines):
+								failures.append(Failure(172, f"contract summary cache.semantics.source_helpers.indexer_forward.source_lines_sha256 mismatch: {contract_summary}"))
+							src = "\n".join(idx_lines)
+							need = [
+								"def forward(",
+								"q = rotate_activation(q)",
+								"fp4_act_quant(q, fp4_block_size, True)",
+								"self.compressor(x, start_pos)",
+								"index_score = torch.einsum(",
+								"if world_size > 1:",
+								"dist.all_reduce(index_score)",
+								"topk_idxs = index_score.topk",
+								"return topk_idxs",
+							]
+							if any(n not in src for n in need):
+								failures.append(Failure(173, f"contract summary cache.semantics.source_helpers.indexer_forward source missing required markers: {contract_summary}"))
+
+						att_obj = helpers.get("attention_forward", None)
+						att_lines = att_obj.get("source_lines") if isinstance(att_obj, dict) else None
+						if not (isinstance(att_lines, list) and all(isinstance(x, str) for x in att_lines) and att_lines):
+							failures.append(Failure(174, f"contract summary cache.semantics.source_helpers.attention_forward.source_lines missing or invalid: {contract_summary}"))
+						else:
+							if att_obj.get("source_lines_sha256") != sha256_lines(att_lines):
+								failures.append(Failure(175, f"contract summary cache.semantics.source_helpers.attention_forward.source_lines_sha256 mismatch: {contract_summary}"))
+							src = "\n".join(att_lines)
+							need = [
+								"def forward(",
+								"topk_idxs = get_window_topk_idxs",
+								"topk_idxs = torch.cat([topk_idxs, compress_topk_idxs], dim=-1)",
+								"self.kv_cache[:bsz, start_pos % win] = kv.squeeze(1)",
+								"o = sparse_attn(",
+								"return x",
+							]
+							if any(n not in src for n in need):
+								failures.append(Failure(176, f"contract summary cache.semantics.source_helpers.attention_forward source missing required markers: {contract_summary}"))
 				compress_gate_prefill = cache_update.get("compressor_prefill_should_compress_expr")
 				if not (isinstance(compress_gate_prefill, str) and "should_compress = seqlen >= ratio" in compress_gate_prefill):
 					failures.append(Failure(19, f"contract summary missing compressor prefill gate expression 'should_compress = seqlen >= ratio': {contract_summary}"))

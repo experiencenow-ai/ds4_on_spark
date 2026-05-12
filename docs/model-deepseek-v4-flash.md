@@ -376,6 +376,12 @@ Runtime update rules:
 These compressor/update semantics are extracted (source-derived) into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.update_semantics.*` so DS4 can enforce them without re-parsing upstream Python.
 In particular, the contract pins the exact prefill sliding-window ring-buffer writes for both `seqlen <= window_size` and the wrap case (`prefill_sliding_write_seqlen_{le,gt}_win_expr`), plus the compressor’s view of the compressed segment (`compressed_segment_view_expr`) and the prefill/decode top-k offset selection (`topk_offset_expr`).
 
+To guard against silent drift in the sliding/CSA/HCA KV update rules, this repo also pins the relevant forward-path implementations verbatim (plus sha256 fingerprints) in `contract_summary.json` under `cache.semantics.source_helpers.*`:
+
+- `compressor_forward` (prefill vs decode compression gates + cache writes)
+- `indexer_forward` (CSA-only scoring path + top-k selection)
+- `attention_forward` (sliding ring update + prefill wrap + top-k concat)
+
 Sparse attention index selection:
 
 - Always attends to the sliding window (`get_window_topk_idxs(...)`).
