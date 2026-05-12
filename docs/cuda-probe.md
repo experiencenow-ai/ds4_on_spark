@@ -22,10 +22,17 @@ When you want a single command that:
 
 - runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior)
 - runs `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile/run gates)
+- runs `scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh` (no repo transfer; minimal “launch a kernel and sync” smoke without `cudaMalloc`)
 - runs `scripts/cuda_probe_sm121_gate_spark0.sh` (ships `tools/cuda_probe/`; fastest “device-props + compile-only gates” build)
 
 ```bash
 ./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
+To skip the kernel-launch smoke (for example when Spark0 is heavily loaded), run:
+
+```bash
+WITH_KERNEL_LAUNCH_MINIMAL=0 ./scripts/cuda_probe_minimal_gates_spark0.sh
 ```
 
 To include the heavier “kernel plumbing” gates, run:
@@ -240,7 +247,21 @@ When you want a tiny compile-only “does `nvcc` accept and device-compile `sm_1
 ./scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh
 ```
 
-This script compiles a minimal `sm_121` compile probe with multiple flag spellings (`-arch=sm_121`, `--gpu-architecture=sm_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121`) and then runs best-effort alias acceptance probes for `sm_121a` / `sm_121f`.
+This script compiles a minimal `sm_121` compile probe with multiple flag spellings (`-arch=sm_121`, `--gpu-architecture=sm_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121`) and then runs best-effort alias acceptance probes for `sm_121a` / `sm_121f`. It also includes compile-only gates for CUTLASS/DeepGEMM-style `-std=c++20 --extended-lambda --expt-relaxed-constexpr` and a standalone `__cluster_dims__(2,1,1)` annotation compile check (same flag-spelling variants).
+
+## Spark0: Kernel Launch Tiny Minimal (No Repo Transfer)
+
+When you want the smallest possible “compile + run a `sm_121` kernel” smoke test without shipping `tools/cuda_probe/` and without calling `cudaMalloc` (useful when Spark0 VRAM is fully allocated, but you still want a direct “kernel launch path works” signal):
+
+```bash
+./scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh
+```
+
+By default this uses `nvcc -arch=sm_121`. To override the exact `nvcc` arch flags (for example: `-arch=native` or `--gpu-architecture=sm_121`), set `NVCC_FLAGS`:
+
+```bash
+NVCC_FLAGS="-arch=native" ./scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh
+```
 
 ## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)
 
