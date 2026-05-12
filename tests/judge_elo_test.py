@@ -22,6 +22,16 @@ class JudgeEloTest(unittest.TestCase):
         # One intentionally parse-invalid record is still schema-valid.
         self.assertEqual(bad, 0)
 
+    def test_fixture_strict_validates(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        bad = 0
+        for _, obj in schema.iter_jsonl(path):
+            errs = schema.validate_record_strict(obj)
+            if len(errs) != 0:
+                bad += 1
+        self.assertEqual(bad, 0)
+
     def test_elo_deterministic(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
@@ -64,6 +74,28 @@ class JudgeEloTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.csv")))
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.md")))
             self.assertTrue(os.path.exists(os.path.join(td, "quality_map.json")))
+
+    def test_update_cli_outputs_validate(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        validate_script = os.path.join(root, "scripts", "judge_elo_validate_outputs.py")
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                path,
+                "--out-dir",
+                td,
+                "--strict",
+            ])
+            subprocess.check_call([
+                "python3",
+                validate_script,
+                "--out-dir",
+                td,
+            ])
 
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
