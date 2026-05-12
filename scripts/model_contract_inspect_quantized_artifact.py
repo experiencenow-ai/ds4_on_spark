@@ -713,6 +713,27 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 
 	note_missing, get_missing_count, get_missing_sample = note_missing_factory()
 
+	has_compressor: list[bool] = [False for _ in range(n_layers_i)]
+	has_indexer: list[bool] = [False for _ in range(n_layers_i)]
+	for k in weight_keys:
+		if not k.startswith("layers."):
+			continue
+		parts = k.split(".", 4)
+		if len(parts) < 4:
+			continue
+		try:
+			i = int(parts[1])
+		except Exception:
+			continue
+		if i < 0 or i >= n_layers_i:
+			continue
+		if parts[2] != "attn":
+			continue
+		if parts[3] == "compressor":
+			has_compressor[i] = True
+		elif parts[3] == "indexer":
+			has_indexer[i] = True
+
 	for k in required_top_level:
 		if not isinstance(k, str) or not k:
 			continue
@@ -740,6 +761,11 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 				need = prefix + suffix
 				if need not in weight_keys:
 					note_missing(need)
+		else:
+			if has_compressor[i]:
+				forbidden_present.add(prefix + "attn.compressor.")
+			if has_indexer[i]:
+				forbidden_present.add(prefix + "attn.indexer.")
 
 		if ratio_i == 4:
 			for suffix in required_ratio4:
@@ -748,6 +774,9 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 				need = prefix + suffix
 				if need not in weight_keys:
 					note_missing(need)
+		else:
+			if ratio_i != 0 and has_indexer[i]:
+				forbidden_present.add(prefix + "attn.indexer.")
 
 		if i < n_hash_layers_i:
 			need_hash = prefix + str(hash_gate_suffix)

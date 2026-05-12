@@ -82,7 +82,7 @@ MTP (multi-token prediction) oracle requirements:
     - `weight_keys_sha256` (stable fingerprint of the artifact’s tensor key set). When `mtp_present == true`, also record `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
     - `topology_contract` mismatches (GGUF header metadata vs expected topology, including RoPE `dimension_count` / `freq_base` when present)
     - `trunk_contract.complete == true` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
-      - `kind="deepseek-upstream"`: checks upstream-style `layers.{i}.*` keys (safetensors index or a GGUF that preserves upstream tensor names)
+      - `kind="deepseek-upstream"`: checks upstream-style `layers.{i}.*` keys (safetensors index or a GGUF that preserves upstream tensor names), including the sliding/CSA/HCA key schedule (no `attn.compressor.*` / `attn.indexer.*` tensors where forbidden by `compress_ratios[]`)
       - `kind="llama.cpp"`: checks DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only signal for quantized artifacts; does not imply semantic correctness)
     - `mtp_contract.complete == true` when `mtp_present == true` (MTP tensor-key completeness)
   - For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` also supports metadata-only inspection via range reads (no full download). Record the `url_prefix_bytes` used:
