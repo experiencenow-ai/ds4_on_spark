@@ -87,7 +87,7 @@ If you also have Spark3, use:
 - Spark1/2 ring:
   - `scripts/centaur_spark12_v73_stage.sh`
   - `scripts/centaur_spark12_v73_node_setup_run.sh` (Mac-side wrapper)
-  - `scripts/centaur_spark12_v73_node_setup_fetch_logs.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_node_setup_fetch_logs.sh` (Mac-side fetch helper: log + facts + freeze)
   - `scripts/centaur_spark_ring_sim_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_sim_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark12_v73_ring_sim_evidence_run.sh` (Mac-side one-command evidence helper)
