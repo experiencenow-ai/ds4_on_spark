@@ -155,5 +155,10 @@ Runbook:
 - \`docs/centaur-ring-spark12.md\`
 EOF
 
-echo "== done =="
+redact="$root/scripts/centaur_redact_fixture_bundle.sh"
+if [ -x "$redact" ]; then
+	echo "== redact bundle (best-effort) =="
+	sh "$redact" "$fixtures_out" || true
+fi
 
+echo "== done =="
