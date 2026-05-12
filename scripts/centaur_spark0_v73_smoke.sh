@@ -144,7 +144,10 @@ fi
 
 echo "== centaur package facts =="
 ls -la "$pkgdir" | sed -n '1,20p'
-decomposer_version="$(python3 -c 'import ast,sys
+decomposer_version="$(python3 - "$pkgdir/centaur.py" <<'PY'
+import ast
+import sys
+
 p=sys.argv[1]
 try:
     t=open(p,"r",encoding="utf-8",errors="replace").read()
@@ -164,7 +167,9 @@ for node in getattr(m,"body",[]):
                 val=getattr(node,"value",None)
                 if isinstance(val, ast.Constant) and isinstance(val.value, str):
                     v=val.value
-print(v)' "$pkgdir/centaur.py")"
+print(v)
+PY
+)"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi
@@ -271,7 +276,10 @@ centaur hyor-model-catalog "$ctrldir" --full
 echo "== hyor: benchmark suite + record + results =="
 centaur hyor-benchmark-suite-register "$ctrldir" spark0_smoke_suite --task-type code_edit --model-class code --metric quality_score --metric cost_score --notes spark0-v73-smoke --force
 
-catalog_key="$(centaur hyor-model-catalog "$ctrldir" --full | "$venv_py" -c 'import json,sys
+catalog_key="$(centaur hyor-model-catalog "$ctrldir" --full | "$venv_py" - <<'PY'
+import json
+import sys
+
 try:
     data=json.load(sys.stdin)
 except Exception:
@@ -281,7 +289,9 @@ matches=data.get("matches") or []
 if not matches:
     print("")
     raise SystemExit(0)
-print(matches[0].get("catalog_key",""))')"
+print(matches[0].get("catalog_key",""))
+PY
+)"
 if [ "$catalog_key" = "" ]; then
 	echo "failed to resolve catalog_key from hyor-model-catalog output" >&2
 	exit 2

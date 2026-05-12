@@ -16,6 +16,8 @@ Environment:
   CENTAUR_PIP_ARGS   Optional extra args for remote pip install (e.g. "--no-index --find-links=/path/to/wheels")
   CENTAUR_SKIP_PIP   Set to 1 to skip remote pip install (assumes deps already present in venv)
   CENTAUR_RUN_ID     Optional remote run id (default: generated UTC timestamp)
+  CENTAUR_WORKDIR    Optional remote workdir override (default: ~/centaur-smoke/v73/run/$CENTAUR_RUN_ID)
+  CENTAUR_TRACE      Set to 1 to enable remote shell tracing (prints exact commands)
 
 Examples:
   ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local
@@ -88,6 +90,12 @@ if [ "${CENTAUR_PIP_ARGS:-}" != "" ]; then
 fi
 if [ "${CENTAUR_SKIP_PIP:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_SKIP_PIP=\"${CENTAUR_SKIP_PIP}\""
+fi
+if [ "${CENTAUR_WORKDIR:-}" != "" ]; then
+	ssh_cmd="$ssh_cmd && export CENTAUR_WORKDIR=\"${CENTAUR_WORKDIR}\""
+fi
+if [ "${CENTAUR_TRACE:-}" != "" ]; then
+	ssh_cmd="$ssh_cmd && export CENTAUR_TRACE=\"${CENTAUR_TRACE}\""
 fi
 ssh_cmd="$ssh_cmd && sh -s"
 
