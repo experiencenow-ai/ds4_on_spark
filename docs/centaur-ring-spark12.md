@@ -44,8 +44,8 @@ Note: `scripts/centaur_spark12_v73_ring_sim_run.sh` accepts an optional `remote_
 
 ```bash
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
-sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
+sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
 4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
@@ -70,7 +70,7 @@ Before attempting a real ring on Spark1/2, ensure each node has a local Centaur 
 From your Mac repo root, you can stage the zip (and optional tiny catalog fixture) to both nodes:
 
 ```bash
-sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73"
 ```
 
 Recommended per-node setup (run on Spark{1,2}) using the reproducible setup script:
@@ -78,8 +78,8 @@ Recommended per-node setup (run on Spark{1,2}) using the reproducible setup scri
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
-sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
+sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
 Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
@@ -92,7 +92,7 @@ Example (Spark1):
 ```bash
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 CENTAUR_PIP_ARGS="--no-index --find-links=/path/to/wheels" \
-  sh ./scripts/centaur_spark_v73_node_setup_run.sh spark1@<spark1-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
+  sh ./scripts/centaur_spark_v73_node_setup_run.sh spark1@<spark1-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
 ```
 
 Minimal per-node setup (run on Spark{1,2}) if you prefer doing it manually:
