@@ -228,6 +228,7 @@ if not isinstance(doc, dict):
 dst.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
+contract_ok=0
 if python3 - "$OUT_DIR/contract_probe_parse.json" 2>/dev/null <<'PY'; then
 import json
 import sys
@@ -237,6 +238,7 @@ p = Path(sys.argv[1])
 doc = json.loads(p.read_text(encoding="utf-8"))
 raise SystemExit(0 if bool(doc.get("ok", False)) else 1)
 PY
+	contract_ok=1
 	echo "== generating llama.cpp MTP sidecar binder skeleton (local) =="
 	python3 "$repo_root/scripts/model_contract_generate_llamacpp_mtp_sidecar_binder.py" \
 		--sidecar-probe-json "$OUT_DIR/contract_probe.json" \
@@ -395,6 +397,19 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_expected_tensors_vs_ds4.py" --jso
 	echo
 } >>"$REPORT_MD"
 
+if [ "$contract_ok" != "1" ]; then
+	echo "== skipping llama.cpp loader probe on spark: contract probe did not return ok=true =="
+	printf '%s\n' "run skipped: contract probe did not return ok=true; see contract_probe_parse.json" >"$OUT_DIR/remote_loader_probe_stdout.txt"
+	printf '%s\n' "" >"$OUT_DIR/remote_loader_probe_stderr.txt"
+	printf '%s\n' "" >"$OUT_DIR/remote_loader_upload_helper_stdout.txt"
+	printf '%s\n' "" >"$OUT_DIR/remote_loader_upload_helper_stderr.txt"
+	printf '%s\n' "" >"$OUT_DIR/remote_loader_upload_patch_stdout.txt"
+	printf '%s\n' "" >"$OUT_DIR/remote_loader_upload_patch_stderr.txt"
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"contract probe did not return ok=true\",\"errors\":[\"contract probe did not return ok=true\"]}" >"$OUT_DIR/loader_probe.json"
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"contract probe did not return ok=true\",\"errors\":[\"contract probe did not return ok=true\"]}" >"$OUT_DIR/loader_probe_parse.json"
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"contract probe did not return ok=true\",\"errors\":[\"contract probe did not return ok=true\"]}" >"$OUT_DIR/contract_vs_loader_probe_parse.json"
+	printf '%s\n' "" >"$OUT_DIR/contract_vs_loader_probe_stderr.txt"
+else
 echo "== running llama.cpp-side MTP sidecar loader probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe_patch.sh && chmod +x /tmp/llamacpp_mtp_sidecar_probe_patch.sh" \
 	<"$HELPER_LOCAL" \
@@ -429,13 +444,13 @@ case "${MTP_SIDECAR_GGUF:-}" in
 		exit 0
 		;;
 esac
-PATCH_FILE="/tmp/llamacpp_mtp_sidecar_probe.patch"
-export PATCH_FILE
-if [ "${JSON_ONLY:-}" = "" ]; then
-	JSON_ONLY=1
+	PATCH_FILE="/tmp/llamacpp_mtp_sidecar_probe.patch"
+	export PATCH_FILE
+	if [ "${JSON_ONLY:-}" = "" ]; then
+		JSON_ONLY=1
 	export JSON_ONLY
 fi
-/tmp/llamacpp_mtp_sidecar_probe_patch.sh
+	/tmp/llamacpp_mtp_sidecar_probe_patch.sh
 SH
 
 python3 - "$OUT_DIR/remote_loader_probe_stdout.txt" "$OUT_DIR/loader_probe.json" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
@@ -505,6 +520,7 @@ python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.p
 	--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
 	--json \
 	>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+fi
 
 {
 	echo "## Loader Probe Results (llama.cpp)"
