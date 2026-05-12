@@ -46,6 +46,9 @@ fi
 log_line "== cuda probe capability: nvcc minimal (no repo transfer) =="
 run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_nvcc_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_nvcc_minimal_spark0.sh" "$target"
 
+log_line "== cuda probe capability: sm_121 compile probes minimal (no repo transfer) =="
+run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_sm121_compile_probes_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh" "$target"
+
 if [ "${with_device_props_minimal}" = "1" ]; then
 	log_line "== cuda probe capability: device props minimal (no repo transfer) =="
 	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_device_props_minimal_${remote_tag}" WITH_SM121_RUN="${with_device_props_sm121_run}" WITH_COMPUTE121_RUN="${with_device_props_compute121_run}" WITH_GENCODE_RUN="${with_device_props_gencode_run}" "$repo_root/scripts/cuda_probe_device_props_minimal_spark0.sh" "$target"

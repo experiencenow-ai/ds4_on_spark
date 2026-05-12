@@ -232,6 +232,16 @@ This also performs best-effort toolchain-only checks when supported:
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
 - When PTX is present, the script also prints the first PTX `.target` line (`ptx_target_*`) so the embedded PTX arch is explicit in logs.
 
+## Spark0: `sm_121` Compile Probes Minimal (No Repo Transfer)
+
+When you want a tiny compile-only “does `nvcc` accept and device-compile `sm_121`?” check without shipping `tools/cuda_probe/` to Spark0:
+
+```bash
+./scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh
+```
+
+This script compiles a minimal `sm_121` compile probe with multiple flag spellings (`-arch=sm_121`, `--gpu-architecture=sm_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121`) and then runs best-effort alias acceptance probes for `sm_121a` / `sm_121f`.
+
 ## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)
 
 When you want a completely self-contained check that does not ship `tools/cuda_probe/`:
