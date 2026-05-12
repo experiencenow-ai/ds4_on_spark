@@ -24,7 +24,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
   - Also records stable sha256 digests for run reports (`contract_fingerprints.*`), including `contract_fingerprints.execution_contract_sha256` (topology + schedule + cache semantics + tokenizer/encoding + quantization + key-invariants digest).
   - Also records machine-readable **tensor-key invariants** (`tensor_keys.required_top_level` and the `tensor_keys.required_layer_suffixes*` sets) and MTP trust gates (`mtp.trust_gates`) so tooling can enforce “exact tensor names” and “MTP is trusted only if…” policies without re-parsing docs.
-  - Also records per-layer trunk key helpers (`tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` and `tensor_keys.layer_*_tensor_key_count_by_layer_id*`) so DS4 implementers can validate “exact tensor names” and per-layer key counts without reconstructing the CSA/HCA schedule logic.
+  - Also records per-layer trunk key helpers (`tensor_keys.layer_required_nonexpert_suffixes_by_layer_id`, `tensor_keys.layer_required_nonexpert_keys_by_layer_id`, and `tensor_keys.layer_*_tensor_key_count_by_layer_id*`) so DS4 implementers can validate “exact tensor names” and per-layer key counts without reconstructing the CSA/HCA schedule logic.
   - Compat mappings also cover MTP (`num_nextn_predict_layers`) and `config.json` quantization knobs (`quantization_config.*`) so external runtime configs can be normalized without guessing.
   - Compat mappings also record a small Transformers-specific cache-layer note (`compat.transformers_cache_layers`) so external-runtime logs can be interpreted without guessing CSA vs HCA cache class behavior.
   - Tokenizer section also records `tokenizer.encoding_token_ids` (derived from `tokenizer.json` `added_tokens[]`) so special-token IDs used by `encoding_constants` are machine-checkable (not just “string template” assumptions).
@@ -88,7 +88,9 @@ MTP (multi-token prediction) oracle requirements:
     - `trunk_contract.complete == true` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
       - `kind="deepseek-upstream"`: checks upstream-style `layers.{i}.*` keys (safetensors index or a GGUF that preserves upstream tensor names), including the sliding/CSA/HCA key schedule (no `attn.compressor.*` / `attn.indexer.*` tensors where forbidden by `compress_ratios[]`)
       - `kind="llama.cpp"`: checks DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only signal for quantized artifacts; does not imply semantic correctness)
+      - When `kind="deepseek-upstream"` and `contract_summary.json` includes expanded per-layer non-expert key lists, the inspector also reports `trunk_contract.nonexpert_required_missing_count` / `trunk_contract.nonexpert_required_missing_sample` as a quick “exact `layers.{i}.*` non-expert namespace preserved?” signal (separate from missing expert keys).
     - `mtp_contract.complete == true` when `mtp_present == true` (MTP tensor-key completeness)
+      - When `contract_summary.json` includes expanded per-layer MTP non-expert key lists, the inspector also reports `mtp_contract.nonexpert_required_missing_count` / `mtp_contract.nonexpert_required_missing_sample` (useful when expert-key missing lists dominate `mtp_contract.missing_required_sample`).
   - For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` also supports metadata-only inspection via range reads (no full download). Record the `url_prefix_bytes` used:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
     - If it fails with “unable to parse ... within max_bytes”, increase `--max-bytes` cautiously (it only fetches the header + tensor table, but large MoE GGUFs can have a large tensor directory).
@@ -161,6 +163,7 @@ Recommended DS4 comparison rule (when enabling DS4 gating):
 Machine-readable MTP gating:
 
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.namespace` (expected `mtp.{j}.*` prefixes + expected MTP layer IDs, validated against the official checkpoint index) so tooling can reason about “does this artifact preserve upstream `mtp.0.*`?” without scraping docs.
 - `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).
 - When `mtp_present==true`, `mtp_trust` reports whether `mtp_keys_sha256` matches the official MTP subset fingerprint (`contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`). For machine checks, prefer `mtp_trust.mtp_keys_sha256_match_official` (and `mtp_trust.expected_mtp_keys_sha256`) over scraping `mtp_trust.reasons[]`; machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
 

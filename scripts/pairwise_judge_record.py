@@ -55,11 +55,21 @@ def build_record(
 ) -> Dict[str, Any]:
     if str(record_schema) not in (schema.SCHEMA_RECORD_V1, schema.SCHEMA_RECORD_V2):
         raise ValueError(f"record_schema must be {schema.SCHEMA_RECORD_V1!r} or {schema.SCHEMA_RECORD_V2!r}")
-    if str(record_schema) == schema.SCHEMA_RECORD_V2:
+    schema_v2 = str(record_schema) == schema.SCHEMA_RECORD_V2
+    if schema_v2:
         if tokens is None:
             raise ValueError("record_schema v2 requires tokens")
         if latency_ms is None:
             raise ValueError("record_schema v2 requires latency_ms")
+        missing: list[str] = []
+        for k in ("a_out", "b_out", "judge_in", "judge_out"):
+            if not isinstance(tokens.get(k), int) or isinstance(tokens.get(k), bool):
+                missing.append(f"tokens.{k}")
+        for k in ("a", "b", "judge"):
+            if not isinstance(latency_ms.get(k), int) or isinstance(latency_ms.get(k), bool):
+                missing.append(f"latency_ms.{k}")
+        if len(missing) != 0:
+            raise ValueError("record_schema v2 requires full budget accounting: missing " + ", ".join(missing))
 
     obj, perr = schema.parse_json_object_loose(decision_text)
     if obj is None:
@@ -77,6 +87,10 @@ def build_record(
             rec["tokens"] = tokens
         if latency_ms is not None:
             rec["latency_ms"] = latency_ms
+        if schema_v2:
+            errs = schema.validate_record(rec)
+            if len(errs) != 0:
+                raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs))
         return rec
 
     errs = schema.validate_decision(obj)
@@ -97,6 +111,10 @@ def build_record(
             rec2["tokens"] = tokens
         if latency_ms is not None:
             rec2["latency_ms"] = latency_ms
+        if schema_v2:
+            errs2 = schema.validate_record(rec2)
+            if len(errs2) != 0:
+                raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs2))
         return rec2
 
     rec3: Dict[str, Any] = {
@@ -113,6 +131,10 @@ def build_record(
         rec3["tokens"] = tokens
     if latency_ms is not None:
         rec3["latency_ms"] = latency_ms
+    if schema_v2:
+        errs3 = schema.validate_record(rec3)
+        if len(errs3) != 0:
+            raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs3))
     return rec3
 
 
@@ -169,6 +191,19 @@ def main() -> None:
         latency_ms = latency_obj
 
     record_schema = (schema.SCHEMA_RECORD_V2 if str(args.record_schema) == "v2" else schema.SCHEMA_RECORD_V1)
+    if record_schema == schema.SCHEMA_RECORD_V2:
+        required = (
+            ("tokens_a_out", t_a),
+            ("tokens_b_out", t_b),
+            ("tokens_judge_in", t_ji),
+            ("tokens_judge_out", t_jo),
+            ("latency_a_ms", l_a),
+            ("latency_b_ms", l_b),
+            ("latency_judge_ms", l_j),
+        )
+        missing_fields = [name for name, val in required if val is None]
+        if len(missing_fields) != 0:
+            raise SystemExit("record_schema v2 requires: " + ", ".join(missing_fields))
 
     try:
         rec = build_record(

@@ -208,6 +208,33 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(rec.get("schema"), schema.SCHEMA_RECORD_V2)
         self.assertTrue(rec.get("parse_valid", False))
 
+    def test_wrap_record_v2_rejects_incomplete_budget(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        with self.assertRaises(ValueError):
+            record_wrap.build_record(
+                record_schema=schema.SCHEMA_RECORD_V2,
+                pair_id="p0v2_bad_tokens",
+                model_a="mA",
+                model_b="mB",
+                judge_model="ds4",
+                decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+                tokens={"a_out": 1, "b_out": 2, "judge_out": 4},
+                latency_ms={"a": 5, "b": 6, "judge": 7},
+                strict=False,
+            )
+        with self.assertRaises(ValueError):
+            record_wrap.build_record(
+                record_schema=schema.SCHEMA_RECORD_V2,
+                pair_id="p0v2_bad_latency",
+                model_a="mA",
+                model_b="mB",
+                judge_model="ds4",
+                decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+                tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+                latency_ms={"a": 5, "judge": 7},
+                strict=False,
+            )
+
     def test_decision_rejects_extra_keys(self) -> None:
         decision = {"winner": "A", "margin": 1, "score_a": 7, "score_b": 6, "reason": "A is better.", "train_hint": "", "tags": [], "extra": 123}
         errs = schema.validate_decision(decision)

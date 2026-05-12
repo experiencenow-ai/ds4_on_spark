@@ -11,7 +11,7 @@ Scope hygiene: treat DeepSeek V4 Flash, Qwen/Ling comparator targets (target-onl
 
 | Name | Upstream | Ref | Commit | License | Notes |
 | --- | --- | --- | --- | --- | --- |
-| ds4 | `antirez/ds4` | `refs/heads/main` | `8809b90a1e3247389d7652b565ab6772e036f1ea` | MIT | DeepSeek-V4-Flash-specific native engine with Metal and CUDA graph paths; upstream README reports DGX Spark GB10 q2 `343.81` prefill t/s + `13.75` generation t/s; do not run upstream model-download scripts without human approval. |
+| ds4 | `antirez/ds4` | `refs/heads/main` | `f8b4ed635d559b3a5b44bf2df6a77e21b3e9178f` | MIT | DeepSeek-V4-Flash-specific native engine with Metal and CUDA graph paths; upstream README reports DGX Spark GB10 q2 `343.81` prefill t/s + `13.75` generation t/s; do not run upstream model-download scripts without human approval. |
 | DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/tags/v2.1.1.post3` | `c9f8b34dcdacc20aa746b786f983492c51072870` | MIT | CUDA GEMM kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); pinned to a release tag (vs `main`). |
 | FlashMLA | `deepseek-ai/FlashMLA` | `refs/heads/main` | `9241ae3ef9bac614dd25e45e507e089f888280e0` | MIT | Efficient Multi-head Latent Attention kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); treat as kernel-design reference for V4-Flash-style MLA. |
 | DeepSeek-V3 (code) | `deepseek-ai/DeepSeek-V3` | `refs/tags/v1.0.0` | `f6e34dd26772dd4a216be94a8899276c5dca9e43` | MIT (code) | Repo has distinct code vs model/weights licensing. |
@@ -81,7 +81,8 @@ Scope hygiene: treat DeepSeek V4 Flash, Qwen/Ling comparator targets (target-onl
 | Gemma-4-31B-it (HF) | `huggingface.co/google/gemma-4-31B-it` | `refs/heads/main` | `ba74f5b6c647c0911554e50278d6f6f4477f9010` | Apache-2.0 | Gemma 4 IT comparison target (58.25 GiB safetensors); do not download weights without human approval; see `docs/upstream-dflash.md`. |
 | Gemma-4-31B-it-DFlash (HF) | `huggingface.co/z-lab/gemma-4-31B-it-DFlash` | `refs/heads/main` | `eabd648301ce28583cc14757912e5e0f84e152e1` | Apache-2.0 | Paired DFlash draft checkpoint (2.86 GiB safetensors); must match the exact target; do not download weights without human approval; see `docs/upstream-dflash.md`. |
 | SGLang | `sgl-project/sglang` | `refs/tags/v0.5.11` | `612785ffdcaf35552f1ed433a981d596ca9fe900` | Apache-2.0 | Serving runtime reference with explicit DeepSeek-V4 docs/cookbook; pinned to a release tag for reproducibility. |
-| llama.cpp | `ggml-org/llama.cpp` | `refs/tags/b9110` | `ef22b3e4ac9444d1dca1c44164861e0317b5579d` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling (pinned to a release tag). |
+| FlashInfer | `flashinfer-ai/flashinfer` | `refs/tags/v0.6.11` | `f6717ff6bc6061c4eb0474576746ee1b42bd6325` | Apache-2.0 | Kernel library used by vLLM runtimes (example: `flashinfer-cutlass` NVFP4 GEMM backend) and relevant to Blackwell SM121 attention/GEMM paths; pinned to a release tag for reproducibility. |
+| llama.cpp | `ggml-org/llama.cpp` | `refs/tags/b9124` | `7bfe120c210c04e7b53d1e9eca8b92acd4ab252f` | MIT | Spark-relevant baseline for CPU/GPU inference + ggml tooling (pinned to a release tag). |
 | llama.cpp (DeepSeek V4 Flash fork) | `antirez/llama.cpp-deepseek-v4-flash` | `refs/heads/main` | `2f2d44052b7d15c9c4dd6610f6e14a5f7b2d5f3f` | MIT | Flash-specific fork widely referenced by community GGUFs; not in upstream `ggml-org/llama.cpp` yet. |
 | llama.cpp (DeepSeek V4 support WIP) | `nisparks/llama.cpp` | `refs/heads/wip/deepseek-v4-support` | `9d364087024da141510267e6b269ee495ca45176` | MIT | WIP branch adding `F8_E4M3_B128` + `MXFP4` types + V4 loader/converter; required by some “native FP4/FP8” GGUF artifacts. |
 | llama.cpp (DeepSeek V4 port fork) | `cchuter/llama.cpp` | `refs/heads/feat/v4-port` | `19b63dc368dfef6db6783e5ba3143927b7ed1c96` | MIT | V4-capable fork referenced by `teamblobfish/DeepSeek-V4-Flash-GGUF`; includes V4 loader + kernels not merged upstream. |
@@ -166,6 +167,7 @@ For sharded GGUF repos, use the grouped report to sum shard sizes:
 - [`docs/upstream-ds4.md`](upstream-ds4.md)
 - [`docs/upstream-deepgemm.md`](upstream-deepgemm.md)
 - [`docs/upstream-flashmla.md`](upstream-flashmla.md)
+- [`docs/upstream-flashinfer.md`](upstream-flashinfer.md)
 - [`docs/upstream-deepseek-v3.md`](upstream-deepseek-v3.md)
 - [`docs/upstream-deepseek-v4-flash.md`](upstream-deepseek-v4-flash.md)
 - [`docs/upstream-vllm-transformers.md`](upstream-vllm-transformers.md)
