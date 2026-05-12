@@ -226,7 +226,7 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
 ## Spark0: Minimal CMake Configure + Build + Run (No Repo Transfer)
 
-When you want to validate that a typical CMake CUDA project can target GB10 (`sm_121`) using `CMAKE_CUDA_ARCHITECTURES="121"`:
+When you want to validate that a typical CMake CUDA project can target GB10 (`sm_121`) using `CMAKE_CUDA_ARCHITECTURES`:
 
 ```bash
 ./scripts/cuda_probe_cmake_minimal_spark0.sh
@@ -236,10 +236,21 @@ This script writes a tiny `CMakeLists.txt` + `main.cu` directly into a Spark0 te
 
 - Prints `cmake --version` and fails if `cmake` is missing or older than 3.18 (first version with `CMAKE_CUDA_ARCHITECTURES`)
 - Prints `nvcc --version`
-- Configures with `-DCMAKE_CUDA_ARCHITECTURES="121"` and builds a single tiny CUDA executable with `cmake --build --verbose` (captures the exact `nvcc` flags in logs)
-- Runs the executable and expects `__CUDA_ARCH__=1210`
+- Configures/builds/runs the same tiny executable with:
+  - `-DCMAKE_CUDA_ARCHITECTURES="121"` (real + virtual; SASS + PTX)
+  - `-DCMAKE_CUDA_ARCHITECTURES="121-real"` (real-only; SASS-only)
+  - `-DCMAKE_CUDA_ARCHITECTURES="121-virtual"` (virtual-only; PTX-only + driver JIT)
+  - `-DCMAKE_CUDA_ARCHITECTURES="native"` when `cmake >= 3.24` (Spark0 GPU arch autodetect)
+- For each case, prints the `--generate-code` lines from the verbose build log (best-effort) and runs the executable (expects `__CUDA_ARCH__=1210`)
 
-Observed on Spark0 (2026-05-12): `cmake version 3.28.3`; `nvcc` CUDA 13.0 `V13.0.88`; build uses `--generate-code=arch=compute_121,code=[compute_121,sm_121]`; run prints `__CUDA_ARCH__=1210`.
+Observed on Spark0 (2026-05-12, `cmake 3.28.3`, `nvcc` CUDA 13.0 `V13.0.88`):
+
+- `CMAKE_CUDA_ARCHITECTURES="121"`: `--generate-code=arch=compute_121,code=[compute_121,sm_121]` (PTX + SASS)
+- `CMAKE_CUDA_ARCHITECTURES="121-real"`: `--generate-code=arch=compute_121,code=[sm_121]` (SASS-only)
+- `CMAKE_CUDA_ARCHITECTURES="121-virtual"`: `--generate-code=arch=compute_121,code=[compute_121]` (PTX-only)
+- `CMAKE_CUDA_ARCHITECTURES="native"`: `nvcc -arch=native` (no explicit `--generate-code` line in the build log)
+
+All four cases run and print `__CUDA_ARCH__=1210` on GB10.
 
 Environment overrides:
 
