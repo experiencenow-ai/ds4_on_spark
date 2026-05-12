@@ -38,12 +38,20 @@ The matrix runner defaults these to keep Ling/Qwen runs clean:
 
 Override any of them if you intentionally want the extra sections in the report.
 
+Quality defaults (recommended for multi-model comparisons):
+
+- `SMOKE_EVAL=1` (default): run the deterministic smoke task set so `passed_tasks`, `total_tasks`, and `local_quality_score` are populated for scoring.
+- `SMOKE_MAX_TOKENS_PER_TASK=64` (default): token cap per task in the smoke set.
+
+Set `SMOKE_EVAL=0` to run the single-prompt probe only (speed plumbing, no automatic local quality).
+
 ## Example invocation
 
 ```sh
 MODEL_RUNS_CSV=/private/tmp/ds4_model_runs.csv \
 PROMPT='Explain Redis streams in one paragraph.' \
 MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+SMOKE_EVAL=1 SMOKE_MAX_TOKENS_PER_TASK=64 \
 ALLOW_RUN=1 ALLOW_FETCH=0 \
 scripts/run_baseline_vllm_matrix.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
 ```
@@ -55,6 +63,7 @@ inside the bundle dir):
 BUNDLE_LABEL=qwen-ling-ladder \
 PROMPT='Explain Redis streams in one paragraph.' \
 MAX_TOKENS=64 TENSOR_PARALLEL_SIZE=1 \
+SMOKE_EVAL=1 SMOKE_MAX_TOKENS_PER_TASK=64 \
 ALLOW_RUN=1 ALLOW_FETCH=0 \
 scripts/run_baseline_vllm_matrix_bundle.sh spark0@aitopatom-9ab9.local /path/to/vllm_matrix.tsv
 ```

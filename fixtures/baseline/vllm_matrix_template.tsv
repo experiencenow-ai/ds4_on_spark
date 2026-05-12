@@ -3,6 +3,9 @@
 #
 # Recommended scopes (keep mechanisms separate in MODEL_RUNS_CSV):
 # - ling_target, qwen_target, qwen_dflash, other_dflash
+# Notes:
+# - scripts/run_baseline_vllm_matrix.sh defaults SMOKE_EVAL=1 (deterministic smoke tasks) so passed/total/local_quality_score are captured for scoring.
+# - Set SMOKE_EVAL=0 when you only want the single-prompt probe.
 #
 # After any Ling result, ensure this INT4 target-only row is present (staged or explicitly approved download).
 ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4	
