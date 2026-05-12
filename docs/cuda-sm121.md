@@ -46,6 +46,8 @@ When `nvcc --list-gpu-arch` is supported and includes `compute_121`, `scripts/cu
 
 For an end-to-end “PTX → driver/runtime JIT → run” gate, `scripts/cuda_probe_nvcc_minimal_spark0.sh` also builds and runs the same minimal probe via `-arch=compute_121` when `compute_121` is advertised.
 
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `nvcc -ptx -arch=compute_121` emits PTX whose first `.target` line is still `.target sm_121` (and `compute_121a` / `compute_121f` emit `.target sm_121a` / `.target sm_121f`). Treat this as a “virtual-arch accepted, but PTX `.target` uses `sm_*` spelling” detail when writing log parsers and portability checks.
+
 ### `compute_121a` / `compute_121f` Feature-Set Macro Probe (Toolchain Probe)
 
 CUDA 13 adds architecture-specific (`a`) and family-specific (`f`) feature-set targets, which are intended to define `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` for device code.
