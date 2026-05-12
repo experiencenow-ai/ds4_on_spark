@@ -1,0 +1,2 @@
+{"type":"task_run","task_id":"math.j.001","task_family":"math","prompt_template_id":"unstable.v1","prompt":"Q1","output":"A"}
+{"type":"task_run","task_id":"math.j.002","task_family":"math","prompt_template_id":"stable.v1","prompt":"Q2","output":"A"}

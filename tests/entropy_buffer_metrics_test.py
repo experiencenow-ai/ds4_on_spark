@@ -3,6 +3,8 @@ import os
 import unittest
 
 from scripts import entropy_buffer_lib as lib
+from scripts import entropy_buffer_canonicalize as canonicalize
+from scripts import entropy_buffer_diff as diff
 from scripts import entropy_buffer_metrics as metrics
 from scripts import entropy_buffer_recommend as recommend
 
@@ -23,6 +25,7 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         })
         self.assertEqual(c.rtype, "task_run")
         self.assertEqual(c.answer, "2")
+        self.assertEqual(c.answer_source, "extract")
 
         j = lib.canonicalize_record({
             "schema": "ds4_pairwise_judge_record_v1",
@@ -36,6 +39,40 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(j.rtype, "judge_pair")
         self.assertEqual(j.judge_id, "judge.vX")
 
+    def test_canonicalize_tool_emits_item_id_and_instrumentation(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_canonicalize_mini.jsonl")
+        records = lib.load_jsonl([path])
+        out = canonicalize.canonicalize_records(records)
+
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0].get("type"), "task_run")
+        self.assertEqual(out[0].get("answer"), "B")
+        self.assertEqual(out[0].get("answer_source"), "extract")
+        self.assertEqual(int(out[0].get("input_tokens", 0)), 12)
+        self.assertEqual(int(out[0].get("output_tokens", 0)), 3)
+        self.assertAlmostEqual(float(out[0].get("wall_ms", 0.0)), 1000.0)
+
+        self.assertEqual(out[1].get("type"), "judge_pair")
+        self.assertEqual(out[1].get("item_id"), "math.add.001|mcq.v1|a=m1|b=m2")
+        toks = out[1].get("tokens") or {}
+        lats = out[1].get("latency_ms") or {}
+        self.assertEqual(int(toks.get("judge_in", 0)), 128)
+        self.assertEqual(int(toks.get("judge_out", 0)), 64)
+        self.assertAlmostEqual(float(lats.get("judge", 0.0)), 1500.0)
+
+    def test_answer_extraction_accepts_answer_is_variants(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_answer_is_mini.jsonl")
+        records = lib.load_jsonl([path])
+        canon = [lib.canonicalize_record(x) for x in records]
+        self.assertEqual(canon[0].answer, "B")
+        self.assertEqual(canon[0].answer_source, "extract")
+        self.assertEqual(canon[1].answer, "42")
+        self.assertEqual(canon[1].answer_source, "extract")
+        self.assertEqual(canon[2].answer, "")
+        self.assertEqual(canon[2].answer_source, "missing")
+
     def test_metrics_from_mini_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")
@@ -46,6 +83,16 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.totals["task_run_records"], 6)
         self.assertEqual(report.totals["judge_pair_records"], 5)
         self.assertEqual(report.totals["unknown_records"], 0)
+
+        fc = report.totals.get("field_coverage") or {}
+        tr = fc.get("task_run") or {}
+        jp = fc.get("judge_pair") or {}
+        self.assertEqual(int(tr.get("answer_present_task_runs", 0)), 4)
+        self.assertAlmostEqual(float(tr.get("answer_present_task_run_rate", 0.0)), (4.0 / 6.0))
+        self.assertEqual(int(jp.get("judge_id_present_judge_pairs", 0)), 4)
+        self.assertEqual(int(jp.get("parse_valid_present_judge_pairs", 0)), 1)
+        self.assertEqual(int(jp.get("task_family_present_judge_pairs", 0)), 4)
+        self.assertEqual(int(jp.get("prompt_template_id_present_judge_pairs", 0)), 4)
 
         self.assertEqual(report.runs["run_id_unique"], 1)
         dup_top = report.runs.get("output_norm_dup_rate_by_run_id_top", [])
@@ -68,6 +115,12 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.tokens["input_tokens"]["count"], 6)
         self.assertEqual(report.tokens["output_tokens"]["count"], 6)
         self.assertEqual(report.tokens["wall_ms"]["count"], 6)
+        self.assertEqual(int(report.tokens.get("input_tokens_present_task_runs", 0)), 6)
+        self.assertAlmostEqual(float(report.tokens.get("input_tokens_present_task_run_rate", 0.0)), 1.0)
+        self.assertEqual(int(report.tokens.get("output_tokens_present_task_runs", 0)), 6)
+        self.assertAlmostEqual(float(report.tokens.get("output_tokens_present_task_run_rate", 0.0)), 1.0)
+        self.assertEqual(int(report.tokens.get("wall_ms_present_task_runs", 0)), 6)
+        self.assertAlmostEqual(float(report.tokens.get("wall_ms_present_task_run_rate", 0.0)), 1.0)
 
         self.assertAlmostEqual(report.duplicates["output_norm_dup_rate"], 0.0)
         self.assertAlmostEqual(report.duplicates["prompt_norm_dup_rate"], (1.0 / 6.0))
@@ -89,8 +142,18 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(int((report.judge.get("judge_in_tokens") or {}).get("count", 0)), 0)
         self.assertEqual(int((report.judge.get("judge_out_tokens") or {}).get("count", 0)), 0)
         self.assertEqual(int((report.judge.get("judge_latency_ms") or {}).get("count", 0)), 0)
+        self.assertAlmostEqual(float(report.judge.get("task_family_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+        self.assertAlmostEqual(float(report.judge.get("prompt_template_id_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+        self.assertAlmostEqual(float(report.judge.get("task_family_template_pair_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+
+        self.assertAlmostEqual(float(report.reuse.get("buffer_id_nonempty_task_run_rate", 0.0)), 1.0)
+        self.assertAlmostEqual(float(report.reuse.get("buffer_item_id_nonempty_task_run_rate", 0.0)), 1.0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)
+
+        useful = report.useful_coverage
+        self.assertEqual(int(useful.get("clean_task_run_records", 0)), 5)
+        self.assertAlmostEqual(float(useful.get("clean_task_run_rate", 0.0)), (5.0 / 6.0))
         flagged_model_top = report.useful_novelty.get("flagged_rate_by_model_id_top", [])
         self.assertGreaterEqual(len(flagged_model_top), 1)
         self.assertEqual(flagged_model_top[0].get("model_id"), "bad-model")
@@ -101,6 +164,38 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         by_model = {str(js.get("model_id", "")): js for js in dup_model_top}
         self.assertIn("dsv4-flash", by_model)
         self.assertAlmostEqual(float(by_model["dsv4-flash"].get("dup_rate", 1.0)), 0.0)
+
+    def test_metrics_extract_task_run_nested_tokens_and_latency(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_task_run_nested_tokens_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        self.assertEqual(report.totals["task_run_records"], 2)
+        self.assertEqual((report.tokens.get("input_tokens") or {}).get("count", 0), 2)
+        self.assertEqual((report.tokens.get("output_tokens") or {}).get("count", 0), 2)
+        self.assertEqual((report.tokens.get("wall_ms") or {}).get("count", 0), 2)
+        self.assertEqual((report.tokens.get("ms_per_output_token") or {}).get("count", 0), 2)
+        self.assertAlmostEqual(float((report.tokens.get("ms_per_output_token") or {}).get("mean", 0.0)), (58.3333333333), places=4)
+        self.assertAlmostEqual(float((report.tokens.get("output_tok_per_s") or {}).get("mean", 0.0)), (17.5), places=4)
+
+    def test_token_slice_entropy_lists_exist(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_token_slices_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        slices = report.tokens.get("slices", {})
+        by_tmpl = slices.get("output_word_by_prompt_template_id", {})
+        low = by_tmpl.get("low_entropy_norm_top", [])
+        self.assertGreaterEqual(len(low), 1)
+        self.assertEqual(low[0].get("prompt_template_id"), "low.v1")
+        self.assertAlmostEqual(float(low[0].get("entropy_norm", 1.0)), 0.0)
+
+        by_model = slices.get("output_word_by_model_id", {})
+        lowm = by_model.get("low_entropy_norm_top", [])
+        self.assertGreaterEqual(len(lowm), 1)
+        self.assertEqual(lowm[0].get("model_id"), "m_low")
 
     def test_judge_budget_metrics_from_fixture(self) -> None:
         root = _repo_root()
@@ -132,6 +227,19 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(len(top), 1)
         self.assertFalse(any(c.task_id == "math.add.001" and c.prompt_template_id == "cot.v2" for c in top))
 
+        predicted = recommend._predict(history, top)
+        self.assertIn("coverage_before", predicted)
+        self.assertIn("coverage_after", predicted)
+        self.assertIn("coverage_delta", predicted)
+        self.assertGreaterEqual(int((predicted.get("coverage_after") or {}).get("task_family", {}).get("unique", 0)), int((predicted.get("coverage_before") or {}).get("task_family", {}).get("unique", 0)))
+        self.assertIsInstance(float(predicted.get("selected_history_noise_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_expected_clean_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_dup_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_disagreement_rate_decided_ab_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_invalid_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_tie_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_history_judge_imbalance_ab_mean", 0.0)), float)
+
     def test_useful_novelty_flags_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_flags_mini.jsonl")
@@ -144,6 +252,50 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertGreaterEqual(flags.get("echo_prompt_overlap_ge_0.90", 0), 1)
         self.assertGreaterEqual(flags.get("line_repetition_ge_6", 0), 1)
 
+    def test_task_template_duplicate_top_exists(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_task_template_dup_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        self.assertEqual(report.diversity["task_id_template_pair"]["unique"], 2)
+        top = report.duplicates.get("task_template_output_norm_dup_rate_top", [])
+        self.assertGreaterEqual(len(top), 1)
+        self.assertEqual(top[0].get("task_id"), "dup.task.001")
+        self.assertEqual(top[0].get("prompt_template_id"), "plain.v1")
+        self.assertEqual(int(top[0].get("count", 0)), 3)
+        self.assertEqual(int(top[0].get("unique", 0)), 1)
+        self.assertAlmostEqual(float(top[0].get("dup_rate", 0.0)), (2.0 / 3.0))
+
+    def test_task_template_model_collapse_top_exists(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_task_template_collapse_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        top = report.duplicates.get("task_template_model_collapse_top", [])
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].get("task_id"), "collapse.task.001")
+        self.assertEqual(top[0].get("task_family"), "mcq")
+        self.assertEqual(top[0].get("prompt_template_id"), "plain.v1")
+        self.assertEqual(int(top[0].get("count", 0)), 3)
+        self.assertEqual(int(top[0].get("model_id_unique", 0)), 3)
+        self.assertEqual(int(top[0].get("output_norm_unique", 0)), 1)
+        self.assertAlmostEqual(float(top[0].get("collapse_rate", 0.0)), (2.0 / 3.0))
+
+    def test_buffer_item_duplicate_top_exists(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_buffer_item_dup_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        top = report.duplicates.get("output_norm_dup_rate_by_buffer_item_id_top", [])
+        self.assertGreaterEqual(len(top), 1)
+        self.assertEqual(top[0].get("buffer_item_id"), "entropy.v1:buf.dup.001:plain.v1")
+        self.assertEqual(int(top[0].get("count", 0)), 3)
+        self.assertEqual(int(top[0].get("unique", 0)), 1)
+        self.assertAlmostEqual(float(top[0].get("dup_rate", 0.0)), (2.0 / 3.0))
+
     def test_recommendations_penalize_noisy_templates(self) -> None:
         root = _repo_root()
         hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_noise_mini.jsonl")
@@ -155,6 +307,103 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False)
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].prompt_template_id, "clean.v1")
+
+    def test_recommendations_penalize_unstable_judge_slices(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_judge_instability_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_judge_instability_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates, judge_disagree_weight=2.0, judge_invalid_weight=1.0)
+        self.assertGreaterEqual(len(scored), 2)
+        self.assertEqual(scored[0].prompt_template_id, "stable.v1")
+
+    def test_judge_slice_summaries_exist(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+        slices = report.judge.get("slices", {})
+        by_tmpl = (slices.get("by_prompt_template_id") or {})
+        top = (by_tmpl.get("count_top") or [])
+        tmpl_keys = set(js.get("prompt_template_id") for js in top)
+        self.assertIn("cot.v1", tmpl_keys)
+        self.assertIn("mcq.letter.v1", tmpl_keys)
+
+    def test_recommendations_avoid_seen_buffer_items(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_buffer_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_buffer_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates)
+        self.assertGreaterEqual(len(scored), 2)
+        self.assertEqual(scored[0].buffer_item_id, "entropy.v1:buf.task.003:plain.v1")
+
+        top = recommend._select(scored, history, limit=2, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, avoid_seen_buffer_item_id=True)
+        self.assertGreaterEqual(len(top), 1)
+        self.assertTrue(all(c.buffer_item_id != "entropy.v1:buf.task.001:plain.v1" for c in top))
+
+    def test_recommendations_prefer_unseen_answers_when_provided(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_answer_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_answer_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates)
+        self.assertGreaterEqual(len(scored), 3)
+        self.assertEqual(scored[0].answer, "C")
+
+        top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].answer, "C")
+
+    def test_recommendations_prefer_prompt_lexical_diversity_when_enabled(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_prompt_ngrams_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_prompt_ngrams_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates, prompt_trigram_weight=2.0)
+        top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, prompt_trigram_weight=2.0)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].task_id, "math.prompt.aaa")
+
+    def test_diff_key_metrics_from_before_after_fixtures(self) -> None:
+        root = _repo_root()
+        before_path = os.path.join(root, "fixtures", "entropy-buffer", "records_diff_before_mini.jsonl")
+        after_path = os.path.join(root, "fixtures", "entropy-buffer", "records_diff_after_mini.jsonl")
+
+        before = diff._report_dict(lib.load_jsonl([before_path]))
+        after = diff._report_dict(lib.load_jsonl([after_path]))
+
+        rows = diff._diff_paths(before, after, [
+            "diversity.task_id.unique",
+            "diversity.task_family.unique",
+            "duplicates.output_norm_dup_rate",
+            "reuse.buffer_item_reuse_event_rate",
+        ])
+        by_path = {r.get("path"): r for r in rows}
+
+        self.assertEqual(by_path["diversity.task_id.unique"]["before"], 2.0)
+        self.assertEqual(by_path["diversity.task_id.unique"]["after"], 3.0)
+        self.assertEqual(by_path["diversity.task_id.unique"]["delta"], 1.0)
+
+        self.assertEqual(by_path["diversity.task_family.unique"]["before"], 1.0)
+        self.assertEqual(by_path["diversity.task_family.unique"]["after"], 2.0)
+        self.assertEqual(by_path["diversity.task_family.unique"]["delta"], 1.0)
+
+        self.assertAlmostEqual(by_path["duplicates.output_norm_dup_rate"]["before"], 0.0)
+        self.assertAlmostEqual(by_path["duplicates.output_norm_dup_rate"]["after"], 0.25)
+        self.assertAlmostEqual(by_path["duplicates.output_norm_dup_rate"]["delta"], 0.25)
+
+        self.assertAlmostEqual(by_path["reuse.buffer_item_reuse_event_rate"]["before"], 0.0)
+        self.assertAlmostEqual(by_path["reuse.buffer_item_reuse_event_rate"]["after"], 0.25)
+        self.assertAlmostEqual(by_path["reuse.buffer_item_reuse_event_rate"]["delta"], 0.25)
 
 
 if __name__ == "__main__":

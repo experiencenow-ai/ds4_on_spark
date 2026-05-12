@@ -15,7 +15,9 @@ _WORD_RE = re.compile(r"[A-Za-z0-9]+")
 _WS_RE = re.compile(r"\s+")
 _ANSWER_NUMERIC_RE = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*$")
 _ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*[\(\[]?([A-Z])[\)\].]?\s*$")
-_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
+_ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
+_ANSWER_IS_LETTER_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s+is\s+[\(\[]?([A-Z])[\)\].]?\b")
+_ANSWER_IS_NUMERIC_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s+is\s+(-?\d+(?:\.\d+)?)\b")
 
 
 @dataclass
@@ -35,6 +37,7 @@ class CanonicalRecord:
     prompt: str
     output: str
     answer: str
+    answer_source: str
     buffer_id: str
     buffer_item_id: str
 
@@ -116,9 +119,15 @@ def extract_answer(text: str) -> str:
     if m is not None:
         return(m.group(1).upper())
     m = _ANSWER_MARKED_RE.search(text)
-    if m is None:
-        return("")
-    return(m.group(1).upper())
+    if m is not None:
+        return(m.group(1).upper())
+    m = _ANSWER_IS_LETTER_RE.search(text)
+    if m is not None:
+        return(m.group(1).upper())
+    m = _ANSWER_IS_NUMERIC_RE.search(text)
+    if m is not None:
+        return(m.group(1))
+    return("")
 
 
 def make_item_id(task_id: str, prompt_template_id: str, a_model_id: str, b_model_id: str) -> str:
@@ -158,9 +167,15 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
     prompt = _get_str(obj, "prompt", "input_prompt", "prompt_text", "input")
     output = _get_str(obj, "output", "completion", "response", "assistant", "text")
 
-    answer = _get_str(obj, "answer", "final_answer")
-    if answer == "" and output != "":
-        answer = extract_answer(output)
+    answer = _get_str(obj, "answer", "final_answer", "expected_answer", "gold_answer")
+    answer_source = "missing"
+    if answer != "":
+        answer_source = "field"
+    elif output != "":
+        extracted = extract_answer(output)
+        if extracted != "":
+            answer = extracted
+            answer_source = "extract"
 
     buffer_id = _get_str(obj, "buffer_id", "entropy_buffer_id")
     buffer_item_id = _get_str(obj, "buffer_item_id", "entropy_buffer_item_id", "buffer_key")
@@ -181,6 +196,7 @@ def canonicalize_record(obj: Dict[str, Any]) -> CanonicalRecord:
         prompt=prompt,
         output=output,
         answer=answer,
+        answer_source=answer_source,
         buffer_id=buffer_id,
         buffer_item_id=buffer_item_id,
     ))

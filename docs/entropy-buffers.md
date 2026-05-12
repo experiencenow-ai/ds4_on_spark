@@ -44,6 +44,9 @@ Notes:
 
 - `answer` is optional but unlocks answer-option diversity metrics.
 - `buffer_id` / `buffer_item_id` are optional but unlock reuse metrics.
+- Token/latency instrumentation can also be provided in nested form:
+  - `tokens: {prompt, completion}` or `tokens: {in, out}` (aliases supported)
+  - `latency_ms: {total}` or `latency_ms: {wall}` (best-effort)
 
 ### Pairwise judge records (`type="judge_pair"`)
 
@@ -113,26 +116,37 @@ Optional but recommended:
 The scripts compute:
 
 - **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family`.
+- **Task-template diversity**: unique counts + entropy over `task_id|prompt_template_id` pairs (useful for spotting repeated reruns of the same task+template).
 - **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
+  - Reports both raw entropy (`*_entropy_bits`) and normalized entropy (`*_entropy_norm`) plus `*_effective_num` for easier cross-corpus comparisons.
 - **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
+- **Token distribution slices** (approx): hashed-bucket word + char-3gram entropy by `prompt_template_id` and by `model_id`, with “low entropy” tops to flag template/model lexical collapse even when outputs are not exact duplicates.
 - **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Runtime / throughput** (optional): `input_tokens`, `output_tokens`, `wall_ms`, plus derived `output_tok_per_s`, `total_tok_per_s`, and `ms_per_output_token`.
+  - Also reports instrumentation coverage rates: `input_tokens_present_task_run_rate`, `output_tokens_present_task_run_rate`, and `wall_ms_present_task_run_rate`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
-- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns.
+  - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
+- **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
   - The report also includes `tie_rate` and `invalid_rate` to help debug judge stability.
 - **Judge budget / stability stats** (when present): `parse_valid_rate`, `judge_in_tokens`, `judge_out_tokens`, `judge_latency_ms`, plus `judge_out_budget_le_target_rate` (default target = 64).
-- **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates.
-- **Duplicate-output concentration**: top normalized-output dup rates by `prompt_template_id` and by `task_family|prompt_template_id` to spot template-level collapse.
+  - Also reports slice-join coverage rates for judge records: `task_family_nonempty_judge_pair_rate`, `prompt_template_id_nonempty_judge_pair_rate`, and `task_family_template_pair_nonempty_judge_pair_rate`.
+- **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates (summary + top repeated pairs).
+  - Includes cross-model collapse diagnostics: `task_template_model_collapse_top` flags `task_id|prompt_template_id` groups where multiple `model_id`s produced too-few unique normalized outputs.
+- **Duplicate-output concentration**: top normalized-output dup rates by `prompt_template_id`, by `task_family|prompt_template_id`, and by `buffer_item_id` to spot template-level collapse or buffer-item degeneracy.
 - **Per-model degeneracy**: top normalized-output duplicate rates and useful-novelty flagged rates by `model_id`.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
+  - Also reports logging coverage rates (`buffer_id_nonempty_task_run_rate`, `buffer_item_id_nonempty_task_run_rate`) plus `buffer_id` concentration (`buffer_id_hhi`, `buffer_id_entropy_bits`, `buffer_id_top`).
 - **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
   - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
   - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
+- **Useful coverage (clean outputs)**: recomputes diversity + duplicate rates after excluding task-runs flagged by useful-novelty filters (a quick “effective coverage” view).
 - **Run slices** (optional): if `run_id` is present on `task_run` records, the report includes per-run coverage/duplicate/noise summaries and “top runs” to quickly spot regressions.
+- **Field coverage**: per-record-type presence rates for the key fields required by slices (task IDs/templates/models, judge IDs/labels, buffer IDs, and optional token/latency instrumentation). This helps validate baseline-runtime and judge-ELO ingestion.
 
 ## Tools
 
@@ -143,6 +157,28 @@ python3 scripts/entropy_buffer_metrics.py \
   --in-jsonl fixtures/entropy-buffer/records_mini.jsonl \
   --out-json /tmp/entropy_metrics.json \
   --out-md /tmp/entropy_metrics.md
+```
+
+### Diff two JSONL corpora (before/after)
+
+Use this when you want to measure how a new batch changes coverage/degeneracy without re-reading full reports.
+
+```bash
+python3 scripts/entropy_buffer_diff.py \
+  --before-jsonl fixtures/entropy-buffer/records_diff_before_mini.jsonl \
+  --after-jsonl fixtures/entropy-buffer/records_diff_after_mini.jsonl \
+  --out-json /tmp/entropy_diff.json \
+  --out-md /tmp/entropy_diff.md
+```
+
+### Canonicalize mixed logs to a stable JSONL schema
+
+Use this as a bridge when upstream logs are loosely-shaped or when you need stable `item_id` generation for judge records.
+
+```bash
+python3 scripts/entropy_buffer_canonicalize.py \
+  --in-jsonl fixtures/entropy-buffer/records_canonicalize_mini.jsonl \
+  --out-jsonl /tmp/entropy_canonical.jsonl
 ```
 
 ### Recommend next tasks (coverage maximization)
@@ -160,16 +196,34 @@ python3 scripts/entropy_buffer_recommend.py \
 Notes:
 
 - If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
+- If candidate records include an `answer`/`final_answer` (or an `output` with an extractable answer), the recommender can reward **answer-option diversity** via `--answer-weight` (set to `0` to disable).
+- If candidate records include `prompt`, the recommender can reward **input lexical diversity** (approx) via:
+  - `--prompt-word-weight` (word unigram entropy gain) and `--prompt-trigram-weight` (word 3-gram entropy gain).
+  - `--prompt-word-limit` / `--prompt-trigram-limit` to cap per-record feature fanout (set to `0` to disable limits).
+- If candidate records include `buffer_item_id`, the recommender can reward **new buffer items** to avoid reuse concentration:
+  - Use `--avoid-seen-buffer-item-id` to hard-exclude previously-used `buffer_item_id`s.
+  - Tune weighting with `--buffer-id-weight` / `--buffer-item-weight` (set to `0` to disable).
 - The recommender also applies a small **penalty** for candidates whose `prompt_template_id` (or `task_family|prompt_template_id`) has a high historical useful-novelty flagged rate or a high historical normalized-output duplicate rate.
   - Tune with `--noise-weight` / `--dup-weight`, or hard-filter with `--max-noise-rate` / `--max-dup-rate`.
+- If history includes `judge_pair` / `ds4_pairwise_judge_record_v1` records with `task_family` + `prompt_template_id`, the recommender can optionally penalize slices that are historically unstable for judging:
+  - Tune with `--judge-disagree-weight`, `--judge-invalid-weight`, `--judge-tie-weight`, and `--judge-imbalance-weight` (all default to `0`/disabled).
+- The output JSON includes a `predicted` block showing:
+  - `coverage_before` / `coverage_after`: entropy stats if you add the selected batch to history (count-only; deterministic).
+  - `coverage_delta`: entropy deltas per dimension (useful for comparing parameter sweeps).
+  - `selected_history_noise_rate_mean` / `selected_history_dup_rate_mean`: expected slice-level penalties for the chosen batch.
+  - `selected_expected_clean_rate_mean`: shorthand for `1 - selected_history_noise_rate_mean` (clamped to `[0,1]`).
+  - `selected_history_judge_*_mean`: expected judge-stability penalty components for the chosen batch (rates only; weights are in `meta`).
 
 ## Integration notes
 
 - **Judge ELO loop**: should emit `judge_pair` records with stable `item_id`, `a_model_id`, `b_model_id`, and `label`. The entropy tools do not compute ELO; they compute *balance* and *disagreement* that affect ELO stability.
+- If the judge loop emits compact envelopes or missing `item_id`, run `scripts/entropy_buffer_canonicalize.py` to normalize and generate a stable `item_id` (from `task_id|prompt_template_id|a_model_id|b_model_id`).
 - **Baseline runtime loop**: should emit `task_run` records with `task_id`, `prompt_template_id`, and `output` (plus optional token/time fields). The entropy tools treat token/time as optional metadata and focus on coverage/degeneracy.
   - If you have `tags`, include them for better coverage accounting.
+  - If token/time fields are nested or inconsistently named, `scripts/entropy_buffer_canonicalize.py` can lift them into `input_tokens`/`output_tokens`/`wall_ms`.
 
 ## Risks / limitations
 
 - Token/n-gram metrics are approximate (not model-tokenizer accurate).
+- Token slice entropy uses hashed buckets for bounded memory; treat values as relative signals, not exact vocab entropy.
 - “Useful novelty” is heuristic; treat flags as triage signals, not ground truth.
