@@ -42,6 +42,8 @@ LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_spark0_$(date -u +%Y%m%d-%H%M%
 LOG_PATH=/private/tmp/ds4_cuda_probe_disasm_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_disasm_spark0.sh
 ```
 
+`scripts/cuda_probe_minimal_gates_spark0.sh` and `scripts/cuda_probe_capability_spark0.sh` run the no-transfer kernel-launch smoke by default (disable with `WITH_KERNEL_LAUNCH_MINIMAL=0`) so logs capture an explicit “kernel launch + sync works” signal even when VRAM is fully allocated.
+
 ## Build (on Spark0)
 
 ```bash
