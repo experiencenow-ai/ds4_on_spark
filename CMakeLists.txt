@@ -139,6 +139,12 @@ if(DS4_ENABLE_TESTS)
 				-DDS4_MODE=dump_config_keys
 				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
 		)
+		add_test(NAME ds4_cli_smoke_dump_config_help
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=dump_config_help
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
 		add_test(NAME ds4_cli_smoke_ctx
 			COMMAND "${CMAKE_COMMAND}"
 				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
@@ -162,6 +168,20 @@ if(DS4_ENABLE_TESTS)
 			COMMAND "${CMAKE_COMMAND}"
 				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
 				-DDS4_MODE=config_stdin_dump
+				-DDS4_TMP_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
+		add_test(NAME ds4_cli_smoke_config_env_inline_dump
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=config_env_inline_dump
+				-DDS4_TMP_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
+		add_test(NAME ds4_cli_smoke_config_env_path_dump
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=config_env_path_dump
 				-DDS4_TMP_DIR:PATH=${CMAKE_CURRENT_BINARY_DIR}
 				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
 		)

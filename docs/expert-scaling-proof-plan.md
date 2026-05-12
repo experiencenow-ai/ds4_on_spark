@@ -87,6 +87,15 @@ Use two fixture classes:
        --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
      ```
 
+     Or run the same sweeps directly from the dump directory (writes a JSON report):
+
+     ```bash
+     python3 scripts/ds4_topk_dump_recommendations.py \
+       --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+       --out-json /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_report.json \
+       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
+     ```
+
      Notes:
      - The `t_ms`/`dt_ms` fields are synthetic (dumps have no timestamps). Keep the report explicit about this.
      - `--batch-size B` groups `B` tokens at the same timestamp (decode-like batch step). This is useful for stress-testing queue depth and backpressure logic; it is not a full decode replay.
@@ -118,6 +127,16 @@ Success criteria:
   routing, or the non-MoE bottleneck is identified;
 - cross-Spark routing is tested only after single-Spark batching proves the
   MoE path is actually the bottleneck being relieved.
+
+Throughput-oriented batches may be larger than the first `B=100` proof point.
+The Spark0 batch sweep shows MoE per-row cost continuing to improve through
+`B=512-2048` and then flattening near `1.6-1.7 ms/row` for 43 layers at
+`B=2048-8192`. Use separate lanes:
+
+- interactive lane: small bounded wait, likely `B<=32-64`;
+- throughput lane: `B=256-1024` target while measuring full decode throughput;
+- bulk/offline lane: `B>=2048` only when added latency and memory headroom are
+  acceptable.
 
 ## Cross-Spark Expectation
 

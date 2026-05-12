@@ -47,6 +47,7 @@ def _infer_mtp_draft_len_for_trace(trace: Sequence[scheduler_sim.TokenRoute], me
 
 def run_runtime_trace_mtp_ablation(
     *,
+    name: str = "runtime_trace_mtp_ablation",
     trace: Sequence[scheduler_sim.TokenRoute],
     trace_meta: Optional[Dict[str, object]] = None,
     expert_queue_max: int = 128,
@@ -67,6 +68,9 @@ def run_runtime_trace_mtp_ablation(
     dflash_draft_cost_scale: Optional[float] = None,
 ) -> Dict[str, Any]:
     meta = dict(trace_meta or {})
+    name_out = str(name).strip()
+    if name_out == "":
+        name_out = "runtime_trace_mtp_ablation"
 
     def _reserve_default(qmax: int) -> int:
         if int(qmax) <= 0:
@@ -193,7 +197,7 @@ def run_runtime_trace_mtp_ablation(
         )
 
     out: Dict[str, Any] = {
-        "name": "runtime_trace_mtp_ablation",
+        "name": str(name_out),
         "trace_summary": trace_summary,
         "base_cfg": dataclasses.asdict(base_cfg),
         "mtp_mode": str(mtp_mode),
@@ -202,6 +206,11 @@ def run_runtime_trace_mtp_ablation(
         },
         "results": {},
     }
+    if bool(meta.get("time_synthetic")):
+        out["trace_assumptions"] = {
+            "time_synthetic": True,
+            "note": "Trace timestamps are synthetic; queue/backpressure/latency deltas are conditional on arrival_rate_tps/batch_size assumptions.",
+        }
 
 
     def _as_summary(obj: object) -> Dict[str, float]:

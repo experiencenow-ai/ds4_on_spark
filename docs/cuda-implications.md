@@ -13,7 +13,15 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
   - `mp=48`, `l2=25165824` (24 MiB), `mem=128518373376` (~119.7 GiB), `clock_khz=2418000`, `mem_clock_khz=8533000`
   - `smem_optin=101376`, `smem_block_max=49152`, `smem_sm=102400`, `smem_reserved_block=1024`, `regs_block=65536`, `regs_sm=65536`, `maxblocks_sm=24`, `mem_pools=1`, `tma_map=1`
   - If any `cudaDeviceGetAttribute` query is unavailable (or CUDA headers are too old to define a given driver-attribute enum constant), the one-line schema uses `-1` for that field (to avoid silently reporting `0`).
-- CMake build-system baseline (2026-05-12, via `scripts/cuda_probe_cmake_minimal_spark0.sh`): `cmake version 3.28.3`; C++ host compiler `GNU 13.3.0`; `CMAKE_CUDA_ARCHITECTURES="121"` builds and runs (`__CUDA_ARCH__=1210`); verbose output shows `nvcc` invoked with `--generate-code=arch=compute_121,code=[compute_121,sm_121]` (fatbin packaging with PTX+SASS).
+- CMake build-system baseline (2026-05-12, via `scripts/cuda_probe_cmake_minimal_spark0.sh`): `cmake version 3.28.3`; C++ host compiler `GNU 13.3.0`; `nvcc` CUDA 13.0 `V13.0.88`; all tested `CMAKE_CUDA_ARCHITECTURES` cases build and run (`__CUDA_ARCH__=1210`), and the verbose logs show:
+  - `CMAKE_CUDA_ARCHITECTURES="121"`: `--generate-code=arch=compute_121,code=[compute_121,sm_121]` (PTX + SASS)
+  - `CMAKE_CUDA_ARCHITECTURES="121-real"`: `--generate-code=arch=compute_121,code=[sm_121]` (SASS-only)
+  - `CMAKE_CUDA_ARCHITECTURES="121-virtual"`: `--generate-code=arch=compute_121,code=[compute_121]` (PTX-only + driver JIT)
+  - `CMAKE_CUDA_ARCHITECTURES="native"`: uses `nvcc -arch=native` in the build log (no explicit `--generate-code` line)
+- Practical packaging choice for CMake-based DeepGEMM/CUTLASS/cuBLASLt builds:
+  - Prefer `"121"` when you want PTX fallback (forward-compat / JIT escape hatch) alongside `sm_121` SASS.
+  - Prefer `"121-real"` when you only deploy to GB10 (`sm_121`) and want to avoid embedding PTX.
+  - Prefer `"121-virtual"` only when you explicitly want PTX-only artifacts and accept driver JIT as a runtime dependency.
 - `tools/cuda_probe/bin/cuda_device_props_tiny` prints a single log-friendly line with driver/runtime versions plus key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + bus width + async engine count + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support), plus `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`) and `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`), ending with `schema=4` for parsing
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints the same one-line limits schema without shipping `tools/cuda_probe/` (useful when repo transfer is blocked), plus `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`) and `cuda_arch`, ending with `schema=4` for parsing
 - `scripts/cuda_probe_device_props_minimal_spark0.sh` is a narrower “device props + `sm_121` compile-only gate” no-transfer script that prints the one-line `schema=4` summary (useful for quick inventory checks)
@@ -22,7 +30,7 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `WITH_GENCODE_RUN=1 scripts/cuda_probe_device_props_minimal_spark0.sh` additionally does a best-effort end-to-end build+run via explicit `-gencode arch=compute_121,code=sm_121` + `-gencode arch=compute_121,code=compute_121` (fatbin SASS+PTX packaging gate)
 - `scripts/cuda_probe_capability_spark0.sh` enables the device-props best-effort `compute_121` and `-gencode` build+run checks by default; set `WITH_DEVICE_PROPS_COMPUTE121_RUN=0` / `WITH_DEVICE_PROPS_GENCODE_RUN=0` to skip them
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` also includes a best-effort compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr` (CUTLASS/DeepGEMM-style nvcc flags) for `sm_121` (and `compute_121` when advertised)
-- `scripts/cuda_probe_cmake_minimal_spark0.sh` validates that CMake (>= 3.18) can configure/build a minimal CUDA project with `CMAKE_CUDA_ARCHITECTURES="121"` and run it on GB10 (`__CUDA_ARCH__=1210`) without shipping the repo
+- `scripts/cuda_probe_cmake_minimal_spark0.sh` validates that CMake (>= 3.18) can configure/build a minimal CUDA project targeting GB10 using `CMAKE_CUDA_ARCHITECTURES` (runs `121`, `121-real`, `121-virtual`, and `native` when supported) and run it on Spark0 (`__CUDA_ARCH__=1210`) without shipping the repo
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o` is a compile-only toolchain gate for build systems that use `nvcc --gpu-architecture=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_code_compile_probe.o` is a compile-only toolchain gate for build systems that split `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (same source as `cuda_sm121_compile_probe.o`, different flag spelling)
 - `nvcc --list-gpu-arch` / `nvcc --list-gpu-code` should include `compute_121` / `sm_121` when supported by the toolkit
@@ -84,6 +92,8 @@ Probe:
 - `./scripts/cuda_probe_cublaslt_tiny_spark0.sh`: Spark0 “cuBLASLt only” fast path (builds `cuda_device_props_tiny`, `cuda_sm121_arch_report`, and the cuBLASLt smoke probes).
 - `./scripts/cuda_probe_capability_spark0.sh`: includes the cuBLASLt smoke gate by default; set `WITH_CUBLASLT_TINY=0` to skip it when you only want kernel/toolchain probes.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny matmul smoke test on Spark0.
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke_gpuarch_code`: same probe, but built via `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (flag-split build-system gate).
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke_gencode`: same probe, but built via explicit `-gencode` for `sm_121` + `compute_121` PTX (fatbin packaging gate).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E4M3) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP8 (E5M2) matmul smoke test on Spark0.
 - `tools/cuda_probe/bin/cuda_cublaslt_fp4_smoke`: compiles for `sm_121`, links `-lcublasLt`, and runs a tiny FP4 (E2M1) matmul smoke test on Spark0 (best-effort capability probe).
@@ -97,6 +107,7 @@ Implication:
 - If `sm_121` is not available in a given upstream build system yet, validate whether building for `sm_120` runs correctly on GB10 first (see `cuda_sm120_compat_probe` below).
 - CUTLASS 3-style TMA loads appear viable on GB10; the `cuda_sm121_tma_bulk_tensor_1d` / `cuda_sm121_tma_bulk_tensor_2d` probes are minimal “tensor map encode + `cp.async.bulk.tensor`” gates that should fail fast if TMA plumbing is missing or broken.
 - The “kernel plumbing” probe set (`./scripts/cuda_probe_kernel_tiny_spark0.sh`) already covers many CUTLASS prerequisites on GB10: C++20 compilation, common nvcc template flags, inline PTX (`ldmatrix.sync`), async copy plumbing (pipeline + CCCL `cp.async.bulk`), TMA tensor-map encode + `cp.async.bulk.tensor`, plus build-system gates like separate compilation + device link (RDC) and device LTO (`-dlto`).
+- The compile-only gate `tools/cuda_probe/bin/cuda_sm121_cluster_dims_attr_compile.o` fails fast if `nvcc` rejects `__cluster_dims__(...)` kernel annotations for `sm_121` (some stacks reject the annotation even when runtime cluster launch via `cudaLaunchKernelExC` works).
 - When repo transfer is blocked (or you want a faster gate), `./scripts/cuda_probe_nvcc_minimal_spark0.sh` includes a compile-only `-std=c++20 --extended-lambda --expt-relaxed-constexpr` check for `sm_121` to catch “toolchain can’t compile CUTLASS-style code” failures early.
 - A real CUTLASS bring-up still needs a minimal CUTLASS compile+run probe, because CUTLASS may hard-gate unknown arch tags (`sm_121`) or require a small arch mapping patch even when the toolchain is otherwise healthy.
 

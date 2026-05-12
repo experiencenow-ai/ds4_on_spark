@@ -64,6 +64,8 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121a_arch_list_report` / `tools/cuda_probe/bin/cuda_sm121f_arch_list_report`: same report, but compiled with `-arch=sm_121a` / `-arch=sm_121f` (build explicitly via `make bin/cuda_sm121a_arch_list_report` / `make bin/cuda_sm121f_arch_list_report`, or run `scripts/cuda_probe_tiny_spark0.sh` on Spark0; best-effort build may succeed even when `nvcc --list-gpu-code` does not advertise those variants).
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke_gpuarch_code`: same matmul probe, but built via `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (build-system flag-split gate).
+- `tools/cuda_probe/bin/cuda_cublaslt_smoke_gencode`: same matmul probe, but built via explicit `-gencode` for `sm_121` + `compute_121` PTX (fatbin packaging gate).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_smoke`: link/run tiny cuBLASLt FP8 (E4M3) matmul for `sm_121` (TN format; BF16 output).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_smoke`: link/run tiny cuBLASLt FP8 (E5M2) matmul for `sm_121` (TN format; BF16 output; prints diagnostics).
 - `tools/cuda_probe/bin/cuda_cublaslt_fp8_e5m2_sweep`: sweep cuBLASLt FP8 (E5M2) matmul configs (workspace, output dtype, compute type) to see whether any configuration is supported on the installed stack.

@@ -15,6 +15,18 @@ static const char *DS4_CONFIG_KEYS[] =
 	"log_ring_entries",
 };
 
+static const char *DS4_CONFIG_KEY_HELP[] =
+{
+	"0..3 or error/warn/info/debug (default=info)",
+	"bool 0/1 true/false yes/no on/off (default=0)",
+	"-1=auto or >=0 device index (default=-1)",
+	"bytes (k/m/g suffix ok), advisory (default=0)",
+	"bytes (k/m/g suffix ok), advisory; requires enable_cuda=1 (default=0)",
+	"entries (k/m/g suffix ok), advisory (default=0)",
+};
+
+_Static_assert((sizeof(DS4_CONFIG_KEYS) / sizeof(DS4_CONFIG_KEYS[0])) == (sizeof(DS4_CONFIG_KEY_HELP) / sizeof(DS4_CONFIG_KEY_HELP[0])),"DS4_CONFIG_KEY_HELP mismatch");
+
 int32_t ds4_config_diag_init(ds4_config_diag_t *d)
 {
 	if ( d == 0 )
@@ -36,6 +48,8 @@ const char *ds4_config_diag_stage_name(int32_t stage)
 		return("file");
 	if ( stage == DS4_CONFIG_DIAG_STAGE_LOAD )
 		return("load");
+	if ( stage == DS4_CONFIG_DIAG_STAGE_ENV )
+		return("env");
 	return("unknown");
 }
 
@@ -84,6 +98,15 @@ const char *ds4_config_known_key(int32_t idx)
 	if ( idx < 0 || idx >= count )
 		return(0);
 	return(DS4_CONFIG_KEYS[idx]);
+}
+
+const char *ds4_config_known_key_help(int32_t idx)
+{
+	int32_t count;
+	count = (int32_t)(sizeof(DS4_CONFIG_KEY_HELP) / sizeof(DS4_CONFIG_KEY_HELP[0]));
+	if ( idx < 0 || idx >= count )
+		return(0);
+	return(DS4_CONFIG_KEY_HELP[idx]);
 }
 
 static void ds4_config_diag_set(ds4_config_diag_t *d,int32_t stage,int32_t line,int32_t err,int32_t unknown)
@@ -1103,7 +1126,7 @@ int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t 
 	if ( err < 0 )
 	{
 		if ( diag != 0 )
-			ds4_config_diag_set(diag,DS4_CONFIG_DIAG_STAGE_LOAD,0,err,unknown);
+			ds4_config_diag_set(diag,DS4_CONFIG_DIAG_STAGE_ENV,0,err,unknown);
 		return(-5);
 	}
 	if ( out_unknown != 0 )

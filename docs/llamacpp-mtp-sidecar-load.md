@@ -115,14 +115,14 @@ This runner writes additional artifacts next to the Markdown report:
 - `contract_probe.json`: full Python contract probe JSON (when parseable)
 - `contract_probe_fingerprint_gate.json`: local pinned antirez payload fingerprint gate result
 - `loader_probe.json`: full llama.cpp probe JSON (when extracted)
-- `contract_vs_loader_probe_parse.json`: local cross-check summary (`ok=true` only when both probes agree on dims/type/offset/nbytes)
+- `contract_vs_loader_probe_parse.json`: local cross-check summary (`ok=true` only when both probes agree on dims/type/offset/nbytes; `skipped=true` when the llama.cpp probe does not return `ok=true` or fails to emit JSON, e.g. `unknown model architecture: deepseek4_mtp_support`)
 - `deepseek4_mtp_sidecar.hpp`: generated binder skeleton (only when the contract probe reports `ok=true`)
 
 By default this Spark-only runner also samples 64 bytes from each tensor payload (`--payload-sample-bytes 64`) to catch truncated/corrupt uploads without loading full weights. Override with `REMOTE_MTP_SIDECAR_ARGS='--json --expect-deepseek-v4-flash --payload-sample-bytes 0'` if you need a strictly header-only check.
 
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
 
-Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez.sh` defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`) and validating the pinned file size, still avoiding full weight downloads. When payload sampling is enabled, it also runs the pinned payload fingerprint gate (`scripts/verify_mtp_sidecar_payload_fingerprint.py`) and prints the gate JSON to stderr. Disable with `FINGERPRINT_GATE=0` or `PAYLOAD_SAMPLE_BYTES=0`. The recorded probe output is `docs/mtp-sidecar-probe-antirez-b0c3326-payload64.json`.
+Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez.sh` defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`) and validating the pinned file size, still avoiding full weight downloads. When payload sampling is enabled, it also runs the pinned payload fingerprint gate (`scripts/verify_mtp_sidecar_payload_fingerprint.py`) and prints the gate JSON to stderr. Disable with `FINGERPRINT_GATE=0` or `PAYLOAD_SAMPLE_BYTES=0`. The recorded probe output is `docs/mtp-sidecar-probe-antirez-c566ab6-payload64.json`.
 
 ### Step 1: sidecar weight loader (not a model loader)
 

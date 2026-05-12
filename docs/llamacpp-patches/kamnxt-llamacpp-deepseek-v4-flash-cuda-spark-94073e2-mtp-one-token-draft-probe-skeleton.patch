@@ -995,7 +995,7 @@ index 0000000..680d9af
 +        const std::vector<std::string> & errors) {
 +    std::printf("{\n");
 +    std::printf("  \"runtime_repo\": \"%s\",\n", "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark");
-+    std::printf("  \"runtime_commit\": \"%s\",\n", "9222e55");
++    std::printf("  \"runtime_commit\": \"%s\",\n", "94073e2");
 +    std::printf("  \"trunk_gguf_path\": \"%s\",\n", json_escape(trunk_path).c_str());
 +    std::printf("  \"mtp_sidecar_path\": \"%s\",\n", json_escape(sidecar_path).c_str());
 +    std::printf("  \"prompt\": \"%s\",\n", json_escape(prompt).c_str());

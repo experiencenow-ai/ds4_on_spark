@@ -46,6 +46,12 @@ If you don’t already have `SSH_OPTS` set, use a safe non-interactive default:
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 ```
 
+Mac-side prerequisites for the helper scripts:
+
+- `ssh`
+- `rsync` (preferred) or `scp` (fallback)
+- `tee` (only if you pass a `local_log` to `scripts/centaur_spark0_v73_run.sh`)
+
 ### One-command run from your Mac (recommended)
 
 This stages the zip + fixture and then streams the smoke over SSH:

@@ -1,9 +1,10 @@
 {
-  "generated_at_utc": "2026-05-12T02:38:41Z",
+  "generated_at_utc": "2026-05-12T07:05:00Z",
   "items": [
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
+      "ds4_mtp_sidecar_contract": null,
       "mtp_contract": null,
       "mtp_keys_sha256": null,
       "mtp_layer_ids": [],
@@ -72,6 +73,7 @@
     {
       "artifact_type": "gguf.url",
       "doc_path": "docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
+      "ds4_mtp_sidecar_contract": null,
       "mtp_contract": null,
       "mtp_keys_sha256": null,
       "mtp_layer_ids": [],
@@ -143,7 +145,8 @@
     },
     {
       "artifact_type": "gguf.url",
-      "doc_path": "docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json",
+      "doc_path": "docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json",
+      "ds4_mtp_sidecar_contract": null,
       "mtp_contract": null,
       "mtp_keys_sha256": null,
       "mtp_layer_ids": [],
@@ -175,7 +178,7 @@
         "status": "absent",
         "trusted": false
       },
-      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
       "quantization_contract": {
         "dense_fp8_like": false,
         "expected": {
@@ -211,7 +214,15 @@
     },
     {
       "artifact_type": "gguf.url",
-      "doc_path": "docs/gguf-inspect-antirez-b0c3326-mtp-sidecar.json",
+      "doc_path": "docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json",
+      "ds4_mtp_sidecar_contract": {
+        "complete": true,
+        "expected_general_architecture": "deepseek4_mtp_support",
+        "expected_tensor_count": 32,
+        "general_architecture": "deepseek4_mtp_support",
+        "missing_expected_count": 0,
+        "unexpected_present_count": 0
+      },
       "mtp_contract": {
         "complete": false,
         "forbidden_present_count": 0,
@@ -252,7 +263,7 @@
         "status": "incomplete",
         "trusted": false
       },
-      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
       "quantization_contract": {
         "dense_fp8_like": false,
         "expected": {
@@ -287,7 +298,9 @@
     },
     {
       "artifact_set": true,
-      "doc_path": "docs/gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2-mtp-set.json",
+      "doc_path": "docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json",
+      "ds4_mtp_sidecar_complete": true,
+      "ds4_mtp_sidecar_present": true,
       "mtp_contract": {
         "complete": false,
         "forbidden_present_count": 0,
@@ -328,8 +341,8 @@
         "trusted": false
       },
       "paths": [
-        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
-        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/b0c3326275d2207e25e42bc8ac0704952466b5bb/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+        "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
       ],
       "quantization_contract": {
         "dense_fp8_like": false,
@@ -367,8 +380,8 @@
   "pinned_docs": [
     "gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
     "gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
-    "gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2.json",
-    "gguf-inspect-antirez-b0c3326-mtp-sidecar.json",
-    "gguf-inspect-antirez-b0c3326-iq2xxs-chat-v2-mtp-set.json"
+    "gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json",
+    "gguf-inspect-antirez-c566ab6-mtp-sidecar.json",
+    "gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json"
   ]
 }

@@ -77,7 +77,7 @@ def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
             _inc(tag_counts, tag)
         if c.output != "":
             outputs_norm.append(lib.normalize_text(c.output))
-        if len(lib.useful_novelty_flags(c.output, c.prompt)) != 0:
+        if len(lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)) != 0:
             novelty_flagged += 1
 
     count = len(task_runs)
@@ -299,6 +299,91 @@ def _div_stats(counts: Dict[str, int]) -> Dict[str, Any]:
         "top": lib.top_counts(counts),
     })
 
+def _safe_log2(x: int) -> float:
+    if x <= 1:
+        return(0.0)
+    return(float(math.log2(float(x))))
+
+def _mutual_info_norm(mi_bits: float, hx_bits: float, hy_bits: float) -> float:
+    den = float(min(hx_bits, hy_bits))
+    if den <= 0.0:
+        return(0.0)
+    return(float(mi_bits) / den)
+
+def _pair_conditional_stats(pair_counts: Dict[str, int]) -> Dict[str, Any]:
+    x_counts: Dict[str, int] = {}
+    y_counts: Dict[str, int] = {}
+    by_x: Dict[str, Dict[str, int]] = {}
+    total = 0
+
+    for key, c in pair_counts.items():
+        cc = int(c)
+        if key == "" or cc <= 0:
+            continue
+        x, y = _split_pair_key(key)
+        if x == "" or y == "":
+            continue
+        x_counts[x] = x_counts.get(x, 0) + cc
+        y_counts[y] = y_counts.get(y, 0) + cc
+        by_x.setdefault(x, {})
+        by_x[x][y] = by_x[x].get(y, 0) + cc
+        total += cc
+
+    if total <= 0:
+        return({
+            "x_unique": 0,
+            "y_unique": 0,
+            "pair_unique": 0,
+            "x_entropy_bits": 0.0,
+            "y_entropy_bits": 0.0,
+            "conditional_entropy_bits": 0.0,
+            "conditional_entropy_norm": 0.0,
+            "mutual_info_bits": 0.0,
+            "mutual_info_norm": 0.0,
+            "x_top": [],
+            "y_top": [],
+        })
+
+    hx = lib.shannon_entropy(x_counts)
+    hy = lib.shannon_entropy(y_counts)
+    cond = 0.0
+    totalf = float(total)
+    for x, xy in by_x.items():
+        cx = int(sum(xy.values()))
+        if cx <= 0:
+            continue
+        px = float(cx) / totalf
+        cond += (px * lib.shannon_entropy(xy))
+
+    mi = hy - cond
+    ynorm = _safe_log2(len(y_counts))
+    cond_norm = 0.0 if ynorm <= 0.0 else (cond / ynorm)
+    return({
+        "x_unique": len(x_counts),
+        "y_unique": len(y_counts),
+        "pair_unique": len(pair_counts),
+        "x_entropy_bits": hx,
+        "y_entropy_bits": hy,
+        "conditional_entropy_bits": cond,
+        "conditional_entropy_norm": cond_norm,
+        "mutual_info_bits": mi,
+        "mutual_info_norm": _mutual_info_norm(mi, hx, hy),
+        "x_top": lib.top_counts(x_counts),
+        "y_top": lib.top_counts(y_counts),
+    })
+
+def _swap_pair_counts(pair_counts: Dict[str, int]) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    for key, c in pair_counts.items():
+        if key == "":
+            continue
+        a, b = _split_pair_key(key)
+        if a == "" or b == "":
+            continue
+        kk = f"{b}|{a}"
+        out[kk] = out.get(kk, 0) + int(c)
+    return(out)
+
 
 _ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
@@ -480,6 +565,10 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     template_counts: Dict[str, int] = {}
     family_template_counts: Dict[str, int] = {}
     task_template_counts: Dict[str, int] = {}
+    template_model_counts: Dict[str, int] = {}
+    family_model_counts: Dict[str, int] = {}
+    template_answer_counts: Dict[str, int] = {}
+    family_answer_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answers: Dict[str, int] = {}
     tag_counts: Dict[str, int] = {}
@@ -587,6 +676,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             _inc(task_template_counts, f"{c.task_id}|{c.prompt_template_id}")
         _inc(model_counts, c.model_id)
         _inc(answers, c.answer)
+        if c.prompt_template_id != "" and c.model_id != "":
+            _inc(template_model_counts, f"{c.prompt_template_id}|{c.model_id}")
+        if c.task_family != "" and c.model_id != "":
+            _inc(family_model_counts, f"{c.task_family}|{c.model_id}")
+        if c.prompt_template_id != "" and c.answer != "":
+            _inc(template_answer_counts, f"{c.prompt_template_id}|{c.answer}")
+        if c.task_family != "" and c.answer != "":
+            _inc(family_answer_counts, f"{c.task_family}|{c.answer}")
         if c.answer != "":
             answers_nonempty.append(c.answer)
             answer_task_runs_nonempty += 1
@@ -630,7 +727,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 total_tok = float(itok + otok)
                 total_tok_per_s.append((total_tok * 1000.0) / float(wms))
 
-        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        flags = lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)
         if len(flags) != 0:
             novelty_flagged += 1
             if tmpl != "":
@@ -977,6 +1074,20 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "source_counts": dict(sorted(answer_source_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
     })
     diversity["answer"] = ans
+    diversity["conditional"] = {
+        "prompt_template_id_given_task_family": _pair_conditional_stats(family_template_counts),
+        "task_family_given_prompt_template_id": _pair_conditional_stats(_swap_pair_counts(family_template_counts)),
+        "prompt_template_id_given_task_id": _pair_conditional_stats(task_template_counts),
+        "task_id_given_prompt_template_id": _pair_conditional_stats(_swap_pair_counts(task_template_counts)),
+        "model_id_given_prompt_template_id": _pair_conditional_stats(template_model_counts),
+        "prompt_template_id_given_model_id": _pair_conditional_stats(_swap_pair_counts(template_model_counts)),
+        "model_id_given_task_family": _pair_conditional_stats(family_model_counts),
+        "task_family_given_model_id": _pair_conditional_stats(_swap_pair_counts(family_model_counts)),
+        "answer_given_prompt_template_id": _pair_conditional_stats(template_answer_counts),
+        "prompt_template_id_given_answer": _pair_conditional_stats(_swap_pair_counts(template_answer_counts)),
+        "answer_given_task_family": _pair_conditional_stats(family_answer_counts),
+        "task_family_given_answer": _pair_conditional_stats(_swap_pair_counts(family_answer_counts)),
+    }
 
     word_counts: Dict[str, int] = {}
     for w in out_words:
@@ -1355,6 +1466,8 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `{js.get('run_id')}`: flagged_rate={float(js.get('flagged_task_run_rate', 0.0)):.6f} count={int(js.get('count', 0))}")
     parts.append("\n## Diversity\n")
     for field, js in report.diversity.items():
+        if field in ("conditional",):
+            continue
         parts.append(f"### {field}\n")
         parts.append(f"- `unique`: {js.get('unique')}")
         parts.append(f"- `entropy_bits`: {js.get('entropy_bits'):.6f}")
@@ -1362,6 +1475,18 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `effective_num`: {js.get('effective_num'):.6f}")
         top = js.get("top") or []
         parts.append(_md_list_top(top))
+    cond = report.diversity.get("conditional") or {}
+    if isinstance(cond, dict) and len(cond) != 0:
+        parts.append("\n### conditional\n")
+        for name in sorted(cond.keys()):
+            js = cond.get(name) or {}
+            parts.append(f"#### {name}\n")
+            parts.append(f"- `x_unique`: {int(js.get('x_unique', 0) or 0)}")
+            parts.append(f"- `y_unique`: {int(js.get('y_unique', 0) or 0)}")
+            parts.append(f"- `conditional_entropy_bits`: {float(js.get('conditional_entropy_bits', 0.0) or 0.0):.6f}")
+            parts.append(f"- `conditional_entropy_norm`: {float(js.get('conditional_entropy_norm', 0.0) or 0.0):.6f}")
+            parts.append(f"- `mutual_info_bits`: {float(js.get('mutual_info_bits', 0.0) or 0.0):.6f}")
+            parts.append(f"- `mutual_info_norm`: {float(js.get('mutual_info_norm', 0.0) or 0.0):.6f}")
     parts.append("")
     parts.append("\n## Tokens\n")
     for k in ("prompt_chars", "prompt_words", "output_chars", "output_words", "input_tokens", "output_tokens", "wall_ms", "ms_per_output_token", "output_tok_per_s", "total_tok_per_s"):
