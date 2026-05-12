@@ -94,6 +94,8 @@ run_retry() {
 run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
 run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+run_retry cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
+run_retry cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
 "
 }
 
@@ -113,4 +115,3 @@ cat "$tmp_out"
 cat "$tmp_out" >> "$log_path"
 rm -f "$tmp_out"
 exit $rc
-

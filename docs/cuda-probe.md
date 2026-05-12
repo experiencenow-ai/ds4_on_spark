@@ -4,7 +4,7 @@ This track keeps probe-only CUDA snippets that answer: “Can we compile for and
 
 ## Spark0: `sm_121` Gate (Fastest)
 
-When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`):
+When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
 
 ```bash
 ./scripts/cuda_probe_sm121_gate_spark0.sh

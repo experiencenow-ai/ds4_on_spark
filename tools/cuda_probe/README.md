@@ -43,7 +43,7 @@ make
 
 Subset builds:
 
-- `make sm121_gate` builds the smallest “device-props + `sm_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh`.
+- `make sm121_gate` builds the smallest “device-props + `sm_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh` (also builds `cuda_sm121{a,f}_arch_list_report` for CUDA 13 alias acceptance visibility).
 - `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh` (the script also builds the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates on top).
 - `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
 
