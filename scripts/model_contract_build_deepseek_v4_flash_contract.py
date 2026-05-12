@@ -1209,6 +1209,31 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"head.weight",
 	]
 
+	tensor_key_templates = {
+		"reference_source": "scripts/model_contract_build_deepseek_v4_flash_contract.py:build_tensor_key_summary (templates derived from required suffix sets)",
+		"placeholders": {
+			"trunk_layer_id": "{layer_id}",
+			"mtp_layer_id": "{mtp_layer_id}",
+			"expert_id": "{eid}",
+		},
+		"layers": {
+			"required_top_level": list(required_top_level),
+			"required_nonexpert": [f"layers.{{layer_id}}.{s}" for s in required_layer_suffixes],
+			"required_compress_ratio_nonzero": [f"layers.{{layer_id}}.{s}" for s in required_layer_suffixes_compress_ratio_nonzero],
+			"required_compress_ratio_4": [f"layers.{{layer_id}}.{s}" for s in required_layer_suffixes_compress_ratio_4],
+			"gate_tid2eid": f"layers.{{layer_id}}.{hash_gate_tensor_key_suffix}",
+			"gate_bias": f"layers.{{layer_id}}.{score_gate_tensor_key_suffix}",
+			"expert_tensors": [f"layers.{{layer_id}}.{t}" for t in expert_tensor_key_templates],
+		},
+		"mtp": {
+			"required_nonexpert": [f"mtp.{{mtp_layer_id}}.{s}" for s in mtp_required_nonexpert_suffixes],
+			"required_additional": [f"mtp.{{mtp_layer_id}}.{s}" for s in required_mtp_additional_suffixes],
+			"gate_bias": f"mtp.{{mtp_layer_id}}.{mtp_score_gate_tensor_key_suffix}",
+			"expert_tensors": [f"mtp.{{mtp_layer_id}}.{t}" for t in expert_tensor_key_templates],
+			"forbidden_suffixes": list(mtp_forbidden_key_suffixes),
+		},
+	}
+
 	return {
 		"tensor_key_count": len(weight_keys),
 		"namespaces": sorted(top.keys()),
@@ -1226,6 +1251,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 			"tid2eid_layer_ids": layer_ids_matching("ffn.gate.tid2eid"),
 			"gate_bias_layer_ids": layer_ids_matching("ffn.gate.bias"),
 		},
+		"tensor_key_templates": tensor_key_templates,
 		"expected_expert_key_count_per_layer": expected_expert_key_count_per_layer,
 		"required_top_level": required_top_level,
 		"required_layer_suffixes": required_layer_suffixes,

@@ -262,8 +262,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     fattn_probe = _read_json(fattn_probe_path)
     multislot_probe = _read_json(multislot_probe_path)
 
-    remote_env_section = _extract_section(report_md, "Remote Env")
-    remote_llama_env_block = _extract_code_block_after(remote_env_section, "Remote llama.cpp env:")
+    # The baseline wrapper prints the remote env blocks as plain text labels followed by
+    # markdown code fences (not under a dedicated "## Remote Env" section).
+    remote_llama_env_block = _extract_code_block_after(report_md, "Remote llama env:")
     spark_probe_block = _extract_first_code_block(_extract_section(report_md, "Spark Probe"))
 
     title_suffix = model_quant if model_quant and model_quant != "unknown" else "V4 Flash"

@@ -11,6 +11,7 @@ Stages the Centaur spec-impl v73 zip to Spark0 without sudo/system changes.
 Environment:
   CENTAUR_ZIP     Local zip path (default: /Users/mac/Downloads/centaur_spec_impl_v73.zip)
   SSH_OPTS        Optional ssh options override (default includes BatchMode + temp known_hosts)
+  STAGE_SKIP_PREFLIGHT  Set to 1 to skip SSH preflight checks
 
 Examples:
   ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local
@@ -86,6 +87,19 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
+ssh_preflight()
+{
+	t="$1"
+	if ssh $SSH_OPTS "$t" "true" >/dev/null 2>&1; then
+		echo "preflight: ssh ok: $t"
+		return 0
+	fi
+	echo "preflight: ssh failed: $t" >&2
+	echo "hint: check DNS/SSH reachability and keys; try:" >&2
+	echo "  REDACT=1 ./scripts/mac_spark_discovery.sh $(printf "%s" "$t" | sed 's/^[^@]*@//')" >&2
+	return 1
+}
+
 copy_to_remote()
 {
 	src="$1"
@@ -99,6 +113,13 @@ copy_to_remote()
 
 echo "== centaur v73 stage to $target =="
 echo "remote_dir: $remote_dir"
+
+if [ "${STAGE_SKIP_PREFLIGHT:-0}" != "1" ]; then
+	echo "== stage preflight ssh =="
+	ssh_preflight "$target" || exit 21
+else
+	echo "== skip preflight (STAGE_SKIP_PREFLIGHT=1) =="
+fi
 
 ssh_run "$target" "mkdir -p $remote_dir"
 remote_dir_abs="$(ssh_run "$target" "cd $remote_dir && pwd -P")"
