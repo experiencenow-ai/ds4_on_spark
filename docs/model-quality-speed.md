@@ -142,6 +142,15 @@ The scorer emits:
 - `correct_tasks_per_s`
 - `tokens_per_success`
 - Pareto `dominated_by` status
+- Speculative decoding fields when present (pass-through):
+  - `speculative_method`
+  - `speculative_draft_model`
+  - `speculative_num_speculative_tokens`
+  - `spec_decode_num_drafts`
+  - `spec_decode_num_draft_tokens`
+  - `spec_decode_num_accepted_tokens`
+  - `spec_decode_mean_accept_len`
+  - `spec_decode_accept_rate`
 
 ## Scope Hygiene
 
