@@ -6,10 +6,11 @@
 
 int32_t test_arena(void)
 {
-	_Alignas(16) uint8_t mem[64];
+	_Alignas(16) uint8_t mem[96];
 	_Alignas(16) uint8_t mem2[65];
 	ds4_arena_t a;
 	uint8_t *z;
+	uint32_t *z2;
 	void *p0,*p1,*p2;
 	int32_t mark0;
 	int32_t i;
@@ -40,6 +41,14 @@ int32_t test_arena(void)
 	for (i=0; i<8; i++)
 		if ( z[i] != 0 )
 			return(-13);
+	z2 = 0;
+	if ( ds4_arena_alloc_zero_n(&a,2,(int32_t)sizeof(uint32_t),4,(void **)&z2) < 0 )
+		return(-18);
+	if ( z2 == 0 )
+		return(-19);
+	for (i=0; i<2; i++)
+		if ( z2[i] != 0 )
+			return(-20);
 	if ( ds4_arena_release(&a,mark0) < 0 )
 		return(-14);
 	if ( a.used != 0 )

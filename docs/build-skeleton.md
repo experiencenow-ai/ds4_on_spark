@@ -36,7 +36,9 @@ For sizing caller-provided static backing storage without duplicating overflow c
 For overflow-checked allocations from arenas without repeating `count*elem_size` math, use:
 
 - `ds4_arena_alloc_n(&arena,count,elem_size,align,&out)` and `ds4_arena_alloc_zero(&arena,size,align,&out)`
+- `ds4_arena_alloc_zero_n(&arena,count,elem_size,align,&out)`
 - `ds4_cuda_arena_alloc_n(&cuda_arena,count,elem_size,align,&out)` and `ds4_cuda_arena_alloc_zero(&cuda_arena,size,align,&out)`
+- `ds4_cuda_arena_alloc_zero_n(&cuda_arena,count,elem_size,align,&out)`
 
 ## Logging
 

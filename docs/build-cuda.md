@@ -59,3 +59,4 @@ For a conservative device-memory pattern, DS4 provides `ds4_cuda_arena_t` (`incl
 - Allocate device memory from the arena with `ds4_cuda_arena_alloc` and reset with `ds4_cuda_arena_reset`.
 - For array allocations, `ds4_cuda_arena_alloc_n` overflow-checks `count*elem_size`.
 - For eager zero-fill, `ds4_cuda_arena_alloc_zero` allocates then calls `cudaMemset` (returns `DS4_CUDA_ERR_DISABLED` in CPU-only builds).
+- For array allocations with eager zero-fill, `ds4_cuda_arena_alloc_zero_n` overflow-checks `count*elem_size` then calls `ds4_cuda_arena_alloc_zero`.
