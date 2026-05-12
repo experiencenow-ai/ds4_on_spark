@@ -54,7 +54,7 @@ remote_base="${4:-}"
 local_log="${5:-}"
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-ring="$root/scripts/centaur_spark_ring_rsync_spark12_v73.sh"
+ring="$root/scripts/centaur_spark_ring_rsync_v73.sh"
 stage12="$root/scripts/centaur_spark12_v73_stage.sh"
 
 if [ ! -f "$ring" ]; then
@@ -133,7 +133,7 @@ else
 	echo "== skip stage (RING_SKIP_STAGE=1) =="
 fi
 
-ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\\$HOME/centaur-smoke/v73/run/venv}\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
+ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
 if [ "${NODE_TYPE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export NODE_TYPE=\"${NODE_TYPE}\""
 fi
@@ -143,7 +143,7 @@ fi
 if [ "${RING_TRACE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export RING_TRACE=\"${RING_TRACE}\""
 fi
-ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\" && sh -s -- \"$spark1\" \"$spark2\" \"$remote_base\""
+ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\" && sh -s -- --remote-base \"$remote_base\" \"$spark1\" \"$spark2\""
 
 echo "== run ring rsync (streamed) =="
 echo "ssh $SSH_OPTS $spark0 \"$ssh_cmd\" < $ring"
