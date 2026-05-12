@@ -16,6 +16,24 @@ This gate also includes a compile-only “fatbin packaging” probe using `-genc
 
 The runtime probes are best-effort: `cuda_sm121_kernel_launch_tiny` (no `cudaMalloc`) and the “arch report” binaries can be skipped if Spark0’s GPU is busy/unavailable or allocations fail with `out of memory`; the gate still reports compile-only results so you can distinguish “toolchain can target `sm_121`” from “device was runnable right now”.
 
+## Spark0: Minimal Gates (nvcc + Device Props + `sm_121` Gate)
+
+When you want a single command that:
+
+- runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior)
+- runs `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile/run gates)
+- runs `scripts/cuda_probe_sm121_gate_spark0.sh` (ships `tools/cuda_probe/`; fastest “device-props + compile-only gates” build)
+
+```bash
+./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
+To include the heavier “kernel plumbing” gates, run:
+
+```bash
+WITH_KERNEL_TINY=1 ./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
 ## Spark0: Tiny Smoke (Fast Path)
 
 When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” check:
