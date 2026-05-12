@@ -182,6 +182,22 @@ python3 scripts/entropy_buffer_canonicalize.py \
   --out-jsonl /tmp/entropy_canonical.jsonl
 ```
 
+### Suggest next-batch targets (coverage gaps)
+
+Use this when you want a deterministic “what should we run next?” view from history only (no candidate list required). It highlights:
+
+- Underrepresented `task_family` / `prompt_template_id` / `task_family|prompt_template_id` keys (low-count).
+- Families with low within-family template entropy (template collapse).
+- Families missing templates relative to templates seen elsewhere (cross-family template coverage).
+- Underrepresented judge model-pairs and judge `task_family|prompt_template_id` slices (when present).
+
+```bash
+python3 scripts/entropy_buffer_gaps.py \
+  --in-jsonl fixtures/entropy-buffer/records_gaps_mini.jsonl \
+  --out-json /tmp/entropy_gaps.json \
+  --out-md /tmp/entropy_gaps.md
+```
+
 ### Recommend next tasks (coverage maximization)
 
 ```bash
