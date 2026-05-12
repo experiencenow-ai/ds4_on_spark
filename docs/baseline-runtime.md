@@ -168,6 +168,7 @@ Per-script useful env vars:
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL_ID` (CSV label override; avoids absolute Spark paths)
 - `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
 - `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM` (skip irrelevant probes for faster multi-model loops)
+- `scripts/run_baseline_existing_runtime.sh`: `FETCH_LLAMA_OUT_DIR=1` (opt-in: fetch the remote llama.cpp runner `out_dir` tarball to preserve `fattn_cli_probe.json` + raw logs locally)
 - `scripts/run_baseline_ds4_macos.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`

@@ -21,6 +21,7 @@ LLAMA_FATTN_PATCH_PROBE="${LLAMA_FATTN_PATCH_PROBE:-0}"
 LLAMA_MULTISLOT_PATCH_PROBE="${LLAMA_MULTISLOT_PATCH_PROBE:-0}"
 LLAMA_SERVER_SWEEP="${LLAMA_SERVER_SWEEP:-0}"
 LLAMA_SERVER_THROUGHPUT_SWEEP="${LLAMA_SERVER_THROUGHPUT_SWEEP:-0}"
+FETCH_LLAMA_OUT_DIR="${FETCH_LLAMA_OUT_DIR:-0}"
 SKIP_GGUF_INSPECT="${SKIP_GGUF_INSPECT:-0}"
 SKIP_LLAMA="${SKIP_LLAMA:-0}"
 SKIP_MTP_SIDECAR="${SKIP_MTP_SIDECAR:-0}"
@@ -68,6 +69,17 @@ extract_baseline_summary()
         }
         $0 == "== baseline summary (approx) ==" { found=1 }
     ' "$in" 2>/dev/null || true
+}
+
+fetch_remote_dir_tar()
+{
+    remote_dir="${1:-}"
+    local_tgz="${2:-}"
+    if [ "$remote_dir" = "" ] || [ "$local_tgz" = "" ]; then
+        return 0
+    fi
+    remote_name="${remote_dir##*/}"
+    ssh $SSH_OPTS "$target" "if [ -d $remote_dir ]; then tar -C /tmp -czf - $remote_name; fi" >"$local_tgz" 2>"$local_tgz.stderr" || true
 }
 
 sh_quote()
@@ -550,6 +562,11 @@ ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_spark.sh && chmod +x /tmp
 
 append_model_runs_csv "${LLAMA_SCOPE:-llamacpp}" "${MODEL_SOURCE:-llamacpp}" "$OUT_DIR/remote_llamacpp_stdout.txt"
 
+LLAMACPP_REMOTE_OUT_DIR=""
+if [ -r "$OUT_DIR/remote_llamacpp_stdout.txt" ]; then
+    LLAMACPP_REMOTE_OUT_DIR="$(awk -F= '$1 == "out_dir" {print $2; exit}' "$OUT_DIR/remote_llamacpp_stdout.txt" 2>/dev/null || true)"
+fi
+
 {
     echo "## llama.cpp (Spark)"
     echo
@@ -579,16 +596,37 @@ append_model_runs_csv "${LLAMA_SCOPE:-llamacpp}" "${MODEL_SOURCE:-llamacpp}" "$O
 } >>"$REPORT_MD"
 fi
 
-fetch_remote_dir_tar()
-{
-    remote_dir="${1:-}"
-    local_tgz="${2:-}"
-    if [ "$remote_dir" = "" ] || [ "$local_tgz" = "" ]; then
-        return 0
-    fi
-    remote_name="${remote_dir##*/}"
-    ssh $SSH_OPTS "$target" "if [ -d $remote_dir ]; then tar -C /tmp -czf - $remote_name; fi" >"$local_tgz" 2>"$local_tgz.stderr" || true
-}
+if [ "$SKIP_LLAMA" != "1" ] && [ "$FETCH_LLAMA_OUT_DIR" = "1" ] && [ "${LLAMACPP_REMOTE_OUT_DIR:-}" != "" ]; then
+    case "$LLAMACPP_REMOTE_OUT_DIR" in
+        /tmp/*)
+            echo "== fetching llama.cpp out_dir tarball from spark (opt-in) =="
+            fetch_remote_dir_tar "$LLAMACPP_REMOTE_OUT_DIR" "$OUT_DIR/remote_llamacpp_out_dir.tgz"
+            if [ -s "$OUT_DIR/remote_llamacpp_out_dir.tgz" ]; then
+                mkdir -p "$OUT_DIR/llamacpp_out_dir"
+                tar -xzf "$OUT_DIR/remote_llamacpp_out_dir.tgz" -C "$OUT_DIR/llamacpp_out_dir" >/dev/null 2>&1 || true
+            fi
+            {
+                echo "## llama.cpp out_dir artifacts (Spark)"
+                echo
+                echo "This is an opt-in tarball fetch of the remote llama.cpp runner output directory."
+                echo "It is useful for preserving `fattn_cli_probe.json` and the raw runner logs alongside the baseline report."
+                echo
+                echo "Artifacts:"
+                echo
+                echo "- remote_out_dir: $LLAMACPP_REMOTE_OUT_DIR"
+                echo "- tarball: $OUT_DIR/remote_llamacpp_out_dir.tgz"
+                echo "- unpacked_dir: $OUT_DIR/llamacpp_out_dir"
+                if [ -r "$OUT_DIR/llamacpp_out_dir/fattn_cli_probe.json" ]; then
+                    echo "- fattn_cli_probe: $OUT_DIR/llamacpp_out_dir/fattn_cli_probe.json"
+                fi
+                echo
+            } >>"$REPORT_MD"
+            ;;
+        *)
+            echo "note: llama.cpp out_dir not under /tmp; skipping fetch: $LLAMACPP_REMOTE_OUT_DIR" >&2
+            ;;
+    esac
+fi
 
 if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_SERVER_SWEEP" = "1" ]; then
     echo "== running llama-server prompt sweep on spark (may be gated) =="
