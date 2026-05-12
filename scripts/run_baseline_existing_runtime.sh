@@ -617,7 +617,7 @@ fi
 
 REMOTE_PROBE_ENV="$(remote_env_prefix)"
 
-if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
+if [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
     echo "== running llama.cpp fattn patch source probe on spark (read-only) =="
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_fattn_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_fattn_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_fattn_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_fattn_patch_probe.py" \
         >"$OUT_DIR/remote_fattn_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_fattn_patch_probe_stderr.txt" || true
@@ -635,10 +635,10 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
         echo "- stdout: $OUT_DIR/remote_fattn_patch_probe_stdout.txt"
         echo "- stderr: $OUT_DIR/remote_fattn_patch_probe_stderr.txt"
         echo
-    } >>"$REPORT_MD"
+} >>"$REPORT_MD"
 fi
 
-if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
+if [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
     echo "== running llama.cpp multislot patch source probe on spark (read-only) =="
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_multislot_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_multislot_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_multislot_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_multislot_patch_probe.py" \
         >"$OUT_DIR/remote_multislot_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_multislot_patch_probe_stderr.txt" || true
