@@ -39,7 +39,7 @@ REPORT_MD="$OUT_DIR/antirez_ds4_mtp_one_token_oracle_probe_spark.md"
 	echo
 	echo "## Safety Gates"
 	echo
-	echo "This runner is **gated** and does not clone/patch/build/run `antirez/ds4` unless Spark-side env enables it."
+	echo "This runner is gated and does not clone/patch/build/run antirez/ds4 unless Spark-side env enables it."
 	echo
 	echo "Set env vars on Spark via REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV:"
 	echo
@@ -159,7 +159,7 @@ fi
 {
 	echo "## Results"
 	echo
-	echo "This runner targets the **antirez/ds4** oracle path and can load the trunk GGUF when `ALLOW_RUN=1` is set."
+	echo "This runner targets the antirez/ds4 oracle path and can load the trunk GGUF when ALLOW_RUN=1 is set."
 	echo "Coordinate with the baseline runtime loop before running it on Spark."
 	echo
 	echo "Stdout (prefix):"
@@ -236,4 +236,3 @@ summary = {
 PY
 
 echo "done: $REPORT_MD"
-

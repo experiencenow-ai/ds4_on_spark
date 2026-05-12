@@ -106,7 +106,11 @@ apply_patch_file "$PATCH_PROBE_FILE" "mtp-one-token-json-probe"
 if [ "$ALLOW_BUILD" != "1" ]; then
 	note "build skipped (set ALLOW_BUILD=1 to compile ds4)"
 else
-	(cd "$DS4_DIR" && make -j)
+	if [ "$JSON_ONLY" = "1" ]; then
+		(cd "$DS4_DIR" && make -j) 1>&2
+	else
+		(cd "$DS4_DIR" && make -j)
+	fi
 fi
 
 if [ "$ALLOW_RUN" != "1" ]; then
@@ -163,5 +167,7 @@ if [ ! -x "$DS4_BIN" ]; then
 fi
 
 cd "$DS4_DIR"
+DS4_MTP_PROBE="${DS4_MTP_PROBE:-1}"
+DS4_MTP_FULL_LOGITS="${DS4_MTP_FULL_LOGITS:-1}"
+export DS4_MTP_PROBE DS4_MTP_FULL_LOGITS
 exec sh -lc "\"$DS4_BIN\" --cuda -m \"$TRUNK_GGUF\" --mtp \"$MTP_SIDECAR_GGUF\" -p \"$PROMPT\" -c \"$CTX\" --seed \"$SEED\" --dump-mtp-one-token-json"
-
