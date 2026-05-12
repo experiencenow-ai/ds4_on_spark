@@ -1,6 +1,8 @@
 # Upstream Manifest
 
-Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
+Pinned upstream references for this Spark local-inference performance lab (repo name `experiencenow-ai/ds4_on_spark` is historical shorthand).
+
+Scope hygiene: treat DeepSeek V4 Flash, Qwen/Ling comparator targets (target-only), and DFlash speculative decoding as separate tracks in reports (see `docs/model-quality-speed.md`).
 
 - Pinned-at: 2026-05-12 (UTC)
 - Policy: do **not** vendor large third-party trees or model weights; fetch on-demand and pin exact commits.
