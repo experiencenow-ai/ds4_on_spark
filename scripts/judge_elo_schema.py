@@ -30,6 +30,18 @@ WINNERS = ("A", "B", "tie")
 DECISION_FIELDS = ("winner", "margin", "score_a", "score_b", "reason", "train_hint", "tags")
 _DECISION_FIELD_SET = set(DECISION_FIELDS)
 
+DECISION_FIELDS_V2 = ("w", "m", "sa", "sb", "r", "h", "t")
+_DECISION_FIELD_V2_SET = set(DECISION_FIELDS_V2)
+_DECISION_V2_TO_V1 = {
+    "w": "winner",
+    "m": "margin",
+    "sa": "score_a",
+    "sb": "score_b",
+    "r": "reason",
+    "h": "train_hint",
+    "t": "tags",
+}
+
 RECORD_FIELDS = (
     "schema",
     "pair_id",
@@ -55,6 +67,35 @@ _RECORD_FIELD_SET = set(RECORD_FIELDS)
 
 PROMPT_FIELDS = ("schema", "judge_out_target", "system", "user", "schema_hint")
 _PROMPT_FIELD_SET = set(PROMPT_FIELDS)
+
+def canonicalize_decision_obj(obj: Any) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    """Canonicalize a decision object into v1 keys.
+
+    Supported input forms:
+    - v1 keys: winner/margin/score_a/score_b/reason/train_hint/tags
+    - v2 keys (compact): w/m/sa/sb/r/h/t
+
+    Returns (canonical_obj, errs). On error, canonical_obj is None.
+    """
+    if not isinstance(obj, dict):
+        return None, ["decision must be an object"]
+
+    has_v1 = any(k in obj for k in _DECISION_FIELD_SET)
+    has_v2 = any(k in obj for k in _DECISION_FIELD_V2_SET)
+    if has_v1 and has_v2:
+        return None, ["decision mixes v1 and v2 keys"]
+    if has_v2 and not has_v1:
+        errs: List[str] = []
+        extra = [k for k in obj.keys() if k not in _DECISION_FIELD_V2_SET]
+        if len(extra) != 0:
+            for k in sorted(extra):
+                errs.append(f"unexpected key in decision: {k}")
+        out: Dict[str, Any] = {}
+        for k2, k1 in _DECISION_V2_TO_V1.items():
+            if k2 in obj:
+                out[k1] = obj.get(k2)
+        return out, errs
+    return dict(obj), []
 
 
 def _is_int(v: Any) -> bool:

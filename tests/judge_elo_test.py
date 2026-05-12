@@ -9,6 +9,7 @@ from scripts import judge_elo_join_quality as joiner
 from scripts import judge_elo_update as updater
 from scripts import pairwise_judge_record as record_wrap
 from scripts import pairwise_judge_prompt as prompt_builder
+from scripts import pairwise_judge_validate_decision as decision_validator
 
 
 class JudgeEloTest(unittest.TestCase):
@@ -39,7 +40,7 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(schema.validate_prompt(obj), [])
 
     def test_prompt_rejects_extra_keys(self) -> None:
-        msg = prompt_builder.build_messages(prompt="p", a="a", b="b", judge_out_target=64, schema_version="v2")
+        msg = prompt_builder.build_messages(prompt="p", a="a", b="b", judge_out_target=64, schema_version="v2", decision_version="v1")
         msg["extra"] = 1
         errs = schema.validate_prompt(msg)
         self.assertTrue(any("unexpected key in prompt" in str(e) for e in errs))
@@ -191,6 +192,33 @@ class JudgeEloTest(unittest.TestCase):
         )
         self.assertTrue(rec.get("parse_valid", False))
         self.assertEqual(rec.get("winner"), "A")
+
+    def test_wrap_record_accepts_compact_decision_v2_keys(self) -> None:
+        decision_v2 = {"w": "B", "m": 1, "sa": 6, "sb": 7, "r": "B is slightly clearer.", "h": "Lead with the direct answer.", "t": ["clarity"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
+            pair_id="p0_compact_v2",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision_v2, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=True,
+        )
+        self.assertTrue(rec.get("parse_valid", False))
+        self.assertEqual(rec.get("winner"), "B")
+        self.assertEqual(rec.get("margin"), 1)
+
+    def test_validate_decision_accepts_compact_decision_v2_keys(self) -> None:
+        decision_v2 = {"w": "tie", "m": 0, "sa": 6, "sb": 6, "r": "Both are acceptable.", "h": "", "t": []}
+        text = "ok\n" + json.dumps(decision_v2, separators=(",", ":"), ensure_ascii=False) + "\n"
+        obj, err = decision_validator.parse_and_validate_decision_text(text, strict=True)
+        self.assertEqual(err, "")
+        self.assertIsNotNone(obj)
+        assert obj is not None
+        self.assertEqual(obj.get("winner"), "tie")
+        self.assertEqual(obj.get("margin"), 0)
 
     def test_wrap_record_parse_valid_v2_requires_budget(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
@@ -582,18 +610,20 @@ class JudgeEloTest(unittest.TestCase):
             self.assertNotIn("Output JSON matching this shape", str(obj.get("user", "")))
 
     def test_prompt_schema_validator_accepts_builder_output(self) -> None:
-        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64, schema_version="v1")
+        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64, schema_version="v1", decision_version="v1")
         self.assertEqual(schema.validate_prompt(msg), [])
 
     def test_prompt_schema_validator_accepts_builder_output_v2(self) -> None:
-        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64, schema_version="v2")
+        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64, schema_version="v2", decision_version="v1")
         self.assertEqual(schema.validate_prompt(msg), [])
 
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
+        dec_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v2.schema.json")
         rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
         rec_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v2.schema.json")
+        rec_v3_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v3.schema.json")
         prompt_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v1.schema.json")
         prompt_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v2.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
@@ -601,7 +631,7 @@ class JudgeEloTest(unittest.TestCase):
         bundle_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_bundle_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, rec_v2_path, prompt_path, prompt_v2_path, meta_path, budget_path, bundle_path, qmap_path, leaderboard_path):
+        for path in (dec_path, dec_v2_path, rec_path, rec_v2_path, rec_v3_path, prompt_path, prompt_v2_path, meta_path, budget_path, bundle_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):
