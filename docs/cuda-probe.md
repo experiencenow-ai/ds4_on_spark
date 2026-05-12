@@ -48,6 +48,8 @@ When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” 
 ./scripts/cuda_probe_cublaslt_tiny_spark0.sh
 ```
 
+This includes additional “build-system flag spelling” variants for the same matmul smoke test (`--gpu-architecture=compute_121 --gpu-code=sm_121` and explicit `-gencode` for `sm_121` + `compute_121` PTX).
+
 To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
 
 ```bash
