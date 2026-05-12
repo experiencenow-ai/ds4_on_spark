@@ -13,6 +13,7 @@ int32_t test_ctx(void)
 	_Alignas(16) uint8_t mem[4096];
 	ds4_log_entry_t e;
 	int32_t c;
+	int32_t bytes;
 	int32_t err;
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
@@ -23,6 +24,11 @@ int32_t test_ctx(void)
 	if ( ctx.arena.base != mem )
 		return(-4);
 	cfg.log_ring_entries = 4;
+	bytes = -1;
+	if ( ds4_ctx_auto_arena_bytes(&cfg,&bytes) < 0 )
+		return(-15);
+	if ( bytes != (int32_t)(cfg.log_ring_entries * (int32_t)sizeof(ds4_log_entry_t)) )
+		return(-28);
 	if ( ds4_ctx_init_auto(&ctx,&cfg,mem,(int32_t)sizeof(mem)) < 0 )
 		return(-16);
 	if ( DS4_LOGI("ctx auto log ring") < 0 )
@@ -36,6 +42,11 @@ int32_t test_ctx(void)
 	if ( strcmp(e.msg,"ctx auto log ring") != 0 )
 		return(-21);
 	cfg.log_ring_entries = 0;
+	bytes = -1;
+	if ( ds4_ctx_auto_arena_bytes(&cfg,&bytes) < 0 )
+		return(-29);
+	if ( bytes != 0 )
+		return(-30);
 	if ( ds4_ctx_apply_config(&ctx,&cfg) < 0 )
 		return(-22);
 	cfg.cuda_arena_size = 256;

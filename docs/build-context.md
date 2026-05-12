@@ -66,6 +66,8 @@ int32_t example_auto(void)
 }
 ```
 
+To help size the host arena for `ds4_ctx_init_auto`, `ds4_ctx_auto_arena_bytes` computes the minimum number of arena bytes needed for the auto-managed allocations implied by a config (currently: the log ring entries when `log_ring_entries > 0`).
+
 ## Reading captured logs
 
 After you attach a log ring, you can retrieve entries via:
