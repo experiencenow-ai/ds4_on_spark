@@ -100,7 +100,7 @@ fetch_remote_dir_tar()
 sh_quote()
 {
     v="${1:-}"
-    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\''/g")"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
 }
 
 remote_env_prefix()

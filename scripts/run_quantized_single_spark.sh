@@ -33,7 +33,7 @@ FETCH_LLAMA_OUT_DIR="${FETCH_LLAMA_OUT_DIR:-0}"
 quote_sh()
 {
     v="${1:-}"
-    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\''/g")"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
 }
 
 infer_llama_dir()
