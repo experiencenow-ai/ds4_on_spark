@@ -1076,9 +1076,13 @@
         "softmax": "scores = scores.softmax(dim=-1)",
         "sqrtsoftplus": "scores = F.softplus(scores).sqrt()"
       },
+      "swiglu_clamp_enabled_expr": "if self.swiglu_limit > 0:",
+      "swiglu_clamp_gate_expr": "gate = torch.clamp(gate, max=self.swiglu_limit)",
+      "swiglu_clamp_up_expr": "up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)",
       "weights_normalize_expr": "weights /= weights.sum(dim=-1, keepdim=True)",
       "weights_scale_expr": "weights *= self.route_scale"
     },
+    "swiglu_limit": 10.0,
     "transformers_mlp_layer_types": [
       "hash_moe",
       "hash_moe",

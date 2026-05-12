@@ -35,6 +35,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Convenience fields: `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256`, `checkpoint_index.weight_map_top_level_keys_sha256`, and `mtp.checkpoint_key_fingerprint.*`.
   - Upstream section records sha256 of the pinned upstream commit (`upstream_commit.txt`), encoding oracle vectors (`encoding/tests/*`), and oracle prompt set (`oracle/prompts.json`) to keep drift machine-detectable.
 - Contract summary also records small but correctness-critical reference expressions (e.g. attention scaling and activation-QAT group sizes) from `inference/model.py` so DS4 can validate external runtime assumptions without guessing.
+- MoE clamp contract: `contract_summary.json` records `moe.swiglu_limit` and the exact clamp expressions under `moe.semantics.swiglu_clamp_*` so runtimes can’t omit expert activation clamping without detection.
 - Fetch/refresh script: `scripts/model_contract_fetch_deepseek_v4_flash.sh`
 - One-shot refresh + verify: `scripts/model_contract_refresh_deepseek_v4_flash.sh`
 - Contract-summary builder: `scripts/model_contract_build_deepseek_v4_flash_contract.py`

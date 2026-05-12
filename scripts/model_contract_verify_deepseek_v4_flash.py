@@ -364,6 +364,37 @@ def main() -> int:
 				if moe_sem.get("bias_affects_selection_only_comment") is None:
 					failures.append(Failure(18, f"contract summary missing MoE bias selection-only note (moe.semantics.bias_affects_selection_only_comment): {contract_summary}"))
 				moe = summary.get("moe", {})
+				if isinstance(moe, dict):
+					swiglu = moe.get("swiglu_limit", None)
+					try:
+						want_inf = float(inf.get("swiglu_limit"))
+					except Exception:
+						want_inf = None
+					try:
+						want_cfg = float(cfg.get("swiglu_limit"))
+					except Exception:
+						want_cfg = None
+					if not isinstance(swiglu, (int, float)):
+						failures.append(Failure(140, f"contract summary moe.swiglu_limit must be a number: {contract_summary}"))
+					else:
+						if want_inf is not None and float(swiglu) != float(want_inf):
+							failures.append(Failure(141, f"contract summary moe.swiglu_limit mismatch vs inference/config.json swiglu_limit={want_inf}: {contract_summary}"))
+						if want_cfg is not None and float(swiglu) != float(want_cfg):
+							failures.append(Failure(142, f"contract summary moe.swiglu_limit mismatch vs config.json swiglu_limit={want_cfg}: {contract_summary}"))
+					need_clamp = {
+						"swiglu_clamp_enabled_expr": "swiglu_limit > 0",
+						"swiglu_clamp_up_expr": "torch.clamp(up",
+						"swiglu_clamp_gate_expr": "torch.clamp(gate",
+					}
+					for k, needle in need_clamp.items():
+						v = moe_sem.get(k)
+						if not (isinstance(v, str) and needle in v):
+							failures.append(Failure(143, f"contract summary missing expected moe.semantics.{k} containing {needle!r}: {contract_summary}"))
+							break
+					up_expr = moe_sem.get("swiglu_clamp_up_expr")
+					if isinstance(up_expr, str):
+						if "min=-self.swiglu_limit" not in up_expr or "max=self.swiglu_limit" not in up_expr:
+							failures.append(Failure(144, f"contract summary moe.semantics.swiglu_clamp_up_expr must clamp to [-swiglu_limit,+swiglu_limit]: {contract_summary}"))
 				moe_hash = moe.get("hash_routing", {}) if isinstance(moe, dict) else {}
 				try:
 					n_hash = int(moe.get("n_hash_layers", 0)) if isinstance(moe, dict) else 0
