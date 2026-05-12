@@ -12,6 +12,7 @@ Mac-side wrapper that produces a commit-safe (REDACT=1) snapshot set for Spark r
   - docs/spark-ring-mtu-probe-<stamp>.md
   - docs/spark-ring-bw-probe-<stamp>.md
   - docs/spark0-probe-facts-<stamp>.md
+  - docs/spark-ring-node-facts-<host>-<stamp>.md (optional; SPARK_NODE_FACTS=1)
 
 Defaults:
   - Targets: aitopatom-9ab9.local spark1.local spark2.local
@@ -29,6 +30,7 @@ Environment:
   SKIP_MTU=1          Skip MTU DF-ping snapshot
   SKIP_BW=1           Skip bandwidth smoke snapshot
   SKIP_SPARK0_FACTS=1 Skip Spark0 facts-only probe snapshot
+  SPARK_NODE_FACTS=1  Also capture per-node facts-only snapshots (writes one file per target)
 
 Examples:
   DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh
@@ -139,6 +141,13 @@ if [ "${SKIP_SPARK0_FACTS:-0}" != "1" ]; then
 	(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh aitopatom-9ab9.local || true) >"$spark0_facts_out"
 else
 	echo "skip: spark0 facts (SKIP_SPARK0_FACTS=1)"
+fi
+
+if [ "${SPARK_NODE_FACTS:-0}" = "1" ]; then
+	echo "capturing: per-node facts (SPARK_NODE_FACTS=1)"
+	(DOCS_DIR="$DOCS_DIR" STAMP="$stamp" SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_ring_probe_facts.sh $targets || true) >/dev/null
+else
+	echo "skip: per-node facts (SPARK_NODE_FACTS!=1)"
 fi
 
 echo

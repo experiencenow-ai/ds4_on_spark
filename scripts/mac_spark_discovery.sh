@@ -68,6 +68,18 @@ date -u
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
 			git_dir="$git_worktree/.gitshim/repo/.git"
 		fi
+		if [ "$git_dir" = "" ] && [ -r "$git_worktree/.git" ] && [ ! -d "$git_worktree/.git" ]; then
+			worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' "$git_worktree/.git" | head -n 1 || true)"
+			if [ "$worktree_gitdir" != "" ] && [ -r "$worktree_gitdir/commondir" ]; then
+				common_rel="$(cat "$worktree_gitdir/commondir" 2>/dev/null || true)"
+				if [ "$common_rel" != "" ]; then
+					common_abs="$(cd "$worktree_gitdir" 2>/dev/null && cd "$common_rel" 2>/dev/null && pwd -P 2>/dev/null || true)"
+					if [ "$common_abs" != "" ] && [ -r "$common_abs/HEAD" ]; then
+						git_dir="$common_abs"
+					fi
+				fi
+			fi
+		fi
 		git_hash=""
 		if [ "$git_dir" != "" ]; then
 			git_hash="$(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"

@@ -27,7 +27,7 @@ Some automation-provided macOS checkouts have a `.git` worktree that is readable
 
 - You may not be able to `git fetch`, create branches, or commit using the checkout’s default `.git` metadata.
 - A common symptom is `git fetch origin` failing with `Operation not permitted` under `.git/worktrees/.../FETCH_HEAD`; use the shim gitdir for all git operations in that checkout.
-- The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir).
+- The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir). When `DS4_GIT_DIR` is unset and `.git` is a worktree `gitdir:` file, the scripts also attempt to derive the shared repo `commondir` for a best-effort `git: <hash>` without writing to the locked worktree gitdir.
 
 Prefer a local shim repo at `.codex_git/` (gitignored by this repo). Older notes and runs may refer to `.git-codex/`; both layouts work.
 
@@ -38,7 +38,7 @@ When `git fetch origin` fails with `Operation not permitted` under `.git/worktre
 From repo root:
 
 ```bash
-worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p' .git)"
+worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' .git)"
 common_rel="$(cat "${worktree_gitdir}/commondir")"
 common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
 rm -rf .codex_git
@@ -92,7 +92,7 @@ If you need to preserve any local files, seed the shim’s `HEAD` and `index` fr
 ```bash
 # Seed `.codex_git/` from the current checkout worktree metadata.
 # This avoids the “untracked would be overwritten” trap when the worktree already has files.
-worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p')"
+worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p')"
 cp "$worktree_gitdir/index" .codex_git/index
 cp "$worktree_gitdir/HEAD" .codex_git/HEAD
 
@@ -183,6 +183,20 @@ To produce a full, commit-safe snapshot set for ring bring-up (mac discovery + r
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+To also capture per-node facts-only snapshots (Spark1/Spark2-ready, when reachable), set `SPARK_NODE_FACTS=1`:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+For facts-only per-node snapshots without the full ring set:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
 ```
 
 ### Spark Hardware + Toolchain Probe
