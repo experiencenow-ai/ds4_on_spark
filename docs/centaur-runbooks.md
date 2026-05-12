@@ -106,6 +106,8 @@ If you also have Spark3, use:
   - `scripts/centaur_spark_hyor_controller_http_v73.sh`
   - `scripts/centaur_spark_hyor_agent_http_v73.sh`
   - `scripts/centaur_spark_hyor_node_discover_v73.sh`
+  - Notes:
+    - For controller-root selection, prefer `RING_WORKDIR` + `RING_RUN_ID` (ring rsync) or `CENTAUR_WORKDIR` (Spark0 smoke); override with `HYOR_CONTROLLER_ROOT` if needed.
 
 ## Fixtures
 

@@ -17,18 +17,28 @@ Environment:
                  (default: ~/centaur-smoke/v73/run/centaur_spec_impl_v73)
   CENTAUR_VENV     Centaur venv dir containing bin/python3
                  (default: ~/centaur-smoke/v73/run/venv)
+  HYOR_CONTROLLER_ROOT  Optional explicit controller root override.
+  RING_WORKDIR     When set with RING_RUN_ID, defaults controller_root to:
+                  $RING_WORKDIR/run/$RING_RUN_ID/controller
+  RING_RUN_ID      Ring run id (pairs with RING_WORKDIR).
+  CENTAUR_WORKDIR  When set (Spark0 smoke), defaults controller_root to:
+                  $CENTAUR_WORKDIR/hyor/controller
+  CENTAUR_RUN_ID   When set (Spark0 smoke), defaults controller_root to:
+                  ~/centaur-smoke/v73/run/$CENTAUR_RUN_ID/hyor/controller
   AUTH_TOKEN_ENV   Optional auth token env var name for controller/node HTTP
   TIMEOUT_S        HTTP timeout seconds (default: 5)
   WORKERS          Concurrent probe workers (default: 8)
   NO_APPLY         Set to 1 to probe without applying discoveries to controller state
 
 Default controller_root:
-  ~/centaur-smoke/v73/run/hyor/controller
+  auto (see environment notes above)
 
 Example (on Spark0):
   export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
   export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
-  sh ./scripts/centaur_spark_hyor_node_discover_v73.sh ~/centaur-smoke/v73/run/hyor/controller http://<spark1-host>:8766 http://<spark2-host>:8767
+  export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+  export RING_RUN_ID=<ring_run_id>
+  sh ./scripts/centaur_spark_hyor_node_discover_v73.sh http://<spark1-host>:8766 http://<spark2-host>:8767
 USAGE
 }
 
@@ -39,8 +49,30 @@ case "${1:-}" in
 		;;
 esac
 
+default_controller_root()
+{
+	if [ "${HYOR_CONTROLLER_ROOT:-}" != "" ]; then
+		echo "$HYOR_CONTROLLER_ROOT"
+		return 0
+	fi
+	if [ "${RING_WORKDIR:-}" != "" ] && [ "${RING_RUN_ID:-}" != "" ]; then
+		echo "${RING_WORKDIR%/}/run/$RING_RUN_ID/controller"
+		return 0
+	fi
+	if [ "${CENTAUR_WORKDIR:-}" != "" ]; then
+		echo "${CENTAUR_WORKDIR%/}/hyor/controller"
+		return 0
+	fi
+	if [ "${CENTAUR_RUN_ID:-}" != "" ]; then
+		echo "$HOME/centaur-smoke/v73/run/$CENTAUR_RUN_ID/hyor/controller"
+		return 0
+	fi
+	echo "$HOME/centaur-smoke/v73/run/hyor/controller"
+	return 0
+}
+
 first="${1:-}"
-controller_root="$HOME/centaur-smoke/v73/run/hyor/controller"
+controller_root="$(default_controller_root)"
 seed_urls=""
 case "$first" in
 	http://*|https://*)

@@ -224,7 +224,7 @@ For Centaur bugs, always include:
 
 - `zip_sha256` + zip mtime
 - exact Centaur command line
-- the affected Centaur root directory (e.g. `~/centaur-smoke/v73/run/hyor/controller`)
+- the affected Centaur root directory (e.g. `"$CENTAUR_WORKDIR/hyor/controller"` or `~/centaur-smoke/v73/run/<run_id>/hyor/controller`)
 - `pip freeze` excerpt for `numpy`, `scipy`, and `scikit-learn`
 
 ## Smoke report template (copy/paste)
