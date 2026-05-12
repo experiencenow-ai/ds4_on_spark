@@ -5,6 +5,7 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
+OUT_DIR_OVERRIDE="${OUT_DIR_OVERRIDE:-}"
 REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
 REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
@@ -30,6 +31,7 @@ SKIP_LLAMA="${SKIP_LLAMA:-0}"
 SKIP_MTP_SIDECAR="${SKIP_MTP_SIDECAR:-0}"
 SKIP_VLLM="${SKIP_VLLM:-0}"
 SKIP_OPENAI_STREAM="${SKIP_OPENAI_STREAM:-1}"
+REQUIRE_GGUF_TRUNK_COMPLETE="${REQUIRE_GGUF_TRUNK_COMPLETE:-0}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -42,11 +44,19 @@ OUT_DIR="$OUT_ROOT/$ts"
 if [ "$RUN_LABEL" != "" ]; then
     OUT_DIR="$OUT_ROOT/$ts-$RUN_LABEL"
 fi
+if [ "$OUT_DIR_OVERRIDE" != "" ]; then
+    OUT_DIR="$OUT_DIR_OVERRIDE"
+fi
 
 mkdir -p "$OUT_DIR"
 RUN_IDS_TSV="$OUT_DIR/model_run_ids.tsv"
 
 echo "writing report to: $OUT_DIR"
+
+if [ "$REQUIRE_GGUF_TRUNK_COMPLETE" = "1" ] && [ "$SKIP_GGUF_INSPECT" = "1" ]; then
+    echo "error: REQUIRE_GGUF_TRUNK_COMPLETE=1 requires SKIP_GGUF_INSPECT=0" >&2
+    exit 6
+fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
@@ -566,6 +576,43 @@ python3 /tmp/model_contract_inspect_quantized_artifact.py --path \"\${MODEL_GGUF
     echo "- stderr: $OUT_DIR/remote_gguf_inspect_stderr.txt"
     echo
 } >>"$REPORT_MD"
+
+if [ "$REQUIRE_GGUF_TRUNK_COMPLETE" = "1" ]; then
+    python3 - "$OUT_DIR/remote_gguf_inspect_stdout.txt" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    text = open(path, "r", encoding="utf-8").read()
+except OSError as e:
+    print(f"gguf contract required but could not read inspector output: {e}", file=sys.stderr)
+    raise SystemExit(2)
+
+start = text.find("{")
+if start < 0:
+    print("gguf contract required but inspector emitted no JSON (did it get skipped?)", file=sys.stderr)
+    raise SystemExit(3)
+
+try:
+    data = json.loads(text[start:])
+except json.JSONDecodeError as e:
+    print(f"gguf contract required but inspector JSON parse failed: {e}", file=sys.stderr)
+    raise SystemExit(4)
+
+trunk = data.get("trunk_contract") or {}
+checked = trunk.get("checked")
+complete = trunk.get("complete")
+kind = trunk.get("kind")
+
+if checked is not True:
+    print(f"gguf contract required but trunk_contract.checked != true (checked={checked!r})", file=sys.stderr)
+    raise SystemExit(5)
+if complete is not True:
+    print(f"gguf contract required but trunk_contract.complete != true (complete={complete!r}, kind={kind!r})", file=sys.stderr)
+    raise SystemExit(6)
+PY
+fi
 fi
 
 REMOTE_PROBE_ENV="$(remote_env_prefix)"

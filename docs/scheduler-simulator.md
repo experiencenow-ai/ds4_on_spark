@@ -610,6 +610,16 @@ interactive p95, starvation, or partial-admit regressions.
 
 When replaying real traces with `python3 sim/scheduler/recommendations.py --trace-jsonl ...`, prefer the report’s `evidence` block as a quick go/no-go sanity check (`evidence.expert_queueing`, and when MTP counters exist: `evidence.mtp` plus the draft-priority sweep `evidence.mtp_draft_queue_cls`).
 
+To get a concise, PR-friendly summary for a runtime trace ablation, use `--format md`:
+
+```bash
+python3 sim/scheduler/recommendations.py \
+  --trace-jsonl /path/to/route.jsonl \
+  --trace-input-format runtime \
+  --trace-non-route skip \
+  --format md
+```
+
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
 
 ## MTP Simulation

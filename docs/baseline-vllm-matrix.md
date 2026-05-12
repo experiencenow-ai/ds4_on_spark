@@ -79,6 +79,7 @@ Notes:
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.
 - The bundle wrapper also emits `model_quality_speed_scored_summary.txt` (per-run `key=value` blocks including Pareto `dominated_by`) for copy/paste into baseline docs.
+- If your checkout is a worktree that cannot write `FETCH_HEAD`, create a local git shim (`scripts/run_baseline_git_shim.sh`) and pass `DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=.` so the bundle report records the correct `ds4_on_spark` commit.
 - Do not download large model weights unless explicitly approved.
 - These wrappers default to `ALLOW_RUN=0` so nothing executes on Spark unless you opt in.
 

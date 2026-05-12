@@ -22,6 +22,8 @@ If `MODEL_RUNS_CSV` is unset, `scripts/run_quantized_single_spark.sh` defaults i
 
 Note: when using `MODEL_GGUF_GLOB` auto-selection, `scripts/run_quantized_single_spark.sh` records the selection inputs (`MODEL_GGUF_GLOB`, `MODEL_GGUF_EXCLUDE_EGREP`, `MODEL_GGUF_INCLUDE_EGREP`, `MODEL_GGUF_SELECT`) into the baseline report’s `REMOTE_LLAMA_ENV` block so commit-ready docs preserve how the GGUF was chosen.
 
+Contract gate: `scripts/run_quantized_single_spark.sh` sets `REQUIRE_GGUF_TRUNK_COMPLETE=1` by default, so the run will abort before token generation unless the Spark-side GGUF inspector reports `trunk_contract.complete=true` (helps ensure the “smallest” auto-selected GGUF is actually a DeepSeek V4 Flash-family artifact). Set `REQUIRE_GGUF_TRUNK_COMPLETE=0` only for plumbing/debug runs.
+
 ## Definition of Done
 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family
