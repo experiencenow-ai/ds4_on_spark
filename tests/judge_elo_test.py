@@ -192,6 +192,11 @@ class JudgeEloTest(unittest.TestCase):
         errs3 = schema.validate_decision(decision3)
         self.assertTrue(any("tags[1] must be a single line" in e for e in errs3))
 
+    def test_decision_reason_must_be_non_empty(self) -> None:
+        decision = {"winner": "A", "margin": 1, "score_a": 7, "score_b": 6, "reason": "", "train_hint": "", "tags": []}
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("reason must be non-empty" in e for e in errs))
+
     def test_record_raw_char_limit(self) -> None:
         rec = {
             "schema": schema.SCHEMA_RECORD_V1,
@@ -205,6 +210,18 @@ class JudgeEloTest(unittest.TestCase):
         }
         errs = schema.validate_record(rec)
         self.assertTrue(any("raw must be <= 512 chars" in e for e in errs))
+
+    def test_record_parse_invalid_requires_raw_or_error(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V1,
+            "pair_id": "p0",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": False,
+        }
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("raw and/or parse_error" in e for e in errs))
 
     def test_wrap_record_sanitizes_raw_newlines(self) -> None:
         rec = record_wrap.build_record(

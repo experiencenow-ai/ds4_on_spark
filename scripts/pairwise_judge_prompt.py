@@ -18,7 +18,9 @@ SYSTEM = (
     "No markdown. No extra keys. No explanations.\n"
     "Return exactly one JSON object on one line.\n"
     "Target judge_out <= ~{judge_out_target} tokens by keeping reason/train_hint short.\n"
-    "reason and train_hint must each be <= 18 words (prefer <= 12).\n"
+    "If you exceed the budget, shorten reason first, then set train_hint to empty, then drop extra tags.\n"
+    "reason must be non-empty and <= 18 words (prefer <= 12).\n"
+    "train_hint may be empty, but if present must be <= 18 words (prefer <= 12).\n"
     "All string values must be single-line (no newlines).\n"
     "If winner is tie, margin must be 0 and score_a must equal score_b."
 )
