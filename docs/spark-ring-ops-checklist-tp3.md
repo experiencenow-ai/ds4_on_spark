@@ -2,6 +2,10 @@
 
 This is a **human-run** checklist for operating a 3-node ring layout safely.
 
+If you are setting up a fresh 3-node ring, start with:
+
+- `docs/spark-ring-ops-quickstart-tp3.md`
+
 For a one-page readiness rubric (what “ready” means, and what blocks a run), see:
 
 - `docs/spark-ring-ops-readiness-tp3.md`

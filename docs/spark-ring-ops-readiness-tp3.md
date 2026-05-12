@@ -6,6 +6,7 @@ It is intended for **human-run** ops. Nothing here should be applied automatical
 
 Use this alongside:
 
+- Quickstart: `docs/spark-ring-ops-quickstart-tp3.md`
 - Operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - SSH + network runbook: `docs/ops-ssh-network-runbook.md`
 - TP=3 readiness checks: `docs/ops-tp3-readiness.md`
