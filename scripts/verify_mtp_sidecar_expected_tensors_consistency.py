@@ -145,7 +145,7 @@ def main() -> None:
 	ap.add_argument("--python-probe", default="scripts/model_contract_probe_mtp_sidecar.py")
 	ap.add_argument(
 		"--patch",
-		default="docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch",
+		default="docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch",
 	)
 	ap.add_argument(
 		"--patch-kind",

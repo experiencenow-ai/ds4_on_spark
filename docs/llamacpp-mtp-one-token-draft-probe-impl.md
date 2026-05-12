@@ -29,7 +29,7 @@ scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 
 2) The sidecar is validated on the llama.cpp fork side (optional but strongly recommended) using the probe patch in this repo:
 
-- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch`
 
 and run:
 
