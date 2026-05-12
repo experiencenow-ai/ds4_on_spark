@@ -99,6 +99,7 @@ Use a strict system instruction:
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
 For lower judge **input** token overhead, use `--schema-version v2` (default; it avoids embedding the JSON shape in the user message).
+Prompt schema v2 also includes the strict margin/score consistency + `tags<=3` constraints in the system message to reduce `parse_valid=false` rates under strict validation.
 For harnesses, use `--format json` to emit a single JSON object with `{system,user}` fields.
 Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_prompt_v1.schema.json`
