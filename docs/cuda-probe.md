@@ -10,6 +10,8 @@ When you want the smallest “device-props + `sm_121` compile-only gates” set 
 ./scripts/cuda_probe_sm121_gate_spark0.sh
 ```
 
+This gate also includes a compile-only “fatbin packaging” probe using `-gencode arch=compute_121,code=[sm_121,compute_121]` when `nvcc --list-gpu-arch` is supported (quick confirmation that CUDA 13’s multi-code `-gencode` bracket-list spelling works for GB10 bring-up).
+
 ## Spark0: Tiny Smoke (Fast Path)
 
 When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” check:

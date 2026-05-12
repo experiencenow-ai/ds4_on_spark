@@ -75,6 +75,29 @@ make clean
 make sm121_gate
 
 echo
+echo \"== nvcc: gencode sm_121+compute_121 compile (if compute_121 advertised) ==\"
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported; skipping)\"
+else
+	if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+		mkdir -p bin
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=[sm_121,compute_121]\" -c -o bin/cuda_sm121_gencode_sm_plus_ptx_compile_probe.o src/cuda_sm121_compile_probe.cu 2>bin/cuda_sm121_gencode_sm_plus_ptx_compile_probe.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_sm_121_plus_compute_121_compile: OK\"
+		else
+			echo \"gencode_sm_121_plus_compute_121_compile: FAILED rc=\$rc\" >&2
+			head -n 80 bin/cuda_sm121_gencode_sm_plus_ptx_compile_probe.err || true
+			exit 6
+		fi
+	else
+		echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\" >&2
+	fi
+fi
+
+echo
 run_retry() {
 	name=\"\$1\"
 	shift
