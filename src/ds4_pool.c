@@ -14,6 +14,30 @@ static void ds4_pool_write_i32(uint8_t *p,int32_t v)
 	memcpy(p,&v,sizeof(v));
 }
 
+int32_t ds4_pool_reset(ds4_pool_t *p)
+{
+	int32_t i,count,next,block_size;
+	if ( p == 0 )
+		return(-1);
+	if ( p->base == 0 )
+		return(-2);
+	block_size = p->block_size;
+	if ( block_size <= 0 )
+		return(-3);
+	count = p->block_count;
+	if ( count <= 0 )
+		return(-4);
+	p->free_head = 0;
+	for (i=0; i<count; i++)
+	{
+		next = (i + 1);
+		if ( next >= count )
+			next = -1;
+		ds4_pool_write_i32(p->base + (i * block_size),next);
+	}
+	return(0);
+}
+
 int32_t ds4_pool_init(ds4_pool_t *p,uint8_t *mem,int32_t mem_size,int32_t block_size)
 {
 	int32_t i,count,next;
@@ -109,5 +133,20 @@ int32_t ds4_pool_free_count(ds4_pool_t *p,int32_t *out)
 			return(-4);
 	}
 	*out = n;
+	return(0);
+}
+
+int32_t ds4_pool_used_count(ds4_pool_t *p,int32_t *out)
+{
+	int32_t free_count;
+	if ( p == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( ds4_pool_free_count(p,&free_count) < 0 )
+		return(-3);
+	if ( p->block_count < free_count )
+		return(-4);
+	*out = (p->block_count - free_count);
 	return(0);
 }
