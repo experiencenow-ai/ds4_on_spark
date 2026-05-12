@@ -1593,6 +1593,7 @@ def build_contract() -> dict:
 		},
 		"attention_schedule": {
 			"compress_ratios": [int(r) for r in compress_ratios],
+			"main_compress_ratios": [int(r) for r in compress_ratios[:n_layers]],
 			"main_layer_types": layer_types,
 			"main_layer_ids_by_type": layer_ids_by_type,
 			"main_layer_ids_by_compress_ratio": layer_ids_by_compress_ratio,
