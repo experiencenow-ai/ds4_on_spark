@@ -202,9 +202,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     ymd = _ymd_from_utc(utc_ts)
     _ = ymd
     repo_rev = _parse_repo_rev(report_md)
-    llama_rev = _parse_llama_commit(remote_llama_stdout)
-
     summary_kv = _extract_kv_block(remote_llama_stdout, "== baseline summary (approx) ==")
+    llama_rev = summary_kv.get("llama_commit", "").strip() or _parse_llama_commit(remote_llama_stdout)
     model_source = summary_kv.get("model_source", "unknown")
     model_quant = summary_kv.get("model_quant", "unknown")
     model_gguf = summary_kv.get("model_gguf", "") or _inspect_path(_read_json(gguf_inspect_path)) or "unknown"

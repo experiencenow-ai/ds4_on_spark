@@ -246,6 +246,10 @@ count from the llama.cpp `eval time = ... / <tokens>` timing line), plus
 canonical aliases `ttft_s`, `total_wall_s`, and `decode_tps` for cross-runtime
 comparisons.
 
+The llama.cpp baseline summary also includes `llama_commit` when the runner can
+resolve it from `LLAMA_DIR` (best-effort provenance pin for the external
+runtime).
+
 Compatibility notes (llama.cpp forks):
 
 - Some V4-capable forks expose `--show-timings` + `--perf` instead of `--timings`. The Spark-side probe auto-detects the supported flags via `llama-cli --help` and parses either the classic `eval time = ... / <tokens>` lines or the fork-style `[ Prompt: <t/s> | Generation: <t/s> ]` summary.
