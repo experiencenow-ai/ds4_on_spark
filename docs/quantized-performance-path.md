@@ -73,10 +73,17 @@ scheduling behavior:
 - per-layer MoE dispatch counts
 - selected expert IDs and top-k scores when available
 - expert GEMM batch sizes
+- quantized-kernel routing/dispatch for MoE (`MUL_MAT_ID`): MMQ vs MMVQ counts plus a small shape histogram (for example `dst_ne[2]`, active tokens, and batch dimensions)
 - GPU memory and KV cache growth
+- CUDA fallback nodes and graph placement (for example `__fattn__` / `__op__` scheduling lines when present)
 - MTP draft tokens, accepted tokens, and rejected tokens when available
 
 Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
+
+### Current Spark0 clues (May 2026)
+
+- Single-Spark llama.cpp DeepSeek V4 Flash IQ2XXS aggregate decode plateaus around ~13.5–14.2 tok/s; see `docs/baseline-batching-throughput.md` for the pinned command-line shapes and gating notes.
+- A `MUL_MAT_ID` sampler has observed MoE routed shapes up to `dst_ne[2]=38`, with larger routed shapes hitting `mmq` while smaller shapes hit `mmvq`; treat this as a clue that some grouping exists, but require per-shape histograms and per-op timing before making any “expert queue” claims.
 
 ## Phase 0: Simulator-Only
 
