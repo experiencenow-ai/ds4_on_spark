@@ -1,0 +1,5 @@
+{"type":"meta","meta":{"note":"Mini conditional-entropy fixture for extra axes (template<->model and family<->answer).","schema":"entropy-buffer.conditional_axes.v1"}}
+{"type":"task_run","task_id":"axes.task.001","task_family":"fam1","prompt_template_id":"t1","model_id":"m1","answer":"A","prompt":"p1","output":"o1"}
+{"type":"task_run","task_id":"axes.task.002","task_family":"fam1","prompt_template_id":"t1","model_id":"m2","answer":"B","prompt":"p2","output":"o2"}
+{"type":"task_run","task_id":"axes.task.003","task_family":"fam2","prompt_template_id":"t2","model_id":"m1","answer":"A","prompt":"p3","output":"o3"}
+{"type":"task_run","task_id":"axes.task.004","task_family":"fam2","prompt_template_id":"t2","model_id":"m2","answer":"B","prompt":"p4","output":"o4"}
