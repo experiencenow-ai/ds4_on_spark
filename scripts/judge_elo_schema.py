@@ -78,6 +78,23 @@ def _as_num(v: Any, field: str, errs: List[str]) -> Optional[float]:
 def _finite(v: float) -> bool:
     return not (math.isnan(v) or math.isinf(v))
 
+def _allowed_margins_for_score_diff(diff: int) -> Tuple[int, ...]:
+    """Allowed margin values given abs(score_a-score_b).
+
+    This is enforced only in strict mode (validate_record_strict). It keeps the
+    decision internally consistent while still allowing "near-tie but pick a
+    winner" cases.
+    """
+    if diff <= 0:
+        return (0,)
+    if diff == 1:
+        return (0, 1)
+    if diff == 2:
+        return (1, 2)
+    if diff == 3:
+        return (2,)
+    return (3,)
+
 
 @dataclass(frozen=True)
 class JudgeDecision:
@@ -268,6 +285,20 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
         if isinstance(parse_error, str) and len(parse_error) > 128:
             errs.append("parse_error must be <= 128 chars")
 
+    if parse_valid is True:
+        winner = obj.get("winner")
+        score_a = obj.get("score_a")
+        score_b = obj.get("score_b")
+        margin = obj.get("margin")
+        if isinstance(winner, str) and winner in ("A", "B"):
+            if _is_int(score_a) and _is_int(score_b) and _is_int(margin):
+                diff = abs(int(score_a) - int(score_b))
+                if diff <= 0:
+                    errs.append("non-tie winners require score_a!=score_b")
+                allowed = _allowed_margins_for_score_diff(int(diff))
+                if int(margin) not in allowed:
+                    errs.append(f"margin must be in {list(allowed)} for score diff {diff}")
+
     return errs
 
 
@@ -394,6 +425,10 @@ def validate_meta(obj: Any) -> List[str]:
         errs.append("inputs is required")
     elif not isinstance(inputs, list) or any(not isinstance(x, str) for x in inputs):
         errs.append("inputs must be an array of strings")
+
+    strict_v = obj.get("strict")
+    if strict_v is not None and not isinstance(strict_v, bool):
+        errs.append("strict must be a boolean when present")
 
     qm = obj.get("quality_mode")
     if not isinstance(qm, str) or qm not in ("logistic", "minmax"):

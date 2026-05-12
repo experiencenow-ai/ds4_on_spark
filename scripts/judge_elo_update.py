@@ -383,6 +383,7 @@ def main() -> None:
     write_outputs(args.out_dir, rows)
     with open(os.path.join(args.out_dir, "meta.json"), "w", encoding="utf-8") as f:
         meta = compute_meta(args.inputs, float(args.k), float(args.scale), bool(args.sort))
+        meta["strict"] = bool(args.strict)
         meta["quality_mode"] = str(args.quality_mode)
         meta["quality_source"] = str(qsrc)
         meta["judge_out_target_tokens"] = int(args.judge_out_target)

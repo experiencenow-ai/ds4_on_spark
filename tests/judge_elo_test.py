@@ -229,6 +229,33 @@ class JudgeEloTest(unittest.TestCase):
         errs = schema.validate_decision(decision)
         self.assertTrue(any("reason must be non-empty" in e for e in errs))
 
+    def test_strict_requires_margin_score_consistency(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V1,
+            "pair_id": "p_strict0",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": True,
+            "winner": "A",
+            "margin": 3,
+            "score_a": 7,
+            "score_b": 6,
+            "reason": "A is better.",
+            "train_hint": "Fix the main issue.",
+            "tags": ["quality"],
+            "tokens": {"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            "latency_ms": {"a": 5, "b": 6, "judge": 7},
+        }
+        errs = schema.validate_record_strict(rec)
+        self.assertTrue(any("margin must be in" in e for e in errs))
+
+        rec2 = dict(rec)
+        rec2["margin"] = 0
+        rec2["score_b"] = 7
+        errs2 = schema.validate_record_strict(rec2)
+        self.assertTrue(any("non-tie winners require" in e for e in errs2))
+
     def test_record_raw_char_limit(self) -> None:
         rec = {
             "schema": schema.SCHEMA_RECORD_V1,
