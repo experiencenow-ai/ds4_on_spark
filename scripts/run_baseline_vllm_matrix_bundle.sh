@@ -10,6 +10,10 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 matrix_tsv="${2:-}"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_rev="unknown"
+if [ -e "$repo_root/.git" ]; then
+    repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
+fi
 
 if [ "$matrix_tsv" = "" ]; then
     matrix_tsv="$repo_root/fixtures/baseline/vllm_matrix_template.tsv"
@@ -50,6 +54,42 @@ mkdir -p "$bundle_dir"
 
 csv_path="$bundle_dir/model_runs.csv"
 : >"$csv_path"
+
+report_md="$bundle_dir/baseline_vllm_matrix_bundle.md"
+{
+    echo "# Baseline: vLLM matrix bundle"
+    echo
+    echo "Date (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo
+    echo "- ds4_on_spark commit: $repo_rev"
+    echo "- target: $target"
+    echo "- matrix_tsv: $matrix_tsv"
+    echo "- bundle_dir: $bundle_dir"
+    echo
+    echo "## Command"
+    echo
+    echo '```sh'
+    echo "BUNDLE_LABEL='$BUNDLE_LABEL' OUT_ROOT='$OUT_ROOT' \\"
+    echo "ALLOW_RUN='$ALLOW_RUN' ALLOW_FETCH='$ALLOW_FETCH' \\"
+    echo "PROMPT='$PROMPT' MAX_TOKENS='$MAX_TOKENS' TENSOR_PARALLEL_SIZE='$TENSOR_PARALLEL_SIZE' \\"
+    echo "DFLASH_NUM_SPEC_TOKENS='$DFLASH_NUM_SPEC_TOKENS' \\"
+    echo "SMOKE_EVAL='$SMOKE_EVAL' SMOKE_MAX_TOKENS_PER_TASK='$SMOKE_MAX_TOKENS_PER_TASK' \\"
+    echo "SKIP_GGUF_INSPECT='$SKIP_GGUF_INSPECT' SKIP_LLAMA='$SKIP_LLAMA' SKIP_MTP_SIDECAR='$SKIP_MTP_SIDECAR' \\"
+    echo "PUBLIC_QUALITY_PRIOR='$PUBLIC_QUALITY_PRIOR' PUBLIC_QUALITY_BASIS='$PUBLIC_QUALITY_BASIS' PUBLIC_QUALITY_SOURCE='$PUBLIC_QUALITY_SOURCE' \\"
+    echo "PASSED_TASKS='$PASSED_TASKS' TOTAL_TASKS='$TOTAL_TASKS' LOCAL_QUALITY_SCORE='$LOCAL_QUALITY_SCORE' QUALITY_SCORE='$QUALITY_SCORE' \\"
+    echo "scripts/run_baseline_vllm_matrix_bundle.sh '$target' '$matrix_tsv'"
+    echo '```'
+    echo
+    echo "## Artifacts"
+    echo
+    echo "- matrix stdout: $bundle_dir/matrix_stdout.txt"
+    echo "- matrix stderr: $bundle_dir/matrix_stderr.txt"
+    echo "- model runs CSV: $csv_path"
+    echo "- scored table: $bundle_dir/model_quality_speed_score.md"
+    echo "- scored JSON: $bundle_dir/model_quality_speed_score.json"
+    echo "- scored summary: $bundle_dir/model_quality_speed_scored_summary.txt"
+    echo
+} >"$report_md"
 
 echo "bundle_dir=$bundle_dir"
 echo "model_runs_csv=$csv_path"
@@ -128,7 +168,21 @@ for r in rows:
 PY
 fi
 
+{
+    echo "## Scored summary (copy/paste)"
+    echo
+    if [ -r "$summary_path" ]; then
+        echo '```text'
+        cat "$summary_path"
+        echo '```'
+    else
+        echo "missing: $summary_path"
+    fi
+    echo
+} >>"$report_md"
+
 echo "wrote:"
+echo "- $report_md"
 echo "- $bundle_dir/matrix_stdout.txt"
 echo "- $bundle_dir/matrix_stderr.txt"
 echo "- $csv_path"
