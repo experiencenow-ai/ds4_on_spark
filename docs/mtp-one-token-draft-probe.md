@@ -70,6 +70,7 @@ scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 Notes:
 
 - This runner **loads the trunk GGUF** when `ALLOW_RUN=1` is set. Keep it gated and coordinate with the baseline runtime loop.
+- The output directory includes a machine-readable `summary.json` (probe parse + local validator status).
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
 - As of 2026-05-12, the patch is still a **skeleton**: it validates sidecar binding and can compute a debug-only stub output-head tensor when `LOAD_SIDECAR_WEIGHTS=1`, but it emits `ok=false` with a TODO until the real `gamma=1` draft compute is implemented.
 
@@ -109,6 +110,8 @@ This runner does not fetch/build. It only runs the provided command, validates t
 
 Note: the runner assumes the one-token command emits **exactly one JSON object** to stdout (no banners, no logs). Any validation output is written to stderr and captured in the report separately.
 
+The output directory includes a machine-readable `summary.json` (probe parse + remote validator JSON, when available).
+
 Optional sidecar-gated runner: if you want this repo to perform a Spark-side sidecar contract probe first (metadata-only, no trunk load) and then cross-check `mtp_params` against the sidecar’s derived params automatically, use:
 
 ```bash
@@ -118,6 +121,7 @@ scripts/run_mtp_one_token_draft_probe_spark_with_sidecar_gate.sh spark0@<spark-h
 ```
 
 This runner also attempts (best-effort) to fetch `/tmp/mtp_sidecar_probe.json` back from Spark and run the same payload fingerprint gate locally, writing the result into the report directory as `sidecar_probe_fingerprint_gate.json`.
+The output directory includes a machine-readable `summary.json` (probe parse + remote validator + local fingerprint gate).
 
 ## Implementation checklist (Spark/CUDA llama.cpp fork)
 
