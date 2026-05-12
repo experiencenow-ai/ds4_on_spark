@@ -1,6 +1,7 @@
 #include "ds4/log_ring.h"
 #include "ds4/str.h"
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -67,7 +68,16 @@ int32_t ds4_log_ring_init(ds4_log_ring_t *lr,ds4_log_entry_t *entries,int32_t en
 		return(-3);
 	if ( ds4_ring_init(&lr->r,(uint8_t *)entries,entry_count,(int32_t)sizeof(ds4_log_entry_t)) < 0 )
 		return(-4);
+	lr->dropped = 0;
 	return(0);
+}
+
+int32_t ds4_log_ring_reset(ds4_log_ring_t *lr)
+{
+	if ( lr == 0 )
+		return(-1);
+	lr->dropped = 0;
+	return(ds4_ring_reset(&lr->r));
 }
 
 int32_t ds4_log_ring_count(ds4_log_ring_t *lr,int32_t *out_count)
@@ -75,6 +85,16 @@ int32_t ds4_log_ring_count(ds4_log_ring_t *lr,int32_t *out_count)
 	if ( lr == 0 )
 		return(-1);
 	return(ds4_ring_count(&lr->r,out_count));
+}
+
+int32_t ds4_log_ring_dropped(ds4_log_ring_t *lr,int32_t *out_dropped)
+{
+	if ( lr == 0 )
+		return(-1);
+	if ( out_dropped == 0 )
+		return(-2);
+	*out_dropped = lr->dropped;
+	return(0);
 }
 
 int32_t ds4_log_ring_pop(ds4_log_ring_t *lr,ds4_log_entry_t *out)
@@ -102,5 +122,7 @@ void ds4_log_ring_sink(void *ctx,int32_t level,const char *msg)
 		return;
 	if ( ds4_ring_pop(&lr->r,&drop) < 0 )
 		return;
+	if ( lr->dropped < INT32_MAX )
+		lr->dropped += 1;
 	ds4_ring_push(&lr->r,&e);
 }

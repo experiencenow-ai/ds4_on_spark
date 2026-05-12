@@ -96,6 +96,15 @@ int32_t ds4_ctx_log_ring_count(ds4_ctx_t *ctx,int32_t *out_count)
 	return(ds4_log_ring_count(&ctx->log_ring,out_count));
 }
 
+int32_t ds4_ctx_log_ring_dropped(ds4_ctx_t *ctx,int32_t *out_dropped)
+{
+	if ( ctx == 0 )
+		return(-1);
+	if ( ctx->log_ring_ready == 0 )
+		return(-2);
+	return(ds4_log_ring_dropped(&ctx->log_ring,out_dropped));
+}
+
 int32_t ds4_ctx_log_ring_pop(ds4_ctx_t *ctx,ds4_log_entry_t *out)
 {
 	if ( ctx == 0 )

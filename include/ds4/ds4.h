@@ -31,5 +31,6 @@ int32_t ds4_ctx_log_ring_init(ds4_ctx_t *ctx,ds4_log_entry_t *entries,int32_t en
 int32_t ds4_ctx_log_ring_init_arena(ds4_ctx_t *ctx,int32_t entry_count);
 int32_t ds4_ctx_log_ring_detach(ds4_ctx_t *ctx);
 int32_t ds4_ctx_log_ring_count(ds4_ctx_t *ctx,int32_t *out_count);
+int32_t ds4_ctx_log_ring_dropped(ds4_ctx_t *ctx,int32_t *out_dropped);
 int32_t ds4_ctx_log_ring_pop(ds4_ctx_t *ctx,ds4_log_entry_t *out);
 DS4_EXTERN_C_END

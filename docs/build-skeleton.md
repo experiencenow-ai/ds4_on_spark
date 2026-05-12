@@ -45,7 +45,7 @@ For overflow-checked allocations from arenas without repeating `count*elem_size`
 Logging is intentionally minimal and allocation-free:
 
 - `include/ds4/log.h` + `src/ds4_log.c`: global log level + pluggable sink
-- `include/ds4/log_ring.h` + `src/ds4_log_ring.c`: fixed-size ring capture sink
+- `include/ds4/log_ring.h` + `src/ds4_log_ring.c`: fixed-size ring capture sink (drops oldest when full; drop count via `ds4_log_ring_dropped`)
 
 See `docs/build-logging.md`.
 
