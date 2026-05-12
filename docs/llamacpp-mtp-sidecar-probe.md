@@ -103,6 +103,8 @@ For the canonical repo-side, no-download validation (HTTP range-read of header/t
 python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/.../DeepSeek-V4-Flash-MTP-*.gguf --json
 ```
 
+When you run the Spark-side llama.cpp probe runners, note that the llama.cpp probe requires a readable **local file**; if you set `MTP_SIDECAR_GGUF` to an `http(s)://` URL for the Python contract probe, the Spark llama.cpp probe step will be skipped with a targeted message.
+
 The Python probe also computes a `payload_bytes` estimate per tensor (for the expected `F32`/`Q8_0`/`Q4_K` types) and validates that tensor payload spans do not overlap and do not exceed the reported `file_size` when available.
 
 Optional stronger check (still no full download): sample a small prefix from each tensor payload:
