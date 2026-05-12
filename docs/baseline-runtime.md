@@ -72,6 +72,8 @@ For vLLM runs, you can also set `SMOKE_EVAL=1` (and optionally `SMOKE_MAX_TOKENS
 
 When the remote baseline summary includes speculative-decoding metadata (for example from vLLM DFlash runs), the wrapper also records `speculative_method`, `speculative_draft_model`, and `speculative_num_speculative_tokens` into `MODEL_RUNS_CSV`.
 
+When `LLAMA_SERVER_THROUGHPUT_SWEEP=1` is enabled (see `docs/baseline-batching-throughput.md`) and `MODEL_RUNS_CSV` is set, the wrapper appends an additional CSV row for the sweep’s **best decode** configuration (mapping `agg_generated_tok_s` → `decode_tps`, `agg_prompt_tok_s` → `prefill_tps`, `wave_wall_s` → `total_wall_s`, and `agg_generated_tokens` → `output_tokens`). Use `LLAMA_SERVER_THROUGHPUT_SCOPE` (default `llama_server_throughput`) to keep these rows separate from the single-prompt llama.cpp baseline.
+
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
 

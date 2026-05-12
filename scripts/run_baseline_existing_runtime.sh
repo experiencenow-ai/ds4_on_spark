@@ -660,14 +660,68 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
         mkdir -p "$OUT_DIR/llama_server_throughput_sweep"
         tar -xzf "$OUT_DIR/remote_llama_server_throughput_sweep.tgz" -C "$OUT_DIR/llama_server_throughput_sweep" >/dev/null 2>&1 || true
     fi
+    best_decode_json="$OUT_DIR/llama_server_throughput_sweep/throughput_best_decode.json"
+    best_decode_summary="$OUT_DIR/llama_server_throughput_best_decode_summary.txt"
+    if [ -r "$best_decode_json" ]; then
+        python3 - "$best_decode_json" >"$best_decode_summary" 2>/dev/null <<'PY' || true
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    data = json.load(open(path, "r", encoding="utf-8"))
+except OSError:
+    data = {}
+except json.JSONDecodeError:
+    data = {}
+
+def _v(k, default=""):
+    v = data.get(k, default)
+    if v is None:
+        return ""
+    return str(v)
+
+print("decode_tps=" + _v("agg_generated_tok_s"))
+print("prefill_tps=" + _v("agg_prompt_tok_s"))
+print("wall_s=" + _v("wave_wall_s"))
+print("output_tokens=" + _v("agg_generated_tokens"))
+for k in [
+    "parallel",
+    "batch",
+    "ubatch",
+    "prompt_words",
+    "concurrency",
+    "repeats",
+    "ok",
+    "errors",
+    "fattn_disabled",
+    "fattn_backend0_only",
+    "multislot_sched_reserve_fail",
+]:
+    if k in data:
+        print(f"llama_server_{k}=" + _v(k))
+PY
+        append_model_runs_csv "${LLAMA_SERVER_THROUGHPUT_SCOPE:-llama_server_throughput}" "${LLAMA_SERVER_MODEL_ID:-${MODEL_SOURCE:-llama-server}}" "$best_decode_summary"
+    fi
     {
         echo "## llama-server throughput sweep (Spark)"
         echo
+        if [ -r "$best_decode_summary" ]; then
+            echo "Best decode row (best-effort):"
+            echo
+            echo '```'
+            cat "$best_decode_summary" 2>/dev/null || true
+            echo '```'
+            echo
+        fi
         echo "Full logs:"
         echo
         echo "- stdout: $OUT_DIR/remote_llama_server_throughput_sweep_stdout.txt"
         echo "- stderr: $OUT_DIR/remote_llama_server_throughput_sweep_stderr.txt"
         echo "- tarball: $OUT_DIR/remote_llama_server_throughput_sweep.tgz"
+        if [ -r "$best_decode_summary" ]; then
+            echo "- best_decode_summary: $best_decode_summary"
+        fi
         echo
 } >>"$REPORT_MD"
 fi
