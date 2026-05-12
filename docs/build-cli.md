@@ -85,6 +85,12 @@ You can also point the CLI at a default config path via `DS4_CONFIG_PATH`:
 DS4_CONFIG_PATH=path/to/ds4.conf ./build_cli/ds4_cli --dump-config
 ```
 
+You can also supply inline config text (newline-delimited `key=value` pairs) via `DS4_CONFIG`:
+
+```bash
+DS4_CONFIG="log_level=debug" ./build_cli/ds4_cli --dump-config
+```
+
 ## Tests (Smoke)
 
 When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests that run:
@@ -95,3 +101,5 @@ When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests t
 - `ds4_cli --smoke-cuda`
 - `ds4_cli --config <tmpfile> --dump-config`
 - `ds4_cli --config - --dump-config` (stdin)
+- `DS4_CONFIG=... ds4_cli --dump-config`
+- `DS4_CONFIG_PATH=... ds4_cli --dump-config`
