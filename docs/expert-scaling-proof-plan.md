@@ -128,6 +128,16 @@ Success criteria:
 - cross-Spark routing is tested only after single-Spark batching proves the
   MoE path is actually the bottleneck being relieved.
 
+Throughput-oriented batches may be larger than the first `B=100` proof point.
+The Spark0 batch sweep shows MoE per-row cost continuing to improve through
+`B=512-2048` and then flattening near `1.6-1.7 ms/row` for 43 layers at
+`B=2048-8192`. Use separate lanes:
+
+- interactive lane: small bounded wait, likely `B<=32-64`;
+- throughput lane: `B=256-1024` target while measuring full decode throughput;
+- bulk/offline lane: `B>=2048` only when added latency and memory headroom are
+  acceptable.
+
 ## Cross-Spark Expectation
 
 Routing between Sparks can reduce time-to-output only if one of these is true:
