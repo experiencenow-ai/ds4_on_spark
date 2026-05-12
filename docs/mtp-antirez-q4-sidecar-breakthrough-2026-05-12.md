@@ -82,3 +82,10 @@ REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1" \
 REMOTE_MTP_ONE_TOKEN_CMD="/abs/path/to/ds4 --cuda -m /abs/trunk.gguf --mtp /abs/DeepSeek-V4-Flash-MTP-*.gguf -p 'Hello.' --dump-mtp-one-token-json" \
 scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 ```
+
+Spark oracle runner (fetch/patch/build/run; all gated on Spark-side env):
+
+```bash
+REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV="ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1" \
+scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
+```

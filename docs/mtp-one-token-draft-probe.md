@@ -106,6 +106,15 @@ Notes:
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
 - As of 2026-05-12, the patch is still a **skeleton**: it validates sidecar binding and can compute a debug-only stub output-head tensor when `LOAD_SIDECAR_WEIGHTS=1`, but it emits `ok=false` with a TODO until the real `gamma=1` draft compute is implemented.
 
+## Spark runner (antirez/ds4 oracle; build + one-token JSON)
+
+This repo also ships a **gated** Spark runner that can clone/patch/build/run `antirez/ds4@3630e64` with the Q4_K + secondary-map fixes and the `--dump-mtp-one-token-json` oracle capture:
+
+```bash
+REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1' \
+scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
+```
+
 ## Spark runner (when the fork has a real one-token command)
 
 When the Spark/CUDA llama.cpp fork has a one-token probe command available, run it on Spark and record artifacts using:
