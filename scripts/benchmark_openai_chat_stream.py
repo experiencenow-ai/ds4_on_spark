@@ -53,8 +53,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--timeout", type=float, default=600.0)
     p.add_argument("--max-prompts", type=int, default=0, help="limit prompt count after filtering; 0 means all")
     p.add_argument("--category", action="append", default=[], help="include only this category; repeatable")
+    p.add_argument("--out-dir", default=os.environ.get("OUT_DIR", ""), help="optional output directory; sets default jsonl/csv/summary paths inside it")
     p.add_argument("--jsonl-out", default="")
     p.add_argument("--csv-out", default="")
+    p.add_argument("--summary-json-out", default="", help="optional path to write a machine-readable summary JSON")
+    p.add_argument("--baseline-summary-out", default="", help="optional path to write a baseline key=value summary block (for MODEL_RUNS_CSV ingestion)")
     return(p.parse_args())
 
 
@@ -240,10 +243,107 @@ def print_summary(rows: List[Dict[str, Any]]) -> None:
         print(f"| {category} | {len(cr)} | {fmt(median(cr_rates))} | {fmt(median(cr_ttfts))} | {fmt(median(cr_aggs))} |")
 
 
+def build_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    real = [r for r in rows if r["category"] != "warmup" and r.get("error", "") == ""]
+    out: Dict[str, Any] = {
+        "rows": len(rows),
+        "real_rows": len(real),
+        "errors": sum(1 for r in rows if r.get("error", "") != ""),
+    }
+
+    def _med(field: str) -> Optional[float]:
+        xs: List[float] = []
+        for r in real:
+            v = r.get(field)
+            if v is None:
+                continue
+            try:
+                xs.append(float(v))
+            except (TypeError, ValueError):
+                continue
+        return(median(xs))
+
+    out["median_decode_tps"] = _med("decode_tps")
+    out["median_ttft_s"] = _med("ttft_s")
+    out["median_total_wall_s"] = _med("total_wall_s")
+    out["median_output_tokens"] = _med("output_tokens")
+    out["median_prompt_tokens"] = _med("prompt_tokens")
+    out["median_group_aggregate_output_tps"] = _med("aggregate_output_tps")
+
+    cats = sorted({r["category"] for r in real})
+    per_cat: Dict[str, Any] = {}
+    for cat in cats:
+        cr = [r for r in real if r["category"] == cat]
+        per_cat[cat] = {
+            "n": len(cr),
+            "median_decode_tps": median([float(r["decode_tps"]) for r in cr if r.get("decode_tps") is not None]),
+            "median_ttft_s": median([float(r["ttft_s"]) for r in cr if r.get("ttft_s") is not None]),
+            "median_group_aggregate_output_tps": median([float(r["aggregate_output_tps"]) for r in cr if r.get("aggregate_output_tps") is not None]),
+        }
+    out["per_category"] = per_cat
+    return(out)
+
+
+def maybe_write_summary_json(path: str, summary: Dict[str, Any]) -> None:
+    if path == "":
+        return
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, sort_keys=True, indent=2)
+        f.write("\n")
+
+
+def maybe_write_baseline_summary(path: str, args: argparse.Namespace, summary: Dict[str, Any]) -> None:
+    if path == "":
+        return
+
+    ttft_s = summary.get("median_ttft_s")
+    decode_tps = summary.get("median_decode_tps")
+    total_wall_s = summary.get("median_total_wall_s")
+    output_tokens = summary.get("median_output_tokens")
+    prompt_tokens = summary.get("median_prompt_tokens")
+
+    prefill_tps = None
+    try:
+        if isinstance(prompt_tokens, (int, float)) and isinstance(ttft_s, (int, float)) and float(ttft_s) > 0.0:
+            prefill_tps = float(prompt_tokens) / float(ttft_s)
+    except Exception:
+        prefill_tps = None
+
+    lines: List[str] = []
+    lines.append("endpoint=" + str(args.endpoint))
+    lines.append("model=" + str(args.model))
+    lines.append("thinking=" + str(args.thinking))
+    lines.append("concurrency=" + str(args.concurrency))
+    if isinstance(ttft_s, (int, float)):
+        lines.append("ttft_s=%.6f" % float(ttft_s))
+    if isinstance(prefill_tps, (int, float)):
+        lines.append("prefill_tps=%.6f" % float(prefill_tps))
+    if isinstance(decode_tps, (int, float)):
+        lines.append("decode_tps=%.6f" % float(decode_tps))
+    if isinstance(total_wall_s, (int, float)):
+        lines.append("total_wall_s=%.6f" % float(total_wall_s))
+    if isinstance(output_tokens, (int, float)):
+        lines.append("output_tokens=%.0f" % float(output_tokens))
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("== baseline summary (approx) ==\n")
+        f.write("\n".join(lines) + "\n")
+
+
 def main() -> int:
     args = parse_args()
     if args.concurrency < 1:
         raise SystemExit("--concurrency must be >= 1")
+    if args.out_dir != "":
+        os.makedirs(args.out_dir, exist_ok=True)
+        if args.jsonl_out == "":
+            args.jsonl_out = os.path.join(args.out_dir, "openai_chat_stream.jsonl")
+        if args.csv_out == "":
+            args.csv_out = os.path.join(args.out_dir, "openai_chat_stream.csv")
+        if args.summary_json_out == "":
+            args.summary_json_out = os.path.join(args.out_dir, "openai_chat_stream.summary.json")
+        if args.baseline_summary_out == "":
+            args.baseline_summary_out = os.path.join(args.out_dir, "openai_chat_stream.baseline_summary.txt")
     prompts = selected_prompts(args)
     if not prompts:
         raise SystemExit("no prompts selected")
@@ -265,7 +365,19 @@ def main() -> int:
     write_jsonl(args.jsonl_out, rows)
     write_csv(args.csv_out, rows)
     print()
+    summary = build_summary(rows)
+    maybe_write_summary_json(args.summary_json_out, summary)
+    maybe_write_baseline_summary(args.baseline_summary_out, args, summary)
     print_summary(rows)
+    if args.baseline_summary_out != "":
+        try:
+            raw = open(args.baseline_summary_out, "r", encoding="utf-8").read()
+        except OSError:
+            raw = ""
+        if raw != "":
+            print()
+            print("== baseline summary (approx) ==")
+            print(raw.split("== baseline summary (approx) ==\n", 1)[-1], end="")
     return(0 if all(r.get("error", "") == "" for r in rows) else 3)
 
 
