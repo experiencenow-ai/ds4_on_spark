@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Tue, 12 May 2026 00:00:00 +0000
+Subject: [proof] Allow I32 CUDA repeat for DS4 RPC layer split
+
+This is the exact proof patch tested on Spark0/Spark1/Spark2 to unblock
+DeepSeek V4 Flash RPC layer split. It allows the small DS4 grouped-output I32
+ID repeat to run on a remote CUDA backend.
+
+This patch is sufficient for the DS4 group IDs observed in the probe, but it
+routes I32 values through the existing float broadcast operator. A production
+version should use a bit-preserving repeat-copy kernel for integer tensors.
+
+diff --git a/ggml/src/ggml-cuda/binbcast.cu b/ggml/src/ggml-cuda/binbcast.cu
+--- a/ggml/src/ggml-cuda/binbcast.cu
++++ b/ggml/src/ggml-cuda/binbcast.cu
+@@ -373,7 +373,7 @@ template<class op>
+ static void ggml_cuda_op_bin_bcast(
+     const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst,
+     const void * src0_dd, const void * src1_dd, void * dst_dd, cudaStream_t stream) {
+ 
+-    GGML_ASSERT(src1->type == GGML_TYPE_F32 || src1->type == GGML_TYPE_F16);
++    GGML_ASSERT(src1->type == GGML_TYPE_F32 || src1->type == GGML_TYPE_F16 || src1->type == GGML_TYPE_I32);
+ 
+     if (src0->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F32) {
+         op()(src0, src1, dst, (const float *)src0_dd, (const float *)src1_dd, (float *)dst_dd, stream);
+@@ -381,6 +381,8 @@ static void ggml_cuda_op_bin_bcast(
+         op()(src0, src1, dst, (const half *) src0_dd, (const half *)src1_dd, (half *) dst_dd, stream);
+     } else if (src0->type == GGML_TYPE_F16 && src1->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F16) {
+         op()(src0, src1, dst, (const half *) src0_dd, (const float *)src1_dd, (half *) dst_dd, stream);
+     } else if (src0->type == GGML_TYPE_F16 && dst->type == GGML_TYPE_F32) {
+         op()(src0, src1, dst, (const half *) src0_dd, (const float *)src1_dd, (float *)dst_dd, stream);
++    } else if (src0->type == GGML_TYPE_I32 && src1->type == GGML_TYPE_I32 && dst->type == GGML_TYPE_I32) {
++        op()(src0, src1, dst, (const int32_t *) src0_dd, (const int32_t *) src1_dd, (int32_t *) dst_dd, stream);
+     } else {
+         fprintf(stderr, "%s: unsupported types: dst: %s, src0: %s, src1: %s\n", __func__,
+             ggml_type_name(dst->type), ggml_type_name(src0->type), ggml_type_name(src1->type));
