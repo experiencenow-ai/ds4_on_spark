@@ -5,6 +5,8 @@ import unittest
 from scripts import entropy_buffer_lib as lib
 from scripts import entropy_buffer_canonicalize as canonicalize
 from scripts import entropy_buffer_diff as diff
+from scripts import entropy_buffer_filter as filt
+from scripts import entropy_buffer_gaps as gaps
 from scripts import entropy_buffer_metrics as metrics
 from scripts import entropy_buffer_recommend as recommend
 
@@ -269,6 +271,67 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertIsInstance(float(predicted.get("selected_history_judge_invalid_rate_mean", 0.0)), float)
         self.assertIsInstance(float(predicted.get("selected_history_judge_tie_rate_mean", 0.0)), float)
         self.assertIsInstance(float(predicted.get("selected_history_judge_imbalance_ab_mean", 0.0)), float)
+
+    def test_gaps_report_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_gaps_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = gaps.summarize(records, low_count_max=1, min_family_count=3, top_k=10, missing_template_limit=10)
+
+        fams = report.get("task_run", {}).get("families_low_template_entropy_norm_top", [])
+        self.assertTrue(any(str(x.get("task_family")) == "math" and float(x.get("entropy_norm", 1.0)) == 0.0 for x in fams))
+
+        missing = report.get("task_run", {}).get("families_missing_prompt_template_id_top", [])
+        math_entry = [x for x in missing if str(x.get("task_family")) == "math"]
+        self.assertEqual(len(math_entry), 1)
+        self.assertEqual(math_entry[0].get("missing_prompt_template_id"), ["code.v1", "plain.v1"])
+
+        judge_low = report.get("judge_pair", {}).get("underrepresented_model_pair_top", [])
+        self.assertGreaterEqual(len(judge_low), 1)
+
+    def test_filter_tool_annotates_and_drops_flagged_task_runs(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_filter_mini.jsonl")
+        records = lib.load_jsonl([path])
+
+        annotated = filt.annotate_records(records, drop_flagged_task_runs=False)
+        self.assertEqual(len(annotated), 4)
+        self.assertEqual(bool(annotated[0].get("useful_novelty_flagged", True)), False)
+        self.assertEqual(list(annotated[0].get("useful_novelty_flags") or []), [])
+
+        self.assertEqual(bool(annotated[1].get("useful_novelty_flagged", False)), True)
+        self.assertGreaterEqual(len(list(annotated[1].get("useful_novelty_flags") or [])), 1)
+
+        dropped = filt.annotate_records(records, drop_flagged_task_runs=True)
+        self.assertEqual(len(dropped), 2)
+        self.assertEqual(dropped[0].get("type"), "task_run")
+        self.assertEqual(dropped[1].get("type"), "judge_pair")
+
+    def test_useful_novelty_flags_respect_persisted_fields(self) -> None:
+        records = [
+            {
+                "type": "task_run",
+                "task_id": "t.clean.override",
+                "task_family": "misc",
+                "prompt_template_id": "plain.v1",
+                "prompt": "Return JSON only.",
+                "output": "As an AI language model, I cannot comply.",
+                "useful_novelty_flags": [],
+                "useful_novelty_flagged": False,
+            },
+            {
+                "type": "task_run",
+                "task_id": "t.flagged.persisted",
+                "task_family": "misc",
+                "prompt_template_id": "plain.v1",
+                "prompt": "Return JSON only.",
+                "output": "ok",
+                "useful_novelty_flags": ["ai_disclaimer"],
+                "useful_novelty_flagged": True,
+            },
+        ]
+        report = metrics.summarize(records)
+        self.assertEqual(int(report.useful_novelty.get("flagged_task_runs", 0) or 0), 1)
 
     def test_useful_novelty_flags_fixture(self) -> None:
         root = _repo_root()

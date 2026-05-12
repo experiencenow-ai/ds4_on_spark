@@ -77,7 +77,7 @@ def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
             _inc(tag_counts, tag)
         if c.output != "":
             outputs_norm.append(lib.normalize_text(c.output))
-        if len(lib.useful_novelty_flags(c.output, c.prompt)) != 0:
+        if len(lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)) != 0:
             novelty_flagged += 1
 
     count = len(task_runs)
@@ -727,7 +727,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 total_tok = float(itok + otok)
                 total_tok_per_s.append((total_tok * 1000.0) / float(wms))
 
-        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        flags = lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)
         if len(flags) != 0:
             novelty_flagged += 1
             if tmpl != "":

@@ -302,6 +302,23 @@ def useful_novelty_flags(output: str, prompt: str) -> List[str]:
     return(flags)
 
 
+def get_useful_novelty_flags(obj: Dict[str, Any], output: str, prompt: str) -> List[str]:
+    v = obj.get("useful_novelty_flags", None)
+    if isinstance(v, list):
+        out: List[str] = []
+        for x in v:
+            s = str(x).strip()
+            if s != "":
+                out.append(s)
+        return(out)
+    if isinstance(v, str) and v.strip() != "":
+        return([x.strip() for x in v.split(",") if x.strip() != ""])
+    flagged = obj.get("useful_novelty_flagged", None)
+    if flagged is False:
+        return([])
+    return(useful_novelty_flags(output, prompt))
+
+
 def _to_float(v: Any) -> Optional[float]:
     if v is None:
         return(None)
