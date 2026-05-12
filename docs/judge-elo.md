@@ -57,6 +57,15 @@ python3 scripts/judge_elo_validate.py --strict --in <records.jsonl>
 Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v1.schema.json`
 
+## Updater Output Schemas
+
+The offline updater emits additional machine-readable outputs intended for downstream joins (baseline runtime scoring, dashboards, etc.):
+
+- `meta.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_meta_v1.schema.json`
+- `budget.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_budget_v1.schema.json`
+- `quality_map.json`: `fixtures/judge-elo/schemas/judge_elo_quality_map_v1.schema.json`
+- `leaderboard.json`: `fixtures/judge-elo/schemas/judge_elo_leaderboard_v1.schema.json`
+
 ## Prompt Design (verifier budget)
 
 Use a strict system instruction:

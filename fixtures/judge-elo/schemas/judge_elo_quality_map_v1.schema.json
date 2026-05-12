@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "judge_elo_quality_map_v1",
+  "description": "quality_map.json emitted by scripts/judge_elo_update.py: model id -> quality_score (0..100).",
+  "type": "object",
+  "additionalProperties": {
+    "type": "number",
+    "minimum": 0.0,
+    "maximum": 100.0
+  }
+}

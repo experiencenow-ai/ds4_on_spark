@@ -92,7 +92,7 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 Equivalent milestone wrapper (same run shape, fewer knobs to type):
 
 ```sh
-MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli \
+MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli RUNTIME_LABEL=v4flash-external \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 

@@ -23,8 +23,9 @@ python3 scripts/render_quantized_single_spark_report.py "$OUT_DIR" --write "docs
 - One Spark0 command produces non-empty generated text from a V4 Flash-family
   quantized artifact.
 - The run records exact runtime source, runtime commit, model source, quant,
-  file size, sha256, command line, context length, token count, TTFT, tokens/sec
-  where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+  runtime label, file size, sha256, command line, context length, token count,
+  TTFT, tokens/sec where available, GPU memory snapshot, CPU RSS, stdout, stderr,
+  and exit code.
 - The run preserves the baseline-summary key/value block (so `decode_tps`,
   `total_wall_s`, and `output_tokens` are recoverable for later scoring), plus
   the read-only patch probes when enabled (`LLAMA_FATTN_PATCH_PROBE=1`,
@@ -108,6 +109,7 @@ metadata-only; no downloads), you can omit `MODEL_GGUF` and provide a glob:
 
 ```sh
 MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
+RUNTIME_LABEL='v4flash-external' \
 LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
@@ -124,6 +126,7 @@ the exclude filter:
 ```sh
 MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
 MODEL_GGUF_INCLUDE_EGREP='Q2_K|IQ2XXS' \
+RUNTIME_LABEL='v4flash-external' \
 LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```

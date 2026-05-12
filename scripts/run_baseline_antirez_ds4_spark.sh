@@ -132,6 +132,7 @@ header = [
     "public_quality_basis", "public_quality_source", "passed_tasks",
     "total_tasks", "local_quality_score", "quality_score", "decode_tps",
     "prefill_tps", "ttft_s", "total_wall_s", "output_tokens",
+    "speculative_method", "speculative_draft_model", "speculative_num_speculative_tokens",
 ]
 row = {
     "model": model,
@@ -149,6 +150,9 @@ row = {
     "ttft_s": get("ttft_s", "ttft_first_output_s"),
     "total_wall_s": get("total_wall_s", "wall_s"),
     "output_tokens": get("output_tokens", "generated_tokens"),
+    "speculative_method": get("speculative_method"),
+    "speculative_draft_model": get("speculative_draft_model"),
+    "speculative_num_speculative_tokens": get("speculative_num_speculative_tokens"),
 }
 
 need_header = True

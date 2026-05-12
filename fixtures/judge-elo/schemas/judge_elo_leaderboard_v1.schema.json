@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "judge_elo_leaderboard_v1",
+  "description": "leaderboard.json emitted by scripts/judge_elo_update.py: sorted rows of per-model Elo + quality mapping.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+      "model",
+      "elo",
+      "games",
+      "wins",
+      "losses",
+      "ties",
+      "quality_score",
+      "quality_source"
+    ],
+    "properties": {
+      "model": {
+        "type": "string",
+        "minLength": 1
+      },
+      "elo": {
+        "type": "number"
+      },
+      "games": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "wins": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "losses": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "ties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "quality_score": {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 100.0
+      },
+      "quality_source": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
