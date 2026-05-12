@@ -101,6 +101,13 @@ Optional: you can also run staged TP readiness checks (safe; runs the readiness 
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional: you can also add staged readiness to the one-shot ops snapshot (safe; combines mesh + status + staged readiness):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 ## Mac-Side Systemd Status Snapshot (Optional)
 
 To capture a read-only systemd status snapshot across the inventory (useful for run notes):

@@ -54,6 +54,21 @@ At the end of staging, the helper runs a safe staged env audit to catch common r
 
 - `scripts/ops_spark_ring_staged_env_audit.sh` (reads `/tmp/ds4-config/ds4-<instance>.env.example` on each Spark)
 
+Optional (recommended): run staged TP readiness checks after staging (safe; no sudo; uses staged `/tmp/ds4-*` assets):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
+Or run staged readiness via the snapshot helper (safe; adds readiness to the Mac-side mesh+status snapshot):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 Or stage each host individually:
 
 ```bash

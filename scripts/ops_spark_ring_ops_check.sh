@@ -7,8 +7,8 @@ usage()
 ops_spark_ring_ops_check.sh -- Mac-side 3-node ops snapshot (safe)
 
 Usage:
-  ops_spark_ring_ops_check.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--staged-env-audit] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_spark_ring_ops_check.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--staged-env-audit] --inventory-file <path>
+  ops_spark_ring_ops_check.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--staged-env-audit] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_ops_check.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--staged-env-audit] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -19,6 +19,7 @@ Notes:
       1) mesh checks (ping/route + optional tcp probes) via ops_spark_ring_mesh_check.sh
       2) systemd status snapshot via ops_spark_ring_status.sh
       3) optional staged env audit (requires prior staging) via ops_spark_ring_staged_env_audit.sh
+      4) optional staged readiness (requires prior staging) via ops_spark_ring_staged_readiness.sh
 EOF
 }
 
@@ -31,6 +32,10 @@ strict=0
 with_journal=0
 journal_lines=80
 staged_env_audit=0
+staged_readiness=0
+staged_readiness_strict=0
+staged_readiness_preflight="auto"
+instance_opts=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -74,6 +79,31 @@ while [ $# -gt 0 ]; do
 			staged_env_audit=1
 			shift
 			;;
+		--staged-readiness)
+			staged_readiness=1
+			shift
+			;;
+		--staged-readiness-strict)
+			staged_readiness=1
+			staged_readiness_strict=1
+			shift
+			;;
+		--staged-readiness-preflight)
+			staged_readiness=1
+			staged_readiness_preflight="${2:-}"
+			shift 2
+			;;
+		--instance[0-9]*)
+			idx="${1#--instance}"
+			case "$idx" in
+				*[!0-9]*|"")
+					echo "invalid instance option: $1" >&2
+					exit 2
+					;;
+			esac
+			instance_opts="$instance_opts $1 ${2:-}"
+			shift 2
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -107,6 +137,15 @@ case "$preflight" in
 		;;
 	*)
 		echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4)" >&2
+		exit 2
+		;;
+esac
+
+case "$staged_readiness_preflight" in
+	auto|tp2|tp3|tp4)
+		;;
+	*)
+		echo "invalid --staged-readiness-preflight: $staged_readiness_preflight (expected auto|tp2|tp3|tp4)" >&2
 		exit 2
 		;;
 esac
@@ -149,6 +188,9 @@ echo "strict=$strict"
 echo "journal=$with_journal"
 echo "journal_lines=$journal_lines"
 echo "staged_env_audit=$staged_env_audit"
+echo "staged_readiness=$staged_readiness"
+echo "staged_readiness_strict=$staged_readiness_strict"
+echo "staged_readiness_preflight=$staged_readiness_preflight"
 echo
 
 echo "== mesh check =="
@@ -175,12 +217,29 @@ fi
 if [ "$with_journal" -ne 0 ]; then
 	status_args="$status_args --journal --lines $journal_lines"
 fi
-"$scripts_dir/ops_spark_ring_status.sh" $status_args "$@" || true
+"$scripts_dir/ops_spark_ring_status.sh" $status_args $instance_opts "$@" || true
 echo
 
 if [ "$staged_env_audit" -ne 0 ]; then
 	echo "== staged env audit (requires prior staging) =="
-	"$scripts_dir/ops_spark_ring_staged_env_audit.sh" "$@" || true
+	"$scripts_dir/ops_spark_ring_staged_env_audit.sh" $instance_opts "$@" || true
+	echo
+fi
+
+if [ "$staged_readiness" -ne 0 ]; then
+	echo "== staged readiness (requires prior staging) =="
+	readiness_args=""
+	readiness_args="$readiness_args --topology $topology"
+	if [ "$tcp_ports" != "" ]; then
+		for p in $tcp_ports; do
+			readiness_args="$readiness_args --tcp $p"
+		done
+	fi
+	readiness_args="$readiness_args --preflight $staged_readiness_preflight"
+	if [ "$staged_readiness_strict" -ne 0 ]; then
+		readiness_args="$readiness_args --strict"
+	fi
+	"$scripts_dir/ops_spark_ring_staged_readiness.sh" $readiness_args $instance_opts "$@" || true
 	echo
 fi
 
@@ -188,4 +247,3 @@ echo "== next =="
 echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
 echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
 echo "== done =="
-
