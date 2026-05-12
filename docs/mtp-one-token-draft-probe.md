@@ -49,6 +49,17 @@ Optional debug keys (non-normative; used by the skeleton patch to stage wiring w
 - `mtp_stub_input_hc_{fnv64,nbytes,shape}` (stub pre-block input computed from sidecar `enorm/e_proj` + `hnorm/h_proj` + add; still not a real draft)
 - `mtp_stub_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
 
+Recommended debug keys (for real oracle-vs-candidate diffs):
+
+- `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
+- `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
+- `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
+
+Notes:
+
+- Prefer fingerprinting intermediate tensors over dumping raw floats/logits. Fingerprints are stable, small, and diff-friendly.
+- Avoid dumping full vocab logits (huge + tokenizer/runtime-dependent); fingerprint the normalized head stream instead and require exact `mtp_draft_token_id` equality.
+
 ## Validation
 
 After capturing the JSON, validate its shape (and optionally cross-check `mtp_params` against the sidecar’s derived params):
@@ -70,9 +81,11 @@ By default this requires:
 
 - `base_next_token_id` match
 - `mtp_draft_token_id` match
+- `runtime_repo`, `runtime_commit`, `trunk_gguf_path`, and `mtp_sidecar_path` are required to be present in both probes, but do not need to match (oracle vs candidate runs will often differ); differences are recorded as `notes[]` in the diff output.
 - when present, any optional debug capture fingerprints match (all keys ending in `*_fnv64`, plus matching `*_nbytes` and `*_shape` companions). Common early captures:
   - `trunk_token_embd_*` / `trunk_pre_hc_head_*`
   - `mtp_stub_input_hc_*` / `mtp_stub_head_norm_*`
+  - once the real draft is implemented: `mtp_input_hc_*` / `mtp_block_out_hc_*` / `mtp_head_norm_*`
 
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
 The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.

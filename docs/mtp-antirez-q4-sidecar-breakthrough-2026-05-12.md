@@ -61,3 +61,17 @@ python3 scripts/verify_antirez_ds4_q4k_dot_math.py
 Practical first step: have both probes emit the same one-token JSON schema and run the strict diff tool:
 
 - `python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json`
+
+This repo includes an additional `antirez/ds4@3630e64` patch to make the oracle JSON capture concrete:
+
+- `docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch`
+  - adds `--dump-mtp-one-token-json` to `ds4` (emits a single JSON object to stdout)
+  - captures intermediate `*_fnv64` fingerprints for the MTP draft path
+
+Spark runner hook (no fetch/build; executes whatever is installed on Spark):
+
+```bash
+REMOTE_MTP_ONE_TOKEN_ENV="ALLOW_RUN=1" \
+REMOTE_MTP_ONE_TOKEN_CMD="/abs/path/to/ds4 --cuda -m /abs/trunk.gguf --mtp /abs/DeepSeek-V4-Flash-MTP-*.gguf -p 'Hello.' --dump-mtp-one-token-json" \
+scripts/run_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```

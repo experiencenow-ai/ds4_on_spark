@@ -96,8 +96,19 @@ def diff_one_token_mtp_probes(
 		out["errors"].append("probe JSON must be objects")
 		return out
 
+	# Context keys should be present, but do not require equality: oracle vs candidate
+	# comparisons will often use different runtime repos/commits and different local paths.
 	for k in ("runtime_repo", "runtime_commit", "trunk_gguf_path", "mtp_sidecar_path"):
-		_cmp_value(out, k, _get(a, k), _get(b, k), required=True)
+		va = _get(a, k)
+		vb = _get(b, k)
+		if va is None and vb is None:
+			out["errors"].append(f"missing key in both probes: {k}")
+			continue
+		if va is None or vb is None:
+			out["mismatches"].append({"key": k, "a": va, "b": vb, "reason": "missing"})
+			continue
+		if va != vb:
+			out["notes"].append(f"context differs: {k}")
 
 	prompt_a = _get(a, "prompt_sha256") if _get(a, "prompt_sha256") is not None else _get(a, "prompt")
 	prompt_b = _get(b, "prompt_sha256") if _get(b, "prompt_sha256") is not None else _get(b, "prompt")
