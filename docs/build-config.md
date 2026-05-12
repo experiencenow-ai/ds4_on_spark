@@ -19,7 +19,7 @@ Rules:
 - Inline comments are supported when `#` begins a token (start-of-line or preceded by whitespace).
 - Unknown keys are ignored by default.
 - For strict parsing (unknown keys are errors), use `ds4_config_parse_mem_ex` / `ds4_config_parse_file_ex` with `DS4_CONFIG_PARSE_STRICT_UNKNOWN`.
-- For parse diagnostics (line number + underlying parse error), use `ds4_config_parse_mem_ex_diag` / `ds4_config_parse_file_ex_diag` (and `ds4_config_load_auto_ex_diag` for the combined defaults+file+env helper). These fill a `ds4_config_diag_t` (1-based line numbers for `*_MEM`/`*_FILE` stages). `ds4_config_load_auto_ex_diag` also reports `stage=env` when parsing environment overrides fails. Use `ds4_config_diag_stage_name` / `ds4_config_diag_format` to render the diagnostic for CLI/log output.
+- For parse diagnostics (line number + underlying parse error), use `ds4_config_parse_mem_ex_diag` / `ds4_config_parse_file_ex_diag` (and `ds4_config_load_auto_ex_diag` for the combined defaults+file+env helper). These fill a `ds4_config_diag_t` (1-based line numbers for `*_MEM`/ `*_FILE` stages). `ds4_config_load_auto_ex_diag` also reports `stage=env` when parsing environment overrides fails; `ds4_config_env_err_var(diag.err)` maps the `ds4_config_parse_env` error code to the failing env var name. Use `ds4_config_diag_stage_name` / `ds4_config_diag_format` to render the diagnostic for CLI/log output.
 - When `out_unknown` is provided, `*_ex` functions report the unknown-key count even when strict parsing returns an error.
 
 Supported keys:
@@ -27,9 +27,9 @@ Supported keys:
 - `log_level`: integer `0..3` (`0=ERROR`, `1=WARN`, `2=INFO`, `3=DEBUG`) or a case-insensitive name (`error`, `warn`/`warning`, `info`, `debug`)
 - `enable_cuda`: boolean (`0/1`, or `true/false`, `yes/no`, `on/off`, case-insensitive)
 - `cuda_device`: integer `-1` (auto / leave default device) or `>= 0` (force device index)
-- `arena_size`: integer bytes (advisory; for callers that want to size arena allocations). Supports `k`/`m`/`g` suffixes (powers of 1024), e.g. `64k`, `2m`.
-- `cuda_arena_size`: integer bytes (advisory; for callers that want `ds4_ctx_apply_config` to allocate a `ds4_cuda_arena_t` via `cudaMalloc`). Supports `k`/`m`/`g` suffixes. Requires `enable_cuda=1`.
-- `log_ring_entries`: integer entries (advisory; for callers that size log capture rings; when a `ds4_ctx_t` has a log ring initialized, `ds4_ctx_apply_config` attaches it when this value is > 0). Supports `k`/`m`/`g` suffixes, e.g. `4k`.
+- `arena_size`: integer bytes (advisory; for callers that want to size arena allocations). Supports `k`/`m`/`g` suffixes (powers of 1024), and also `KiB`/`MiB`/`GiB`, e.g. `64k`, `2m`, `64KiB`.
+- `cuda_arena_size`: integer bytes (advisory; for callers that want `ds4_ctx_apply_config` to allocate a `ds4_cuda_arena_t` via `cudaMalloc`). Supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes. Requires `enable_cuda=1`.
+- `log_ring_entries`: integer entries (advisory; for callers that size log capture rings; when a `ds4_ctx_t` has a log ring initialized, `ds4_ctx_apply_config` attaches it when this value is > 0). Supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `4k`, `4KiB`.
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 
@@ -60,9 +60,9 @@ You can also override config fields from the environment with `ds4_config_parse_
 - `DS4_LOG_LEVEL`
 - `DS4_ENABLE_CUDA`
 - `DS4_CUDA_DEVICE`
-- `DS4_ARENA_SIZE` (supports `k`/`m`/`g` suffixes, e.g. `512k`)
-- `DS4_CUDA_ARENA_SIZE` (supports `k`/`m`/`g` suffixes, e.g. `256m`)
-- `DS4_LOG_RING_ENTRIES` (supports `k`/`m`/`g` suffixes, e.g. `4k`)
+- `DS4_ARENA_SIZE` (supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `512k`, `512KiB`)
+- `DS4_CUDA_ARENA_SIZE` (supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `256m`, `256MiB`)
+- `DS4_LOG_RING_ENTRIES` (supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `4k`, `4KiB`)
 
 Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "`) are treated as unset and ignored; surrounding whitespace is trimmed before parsing.
 

@@ -10,6 +10,7 @@ typedef struct
 } ds4_pool_t;
 
 DS4_EXTERN_C_BEGIN
+int32_t ds4_pool_bytes_needed(int32_t block_count,int32_t block_size,int32_t *out_bytes);
 int32_t ds4_pool_init(ds4_pool_t *p,uint8_t *mem,int32_t mem_size,int32_t block_size);
 int32_t ds4_pool_reset(ds4_pool_t *p);
 int32_t ds4_pool_alloc(ds4_pool_t *p,void **out);

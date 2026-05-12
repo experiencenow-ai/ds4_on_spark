@@ -2,6 +2,23 @@
 
 #include <string.h>
 
+int32_t ds4_ring_bytes_needed(int32_t elem_count,int32_t elem_size,int32_t *out_bytes)
+{
+	int64_t bytes64;
+	if ( out_bytes == 0 )
+		return(-1);
+	*out_bytes = 0;
+	if ( elem_count <= 0 )
+		return(-2);
+	if ( elem_size <= 0 )
+		return(-3);
+	bytes64 = ((int64_t)elem_count * (int64_t)elem_size);
+	if ( bytes64 > (int64_t)INT32_MAX )
+		return(-4);
+	*out_bytes = (int32_t)bytes64;
+	return(0);
+}
+
 int32_t ds4_ring_init(ds4_ring_t *r,uint8_t *mem,int32_t elem_count,int32_t elem_size)
 {
 	int64_t cap64;

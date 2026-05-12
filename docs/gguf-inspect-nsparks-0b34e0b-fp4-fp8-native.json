@@ -102,6 +102,10 @@
       "dense_fp8_like inferred from FP8 tensors present in key categories; dense_primary may be F32 due to scales/routers",
       "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
     ],
+    "notes_sample": [
+      "dense_fp8_like inferred from FP8 tensors present in key categories; dense_primary may be F32 due to scales/routers",
+      "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+    ],
     "observed": {
       "dense_fp8_evidence": {
         "checked": true,
@@ -116,7 +120,8 @@
       },
       "dense_primary_type": "F32",
       "expert_primary_type": "MXFP4"
-    }
+    },
+    "status": "native_like"
   },
   "tensor_count": 1328,
   "tensor_key_namespace_evidence": [

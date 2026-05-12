@@ -31,6 +31,7 @@ int32_t test_gguf(void)
 	ds4_gguf_kv_view_t kv;
 	uint8_t buf0[24];
 	uint8_t buf1[96];
+	uint8_t buf2[96];
 	uint32_t v;
 	int32_t i,off,klen;
 	const char *k;
@@ -92,5 +93,27 @@ int32_t test_gguf(void)
 		return(-16);
 	if ( v != 64u )
 		return(-17);
+	for (i=0; i<(int32_t)sizeof(buf2); i++)
+		buf2[i] = 0;
+	ds4_put_u32le(buf2,0,0x46554747u);
+	ds4_put_u32le(buf2,4,3u);
+	ds4_put_u64le(buf2,8,0u);
+	ds4_put_u64le(buf2,16,1u);
+	off = 24;
+	k = "general.bad_array";
+	klen = ds4_cstr_len_i32(k);
+	ds4_put_u64le(buf2,off,(uint64_t)klen);
+	off += 8;
+	for (i=0; i<klen; i++)
+		buf2[off + i] = (uint8_t)k[i];
+	off += klen;
+	ds4_put_u32le(buf2,off,9u);
+	off += 4;
+	ds4_put_u32le(buf2,off,10u);
+	off += 4;
+	ds4_put_u64le(buf2,off,0x40000000ull);
+	off += 8;
+	if ( ds4_gguf_parse_mem(&g,buf2,off) >= 0 )
+		return(-18);
 	return(0);
 }

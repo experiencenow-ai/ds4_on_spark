@@ -38,6 +38,8 @@ ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -
 sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
+Note: `scripts/centaur_spark12_v73_ring_sim_run.sh` accepts an optional `remote_ring_workdir` argument; `~/...` and `$HOME/...` are fine (the wrapper resolves to an absolute path to avoid creating literal `~` directories on Spark0).
+
 3) When Spark1/2 hardware exists: stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
 
 ```bash
@@ -277,6 +279,22 @@ If you want Spark1/2 to run `hyor-agent-step` without a shared controller filesy
 
 Important: the controller runs `hyor-controller-http` (controller API). Each node runs `hyor-agent-http` (node agent endpoint). These are different commands.
 
+Prereqs:
+
+- You already ran the Spark0 v73 smoke, so Spark0 has `~/centaur-smoke/v73/run/centaur_spec_impl_v73/centaur.py` and `~/centaur-smoke/v73/run/venv/bin/python3`.
+- You already ran per-node setup on Spark1/2 so each node has the same Centaur+venv footprint under `~/centaur-smoke/v73/run/`.
+- You already ran the ring rsync step (or otherwise created node roots) so Spark1/2 have:
+  - `~/centaur-smoke/v73/ring_node/hyor/node_spark1`
+  - `~/centaur-smoke/v73/ring_node/hyor/node_spark2`
+
+Ports (example defaults):
+
+- Spark0 controller: `8765`
+- Spark1 agent: `8766`
+- Spark2 agent: `8767`
+
+If these ports are not reachable between Sparks, stop and fix network access before proceeding.
+
 1) On the controller host (typically Spark0), run the controller HTTP endpoint (human-run, no system service):
 
 ```bash
@@ -309,6 +327,46 @@ export CONTROLLER_URL="http://<spark0-host>:8765"
 ```
 
 Convenience wrappers for the three commands above (easy to stream over SSH): `scripts/centaur_spark_hyor_controller_http_v73.sh`, `scripts/centaur_spark_hyor_agent_http_v73.sh`, `scripts/centaur_spark_hyor_node_discover_v73.sh`.
+
+#### Stream-run the HTTP smoke from your Mac (recommended)
+
+This uses the wrapper scripts above and avoids copying any scripts to the Sparks.
+You will need **three terminals** (or `tmux`) because the HTTP servers run until you stop them.
+
+Terminal 1 (Mac): controller HTTP on Spark0:
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller 0.0.0.0 8765 0" < ./scripts/centaur_spark_hyor_controller_http_v73.sh
+```
+
+Terminal 2 (Mac): agent HTTP on Spark1:
+
+```bash
+export CONTROLLER_URL="http://<spark0-host>:8765"
+ssh $SSH_OPTS spark1@<spark1-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/ring_node/hyor/node_spark1 spark1 \"$CONTROLLER_URL\" 0.0.0.0 8766 0" < ./scripts/centaur_spark_hyor_agent_http_v73.sh
+```
+
+Terminal 3 (Mac): agent HTTP on Spark2:
+
+```bash
+export CONTROLLER_URL="http://<spark0-host>:8765"
+ssh $SSH_OPTS spark2@<spark2-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/ring_node/hyor/node_spark2 spark2 \"$CONTROLLER_URL\" 0.0.0.0 8767 0" < ./scripts/centaur_spark_hyor_agent_http_v73.sh
+```
+
+Once all three are running, from a **fourth** terminal (or after stopping the controller with `ctrl-c` and restarting it later), discover the nodes on Spark0:
+
+```bash
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller http://<spark1-host>:8766 http://<spark2-host>:8767" < ./scripts/centaur_spark_hyor_node_discover_v73.sh
+```
+
+Then, on each node (Spark1 and Spark2), run one agent step:
+
+```bash
+export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73
+export CENTAUR_VENV=~/centaur-smoke/v73/run/venv
+export NODE_ROOT=~/centaur-smoke/v73/ring_node/hyor/node_spark1   # spark2 accordingly
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-agent-step "$NODE_ROOT"
+```
 
 Keep this strictly as a smoke: no secrets, no large model downloads, and stop if you hit network/auth surprises.
 

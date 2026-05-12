@@ -54,6 +54,7 @@ int32_t test_config(void)
 	char env_path[96];
 	char out[128];
 	const char *k0,*h0;
+	const char *ev;
 	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
@@ -81,6 +82,26 @@ int32_t test_config(void)
 		return(-1819);
 	if ( ds4_cstr_len_i32(h0) <= 0 )
 		return(-1820);
+	ev = ds4_config_env_err_var(-3);
+	if ( ev == 0 || strcmp(ev,"DS4_LOG_LEVEL") != 0 )
+		return(-1821);
+	ev = ds4_config_env_err_var(-7);
+	if ( ev == 0 || strcmp(ev,"DS4_ENABLE_CUDA") != 0 )
+		return(-1822);
+	ev = ds4_config_env_err_var(-12);
+	if ( ev == 0 || strcmp(ev,"DS4_CUDA_DEVICE") != 0 )
+		return(-1823);
+	ev = ds4_config_env_err_var(-15);
+	if ( ev == 0 || strcmp(ev,"DS4_ARENA_SIZE") != 0 )
+		return(-1824);
+	ev = ds4_config_env_err_var(-21);
+	if ( ev == 0 || strcmp(ev,"DS4_CUDA_ARENA_SIZE") != 0 )
+		return(-1825);
+	ev = ds4_config_env_err_var(-18);
+	if ( ev == 0 || strcmp(ev,"DS4_LOG_RING_ENTRIES") != 0 )
+		return(-1826);
+	if ( ds4_config_env_err_var(0) != 0 )
+		return(-1827);
 	if ( ds4_config_validate(&cfg) < 0 )
 		return(-1800);
 	cfg.log_level = -1;
@@ -132,10 +153,26 @@ int32_t test_config(void)
 		return(-170);
 	if ( cfg.arena_size != 65536 )
 		return(-171);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","64KiB") != 0 )
+		return(-1710);
+	if ( cfg.arena_size != 65536 )
+		return(-1711);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","1MiB") != 0 )
+		return(-1712);
+	if ( cfg.arena_size != 1048576 )
+		return(-1713);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","1GiB") != 0 )
+		return(-1714);
+	if ( cfg.arena_size != 1073741824 )
+		return(-1715);
 	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","256") != 0 )
 		return(-1810);
 	if ( cfg.cuda_arena_size != 256 )
 		return(-1811);
+	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","1MiB") != 0 )
+		return(-1812);
+	if ( cfg.cuda_arena_size != 1048576 )
+		return(-1813);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","9") != 0 )
 		return(-142);
 	if ( cfg.log_ring_entries != 9 )
@@ -144,6 +181,10 @@ int32_t test_config(void)
 		return(-172);
 	if ( cfg.log_ring_entries != 2048 )
 		return(-173);
+	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","2KiB") != 0 )
+		return(-1730);
+	if ( cfg.log_ring_entries != 2048 )
+		return(-1731);
 	if ( ds4_config_parse_kv_cstr(&cfg,0,"1") >= 0 )
 		return(-64);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
