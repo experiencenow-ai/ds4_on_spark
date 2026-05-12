@@ -3588,6 +3588,57 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(m.mtp_accept_len_clamped_backpressure, 1)
         self.assertEqual(m.mtp_accept_len_per_step[0], 1)
 
+    def test_mtp_draft_layer0_backpressure_clamps_accept_len_when_drafts_are_batch_queued(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                mtp_accept_len=1,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=0.1,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0,),
+                mtp_accept_len=3,
+            ),
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=2,
+            expert_queue_reserve_interactive=1,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            sim_seed=123,
+            mtp_draft_len=2,
+            mtp_accept_prob=1.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            mtp_draft_attempt_policy="stop_at_reject",
+            mtp_draft_queue_cls="batch",
+        )
+        token_states: list[scheduler_sim.TokenState] = []
+        m = scheduler_sim.run_simulation(cfg, trace, token_states_out=token_states)
+        self.assertEqual(len(token_states), 2)
+        self.assertTrue(token_states[1].mtp_draft_layer0_skipped_backpressure)
+        self.assertTrue(token_states[1].mtp_accept_len_clamped_backpressure)
+        self.assertEqual(token_states[1].mtp_draft_attempt_len, 0)
+        self.assertEqual(token_states[1].mtp_accept_len, 1)
+        self.assertEqual(token_states[1].output_len, 1)
+        self.assertFalse(token_states[1].mtp_verify_layer0_skipped_backpressure)
+        self.assertEqual(m.mtp_draft_layer0_skipped_backpressure, 1)
+
     def test_mtp_accounting_does_not_require_verify_layer0_admission(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(
@@ -4191,6 +4242,9 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("baseline", out["results"]["arrival_units_steps"])
         self.assertIn("variants", out["results"]["arrival_units_steps"])
         self.assertIn("mtp_off", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("mtp_draft_queue_batch", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("mtp_draft_queue_cls", out["evidence"])
+        self.assertEqual(out["evidence"]["mtp_draft_queue_cls"].get("variant"), "batch")
 
     def test_recommendations_runtime_trace_mtp_ablation_supports_synthetic_mtp(self) -> None:
         from sim.scheduler import recommendations
@@ -4214,12 +4268,18 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])
         self.assertIn("mtp_off", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("mtp_draft_queue_batch", out["results"]["arrival_units_steps"]["variants"])
         self.assertIn("evidence", out)
         self.assertIn("mtp", out["evidence"])
         ev = out["evidence"]["mtp"]
         self.assertEqual(ev.get("mode"), "synthetic")
         self.assertFalse(bool(ev.get("supported_by_trace_counters")))
         self.assertIsInstance(ev.get("supported_by_synthetic_model"), bool)
+        self.assertIn("mtp_draft_queue_cls", out["evidence"])
+        evq = out["evidence"]["mtp_draft_queue_cls"]
+        self.assertEqual(evq.get("variant"), "batch")
+        self.assertFalse(bool(evq.get("supported_by_trace_counters")))
+        self.assertIsInstance(evq.get("supported_by_synthetic_model"), bool)
 
     def test_trace_sweep_runs_on_synthetic_trace(self) -> None:
         from sim.scheduler import scheduler_sim

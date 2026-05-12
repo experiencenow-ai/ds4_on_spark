@@ -339,7 +339,10 @@ def run_runtime_trace_mtp_ablation(
         out["evidence"] = evidence
         return(out)
 
-    variants: List[Tuple[str, Dict[str, object]]] = [("mtp_off", {"mtp_draft_len": 0})]
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("mtp_off", {"mtp_draft_len": 0}),
+        ("mtp_draft_queue_batch", {"mtp_draft_queue_cls": "batch"}),
+    ]
     out["results"] = {
         "arrival_units_steps": scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants, arrival_units="steps"),
         "arrival_units_output_tokens": scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants, arrival_units="output_tokens"),
@@ -397,6 +400,29 @@ def run_runtime_trace_mtp_ablation(
             str(lat_key): float(_delta(off_sum, base_sum, lat_key)),
         },
     }
+
+    q_sum = _sweep_variant_summary(sweep_mtp, "mtp_draft_queue_batch") if isinstance(sweep_mtp, dict) else {}
+    if len(q_sum) != 0:
+        verify_q_key = "task_queue_wait_ms_p95_mtp_verify"
+        draft_q_key = "task_queue_wait_ms_p95_mtp_draft"
+        dd = _delta(base_sum, q_sum, drop_key)
+        dl = _delta(base_sum, q_sum, lat_key)
+        dv = _delta(base_sum, q_sum, verify_q_key)
+        ddraft = _delta(base_sum, q_sum, draft_q_key)
+        supported_q = bool((dv < 0.0 or dl < 0.0) and dd <= 0.0)
+        evidence["mtp_draft_queue_cls"] = {
+            "present": True,
+            "variant": "batch",
+            "supported_by_trace_counters": bool(supported_q) if any_mtp else False,
+            "supported_by_synthetic_model": bool(supported_q) if (not any_mtp and str(mtp_mode) == "synthetic") else False,
+            "delta_vs_inherit": {
+                str(drop_key): float(dd),
+                str(lat_key): float(dl),
+                str(verify_q_key): float(dv),
+                str(draft_q_key): float(ddraft),
+            },
+            "reason": "Treat draft_queue_cls=batch as beneficial when it reduces verify queue wait or output-token p95 latency without increasing drop_frac_tokens.",
+        }
     out["evidence"] = evidence
 
     return(out)
