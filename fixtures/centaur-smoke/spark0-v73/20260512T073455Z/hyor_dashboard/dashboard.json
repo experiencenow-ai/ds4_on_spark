@@ -520,7 +520,7 @@
           "cpu_count": 20,
           "disk_free_bytes": 3542846124032,
           "disk_total_bytes": 4030802149376,
-          "hostname": "aitopatom-9ab9",
+          "hostname": "<redacted-hostname>",
           "machine": "aarch64",
           "memory_bytes": 128518373376,
           "memory_gib": 119.692,
