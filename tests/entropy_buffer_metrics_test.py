@@ -116,6 +116,20 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertIn("dsv4-flash", by_model)
         self.assertAlmostEqual(float(by_model["dsv4-flash"].get("dup_rate", 1.0)), 0.0)
 
+    def test_metrics_extract_task_run_nested_tokens_and_latency(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_task_run_nested_tokens_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        self.assertEqual(report.totals["task_run_records"], 2)
+        self.assertEqual((report.tokens.get("input_tokens") or {}).get("count", 0), 2)
+        self.assertEqual((report.tokens.get("output_tokens") or {}).get("count", 0), 2)
+        self.assertEqual((report.tokens.get("wall_ms") or {}).get("count", 0), 2)
+        self.assertEqual((report.tokens.get("ms_per_output_token") or {}).get("count", 0), 2)
+        self.assertAlmostEqual(float((report.tokens.get("ms_per_output_token") or {}).get("mean", 0.0)), (58.3333333333), places=4)
+        self.assertAlmostEqual(float((report.tokens.get("output_tok_per_s") or {}).get("mean", 0.0)), (17.5), places=4)
+
     def test_judge_budget_metrics_from_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_judge_budget_mini.jsonl")

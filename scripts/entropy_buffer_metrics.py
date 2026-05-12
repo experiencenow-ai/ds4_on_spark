@@ -503,9 +503,17 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             buffer_item_id_present += 1
             _inc(buffer_items, c.buffer_item_id)
 
-        itok = lib.get_int(c.raw, "input_tokens", "prompt_tokens", "input_token_count")
-        otok = lib.get_int(c.raw, "output_tokens", "completion_tokens", "output_token_count")
+        itok = lib.get_int(c.raw, "input_tokens", "prompt_tokens", "input_token_count", "tokens_in")
+        otok = lib.get_int(c.raw, "output_tokens", "completion_tokens", "output_token_count", "tokens_out")
         wms = lib.get_float(c.raw, "wall_ms", "latency_ms", "duration_ms", "elapsed_ms")
+        toks = c.raw.get("tokens", None)
+        if itok is None and isinstance(toks, dict):
+            itok = lib.get_int(toks, "in", "input", "prompt", "prompt_tokens", "tokens_in")
+        if otok is None and isinstance(toks, dict):
+            otok = lib.get_int(toks, "out", "output", "completion", "completion_tokens", "tokens_out")
+        lats = c.raw.get("latency_ms", None)
+        if wms is None and isinstance(lats, dict):
+            wms = lib.get_float(lats, "total", "wall", "elapsed", "duration", "run", "task")
         if itok is not None:
             input_tokens.append(float(itok))
             input_tokens_present += 1

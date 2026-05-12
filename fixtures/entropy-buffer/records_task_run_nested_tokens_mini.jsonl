@@ -1,0 +1,3 @@
+{"type":"meta","meta":{"note":"Mini task_run fixture exercising nested tokens/latency_ms extraction for entropy buffer metrics.","schema":"entropy-buffer.task_run_nested_tokens.v1"}}
+{"type":"task_run","run_id":"baseline-20260512-nested","task_id":"toy.nested.001","task_family":"toy","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say hi.","output":"hi","tokens":{"prompt":10,"completion":2},"latency_ms":{"total":100}}
+{"type":"task_run","run_id":"baseline-20260512-nested","task_id":"toy.nested.002","task_family":"toy","prompt_template_id":"plain.v1","model_id":"mA","prompt":"Say bye.","output":"bye","tokens":{"in":12,"out":3},"latency_ms":{"wall":200}}

@@ -44,6 +44,9 @@ Notes:
 
 - `answer` is optional but unlocks answer-option diversity metrics.
 - `buffer_id` / `buffer_item_id` are optional but unlock reuse metrics.
+- Token/latency instrumentation can also be provided in nested form:
+  - `tokens: {prompt, completion}` or `tokens: {in, out}` (aliases supported)
+  - `latency_ms: {total}` or `latency_ms: {wall}` (best-effort)
 
 ### Pairwise judge records (`type="judge_pair"`)
 
