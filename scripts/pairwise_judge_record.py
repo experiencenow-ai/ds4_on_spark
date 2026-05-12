@@ -43,6 +43,7 @@ def _as_int_opt(v: Optional[str], field: str) -> Optional[int]:
 
 
 def build_record(
+    record_schema: str,
     pair_id: str,
     model_a: str,
     model_b: str,
@@ -52,10 +53,18 @@ def build_record(
     latency_ms: Optional[Dict[str, int]],
     strict: bool,
 ) -> Dict[str, Any]:
+    if str(record_schema) not in (schema.SCHEMA_RECORD_V1, schema.SCHEMA_RECORD_V2):
+        raise ValueError(f"record_schema must be {schema.SCHEMA_RECORD_V1!r} or {schema.SCHEMA_RECORD_V2!r}")
+    if str(record_schema) == schema.SCHEMA_RECORD_V2:
+        if tokens is None:
+            raise ValueError("record_schema v2 requires tokens")
+        if latency_ms is None:
+            raise ValueError("record_schema v2 requires latency_ms")
+
     obj, perr = schema.parse_json_object_loose(decision_text)
     if obj is None:
         rec: Dict[str, Any] = {
-            "schema": schema.SCHEMA_RECORD_V1,
+            "schema": str(record_schema),
             "pair_id": pair_id,
             "model_a": model_a,
             "model_b": model_b,
@@ -75,7 +84,7 @@ def build_record(
         errs.extend(schema.validate_decision_strict_extra(obj))
     if len(errs) != 0:
         rec2: Dict[str, Any] = {
-            "schema": schema.SCHEMA_RECORD_V1,
+            "schema": str(record_schema),
             "pair_id": pair_id,
             "model_a": model_a,
             "model_b": model_b,
@@ -91,7 +100,7 @@ def build_record(
         return rec2
 
     rec3: Dict[str, Any] = {
-        "schema": schema.SCHEMA_RECORD_V1,
+        "schema": str(record_schema),
         "pair_id": pair_id,
         "model_a": model_a,
         "model_b": model_b,
@@ -109,6 +118,7 @@ def build_record(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--record-schema", choices=["v1", "v2"], default="v1", help="record schema version (default v1)")
     ap.add_argument("--pair-id", required=True)
     ap.add_argument("--model-a", required=True)
     ap.add_argument("--model-b", required=True)
@@ -158,16 +168,22 @@ def main() -> None:
     if len(latency_obj) != 0:
         latency_ms = latency_obj
 
-    rec = build_record(
-        pair_id=str(args.pair_id),
-        model_a=str(args.model_a),
-        model_b=str(args.model_b),
-        judge_model=str(args.judge_model),
-        decision_text=decision_text,
-        tokens=tokens,
-        latency_ms=latency_ms,
-        strict=bool(args.strict),
-    )
+    record_schema = (schema.SCHEMA_RECORD_V2 if str(args.record_schema) == "v2" else schema.SCHEMA_RECORD_V1)
+
+    try:
+        rec = build_record(
+            record_schema=record_schema,
+            pair_id=str(args.pair_id),
+            model_a=str(args.model_a),
+            model_b=str(args.model_b),
+            judge_model=str(args.judge_model),
+            decision_text=decision_text,
+            tokens=tokens,
+            latency_ms=latency_ms,
+            strict=bool(args.strict),
+        )
+    except ValueError as e:
+        raise SystemExit(str(e))
     print(json.dumps(rec, separators=(",", ":"), ensure_ascii=False))
 
 

@@ -55,6 +55,25 @@ def sha256_json(obj) -> str:
 	b = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
 	return sha256(b).hexdigest()
 
+def build_sparse_attn_mask_contract(kernel_py: Path) -> dict:
+	text = kernel_py.read_text(encoding="utf-8")
+	expected_lines = (
+		"idxs[i] = T.if_then_else(t * block + i < topk, topk_idxs[by, bx, t * block + i], -1)",
+		"kv_shared[i, j] = T.if_then_else(idxs[i] != -1, kv[by, idxs[i], j], 0)",
+		"acc_s[i, j] = T.if_then_else(idxs[j] != -1, 0, -T.infinity(FP32))",
+	)
+	missing = [line for line in expected_lines if line not in text]
+	if missing:
+		raise RuntimeError(
+			f"sparse_attn mask semantics probe failed; kernel changed? missing={missing} kernel={repo_relpath(kernel_py)}"
+		)
+	return {
+		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/kernel.py (sparse_attn_kernel_ sentinel masking)",
+		"sentinel_index": -1,
+		"masked_kv_fill_value": 0,
+		"masked_score_fill_value": "-inf",
+	}
+
 def build_contract_fingerprints(contract: dict) -> dict:
 	up = contract.get("upstream", {}) if isinstance(contract, dict) else {}
 	checkpoint_index = contract.get("checkpoint_index", {}) if isinstance(contract, dict) else {}
@@ -116,6 +135,7 @@ def build_contract_fingerprints(contract: dict) -> dict:
 			"mtp_cache_kind_by_mtp_layer_id": cache.get("mtp_cache_kind_by_mtp_layer_id"),
 			"mtp_compress_ratio_by_mtp_layer_id": cache.get("mtp_compress_ratio_by_mtp_layer_id"),
 			"sparse_attn_mask_rule": cache.get("sparse_attn_mask_rule"),
+			"sparse_attn_mask": cache.get("sparse_attn_mask"),
 			"topk_mask_value": cache.get("topk_mask_value"),
 			"update_semantics": cache.get("update_semantics"),
 			"topk_index_helpers": cache.get("topk_index_helpers"),
@@ -1755,6 +1775,7 @@ def build_contract() -> dict:
 			fixture_sha[rel] = sha256_file(p)
 
 	mtp_sidecar = build_ds4_mtp_sidecar_contract()
+	sparse_attn_mask = build_sparse_attn_mask_contract(FIX / "inference" / "kernel.py")
 	requested_hf_rev = "main"
 	pinned_hf_rev = requested_hf_rev
 	if isinstance(upstream_commit, str) and len(upstream_commit) == 40:
@@ -1889,6 +1910,7 @@ def build_contract() -> dict:
 			},
 			"topk_mask_value": -1,
 			"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+			"sparse_attn_mask": sparse_attn_mask,
 			"prefill": {
 				"compressed_index_offset": "seqlen",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",

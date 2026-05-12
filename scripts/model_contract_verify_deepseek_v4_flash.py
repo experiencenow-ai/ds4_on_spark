@@ -554,6 +554,27 @@ def main() -> int:
 						if any(n not in src for n in need):
 							failures.append(Failure(140, f"contract summary cache.topk_index_helpers.get_compress_topk_idxs source missing required markers: {contract_summary}"))
 
+				if cache_obj.get("topk_mask_value") != -1:
+					failures.append(Failure(5200, f"contract summary cache.topk_mask_value must be -1: {contract_summary}"))
+				sparse_rule = cache_obj.get("sparse_attn_mask_rule", None)
+				if not (isinstance(sparse_rule, str) and "idx == -1" in sparse_rule and "score=-inf" in sparse_rule and "kv=0" in sparse_rule):
+					failures.append(Failure(5201, f"contract summary cache.sparse_attn_mask_rule must be a string describing idx==-1 masking (score=-inf, kv=0): {contract_summary}"))
+				sparse_mask = cache_obj.get("sparse_attn_mask", None)
+				if not isinstance(sparse_mask, dict):
+					failures.append(Failure(5202, f"contract summary cache.sparse_attn_mask must be an object: {contract_summary}"))
+				else:
+					ref = sparse_mask.get("reference_source")
+					if not (isinstance(ref, str) and ref):
+						failures.append(Failure(5203, f"contract summary cache.sparse_attn_mask.reference_source must be a non-empty string: {contract_summary}"))
+					elif ref.startswith("/"):
+						failures.append(Failure(5204, f"contract summary cache.sparse_attn_mask.reference_source must not be absolute: {contract_summary}"))
+					if sparse_mask.get("sentinel_index") != -1:
+						failures.append(Failure(5205, f"contract summary cache.sparse_attn_mask.sentinel_index must be -1: {contract_summary}"))
+					if sparse_mask.get("masked_kv_fill_value") != 0:
+						failures.append(Failure(5206, f"contract summary cache.sparse_attn_mask.masked_kv_fill_value must be 0: {contract_summary}"))
+					if sparse_mask.get("masked_score_fill_value") != "-inf":
+						failures.append(Failure(5207, f"contract summary cache.sparse_attn_mask.masked_score_fill_value must be '-inf': {contract_summary}"))
+
 				cache_sem = cache_obj.get("semantics", None)
 				if not isinstance(cache_sem, dict):
 					failures.append(Failure(165, f"contract summary cache.semantics must be an object: {contract_summary}"))
@@ -1693,22 +1714,22 @@ def main() -> int:
 
 		if mtp_expert_id_seen != set(range(n_routed_experts)):
 			failures.append(Failure(35, f"mtp layer {mtp_id} expert id set mismatch: expected 0..{n_routed_experts-1} got {sorted(mtp_expert_id_seen)[:8]}... ({len(mtp_expert_id_seen)} total)"))
-		expected_expert_key_count = n_routed_experts * 6
-		if mtp_expert_key_count != expected_expert_key_count:
-			failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
+			expected_expert_key_count = n_routed_experts * 6
+			if mtp_expert_key_count != expected_expert_key_count:
+				failures.append(Failure(36, f"mtp layer {mtp_id} expert tensor key count mismatch: expected {expected_expert_key_count} got {mtp_expert_key_count}"))
 
-		# MTPBlock-specific projections + norms + HC head.
+			# MTPBlock-specific projections + norms + HC head.
 			for suffix in (
 				"e_proj.weight",
 				"e_proj.scale",
 				"h_proj.weight",
-			"h_proj.scale",
-			"enorm.weight",
-			"hnorm.weight",
-			"norm.weight",
-			"hc_head_fn",
-			"hc_head_base",
-			"hc_head_scale",
+				"h_proj.scale",
+				"enorm.weight",
+				"hnorm.weight",
+				"norm.weight",
+				"hc_head_fn",
+				"hc_head_base",
+				"hc_head_scale",
 			):
 				req_mtp(suffix)
 
