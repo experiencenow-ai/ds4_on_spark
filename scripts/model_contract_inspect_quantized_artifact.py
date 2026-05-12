@@ -494,8 +494,34 @@ def compute_quantization_contract_hint(
 			return True
 		return False
 
+	def _dense_fp8_evidence() -> dict[str, Any]:
+		cts = tensor_type_profile.get("category_type_counts", {})
+		if not isinstance(cts, dict):
+			return {"checked": False, "reason": "missing category_type_counts"}
+
+		fp8_types: set[str] = set()
+		fp8_cats: list[str] = []
+		for cat in ("attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"):
+			v = cts.get(cat, None)
+			if not isinstance(v, dict):
+				continue
+			has = False
+			for t in v.keys():
+				if isinstance(t, str) and t.startswith("F8_"):
+					fp8_types.add(t)
+					has = True
+			if has:
+				fp8_cats.append(cat)
+		return {"checked": True, "fp8_present": bool(fp8_types), "fp8_types": sorted(fp8_types), "fp8_categories": fp8_cats}
+
 	expert_like = _fp4_like(obs_expert_type) if expected_expert == "fp4" else None
-	dense_like = _fp8_like(obs_dense_type) if expected_dense == "fp8" else None
+	dense_like = None
+	dense_fp8_evidence = None
+	if expected_dense == "fp8":
+		dense_fp8_evidence = _dense_fp8_evidence()
+		dense_like = _fp8_like(obs_dense_type)
+		if dense_like is False and isinstance(dense_fp8_evidence, dict) and dense_fp8_evidence.get("fp8_present") is True:
+			dense_like = True
 
 	notes: list[str] = []
 	if expected_expert == "fp4" and expert_like is False:
@@ -503,16 +529,21 @@ def compute_quantization_contract_hint(
 			f"expected Flash experts fp4; artifact expert primary type is {obs_expert_type!r} (likely re-quantized or non-native conversion)"
 		)
 	if expected_dense == "fp8" and dense_like is False:
-		notes.append(
-			f"expected Flash trunk fp8; artifact dense primary type is {obs_dense_type!r} (likely re-quantized or non-native conversion)"
-		)
+		notes.append(f"expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is {obs_dense_type!r})")
+	if expected_dense == "fp8" and dense_like is True and _fp8_like(obs_dense_type) is not True:
+		if isinstance(dense_fp8_evidence, dict) and dense_fp8_evidence.get("fp8_present") is True:
+			notes.append("dense_fp8_like inferred from FP8 tensors present in key categories; dense_primary may be F32 due to scales/routers")
 	if expected_scale_fmt is not None:
 		notes.append(f"scale_fmt is source-derived as {expected_scale_fmt!r}; GGUF headers typically do not encode scale-tensor semantics")
 
 	return {
 		"checked": True,
 		"expected": {"dense_dtype": expected_dense, "expert_dtype": expected_expert, "scale_fmt": expected_scale_fmt},
-		"observed": {"dense_primary_type": obs_dense_type, "expert_primary_type": obs_expert_type},
+		"observed": {
+			"dense_primary_type": obs_dense_type,
+			"expert_primary_type": obs_expert_type,
+			"dense_fp8_evidence": dense_fp8_evidence,
+		},
 		"dense_fp8_like": dense_like,
 		"expert_fp4_like": expert_like,
 		"notes": notes,
