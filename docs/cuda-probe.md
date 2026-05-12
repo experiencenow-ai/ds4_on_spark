@@ -238,6 +238,7 @@ This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 - Runs a best-effort cross-translation-unit `__global__` template explicit-instantiation link probe and prints `template_stub_default` / `template_stub_stubfalse` / `template_stub_rdc` (CUDA 13 `-static-global-template-stub` behavior gate for CUTLASS/DeepGEMM-style builds)
 - Prints a `cuda_device_props_tiny`-schema one-line driver/runtime + key `device[0]` limits (CC/SMs/clocks/memory/shared-mem/L2/threads/blocks/registers + cooperative/cluster launch support)
   - Includes driver-reserved shared memory per block (`cudaDevAttrReservedSharedMemoryPerBlock`) plus `cudaMallocAsync`/memory-pool support (`cudaDevAttrMemoryPoolsSupported`) when available.
+  - Runs a no-`cudaMalloc` kernel-launch smoke before the optional `cuda_arch` capture, so logs can still confirm “kernel launch path works” even when Spark0 VRAM is fully allocated; the schema line prints `cuda_arch=0` when the optional capture can’t run.
 - Prints the device-observed `__CUDA_ARCH__`
 - If `cuobjdump` is available, reports whether each binary contains embedded PTX (expected: `sm_121` present, `gpuarch_sm_121` present, `native` missing; `compute_121` present when built)
 

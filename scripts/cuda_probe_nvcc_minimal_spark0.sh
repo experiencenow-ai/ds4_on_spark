@@ -539,6 +539,12 @@ __global__ void cuda_arch_probe(uint32_t *out)
 #endif
 }
 
+__global__ void cuda_kernel_launch_tiny(void)
+{
+	if ( ((int32_t)threadIdx.x) == 0 )
+		;
+}
+
 	int main(int argc,char **argv)
 	{
 		int32_t count = 0,driver_v = -1,runtime_v = -1,rc = 0,clock_khz = -1,mem_clock_khz = -1;
@@ -592,17 +598,21 @@ __global__ void cuda_arch_probe(uint32_t *out)
 	#else
 		tma_map = -1;
 	#endif
-	rc = ck(cudaMalloc((void **)&dout,sizeof(out)),-4,\"cudaMalloc\");
+	cuda_kernel_launch_tiny<<<1,32>>>();
+	rc = ck(cudaGetLastError(),-4,\"kernel_launch_tiny\");
 	if ( rc != 0 )
 		return(rc);
-	cuda_arch_probe<<<1,1>>>(dout);
-	rc = ck(cudaGetLastError(),-5,\"kernel launch\");
+	rc = ck(cudaDeviceSynchronize(),-5,\"cudaDeviceSynchronize\");
 	if ( rc != 0 )
 		return(rc);
-	rc = ck(cudaMemcpy(&out,dout,sizeof(out),cudaMemcpyDeviceToHost),-6,\"cudaMemcpy\");
-	(void)cudaFree(dout);
-	if ( rc != 0 )
-		return(rc);
+	if ( cudaMalloc((void **)&dout,sizeof(out)) == cudaSuccess )
+	{
+		cuda_arch_probe<<<1,1>>>(dout);
+		if ( cudaGetLastError() == cudaSuccess )
+			(void)cudaMemcpy(&out,dout,sizeof(out),cudaMemcpyDeviceToHost);
+		(void)cudaFree(dout);
+		dout = 0;
+	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
 		printf(\"cuda drv=%d rt=%d count=%d dev0=\\\"%s\\\" cc=%d.%d mp=%d warp=%d clock_khz=%d mem_clock_khz=%d bus_width_bits=%d async_engines=%d mem=%\" PRIu64 \" smem_block=%\" PRIu64 \" smem_block_max=%d smem_optin=%d smem_sm=%d smem_reserved_block=%d l2=%d max_persisting_l2=%d max_apw=%d maxthr_block=%d maxthr_sm=%d maxblocks_sm=%d regs_block=%d regs_sm=%d mem_pools=%d coop_launch=%d cluster_launch=%d tma_map=%d cuda_arch=%u schema=4\\n\",driver_v,runtime_v,count,prop.name,prop.major,prop.minor,prop.multiProcessorCount,prop.warpSize,clock_khz,mem_clock_khz,bus_width_bits,async_engines,mem_bytes,smem_block_bytes,smem_block_max,smem_optin,smem_sm,smem_reserved_block,l2_bytes,max_persisting_l2,max_apw_bytes,max_threads_block,max_threads_sm,max_blocks_sm,regs_block,regs_sm,mem_pools,coop_launch,cluster_launch,tma_map,out);
@@ -614,15 +624,32 @@ run_retry() {
 	name=\"\$1\"
 	shift
 	set +e
-	\"\$@\"
+	out=\$(\"\$@\" 2>&1)
 	rc=\$?
 	set -e
+	printf \"%s\\n\" \"\${out}\"
 	if [ \$rc -eq 0 ]; then
+		return 0
+	fi
+	if printf \"%s\\n\" \"\${out}\" | grep -Eqi \"out of memory|busy or unavailable|device is busy\"; then
+		echo \"(\${name} skipped: GPU OOM/busy rc=\${rc})\" >&2
 		return 0
 	fi
 	echo \"(\${name} failed rc=\${rc}; retrying once)\" >&2
 	sleep 1
-	\"\$@\"
+	set +e
+	out2=\$(\"\$@\" 2>&1)
+	rc2=\$?
+	set -e
+	printf \"%s\\n\" \"\${out2}\"
+	if [ \$rc2 -eq 0 ]; then
+		return 0
+	fi
+	if printf \"%s\\n\" \"\${out2}\" | grep -Eqi \"out of memory|busy or unavailable|device is busy\"; then
+		echo \"(\${name} skipped: GPU OOM/busy rc=\${rc2})\" >&2
+		return 0
+	fi
+	return \"\${rc2}\"
 }
 
 echo \"-- build: -arch=sm_121\"
