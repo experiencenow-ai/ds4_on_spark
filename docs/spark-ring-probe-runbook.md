@@ -48,6 +48,7 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 
 The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.
 It also includes a compact link speed/duplex summary (`== network (link speed, compact) ==`) from sysfs to spot unexpectedly slow negotiated links.
+The `== network (iface matrix, compact) ==` section joins `state`/`mtu`/`speed` with per-interface v4/v6 addresses (redacted) to make the Ethernet/Wi‑Fi address matrix easier to transcribe.
 The `== clock ==` section prints a `skew_s (remote-local): ...` line as a quick clock sanity check.
 
 If you want each host to ping **all** peers instead of only ring neighbors:
