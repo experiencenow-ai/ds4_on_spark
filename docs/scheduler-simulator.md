@@ -66,6 +66,21 @@ Stage skips (layer-local residual-path drops) are summarized under `stages.skipp
 
 Per-layer expert congestion is summarized under `stages.per_layer[].pending_depth_time_weighted` (and mirrored in `--summary-json` as `pending_depth_time_weighted_p95_layer{i}` / `pending_depth_time_weighted_mean_layer{i}`) so multi-layer traces can surface which layer(s) actually build queue depth.
 
+### Packing Per-Layer Runtime Logs Into `layers[]`
+
+Some early runtime logging formats emit **one route record per MoE layer** and repeat the same `token_index` for every layer of that token (instead of emitting `layers[]` in one record). For those traces, use:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py \
+  --trace-jsonl /tmp/runtime_routes.log \
+  --trace-input-format runtime \
+  --trace-non-route skip \
+  --trace-pack-layers-by-token-index \
+  --trace-summary --json
+```
+
+This packs all records with the same `token_index` into a single token record with `layers[]` (layer order is the order encountered in the trace). The packer is strict: it fails if `cls` or `t_ms` differ within a `token_index` group.
+
 ### Candidate Admission Policy
 
 When `K < len(candidates)`, the simulator must pick which experts receive tasks.

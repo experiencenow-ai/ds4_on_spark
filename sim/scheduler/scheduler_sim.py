@@ -1346,6 +1346,7 @@ def load_trace_jsonl(
     input_format: str = "strict",
     route_type: str = "",
     default_cls: str = "",
+    pack_layers_by_token_index: bool = False,
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
@@ -1738,8 +1739,107 @@ def load_trace_jsonl(
         if path != "-":
             f.close()
 
+    if pack_layers_by_token_index:
+        routes = pack_trace_layers_by_token_index(routes, meta_out=meta_out)
+
     routes.sort(key=lambda r: r.t_ms)
     return(routes)
+
+
+def pack_trace_layers_by_token_index(trace: Sequence[TokenRoute], meta_out: Optional[Dict[str, object]] = None) -> List[TokenRoute]:
+    groups: Dict[int, List[TokenRoute]] = {}
+    order: List[int] = []
+    out: List[TokenRoute] = []
+
+    for r in trace:
+        if r.token_index is None:
+            out.append(r)
+            continue
+        if r.layers is not None and len(r.layers) != 0:
+            out.append(r)
+            continue
+        tid = int(r.token_index)
+        if tid not in groups:
+            groups[tid] = []
+            order.append(tid)
+        groups[tid].append(r)
+
+    packed = 0
+    for tid in order:
+        rs = groups.get(tid, [])
+        if len(rs) <= 1:
+            if len(rs) == 1:
+                out.append(rs[0])
+            continue
+
+        cls0 = rs[0].cls
+        t0 = float(rs[0].t_ms)
+        for r in rs[1:]:
+            if r.cls != cls0:
+                raise ValueError(f"trace pack: token_index={int(tid)} has mixed cls values ({str(cls0.value)} vs {str(r.cls.value)})")
+            if abs(float(r.t_ms) - t0) > 1e-6:
+                raise ValueError(f"trace pack: token_index={int(tid)} has mixed t_ms values ({t0} vs {float(r.t_ms)})")
+
+        def pick_opt(field: str) -> Optional[object]:
+            chosen: Optional[object] = None
+            for r in rs:
+                v = getattr(r, field)
+                if v is None:
+                    continue
+                if chosen is None:
+                    chosen = v
+                    continue
+                if v != chosen:
+                    raise ValueError(f"trace pack: token_index={int(tid)} has conflicting {field} values")
+            return(chosen)
+
+        mtp_accept_len = pick_opt("mtp_accept_len")
+        accepted_mtp = pick_opt("accepted_mtp")
+        rejected_mtp = pick_opt("rejected_mtp")
+        dflash_accept_len = pick_opt("dflash_accept_len")
+        accepted_dflash = pick_opt("accepted_dflash")
+        rejected_dflash = pick_opt("rejected_dflash")
+        decode_ms = pick_opt("decode_ms")
+        kv_tokens = pick_opt("kv_tokens")
+        expert_batch_size = pick_opt("expert_batch_size")
+
+        layers: List[LayerRoute] = []
+        union: List[int] = []
+        seen_union: set[int] = set()
+        for r in rs:
+            lr = LayerRoute(candidates=tuple(r.candidates), k=r.k, scores=r.scores, cost_scale=r.cost_scale)
+            layers.append(lr)
+            for c in lr.candidates:
+                if c not in seen_union:
+                    union.append(int(c))
+                    seen_union.add(int(c))
+
+        out.append(
+            TokenRoute(
+                t_ms=t0,
+                cls=cls0,
+                candidates=tuple(union),
+                token_index=int(tid),
+                k=None,
+                scores=None,
+                mtp_accept_len=mtp_accept_len if isinstance(mtp_accept_len, int) else None,
+                accepted_mtp=accepted_mtp if isinstance(accepted_mtp, int) else None,
+                rejected_mtp=rejected_mtp if isinstance(rejected_mtp, int) else None,
+                dflash_accept_len=dflash_accept_len if isinstance(dflash_accept_len, int) else None,
+                accepted_dflash=accepted_dflash if isinstance(accepted_dflash, int) else None,
+                rejected_dflash=rejected_dflash if isinstance(rejected_dflash, int) else None,
+                cost_scale=None,
+                decode_ms=float(decode_ms) if isinstance(decode_ms, (int, float)) else None,
+                kv_tokens=kv_tokens if isinstance(kv_tokens, int) else None,
+                expert_batch_size=expert_batch_size if isinstance(expert_batch_size, int) else None,
+                layers=tuple(layers),
+            )
+        )
+        packed += 1
+
+    if meta_out is not None:
+        meta_out["packed_layers_by_token_index"] = {"enabled": True, "packed_tokens": int(packed)}
+    return(out)
 
 
 def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
@@ -5003,6 +5103,11 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         choices=("error", "skip"),
         help="JSONL trace replay: what to do with non-route input. 'skip' ignores non-route JSON objects (non-meta 'type' without route fields) and non-JSON lines (useful for mixed runtime stdout/stderr logs).",
     )
+    p.add_argument(
+        "--trace-pack-layers-by-token-index",
+        action="store_true",
+        help="Trace replay/canonicalization helper: when the trace logs one record per MoE layer (one candidates list) and repeats the same token_index for all layers of that token, pack those records into a single multi-layer token (layers[]). Fails if cls/t_ms differ within a token_index group.",
+    )
     p.add_argument("--trace-speedup", type=float, default=1.0, help="Scale trace arrivals by dividing t_ms by this factor (>0). Useful for stressing backpressure/starvation using one fixed trace.")
     p.add_argument("--trace-summary", action="store_true", help="Print a JSON summary of the trace contract (and exit).")
     p.add_argument(
@@ -5226,9 +5331,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 input_format=args.trace_input_format.strip().lower(),
                 route_type=args.trace_route_type.strip(),
                 default_cls=args.trace_default_cls,
+                pack_layers_by_token_index=bool(args.trace_pack_layers_by_token_index),
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
+            if args.trace_pack_layers_by_token_index:
+                try:
+                    trace = pack_trace_layers_by_token_index(trace, meta_out=trace_meta)
+                except ValueError as e:
+                    raise SystemExit(str(e))
         if trace_speedup != 1.0:
             try:
                 trace = scale_trace_speedup(trace, trace_speedup)

@@ -247,6 +247,53 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_pack_layers_by_token_index_packs_into_layers_union_candidates(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "meta", "meta": {"source_format": "unit_test"}}) + "\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "token_index": 7, "candidates": [0, 1], "cost_scale": 1.0}) + "\n")
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "token_index": 7, "candidates": [2, 3], "cost_scale": 2.0}) + "\n")
+        try:
+            trace_meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(
+                tmp_path,
+                time_mode="t_ms",
+                meta_out=trace_meta,
+                non_route_policy="error",
+                input_format="strict",
+                pack_layers_by_token_index=True,
+            )
+            self.assertEqual(len(trace), 1)
+            r0 = trace[0]
+            self.assertEqual(r0.token_index, 7)
+            self.assertEqual(list(r0.candidates), [0, 1, 2, 3])
+            self.assertIsNotNone(r0.layers)
+            self.assertEqual(len(r0.layers or ()), 2)
+            self.assertEqual(list((r0.layers or ())[0].candidates), [0, 1])
+            self.assertEqual(list((r0.layers or ())[1].candidates), [2, 3])
+            self.assertAlmostEqual(float((r0.layers or ())[0].cost_scale or 0.0), 1.0, places=6)
+            self.assertAlmostEqual(float((r0.layers or ())[1].cost_scale or 0.0), 2.0, places=6)
+            self.assertIsNone(r0.cost_scale)
+            packed = trace_meta.get("packed_layers_by_token_index")
+            self.assertIsNotNone(packed)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_pack_layers_by_token_index_rejects_mixed_timestamps(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "token_index": 0, "candidates": [0]}) + "\n")
+            f.write(json.dumps({"t_ms": 1.0, "cls": "batch", "token_index": 0, "candidates": [1]}) + "\n")
+        try:
+            with self.assertRaises(ValueError):
+                scheduler_sim.load_trace_jsonl(tmp_path, pack_layers_by_token_index=True)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_ds4_topk_dump_to_trace_jsonl_emits_layers_and_synthetic_dt(self) -> None:
         from array import array
 
