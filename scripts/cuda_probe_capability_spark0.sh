@@ -7,6 +7,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 with_device_props_minimal="${WITH_DEVICE_PROPS_MINIMAL:-1}"
 with_kernel_tiny="${WITH_KERNEL_TINY:-1}"
 with_cmake_minimal="${WITH_CMAKE_MINIMAL:-1}"
+with_cublaslt_tiny="${WITH_CUBLASLT_TINY:-1}"
 log_path="${LOG_PATH:-}"
 
 log_line() {
@@ -57,6 +58,11 @@ run_logged "$repo_root/scripts/cuda_probe_tiny_spark0.sh" "$target"
 
 log_line "== cuda probe capability: tiny compile-only (variants + PTX embed probes) =="
 run_logged "$repo_root/scripts/cuda_probe_compile_only_tiny_spark0.sh" "$target"
+
+if [ "${with_cublaslt_tiny}" = "1" ]; then
+	log_line "== cuda probe capability: cublaslt-tiny gates (cuBLASLt matmul) =="
+	run_logged "$repo_root/scripts/cuda_probe_cublaslt_tiny_spark0.sh" "$target"
+fi
 
 if [ "${with_kernel_tiny}" = "1" ]; then
 	log_line "== cuda probe capability: kernel-tiny gates (CUTLASS/DeepGEMM plumbing) =="

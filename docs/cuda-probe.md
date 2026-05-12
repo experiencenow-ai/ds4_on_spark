@@ -111,12 +111,19 @@ This runs, in order:
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` (no repo transfer; CMake build-system gate)
 - `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
+- `scripts/cuda_probe_cublaslt_tiny_spark0.sh` (cuBLASLt matmul smoke tests; includes FP8/FP4 best-effort probes)
 - `scripts/cuda_probe_kernel_tiny_spark0.sh` (kernel plumbing gates; no cuBLASLt)
 
 To skip the “kernel plumbing” bring-up gates (faster), run:
 
 ```bash
 WITH_KERNEL_TINY=0 ./scripts/cuda_probe_capability_spark0.sh
+```
+
+To skip the cuBLASLt smoke gates (faster / kernel-only), run:
+
+```bash
+WITH_CUBLASLT_TINY=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
 To skip the CMake build-system gate (faster), run:
