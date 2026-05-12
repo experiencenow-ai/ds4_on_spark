@@ -14,7 +14,7 @@ from scripts import pairwise_judge_prompt as prompt_builder
 class JudgeEloTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -46,7 +46,7 @@ class JudgeEloTest(unittest.TestCase):
 
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -207,6 +207,37 @@ class JudgeEloTest(unittest.TestCase):
         )
         self.assertEqual(rec.get("schema"), schema.SCHEMA_RECORD_V2)
         self.assertTrue(rec.get("parse_valid", False))
+
+    def test_wrap_record_parse_valid_v3_requires_budget(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V3,
+            pair_id="p0v3",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        self.assertEqual(rec.get("schema"), schema.SCHEMA_RECORD_V3)
+        self.assertTrue(rec.get("parse_valid", False))
+
+    def test_wrap_record_v3_enforces_strict_even_without_flag(self) -> None:
+        decision = {"winner": "A", "margin": 0, "score_a": 6, "score_b": 6, "reason": "A is better overall.", "train_hint": "Differentiate the answers.", "tags": ["clarity"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V3,
+            pair_id="p0v3_strict",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        self.assertFalse(rec.get("parse_valid", True))
 
     def test_wrap_record_v2_rejects_incomplete_budget(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
