@@ -454,11 +454,11 @@ PY
 	fi
 	[ "$cuda_ver" != "" ] && echo "cuda version.json: $cuda_ver"
 fi
-cuda_h="/usr/local/cuda/include/cuda.h"
-if [ -r "$cuda_h" ]; then
-	cuda_h_version="$(grep -E "^#define CUDA_VERSION " "$cuda_h" 2>/dev/null | awk "{ print \\$3 }" | head -n 1 || true)"
-	[ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
-fi
+	cuda_h="/usr/local/cuda/include/cuda.h"
+	if [ -r "$cuda_h" ]; then
+		cuda_h_version="$(grep -E "^#define CUDA_VERSION " "$cuda_h" 2>/dev/null | awk '{ print $3 }' | head -n 1 || true)"
+		[ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
+	fi
 echo
 	if [ "$ring_ping" = "1" ]; then
 		echo "== peer ping (best effort, rtt) =="
@@ -497,8 +497,8 @@ REMOTE
 		rm -f "$out_file" >/dev/null 2>&1 || true
 		set -e
 		[ "$out" != "" ] && printf "%s\n" "$out"
-		epoch="$(printf "%s\n" "$out" | sed -nE 's/^epoch: ([0-9]+).*/\\1/p' | head -n 1 || true)"
-		skew_s="$(printf "%s\n" "$out" | sed -nE 's/^skew_s \\(remote-local\\): (-?[0-9]+).*/\\1/p' | head -n 1 || true)"
+			epoch="$(printf "%s\n" "$out" | sed -nE 's/^epoch: ([0-9]+).*/\1/p' | head -n 1 || true)"
+				skew_s="$(printf "%s\n" "$out" | sed -nE 's/^skew_s [(]remote-local[)]: (-?[0-9]+).*/\1/p' | head -n 1 || true)"
 		[ "$epoch" = "" ] && epoch="?"
 		[ "$skew_s" = "" ] && skew_s="?"
 		clock_rows="${clock_rows}${clock_rows:+
