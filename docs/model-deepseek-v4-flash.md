@@ -52,7 +52,7 @@ Attention schedule (main trunk; derived from `compress_ratios`):
 - Sliding-only layer IDs: `[0,1]`
 - CSA layer IDs: `[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42]`
 - HCA layer IDs: `[3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41]`
-- Main compress-ratio schedule (length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
+- Main trunk compress-ratio schedule (entries `0..42`; length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
 
 MTP:
 
@@ -232,6 +232,7 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 - `compress_ratios` length is `44`:
   - entries `0..42` are the 43 main trunk layers (`layers.{i}.*`)
   - entry `43` is the MTP layer (`mtp.0.*`)
+- Convenience view: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` also records `attention_schedule.main_compress_ratios` as the trunk-only slice (length `43`) so contract consumers don’t need to slice the raw config array.
 - Main layer type counts (derived from `fixtures/model_contract/deepseek_v4_flash/config.json` and recorded in `contract_summary.json`):
   - sliding-only: 2 layers (`layer_id ∈ {0,1}`)
   - CSA (`compress_ratio == 4`): 21 layers
