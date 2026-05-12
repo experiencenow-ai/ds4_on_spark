@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_pairwise_judge_prompt_v1",
+  "description": "Machine-readable schema for scripts/pairwise_judge_prompt.py --format json output. Offline-only; intended for harness integration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "judge_out_target",
+    "system",
+    "user",
+    "schema_hint"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "ds4_pairwise_judge_prompt_v1"
+    },
+    "judge_out_target": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "system": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_hint": {
+      "type": "object"
+    }
+  }
+}
