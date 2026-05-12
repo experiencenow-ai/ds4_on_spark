@@ -53,7 +53,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 | Node | SSH target | SSH path | Wired ifname | Wired MTU | Wi‑Fi ifname | Wi‑Fi MTU | Notes |
 |------|------------|----------|--------------|----------:|--------------|----------:|-------|
-| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | 10GbE link expected |
+| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | 10GbE jumbo on `enP7s7`; 200GbE Mellanox ports also present (see latest ring probe) |
 | spark1 | `spark1.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 | spark2 | `spark2.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 

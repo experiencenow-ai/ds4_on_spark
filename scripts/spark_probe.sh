@@ -1088,28 +1088,27 @@ fi
 	fi
 	echo
 	echo "== storage =="
-	if [ "$spark_probe_facts" != "1" ]; then
-		if command -v timeout >/dev/null 2>&1; then
-			timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\\$1]++ {print}" || true
-		else
-			df -h / 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || true
-		fi
-		if [ "$spark_probe_summary" != "1" ]; then
-			lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
-			if [ "$lsblk_out" != "" ]; then
-				printf "%s\n" "$lsblk_out"
+		if [ "$spark_probe_facts" != "1" ]; then
+			if command -v timeout >/dev/null 2>&1; then
+				timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\\$1]++ {print}" || true
 			else
-				lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+				df -h / 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || true
 			fi
+			if [ "$spark_probe_summary" != "1" ]; then
+				lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
+				if [ "$lsblk_out" != "" ]; then
+					printf "%s\n" "$lsblk_out"
+				else
+					lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+				fi
+			fi
+			echo
 		fi
-		echo
-	fi
-fi
-echo "== disks (summary) =="
-disks_out="$(lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE -e 7 2>/dev/null || true)"
-if [ "$disks_out" != "" ]; then
-	printf "%s\n" "$disks_out" | head -n 20 || true
-else
+	echo "== disks (summary) =="
+	disks_out="$(lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE -e 7 2>/dev/null || true)"
+	if [ "$disks_out" != "" ]; then
+		printf "%s\n" "$disks_out" | head -n 20 || true
+	else
 	lsblk -d -o NAME,SIZE,MODEL,ROTA,TYPE 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' | head -n 20 || true
 fi
 echo

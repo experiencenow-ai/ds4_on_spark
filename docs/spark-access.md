@@ -11,12 +11,13 @@ Current observed Spark identity:
 - Mac Wi-Fi IPv4 observed during bootstrap: `<redacted-ipv4cidr>`
 - Spark Wi-Fi IPv4 observed during probe: `<redacted-ipv4cidr>`
 - Spark wired interface: `enP7s7`, MTU 9000
+- Additional wired NICs observed: Mellanox `mlx5_core` ports at `200000Mb/s` (MTU `1500`; see latest ring probe snapshot for ifnames)
 - SSH key authentication from the Mac is now working for `spark0`.
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe snapshot set: `2026-05-12T0254Z` (`docs/spark-ring-*-2026-05-12T0254Z.md`, `docs/spark0-probe-facts-2026-05-12T0254Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0254Z.md`
+- Latest commit-safe snapshot set: `2026-05-12T0758Z` (`docs/spark-ring-*-2026-05-12T0758Z.md`, `docs/spark0-probe-facts-2026-05-12T0758Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0758Z.md`
 
 ## Reproducible Probes
 
@@ -111,6 +112,21 @@ git --git-dir=.codex_git --work-tree=. add -A
 git --git-dir=.codex_git --work-tree=. -c user.name=codex -c user.email=codex@example.local commit -m "seed worktree" || true
 git --git-dir=.codex_git --work-tree=. fetch origin --prune
 git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+```
+
+If you want to avoid extra downloads while still keeping writes out of the locked `.git/worktrees/...` directory, you can point the shim at the existing object database via `objects/info/alternates`:
+
+```bash
+worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p')"
+common_rel="$(cat "${worktree_gitdir}/commondir")"
+common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
+rm -rf .codex_git
+mkdir -p .codex_git/objects/info
+git --git-dir=.codex_git --work-tree=. init
+printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
+git --git-dir=.codex_git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
 ```
 
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:

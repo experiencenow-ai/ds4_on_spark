@@ -14,7 +14,7 @@ This is a compact, non-secret reference for Spark0 (`aitopatom-9ab9.local`). It 
 - `/usr/local/cuda/include/cuda.h` `CUDA_VERSION`: `13000`
 
 Source snapshot (commit-safe):
-- `docs/spark0-probe-facts-2026-05-12T0254Z.md`
+- `docs/spark0-probe-facts-2026-05-12T0758Z.md`
 
 ## How To Re-Verify (Commit-Safe)
 
@@ -29,4 +29,3 @@ Notes:
 - When `nvidia-smi --query-gpu=compute_cap` is unsupported, the probe’s tiny `nvcc` runtime test is the fallback source (`device0 cc:`).
 - On unified-memory hosts, `nvidia-smi` can report `memory.total=[N/A]`; use the probe’s `== memory ==` and `device0 global mem (bytes)` instead.
 - Spark0 has shown PCIe link downtraining in snapshots; see the `warning:` lines in the referenced facts snapshot.
-
