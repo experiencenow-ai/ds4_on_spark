@@ -205,7 +205,7 @@ python3 sim/scheduler/scheduler_sim.py --summary-json --compare 'mtp_off:{"mtp_d
 
 Note: when replaying a trace that already contains `mtp_accept_len` / `accepted_mtp` / `rejected_mtp`, `mtp_off` variants run with those fields ignored (stripped) so you can do an on/off comparison in one invocation.
 
-For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sweeps (expert queue max, reservation, `k_signal`, admit policy, starvation knobs, expert batching, optional pending-units and backpressure-units when `cost_scale` is present, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep) and returns a JSON bundle with per-variant summaries:
+For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sweeps (backpressure skip-vs-stall policy, expert queue max, reservation, `k_signal`, admit policy, starvation knobs, expert batching, optional pending-units and backpressure-units when `cost_scale` is present, optional per-layer K scope, and optionally MTP attempt policy; when the trace omits observed MTP accept lengths it also includes an MTP accept-prob sensitivity sweep) and returns a JSON bundle with per-variant summaries:
 
 ```bash
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000

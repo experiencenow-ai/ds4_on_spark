@@ -4225,6 +4225,7 @@ class SchedulerSimTest(unittest.TestCase):
 
         out = trace_sweep.run_trace_sweeps(trace, base_cfg, trace_meta={"note": "unit_test"}, max_tokens=200)
         scenarios = out.get("scenarios", {})
+        self.assertIn("backpressure_zero_admit_policy", scenarios)
         self.assertIn("k_signal_policy", scenarios)
         self.assertIn("admit_policy", scenarios)
         self.assertIn("adaptive_k_policy", scenarios)
@@ -4255,6 +4256,40 @@ class SchedulerSimTest(unittest.TestCase):
         summary = out.get("trace_summary")
         self.assertIsInstance(summary, dict)
         self.assertIn("tokens", summary)
+
+    def test_trace_sweep_backpressure_stall_reduces_drops_on_overload(self) -> None:
+        from sim.scheduler import scheduler_sim
+        from sim.scheduler import trace_sweep
+
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,)),
+        ]
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=10.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            backpressure_zero_admit_policy="skip",
+            sim_seed=123,
+        )
+        out = trace_sweep.run_trace_sweeps(trace, base_cfg)
+        scen = out["scenarios"]["backpressure_zero_admit_policy"]["results"]
+        base_sum = scen["baseline"]["summary"]
+        stall_sum = scen["variants"]["bp_stall"]["summary"]
+        self.assertGreater(float(base_sum.get("drop_frac_tokens", 0.0)), 0.0)
+        self.assertEqual(float(stall_sum.get("drop_frac_tokens", 0.0)), 0.0)
 
     def test_trace_sweep_includes_score_desc_admit_policy_when_scores_present(self) -> None:
         from sim.scheduler import scheduler_sim

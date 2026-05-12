@@ -81,6 +81,23 @@ def run_trace_sweeps(
     scenarios: Dict[str, Any] = {}
     trace_summary = scheduler_sim.trace_summary_jsonable(trace_in, mtp_draft_len=int(base_cfg.mtp_draft_len), meta=trace_meta)
 
+    base_bp = str(base_cfg.backpressure_zero_admit_policy).strip().lower()
+    if base_bp not in ("skip", "stall"):
+        raise ValueError("base_cfg.backpressure_zero_admit_policy must be 'skip' or 'stall'")
+    bp_variants: List[Tuple[str, Dict[str, object]]] = []
+    if base_bp != "skip":
+        bp_variants.append(("bp_skip", {"backpressure_zero_admit_policy": "skip"}))
+    if base_bp != "stall":
+        bp_variants.append(("bp_stall", {"backpressure_zero_admit_policy": "stall"}))
+    if len(bp_variants) != 0:
+        scenarios["backpressure_zero_admit_policy"] = {
+            "name": "backpressure_zero_admit_policy",
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "variants": bp_variants,
+            "results": scheduler_sim.compare_simulation_summaries(base_cfg, trace_in, bp_variants, arrival_units=arrival_units),
+            "note": "bp_stall retries blocked stages later (fewer drops, higher latency); bp_skip treats blocked stages as residual-path skips (more drops, lower latency).",
+        }
+
     base_batch_max = int(base_cfg.batch_max_batch)
     batch_variants: List[Tuple[str, Dict[str, object]]] = []
     for b in (1, 4, 8):
