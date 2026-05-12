@@ -14,8 +14,8 @@ Current observed Spark identity:
 - SSH key authentication from the Mac is now working for `spark0`.
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
-- Latest commit-safe snapshot set: `2026-05-12T0122Z` (`docs/spark-ring-*-2026-05-12T0122Z.md`, `docs/spark0-probe-facts-2026-05-12T0122Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0122Z.md`
+- Latest commit-safe snapshot set: `2026-05-12T0206Z` (`docs/spark-ring-*-2026-05-12T0206Z.md`, `docs/spark0-probe-facts-2026-05-12T0206Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0206Z.md`
 
 ## Reproducible Probes
 

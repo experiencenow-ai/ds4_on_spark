@@ -1062,20 +1062,30 @@ if [ "$spark_probe_summary" != "1" ]; then
 	fi
 	echo
 fi
-echo "== filesystems (type + opts) =="
-if command -v findmnt >/dev/null 2>&1; then
-	findmnt -no TARGET,FSTYPE,OPTIONS / /home 2>/dev/null || findmnt -no TARGET,FSTYPE,OPTIONS / 2>/dev/null || true
-else
-	echo "findmnt not found"
-fi
-echo
-echo "== storage =="
-if [ "$spark_probe_facts" != "1" ]; then
-	df -h / /home 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || df -h / || true
-	if [ "$spark_probe_summary" != "1" ]; then
-		lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
-		if [ "$lsblk_out" != "" ]; then
-			printf "%s\n" "$lsblk_out"
+	echo "== filesystems (mountinfo: / and /home) =="
+	if [ -r /proc/self/mountinfo ]; then
+		awk "(\$5==\"/\" || \$5==\"/home\") { mp=\$5; opts=\$6; fstype=\"?\"; n=split(\$0,a,\" - \"); if ( n>=2 ) { split(a[2],b,\" \"); if ( b[1] != \"\" ) fstype=b[1]; } print mp \" \" fstype \" \" opts }" /proc/self/mountinfo 2>/dev/null || true
+	elif command -v findmnt >/dev/null 2>&1; then
+		if command -v timeout >/dev/null 2>&1; then
+			timeout 3s findmnt -no TARGET,FSTYPE,OPTIONS / 2>/dev/null || true
+		else
+			findmnt -no TARGET,FSTYPE,OPTIONS / 2>/dev/null || true
+		fi
+	else
+		echo "mountinfo unreadable; findmnt not found"
+	fi
+	echo
+	echo "== storage =="
+	if [ "$spark_probe_facts" != "1" ]; then
+		if command -v timeout >/dev/null 2>&1; then
+			timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\\$1]++ {print}" || true
+		else
+			df -h / 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || true
+		fi
+		if [ "$spark_probe_summary" != "1" ]; then
+			lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
+			if [ "$lsblk_out" != "" ]; then
+				printf "%s\n" "$lsblk_out"
 		else
 			lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
 		fi

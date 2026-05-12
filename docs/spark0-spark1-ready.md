@@ -5,11 +5,11 @@ This is a lightweight, reproducible probe flow for Spark hosts.
 ## Current Status (2026-05-12)
 
 - `aitopatom-9ab9.local` (Spark0) is reachable over SSH from the Mac.
-- `spark1.local` and `spark2.local` are not reachable yet (as of the `2026-05-12T0122Z` refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
-- Latest redacted Spark0 facts-only snapshot: `docs/spark0-probe-facts-2026-05-12T0122Z.md`.
-- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-12T0122Z.md`, `docs/spark-ring-probe-2026-05-12T0122Z.md`.
-- Latest ring bandwidth snapshot (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T0122Z.md`.
-- Latest ring MTU snapshot: `docs/spark-ring-mtu-probe-2026-05-12T0122Z.md`.
+- `spark1.local` and `spark2.local` are not reachable yet (as of the `2026-05-12T0206Z` refresh, both failed DNS resolution from the Mac probe environment; likely not provisioned / not on the same mDNS domain).
+- Latest redacted Spark0 facts-only snapshot: `docs/spark0-probe-facts-2026-05-12T0206Z.md`.
+- Latest ring snapshots: `docs/spark-ring-mac-discovery-2026-05-12T0206Z.md`, `docs/spark-ring-probe-2026-05-12T0206Z.md`.
+- Latest ring bandwidth snapshot (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T0206Z.md`.
+- Latest ring MTU snapshot: `docs/spark-ring-mtu-probe-2026-05-12T0206Z.md`.
 - Ring readiness tracker: `docs/spark-ring-readiness-status.md`.
 
 ## Goals
