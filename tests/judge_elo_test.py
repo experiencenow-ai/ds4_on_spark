@@ -14,14 +14,15 @@ from scripts import pairwise_judge_prompt as prompt_builder
 class JudgeEloTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
-        bad = 0
-        for _, obj in schema.iter_jsonl(path):
-            errs = schema.validate_record(obj)
-            if len(errs) != 0:
-                bad += 1
-        # One intentionally parse-invalid record is still schema-valid.
-        self.assertEqual(bad, 0)
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl"):
+            path = os.path.join(root, "fixtures", "judge-elo", str(fname))
+            bad = 0
+            for _, obj in schema.iter_jsonl(path):
+                errs = schema.validate_record(obj)
+                if len(errs) != 0:
+                    bad += 1
+            # One intentionally parse-invalid record is still schema-valid.
+            self.assertEqual(bad, 0)
 
     def test_prompt_fixture_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -30,15 +31,29 @@ class JudgeEloTest(unittest.TestCase):
             obj = json.load(f)
         self.assertEqual(schema.validate_prompt(obj), [])
 
+    def test_prompt_fixture_v2_validates(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_pairwise_prompt_v2.json")
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        self.assertEqual(schema.validate_prompt(obj), [])
+
+    def test_prompt_rejects_extra_keys(self) -> None:
+        msg = prompt_builder.build_messages(prompt="p", a="a", b="b", judge_out_target=64, schema_version="v2")
+        msg["extra"] = 1
+        errs = schema.validate_prompt(msg)
+        self.assertTrue(any("unexpected key in prompt" in str(e) for e in errs))
+
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
-        bad = 0
-        for _, obj in schema.iter_jsonl(path):
-            errs = schema.validate_record_strict(obj)
-            if len(errs) != 0:
-                bad += 1
-        self.assertEqual(bad, 0)
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl"):
+            path = os.path.join(root, "fixtures", "judge-elo", str(fname))
+            bad = 0
+            for _, obj in schema.iter_jsonl(path):
+                errs = schema.validate_record_strict(obj)
+                if len(errs) != 0:
+                    bad += 1
+            self.assertEqual(bad, 0)
 
     def test_elo_deterministic(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -99,6 +114,7 @@ class JudgeEloTest(unittest.TestCase):
                 "--strict",
             ])
             self.assertTrue(os.path.exists(os.path.join(td, "summary.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "bundle.json")))
             subprocess.check_call([
                 "python3",
                 validate_script,
@@ -163,6 +179,7 @@ class JudgeEloTest(unittest.TestCase):
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
         rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
             pair_id="p0",
             model_a="mA",
             model_b="mB",
@@ -170,12 +187,79 @@ class JudgeEloTest(unittest.TestCase):
             decision_text="  \n" + json.dumps(decision, separators=(",", ":")) + "\n",
             tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
             latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
         )
         self.assertTrue(rec.get("parse_valid", False))
         self.assertEqual(rec.get("winner"), "A")
 
+    def test_wrap_record_parse_valid_v2_requires_budget(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V2,
+            pair_id="p0v2",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        self.assertEqual(rec.get("schema"), schema.SCHEMA_RECORD_V2)
+        self.assertTrue(rec.get("parse_valid", False))
+
+    def test_wrap_record_v2_rejects_incomplete_budget(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        with self.assertRaises(ValueError):
+            record_wrap.build_record(
+                record_schema=schema.SCHEMA_RECORD_V2,
+                pair_id="p0v2_bad_tokens",
+                model_a="mA",
+                model_b="mB",
+                judge_model="ds4",
+                decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+                tokens={"a_out": 1, "b_out": 2, "judge_out": 4},
+                latency_ms={"a": 5, "b": 6, "judge": 7},
+                strict=False,
+            )
+        with self.assertRaises(ValueError):
+            record_wrap.build_record(
+                record_schema=schema.SCHEMA_RECORD_V2,
+                pair_id="p0v2_bad_latency",
+                model_a="mA",
+                model_b="mB",
+                judge_model="ds4",
+                decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+                tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+                latency_ms={"a": 5, "judge": 7},
+                strict=False,
+            )
+
+    def test_decision_rejects_extra_keys(self) -> None:
+        decision = {"winner": "A", "margin": 1, "score_a": 7, "score_b": 6, "reason": "A is better.", "train_hint": "", "tags": [], "extra": 123}
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("unexpected key" in str(e) for e in errs))
+
+    def test_record_rejects_extra_keys(self) -> None:
+        decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
+            pair_id="p_extra",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        rec["extra"] = 1
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("unexpected key in record" in str(e) for e in errs))
+
     def test_wrap_record_parse_invalid(self) -> None:
         rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
             pair_id="p1",
             model_a="mA",
             model_b="mB",
@@ -183,8 +267,25 @@ class JudgeEloTest(unittest.TestCase):
             decision_text="WINNER=A margin=2",
             tokens=None,
             latency_ms=None,
+            strict=False,
         )
         self.assertFalse(rec.get("parse_valid", True))
+
+    def test_wrap_record_strict_rejects_inconsistent_margin(self) -> None:
+        decision = {"winner": "A", "margin": 0, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
+            pair_id="p_strict",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens=None,
+            latency_ms=None,
+            strict=True,
+        )
+        self.assertFalse(rec.get("parse_valid", True))
+        self.assertIn("margin must be in", str(rec.get("parse_error", "")))
 
     def test_validate_decision_cli_ok(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -198,6 +299,17 @@ class JudgeEloTest(unittest.TestCase):
             self.assertEqual(res.returncode, 0)
             out = json.loads(res.stdout.strip())
             self.assertEqual(out.get("winner"), "tie")
+
+    def test_validate_decision_cli_strict_rejects_inconsistent_margin(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_validate_decision.py")
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "judge.txt")
+            decision = {"winner": "A", "margin": 0, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "", "tags": ["factuality"]}
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(decision, separators=(",", ":"), ensure_ascii=False) + "\n")
+            res = subprocess.run(["python3", script, "--strict", "--in", path], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 2)
 
     def test_validate_decision_cli_bad(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -316,6 +428,7 @@ class JudgeEloTest(unittest.TestCase):
 
     def test_wrap_record_sanitizes_raw_newlines(self) -> None:
         rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
             pair_id="p_nl",
             model_a="mA",
             model_b="mB",
@@ -323,6 +436,7 @@ class JudgeEloTest(unittest.TestCase):
             decision_text="not json\nline2\rline3",
             tokens=None,
             latency_ms=None,
+            strict=False,
         )
         self.assertFalse(rec.get("parse_valid", True))
         raw = str(rec.get("raw", ""))
@@ -387,6 +501,8 @@ class JudgeEloTest(unittest.TestCase):
                 b_path,
                 "--judge-out-target",
                 "64",
+                "--schema-version",
+                "v1",
                 "--format",
                 "json",
             ], text=True)
@@ -398,20 +514,63 @@ class JudgeEloTest(unittest.TestCase):
             self.assertIn("Return minified JSON only", str(obj.get("system", "")))
             self.assertIn("PROMPT:", str(obj.get("user", "")))
 
+    def test_pairwise_judge_prompt_cli_json_format_v2_is_compact(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_prompt.py")
+        with tempfile.TemporaryDirectory() as td:
+            p_path = os.path.join(td, "prompt.txt")
+            a_path = os.path.join(td, "a.txt")
+            b_path = os.path.join(td, "b.txt")
+            with open(p_path, "w", encoding="utf-8") as f:
+                f.write("Explain what ELO rating means.\n")
+            with open(a_path, "w", encoding="utf-8") as f:
+                f.write("Elo is a rating system used for head-to-head games.\n")
+            with open(b_path, "w", encoding="utf-8") as f:
+                f.write("ELO is a ranking thing.\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--prompt",
+                p_path,
+                "--a",
+                a_path,
+                "--b",
+                b_path,
+                "--judge-out-target",
+                "64",
+                "--schema-version",
+                "v2",
+                "--format",
+                "json",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertEqual(obj.get("schema"), "ds4_pairwise_judge_prompt_v2")
+            self.assertIn("system", obj)
+            self.assertIn("user", obj)
+            self.assertIn("schema_hint", obj)
+            self.assertNotIn("Output JSON matching this shape", str(obj.get("user", "")))
+
     def test_prompt_schema_validator_accepts_builder_output(self) -> None:
-        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64)
+        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64, schema_version="v1")
+        self.assertEqual(schema.validate_prompt(msg), [])
+
+    def test_prompt_schema_validator_accepts_builder_output_v2(self) -> None:
+        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64, schema_version="v2")
         self.assertEqual(schema.validate_prompt(msg), [])
 
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
         rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
+        rec_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v2.schema.json")
         prompt_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v1.schema.json")
+        prompt_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v2.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
         budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
+        bundle_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_bundle_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, prompt_path, meta_path, budget_path, qmap_path, leaderboard_path):
+        for path in (dec_path, rec_path, rec_v2_path, prompt_path, prompt_v2_path, meta_path, budget_path, bundle_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):

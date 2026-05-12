@@ -7,7 +7,8 @@ usage()
 ops_stage_spark_ring.sh -- stage DS4 deploy assets to an ordered Spark ring (Mac-side)
 
 Usage:
-  ops_stage_spark_ring.sh [--mesh-check] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_stage_spark_ring.sh [--mesh-check] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_stage_spark_ring.sh [--mesh-check] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -19,12 +20,14 @@ Notes:
   - Defaults instance names to `spark0`, `spark1`, ... based on host order.
   - Override an instance with `--instance0 name`, `--instance1 name`, etc.
   - `--mesh-check` runs `ops_spark_ring_mesh_check.sh` before staging.
+  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
 EOF
 }
 
 mesh_check=0
 topology="ring"
 tcp_ports=""
+inventory_file=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -38,6 +41,10 @@ while [ $# -gt 0 ]; do
 			;;
 		--tcp)
 			tcp_ports="$tcp_ports ${2:-}"
+			shift 2
+			;;
+		--inventory-file)
+			inventory_file="${2:-}"
 			shift 2
 			;;
 		--instance[0-9]*)
@@ -69,6 +76,21 @@ case "$topology" in
 		exit 2
 		;;
 esac
+
+if [ "$inventory_file" != "" ]; then
+	if [ ! -f "$inventory_file" ]; then
+		echo "inventory file not found: $inventory_file" >&2
+		exit 2
+	fi
+	while IFS= read -r line || [ "$line" != "" ]; do
+		case "$line" in
+			""|\#*)
+				continue
+				;;
+		esac
+		set -- "$@" "$line"
+	done < "$inventory_file"
+fi
 
 if [ "$#" -lt 2 ]; then
 	usage >&2

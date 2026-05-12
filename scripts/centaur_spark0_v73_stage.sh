@@ -6,7 +6,7 @@ usage()
 	cat <<'USAGE'
 usage: centaur_spark0_v73_stage.sh <spark0_user@host> [remote_dir]
 
-Stages the Centaur spec-impl v73 zip to Spark0 without sudo/system changes.
+Stages the Centaur spec-impl v73 zip + smoke helper scripts to Spark0 without sudo/system changes.
 
 Environment:
   CENTAUR_ZIP     Local zip path (default: /Users/mac/Downloads/centaur_spec_impl_v73.zip)
@@ -68,6 +68,16 @@ if [ ! -f "$catalog_src" ]; then
 	echo "missing fixture: $catalog_src" >&2
 	exit 2
 fi
+smoke_src="$root/scripts/centaur_spark0_v73_smoke.sh"
+validate_src="$root/scripts/centaur_spark0_v73_validate_artifacts.sh"
+if [ ! -f "$smoke_src" ]; then
+	echo "missing smoke script: $smoke_src" >&2
+	exit 2
+fi
+if [ ! -f "$validate_src" ]; then
+	echo "missing validate script: $validate_src" >&2
+	exit 2
+fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	known_hosts="/tmp/ds4_spark_known_hosts"
@@ -126,6 +136,9 @@ remote_dir_abs="$(ssh_run "$target" "cd $remote_dir && pwd -P")"
 echo "remote_dir_abs: $remote_dir_abs"
 copy_to_remote "$zip" "$target:$remote_dir/centaur_spec_impl_v73.zip"
 copy_to_remote "$catalog_src" "$target:$remote_dir/unit_model_catalog.json"
+copy_to_remote "$smoke_src" "$target:$remote_dir/centaur_spark0_v73_smoke.sh"
+copy_to_remote "$validate_src" "$target:$remote_dir/centaur_spark0_v73_validate_artifacts.sh"
+ssh_run "$target" "chmod 0755 $remote_dir_abs/centaur_spark0_v73_smoke.sh $remote_dir_abs/centaur_spark0_v73_validate_artifacts.sh"
 
 cat <<EOF
 
@@ -134,8 +147,13 @@ cd $remote_dir_abs
 export CENTAUR_ZIP="$remote_dir_abs/centaur_spec_impl_v73.zip"
 export CENTAUR_CATALOG_JSON="$remote_dir_abs/unit_model_catalog.json"
 
-# Run the smoke script by streaming it over SSH from this repo:
+# Option A (recommended): run the staged smoke script on Spark0:
+export CENTAUR_RUN_ID="\$(date -u +%Y%m%dT%H%M%SZ)"
+export CENTAUR_LOG="$remote_dir_abs/run/\$CENTAUR_RUN_ID/smoke.log"
+sh ./centaur_spark0_v73_smoke.sh
+
+# Option B: run by streaming the repo smoke script over SSH from your Mac:
 # (run this from your Mac repo root)
-ssh $SSH_OPTS "$target" "cd $remote_dir_abs && sh -s" < "$root/scripts/centaur_spark0_v73_smoke.sh"
+# ssh $SSH_OPTS "$target" "cd $remote_dir_abs && sh -s" < "$root/scripts/centaur_spark0_v73_smoke.sh"
 
 EOF

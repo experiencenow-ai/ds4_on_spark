@@ -40,6 +40,32 @@ def _read_quality_map(path: str) -> Tuple[Dict[str, float], str]:
         out[k] = fv
     return out, "judge_elo_quality_map_v1"
 
+def _read_bundle_quality_map(path: str) -> Tuple[Dict[str, float], str]:
+    with open(path, "r", encoding="utf-8") as f:
+        obj = json.load(f)
+    if not isinstance(obj, dict):
+        raise ValueError("bundle must be a JSON object")
+    qmap_obj = obj.get("quality_map")
+    if not isinstance(qmap_obj, dict):
+        raise ValueError("bundle.quality_map must be a JSON object mapping model->score")
+    out: Dict[str, float] = {}
+    for k, v in qmap_obj.items():
+        if not isinstance(k, str) or k.strip() == "":
+            continue
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            continue
+        fv = float(v)
+        if not _is_finite(fv) or fv < 0.0 or fv > 100.0:
+            continue
+        out[k] = fv
+    qsrc = "judge_elo_quality_map_v1"
+    meta = obj.get("meta")
+    if isinstance(meta, dict):
+        msrc = meta.get("quality_source")
+        if isinstance(msrc, str) and msrc.strip() != "":
+            qsrc = msrc.strip()
+    return out, qsrc
+
 
 def _read_meta_quality_source(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -118,8 +144,10 @@ def _write_csv(path: str, rows: Sequence[Dict[str, str]], fieldnames: Sequence[s
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="input_csv", required=True, help="baseline CSV input")
-    ap.add_argument("--quality-map", required=True, help="quality_map.json from scripts/judge_elo_update.py")
-    ap.add_argument("--meta", default="", help="meta.json from scripts/judge_elo_update.py (optional; provides quality_source)")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--quality-map", help="quality_map.json from scripts/judge_elo_update.py")
+    src.add_argument("--bundle", help="bundle.json from scripts/judge_elo_update.py (reads quality_map + meta.quality_source)")
+    ap.add_argument("--meta", default="", help="meta.json from scripts/judge_elo_update.py (optional; provides quality_source; ignored with --bundle)")
     ap.add_argument("--out", required=True, help="output CSV with quality_score attached")
     ap.add_argument("--model-field", default="", help="CSV column name for model id (default: auto-detect)")
     ap.add_argument("--overwrite", action="store_true", help="overwrite existing quality_score/quality_source if present")
@@ -127,11 +155,14 @@ def main() -> None:
     ap.add_argument("--quality-source", default="", help="override quality_source value written to CSV")
     args = ap.parse_args()
 
-    qmap, qsrc = _read_quality_map(str(args.quality_map))
-    if str(args.meta).strip() != "":
-        meta_src = _read_meta_quality_source(str(args.meta))
-        if meta_src != "":
-            qsrc = meta_src
+    if str(getattr(args, "bundle", "") or "").strip() != "":
+        qmap, qsrc = _read_bundle_quality_map(str(args.bundle))
+    else:
+        qmap, qsrc = _read_quality_map(str(args.quality_map))
+        if str(args.meta).strip() != "":
+            meta_src = _read_meta_quality_source(str(args.meta))
+            if meta_src != "":
+                qsrc = meta_src
     if str(args.quality_source).strip() != "":
         qsrc = str(args.quality_source).strip()
     rows, fieldnames = _read_csv(str(args.input_csv))

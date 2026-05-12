@@ -11,11 +11,15 @@ Current observed Spark identity:
 - Mac Wi-Fi IPv4 observed during bootstrap: `<redacted-ipv4cidr>`
 - Spark Wi-Fi IPv4 observed during probe: `<redacted-ipv4cidr>`
 - Spark wired interface: `enP7s7`, MTU 9000
+- Additional wired NICs observed: Mellanox `mlx5_core` ports at `200000Mb/s` (MTU `9000`; see latest ring probe snapshot for ifnames)
 - SSH key authentication from the Mac is now working for `spark0`.
+- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, 100% loss at `2026-05-12T1830Z` and `2026-05-12T1934Z`; see latest mac discovery snapshot).
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
-- Latest commit-safe snapshot set: `2026-05-12T0230Z` (`docs/spark-ring-*-2026-05-12T0230Z.md`, `docs/spark0-probe-facts-2026-05-12T0230Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0230Z.md`
+- Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
+- Latest commit-safe ring snapshot set: `2026-05-12T1934Z` (`docs/spark-ring-*-2026-05-12T1934Z.md`)
+- Latest Spark0 facts-only snapshot: `2026-05-12T1934Z` (`docs/spark0-probe-facts-2026-05-12T1934Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T1934Z.md`
 
 ## Reproducible Probes
 
@@ -27,7 +31,7 @@ Some automation-provided macOS checkouts have a `.git` worktree that is readable
 
 - You may not be able to `git fetch`, create branches, or commit using the checkout’s default `.git` metadata.
 - A common symptom is `git fetch origin` failing with `Operation not permitted` under `.git/worktrees/.../FETCH_HEAD`; use the shim gitdir for all git operations in that checkout.
-- The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir).
+- The probe scripts can still print `git: <hash>` if you provide a usable gitdir via `DS4_GIT_DIR` (or create a local shim gitdir). When `DS4_GIT_DIR` is unset and `.git` is a worktree `gitdir:` file, the scripts also attempt to derive the shared repo `commondir` for a best-effort `git: <hash>` without writing to the locked worktree gitdir.
 
 Prefer a local shim repo at `.codex_git/` (gitignored by this repo). Older notes and runs may refer to `.git-codex/`; both layouts work.
 
@@ -38,7 +42,7 @@ When `git fetch origin` fails with `Operation not permitted` under `.git/worktre
 From repo root:
 
 ```bash
-worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p' .git)"
+worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' .git)"
 common_rel="$(cat "${worktree_gitdir}/commondir")"
 common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
 rm -rf .codex_git
@@ -53,6 +57,24 @@ Then use the shim for git ops:
 GIT_DIR=.codex_git GIT_WORK_TREE=. git fetch origin --prune
 GIT_DIR=.codex_git GIT_WORK_TREE=. git checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
 ```
+
+#### Fast path: bare shim + alternates (no copy, minimal network)
+
+If the checkout is a Git worktree with an existing shared object store (`commondir`), you can build a local bare shim gitdir that *reuses* those objects via `objects/info/alternates` (avoids copying the worktree gitdir and avoids re-downloading the whole repo):
+
+```bash
+worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' .git)"
+common_rel="$(cat "${worktree_gitdir}/commondir")"
+common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
+rm -rf .codex_git
+git init --bare .codex_git
+git --git-dir=.codex_git remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+mkdir -p .codex_git/objects/info
+	printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
+	git --git-dir=.codex_git fetch origin main
+	git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+	git --git-dir=.codex_git --work-tree=. checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
+	```
 
 ```bash
 # One-time setup (from repo root, simplest gitdir shim; creates `.codex_git/` as a gitdir)
@@ -82,17 +104,17 @@ it usually means the shim gitdir has no index yet (so it sees your existing chec
 
 Fast path (overwrites the working tree; only do this when `git status` is clean and you are OK discarding any local-only files):
 
-```bash
-git --git-dir=.codex_git --work-tree=. fetch origin --prune
-git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
-```
+	```bash
+	git --git-dir=.codex_git --work-tree=. fetch origin --prune
+	git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+	```
 
 If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
 
 ```bash
 # Seed `.codex_git/` from the current checkout worktree metadata.
 # This avoids the “untracked would be overwritten” trap when the worktree already has files.
-worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p')"
+worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p')"
 cp "$worktree_gitdir/index" .codex_git/index
 cp "$worktree_gitdir/HEAD" .codex_git/HEAD
 
@@ -110,6 +132,21 @@ git --git-dir=.codex_git --work-tree=. add -A
 git --git-dir=.codex_git --work-tree=. -c user.name=codex -c user.email=codex@example.local commit -m "seed worktree" || true
 git --git-dir=.codex_git --work-tree=. fetch origin --prune
 git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+```
+
+If you want to avoid extra downloads while still keeping writes out of the locked `.git/worktrees/...` directory, you can point the shim at the existing object database via `objects/info/alternates`:
+
+```bash
+worktree_gitdir="$(cat .git | sed -nE 's/^gitdir:[[:space:]]*(.*)/\\1/p')"
+common_rel="$(cat "${worktree_gitdir}/commondir")"
+common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
+rm -rf .codex_git
+mkdir -p .codex_git/objects/info
+git --git-dir=.codex_git --work-tree=. init
+printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
+git --git-dir=.codex_git --work-tree=. remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
 ```
 
 Then create a protocol-compliant branch (example) and commit using the shim gitdir:
@@ -178,11 +215,39 @@ This prints:
 
 ### Spark Ring Snapshot Set (one command)
 
-To produce a full, commit-safe snapshot set for ring bring-up (mac discovery + ring probe + MTU + bandwidth + Spark0 facts), use:
+To produce a full, commit-safe snapshot set for ring bring-up (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets), use:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+If each node uses a different SSH user, pass explicit `user@host` targets (the mac discovery step strips the `user@` prefix automatically):
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+```
+
+To also capture per-node facts-only snapshots (Spark1/Spark2-ready, when reachable), set `SPARK_NODE_FACTS=1`:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+For facts-only per-node snapshots without the full ring set:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+With explicit per-node SSH users:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
 ```
 
 ### Spark Hardware + Toolchain Probe
@@ -267,13 +332,13 @@ Account authentication is now fixed. The Mac public key is installed in
 
 ## If Account Auth Needs Reset Again
 
-On the Spark local console, reset the account password and reinstall the Mac key.
+Human-only (requires local console + admin privileges; do not run from automation loops): reset the account password and reinstall the Mac key.
 
 ```bash
-sudo passwd spark0
+passwd spark0
 mkdir -p ~spark0/.ssh
-sudo chown spark0:spark0 ~spark0/.ssh
-sudo chmod 700 ~spark0/.ssh
+chown spark0:spark0 ~spark0/.ssh
+chmod 700 ~spark0/.ssh
 ```
 
 Then from the Mac:
@@ -285,10 +350,10 @@ ssh spark0@aitopatom-9ab9.local hostname
 
 ## Optional Wired IPv4 Alias On Mac
 
-To make the Spark wired IPv4 reachable directly from the Mac wired port:
+Human-only (requires Mac admin privileges; do not run from automation loops): make the Spark wired IPv4 reachable directly from the Mac wired port.
 
 ```bash
-sudo ifconfig en0 inet <mac-wired-ipv4> netmask 255.255.255.0 alias
+ifconfig en0 inet <mac-wired-ipv4> netmask 255.255.255.0 alias
 ping <spark-wired-ipv4>
 ssh spark0@<spark-wired-ipv4> hostname
 ```

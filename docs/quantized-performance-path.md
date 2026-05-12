@@ -85,10 +85,17 @@ scheduling behavior:
 - per-layer MoE dispatch counts
 - selected expert IDs and top-k scores when available
 - expert GEMM batch sizes
+- quantized-kernel routing/dispatch for MoE (`MUL_MAT_ID`): MMQ vs MMVQ counts plus a small shape histogram (for example `dst_ne[2]`, active tokens, and batch dimensions)
 - GPU memory and KV cache growth
+- CUDA fallback nodes and graph placement (for example `__fattn__` / `__op__` scheduling lines when present)
 - MTP draft tokens, accepted tokens, and rejected tokens when available
 
 Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
+
+### Current Spark0 clues (May 2026)
+
+- Single-Spark llama.cpp DeepSeek V4 Flash IQ2XXS aggregate decode plateaus around ~13.5–14.2 tok/s; see `docs/baseline-batching-throughput.md` for the pinned command-line shapes and gating notes.
+- A `MUL_MAT_ID` sampler has observed MoE routed shapes up to `dst_ne[2]=38`, with larger routed shapes hitting `mmq` while smaller shapes hit `mmvq`; treat this as a clue that some grouping exists, but require per-shape histograms and per-op timing before making any “expert queue” claims.
 
 ## Phase 0: Simulator-Only
 
@@ -286,7 +293,7 @@ Initial scope:
   - As of 2026-05-12, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
   - Treat MTP presence as a property of the **artifact set**:
     - trunk-only GGUFs commonly report `mtp_present=false` and `mtp_namespace.has_mtp0=false` (the upstream `mtp.0.*` namespace was dropped during conversion).
-    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars; see `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json`).
+    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars; see `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json`).
   - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
   - When `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, also record `mtp_namespace`, `mtp_contract`, and `mtp_trust` from `scripts/model_contract_inspect_quantized_artifact.py --json`.
     - `mtp_trust.status=absent|namespace_missing_mtp0|namespace_incomplete|incomplete|structural_complete_untrusted` is the expected progression for artifact sets that lack upstream-complete `mtp.0.*`.
@@ -296,7 +303,7 @@ Initial scope:
   - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load) + pinned payload fingerprint gate: `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Local combined runner (no fetch/build; requires a prebuilt `llama-ds4-mtp-sidecar-probe`): `scripts/run_mtp_sidecar_loader_probe_local.sh`
-- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

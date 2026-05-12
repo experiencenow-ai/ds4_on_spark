@@ -19,11 +19,13 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
+- No extra keys: the decision validator rejects unknown fields.
 - Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
   - diff=1 ⇒ margin ∈ {0,1}
   - diff=2 ⇒ margin ∈ {1,2}
   - diff=3 ⇒ margin = 2
   - diff≥4 ⇒ margin = 3
+  - strict mode also enforces compact tags: `len(tags) <= 3`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
@@ -35,10 +37,11 @@ Machine-readable schema:
 The offline tools in `scripts/judge_elo_*.py` expect one JSON object per line with:
 
 Required fields:
-- `schema`: `"ds4_pairwise_judge_record_v1"`
+- `schema`: `"ds4_pairwise_judge_record_v1"` or `"ds4_pairwise_judge_record_v2"`
 - `pair_id`: stable identifier for this comparison
 - `model_a`, `model_b`: model identifiers (strings)
 - `parse_valid`: boolean (whether the judge decision JSON was parsed successfully)
+- No extra keys: unknown top-level fields are invalid (keep metadata in the defined optional fields).
 
 If `parse_valid` is `true`, these must also be present:
 - decision fields: `winner`, `margin`, `score_a`, `score_b`, `reason`, `train_hint`, `tags`
@@ -46,7 +49,8 @@ If `parse_valid` is `true`, these must also be present:
 Optional but recommended (for speed/quality separation and budgeting):
 - `tokens`: `{ "a_out": int, "b_out": int, "judge_in": int, "judge_out": int }`
 - `latency_ms`: `{ "a": int, "b": int, "judge": int }`
-- `tokens` / `latency_ms` may be partially populated; strict validation requires all keys.
+- In `schema="ds4_pairwise_judge_record_v1"`, these may be omitted or partially populated; strict validation requires all keys.
+- In `schema="ds4_pairwise_judge_record_v2"`, these are required (all keys required).
 - `judge_model`: string
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
@@ -62,6 +66,7 @@ python3 scripts/judge_elo_validate.py --strict --in <records.jsonl>
 
 Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v1.schema.json`
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v2.schema.json` (tokens/latency required)
 
 ## Updater Output Schemas
 
@@ -72,6 +77,8 @@ The offline updater emits additional machine-readable outputs intended for downs
 - `budget.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_budget_v1.schema.json`
 - `quality_map.json`: `fixtures/judge-elo/schemas/judge_elo_quality_map_v1.schema.json`
 - `leaderboard.json`: `fixtures/judge-elo/schemas/judge_elo_leaderboard_v1.schema.json`
+- `bundle.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_bundle_v1.schema.json`
+  - single-file bundle for downstream loops that want one JSON to ingest
 - `summary.md`: compact human-readable summary (parse validity + judge-out budget + top models)
 
 To validate a produced output directory (without any paid API calls):
@@ -91,9 +98,12 @@ Use a strict system instruction:
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
+For lower judge **input** token overhead, use `--schema-version v2` (default; it avoids embedding the JSON shape in the user message).
+Prompt schema v2 also includes the strict margin/score consistency + `tags<=3` constraints in the system message to reduce `parse_valid=false` rates under strict validation.
 For harnesses, use `--format json` to emit a single JSON object with `{system,user}` fields.
 Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_prompt_v1.schema.json`
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_prompt_v2.schema.json`
 
 To validate raw judge output (extracting the first JSON object if wrapped in extra text), use:
 
@@ -101,10 +111,28 @@ To validate raw judge output (extracting the first JSON object if wrapped in ext
 python3 scripts/pairwise_judge_validate_decision.py --in <judge.txt>
 ```
 
+To enforce strict margin/score consistency + compact tags during validation, add `--strict`:
+
+```bash
+python3 scripts/pairwise_judge_validate_decision.py --strict --in <judge.txt>
+```
+
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 
 ```bash
 python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
+```
+
+To emit `schema="ds4_pairwise_judge_record_v2"` (tokens/latency required), add `--record-schema v2` and provide all budget fields:
+
+```bash
+python3 scripts/pairwise_judge_record.py --record-schema v2 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
+```
+
+To enforce strict margin/score consistency + compact tags while wrapping, add `--strict`:
+
+```bash
+python3 scripts/pairwise_judge_record.py --strict --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
 ```
 
 ## Offline ELO

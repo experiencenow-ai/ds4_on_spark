@@ -16,6 +16,7 @@ This is a **human-run** checklist for operating a 4-node ring layout safely.
 ## Bring-up (Once)
 
 - Pick stable hostnames for the example four-node ring and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark_ring.example`).
+- Recommended: keep the ordered inventory in a file so rank order is explicit and repeatable (format example: `deploy/config/inventory.ds4.spark_ring.example`).
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring ...` (stages TP=4 env variants via `DS4_ENV_VARIANT=tp4`)
   - Confirm the staged env audit passes (safe; catches DS4 ring config mismatches before install): `scripts/ops_spark_ring_staged_env_audit.sh`

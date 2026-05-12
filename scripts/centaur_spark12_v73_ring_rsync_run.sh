@@ -6,9 +6,7 @@ usage()
 	cat <<'USAGE'
 usage: centaur_spark12_v73_ring_rsync_run.sh <spark0_user@host> <spark1_user@host> <spark2_user@host> [remote_base_dir] [local_log]
 
-Runs the Spark1/Spark2 rsync-staged ring-step by streaming
-`scripts/centaur_spark_ring_rsync_spark12_v73.sh` to Spark0, passing Spark1/2
-as SSH targets. No sudo/service changes; no secrets.
+Runs the Spark1/Spark2 rsync-staged ring-step on Spark0, passing Spark1/2 as SSH targets. No sudo/service changes; no secrets.
 
 Prereq:
   - Run the Spark0 v73 smoke first so Spark0 has:
@@ -83,6 +81,21 @@ need_cmd()
 	exit 2
 }
 
+copy_to_remote()
+{
+	src="$1"
+	dst="$2"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$src" "$dst"
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		scp $SSH_OPTS "$src" "$dst"
+		return 0
+	fi
+	return 1
+}
+
 ssh_preflight()
 {
 	t="$1"
@@ -142,7 +155,16 @@ else
 	echo "== skip stage (RING_SKIP_STAGE=1) =="
 fi
 
-ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
+ring_workdir_abs="$(ssh $SSH_OPTS "$spark0" "mkdir -p $ring_workdir && cd $ring_workdir && pwd -P")"
+remote_log_abs="${remote_log}"
+if [ "${RING_LOG:-}" = "" ]; then
+	remote_log_abs="$ring_workdir_abs/run/$run_id/ring_rsync.log"
+else
+	remote_log_abs="$(ssh $SSH_OPTS "$spark0" "python3 -c 'import os,sys; print(os.path.abspath(os.path.expandvars(os.path.expanduser(sys.argv[1]))))' \"$remote_log_abs\"")"
+fi
+remote_ring_script="$ring_workdir_abs/centaur_spark_ring_rsync_v73.sh"
+
+ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export RING_WORKDIR=\"$ring_workdir_abs\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log_abs\""
 if [ "${NODE_TYPE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export NODE_TYPE=\"${NODE_TYPE}\""
 fi
@@ -152,16 +174,32 @@ fi
 if [ "${RING_TRACE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export RING_TRACE=\"${RING_TRACE}\""
 fi
-ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\" && sh -s -- --remote-base \"$remote_base\" \"$spark1\" \"$spark2\""
 
-echo "== run ring rsync (streamed) =="
-echo "ssh $SSH_OPTS $spark0 \"$ssh_cmd\" < $ring"
+remote_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log_abs")\" && sh \"$remote_ring_script\" --remote-base \"$remote_base\" \"$spark1\" \"$spark2\""
 
-if [ "$local_log" = "" ]; then
-	ssh $SSH_OPTS "$spark0" "$ssh_cmd" < "$ring"
+if copy_to_remote "$ring" "$spark0:$remote_ring_script"; then
+	echo "== stage ring script to spark0 =="
+	ssh $SSH_OPTS "$spark0" "chmod 0755 \"$remote_ring_script\""
+	echo "== run ring rsync (remote) =="
+	echo "ssh $SSH_OPTS $spark0 \"$remote_cmd\""
+	if [ "$local_log" = "" ]; then
+		ssh $SSH_OPTS "$spark0" "$remote_cmd"
+	else
+		need_cmd tee
+		need_cmd dirname
+		mkdir -p "$(dirname -- "$local_log")"
+		ssh $SSH_OPTS "$spark0" "$remote_cmd" 2>&1 | tee "$local_log"
+	fi
 else
-	need_cmd tee
-	need_cmd dirname
-	mkdir -p "$(dirname -- "$local_log")"
-	ssh $SSH_OPTS "$spark0" "$ssh_cmd" < "$ring" 2>&1 | tee "$local_log"
+	echo "== run ring rsync (streamed; no rsync/scp on Mac) =="
+	stream_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log_abs")\" && sh -s -- --remote-base \"$remote_base\" \"$spark1\" \"$spark2\""
+	echo "ssh $SSH_OPTS $spark0 \"$stream_cmd\" < $ring"
+	if [ "$local_log" = "" ]; then
+		ssh $SSH_OPTS "$spark0" "$stream_cmd" < "$ring"
+	else
+		need_cmd tee
+		need_cmd dirname
+		mkdir -p "$(dirname -- "$local_log")"
+		ssh $SSH_OPTS "$spark0" "$stream_cmd" < "$ring" 2>&1 | tee "$local_log"
+	fi
 fi

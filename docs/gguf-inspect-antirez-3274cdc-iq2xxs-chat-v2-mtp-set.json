@@ -94,7 +94,7 @@
         "status": "absent",
         "trusted": false
       },
-      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
       "quantization_contract": {
         "checked": true,
         "dense_fp8_like": false,
@@ -377,7 +377,7 @@
         "status": "incomplete",
         "trusted": false
       },
-      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+      "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
       "quantization_contract": {
         "checked": true,
         "dense_fp8_like": false,
@@ -466,7 +466,7 @@
       {
         "complete": true,
         "missing_expected_count": 0,
-        "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
+        "path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf",
         "unexpected_present_count": 0
       }
     ],
@@ -535,7 +535,7 @@
       ]
     },
     "mtp_paths": [
-      "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+      "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
     ],
     "mtp_present": true,
     "mtp_preservation": {
@@ -566,8 +566,8 @@
       "trusted": false
     },
     "paths": [
-      "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
-      "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+      "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+      "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
     ],
     "quantization_contract": {
       "checked": true,
@@ -600,7 +600,7 @@
       },
       "status": "mismatch"
     },
-    "quantization_contract_source_path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+    "quantization_contract_source_path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
     "tensor_count": 1360,
     "tensor_type_counts": {
       "F16": 359,
@@ -623,7 +623,7 @@
       "rope_freq_base": 10000.0,
       "vocab_size": 129280
     },
-    "topology_contract_source_path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+    "topology_contract_source_path": "https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
     "trunk_contract": {
       "block_ids_present_sample": [
         0,

@@ -9,13 +9,11 @@ weight downloads.
 ## Inputs
 
 - Centaur zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
-  - mtime/size: `-rw-r--r--@ 1 mac  staff  385391 May 11 02:08 /Users/mac/Downloads/centaur_spec_impl_v73.zip`
-  - `zip_sha256`: `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
-  - `decomposer_version`: `centaur-impl-0.68`
+  - Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
 
 ## Spark0 v73 smoke (PASS)
 
-- Spark0 host (mDNS): `aitopatom-9ab9.local`
+- Spark0 host (sanitized): `<spark0-host>`
 - Spark0 OS/kernel: `Linux 6.17.0-1014-nvidia` (`aarch64`, Ubuntu)
 - Spark0 python: `Python 3.12.3`
 - Pip deps (from log): `numpy==2.4.4`, `scipy==1.17.1`, `scikit-learn==1.8.0`
@@ -25,7 +23,7 @@ Spark commands run (from Mac; staged zip + streamed smoke):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID=20260512T073455Z
-sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@aitopatom-9ab9.local
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 Sanitized bundle (commit-safe):
@@ -37,7 +35,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID=20260512T093838Z
-sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host> "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z
 ```
 
 Local bundle path:
@@ -51,7 +49,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID=20260512T110824Z
-sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T110824Z
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host> "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T110824Z
 ```
 
 Local bundle path:
@@ -65,7 +63,7 @@ Spark commands run (from Mac; streamed):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T074400Z
-sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@aitopatom-9ab9.local
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 ```
 
 Sanitized bundle (commit-safe):
@@ -77,7 +75,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T094444Z
-sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73/ring_sim_spark12" /private/tmp/centaur-ring-sim/spark12-v73/20260512T094444Z
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host> "~/centaur-smoke/v73/ring_sim_spark12" /private/tmp/centaur-ring-sim/spark12-v73/20260512T094444Z
 ```
 
 Local bundle path:
@@ -89,7 +87,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T111132Z
-sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73/ring_sim_spark12" /private/tmp/centaur-ring-sim/spark12-v73/20260512T111132Z
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host> "~/centaur-smoke/v73/ring_sim_spark12" /private/tmp/centaur-ring-sim/spark12-v73/20260512T111132Z
 ```
 
 Local bundle path:

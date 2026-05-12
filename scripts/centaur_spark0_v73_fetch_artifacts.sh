@@ -10,6 +10,8 @@ Fetch a *small* Centaur Spark0 v73 smoke artifact bundle back to your Mac for bu
 
 Copies (when present) from Spark0:
   - run/<run_id>/smoke.log
+  - run/<run_id>/smoke_facts.json
+  - run/<run_id>/pip_freeze.txt
   - run/<run_id>/effective_manifests/
   - run/<run_id>/hyor_dashboard/
   - run/<run_id>/hyor_effective/spark0/
@@ -139,6 +141,8 @@ fetch_one()
 }
 
 fetch_one "$remote_run_dir/smoke.log" "$local_out/"
+fetch_one "$remote_run_dir/smoke_facts.json" "$local_out/"
+fetch_one "$remote_run_dir/pip_freeze.txt" "$local_out/"
 fetch_one "$remote_run_dir/effective_manifests" "$local_out/"
 fetch_one "$remote_run_dir/hyor_dashboard" "$local_out/"
 mkdir -p "$local_out/hyor_effective"

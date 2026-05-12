@@ -119,11 +119,13 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### antirez/deepseek-v4-gguf (DS4-tuned IQ2XXS)
 
-- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `c566ab6d7c696ddd0c7f124e115228af1a326824` (`refs/heads/main`)
+- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `3274cdc42be178f7384211c7463565dccfc444d7` (`refs/heads/main`)
 - License: MIT (model card)
 - Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
   - IQ2XXS: `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` (86720111200 bytes, 80.8 GiB)
     - LFS sha256: `31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c`
+  - IQ2XXS (imatrix): `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf` (86720111488 bytes, 80.8 GiB)
+    - Notes: metadata-only discovery via HF API; treat as a high-priority drift watch for potential quality/perf tradeoffs vs the non-`-imatrix` baseline.
   - Q4KExperts (too large for single Spark): `DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2.gguf` (164633502304 bytes, 153.3 GiB)
     - LFS sha256: `39e5de72ac544fdd5ffaf83ec28e36aaf3341b145235488e67d59400bbb3af55`
   - MTP sidecar: `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` (3807602400 bytes, 3.5 GiB)

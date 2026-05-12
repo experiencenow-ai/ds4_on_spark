@@ -7,7 +7,8 @@ usage()
 ops_spark_ring_status.sh -- Mac-side DS4 systemd status snapshot (safe)
 
 Usage:
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -21,6 +22,7 @@ Notes:
       tp2 => ds4-strict@.service + ds4-preflight-strict@.service
       tp3 => ds4-tp3-strict@.service + ds4-preflight-tp3-strict@.service
       tp4 => ds4-tp4-strict@.service + ds4-preflight-tp4-strict@.service
+  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
 EOF
 }
 
@@ -29,6 +31,7 @@ preflight="auto"
 strict=0
 with_journal=0
 journal_lines=80
+inventory_file=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -54,6 +57,10 @@ while [ $# -gt 0 ]; do
 			;;
 		--lines)
 			journal_lines="${2:-}"
+			shift 2
+			;;
+		--inventory-file)
+			inventory_file="${2:-}"
 			shift 2
 			;;
 		--instance[0-9]*)
@@ -102,13 +109,28 @@ case "$journal_lines" in
 		;;
 esac
 
+if [ "${SSH_OPTS:-}" = "" ]; then
+	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+fi
+
+if [ "$inventory_file" != "" ]; then
+	if [ ! -f "$inventory_file" ]; then
+		echo "inventory file not found: $inventory_file" >&2
+		exit 2
+	fi
+	while IFS= read -r line || [ "$line" != "" ]; do
+		case "$line" in
+			""|\#*)
+				continue
+				;;
+		esac
+		set -- "$@" "$line"
+	done < "$inventory_file"
+fi
+
 if [ "$#" -lt 2 ]; then
 	usage >&2
 	exit 2
-fi
-
-if [ "${SSH_OPTS:-}" = "" ]; then
-	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 fi
 
 node_count="$#"

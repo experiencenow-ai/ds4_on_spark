@@ -22,11 +22,11 @@ export SPARK_NODE_COUNT=3
 export RING_RUN_ID=20260512T041207Z
 export RING_WORKDIR=~/centaur-smoke/v73/ring_sim_spark12
 export RING_LOG=~/centaur-smoke/v73/ring_sim_spark12/run/$RING_RUN_ID/ring_sim.log
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export CENTAUR_ROOT=\"$CENTAUR_ROOT\" CENTAUR_VENV=\"$CENTAUR_VENV\" SPARK_NODE_COUNT=\"$SPARK_NODE_COUNT\" RING_RUN_ID=\"$RING_RUN_ID\" RING_WORKDIR=\"$RING_WORKDIR\" RING_LOG=\"$RING_LOG\"; sh -s" < ./scripts/centaur_spark_ring_sim_v73.sh
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=\"$CENTAUR_ROOT\" CENTAUR_VENV=\"$CENTAUR_VENV\" SPARK_NODE_COUNT=\"$SPARK_NODE_COUNT\" RING_RUN_ID=\"$RING_RUN_ID\" RING_WORKDIR=\"$RING_WORKDIR\" RING_LOG=\"$RING_LOG\"; sh -s" < ./scripts/centaur_spark_ring_sim_v73.sh
 ```
 
 Fetch back to this bundle (from Mac):
 
 ```bash
-sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T041207Z "~/centaur-smoke/v73/ring_sim_spark12" fixtures/centaur-smoke/spark12-v73/ring_sim/20260512T041207Z
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> 20260512T041207Z "~/centaur-smoke/v73/ring_sim_spark12" fixtures/centaur-smoke/spark12-v73/ring_sim/20260512T041207Z
 ```

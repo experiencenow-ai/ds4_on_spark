@@ -62,6 +62,12 @@ sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<
 sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
+The fetch helper pulls per-node artifacts (when present):
+
+- `node_setup.log`
+- `pip_freeze.txt` (sanitized)
+- `node_setup_facts.json` (zip/python/requirements + freeze)
+
 4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
 
 	Recommended: one-command evidence loop (node setup → ring rsync → validate → fetch):
@@ -69,6 +75,12 @@ sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> s
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+	```
+
+	To also verify that Spark1/2 can run `hyor-sync-status` locally against the pushed node roots (recommended), set:
+
+	```bash
+	export RING_REMOTE_VERIFY=1
 	```
 
 	If you already ran node setup and want to skip it:
@@ -116,6 +128,8 @@ export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
 sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
+
+The fetched per-node directories include `node_setup_facts.json` + `pip_freeze.txt` so you can attach version context to ring failures without rerunning setup.
 
 Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
 
@@ -243,7 +257,7 @@ This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/
 3. Captures `hyor-sync-effective` manifests under `RING_WORKDIR/effective_manifests/`
 4. Pushes the mutated node roots back to the remote Sparks (and optionally effective dirs when `RING_APPLY=1`)
 
-From your Mac repo root (stream-run on Spark0, passing Spark1/2 SSH targets as args):
+From your Mac repo root (runs on Spark0 over SSH, passing Spark1/2 SSH targets as args):
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
@@ -299,6 +313,14 @@ export NODE_ROOT=~/centaur-smoke/v73/ring_node/hyor/node_spark1   # spark2 accor
 
 "$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-sync-status "$NODE_ROOT" --full
 ```
+
+If you prefer a Mac-side helper that runs the same `hyor-sync-status` checks over SSH (and optionally writes per-node logs), use:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh spark1@<spark1-host> spark2@<spark2-host>
+```
+
+This helper is also wired into `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh` when `RING_REMOTE_VERIFY=1`.
 
 If you also want to confirm the “effective view” can be materialized on-node:
 
@@ -414,6 +436,7 @@ If you can provide a shared writable filesystem path visible on Spark0/1/2 (NFS,
 When the ring sim/rsync run fails, capture:
 
 - Centaur zip facts: `ls -la` and `sha256` of `centaur_spec_impl_v73.zip`
+- Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
 - Mac-side helper: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip`
 - `python3 -V` and `pip freeze` (at least numpy/scipy/scikit-learn)
 - Exact Centaur command lines that failed (copy/paste)

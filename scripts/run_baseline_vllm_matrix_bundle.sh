@@ -52,6 +52,9 @@ ts="$(date -u +%Y%m%dT%H%M%SZ)"
 bundle_dir="$OUT_ROOT/$ts-$BUNDLE_LABEL"
 mkdir -p "$bundle_dir"
 
+matrix_copy="$bundle_dir/matrix.tsv"
+cp "$matrix_tsv" "$matrix_copy"
+
 csv_path="$bundle_dir/model_runs.csv"
 : >"$csv_path"
 
@@ -63,7 +66,8 @@ report_md="$bundle_dir/baseline_vllm_matrix_bundle.md"
     echo
     echo "- ds4_on_spark commit: $repo_rev"
     echo "- target: $target"
-    echo "- matrix_tsv: $matrix_tsv"
+    echo "- matrix_tsv_src: $matrix_tsv"
+    echo "- matrix_tsv_copy: $matrix_copy"
     echo "- bundle_dir: $bundle_dir"
     echo
     echo "## Command"
@@ -82,6 +86,7 @@ report_md="$bundle_dir/baseline_vllm_matrix_bundle.md"
     echo
     echo "## Artifacts"
     echo
+    echo "- matrix copy: $matrix_copy"
     echo "- matrix stdout: $bundle_dir/matrix_stdout.txt"
     echo "- matrix stderr: $bundle_dir/matrix_stderr.txt"
     echo "- model runs CSV: $csv_path"
@@ -93,10 +98,10 @@ report_md="$bundle_dir/baseline_vllm_matrix_bundle.md"
 
 echo "bundle_dir=$bundle_dir"
 echo "model_runs_csv=$csv_path"
-echo "matrix_tsv=$matrix_tsv"
+echo "matrix_tsv=$matrix_copy"
 echo
 
-MODEL_RUNS_CSV="$csv_path" OUT_ROOT="$bundle_dir" ALLOW_RUN="$ALLOW_RUN" ALLOW_FETCH="$ALLOW_FETCH" PROMPT="$PROMPT" MAX_TOKENS="$MAX_TOKENS" TENSOR_PARALLEL_SIZE="$TENSOR_PARALLEL_SIZE" DFLASH_NUM_SPEC_TOKENS="$DFLASH_NUM_SPEC_TOKENS" SMOKE_EVAL="$SMOKE_EVAL" SMOKE_MAX_TOKENS_PER_TASK="$SMOKE_MAX_TOKENS_PER_TASK" SKIP_GGUF_INSPECT="$SKIP_GGUF_INSPECT" SKIP_LLAMA="$SKIP_LLAMA" SKIP_MTP_SIDECAR="$SKIP_MTP_SIDECAR" PUBLIC_QUALITY_PRIOR="$PUBLIC_QUALITY_PRIOR" PUBLIC_QUALITY_BASIS="$PUBLIC_QUALITY_BASIS" PUBLIC_QUALITY_SOURCE="$PUBLIC_QUALITY_SOURCE" PASSED_TASKS="$PASSED_TASKS" TOTAL_TASKS="$TOTAL_TASKS" LOCAL_QUALITY_SCORE="$LOCAL_QUALITY_SCORE" QUALITY_SCORE="$QUALITY_SCORE" scripts/run_baseline_vllm_matrix.sh "$target" "$matrix_tsv" >"$bundle_dir/matrix_stdout.txt" 2>"$bundle_dir/matrix_stderr.txt" || true
+MODEL_RUNS_CSV="$csv_path" OUT_ROOT="$bundle_dir" ALLOW_RUN="$ALLOW_RUN" ALLOW_FETCH="$ALLOW_FETCH" PROMPT="$PROMPT" MAX_TOKENS="$MAX_TOKENS" TENSOR_PARALLEL_SIZE="$TENSOR_PARALLEL_SIZE" DFLASH_NUM_SPEC_TOKENS="$DFLASH_NUM_SPEC_TOKENS" SMOKE_EVAL="$SMOKE_EVAL" SMOKE_MAX_TOKENS_PER_TASK="$SMOKE_MAX_TOKENS_PER_TASK" SKIP_GGUF_INSPECT="$SKIP_GGUF_INSPECT" SKIP_LLAMA="$SKIP_LLAMA" SKIP_MTP_SIDECAR="$SKIP_MTP_SIDECAR" PUBLIC_QUALITY_PRIOR="$PUBLIC_QUALITY_PRIOR" PUBLIC_QUALITY_BASIS="$PUBLIC_QUALITY_BASIS" PUBLIC_QUALITY_SOURCE="$PUBLIC_QUALITY_SOURCE" PASSED_TASKS="$PASSED_TASKS" TOTAL_TASKS="$TOTAL_TASKS" LOCAL_QUALITY_SCORE="$LOCAL_QUALITY_SCORE" QUALITY_SCORE="$QUALITY_SCORE" scripts/run_baseline_vllm_matrix.sh "$target" "$matrix_copy" >"$bundle_dir/matrix_stdout.txt" 2>"$bundle_dir/matrix_stderr.txt" || true
 
 if [ ! -r "$repo_root/scripts/model_quality_speed_score.py" ]; then
     echo "missing scorer: $repo_root/scripts/model_quality_speed_score.py" >&2

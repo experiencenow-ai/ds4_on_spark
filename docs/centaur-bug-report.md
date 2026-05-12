@@ -74,7 +74,10 @@ Default local output directory:
   - `zip_sha256` (printed by the smoke; also present in `smoke.log`)
 - Python + deps:
   - `python3 -V`
-  - `pip freeze` excerpt (at least `numpy`, `scipy`, `scikit-learn`)
+  - `pip freeze` excerpt (at least `numpy`, `scipy`, `scikit-learn`) or the full `pip_freeze.txt`
+- For Spark1/2 node setup failures (or ring rsync failures that depend on node setup):
+  - `node_setup_facts.json` (zip/python/requirements + freeze; per-node)
+  - `pip_freeze.txt` (sanitized; per-node)
 - Failing sub-step:
   - exact `centaur.py ...` command line
   - a bounded tail excerpt (sanitized)
@@ -84,6 +87,8 @@ Default local output directory:
 The fetch script pulls (when present):
 
 - `smoke.log` (includes package facts + full command outputs)
+- `smoke_facts.json` (structured zip/python/pip/requirements facts)
+- `pip_freeze.txt` (sanitized dependency versions)
 - `effective_manifests/` (includes `hyor_effective_manifest_spark0.json`)
 - `hyor_effective/spark0/` (materialized node view)
 - `hyor_dashboard/` (HTML/JSON dashboard output)

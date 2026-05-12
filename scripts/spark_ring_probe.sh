@@ -211,6 +211,18 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
 			git_dir="$git_worktree/.gitshim/repo/.git"
 		fi
+		if [ "$git_dir" = "" ] && [ -r "$git_worktree/.git" ] && [ ! -d "$git_worktree/.git" ]; then
+			worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' "$git_worktree/.git" | head -n 1 || true)"
+			if [ "$worktree_gitdir" != "" ] && [ -r "$worktree_gitdir/commondir" ]; then
+				common_rel="$(cat "$worktree_gitdir/commondir" 2>/dev/null || true)"
+				if [ "$common_rel" != "" ]; then
+					common_abs="$(cd "$worktree_gitdir" 2>/dev/null && cd "$common_rel" 2>/dev/null && pwd -P 2>/dev/null || true)"
+					if [ "$common_abs" != "" ] && [ -r "$common_abs/HEAD" ]; then
+						git_dir="$common_abs"
+					fi
+				fi
+			fi
+		fi
 		git_hash=""
 		if [ "$git_dir" != "" ]; then
 			git_hash="$(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
@@ -234,14 +246,18 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo
 
 	ssh_fail="0"
+	clock_rows=""
 	i=0
 	for target in $targets; do
 		i=$((i + 1))
 		kh="$(known_hosts_for_target "$target")"
 		peers="$(peer_hosts_for_index "$i")"
 		local_epoch="$(date -u +%s 2>/dev/null || date +%s)"
+		host="$(host_only "$target")"
 		echo "== target: $target =="
-		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers 2>&1 <<'REMOTE'
+		set +e
+		out_file="$(mktemp /private/tmp/ds4_spark_ring_probe_target.XXXXXX)"
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers >"$out_file" 2>&1 <<'REMOTE'
 set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
@@ -377,20 +393,38 @@ echo "== storage (df, lsblk model/size) =="
 fi
 echo
 echo "== gpu/toolchain facts (compact) =="
+driver_version=""
+compute_cap=""
+compute_cap_q=""
+smi_cuda_ver=""
+cuda_ver=""
+cuda_h_version=""
+nvcc_release=""
 if command -v nvidia-smi >/dev/null 2>&1; then
 	(nvidia-smi --version 2>/dev/null || nvidia-smi -V 2>/dev/null || true) | sed -E "/^ERROR:/d" | head -n 20 || true
 	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
 	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then
 		echo "$q"
+		driver_version="$(printf "%s\n" "$q" | head -n 1 | awk -F"," '{ v=$4; gsub(/^[ \t]+|[ \t]+$/, "", v); print v; }' 2>/dev/null || true)"
+		compute_cap="$(printf "%s\n" "$q" | awk -F"," '{ c=$5; gsub(/^[ \t]+|[ \t]+$/, "", c); if ( c ~ /^[0-9]+[.][0-9]+$/ ) { split(c,a,"."); v=(a[1]*100)+a[2]; if ( v > best ) { best=v; bestc=c; } } } END { if ( bestc != "" ) print bestc; }' 2>/dev/null || true)"
 	else
 		echo "columns: index,gpu_name,pci.bus_id,driver_version,memory.total"
 		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 		[ "$q" != "" ] && echo "$q"
+		[ "$q" != "" ] && driver_version="$(printf "%s\n" "$q" | head -n 1 | awk -F"," '{ v=$4; gsub(/^[ \t]+|[ \t]+$/, "", v); print v; }' 2>/dev/null || true)"
 		echo "note: nvidia-smi compute_cap field not supported; using nvidia-smi -q fallback"
-		smi_q="$(nvidia-smi -q 2>/dev/null || true)"
-		compute_cap_q="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Compute Capability[[:space:]]*:[[:space:]]*([0-9]+)[.]([0-9]+).*/\\1.\\2/p" | awk -F. "{ v=(\$1*100)+\$2; if ( v > best ) { best=v; bestc=\$0; } } END { if ( bestc != \"\" ) print bestc; }" || true)"
-		[ "$compute_cap_q" != "" ] && echo "compute_cap (-q): $compute_cap_q"
+	fi
+	smi_q="$(nvidia-smi -q 2>/dev/null || true)"
+	smi_cuda_ver="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*CUDA Version[[:space:]]*:[[:space:]]*([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
+	compute_cap_q="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Compute Capability[[:space:]]*:[[:space:]]*([0-9]+)[.]([0-9]+).*/\\1.\\2/p" | awk -F. '{ v=($1*100)+$2; if ( v > best ) { best=v; bestc=$0; } } END { if ( bestc != "" ) print bestc; }' 2>/dev/null || true)"
+	if [ "$compute_cap_q" != "" ]; then
+		echo "compute_cap (-q): $compute_cap_q"
+		if [ "$compute_cap" = "" ]; then
+			compute_cap="$compute_cap_q"
+		elif [ "$compute_cap" != "$compute_cap_q" ]; then
+			echo "warning: compute_cap selected $compute_cap != nvidia-smi -q compute_cap $compute_cap_q"
+		fi
 	fi
 	if [ "$q" != "" ]; then
 		smi_mem_total_any_na="$(printf "%s\n" "$q" | awk -F"," '{ v=$NF; gsub(/^[ \t]+|[ \t]+$/, "", v); if ( v == "[N/A]" ) { print "1"; exit } }' || true)"
@@ -407,6 +441,9 @@ if [ "$nvcc_path" = "" ] && [ -x /usr/local/cuda/bin/nvcc ]; then
 fi
 echo "nvcc path: $nvcc_path"
 [ "$nvcc_path" != "" ] && "$nvcc_path" --version 2>/dev/null | head -n 5 || true
+if [ "$nvcc_path" != "" ]; then
+	nvcc_release="$("$nvcc_path" --version 2>/dev/null | tr -d "\r" | sed -nE "s/.* release ([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
+fi
 if [ -r /usr/local/cuda/version.json ]; then
 	cuda_ver=""
 	if command -v python3 >/dev/null 2>&1; then
@@ -438,6 +475,36 @@ PY
 	fi
 	[ "$cuda_ver" != "" ] && echo "cuda version.json: $cuda_ver"
 fi
+cuda_h="/usr/local/cuda/include/cuda.h"
+if [ -r "$cuda_h" ]; then
+	cuda_h_version="$(grep -E "^#define CUDA_VERSION " "$cuda_h" 2>/dev/null | awk '{ print $3 }' | head -n 1 || true)"
+	[ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
+fi
+if [ "$nvcc_release" != "" ] && [ "$cuda_h_version" != "" ]; then
+	nvcc_major="$(printf "%s" "$nvcc_release" | awk -F. '{ print $1 }' 2>/dev/null || true)"
+	nvcc_minor="$(printf "%s" "$nvcc_release" | awk -F. '{ print $2 }' 2>/dev/null || true)"
+	if [ "$nvcc_major" != "" ] && [ "$nvcc_minor" != "" ]; then
+		nvcc_expect="$(( (nvcc_major * 1000) + (nvcc_minor * 10) ))"
+		if [ "$cuda_h_version" != "$nvcc_expect" ]; then
+			echo "warning: nvcc release $nvcc_release expects CUDA_VERSION $nvcc_expect but cuda.h has $cuda_h_version"
+		fi
+	fi
+fi
+if [ "$smi_cuda_ver" != "" ] && [ "$nvcc_release" != "" ]; then
+	smi_major="$(printf "%s" "$smi_cuda_ver" | awk -F. '{ print $1 }' 2>/dev/null || true)"
+	nvcc_major="$(printf "%s" "$nvcc_release" | awk -F. '{ print $1 }' 2>/dev/null || true)"
+	if [ "$smi_major" != "" ] && [ "$nvcc_major" != "" ] && [ "$smi_major" != "$nvcc_major" ]; then
+		echo "note: nvidia-smi CUDA $smi_cuda_ver differs from nvcc release $nvcc_release (driver vs toolkit)"
+	fi
+fi
+echo
+echo "== cuda/toolchain facts (summary) =="
+[ "$driver_version" != "" ] && echo "driver: $driver_version"
+[ "$smi_cuda_ver" != "" ] && echo "smi CUDA: $smi_cuda_ver"
+[ "$nvcc_release" != "" ] && echo "nvcc release: $nvcc_release" || echo "nvcc release: (none)"
+[ "$cuda_ver" != "" ] && echo "cuda version.json: $cuda_ver"
+[ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
+[ "$compute_cap" != "" ] && echo "compute_cap: $compute_cap" || echo "compute_cap: (unknown)"
 echo
 	if [ "$ring_ping" = "1" ]; then
 		echo "== peer ping (best effort, rtt) =="
@@ -470,32 +537,78 @@ echo
 		fi
 	fi
 REMOTE
-		then
-			:
-		else
-			rc="$?"
+		rc="$?"
+		out=""
+		[ -r "$out_file" ] && out="$(cat "$out_file" 2>/dev/null || true)"
+		rm -f "$out_file" >/dev/null 2>&1 || true
+		set -e
+		[ "$out" != "" ] && printf "%s\n" "$out"
+			epoch="$(printf "%s\n" "$out" | sed -nE 's/^epoch: ([0-9]+).*/\1/p' | head -n 1 || true)"
+				skew_s="$(printf "%s\n" "$out" | sed -nE 's/^skew_s [(]remote-local[)]: (-?[0-9]+).*/\1/p' | head -n 1 || true)"
+		[ "$epoch" = "" ] && epoch="?"
+		[ "$skew_s" = "" ] && skew_s="?"
+		clock_rows="${clock_rows}${clock_rows:+
+}${host} epoch=${epoch} skew_s=${skew_s}"
+		if [ "$rc" -ne 0 ]; then
 			echo "ssh: failed rc=$rc"
 			ssh_fail=$((ssh_fail + 1))
 		fi
 		echo
 	done
+	if [ "$clock_rows" != "" ]; then
+		echo "== clock (summary, remote-local) =="
+		printf "%s\n" "$clock_rows"
+		echo
+		span="$(printf "%s\n" "$clock_rows" | awk '
+			BEGIN{min="";max="";}
+			{
+				skew="";
+				for(i=1;i<=NF;i++){
+					if($i ~ /^skew_s=/){
+						s=$i; sub(/^skew_s=/,"",s);
+						if(s ~ /^-?[0-9]+$/){
+							if(min=="" || s<min) min=s;
+							if(max=="" || s>max) max=s;
+						}
+					}
+				}
+			}
+			END{
+				if(min!="" && max!=""){
+					printf "%d %d", min, max;
+				}
+			}
+		')"
+		if [ "$span" != "" ]; then
+			min_skew="$(printf "%s" "$span" | awk '{print $1}')"
+			max_skew="$(printf "%s" "$span" | awk '{print $2}')"
+			span_s=$((max_skew - min_skew))
+			echo "skew span_s: $span_s (min=$min_skew max=$max_skew)"
+			if [ "$span_s" -gt 1 ]; then
+				echo "note: skew span_s > 1s; treat as ring bring-up blocker until clocks are consistent"
+			fi
+		fi
+		echo
+	fi
 	if [ "$ssh_fail" != "0" ]; then
 		echo "== probe summary =="
 		echo "ssh failures: $ssh_fail"
 	fi
 } >"$tmp"
 
-	if [ "${REDACT:-0}" = "1" ]; then
-		sed -E \
-			-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3}\/[0-9]{1,2})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4cidr>\4/g' \
-			-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
-			-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
-			-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
-			-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
-			"$tmp"
-else
-	cat "$tmp"
-fi
+		if [ "${REDACT:-0}" = "1" ]; then
+			sed -E \
+				-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3}\/[0-9]{1,2})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4cidr>\4/g' \
+				-e 's/(^|[^0-9A-Za-z_.-])(([0-9]{1,3}[.]){3}[0-9]{1,3})([^0-9A-Za-z_.-]|$)/\1<redacted-ipv4>\4/g' \
+				-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
+				-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
+				-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+				-e 's/UUID: [^)]*/UUID: <redacted-gpu-uuid>/g' \
+				-e 's/GPU-[0-9A-Fa-f-]{36}/<redacted-gpu-uuid>/g' \
+				"$tmp"
+	else
+		cat "$tmp"
+	fi
 
 if [ "${ssh_fail:-0}" != "0" ]; then
 	exit 1
