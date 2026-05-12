@@ -559,6 +559,36 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].task_id, "math.prompt.aaa")
 
+    def test_judge_slice_toplists_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_judge_slice_rates_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        slices = report.judge.get("slices") or {}
+        by_tmpl = slices.get("by_prompt_template_id") or {}
+        by_pair = slices.get("by_task_family_template_pair") or {}
+
+        invalid_top = by_tmpl.get("invalid_rate_top") or []
+        self.assertGreaterEqual(len(invalid_top), 1)
+        self.assertEqual(invalid_top[0].get("prompt_template_id"), "tmpl.invalid.v1")
+        self.assertAlmostEqual(float(invalid_top[0].get("invalid_rate", 0.0) or 0.0), 1.0, places=6)
+
+        low_decided = by_tmpl.get("low_decided_rate_ab_top") or []
+        self.assertGreaterEqual(len(low_decided), 1)
+        self.assertEqual(low_decided[0].get("prompt_template_id"), "tmpl.invalid.v1")
+        self.assertAlmostEqual(float(low_decided[0].get("decided_rate_ab", 1.0)), 0.0, places=6)
+
+        disagree_ab = by_tmpl.get("disagreement_decided_ab_top") or []
+        self.assertGreaterEqual(len(disagree_ab), 1)
+        self.assertEqual(disagree_ab[0].get("prompt_template_id"), "tmpl.bad.v1")
+        self.assertAlmostEqual(float(disagree_ab[0].get("disagreement_rate_decided_ab", 0.0) or 0.0), 0.5, places=6)
+
+        pair_invalid_top = by_pair.get("invalid_rate_top") or []
+        self.assertGreaterEqual(len(pair_invalid_top), 1)
+        self.assertEqual(pair_invalid_top[0].get("task_family_template_pair"), "fam2|tmpl.invalid.v1")
+        self.assertAlmostEqual(float(pair_invalid_top[0].get("invalid_rate", 0.0) or 0.0), 1.0, places=6)
+
     def test_diff_key_metrics_from_before_after_fixtures(self) -> None:
         root = _repo_root()
         before_path = os.path.join(root, "fixtures", "entropy-buffer", "records_diff_before_mini.jsonl")

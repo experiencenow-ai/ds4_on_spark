@@ -1,0 +1,8 @@
+{"type":"meta","meta":{"note":"Mini judge-pair fixture for judge slice top-list metrics (invalid/decided/disagreement).","schema":"entropy-buffer.judge_slice_rates.v1"}}
+{"type":"judge_pair","judge_id":"judge.v1","item_id":"t.bad.001|tmpl.bad.v1|a=m1|b=m2","task_id":"t.bad.001","task_family":"fam1","prompt_template_id":"tmpl.bad.v1","a_model_id":"m1","b_model_id":"m2","label":"a","buffer_id":"entropy.v1"}
+{"type":"judge_pair","judge_id":"judge.v2","item_id":"t.bad.001|tmpl.bad.v1|a=m1|b=m2","task_id":"t.bad.001","task_family":"fam1","prompt_template_id":"tmpl.bad.v1","a_model_id":"m1","b_model_id":"m2","label":"b","buffer_id":"entropy.v1"}
+{"type":"judge_pair","judge_id":"judge.v1","item_id":"t.good.001|tmpl.good.v1|a=m1|b=m2","task_id":"t.good.001","task_family":"fam1","prompt_template_id":"tmpl.good.v1","a_model_id":"m1","b_model_id":"m2","label":"a","buffer_id":"entropy.v1"}
+{"type":"judge_pair","judge_id":"judge.v2","item_id":"t.good.001|tmpl.good.v1|a=m1|b=m2","task_id":"t.good.001","task_family":"fam1","prompt_template_id":"tmpl.good.v1","a_model_id":"m1","b_model_id":"m2","label":"a","buffer_id":"entropy.v1"}
+{"type":"judge_pair","judge_id":"judge.v1","item_id":"t.invalid.001|tmpl.invalid.v1|a=m1|b=m2","task_id":"t.invalid.001","task_family":"fam2","prompt_template_id":"tmpl.invalid.v1","a_model_id":"m1","b_model_id":"m2","label":"invalid","buffer_id":"entropy.v1"}
+{"type":"judge_pair","judge_id":"judge.v2","item_id":"t.invalid.001|tmpl.invalid.v1|a=m1|b=m2","task_id":"t.invalid.001","task_family":"fam2","prompt_template_id":"tmpl.invalid.v1","a_model_id":"m1","b_model_id":"m2","label":"invalid","buffer_id":"entropy.v1"}
+

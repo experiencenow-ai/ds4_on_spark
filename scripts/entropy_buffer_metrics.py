@@ -1428,18 +1428,30 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             "imbalance_ab_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "label_imbalance_ab", k=10),
             "low_balance_ab_top": _judge_slice_low(tmpl_summ, "prompt_template_id", "label_balance_ab", k=10),
             "disagreement_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "disagreement_rate", k=10),
+            "disagreement_decided_ab_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "disagreement_rate_decided_ab", k=10),
+            "invalid_rate_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "invalid_rate", k=10),
+            "tie_rate_top": _judge_slice_top(tmpl_summ, "prompt_template_id", "tie_rate", k=10),
+            "low_decided_rate_ab_top": _judge_slice_low(tmpl_summ, "prompt_template_id", "decided_rate_ab", k=10),
         },
         "by_task_family": {
             "count_top": fam_summ[:20],
             "imbalance_ab_top": _judge_slice_top(fam_summ, "task_family", "label_imbalance_ab", k=10),
             "low_balance_ab_top": _judge_slice_low(fam_summ, "task_family", "label_balance_ab", k=10),
             "disagreement_top": _judge_slice_top(fam_summ, "task_family", "disagreement_rate", k=10),
+            "disagreement_decided_ab_top": _judge_slice_top(fam_summ, "task_family", "disagreement_rate_decided_ab", k=10),
+            "invalid_rate_top": _judge_slice_top(fam_summ, "task_family", "invalid_rate", k=10),
+            "tie_rate_top": _judge_slice_top(fam_summ, "task_family", "tie_rate", k=10),
+            "low_decided_rate_ab_top": _judge_slice_low(fam_summ, "task_family", "decided_rate_ab", k=10),
         },
         "by_task_family_template_pair": {
             "count_top": fam_tmpl_summ[:20],
             "imbalance_ab_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "label_imbalance_ab", k=10),
             "low_balance_ab_top": _judge_slice_low(fam_tmpl_summ, "task_family_template_pair", "label_balance_ab", k=10),
             "disagreement_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "disagreement_rate", k=10),
+            "disagreement_decided_ab_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "disagreement_rate_decided_ab", k=10),
+            "invalid_rate_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "invalid_rate", k=10),
+            "tie_rate_top": _judge_slice_top(fam_tmpl_summ, "task_family_template_pair", "tie_rate", k=10),
+            "low_decided_rate_ab_top": _judge_slice_low(fam_tmpl_summ, "task_family_template_pair", "decided_rate_ab", k=10),
         },
     }
     judge_out_budget_target = 64.0
@@ -1907,10 +1919,22 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_judge_slice_top(by_tmpl.get("imbalance_ab_top", []), "prompt_template_id"))
     parts.append("\n### slices.by_prompt_template_id.disagreement_top\n")
     parts.append(_md_judge_slice_top(by_tmpl.get("disagreement_top", []), "prompt_template_id"))
+    parts.append("\n### slices.by_prompt_template_id.disagreement_decided_ab_top\n")
+    parts.append(_md_judge_slice_top(by_tmpl.get("disagreement_decided_ab_top", []), "prompt_template_id"))
+    parts.append("\n### slices.by_prompt_template_id.invalid_rate_top\n")
+    parts.append(_md_judge_slice_top(by_tmpl.get("invalid_rate_top", []), "prompt_template_id"))
+    parts.append("\n### slices.by_prompt_template_id.low_decided_rate_ab_top\n")
+    parts.append(_md_judge_slice_top(by_tmpl.get("low_decided_rate_ab_top", []), "prompt_template_id"))
     parts.append("\n### slices.by_task_family_template_pair.imbalance_ab_top\n")
     parts.append(_md_judge_slice_top(by_pair.get("imbalance_ab_top", []), "task_family_template_pair"))
     parts.append("\n### slices.by_task_family_template_pair.disagreement_top\n")
     parts.append(_md_judge_slice_top(by_pair.get("disagreement_top", []), "task_family_template_pair"))
+    parts.append("\n### slices.by_task_family_template_pair.disagreement_decided_ab_top\n")
+    parts.append(_md_judge_slice_top(by_pair.get("disagreement_decided_ab_top", []), "task_family_template_pair"))
+    parts.append("\n### slices.by_task_family_template_pair.invalid_rate_top\n")
+    parts.append(_md_judge_slice_top(by_pair.get("invalid_rate_top", []), "task_family_template_pair"))
+    parts.append("\n### slices.by_task_family_template_pair.low_decided_rate_ab_top\n")
+    parts.append(_md_judge_slice_top(by_pair.get("low_decided_rate_ab_top", []), "task_family_template_pair"))
     parts.append("\n## Buffer reuse\n")
     for k in ("buffer_id_nonempty_task_run_rate", "buffer_item_id_nonempty_task_run_rate", "buffer_id_unique", "buffer_id_hhi", "buffer_id_entropy_bits", "buffer_item_id_unique", "buffer_item_id_reused_unique", "buffer_item_reuse_rate_unique", "buffer_item_reuse_events", "buffer_item_reuse_event_rate", "buffer_item_hhi", "buffer_item_entropy_bits"):
         v = report.reuse.get(k)
