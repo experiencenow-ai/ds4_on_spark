@@ -910,6 +910,28 @@ MTP acceptance gates (high-performance / quantized path):
 
 ## Next steps (oracle + remaining unknowns)
 
+- Machine-readable oracle requirements live in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `oracle.*`.
+- Oracle acceptance rule is pinned to a top-k size (`oracle.logits_oracle.acceptance.topk_k` and `oracle.mtp.acceptance.topk_k`, currently `64`) so tooling can enforce a consistent comparison window across runs.
+
+Encoding oracle (no weights; required):
+
+- Executed by `python3 scripts/model_contract_verify_deepseek_v4_flash.py`.
+- Uses the pinned upstream `encoding/tests/*` vectors to validate message/tool/thinking rendering and parsing behavior.
+
+Logits oracle (weights required; required before semantic claims):
+
+- Generator: `scripts/model_contract_generate_deepseek_v4_flash_oracle.py` (writes `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`).
+- Must cover both:
+  - prefill (`start_pos == 0`) to exercise the prefill cache path and wrap rules
+  - decode (`start_pos > 0`) to exercise the ring-buffer + compressed-cache update semantics
+- Acceptance rule (recommended DS4 gate): compare top-k token IDs exactly; compare logits within a tolerance appropriate for FP8/FP4 kernels.
+
+MTP oracle (weights required; required before trusting/spec-enabling MTP):
+
+- Even when an artifact set structurally preserves `mtp.0.*` (`mtp_contract.complete==true` and `mtp_keys_sha256` matches the official fingerprint), treat MTP as **untrusted** until an MTP logits oracle passes.
+- Generate with `scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp` (records `cases[].mtp_trace[]` draft logits alongside the main `cases[].trace[]`).
+- Gate against the same top-k acceptance rule, and include both prefill + decode cases.
+
 - The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
 - A Spark-side logit oracle generator is provided:
   - Prompt cases: `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`
