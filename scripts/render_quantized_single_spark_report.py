@@ -485,6 +485,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     for k in extra_fattn_keys:
         if k in summary_kv:
             lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
+    reserve_keys = (
+        "sched_reserve_line_count",
+        "sched_reserve_graph_nodes",
+        "sched_reserve_graph_splits",
+        "sched_reserve_took_ms",
+    )
+    for k in reserve_keys:
+        if k in summary_kv:
+            lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
     if summary_kv.get("fattn_seen_disabled", ""):
         lines.append("- fattn_seen_disabled: `true`")
     if summary_kv.get("fattn_seen_sched_reserve_cpu", ""):
