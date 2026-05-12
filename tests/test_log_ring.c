@@ -27,7 +27,7 @@ int32_t test_log_ring(void)
 	char expected[512];
 	char fmt[512];
 	char longmsg[300];
-	int32_t err,c,i,expected_n;
+	int32_t err,c,d,i,expected_n;
 	err = 0;
 	if ( ds4_log_ring_init(&lr,entries,(int32_t)(sizeof(entries) / sizeof(entries[0]))) < 0 )
 		err = -1;
@@ -49,6 +49,11 @@ int32_t test_log_ring(void)
 		err = -9;
 	if ( err == 0 && c != 4 )
 		err = -10;
+	d = -1;
+	if ( err == 0 && ds4_log_ring_dropped(&lr,&d) < 0 )
+		err = -29;
+	if ( err == 0 && d != 1 )
+		err = -30;
 	if ( err == 0 && ds4_log_ring_pop(&lr,&e) < 0 )
 		err = -11;
 	if ( err == 0 && ds4_cstr_eq(e.msg,"b") == 0 )
@@ -80,6 +85,11 @@ int32_t test_log_ring(void)
 			err = -22;
 		if ( err == 0 && c != 1 )
 			err = -23;
+		d = -1;
+		if ( err == 0 && ds4_log_ring_dropped(&lr,&d) < 0 )
+			err = -31;
+		if ( err == 0 && d != 1 )
+			err = -32;
 		if ( err == 0 && ds4_log_ring_pop(&lr,&e) < 0 )
 			err = -24;
 		if ( err == 0 && e.truncated == 0 )

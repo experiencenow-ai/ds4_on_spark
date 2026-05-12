@@ -9,7 +9,8 @@ int32_t test_pool(void)
 	uint8_t mem[64];
 	ds4_pool_t p;
 	void *a,*b,*c;
-	int32_t bytes,free0,free1,used;
+	uint8_t *ua;
+	int32_t bytes,free0,free1,i,used;
 	if ( ds4_pool_bytes_needed(4,16,&bytes) < 0 )
 		return(-1);
 	if ( bytes != (int32_t)sizeof(mem) )
@@ -20,8 +21,12 @@ int32_t test_pool(void)
 		return(-4);
 	if ( free0 != 4 )
 		return(-5);
-	if ( ds4_pool_alloc(&p,&a) < 0 )
+	if ( ds4_pool_alloc_zero(&p,&a) < 0 )
 		return(-6);
+	ua = (uint8_t *)a;
+	for (i=0; i<16; i++)
+		if ( ua[i] != 0 )
+			return(-24);
 	if ( ds4_pool_alloc(&p,&b) < 0 )
 		return(-7);
 	if ( ds4_pool_alloc(&p,&c) < 0 )

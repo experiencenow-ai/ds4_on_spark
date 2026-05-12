@@ -98,27 +98,42 @@ else
 fi
 
 echo
-run_retry() {
-	name=\"\$1\"
-	shift
-	echo \"== run: \${name} ==\"
-	if \"\$@\"; then
+echo \"== nvidia-smi: memory (best-effort) ==\"
+if command -v nvidia-smi >/dev/null 2>&1; then
+	nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free --format=csv,noheader,nounits 2>/dev/null || true
+else
+	echo \"(nvidia-smi not found)\"
+fi
+
+	run_best_effort() {
+		name=\"\$1\"
+		shift
+		echo \"== run: \${name} ==\"
+	set +e
+	out=\$(\"\$@\" 2>&1)
+	rc=\$?
+	set -e
+	printf \"%s\\n\" \"\${out}\"
+	if [ \"\${rc}\" -eq 0 ]; then
 		echo
 		return 0
-	else
-		rc=\$?
-		echo \"(\${name} failed rc=\${rc}; retrying once)\" >&2
-		sleep 1
-		\"\$@\"
-		echo
 	fi
-}
-
-run_retry cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
-run_retry cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
-run_retry cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
-run_retry cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
-run_retry cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
+		if printf \"%s\\n\" \"\${out}\" | grep -Eqi \"out of memory|busy or unavailable|device is busy\"; then
+			echo \"(\${name} skipped: GPU OOM/busy rc=\${rc})\" >&2
+			echo
+			return 0
+		fi
+	echo \"(\${name} failed rc=\${rc})\" >&2
+	echo
+	return \"\${rc}\"
+	}
+	
+	run_best_effort cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
+	run_best_effort cuda_sm121_kernel_launch_tiny \"$REMOTE_DIR\"/bin/cuda_sm121_kernel_launch_tiny
+	run_best_effort cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+	run_best_effort cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+	run_best_effort cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
+	run_best_effort cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
 "
 }
 

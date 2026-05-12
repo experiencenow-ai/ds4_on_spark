@@ -23,6 +23,7 @@ Alignment note: `ds4_arena_alloc` aligns relative to the arena base pointer, so 
 
 - `ds4_pool_init`: partitions memory into equal-sized blocks.
 - `ds4_pool_alloc`: returns one block.
+- `ds4_pool_alloc_zero`: returns one block and zero-fills it.
 - `ds4_pool_free`: returns a block to the pool.
 
 This pattern is useful when you know the max number of same-sized objects ahead of time (e.g. queue nodes, small structs).

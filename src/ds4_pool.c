@@ -105,6 +105,25 @@ int32_t ds4_pool_alloc(ds4_pool_t *p,void **out)
 	return(0);
 }
 
+int32_t ds4_pool_alloc_zero(ds4_pool_t *p,void **out)
+{
+	void *ptr;
+	if ( p == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( p->block_size <= 0 )
+		return(-3);
+	ptr = 0;
+	if ( ds4_pool_alloc(p,&ptr) < 0 )
+		return(-4);
+	if ( ptr == 0 )
+		return(-5);
+	memset(ptr,0,(size_t)p->block_size);
+	*out = ptr;
+	return(0);
+}
+
 int32_t ds4_pool_free(ds4_pool_t *p,void *ptr)
 {
 	uint8_t *uptr;
