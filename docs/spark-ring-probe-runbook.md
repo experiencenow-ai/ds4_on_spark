@@ -51,6 +51,7 @@ The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to 
 It also includes a compact link speed/duplex summary (`== network (link speed, compact) ==`) from sysfs to spot unexpectedly slow negotiated links.
 The `== network (iface matrix, compact) ==` section joins `state`/`mtu`/`speed` with per-interface v4/v6 addresses (redacted) to make the Ethernet/Wi‑Fi address matrix easier to transcribe.
 The `== clock ==` section prints a `skew_s (remote-local): ...` line as a quick clock sanity check.
+The `== clock (summary, remote-local) ==` section consolidates `epoch` + `skew_s` per host and prints a `skew span_s: ...` line to make multi-node clock skew obvious.
 The storage section uses a short `timeout` around `df -h` when available to avoid hanging on stale network mounts.
 
 If you want each host to ping **all** peers instead of only ring neighbors:

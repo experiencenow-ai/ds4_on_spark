@@ -26,6 +26,7 @@ This is a **human-run** access + probe checklist for the current Spark ring. It 
 
 - Verify each node’s UTC time is sane and NTP is synchronized (or at least consistent):
   - Use `./scripts/spark_ring_probe.sh` output `== clock ==` (prints UTC + epoch + `timedatectl` fields when available).
+  - Also check `== clock (summary, remote-local) ==` and the `skew span_s:` line for a quick multi-node skew sanity check.
 - Rule of thumb: if `skew_s (remote-local)` exceeds about `±1s`, treat it as a blocker for distributed experiments (TP>1) until a human fixes time sync.
 
 ## 4) Address Matrix (Wired + Wi‑Fi + v4/v6)

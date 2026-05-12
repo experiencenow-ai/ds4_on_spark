@@ -246,14 +246,17 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo
 
 	ssh_fail="0"
+	clock_rows=""
 	i=0
 	for target in $targets; do
 		i=$((i + 1))
 		kh="$(known_hosts_for_target "$target")"
 		peers="$(peer_hosts_for_index "$i")"
 		local_epoch="$(date -u +%s 2>/dev/null || date +%s)"
+		host="$(host_only "$target")"
 		echo "== target: $target =="
-		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers 2>&1 <<'REMOTE'
+		set +e
+		out="$(ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers 2>&1 <<'REMOTE'
 set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
@@ -482,15 +485,57 @@ echo
 		fi
 	fi
 REMOTE
-		then
-			:
-		else
-			rc="$?"
+)"
+		rc="$?"
+		set -e
+		[ "$out" != "" ] && printf "%s\n" "$out"
+		epoch="$(printf "%s\n" "$out" | sed -nE 's/^epoch: ([0-9]+).*/\\1/p' | head -n 1 || true)"
+		skew_s="$(printf "%s\n" "$out" | sed -nE 's/^skew_s \\(remote-local\\): (-?[0-9]+).*/\\1/p' | head -n 1 || true)"
+		[ "$epoch" = "" ] && epoch="?"
+		[ "$skew_s" = "" ] && skew_s="?"
+		clock_rows="${clock_rows}${clock_rows:+
+}${host} epoch=${epoch} skew_s=${skew_s}"
+		if [ "$rc" -ne 0 ]; then
 			echo "ssh: failed rc=$rc"
 			ssh_fail=$((ssh_fail + 1))
 		fi
 		echo
 	done
+	if [ "$clock_rows" != "" ]; then
+		echo "== clock (summary, remote-local) =="
+		printf "%s\n" "$clock_rows"
+		echo
+		span="$(printf "%s\n" "$clock_rows" | awk '
+			BEGIN{min="";max="";}
+			{
+				skew="";
+				for(i=1;i<=NF;i++){
+					if($i ~ /^skew_s=/){
+						s=$i; sub(/^skew_s=/,"",s);
+						if(s ~ /^-?[0-9]+$/){
+							if(min=="" || s<min) min=s;
+							if(max=="" || s>max) max=s;
+						}
+					}
+				}
+			}
+			END{
+				if(min!="" && max!=""){
+					printf "%d %d", min, max;
+				}
+			}
+		')"
+		if [ "$span" != "" ]; then
+			min_skew="$(printf "%s" "$span" | awk '{print $1}')"
+			max_skew="$(printf "%s" "$span" | awk '{print $2}')"
+			span_s=$((max_skew - min_skew))
+			echo "skew span_s: $span_s (min=$min_skew max=$max_skew)"
+			if [ "$span_s" -gt 1 ]; then
+				echo "note: skew span_s > 1s; treat as ring bring-up blocker until clocks are consistent"
+			fi
+		fi
+		echo
+	fi
 	if [ "$ssh_fail" != "0" ]; then
 		echo "== probe summary =="
 		echo "ssh failures: $ssh_fail"
