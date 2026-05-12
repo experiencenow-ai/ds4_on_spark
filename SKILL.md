@@ -227,7 +227,6 @@ Include order in project headers:
 ❌ `/* */` comments inside functions
 ❌ Guessing struct fields without reading the source
 
-
 --- project-doc ---
 
 # Project Instructions
@@ -256,3 +255,4 @@ This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
 - Commit generated probe outputs only after redacting secrets, usernames that
   should not be public, tokens, and private LAN details if needed.
 - Prefer narrow, measurable milestones over broad framework work.
+
