@@ -25,6 +25,10 @@ if [ \"\$major\" -lt 3 ] || { [ \"\$major\" -eq 3 ] && [ \"\$minor\" -lt 18 ]; }
 	echo \"cmake too old (\$ver); need >= 3.18 for CMAKE_CUDA_ARCHITECTURES\" >&2
 	exit 4
 fi
+with_native=0
+if [ \"\$major\" -gt 3 ] || { [ \"\$major\" -eq 3 ] && [ \"\$minor\" -ge 24 ]; }; then
+	with_native=1
+fi
 
 NVCC=\"\"
 echo
@@ -39,8 +43,6 @@ else
 fi
 \$NVCC --version
 
-echo
-echo \"== cmake: minimal configure/build/run (CMAKE_CUDA_ARCHITECTURES=121) ==\"
 rm -rf \"$REMOTE_DIR\"
 mkdir -p \"$REMOTE_DIR\"
 cat > \"$REMOTE_DIR\"/CMakeLists.txt <<'EOF'
@@ -53,7 +55,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(ds4_cuda_probe_cmake_sm121 main.cu)
-set_property(TARGET ds4_cuda_probe_cmake_sm121 PROPERTY CUDA_ARCHITECTURES 121)
 EOF
 
 cat > \"$REMOTE_DIR\"/main.cu <<'EOF'
@@ -110,27 +111,37 @@ int main(int argc,char **argv)
 }
 EOF
 
-\$CMAKE -S \"$REMOTE_DIR\" -B \"$REMOTE_DIR\"/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=\"\$NVCC\" -DCMAKE_CUDA_ARCHITECTURES=\"121\" -DCMAKE_VERBOSE_MAKEFILE=ON
-echo
-echo \"== cmake: build (verbose) ==\"
-build_log=\"$REMOTE_DIR\"/build/build.log
-set +e
-\$CMAKE --build \"$REMOTE_DIR\"/build --verbose >\"\${build_log}\" 2>&1
-rc=\$?
-set -e
-cat \"\${build_log}\"
-echo
-echo \"== cmake: nvcc flags check (best-effort) ==\"
-if grep -q \"sm_121\" \"\${build_log}\"; then
-	echo \"cmake_build_log_sm_121: OK\"
-else
-	echo \"(cmake build log did not mention sm_121; generator may not support verbose output)\"
+run_case() {
+	tag=\"\$1\"
+	arch=\"\$2\"
+	build_dir=\"$REMOTE_DIR\"/build_\"\${tag}\"
+	echo
+	echo \"== cmake: minimal configure/build/run (CMAKE_CUDA_ARCHITECTURES=\${arch}) ==\"
+	\$CMAKE -S \"$REMOTE_DIR\" -B \"\${build_dir}\" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=\"\$NVCC\" -DCMAKE_CUDA_ARCHITECTURES=\"\${arch}\" -DCMAKE_VERBOSE_MAKEFILE=ON
+	echo
+	echo \"== cmake: build (verbose) ==\"
+	build_log=\"\${build_dir}\"/build.log
+	set +e
+	\$CMAKE --build \"\${build_dir}\" --verbose >\"\${build_log}\" 2>&1
+	rc=\$?
+	set -e
+	cat \"\${build_log}\"
+	echo
+	echo \"== cmake: nvcc --generate-code lines (best-effort) ==\"
+	grep -- \"--generate-code\" \"\${build_log}\" | head -n 40 || echo \"(no --generate-code lines found)\"
+	if [ \$rc -ne 0 ]; then
+		echo \"cmake build failed rc=\$rc\" >&2
+		exit 6
+	fi
+	\"\${build_dir}\"/ds4_cuda_probe_cmake_sm121
+}
+
+run_case both 121
+run_case real 121-real
+run_case virtual 121-virtual
+if [ \"\${with_native}\" = \"1\" ]; then
+	run_case native native
 fi
-if [ \$rc -ne 0 ]; then
-	echo \"cmake build failed rc=\$rc\" >&2
-	exit 6
-fi
-\"$REMOTE_DIR\"/build/ds4_cuda_probe_cmake_sm121
 " 
 }
 
