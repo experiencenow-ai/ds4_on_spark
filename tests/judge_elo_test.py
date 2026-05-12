@@ -259,12 +259,22 @@ class JudgeEloTest(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
         rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
-        for path in (dec_path, rec_path):
+        meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
+        budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
+        qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
+        leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
+        for path in (dec_path, rec_path, meta_path, budget_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
-            self.assertIsInstance(obj, dict)
-            self.assertEqual(obj.get("type"), "object")
-            self.assertIn("properties", obj)
+            if path.endswith("leaderboard_v1.schema.json"):
+                self.assertIsInstance(obj, dict)
+                self.assertEqual(obj.get("type"), "array")
+                self.assertIn("items", obj)
+            else:
+                self.assertIsInstance(obj, dict)
+                self.assertEqual(obj.get("type"), "object")
+                # Decision/record/meta/budget schemas expose properties; the quality_map schema uses additionalProperties.
+                self.assertTrue(("properties" in obj) or ("additionalProperties" in obj))
 
 
 if __name__ == "__main__":
