@@ -1,6 +1,6 @@
 # Scheduler Simulator Recommendations (Synthetic)
 
-Date: 2026-05-11
+Date: 2026-05-12
 
 This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
@@ -12,12 +12,12 @@ This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
 All numbers below come from the committed JSON report:
 
-- `docs/scheduler-simulator-recommendations-2026-05-11.json`
+- `docs/scheduler-simulator-recommendations-2026-05-12.json`
 
 Regenerate it with:
 
 ```bash
-python3 sim/scheduler/recommendations.py --json > docs/scheduler-simulator-recommendations-2026-05-11.json
+python3 sim/scheduler/recommendations.py --json > docs/scheduler-simulator-recommendations-2026-05-12.json
 ```
 
 ## Expert Queue Reservation
