@@ -103,28 +103,31 @@ fi
 node_count="${SPARK_NODE_COUNT:-3}"
 
 ring_workdir="${RING_WORKDIR:-}"
-remote_log="${RING_LOG:-}"
 if [ "$remote_workdir" != "" ]; then
 	ring_workdir="$remote_workdir"
 fi
 if [ "$ring_workdir" = "" ]; then
 	ring_workdir="\$HOME/centaur-smoke/v73/ring_sim_spark12"
 fi
+ring_workdir_abs="$(ssh $SSH_OPTS "$target" "mkdir -p $ring_workdir && cd $ring_workdir && pwd -P")"
+remote_log="${RING_LOG:-}"
 if [ "$remote_log" = "" ]; then
-	remote_log="$ring_workdir/run/$run_id/ring_sim.log"
+	remote_log="$ring_workdir_abs/run/$run_id/ring_sim.log"
+else
+	remote_log="$(ssh $SSH_OPTS "$target" "python3 -c 'import os,sys; print(os.path.abspath(os.path.expandvars(os.path.expanduser(sys.argv[1]))))' \"$remote_log\"")"
 fi
 
 echo "== centaur v73 ring sim run (spark12) =="
 echo "spark0: $target"
 echo "ring_run_id: $run_id"
 echo "spark_node_count: $node_count"
-echo "spark0_ring_workdir: $ring_workdir"
+echo "spark0_ring_workdir: $ring_workdir_abs"
 echo "spark0_ring_log: $remote_log"
 if [ "$local_log" != "" ]; then
 	echo "local_log: $local_log"
 fi
 
-ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export SPARK_NODE_COUNT=\"$node_count\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
+ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export SPARK_NODE_COUNT=\"$node_count\" && export RING_WORKDIR=\"$ring_workdir_abs\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
 if [ "${NODE_TYPE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export NODE_TYPE=\"${NODE_TYPE}\""
 fi

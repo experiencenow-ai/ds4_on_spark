@@ -38,6 +38,8 @@ ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -
 sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
+Note: `scripts/centaur_spark12_v73_ring_sim_run.sh` accepts an optional `remote_ring_workdir` argument; `~/...` and `$HOME/...` are fine (the wrapper resolves to an absolute path to avoid creating literal `~` directories on Spark0).
+
 3) When Spark1/2 hardware exists: stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
 
 ```bash
