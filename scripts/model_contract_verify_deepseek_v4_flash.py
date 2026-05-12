@@ -480,6 +480,24 @@ def main() -> int:
 				if not isinstance(cache_sem, dict):
 					failures.append(Failure(165, f"contract summary cache.semantics must be an object: {contract_summary}"))
 				else:
+					ref = cache_sem.get("reference_source")
+					if not (isinstance(ref, str) and ref):
+						failures.append(Failure(177, f"contract summary cache.semantics.reference_source must be a non-empty string: {contract_summary}"))
+					kv_layout = cache_sem.get("kv_layout")
+					if not (isinstance(kv_layout, str) and kv_layout):
+						failures.append(Failure(178, f"contract summary cache.semantics.kv_layout must be a non-empty string: {contract_summary}"))
+					topk_rule = cache_sem.get("sparse_topk_rule")
+					if not (isinstance(topk_rule, str) and topk_rule):
+						failures.append(Failure(179, f"contract summary cache.semantics.sparse_topk_rule must be a non-empty string: {contract_summary}"))
+					sliding_summary = cache_sem.get("sliding_summary")
+					if not (isinstance(sliding_summary, str) and sliding_summary):
+						failures.append(Failure(180, f"contract summary cache.semantics.sliding_summary must be a non-empty string: {contract_summary}"))
+					csa_summary = cache_sem.get("csa_summary")
+					if not (isinstance(csa_summary, str) and csa_summary):
+						failures.append(Failure(181, f"contract summary cache.semantics.csa_summary must be a non-empty string: {contract_summary}"))
+					hca_summary = cache_sem.get("hca_summary")
+					if not (isinstance(hca_summary, str) and hca_summary):
+						failures.append(Failure(182, f"contract summary cache.semantics.hca_summary must be a non-empty string: {contract_summary}"))
 					helpers = cache_sem.get("source_helpers", None)
 					if not isinstance(helpers, dict):
 						failures.append(Failure(166, f"contract summary cache.semantics.source_helpers must be an object: {contract_summary}"))
