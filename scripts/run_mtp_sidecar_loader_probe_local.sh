@@ -233,21 +233,24 @@ else
 	fi
 fi
 
-python3 - "$OUT_DIR/loader_probe_stdout.txt" "$OUT_DIR/loader_probe.json" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
+python3 - "$OUT_DIR/loader_probe_stdout.txt" "$OUT_DIR/loader_probe_stderr.txt" "$OUT_DIR/loader_probe.json" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
 import json
+import re
 import sys
 from pathlib import Path
 
-src = Path(sys.argv[1])
-out_json_path = Path(sys.argv[2])
+stdout_path = Path(sys.argv[1])
+stderr_path = Path(sys.argv[2])
+out_json_path = Path(sys.argv[3])
 
-out = {"ok": False, "errors": [], "probe_ok": None}
+out = {"ok": False, "errors": [], "probe_ok": None, "arch_unknown": False, "architecture": None, "skipped": False}
 try:
-    doc = json.loads(src.read_text(encoding="utf-8"))
+    doc = json.loads(stdout_path.read_text(encoding="utf-8"))
     if isinstance(doc, dict):
         out_json_path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         out["probe_ok"] = bool(doc.get("ok", False))
         out["ok"] = out["probe_ok"]
+        out["architecture"] = doc.get("architecture", None)
         errs = doc.get("errors", [])
         if isinstance(errs, list):
             out["errors"] = [str(x) for x in errs[:64]]
@@ -255,6 +258,39 @@ try:
         out["errors"].append("stdout JSON top-level is not an object")
 except Exception as e:
     out["errors"].append(f"failed to parse stdout as JSON: {e}")
+    err = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+    m = re.search(r"unknown model architecture: '([^']+)'", err)
+    if m is None:
+        m = re.search(r"unknown model architecture: ([^\\s]+)", err)
+    if m is not None:
+        out["arch_unknown"] = True
+        out["skipped"] = True
+        out["architecture"] = str(m.group(1))
+        out["errors"].append(f"llama.cpp rejected architecture: {out['architecture']}")
+    elif "deepseek4_mtp_support is an MTP sidecar GGUF" in err:
+        out["arch_unknown"] = True
+        out["skipped"] = True
+        out["architecture"] = "deepseek4_mtp_support"
+        out["errors"].append("llama.cpp treated deepseek4_mtp_support as unknown (sidecar-only GGUF)")
+
+    try:
+        out_json_path.write_text(
+            json.dumps(
+                {
+                    "ok": False,
+                    "architecture": out["architecture"],
+                    "errors": out["errors"],
+                    "arch_unknown": out["arch_unknown"],
+                    "skipped": out["skipped"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
 print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
@@ -263,11 +299,23 @@ if [ "$is_url" = "1" ]; then
 	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"sidecar is URL (no llama.cpp probe)\",\"errors\":[]}" >"$OUT_DIR/contract_vs_loader_probe_parse.json"
 	printf '%s\n' "" >"$OUT_DIR/contract_vs_loader_probe_stderr.txt"
 else
-	python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
-		--contract-probe-json "$OUT_DIR/contract_probe.json" \
-		--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
-		--json \
-		>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+	loader_ok=0
+	if [ -r "$OUT_DIR/loader_probe_parse.json" ]; then
+		if grep -q '"ok": true' "$OUT_DIR/loader_probe_parse.json"; then
+			loader_ok=1
+		fi
+	fi
+	if [ "$loader_ok" != "1" ]; then
+		printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"llama.cpp loader probe not ok (see loader_probe_parse.json)\",\"errors\":[]}" \
+			>"$OUT_DIR/contract_vs_loader_probe_parse.json"
+		printf '%s\n' "" >"$OUT_DIR/contract_vs_loader_probe_stderr.txt"
+	else
+		python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
+			--contract-probe-json "$OUT_DIR/contract_probe.json" \
+			--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
+			--json \
+			>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+	fi
 fi
 
 {

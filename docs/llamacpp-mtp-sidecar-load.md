@@ -115,7 +115,7 @@ This runner writes additional artifacts next to the Markdown report:
 - `contract_probe.json`: full Python contract probe JSON (when parseable)
 - `contract_probe_fingerprint_gate.json`: local pinned antirez payload fingerprint gate result
 - `loader_probe.json`: full llama.cpp probe JSON (when extracted)
-- `contract_vs_loader_probe_parse.json`: local cross-check summary (`ok=true` only when both probes agree on dims/type/offset/nbytes)
+- `contract_vs_loader_probe_parse.json`: local cross-check summary (`ok=true` only when both probes agree on dims/type/offset/nbytes; `skipped=true` when the llama.cpp probe does not return `ok=true` or fails to emit JSON, e.g. `unknown model architecture: deepseek4_mtp_support`)
 - `deepseek4_mtp_sidecar.hpp`: generated binder skeleton (only when the contract probe reports `ok=true`)
 
 By default this Spark-only runner also samples 64 bytes from each tensor payload (`--payload-sample-bytes 64`) to catch truncated/corrupt uploads without loading full weights. Override with `REMOTE_MTP_SIDECAR_ARGS='--json --expect-deepseek-v4-flash --payload-sample-bytes 0'` if you need a strictly header-only check.
