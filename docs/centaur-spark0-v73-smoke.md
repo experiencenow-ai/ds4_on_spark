@@ -52,6 +52,12 @@ Mac-side prerequisites for the helper scripts:
 - `rsync` (preferred) or `scp` (fallback)
 - `tee` (used by `scripts/centaur_spark0_v73_evidence_run.sh` and when you pass a `local_log`)
 
+Preflight: `scripts/centaur_spark0_v73_stage.sh` checks SSH reachability by default and prints a `mac_spark_discovery.sh` hint on failure. To bypass (not recommended), set:
+
+```bash
+export STAGE_SKIP_PREFLIGHT=1
+```
+
 ### One-command run from your Mac (recommended)
 
 This runs the full evidence loop (stage → smoke → validate → fetch):
