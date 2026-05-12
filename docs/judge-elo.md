@@ -37,7 +37,7 @@ Machine-readable schema:
 The offline tools in `scripts/judge_elo_*.py` expect one JSON object per line with:
 
 Required fields:
-- `schema`: `"ds4_pairwise_judge_record_v1"` or `"ds4_pairwise_judge_record_v2"`
+- `schema`: `"ds4_pairwise_judge_record_v1" | "ds4_pairwise_judge_record_v2" | "ds4_pairwise_judge_record_v3"`
 - `pair_id`: stable identifier for this comparison
 - `model_a`, `model_b`: model identifiers (strings)
 - `parse_valid`: boolean (whether the judge decision JSON was parsed successfully)
@@ -50,7 +50,8 @@ Optional but recommended (for speed/quality separation and budgeting):
 - `tokens`: `{ "a_out": int, "b_out": int, "judge_in": int, "judge_out": int }`
 - `latency_ms`: `{ "a": int, "b": int, "judge": int }`
 - In `schema="ds4_pairwise_judge_record_v1"`, these may be omitted or partially populated; strict validation requires all keys.
-- In `schema="ds4_pairwise_judge_record_v2"`, these are required (all keys required).
+- In `schema="ds4_pairwise_judge_record_v2"` and `schema="ds4_pairwise_judge_record_v3"`, these are required (all keys required).
+- `schema="ds4_pairwise_judge_record_v3"` is strict-by-schema: it also enforces strict decision consistency (margin/score mapping + `tags<=3`) via `scripts/judge_elo_schema.py`.
 - `judge_model`: string
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
@@ -67,6 +68,7 @@ python3 scripts/judge_elo_validate.py --strict --in <records.jsonl>
 Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v1.schema.json`
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v2.schema.json` (tokens/latency required)
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v3.schema.json` (tokens/latency required; tags<=3)
 
 ## Updater Output Schemas
 
@@ -129,7 +131,13 @@ To emit `schema="ds4_pairwise_judge_record_v2"` (tokens/latency required), add `
 python3 scripts/pairwise_judge_record.py --record-schema v2 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
 ```
 
-To enforce strict margin/score consistency + compact tags while wrapping, add `--strict`:
+To emit `schema="ds4_pairwise_judge_record_v3"` (tokens/latency required; strict-by-schema), use `--record-schema v3` and provide all budget fields:
+
+```bash
+python3 scripts/pairwise_judge_record.py --record-schema v3 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
+```
+
+To enforce strict margin/score consistency + compact tags while wrapping for schema v1/v2, add `--strict`:
 
 ```bash
 python3 scripts/pairwise_judge_record.py --strict --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
