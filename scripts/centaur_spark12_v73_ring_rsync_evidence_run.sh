@@ -26,6 +26,7 @@ Environment:
   RING_RUN_ID          Optional ring run id (default: generated UTC timestamp)
   NODE_SETUP_RUN_ID    Optional node setup run id (default: $RING_RUN_ID)
   RING_SKIP_NODE_SETUP Set to 1 to skip Spark1/2 node setup (still stages zip by default)
+  RING_REMOTE_VERIFY   Set to 1 to run post-ring remote `hyor-sync-status` on Spark1/2
   SSH_OPTS             Optional ssh options override (default includes BatchMode + temp known_hosts)
 
 Pass-through env (see underlying scripts):
@@ -65,6 +66,7 @@ node_setup_fetch="$root/scripts/centaur_spark12_v73_node_setup_fetch_logs.sh"
 run="$root/scripts/centaur_spark12_v73_ring_rsync_run.sh"
 validate="$root/scripts/centaur_spark12_v73_validate_ring_artifacts.sh"
 fetch="$root/scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh"
+remote_verify="$root/scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh"
 
 need_cmd()
 {
@@ -105,6 +107,10 @@ if [ ! -f "$validate" ]; then
 fi
 if [ ! -x "$fetch" ]; then
 	echo "missing ring artifact fetcher: $fetch" >&2
+	exit 2
+fi
+if [ ! -x "$remote_verify" ]; then
+	echo "missing remote verify helper: $remote_verify" >&2
 	exit 2
 fi
 
@@ -159,7 +165,14 @@ RING_RUN_ID="$run_id" sh "$run" "$spark0" "$spark1" "$spark2" "$remote_base" "$l
 echo "== step 2/3: validate ring artifacts (Spark0) =="
 ssh $SSH_OPTS "$spark0" "export RING_RUN_ID=\"$run_id\"; sh -s -- --mode rsync" < "$validate"
 
-echo "== step 3/3: fetch ring artifacts (Mac) =="
+if [ "${RING_REMOTE_VERIFY:-0}" = "1" ]; then
+	echo "== step 3/4: remote verify (spark1/2) =="
+	sh "$remote_verify" "$spark1" "$spark2" "$remote_base" "$remote_dir" "$local_out/remote_verify"
+else
+	echo "== skip remote verify (RING_REMOTE_VERIFY!=1) =="
+fi
+
+echo "== step 4/4: fetch ring artifacts (Mac) =="
 sh "$fetch" "$spark0" "$run_id" "" "$local_out"
 
 echo "== done =="

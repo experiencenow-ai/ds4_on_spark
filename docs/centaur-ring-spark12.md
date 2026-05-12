@@ -71,6 +71,12 @@ sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> s
 	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 	```
 
+	To also verify that Spark1/2 can run `hyor-sync-status` locally against the pushed node roots (recommended), set:
+
+	```bash
+	export RING_REMOTE_VERIFY=1
+	```
+
 	If you already ran node setup and want to skip it:
 
 	```bash
@@ -299,6 +305,14 @@ export NODE_ROOT=~/centaur-smoke/v73/ring_node/hyor/node_spark1   # spark2 accor
 
 "$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-sync-status "$NODE_ROOT" --full
 ```
+
+If you prefer a Mac-side helper that runs the same `hyor-sync-status` checks over SSH (and optionally writes per-node logs), use:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh spark1@<spark1-host> spark2@<spark2-host>
+```
+
+This helper is also wired into `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh` when `RING_REMOTE_VERIFY=1`.
 
 If you also want to confirm the “effective view” can be materialized on-node:
 
