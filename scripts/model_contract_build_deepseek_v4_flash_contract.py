@@ -623,6 +623,36 @@ def extract_function_source_lines(text: str, func_name: str) -> Optional[list[st
 		return out
 	return None
 
+def extract_class_method_source_lines(text: str, class_name: str, method_name: str) -> Optional[list[str]]:
+	try:
+		mod = ast.parse(text)
+	except Exception:
+		return None
+	lines = text.splitlines()
+	for node in mod.body:
+		if not isinstance(node, ast.ClassDef):
+			continue
+		if node.name != class_name:
+			continue
+		for sub in node.body:
+			if not isinstance(sub, ast.FunctionDef):
+				continue
+			if sub.name != method_name:
+				continue
+			start = sub.lineno
+			if sub.decorator_list:
+				start = min((getattr(d, "lineno", start) for d in sub.decorator_list))
+			end = getattr(sub, "end_lineno", None)
+			if not isinstance(start, int) or not isinstance(end, int) or start <= 0 or end <= 0:
+				return None
+			if end < start or end > len(lines):
+				return None
+			out = [ln.rstrip() for ln in lines[start - 1 : end]]
+			while out and out[-1] == "":
+				out.pop()
+			return out
+	return None
+
 def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	text = model_py.read_text(encoding="utf-8")
 
@@ -700,6 +730,9 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 	swiglu_up_clamp = find_first_line_containing(text, "up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)")
 	swiglu_gate_clamp = find_first_line_containing(text, "gate = torch.clamp(gate, max=self.swiglu_limit)")
 
+	gate_forward_lines = extract_class_method_source_lines(text, "Gate", "forward")
+	moe_forward_lines = extract_class_method_source_lines(text, "MoE", "forward")
+
 	return {
 		"gate_scores_fp32_expr": score_fp32,
 		"bias_affects_selection_only_comment": bias_comment,
@@ -714,6 +747,17 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 		"swiglu_clamp_enabled_expr": swiglu_gate,
 		"swiglu_clamp_up_expr": swiglu_up_clamp,
 		"swiglu_clamp_gate_expr": swiglu_gate_clamp,
+		"source_helpers": {
+			"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Gate.forward, MoE.forward)",
+			"gate_forward": {
+				"source_lines": gate_forward_lines,
+				"source_lines_sha256": sha256_lines(gate_forward_lines) if isinstance(gate_forward_lines, list) else None,
+			},
+			"moe_forward": {
+				"source_lines": moe_forward_lines,
+				"source_lines_sha256": sha256_lines(moe_forward_lines) if isinstance(moe_forward_lines, list) else None,
+			},
+		},
 	}
 
 def parse_inference_moe_hash_routing(model_py: Path) -> dict:

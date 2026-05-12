@@ -8,6 +8,14 @@ Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` requ
 
 From your Mac (repo root), in order:
 
+0) Preflight: confirm each Spark hostname resolves and SSH is reachable.
+Both `scripts/centaur_spark12_v73_stage.sh` and `scripts/centaur_spark12_v73_ring_rsync_run.sh` run SSH preflight checks by default (set `STAGE_SKIP_PREFLIGHT=1` / `RING_SKIP_PREFLIGHT=1` to bypass).
+When a hostname does not resolve (common before Spark1/2 exist), use an explicit `user@ip` target instead of `spark1.local`/`spark2.local`.
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
+```
+
 1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
 
 ```bash
@@ -16,6 +24,10 @@ export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
+
+If you want a known-good reference bundle for what “PASS” looks like, see:
+
+- `fixtures/centaur-smoke/spark0-v73/20260512T030829Z/`
 
 2) Stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
 
@@ -152,6 +164,12 @@ To validate expected ring artifacts exist (run on the orchestrator host; Spark0 
 ```bash
 export RING_RUN_ID="<run_id>"
 sh ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh --mode sim
+```
+
+To fetch a small sanitized ring-sim bundle (log + effective manifests + effective view) back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
 ## Next step (when Spark1/2 hardware exists)

@@ -30,6 +30,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - `scripts/model_contract_verify_deepseek_v4_flash.py` also cross-checks tokenizer invariants against the pinned fixtures (BOS/EOS token IDs, `add_bos_token/add_eos_token`, `model_max_length`, and “PAD is EOS”) so contract consumers can treat these as enforced facts, not just documentation.
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Cache section also pins the exact sparse-attention top-k index helper definitions from the upstream reference (`cache.topk_index_helpers`) so external runtimes can reproduce index matrices (including `-1` sentinel placement) without guessing.
+  - MoE section also pins verbatim `Gate.forward` and `MoE.forward` helper sources (`moe.semantics.source_helpers`) so expert selection and routing-weight semantics are reproducible without guessing.
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
   - It also records per-prefix fingerprints (`checkpoint_index.weight_map_prefix_fingerprints`) so consumers can independently sanity-check the `layers.*` and `mtp.*` namespaces (useful when evaluating whether an artifact set plausibly preserves upstream `mtp.0.*`).
   - Convenience fields: `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256`, `checkpoint_index.weight_map_top_level_keys_sha256`, and `mtp.checkpoint_key_fingerprint.*`.
@@ -110,13 +111,14 @@ MTP (multi-token prediction) oracle requirements:
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
     - Validate the probe JSON shape with: `python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json ...`
 
-Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-11; refreshed via `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`):
+Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-12; refreshed via `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`):
 
 Machine-readable view:
 
 - `fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` summarizes the pinned `docs/gguf-inspect-*.json` into a small fixture for tooling.
   - MTP namespace preservation: `items[].mtp_namespace.present_prefixes` (for example `["mtp.0."]` when an artifact set actually preserves the upstream `mtp.0.*` namespace).
   - Quant-format compatibility: `items[].quantization_contract.status` plus `items[].quantization_contract.notes_sample` (helps interpret single-Spark external-runtime results when artifacts are re-quantized or non-native).
+    - Note: `dense_fp8_like` is based on FP8 tensor evidence in key dense categories (e.g. attention/shared-expert); the most common non-expert tensor type may still be `F32` due to scale/router tensors.
 
 | Pinned probe output | Artifact kind | `mtp_present` | `mtp_contract.complete` | Note |
 |---|---|---:|---:|---|

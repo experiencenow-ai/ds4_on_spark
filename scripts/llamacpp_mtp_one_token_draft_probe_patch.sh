@@ -5,8 +5,20 @@ target_note="llama.cpp Spark fork: one-token MTP draft probe (skeleton patch)"
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark}"
 LLAMA_REPO="${LLAMA_REPO:-https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git}"
-LLAMA_COMMIT="${LLAMA_COMMIT:-9222e55}"
-PATCH_FILE="${PATCH_FILE:-$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch}"
+LLAMA_COMMIT="${LLAMA_COMMIT:-94073e2}"
+if [ "${PATCH_FILE:-}" = "" ]; then
+	case "$LLAMA_COMMIT" in
+		9222e55)
+			PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-one-token-draft-probe-skeleton.patch"
+			;;
+		94073e2)
+			PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-one-token-draft-probe-skeleton.patch"
+			;;
+		*)
+			PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-one-token-draft-probe-skeleton.patch"
+			;;
+	esac
+fi
 
 TRUNK_GGUF="${TRUNK_GGUF:-}"
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
@@ -15,6 +27,8 @@ SEED="${SEED:-1234}"
 LOAD_SIDECAR_WEIGHTS="${LOAD_SIDECAR_WEIGHTS:-0}"
 
 JSON_ONLY="${JSON_ONLY:-0}"
+
+CUDACXX="${CUDACXX:-}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_PATCH="${ALLOW_PATCH:-0}"
@@ -114,7 +128,30 @@ if [ "$ALLOW_BUILD" != "1" ]; then
 		echo "build skipped (set ALLOW_BUILD=1 to compile llama-ds4-mtp-one-token-draft-probe)"
 	fi
 else
-	(cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release)
+	if [ "$CUDACXX" = "" ]; then
+		if command -v nvcc >/dev/null 2>&1; then
+			CUDACXX="$(command -v nvcc)"
+		else
+			for p in /usr/local/cuda/bin/nvcc /opt/cuda/bin/nvcc /usr/local/cuda-*/bin/nvcc /usr/local/cuda*/bin/nvcc; do
+				if [ -x "$p" ]; then
+					CUDACXX="$p"
+					break
+				fi
+			done
+		fi
+	fi
+	if [ "$JSON_ONLY" != "1" ]; then
+		if [ "$CUDACXX" != "" ]; then
+			echo "cudacxx=$CUDACXX"
+		else
+			echo "cudacxx=not-found (set CUDACXX=/abs/path/to/nvcc if CMake cannot discover CUDA)"
+		fi
+	fi
+	cmake_cuda_compiler_arg=""
+	if [ "$CUDACXX" != "" ]; then
+		cmake_cuda_compiler_arg="-DCMAKE_CUDA_COMPILER=$CUDACXX"
+	fi
+	(cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release $cmake_cuda_compiler_arg)
 	(cd "$LLAMA_DIR" && cmake --build build --config Release --target llama-ds4-mtp-one-token-draft-probe -j)
 fi
 

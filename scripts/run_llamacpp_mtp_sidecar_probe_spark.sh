@@ -6,6 +6,7 @@ SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChec
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_llamacpp_mtp_sidecar_probe}"
 REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV="${REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV:-}"
+LLAMA_COMMIT="${LLAMA_COMMIT:-94073e2}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
 
@@ -22,10 +23,22 @@ elif [ -e "$repo_root/.git" ]; then
 	repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
 
-PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch"
+PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-${LLAMA_COMMIT}-mtp-sidecar-probe.patch"
+if [ ! -r "$PATCH_LOCAL" ] && [ "$LLAMA_COMMIT" = "94073e2" ] && [ -r "$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch" ]; then
+	PATCH_LOCAL="$repo_root/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch"
+fi
 HELPER_LOCAL="$repo_root/scripts/llamacpp_mtp_sidecar_probe_patch.sh"
 
 REPORT_MD="$OUT_DIR/llamacpp_mtp_sidecar_probe_spark.md"
+
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE="$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV"
+case " $REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE " in
+	*" LLAMA_COMMIT="*)
+		;;
+	*)
+		REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE="$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE LLAMA_COMMIT=$LLAMA_COMMIT"
+		;;
+esac
 
 {
 	echo "# llama.cpp MTP Sidecar Probe (Spark)"
@@ -34,6 +47,7 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_sidecar_probe_spark.md"
 	echo
 	echo "- ds4_on_spark commit: $repo_rev"
 	echo "- target: $target"
+	echo "- llama_commit: $LLAMA_COMMIT"
 	echo "- patch: $PATCH_LOCAL"
 	echo
 	echo "## Safety Gates"
@@ -52,7 +66,8 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_sidecar_probe_spark.md"
 	echo
 	echo "- LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark"
 	echo "- LLAMA_REPO=https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git"
-	echo "- LLAMA_COMMIT=94073e2"
+	echo "- LLAMA_COMMIT=$LLAMA_COMMIT"
+	echo "- CUDACXX=/abs/path/to/nvcc (optional; overrides auto-detect if CMake cannot find CUDA)"
 	echo "- PAYLOAD_SAMPLE_BYTES=64"
 	echo "- LOAD_WEIGHTS=1"
 	echo
@@ -61,7 +76,7 @@ REPORT_MD="$OUT_DIR/llamacpp_mtp_sidecar_probe_spark.md"
 	echo "Do not put secrets in REMOTE_* env values; this report records them."
 	echo
 	echo '```'
-	echo "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV"
+	echo "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE"
 	echo '```'
 	echo
 	echo "## Spark Host Info"
@@ -146,7 +161,7 @@ ssh $SSH_OPTS "$target" "cat > /tmp/llamacpp_mtp_sidecar_probe.patch" \
 	<"$PATCH_LOCAL" \
 	>"$OUT_DIR/remote_llamacpp_mtp_sidecar_upload_patch_stdout.txt" 2>"$OUT_DIR/remote_llamacpp_mtp_sidecar_upload_patch_stderr.txt" || true
 
-ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV sh -lc '
+ssh $SSH_OPTS "$target" "$REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV_EFFECTIVE sh -lc '
 set -eu
 if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
   for p in \

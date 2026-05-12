@@ -23,6 +23,12 @@ Print the version:
 ./build_cli/ds4_cli --version
 ```
 
+Print supported config keys:
+
+```bash
+./build_cli/ds4_cli --dump-config-keys
+```
+
 Dump effective config (defaults + optional file + env):
 
 ```bash
@@ -85,6 +91,7 @@ When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests t
 
 - `ds4_cli --version`
 - `ds4_cli --dump-config`
+- `ds4_cli --dump-config-keys`
 - `ds4_cli --smoke-cuda`
 - `ds4_cli --config <tmpfile> --dump-config`
 - `ds4_cli --config - --dump-config` (stdin)

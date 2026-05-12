@@ -104,7 +104,7 @@ To capture a full log file on the Mac (without relying on `tee` + shell `pipefai
 LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_capability_spark0.sh
 ```
 
-The capability sweep also sets per-step `REMOTE_DIR` values using a unique `REMOTE_TAG` so concurrent runs do not clobber `/tmp/ds4_cuda_probe_*` directories on Spark0. To make the remote directory names deterministic (useful for debugging), set:
+The capability sweep also sets per-step `REMOTE_DIR` values (including the cuBLASLt step) using a unique `REMOTE_TAG` so concurrent runs do not clobber `/tmp/ds4_cuda_probe_*` directories on Spark0. To make the remote directory names deterministic (useful for debugging), set:
 
 ```bash
 REMOTE_TAG=manual ./scripts/cuda_probe_capability_spark0.sh
@@ -253,6 +253,9 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121` with C++20 flags)
 - `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)
+- `cuda_sm121_arch_list_report` (`__CUDA_ARCH_LIST__` + CUDA 13 feature macro sanity)
+- `cuda_sm121_rdc_probe` (separate compilation + device link smoke test for `sm_121`)
+- `cuda_sm121_dlto_probe` (device LTO (`-dlto`) smoke test for `sm_121`)
 - `cuda_sm121_smem_optin` (shared-memory opt-in + max dynamic shared-memory launch gate)
 - `cuda_sm121_devattrs` (device attribute dump for kernel bring-up gating)
 - `cuda_sm121_pipeline_memcpy_async` (cp.async-style global->shared copy)

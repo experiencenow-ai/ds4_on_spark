@@ -32,6 +32,10 @@ Legacy patch (for older checkouts):
 
 - `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
 
+Spark runners in this repo select the matching patch file based on
+`LLAMA_COMMIT` (default `94073e2`). To validate against the original observed
+failure commit, run with `LLAMA_COMMIT=9222e55`.
+
 ## Apply + build (Spark)
 
 ```bash
@@ -44,6 +48,12 @@ git apply /path/to/ds4_on_spark/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v
 
 cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
+```
+
+If CMake fails with `No CMAKE_CUDA_COMPILER could be found`, set `CUDACXX` (or pass `-DCMAKE_CUDA_COMPILER=...`) to point at `nvcc`, for example:
+
+```bash
+CUDACXX=/usr/local/cuda/bin/nvcc cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 ```
 
 ## Run
@@ -60,7 +70,7 @@ cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
 If `--load-weights` is reported as an unknown argument, update the ds4_on_spark patch file (`docs/llamacpp-patches/...-mtp-sidecar-probe.patch`) and rebuild the probe.
 ```
 
-Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1` and `PAYLOAD_SAMPLE_BYTES=N`.
+Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1`, `PAYLOAD_SAMPLE_BYTES=N`, and `CUDACXX=/abs/path/to/nvcc` (auto-detects `nvcc` when unset).
 
 Notes:
 

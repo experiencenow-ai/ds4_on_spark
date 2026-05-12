@@ -5,6 +5,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+static const char *DS4_CONFIG_KEYS[] =
+{
+	"log_level",
+	"enable_cuda",
+	"cuda_device",
+	"arena_size",
+	"cuda_arena_size",
+	"log_ring_entries",
+};
+
 int32_t ds4_config_diag_init(ds4_config_diag_t *d)
 {
 	if ( d == 0 )
@@ -57,6 +67,23 @@ int32_t ds4_config_diag_format(const ds4_config_diag_t *d,char *out,int32_t cap)
 	if ( n >= cap )
 		return(-4);
 	return(n);
+}
+
+int32_t ds4_config_known_key_count(int32_t *out_count)
+{
+	if ( out_count == 0 )
+		return(-1);
+	*out_count = (int32_t)(sizeof(DS4_CONFIG_KEYS) / sizeof(DS4_CONFIG_KEYS[0]));
+	return(0);
+}
+
+const char *ds4_config_known_key(int32_t idx)
+{
+	int32_t count;
+	count = (int32_t)(sizeof(DS4_CONFIG_KEYS) / sizeof(DS4_CONFIG_KEYS[0]));
+	if ( idx < 0 || idx >= count )
+		return(0);
+	return(DS4_CONFIG_KEYS[idx]);
 }
 
 static void ds4_config_diag_set(ds4_config_diag_t *d,int32_t stage,int32_t line,int32_t err,int32_t unknown)

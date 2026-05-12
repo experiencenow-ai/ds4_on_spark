@@ -97,6 +97,17 @@ REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 AL
 scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 ```
 
+To reproduce against the original observed fork revision (`9222e55`), set
+`LLAMA_COMMIT=9222e55` (the runner selects/uploads the matching patch file and
+injects `LLAMA_COMMIT` into the Spark-side env unless you already set it):
+
+```bash
+LLAMA_COMMIT=9222e55 \
+REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
+REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1' \
+scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
+```
+
 This runner writes additional artifacts next to the Markdown report:
 
 - `contract_probe.json`: full Python contract probe JSON (when parseable)

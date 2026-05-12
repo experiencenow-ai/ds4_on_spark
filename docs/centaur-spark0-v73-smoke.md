@@ -152,6 +152,21 @@ For a fuller bug-report checklist and sanitization guidance, see:
 
 - `docs/centaur-bug-report.md`
 
+## Known-good evidence (Spark0 v73 PASS)
+
+The repo includes one sanitized, commit-safe Spark0 v73 smoke artifact bundle:
+
+- Run id: `20260512T030829Z`
+- Zip: `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
+  - `zip_sha256`: `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
+  - `decomposer_version`: `centaur-impl-0.68`
+- Spark0 python: `Python 3.12.3` (`aarch64`, Ubuntu `6.17.0-1014-nvidia`)
+- Spark0 deps (pip): `numpy==2.4.4`, `scipy==1.17.1`, `scikit-learn==1.8.0`
+- Bundle path:
+  - `fixtures/centaur-smoke/spark0-v73/20260512T030829Z/`
+
+The bundle contains `smoke.log`, `effective_manifests/`, `hyor_effective/`, and `hyor_dashboard/`.
+
 ## Bug triage: Centaur vs DS4 runtime
 
 When something fails, label it explicitly:

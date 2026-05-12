@@ -135,7 +135,7 @@ right_index()
 
 i=0
 while [ "$i" -lt "$node_count" ]; do
-	eval "s$i=\$workdir/spark$i"
+	eval "s_$i=\$workdir/spark$i"
 	i=$((i + 1))
 done
 

@@ -96,6 +96,23 @@ if(DS4_ENABLE_TESTS)
 		tests/test_gguf.c
 		tests/test_log_ring.c
 	)
+	add_library(ds4_headers_smoke OBJECT
+		tests/header_smoke_arena.c
+		tests/header_smoke_common.c
+		tests/header_smoke_config.c
+		tests/header_smoke_cuda.c
+		tests/header_smoke_cuda_arena.c
+		tests/header_smoke_ds4.c
+		tests/header_smoke_gguf.c
+		tests/header_smoke_log.c
+		tests/header_smoke_log_ring.c
+		tests/header_smoke_pool.c
+		tests/header_smoke_ring.c
+		tests/header_smoke_str.c
+	)
+	target_link_libraries(ds4_headers_smoke PRIVATE ds4)
+	ds4_target_warnings(ds4_headers_smoke ${DS4_WERROR})
+	target_sources(ds4_tests PRIVATE $<TARGET_OBJECTS:ds4_headers_smoke>)
 	target_link_libraries(ds4_tests PRIVATE ds4)
 	ds4_target_warnings(ds4_tests ${DS4_WERROR})
 	ds4_target_sanitizers(ds4_tests ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
@@ -114,6 +131,12 @@ if(DS4_ENABLE_TESTS)
 			COMMAND "${CMAKE_COMMAND}"
 				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
 				-DDS4_MODE=dump_config_overrides
+				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
+		)
+		add_test(NAME ds4_cli_smoke_dump_config_keys
+			COMMAND "${CMAKE_COMMAND}"
+				-DDS4_CLI_PATH=$<TARGET_FILE:ds4_cli>
+				-DDS4_MODE=dump_config_keys
 				-P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4_cli_smoke_test.cmake"
 		)
 		add_test(NAME ds4_cli_smoke_ctx

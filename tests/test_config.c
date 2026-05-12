@@ -53,12 +53,25 @@ int32_t test_config(void)
 	char path[64];
 	char env_path[96];
 	char out[128];
+	const char *k0;
 	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
-	int32_t unknown;
+	int32_t unknown,key_count;
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
+	key_count = -1;
+	if ( ds4_config_known_key_count(&key_count) < 0 )
+		return(-1812);
+	if ( key_count < 6 )
+		return(-1813);
+	if ( ds4_config_known_key(-1) != 0 )
+		return(-1814);
+	if ( ds4_config_known_key(key_count) != 0 )
+		return(-1815);
+	k0 = ds4_config_known_key(0);
+	if ( k0 == 0 || strcmp(k0,"log_level") != 0 )
+		return(-1816);
 	if ( ds4_config_validate(&cfg) < 0 )
 		return(-1800);
 	cfg.log_level = -1;

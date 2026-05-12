@@ -55,6 +55,14 @@ def run_runtime_trace_mtp_ablation(
     starvation_ms: float = 50.0,
     trace_derive_cost_scale: str = "none",
     trace_speedup: float = 1.0,
+    mtp_draft_len: int = -1,
+    mtp_accept_model: str = "geom",
+    mtp_accept_hist: Sequence[float] = (),
+    mtp_accept_prob: float = 0.0,
+    mtp_accept_decay: float = 1.0,
+    mtp_draft_cost_scale: float = 0.25,
+    mtp_verify_per_draft_cost_scale: float = 0.0,
+    mtp_draft_attempt_policy: str = "full",
     dflash_draft_len: int = -1,
     dflash_draft_cost_scale: Optional[float] = None,
 ) -> Dict[str, Any]:
@@ -92,12 +100,20 @@ def run_runtime_trace_mtp_ablation(
     if any_dflash and dflash_draft_cost_scale is not None:
         meta["dflash_draft_cost_scale"] = float(dflash_draft_cost_scale)
 
-    mtp_draft_len = 0
+    mtp_draft_len_req = int(mtp_draft_len)
+    mtp_draft_len_inferred = 0
+    mtp_mode = "none"
     if any_mtp:
         inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
         if inferred_mtp_draft_len is None or int(inferred_mtp_draft_len) <= 0:
             raise ValueError("runtime trace ablation requires meta.mtp_draft_len, accepted_mtp+rejected_mtp, or mtp_accept_len in the trace")
-        mtp_draft_len = int(inferred_mtp_draft_len)
+        mtp_draft_len_inferred = int(inferred_mtp_draft_len)
+        mtp_mode = "trace"
+    elif mtp_draft_len_req > 0:
+        mtp_draft_len_inferred = int(mtp_draft_len_req)
+        mtp_mode = "synthetic"
+
+    mtp_draft_len_out = int(mtp_draft_len_inferred)
 
     k_mode = "trace" if _trace_has_full_k(trace) else "controller"
     dflash_cost_scale = 0.0
@@ -126,12 +142,19 @@ def run_runtime_trace_mtp_ablation(
         k_mode=str(k_mode),
         k_signal="global",
         sim_seed=123,
-        mtp_draft_len=int(mtp_draft_len),
+        mtp_draft_len=int(mtp_draft_len_out),
+        mtp_accept_model=str(mtp_accept_model),
+        mtp_accept_hist=tuple(float(x) for x in mtp_accept_hist),
+        mtp_accept_prob=float(mtp_accept_prob),
+        mtp_accept_decay=float(mtp_accept_decay),
+        mtp_draft_cost_scale=float(mtp_draft_cost_scale),
+        mtp_verify_per_draft_cost_scale=float(mtp_verify_per_draft_cost_scale),
+        mtp_draft_attempt_policy=str(mtp_draft_attempt_policy),
         dflash_draft_len=int(meta.get("dflash_draft_len", -1)) if any_dflash else -1,
         dflash_draft_cost_scale=float(dflash_cost_scale) if any_dflash else 0.0,
     )
 
-    trace_summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=int(mtp_draft_len), meta=meta)
+    trace_summary = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=int(mtp_draft_len_out), meta=meta)
 
     trace_sched = scheduler_sim.strip_trace_mtp_fields(trace)
     cfg_sched = dataclasses.replace(base_cfg, mtp_draft_len=0)
@@ -173,6 +196,7 @@ def run_runtime_trace_mtp_ablation(
         "name": "runtime_trace_mtp_ablation",
         "trace_summary": trace_summary,
         "base_cfg": dataclasses.asdict(base_cfg),
+        "mtp_mode": str(mtp_mode),
         "scheduler_sweeps": {
             "arrival_units_steps": scheduler_sim.compare_simulation_summaries(cfg_sched, trace_sched, sched_variants, arrival_units="steps"),
         },
@@ -226,7 +250,7 @@ def run_runtime_trace_mtp_ablation(
             return(str(batch_key))
         return(str(fallback_key))
 
-    evidence: Dict[str, Any] = {"mtp": {"present": bool(any_mtp)}, "expert_queueing": {"present": True}}
+    evidence: Dict[str, Any] = {"mtp": {"present": bool(any_mtp), "mode": str(mtp_mode)}, "expert_queueing": {"present": True}}
 
     sweep_steps = out["scheduler_sweeps"]["arrival_units_steps"]
     sweep_base = _sweep_baseline_summary(sweep_steps) if isinstance(sweep_steps, dict) else {}
@@ -293,7 +317,7 @@ def run_runtime_trace_mtp_ablation(
         else:
             evidence["expert_queueing"] = {"present": True, "note": "No scheduler variants produced comparable summaries."}
 
-    if int(mtp_draft_len) <= 0:
+    if int(mtp_draft_len_out) <= 0:
         out["note"] = "Trace has no MTP counters; skipping mtp_off ablation."
         if any_dflash:
             cfg_no_mtp = dataclasses.replace(base_cfg, mtp_draft_len=0)
@@ -361,11 +385,13 @@ def run_runtime_trace_mtp_ablation(
 
     evidence["mtp"] = {
         "present": True,
+        "mode": str(mtp_mode),
         "service_slot_ms_per_output_token_ratio_vs_mtp_off": float(ratio),
         "mtp_accept_rate": float(_as_float(base_sum, "mtp_accept_rate")),
         "mtp_mean_accept_len": float(_as_float(base_sum, "mtp_mean_accept_len")),
-        "supported_by_trace_counters": bool(supported),
-        "reason": str(reason),
+        "supported_by_trace_counters": bool(supported) if any_mtp else False,
+        "supported_by_synthetic_model": bool(supported) if (not any_mtp and str(mtp_mode) == "synthetic") else False,
+        "reason": str(reason) if any_mtp else f"Synthetic MTP model (no trace counters): {str(reason)}",
         "delta_vs_mtp_off": {
             str(drop_key): float(_delta(off_sum, base_sum, drop_key)),
             str(lat_key): float(_delta(off_sum, base_sum, lat_key)),
@@ -1267,6 +1293,14 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--expert-parallelism", type=int, default=1)
     p.add_argument("--service-ms", type=float, default=1.0)
     p.add_argument("--starvation-ms", type=float, default=50.0)
+    p.add_argument("--mtp-draft-len", type=int, default=-1, help="Optional: enable synthetic MTP ablation when the trace has no MTP counters (>=1), or override inferred draft length (-1 = infer when present, else disabled).")
+    p.add_argument("--mtp-accept-model", type=str, default="geom", choices=("geom", "hist"))
+    p.add_argument("--mtp-accept-hist", type=str, default="", help="When --mtp-accept-model=hist, comma-separated probabilities for accept_len=1..draft_len+1.")
+    p.add_argument("--mtp-accept-prob", type=float, default=0.0)
+    p.add_argument("--mtp-accept-decay", type=float, default=1.0)
+    p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25)
+    p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0)
+    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", choices=("full", "stop_at_reject"))
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Optional: override/inject meta.dflash_draft_len for runtime-trace comparator accounting (-1 = keep/infer).")
     p.add_argument("--dflash-draft-cost-scale", type=float, default=-1.0, help="Optional: draft-cost multiplier for the speculative-decoding comparator (-1 = use meta if present, 0 = disable overhead adjustment).")
     return(p.parse_args(argv))
@@ -1290,6 +1324,13 @@ def main(argv: List[str] | None = None) -> int:
         dflash_cost_scale: Optional[float] = None
         if float(args.dflash_draft_cost_scale) >= 0.0:
             dflash_cost_scale = float(args.dflash_draft_cost_scale)
+        mtp_hist: List[float] = []
+        if str(args.mtp_accept_hist).strip() != "":
+            for tok in str(args.mtp_accept_hist).split(","):
+                tok = tok.strip()
+                if tok == "":
+                    continue
+                mtp_hist.append(float(tok))
         out = run_runtime_trace_mtp_ablation(
             trace=trace,
             trace_meta=meta,
@@ -1299,6 +1340,14 @@ def main(argv: List[str] | None = None) -> int:
             starvation_ms=float(args.starvation_ms),
             trace_derive_cost_scale=str(args.trace_derive_cost_scale),
             trace_speedup=float(args.trace_speedup),
+            mtp_draft_len=int(args.mtp_draft_len),
+            mtp_accept_model=str(args.mtp_accept_model),
+            mtp_accept_hist=mtp_hist,
+            mtp_accept_prob=float(args.mtp_accept_prob),
+            mtp_accept_decay=float(args.mtp_accept_decay),
+            mtp_draft_cost_scale=float(args.mtp_draft_cost_scale),
+            mtp_verify_per_draft_cost_scale=float(args.mtp_verify_per_draft_cost_scale),
+            mtp_draft_attempt_policy=str(args.mtp_draft_attempt_policy),
             dflash_draft_len=int(args.dflash_draft_len),
             dflash_draft_cost_scale=dflash_cost_scale,
         )
