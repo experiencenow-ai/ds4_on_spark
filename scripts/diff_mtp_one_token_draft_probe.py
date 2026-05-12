@@ -111,9 +111,9 @@ def diff_one_token_mtp_probes(
 
 	# Optional debug captures: compare any `*_fnv64` captures when present in either probe.
 	# This lets new intermediate captures be added without patching this script.
-	prefixes = sorted(_capture_prefixes(a) | _capture_prefixes(b))
-	if not prefixes:
-		prefixes = list(DEFAULT_CAPTURE_KEYS)
+	found_prefixes = sorted(_capture_prefixes(a) | _capture_prefixes(b))
+	using_default_prefixes = (len(found_prefixes) == 0)
+	prefixes = found_prefixes if found_prefixes else list(DEFAULT_CAPTURE_KEYS)
 
 	for prefix in prefixes:
 		fnv_key = f"{prefix}_fnv64"
@@ -122,7 +122,9 @@ def diff_one_token_mtp_probes(
 
 		fnv_a, fnv_b = _get(a, fnv_key), _get(b, fnv_key)
 		if fnv_a is None and fnv_b is None:
-			if require_capture_match:
+			if require_capture_match and using_default_prefixes:
+				out["mismatches"].append({"key": fnv_key, "a": None, "b": None, "reason": "missing_both"})
+			elif require_capture_match:
 				out["notes"].append(f"capture missing in both probes: {prefix}")
 			continue
 

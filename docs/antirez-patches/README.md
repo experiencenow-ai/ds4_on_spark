@@ -15,6 +15,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Purpose:
     - fix CUDA weight-cache keying so cached ranges are keyed by `(model_map, fd, offset)` (not just `offset`)
     - avoids trunk/sidecar cache collisions when `DS4_CUDA_WEIGHT_CACHE=1` (or when fd-caching is enabled)
+    - keeps the largest cached mapping per key to avoid cache thrash on repeated partial range requests
 
 Apply (example):
 

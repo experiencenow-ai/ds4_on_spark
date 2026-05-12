@@ -34,6 +34,27 @@ def get_scale_min_k4(j: int, scales: bytes) -> tuple[int, int]:
     return d, m
 
 
+def unpack_scales_mins_k4(scales: bytes) -> tuple[list[int], list[int]]:
+    if len(scales) != 12:
+        raise ValueError("expected scales[12]")
+
+    d = [0] * 8
+    m = [0] * 8
+
+    # Indices 0..3: low 6 bits are stored directly.
+    for j in range(4):
+        d[j] = int(scales[j] & 63)
+        m[j] = int(scales[j + 4] & 63)
+
+    # Indices 4..7: low 4 bits come from scales[8..11], high 2 bits are packed
+    # into the top two bits of the earlier bytes.
+    for j in range(4, 8):
+        d[j] = int((scales[j + 4] & 0x0F) | (((scales[j - 4] >> 6) & 0x03) << 4))
+        m[j] = int((scales[j + 4] >> 4) | (((scales[j - 0] >> 6) & 0x03) << 4))
+
+    return d, m
+
+
 def ggml_dequantize_row_q4_k(scales: bytes, qs: bytes, d_bits: int, dmin_bits: int) -> list[float]:
     if len(scales) != 12:
         raise ValueError("expected scales[12]")
@@ -72,16 +93,16 @@ def cuda_style_dot_q4_k(scales: bytes, qs: bytes, d_bits: int, dmin_bits: int, x
     d = f16_to_f32(d_bits)
     mn = f16_to_f32(dmin_bits)
 
+    d_scales, m_scales = unpack_scales_mins_k4(scales)
+
     acc = 0.0
     q_off = 0
     is_ = 0
     for j in range(0, QK_K, 64):
-        sc, m = get_scale_min_k4(is_ + 0, scales)
-        d1 = d * float(sc)
-        m1f = mn * float(m)
-        sc, m = get_scale_min_k4(is_ + 1, scales)
-        d2 = d * float(sc)
-        m2f = mn * float(m)
+        d1 = d * float(d_scales[is_ + 0])
+        m1f = mn * float(m_scales[is_ + 0])
+        d2 = d * float(d_scales[is_ + 1])
+        m2f = mn * float(m_scales[is_ + 1])
         q = qs[q_off : q_off + 32]
         for l, b in enumerate(q):
             acc += (d1 * float(b & 0xF) - m1f) * x[j + l]
@@ -108,6 +129,15 @@ def main() -> int:
         d_bits = rng.getrandbits(16)
         dmin_bits = rng.getrandbits(16)
         x = [rng.uniform(-3.0, 3.0) for _ in range(QK_K)]
+
+        # Cross-check the two scale/min unpacking paths for every random block.
+        d_scales, m_scales = unpack_scales_mins_k4(scales)
+        for j in range(8):
+            gd, gm = get_scale_min_k4(j, scales)
+            if (gd != d_scales[j]) or (gm != m_scales[j]):
+                raise SystemExit(
+                    f"scale unpack mismatch j={j} get=({gd},{gm}) unpack=({d_scales[j]},{m_scales[j]})"
+                )
 
         w = ggml_dequantize_row_q4_k(scales, qs, d_bits, dmin_bits)
         ref = sum(w[i] * x[i] for i in range(QK_K))

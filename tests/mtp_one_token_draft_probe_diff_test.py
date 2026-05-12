@@ -56,3 +56,15 @@ class MtpOneTokenProbeDiffTest(unittest.TestCase):
 		errors = res.get("errors") or []
 		self.assertTrue(any("not a 16-nybble" in str(e) for e in errors))
 
+	def test_diff_fails_when_no_capture_keys_present(self) -> None:
+		a = _base_probe()
+		b = _base_probe()
+		for k in list(a.keys()):
+			if k.endswith("_fnv64") or k.endswith("_nbytes") or k.endswith("_shape"):
+				a.pop(k, None)
+				b.pop(k, None)
+		res = diff.diff_one_token_mtp_probes(a, b)
+		self.assertFalse(bool(res.get("ok", True)))
+		mismatches = res.get("mismatches") or []
+		keys = [m.get("key") for m in mismatches]
+		self.assertIn("trunk_token_embd_fnv64", keys)

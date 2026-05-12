@@ -75,6 +75,7 @@ By default this requires:
   - `mtp_stub_input_hc_*` / `mtp_stub_head_norm_*`
 
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
+The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.
 
 ## Spark runner (llama.cpp skeleton patch; available now)
 
