@@ -267,13 +267,13 @@ Account authentication is now fixed. The Mac public key is installed in
 
 ## If Account Auth Needs Reset Again
 
-On the Spark local console, reset the account password and reinstall the Mac key.
+Human-only (requires local console + admin privileges; do not run from automation loops): reset the account password and reinstall the Mac key.
 
 ```bash
-sudo passwd spark0
+passwd spark0
 mkdir -p ~spark0/.ssh
-sudo chown spark0:spark0 ~spark0/.ssh
-sudo chmod 700 ~spark0/.ssh
+chown spark0:spark0 ~spark0/.ssh
+chmod 700 ~spark0/.ssh
 ```
 
 Then from the Mac:
@@ -285,10 +285,10 @@ ssh spark0@aitopatom-9ab9.local hostname
 
 ## Optional Wired IPv4 Alias On Mac
 
-To make the Spark wired IPv4 reachable directly from the Mac wired port:
+Human-only (requires Mac admin privileges; do not run from automation loops): make the Spark wired IPv4 reachable directly from the Mac wired port.
 
 ```bash
-sudo ifconfig en0 inet <mac-wired-ipv4> netmask 255.255.255.0 alias
+ifconfig en0 inet <mac-wired-ipv4> netmask 255.255.255.0 alias
 ping <spark-wired-ipv4>
 ssh spark0@<spark-wired-ipv4> hostname
 ```
