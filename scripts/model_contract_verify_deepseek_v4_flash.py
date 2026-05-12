@@ -1361,6 +1361,61 @@ def main() -> int:
 							failures.append(Failure(105, f"contract summary transformers_mtp_layer_types[{j}] mismatch (got {tf_mtp[j]!r} expected {want!r}): {contract_summary}"))
 							break
 
+			def ratio_kind(r: int) -> str:
+				if r == 0:
+					return("sliding")
+				if r == 4:
+					return("csa")
+				if r == 128:
+					return("hca")
+				return("unknown")
+
+			main_kind_map = attn.get("main_layer_type_by_layer_id", None)
+			if not isinstance(main_kind_map, dict) or len(main_kind_map) != n_layers:
+				failures.append(Failure(154, f"contract summary attention_schedule.main_layer_type_by_layer_id must be an object with n_layers={n_layers} entries: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:n_layers]):
+					want = ratio_kind(int(r))
+					if want == "unknown":
+						failures.append(Failure(155, f"unexpected trunk compress_ratio {r!r} at layer {i}: {contract_summary}"))
+						break
+					got = main_kind_map.get(str(i))
+					if got != want:
+						failures.append(Failure(156, f"contract summary attention_schedule.main_layer_type_by_layer_id[{i}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+						break
+
+			main_ratio_map = attn.get("main_compress_ratio_by_layer_id", None)
+			if not isinstance(main_ratio_map, dict) or len(main_ratio_map) != n_layers:
+				failures.append(Failure(157, f"contract summary attention_schedule.main_compress_ratio_by_layer_id must be an object with n_layers={n_layers} entries: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:n_layers]):
+					got = main_ratio_map.get(str(i))
+					if got != int(r):
+						failures.append(Failure(158, f"contract summary attention_schedule.main_compress_ratio_by_layer_id[{i}] mismatch (got {got!r} expected {int(r)!r}): {contract_summary}"))
+						break
+
+			full_kind_map = attn.get("layer_type_by_layer_id", None)
+			full_ratio_map = attn.get("compress_ratio_by_layer_id", None)
+			want_total = int(n_layers + n_mtp_layers)
+			if not isinstance(full_kind_map, dict) or len(full_kind_map) != want_total:
+				failures.append(Failure(159, f"contract summary attention_schedule.layer_type_by_layer_id must be an object with n_layers+n_mtp_layers={want_total} entries: {contract_summary}"))
+			elif not isinstance(full_ratio_map, dict) or len(full_ratio_map) != want_total:
+				failures.append(Failure(160, f"contract summary attention_schedule.compress_ratio_by_layer_id must be an object with n_layers+n_mtp_layers={want_total} entries: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:want_total]):
+					got_kind = full_kind_map.get(str(i))
+					got_ratio = full_ratio_map.get(str(i))
+					want_kind = ratio_kind(int(r))
+					if want_kind == "unknown":
+						failures.append(Failure(161, f"unexpected compress_ratio {r!r} at layer_id {i}: {contract_summary}"))
+						break
+					if got_kind != want_kind:
+						failures.append(Failure(162, f"contract summary attention_schedule.layer_type_by_layer_id[{i}] mismatch (got {got_kind!r} expected {want_kind!r}): {contract_summary}"))
+						break
+					if got_ratio != int(r):
+						failures.append(Failure(163, f"contract summary attention_schedule.compress_ratio_by_layer_id[{i}] mismatch (got {got_ratio!r} expected {int(r)!r}): {contract_summary}"))
+						break
+
 			moe = summary.get("moe", {}) if isinstance(summary, dict) else {}
 			if isinstance(moe, dict):
 				tf_mlp = moe.get("transformers_mlp_layer_types", None)

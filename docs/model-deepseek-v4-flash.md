@@ -126,7 +126,7 @@ Key JSON paths by concern:
 
 - Topology (layers/hidden/heads/vocab): `topology.*`
 - Sliding/CSA/HCA schedule: `attention_schedule.main_compress_ratios` + `attention_schedule.mtp_compress_ratios` (raw upstream array: `attention_schedule.compress_ratios`), `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
-  - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type` and `attention_schedule.main_layer_ids_by_compress_ratio`
+  - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type`, `attention_schedule.main_layer_ids_by_compress_ratio`, plus direct maps `attention_schedule.main_layer_type_by_layer_id` / `attention_schedule.main_compress_ratio_by_layer_id` and the full (main+MTP) maps `attention_schedule.layer_type_by_layer_id` / `attention_schedule.compress_ratio_by_layer_id`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
 - Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
