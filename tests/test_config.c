@@ -279,6 +279,59 @@ int32_t test_config(void)
 		return(-209);
 	if ( strcmp(out,"stage=mem line=2 err=-11 unknown=1") != 0 )
 		return(-210);
+	unsetenv("DS4_CONFIG_PATH");
+	unsetenv("DS4_CONFIG");
+	if ( setenv("DS4_CONFIG",(const char *)env_cfg_unknown0,1) != 0 )
+		return(-2150);
+	unknown = -1;
+	ds4_config_diag_init(&diag);
+	if ( ds4_config_load_auto_ex_diag(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown,&diag) >= 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2151);
+	}
+	if ( unknown != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2152);
+	}
+	if ( diag.stage != DS4_CONFIG_DIAG_STAGE_ENV_CONFIG )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2153);
+	}
+	if ( diag.line != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2154);
+	}
+	if ( diag.err != -11 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2155);
+	}
+	if ( diag.unknown != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2156);
+	}
+	if ( strcmp(ds4_config_diag_stage_name(diag.stage),"env_config") != 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2157);
+	}
+	n = ds4_config_diag_format(&diag,out,(int32_t)sizeof(out));
+	if ( n < 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2158);
+	}
+	if ( strcmp(out,"stage=env_config line=1 err=-11 unknown=1") != 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2159);
+	}
+	unsetenv("DS4_CONFIG");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-101);
 	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )
