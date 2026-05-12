@@ -186,6 +186,29 @@ class JudgeEloTest(unittest.TestCase):
         )
         self.assertFalse(rec.get("parse_valid", True))
 
+    def test_validate_decision_cli_ok(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_validate_decision.py")
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "judge.txt")
+            decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("LEAD\n" + json.dumps(decision, separators=(",", ":")) + "\nTRAIL\n")
+            res = subprocess.run(["python3", script, "--in", path], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 0)
+            out = json.loads(res.stdout.strip())
+            self.assertEqual(out.get("winner"), "tie")
+
+    def test_validate_decision_cli_bad(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_validate_decision.py")
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "judge.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("WINNER=A margin=2")
+            res = subprocess.run(["python3", script, "--in", path], capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 2)
+
     def test_parse_json_object_loose_extracts_first_object(self) -> None:
         decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
         text = "NOTE {not json}\n" + json.dumps(decision, separators=(",", ":"), ensure_ascii=False) + "\nTRAILING"

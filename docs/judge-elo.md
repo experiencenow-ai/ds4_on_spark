@@ -95,6 +95,12 @@ For harnesses, use `--format json` to emit a single JSON object with `{system,us
 Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_prompt_v1.schema.json`
 
+To validate raw judge output (extracting the first JSON object if wrapped in extra text), use:
+
+```bash
+python3 scripts/pairwise_judge_validate_decision.py --in <judge.txt>
+```
+
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 
 ```bash
