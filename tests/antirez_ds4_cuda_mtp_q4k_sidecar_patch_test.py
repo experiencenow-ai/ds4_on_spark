@@ -9,4 +9,3 @@ class AntirezDs4CudaMtpQ4kSidecarPatchTest(unittest.TestCase):
 			patch_text = f.read()
 		errors = verify.validate_patch_text(patch_text)
 		self.assertEqual(errors, [])
-

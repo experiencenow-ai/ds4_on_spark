@@ -6,7 +6,7 @@ This verifier is intentionally lightweight: it does not require cloning/building
 made the DeepSeek V4 Flash MTP sidecar usable on the Spark CUDA path:
 
 - prevent secondary (sidecar) maps from clobbering trunk CUDA map/fd-cache state
-- accept routed-MoE down experts in Q4_K and run a Q4_K dot fallback on CUDA
+- accept routed-MoE gate/up/down experts in Q4_K and run a Q4_K dot fallback on CUDA
 """
 
 from __future__ import annotations
@@ -43,16 +43,18 @@ def validate_patch_text(patch_text: str) -> list[str]:
 	required_substrings = [
 		"diff --git a/ds4.c b/ds4.c",
 		"diff --git a/ds4_cuda.cu b/ds4_cuda.cu",
-		"diff --git a/ds4_gpu.h b/ds4_gpu.h",
-		"ds4_gpu_set_model_map_range_secondary",
+		"e->mtp_ready && getenv(\"DS4_MTP_SET_MODEL_MAP\") != NULL",
 		"typedef struct {",
 		"} cuda_block_q4_K;",
-		"__device__ __forceinline__ static void dev_get_scale_min_k4(",
+		"__device__ __forceinline__ static uint32_t dev_u32le_load(",
+		"__device__ __forceinline__ static uint8_t dev_u32_byte(",
 		"__device__ static float dev_q4_K_dot_f32(",
+		"__global__ static void moe_gate_up_mid_q4_f32_kernel(",
 		"__global__ static void moe_down_q4_f32_kernel(",
-		"if (gate_type != 16u) return 0;",
-		"if (down_type != 10u && down_type != 12u) return 0;",
-		"if (down_type == 12u) {",
+		"const uint32_t fast_iq2_q2 = gate_type == 16u && down_type == 10u;",
+		"const uint32_t slow_q4 = gate_type == 12u && down_type == 12u;",
+		"if (!fast_iq2_q2 && !slow_q4) return 0;",
+		"moe_gate_up_mid_q4_f32_kernel<<<mgrid, 256>>>",
 		"moe_down_q4_f32_kernel<<<dgrid, 256>>>",
 	]
 
@@ -69,9 +71,10 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		if s not in patch_text:
 			errors.append(f"missing expected trunk-map guard marker: {s!r}")
 
-	# Guardrail: avoid adding more uses of the old map-range function in the sidecar callsite.
+	# Guardrail: the sidecar map call may stay available for explicit debugging, but it must be gated.
 	if any("ds4_gpu_set_model_map_range(e->mtp_model.map" in line for line in added_lines):
-		errors.append("found ds4_gpu_set_model_map_range(...) on an added line; expected secondary map setter")
+		if "DS4_MTP_SET_MODEL_MAP" not in patch_text:
+			errors.append("found MTP map-range setter without the explicit DS4_MTP_SET_MODEL_MAP debug gate")
 
 	return errors
 
@@ -93,4 +96,3 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
-
