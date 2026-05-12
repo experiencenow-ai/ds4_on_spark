@@ -26,6 +26,13 @@ In `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@9222e55`:
 
 Net: even after solving the “unknown architecture” error, the fork still needs *new functionality* (not just loader tweaks) to do MTP draft/verify.
 
+If you have a local checkout of the fork and want fast, grep-able pointers (with line numbers) to the relevant reuse points (HC mix, attention path, MoE, output head, NextN placeholders), run:
+
+```bash
+LLAMA_DIR=$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark \
+scripts/extract_llamacpp_deepseek4_mtp_reuse_points.sh
+```
+
 ## Key implementation reuse (kamnxt fork @ `9222e55`)
 
 The Spark/CUDA fork already contains the DeepSeek V4 hyper-connection building blocks that DS4’s MTP sidecar expects:
