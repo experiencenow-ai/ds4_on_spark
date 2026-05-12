@@ -210,6 +210,23 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(float(pt_given_family.get("mutual_info_bits", 0.0)), 0.31127812445913283, places=6)
         self.assertAlmostEqual(float(pt_given_family.get("mutual_info_norm", 0.0)), 0.3836885465963443, places=6)
 
+    def test_conditional_entropy_extra_axes_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_conditional_axes_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        cond = report.diversity.get("conditional") or {}
+        model_given_template = cond.get("model_id_given_prompt_template_id") or {}
+        self.assertAlmostEqual(float(model_given_template.get("conditional_entropy_bits", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(model_given_template.get("conditional_entropy_norm", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(model_given_template.get("mutual_info_bits", 0.0)), 0.0, places=6)
+
+        answer_given_family = cond.get("answer_given_task_family") or {}
+        self.assertAlmostEqual(float(answer_given_family.get("conditional_entropy_bits", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(answer_given_family.get("conditional_entropy_norm", 0.0)), 1.0, places=6)
+        self.assertAlmostEqual(float(answer_given_family.get("mutual_info_bits", 0.0)), 0.0, places=6)
+
     def test_judge_budget_metrics_from_fixture(self) -> None:
         root = _repo_root()
         path = os.path.join(root, "fixtures", "entropy-buffer", "records_judge_budget_mini.jsonl")

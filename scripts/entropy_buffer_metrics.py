@@ -565,6 +565,10 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     template_counts: Dict[str, int] = {}
     family_template_counts: Dict[str, int] = {}
     task_template_counts: Dict[str, int] = {}
+    template_model_counts: Dict[str, int] = {}
+    family_model_counts: Dict[str, int] = {}
+    template_answer_counts: Dict[str, int] = {}
+    family_answer_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answers: Dict[str, int] = {}
     tag_counts: Dict[str, int] = {}
@@ -672,6 +676,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             _inc(task_template_counts, f"{c.task_id}|{c.prompt_template_id}")
         _inc(model_counts, c.model_id)
         _inc(answers, c.answer)
+        if c.prompt_template_id != "" and c.model_id != "":
+            _inc(template_model_counts, f"{c.prompt_template_id}|{c.model_id}")
+        if c.task_family != "" and c.model_id != "":
+            _inc(family_model_counts, f"{c.task_family}|{c.model_id}")
+        if c.prompt_template_id != "" and c.answer != "":
+            _inc(template_answer_counts, f"{c.prompt_template_id}|{c.answer}")
+        if c.task_family != "" and c.answer != "":
+            _inc(family_answer_counts, f"{c.task_family}|{c.answer}")
         if c.answer != "":
             answers_nonempty.append(c.answer)
             answer_task_runs_nonempty += 1
@@ -1067,6 +1079,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "task_family_given_prompt_template_id": _pair_conditional_stats(_swap_pair_counts(family_template_counts)),
         "prompt_template_id_given_task_id": _pair_conditional_stats(task_template_counts),
         "task_id_given_prompt_template_id": _pair_conditional_stats(_swap_pair_counts(task_template_counts)),
+        "model_id_given_prompt_template_id": _pair_conditional_stats(template_model_counts),
+        "prompt_template_id_given_model_id": _pair_conditional_stats(_swap_pair_counts(template_model_counts)),
+        "model_id_given_task_family": _pair_conditional_stats(family_model_counts),
+        "task_family_given_model_id": _pair_conditional_stats(_swap_pair_counts(family_model_counts)),
+        "answer_given_prompt_template_id": _pair_conditional_stats(template_answer_counts),
+        "prompt_template_id_given_answer": _pair_conditional_stats(_swap_pair_counts(template_answer_counts)),
+        "answer_given_task_family": _pair_conditional_stats(family_answer_counts),
+        "task_family_given_answer": _pair_conditional_stats(_swap_pair_counts(family_answer_counts)),
     }
 
     word_counts: Dict[str, int] = {}
