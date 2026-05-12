@@ -166,6 +166,12 @@ export RING_RUN_ID="<run_id>"
 sh ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh --mode sim
 ```
 
+To fetch a small sanitized ring-sim bundle (log + effective manifests + effective view) back to your Mac:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
 ## Next step (when Spark1/2 hardware exists)
 
 Decide one of:

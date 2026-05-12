@@ -1,0 +1,538 @@
+== ring sim workdir ==
+/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z
+node_count=3
+== centaur package facts ==
+Python 3.12.3
+decomposer_version: centaur-impl-0.68
+== pip freeze (sanitized) ==
+joblib==1.5.3
+numpy==2.4.4
+scikit-learn==1.8.0
+scipy==1.17.1
+threadpoolctl==3.6.0
+== init roots ==
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/controller/.centaur/hyor_distribution/state.json",
+  "selectors": {},
+  "status": "success"
+}
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0/.centaur/hyor_distribution/state.json",
+  "selectors": {},
+  "status": "success"
+}
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1/.centaur/hyor_distribution/state.json",
+  "selectors": {},
+  "status": "success"
+}
+{
+  "distribution_present": true,
+  "format": "centaur-hyor-distribution-v1",
+  "layer_counts": {},
+  "manifest_count": 0,
+  "object_bytes": 0,
+  "object_count": 0,
+  "path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2/.centaur/hyor_distribution/state.json",
+  "selectors": {},
+  "status": "success"
+}
+== publish baseline + node_type from controller ==
+{
+  "entry_count": 1,
+  "format": "centaur-hyor-distribution-manifest-v1",
+  "layer": "baseline",
+  "manifest_hash": "sha256:733075e353e32dd87e77a61e6238d1094dfd001d6f8e6a2e8848f4c5123adbdc",
+  "manifest_id": "baseline-all-733075e353e32dd87e77",
+  "path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/controller/.centaur/hyor_distribution/manifests/baseline-all-733075e353e32dd87e77.json",
+  "selector": "all",
+  "status": "success"
+}
+{
+  "entry_count": 1,
+  "format": "centaur-hyor-distribution-manifest-v1",
+  "layer": "node_type",
+  "manifest_hash": "sha256:fbcf97014785a7690aa99aa3d457731f4bd1bfbfa34b482698715aac14349a31",
+  "manifest_id": "node_type-default-fbcf97014785a7690aa9",
+  "path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/controller/.centaur/hyor_distribution/manifests/node_type-default-fbcf97014785a7690aa9.json",
+  "selector": "default",
+  "status": "success"
+}
+== ring step (metadata) ==
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 0
+      },
+      "scope": "metadata",
+      "side": "left"
+    },
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 0
+      },
+      "scope": "metadata",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/controller",
+  "scope": "metadata",
+  "status": "success",
+  "total": {
+    "copied": 4,
+    "missing": 0,
+    "skipped": 4
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+      "pull": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 0
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 0
+      },
+      "scope": "metadata",
+      "side": "left"
+    },
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "metadata",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0",
+  "scope": "metadata",
+  "status": "success",
+  "total": {
+    "copied": 2,
+    "missing": 0,
+    "skipped": 4
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "metadata",
+      "side": "left"
+    },
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "metadata",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+  "scope": "metadata",
+  "status": "success",
+  "total": {
+    "copied": 0,
+    "missing": 0,
+    "skipped": 8
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "metadata",
+      "side": "left"
+    },
+    {
+      "copy_objects": false,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "metadata",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+  "scope": "metadata",
+  "status": "success",
+  "total": {
+    "copied": 0,
+    "missing": 0,
+    "skipped": 8
+  }
+}
+== ring step (effective) ==
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "effective",
+      "side": "left"
+    },
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 2
+      },
+      "scope": "effective",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/controller",
+  "scope": "effective",
+  "status": "success",
+  "total": {
+    "copied": 4,
+    "missing": 0,
+    "skipped": 12
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+      "pull": {
+        "copied": 2,
+        "missing": 0,
+        "skipped": 2
+      },
+      "push": {
+        "copied": 0,
+        "missing": 2,
+        "skipped": 2
+      },
+      "scope": "effective",
+      "side": "left"
+    },
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "scope": "effective",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0",
+  "scope": "effective",
+  "status": "success",
+  "total": {
+    "copied": 2,
+    "missing": 2,
+    "skipped": 12
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "scope": "effective",
+      "side": "left"
+    },
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "scope": "effective",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+  "scope": "effective",
+  "status": "success",
+  "total": {
+    "copied": 0,
+    "missing": 0,
+    "skipped": 16
+  }
+}
+{
+  "format": "centaur-hyor-distribution-v1",
+  "peer_count": 2,
+  "peers": [
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark1",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "scope": "effective",
+      "side": "left"
+    },
+    {
+      "copy_objects": true,
+      "peer_root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark0",
+      "pull": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "push": {
+        "copied": 0,
+        "missing": 0,
+        "skipped": 4
+      },
+      "scope": "effective",
+      "side": "right"
+    }
+  ],
+  "root": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/spark2",
+  "scope": "effective",
+  "status": "success",
+  "total": {
+    "copied": 0,
+    "missing": 0,
+    "skipped": 16
+  }
+}
+== effective manifests (non-controller nodes) ==
+{
+  "applied_layers": [
+    {
+      "entry_count": 1,
+      "layer": "baseline",
+      "manifest_id": "baseline-all-733075e353e32dd87e77",
+      "selector": "all"
+    },
+    {
+      "entry_count": 1,
+      "layer": "node_type",
+      "manifest_id": "node_type-default-fbcf97014785a7690aa9",
+      "selector": "default"
+    }
+  ],
+  "effective_hash": "sha256:82b7851a1a74bc25cae24b22f9b0c2b00c95cd533e2cb031567b9ce293a54417",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "generated_unix_us": 1778559133015494,
+  "manifest_ids": [
+    "baseline-all-733075e353e32dd87e77",
+    "node_type-default-fbcf97014785a7690aa9"
+  ],
+  "node_id": "spark1",
+  "node_type": "default",
+  "total_size_bytes": 19,
+  "version": 1
+}
+{
+  "applied_layers": [
+    {
+      "entry_count": 1,
+      "layer": "baseline",
+      "manifest_id": "baseline-all-733075e353e32dd87e77",
+      "selector": "all"
+    },
+    {
+      "entry_count": 1,
+      "layer": "node_type",
+      "manifest_id": "node_type-default-fbcf97014785a7690aa9",
+      "selector": "default"
+    }
+  ],
+  "effective_hash": "sha256:3b664df46618bf211da1bc9cbc4bf721211db060b35455b80b77314b8fb4ff8f",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "generated_unix_us": 1778559133273127,
+  "manifest_ids": [
+    "baseline-all-733075e353e32dd87e77",
+    "node_type-default-fbcf97014785a7690aa9"
+  ],
+  "node_id": "spark2",
+  "node_type": "default",
+  "total_size_bytes": 19,
+  "version": 1
+}
+== effective apply (non-controller nodes) ==
+{
+  "effective_hash": "sha256:d91943803b280bd7bc0304707e2b4d4b300dc668b9d320722ac1a66fd1fe8b39",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "manifest_count": 2,
+  "manifest_path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/effective/spark1/.centaur_effective_manifest.json",
+  "node_id": "spark1",
+  "node_type": "default",
+  "output_dir": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/effective/spark1",
+  "status": "success",
+  "written": [
+    "baseline.txt",
+    "model.txt"
+  ]
+}
+{
+  "effective_hash": "sha256:4f3d95175a17980e93e8e2abf14d6af7a1de98f98b6cdb7dbd034df3456a6c4c",
+  "file_count": 2,
+  "format": "centaur-hyor-distribution-effective-v1",
+  "manifest_count": 2,
+  "manifest_path": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/effective/spark2/.centaur_effective_manifest.json",
+  "node_id": "spark2",
+  "node_type": "default",
+  "output_dir": "/home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z/effective/spark2",
+  "status": "success",
+  "written": [
+    "baseline.txt",
+    "model.txt"
+  ]
+}
+== done ==
+workdir: /home/spark0/centaur-smoke/v73/ring_sim_spark12/run/20260512T041207Z

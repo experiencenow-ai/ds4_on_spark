@@ -19,3 +19,6 @@ These are not inputs, but they are intentionally bounded (no venvs, no zips, no 
 
 - Spark0 v73 smoke PASS (artifact bundle):
   - `fixtures/centaur-smoke/spark0-v73/20260512T030829Z/`
+
+- Spark12 v73 ring sim PASS (Spark0-local, artifact bundle):
+  - `fixtures/centaur-smoke/spark12-v73/ring_sim/20260512T041207Z/`
