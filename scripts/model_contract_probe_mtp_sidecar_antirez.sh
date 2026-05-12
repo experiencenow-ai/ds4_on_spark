@@ -9,7 +9,7 @@ set -euo pipefail
 # Override with:
 #   SIDECAR_URL=... ./scripts/model_contract_probe_mtp_sidecar_antirez.sh
 
-SIDECAR_URL="${SIDECAR_URL:-https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
+SIDECAR_URL="${SIDECAR_URL:-https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf}"
 SIDECAR_EXPECT_FILE_SIZE="${SIDECAR_EXPECT_FILE_SIZE:-3807602400}"
 PAYLOAD_SAMPLE_BYTES="${PAYLOAD_SAMPLE_BYTES:-64}"
 FINGERPRINT_GATE="${FINGERPRINT_GATE:-1}"
