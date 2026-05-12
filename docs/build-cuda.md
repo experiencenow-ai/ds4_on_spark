@@ -27,7 +27,7 @@ For kernel launches (or any void-returning CUDA statements compiled by NVCC), us
 
 - `DS4_CUDA_KERNEL_LAUNCH(kernel<<<grid,block,shared,stream>>>(...))`
 
-`DS4_CUDA_KERNEL_LAUNCH` returns a `ds4_cuda_status_t` and logs failures with the full callsite text.
+`DS4_CUDA_KERNEL_LAUNCH` returns a `ds4_cuda_status_t`. In CUDA-enabled builds it logs failures with the full callsite text.
 
 When DS4 is built CPU-only (`DS4_ENABLE_CUDA=OFF`), `DS4_CUDA_KERNEL_LAUNCH(...)` is still defined but always returns `DS4_CUDA_ERR_DISABLED`.
 
