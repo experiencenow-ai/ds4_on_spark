@@ -25,9 +25,7 @@ Spark commands run (from Mac; staged zip + streamed smoke):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID=20260512T073455Z
-sh ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export CENTAUR_RUN_ID=20260512T073455Z; sh -s" < ./scripts/centaur_spark0_v73_validate_artifacts.sh
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T073455Z
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@aitopatom-9ab9.local
 ```
 
 Sanitized bundle (commit-safe):
@@ -39,9 +37,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID=20260512T093838Z
-sh ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z/smoke.local.log
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export CENTAUR_RUN_ID=20260512T093838Z; sh -s" < ./scripts/centaur_spark0_v73_validate_artifacts.sh
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T093838Z "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T093838Z
 ```
 
 Local bundle path:
@@ -55,9 +51,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID=20260512T110824Z
-sh ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T110824Z/smoke.local.log
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export CENTAUR_RUN_ID=20260512T110824Z; sh -s" < ./scripts/centaur_spark0_v73_validate_artifacts.sh
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T110824Z "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T110824Z
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260512T110824Z
 ```
 
 Local bundle path:
@@ -71,9 +65,7 @@ Spark commands run (from Mac; streamed):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T074400Z
-sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@aitopatom-9ab9.local
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export RING_RUN_ID=20260512T074400Z; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
-sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T074400Z
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@aitopatom-9ab9.local
 ```
 
 Sanitized bundle (commit-safe):
@@ -85,9 +77,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T094444Z
-sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@aitopatom-9ab9.local
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export RING_RUN_ID=20260512T094444Z; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
-sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T094444Z
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73/ring_sim_spark12" /private/tmp/centaur-ring-sim/spark12-v73/20260512T094444Z
 ```
 
 Local bundle path:
@@ -99,9 +89,7 @@ Re-verified run (not checked in; artifacts fetched locally):
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export RING_RUN_ID=20260512T111132Z
-sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@aitopatom-9ab9.local "" /private/tmp/centaur-ring-sim/spark12-v73/20260512T111132Z/ring_sim.local.log
-ssh $SSH_OPTS spark0@aitopatom-9ab9.local "export RING_RUN_ID=20260512T111132Z; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
-sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@aitopatom-9ab9.local 20260512T111132Z
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73/ring_sim_spark12" /private/tmp/centaur-ring-sim/spark12-v73/20260512T111132Z
 ```
 
 Local bundle path:
