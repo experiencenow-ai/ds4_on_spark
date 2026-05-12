@@ -381,6 +381,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             complete = tc.get("complete")
             if kind is not None or complete is not None:
                 lines.append(f"- trunk_contract: kind={kind} complete={complete}")
+            ne_used = tc.get("nonexpert_key_lists_used")
+            ne_expected = tc.get("nonexpert_required_expected_count")
+            ne_missing = tc.get("nonexpert_required_missing_count")
+            if ne_expected is not None or ne_missing is not None or ne_used is not None:
+                lines.append(f"- trunk_contract_nonexpert: used={ne_used} missing={ne_missing}/{ne_expected}")
         mc = inspect.get("mtp_contract")
         if isinstance(mc, dict):
             checked = mc.get("checked")
@@ -390,6 +395,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if isinstance(reason, str) and reason.strip():
                     extra = f" reason={reason.strip()}"
                 lines.append(f"- mtp_contract: checked={checked}{extra}")
+            ne_used = mc.get("nonexpert_key_lists_used")
+            ne_expected = mc.get("nonexpert_required_expected_count")
+            ne_missing = mc.get("nonexpert_required_missing_count")
+            if ne_expected is not None or ne_missing is not None or ne_used is not None:
+                lines.append(f"- mtp_contract_nonexpert: used={ne_used} missing={ne_missing}/{ne_expected}")
         mns = inspect.get("mtp_namespace")
         if isinstance(mns, dict):
             has_mtp0 = mns.get("has_mtp0")
@@ -483,6 +493,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         "fattn_cuda_device0_only",
     )
     for k in extra_fattn_keys:
+        if k in summary_kv:
+            lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
+    reserve_keys = (
+        "sched_reserve_line_count",
+        "sched_reserve_graph_nodes",
+        "sched_reserve_graph_splits",
+        "sched_reserve_took_ms",
+    )
+    for k in reserve_keys:
         if k in summary_kv:
             lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
     if summary_kv.get("fattn_seen_disabled", ""):

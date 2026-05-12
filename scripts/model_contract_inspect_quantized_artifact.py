@@ -571,6 +571,7 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 	required_layer_suffixes = tk.get("required_layer_suffixes", None)
 	required_nonzero = tk.get("required_layer_suffixes_compress_ratio_nonzero", None)
 	required_ratio4 = tk.get("required_layer_suffixes_compress_ratio_4", None)
+	layer_required_nonexpert_keys_by_layer_id = tk.get("layer_required_nonexpert_keys_by_layer_id", None)
 
 	hash_gate_suffix = tk.get("hash_gate_tensor_key_suffix", "ffn.gate.tid2eid")
 	score_gate_suffix = tk.get("score_gate_tensor_key_suffix", "ffn.gate.bias")
@@ -608,6 +609,29 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 				missing_sample.append(key)
 
 		return note_missing, lambda: missing_count, lambda: missing_sample
+
+	def compute_nonexpert_missing_from_expanded_key_lists(note_total_missing: Callable[[str], None]) -> tuple[bool, int, int, list[str]]:
+		# Optional: when the contract includes explicit expanded per-layer required
+		# non-expert keys, use that for a precise "namespace preserved?" signal.
+		if not isinstance(layer_required_nonexpert_keys_by_layer_id, dict):
+			return (False, 0, 0, [])
+		expected_total = 0
+		missing = 0
+		missing_sample: list[str] = []
+		for i in range(n_layers_i):
+			keys = layer_required_nonexpert_keys_by_layer_id.get(str(i), None)
+			if not isinstance(keys, list) or not keys:
+				continue
+			for need in keys:
+				if not isinstance(need, str) or not need:
+					continue
+				expected_total += 1
+				if need not in weight_keys:
+					missing += 1
+					note_total_missing(need)
+					if len(missing_sample) < 20:
+						missing_sample.append(need)
+		return (True, int(expected_total), int(missing), missing_sample)
 
 	def compute_llamacpp_trunk_contract() -> dict[str, Any]:
 		# llama.cpp DeepSeek-V4 GGUFs typically use:
@@ -720,6 +744,7 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 	forbidden_present: set[str] = set()
 
 	note_missing, get_missing_count, get_missing_sample = note_missing_factory()
+	nonexpert_expanded_used, nonexpert_expected, nonexpert_missing, nonexpert_missing_sample = compute_nonexpert_missing_from_expanded_key_lists(note_missing)
 
 	has_compressor: list[bool] = [False for _ in range(n_layers_i)]
 	has_indexer: list[bool] = [False for _ in range(n_layers_i)]
@@ -755,48 +780,56 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 		except Exception:
 			ratio_i = 0
 
-		for suffix in required_layer_suffixes:
-			if not isinstance(suffix, str) or not suffix:
-				continue
-			need = prefix + suffix
-			if need not in weight_keys:
-				note_missing(need)
-
-		if ratio_i != 0:
-			for suffix in required_nonzero:
+		# When expanded non-expert key lists are available, treat them as the
+		# authoritative per-layer requirements and avoid duplicating missing counts.
+		if not nonexpert_expanded_used:
+			for suffix in required_layer_suffixes:
 				if not isinstance(suffix, str) or not suffix:
 					continue
 				need = prefix + suffix
 				if need not in weight_keys:
 					note_missing(need)
-		else:
+
+			if ratio_i != 0:
+				for suffix in required_nonzero:
+					if not isinstance(suffix, str) or not suffix:
+						continue
+					need = prefix + suffix
+					if need not in weight_keys:
+						note_missing(need)
+			if ratio_i == 4:
+				for suffix in required_ratio4:
+					if not isinstance(suffix, str) or not suffix:
+						continue
+					need = prefix + suffix
+					if need not in weight_keys:
+						note_missing(need)
+
+			if i < n_hash_layers_i:
+				need_hash = prefix + str(hash_gate_suffix)
+				if need_hash not in weight_keys:
+					note_missing(need_hash)
+			else:
+				need_score = prefix + str(score_gate_suffix)
+				if need_score not in weight_keys:
+					note_missing(need_score)
+
+		# Forbidden keys are schedule-sensitive and remain enforced even when the
+		# contract provides expanded required key lists.
+		if ratio_i == 0:
 			if has_compressor[i]:
 				forbidden_present.add(prefix + "attn.compressor.")
 			if has_indexer[i]:
 				forbidden_present.add(prefix + "attn.indexer.")
-
-		if ratio_i == 4:
-			for suffix in required_ratio4:
-				if not isinstance(suffix, str) or not suffix:
-					continue
-				need = prefix + suffix
-				if need not in weight_keys:
-					note_missing(need)
 		else:
-			if ratio_i != 0 and has_indexer[i]:
+			if ratio_i != 4 and has_indexer[i]:
 				forbidden_present.add(prefix + "attn.indexer.")
 
 		if i < n_hash_layers_i:
-			need_hash = prefix + str(hash_gate_suffix)
-			if need_hash not in weight_keys:
-				note_missing(need_hash)
 			bad_score = prefix + str(score_gate_suffix)
 			if bad_score in weight_keys:
 				forbidden_present.add(bad_score)
 		else:
-			need_score = prefix + str(score_gate_suffix)
-			if need_score not in weight_keys:
-				note_missing(need_score)
 			bad_hash = prefix + str(hash_gate_suffix)
 			if bad_hash in weight_keys:
 				forbidden_present.add(bad_hash)
@@ -815,6 +848,10 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 		"kind": "deepseek-upstream",
 		"complete": (missing_count == 0 and len(forbidden_sorted) == 0),
 		"n_layers_checked": n_layers_i,
+		"nonexpert_key_lists_used": bool(nonexpert_expanded_used),
+		"nonexpert_required_expected_count": int(nonexpert_expected),
+		"nonexpert_required_missing_count": int(nonexpert_missing),
+		"nonexpert_required_missing_sample": nonexpert_missing_sample,
 		"missing_required_count": missing_count,
 		"missing_required_sample": get_missing_sample(),
 		"forbidden_present": forbidden_sorted,
@@ -934,6 +971,7 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 
 	tk = contract_summary.get("tensor_keys", {})
 	moe = contract_summary.get("moe", {})
+	mtp_required_nonexpert_keys_by_layer_id = tk.get("mtp_required_nonexpert_keys_by_layer_id", None)
 
 	required_layer_suffixes = tk.get("required_layer_suffixes", None)
 	required_mtp_additional_suffixes = tk.get("required_mtp_additional_suffixes", None)
@@ -960,6 +998,7 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 			continue
 
 	missing_required: set[str] = set()
+	missing_nonexpert: set[str] = set()
 	forbidden_present: set[str] = set()
 
 	for mtp_id in sorted(mtp_layer_ids_present):
@@ -993,12 +1032,32 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 			if need not in mtp_keys:
 				missing_required.add(need)
 
+		if isinstance(mtp_required_nonexpert_keys_by_layer_id, dict):
+			keys = mtp_required_nonexpert_keys_by_layer_id.get(str(mtp_id), None)
+			if isinstance(keys, list):
+				for need in keys:
+					if not isinstance(need, str) or not need:
+						continue
+					if need not in mtp_keys:
+						missing_nonexpert.add(need)
+
 	missing_sorted = sorted(missing_required)
+	missing_nonexpert_sorted = sorted(missing_nonexpert)
 	forbidden_sorted = sorted(forbidden_present)
+	nonexpert_expected = 0
+	if isinstance(mtp_required_nonexpert_keys_by_layer_id, dict):
+		for mtp_id in sorted(mtp_layer_ids_present):
+			keys = mtp_required_nonexpert_keys_by_layer_id.get(str(mtp_id), None)
+			if isinstance(keys, list):
+				nonexpert_expected += int(len([k for k in keys if isinstance(k, str) and k]))
 	return {
 		"checked": True,
 		"complete": (len(missing_sorted) == 0 and len(forbidden_sorted) == 0),
 		"mtp_layer_ids_present": sorted(mtp_layer_ids_present),
+		"nonexpert_key_lists_used": bool(isinstance(mtp_required_nonexpert_keys_by_layer_id, dict) and nonexpert_expected > 0),
+		"nonexpert_required_expected_count": int(nonexpert_expected),
+		"nonexpert_required_missing_count": int(len(missing_nonexpert_sorted)),
+		"nonexpert_required_missing_sample": missing_nonexpert_sorted[:20],
 		"missing_required_count": len(missing_sorted),
 		"missing_required_sample": missing_sorted[:20],
 		"forbidden_present": forbidden_sorted[:20],

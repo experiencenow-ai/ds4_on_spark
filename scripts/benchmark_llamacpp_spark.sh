@@ -498,6 +498,14 @@ if probe.get("fattn_backend_unique", 0) > 0:
     summary_lines.append("fattn_backend0_only=%s" % _probe_val("fattn_backend0_only"))
 if probe.get("fattn_cuda_device_unique", 0) > 0:
     summary_lines.append("fattn_cuda_device0_only=%s" % _probe_val("fattn_cuda_device0_only"))
+if probe.get("sched_reserve_line_count", 0) > 0:
+    summary_lines.append("sched_reserve_line_count=%s" % _probe_val("sched_reserve_line_count"))
+if probe.get("sched_reserve_graph_nodes") is not None:
+    summary_lines.append("sched_reserve_graph_nodes=%s" % _probe_val("sched_reserve_graph_nodes"))
+if probe.get("sched_reserve_graph_splits") is not None:
+    summary_lines.append("sched_reserve_graph_splits=%s" % _probe_val("sched_reserve_graph_splits"))
+if probe.get("sched_reserve_took_ms") is not None:
+    summary_lines.append("sched_reserve_took_ms=%s" % _probe_val("sched_reserve_took_ms"))
 if probe.get("seen_fattn_disabled"):
     summary_lines.append("fattn_seen_disabled=true")
 if probe.get("seen_sched_reserve_cpu_fattn"):

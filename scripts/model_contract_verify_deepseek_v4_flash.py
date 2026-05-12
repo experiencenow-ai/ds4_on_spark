@@ -945,10 +945,11 @@ def main() -> int:
 						else:
 							# Enforce machine-readable per-layer suffix + count helpers for DS4 implementers.
 							layer_req = tk.get("layer_required_nonexpert_suffixes_by_layer_id", None)
+							layer_req_keys = tk.get("layer_required_nonexpert_keys_by_layer_id", None)
 							layer_expected = tk.get("layer_expected_tensor_key_count_by_layer_id", None)
 							layer_counts = tk.get("layer_tensor_key_count_by_layer_id", None)
 							layer_ok = tk.get("layer_expected_tensor_key_count_by_layer_id_ok", None)
-							if not (isinstance(layer_req, dict) and isinstance(layer_expected, dict) and isinstance(layer_counts, dict) and isinstance(layer_ok, dict)):
+							if not (isinstance(layer_req, dict) and isinstance(layer_req_keys, dict) and isinstance(layer_expected, dict) and isinstance(layer_counts, dict) and isinstance(layer_ok, dict)):
 								failures.append(Failure(121, f"contract summary missing tensor_keys.layer_* per-layer helpers (required_nonexpert_suffixes / expected_counts / counts / ok): {contract_summary}"))
 							else:
 								try:
@@ -972,6 +973,12 @@ def main() -> int:
 									got_req = layer_req.get(key)
 									if got_req != exp:
 										failures.append(Failure(122, f"contract summary tensor_keys.layer_required_nonexpert_suffixes_by_layer_id[{i}] mismatch (got_len={len(got_req) if isinstance(got_req, list) else 'n/a'} expected_len={len(exp)}): {contract_summary}"))
+										break
+
+									exp_keys = [f"layers.{i}.{s}" for s in exp]
+									got_req_keys = layer_req_keys.get(key)
+									if got_req_keys != exp_keys:
+										failures.append(Failure(126, f"contract summary tensor_keys.layer_required_nonexpert_keys_by_layer_id[{i}] mismatch (got_len={len(got_req_keys) if isinstance(got_req_keys, list) else 'n/a'} expected_len={len(exp_keys)}): {contract_summary}"))
 										break
 
 									got_count = layer_counts.get(key)
@@ -1010,7 +1017,10 @@ def main() -> int:
 
 					mtp_counts = tk.get("mtp_tensor_key_count_by_layer_id", None)
 					mtp_ok = tk.get("mtp_expected_tensor_key_count_by_layer_id_ok", None)
-					if not isinstance(mtp_counts, dict) or not isinstance(mtp_ok, dict):
+					mtp_req_keys_by_layer = tk.get("mtp_required_nonexpert_keys_by_layer_id", None)
+					mtp_req_suffixes = tk.get("mtp_required_nonexpert_suffixes", None)
+					mtp0 = tk.get("mtp0", None)
+					if not isinstance(mtp_counts, dict) or not isinstance(mtp_ok, dict) or not isinstance(mtp_req_keys_by_layer, dict) or not isinstance(mtp_req_suffixes, list) or not isinstance(mtp0, dict):
 						failures.append(Failure(107, f"contract summary missing tensor_keys mtp per-layer count objects (mtp_tensor_key_count_by_layer_id / mtp_expected_tensor_key_count_by_layer_id_ok): {contract_summary}"))
 					else:
 						mtp_layer_ids = find_mtp_layer_ids(weight_keys)
@@ -1025,6 +1035,18 @@ def main() -> int:
 							if ok is not True:
 								failures.append(Failure(109, f"contract summary tensor_keys.mtp_expected_tensor_key_count_by_layer_id_ok[{mtp_id}] must be true: {contract_summary}"))
 								break
+
+							exp_mtp_keys = [prefix + str(s) for s in mtp_req_suffixes]
+							got_mtp_keys = mtp_req_keys_by_layer.get(str(mtp_id))
+							if got_mtp_keys != exp_mtp_keys:
+								failures.append(Failure(127, f"contract summary tensor_keys.mtp_required_nonexpert_keys_by_layer_id[{mtp_id}] mismatch (got_len={len(got_mtp_keys) if isinstance(got_mtp_keys, list) else 'n/a'} expected_len={len(exp_mtp_keys)}): {contract_summary}"))
+								break
+
+						if mtp0.get("present") is True:
+							got0 = mtp0.get("required_nonexpert_keys", None)
+							want0 = mtp_req_keys_by_layer.get("0")
+							if got0 != want0:
+								failures.append(Failure(128, f"contract summary tensor_keys.mtp0.required_nonexpert_keys must match mtp_required_nonexpert_keys_by_layer_id[0]: {contract_summary}"))
 
 						# Enforce MTP tensor-key semantics for the official checkpoint: no compressor/indexer, no tid2eid, and full key coverage.
 						req_layer = tk.get("required_layer_suffixes", None)
