@@ -42,14 +42,7 @@ Keep this probe *fast*: it should stop after the first verify step and draft com
 
 Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`.
 
-Optional debug keys (non-normative; used by the skeleton patch to stage wiring work):
-
-- `trunk_token_embd_{fnv64,nbytes,shape}`
-- `trunk_pre_hc_head_{fnv64,nbytes,shape}`
-- `mtp_stub_input_hc_{fnv64,nbytes,shape}` (stub pre-block input computed from sidecar `enorm/e_proj` + `hnorm/h_proj` + add; still not a real draft)
-- `mtp_stub_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
-
-Recommended debug keys (for real oracle-vs-candidate diffs):
+Optional debug keys (non-normative; used by the skeleton patch to stage wiring work and by the oracle for diffs):
 
 - `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
 - `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
@@ -84,8 +77,8 @@ By default this requires:
 - `runtime_repo`, `runtime_commit`, `trunk_gguf_path`, and `mtp_sidecar_path` are required to be present in both probes, but do not need to match (oracle vs candidate runs will often differ); differences are recorded as `notes[]` in the diff output.
 - when present, any optional debug capture fingerprints match (all keys ending in `*_fnv64`, plus matching `*_nbytes` and `*_shape` companions). Common early captures:
   - `trunk_token_embd_*` / `trunk_pre_hc_head_*`
-  - `mtp_stub_input_hc_*` / `mtp_stub_head_norm_*`
-  - once the real draft is implemented: `mtp_input_hc_*` / `mtp_block_out_hc_*` / `mtp_head_norm_*`
+  - `mtp_input_hc_*` / `mtp_head_norm_*`
+  - once the real draft is implemented: `mtp_block_out_hc_*` (plus the token ID match)
 
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
 The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.

@@ -21,8 +21,8 @@ from typing import Any, Optional
 DEFAULT_CAPTURE_KEYS = [
 	"trunk_token_embd",
 	"trunk_pre_hc_head",
-	"mtp_stub_input_hc",
-	"mtp_stub_head_norm",
+	"mtp_input_hc",
+	"mtp_head_norm",
 ]
 
 
