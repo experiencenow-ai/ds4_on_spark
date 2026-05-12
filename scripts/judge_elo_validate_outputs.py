@@ -36,6 +36,7 @@ def validate_dir(out_dir: str) -> int:
         ("budget.json", schema.validate_budget, "budget"),
         ("quality_map.json", schema.validate_quality_map, "quality_map"),
         ("leaderboard.json", schema.validate_leaderboard, "leaderboard"),
+        ("bundle.json", schema.validate_bundle, "bundle"),
     ]
     for rel, fn, label in paths:
         path = os.path.join(out_dir, rel)
@@ -65,4 +66,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

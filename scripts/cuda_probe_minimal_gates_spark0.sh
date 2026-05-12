@@ -7,6 +7,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 with_device_props_sm121_run="${WITH_DEVICE_PROPS_SM121_RUN:-1}"
 with_device_props_compute121_run="${WITH_DEVICE_PROPS_COMPUTE121_RUN:-1}"
 with_device_props_gencode_run="${WITH_DEVICE_PROPS_GENCODE_RUN:-1}"
+with_kernel_launch_minimal="${WITH_KERNEL_LAUNCH_MINIMAL:-1}"
 with_kernel_tiny="${WITH_KERNEL_TINY:-0}"
 log_path="${LOG_PATH:-}"
 remote_tag="${REMOTE_TAG:-"$(date -u +%Y%m%d-%H%M%S)-$$"}"
@@ -46,6 +47,11 @@ run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_nvcc_minimal_${remote_tag}" "$rep
 log_line "== cuda probe minimal gates: device props minimal (no repo transfer) =="
 run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_device_props_minimal_${remote_tag}" WITH_SM121_RUN="${with_device_props_sm121_run}" WITH_COMPUTE121_RUN="${with_device_props_compute121_run}" WITH_GENCODE_RUN="${with_device_props_gencode_run}" "$repo_root/scripts/cuda_probe_device_props_minimal_spark0.sh" "$target"
 
+if [ "${with_kernel_launch_minimal}" = "1" ]; then
+	log_line "== cuda probe minimal gates: kernel launch tiny minimal (no cudaMalloc; no repo transfer) =="
+	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_kernel_launch_tiny_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh" "$target"
+fi
+
 log_line "== cuda probe minimal gates: sm121_gate (ships tools/cuda_probe) =="
 run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_sm121_gate_${remote_tag}" "$repo_root/scripts/cuda_probe_sm121_gate_spark0.sh" "$target"
 
@@ -53,4 +59,3 @@ if [ "${with_kernel_tiny}" = "1" ]; then
 	log_line "== cuda probe minimal gates: kernel-tiny (plumbing gates) =="
 	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_kernel_tiny_${remote_tag}" "$repo_root/scripts/cuda_probe_kernel_tiny_spark0.sh" "$target"
 fi
-

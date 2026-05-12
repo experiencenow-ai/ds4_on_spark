@@ -19,6 +19,7 @@ SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
 SCHEMA_PROMPT_V2 = "ds4_pairwise_judge_prompt_v2"
 SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
 SCHEMA_BUDGET_V1 = "ds4_judge_elo_budget_v1"
+SCHEMA_BUNDLE_V1 = "ds4_judge_elo_bundle_v1"
 SCHEMA_QUALITY_MAP_V1 = "judge_elo_quality_map_v1"
 SCHEMA_LEADERBOARD_V1 = "judge_elo_leaderboard_v1"
 
@@ -606,4 +607,34 @@ def validate_budget(obj: Any) -> List[str]:
             fv = _as_num(job.get(k), f"judge_out_budget.{k}", errs)
             if fv is not None and (fv < 0.0 or fv > 1.0):
                 errs.append(f"judge_out_budget.{k} must be in [0,1]")
+    return errs
+
+
+def validate_bundle(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["bundle must be an object"]
+    schema_v = obj.get("schema")
+    if not isinstance(schema_v, str) or schema_v != SCHEMA_BUNDLE_V1:
+        errs.append(f"schema must be {SCHEMA_BUNDLE_V1!r}")
+    meta = obj.get("meta")
+    budget = obj.get("budget")
+    quality_map = obj.get("quality_map")
+    leaderboard = obj.get("leaderboard")
+    if meta is None:
+        errs.append("meta is required")
+    else:
+        errs.extend([f"meta: {e}" for e in validate_meta(meta)])
+    if budget is None:
+        errs.append("budget is required")
+    else:
+        errs.extend([f"budget: {e}" for e in validate_budget(budget)])
+    if quality_map is None:
+        errs.append("quality_map is required")
+    else:
+        errs.extend([f"quality_map: {e}" for e in validate_quality_map(quality_map)])
+    if leaderboard is None:
+        errs.append("leaderboard is required")
+    else:
+        errs.extend([f"leaderboard: {e}" for e in validate_leaderboard(leaderboard)])
     return errs

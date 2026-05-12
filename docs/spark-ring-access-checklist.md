@@ -4,6 +4,22 @@ This is a **human-run** access + probe checklist for the current Spark ring. It 
 
 For new node onboarding (Spark1/Spark2 bring-up), see `docs/spark-ring-node-bringup.md`.
 
+## Quickstart (Commit-Safe Ring Snapshot Set)
+
+From the Mac repo root, capture a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + per-node facts) in one command:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+```
+
+Quick validation targets (paste-friendly stanzas):
+- `docs/spark-ring-mac-discovery-<stamp>.md`: `== known target checks ==`, `== ping (mac->targets, compact) ==`
+- `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==`, `== network (iface matrix, compact) ==`, `== cuda/toolchain facts (summary) ==`
+- `docs/spark-ring-mtu-probe-<stamp>.md`: MTU DF-ping payload pass/fail matrix
+- `docs/spark-ring-bw-probe-<stamp>.md`: `bw up/down` smoke numbers (best-effort)
+- `docs/spark-ring-node-facts-<host>-<stamp>.md`: stable per-node GPU/CUDA/storage facts
+
 ## 1) Hostnames + Resolution
 
 - Decide stable identities for each node:

@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import subprocess
@@ -112,12 +113,49 @@ class JudgeEloTest(unittest.TestCase):
                 "--strict",
             ])
             self.assertTrue(os.path.exists(os.path.join(td, "summary.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "bundle.json")))
             subprocess.check_call([
                 "python3",
                 validate_script,
                 "--out-dir",
                 td,
             ])
+
+    def test_join_quality_cli_bundle(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        records = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        baseline = os.path.join(root, "fixtures", "judge-elo", "sample_baseline_rows.csv")
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        join_script = os.path.join(root, "scripts", "judge_elo_join_quality.py")
+        with tempfile.TemporaryDirectory() as td:
+            elo_dir = os.path.join(td, "elo")
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                records,
+                "--out-dir",
+                elo_dir,
+                "--strict",
+            ])
+            out_csv = os.path.join(td, "joined.csv")
+            subprocess.check_call([
+                "python3",
+                join_script,
+                "--in",
+                baseline,
+                "--bundle",
+                os.path.join(elo_dir, "bundle.json"),
+                "--out",
+                out_csv,
+                "--require-all",
+            ])
+            with open(out_csv, "r", encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual(len(rows), 3)
+            for row in rows:
+                self.assertNotEqual(row.get("quality_score", "").strip(), "")
+                self.assertEqual(row.get("quality_source", ""), "judge_elo_logistic_v1")
 
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -513,9 +551,10 @@ class JudgeEloTest(unittest.TestCase):
         prompt_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v2.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
         budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
+        bundle_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_bundle_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, prompt_path, prompt_v2_path, meta_path, budget_path, qmap_path, leaderboard_path):
+        for path in (dec_path, rec_path, prompt_path, prompt_v2_path, meta_path, budget_path, bundle_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):
