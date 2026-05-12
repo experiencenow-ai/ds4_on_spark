@@ -24,6 +24,8 @@ PAYLOAD_SAMPLE_BYTES="${PAYLOAD_SAMPLE_BYTES:-0}"
 LOAD_WEIGHTS="${LOAD_WEIGHTS:-0}"
 JSON_ONLY="${JSON_ONLY:-0}"
 
+CUDACXX="${CUDACXX:-}"
+
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_PATCH="${ALLOW_PATCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
@@ -124,7 +126,30 @@ if [ "$ALLOW_BUILD" != "1" ]; then
 		echo "build skipped (set ALLOW_BUILD=1 to compile llama-ds4-mtp-sidecar-probe)"
 	fi
 else
-	(cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release)
+	if [ "$CUDACXX" = "" ]; then
+		if command -v nvcc >/dev/null 2>&1; then
+			CUDACXX="$(command -v nvcc)"
+		else
+			for p in /usr/local/cuda/bin/nvcc /opt/cuda/bin/nvcc /usr/local/cuda-*/bin/nvcc /usr/local/cuda*/bin/nvcc; do
+				if [ -x "$p" ]; then
+					CUDACXX="$p"
+					break
+				fi
+			done
+		fi
+	fi
+	if [ "$JSON_ONLY" != "1" ]; then
+		if [ "$CUDACXX" != "" ]; then
+			echo "cudacxx=$CUDACXX"
+		else
+			echo "cudacxx=not-found (set CUDACXX=/abs/path/to/nvcc if CMake cannot discover CUDA)"
+		fi
+	fi
+	cmake_cuda_compiler_arg=""
+	if [ "$CUDACXX" != "" ]; then
+		cmake_cuda_compiler_arg="-DCMAKE_CUDA_COMPILER=$CUDACXX"
+	fi
+	(cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release $cmake_cuda_compiler_arg)
 	(cd "$LLAMA_DIR" && cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j)
 fi
 
