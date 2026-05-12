@@ -1,22 +1,25 @@
 # Spark Ring Readiness Status (Spark0..Spark2)
 
-Status as of `2026-05-12T1606Z` (UTC).
+Status as of `2026-05-12T1611Z` (UTC).
 
 ## Latest commit-safe snapshots
 
-- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-12T1606Z.md`
-- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-12T1606Z.md`
-- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-12T1606Z.md`
-- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T1606Z.md`
-- Spark0 facts-only probe (refreshed): `docs/spark0-probe-facts-2026-05-12T1606Z.md`
+- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-12T1611Z.md`
+- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-12T1611Z.md`
+- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-12T1611Z.md`
+- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T1611Z.md`
+- Spark0 facts-only probe (refreshed): `docs/spark0-probe-facts-2026-05-12T1611Z.md`
 - Per-node facts-only probes:
-  - `docs/spark-ring-node-facts-aitopatom-9ab9.local-2026-05-12T1606Z.md`
-  - `docs/spark-ring-node-facts-spark1.local-2026-05-12T1606Z.md`
-  - `docs/spark-ring-node-facts-spark2.local-2026-05-12T1606Z.md`
+  - `docs/spark-ring-node-facts-aitopatom-9ab9.local-2026-05-12T1611Z.md`
+  - `docs/spark-ring-node-facts-spark1.local-2026-05-12T1611Z.md`
+  - `docs/spark-ring-node-facts-spark2.local-2026-05-12T1611Z.md`
 
-## Latest smoke verification (non-committed)
+## Snapshot command (commit-safe)
 
-As of `2026-05-12T1606Z` (UTC), the snapshots above reflect the current Spark0 probe output and ring bring-up status.
+```bash
+stamp="2026-05-12T1611Z"
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+```
 
 ## Ring readiness matrix
 
