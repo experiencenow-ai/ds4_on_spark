@@ -24,7 +24,7 @@ When you want a minimal “toolchain + compile-only `sm_121` gates + one-line de
 ./scripts/cuda_probe_micro_spark0.sh
 ```
 
-This runs in a single SSH session and is intended as the quickest preflight before attempting DeepGEMM/CUTLASS/cuBLASLt builds on Spark0.
+This runs in a single SSH session and is intended as the quickest preflight before attempting DeepGEMM/CUTLASS/cuBLASLt builds on Spark0. It also includes a tiny PTX `.target` probe (`-ptx -arch=sm_121` and `-ptx -arch=compute_121`) plus a compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate so logs capture CUDA 13 “PTX target naming” and bracket-list `-gencode` behavior.
 
 ## Spark0: Minimal Gates (nvcc + Device Props + `sm_121` Gate)
 
