@@ -115,7 +115,21 @@ As of `2026-05-12`, Spark1/Spark2 were not reachable from the Mac environment
 so the rsync-staged “real ring” path has not been executed yet.
 
 When Spark1/Spark2 hardware exists and is SSH-reachable, run the full 3-node
-ring path (Mac-driven):
+ring path (Mac-driven). Recommended: one-command evidence loop (node setup → ring rsync → validate → fetch):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+To skip node setup (when Spark1/2 are already set up), set:
+
+```bash
+export RING_SKIP_NODE_SETUP=1
+```
+
+If you prefer running the pieces manually, use:
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
