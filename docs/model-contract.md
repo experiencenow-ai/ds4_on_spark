@@ -88,7 +88,9 @@ MTP (multi-token prediction) oracle requirements:
     - `trunk_contract.complete == true` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
       - `kind="deepseek-upstream"`: checks upstream-style `layers.{i}.*` keys (safetensors index or a GGUF that preserves upstream tensor names), including the sliding/CSA/HCA key schedule (no `attn.compressor.*` / `attn.indexer.*` tensors where forbidden by `compress_ratios[]`)
       - `kind="llama.cpp"`: checks DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only signal for quantized artifacts; does not imply semantic correctness)
+      - When `kind="deepseek-upstream"` and `contract_summary.json` includes expanded per-layer non-expert key lists, the inspector also reports `trunk_contract.nonexpert_required_missing_count` / `trunk_contract.nonexpert_required_missing_sample` as a quick “exact `layers.{i}.*` non-expert namespace preserved?” signal (separate from missing expert keys).
     - `mtp_contract.complete == true` when `mtp_present == true` (MTP tensor-key completeness)
+      - When `contract_summary.json` includes expanded per-layer MTP non-expert key lists, the inspector also reports `mtp_contract.nonexpert_required_missing_count` / `mtp_contract.nonexpert_required_missing_sample` (useful when expert-key missing lists dominate `mtp_contract.missing_required_sample`).
   - For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` also supports metadata-only inspection via range reads (no full download). Record the `url_prefix_bytes` used:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
     - If it fails with “unable to parse ... within max_bytes”, increase `--max-bytes` cautiously (it only fetches the header + tensor table, but large MoE GGUFs can have a large tensor directory).

@@ -828,12 +828,13 @@ For each quantized artifact tested, record:
   - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`; includes `status ∈ {"native_like","mismatch","unknown"}` plus `dense_fp8_like` / `expert_fp4_like` and `notes_sample`)
   - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
     - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
-    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
+    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`; plus `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when the expanded `tensor_keys.mtp_required_nonexpert_keys_by_layer_id` contract is available)
     - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`, and (when `contract_summary.json` is available) the official `mtp_keys_sha256` fingerprint gate)
     - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
     - `trunk_contract` (`checked`, `complete`) with `trunk_contract.kind`:
       - `kind="deepseek-upstream"`: upstream-style `layers.{i}.*` keys preserved
       - `kind="llama.cpp"`: DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only structural signal)
+      - For upstream-preserving artifacts, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when expanded per-layer key lists are available (quick “exact `layers.{i}.*` non-expert namespace preserved?” signal).
     - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract
