@@ -151,6 +151,7 @@ scripts/model_contract_refresh_v4flash_gguf_inspects.sh
 Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
+  - The pinned DeepSeek V4 Flash logits oracle uses `default_topk` from `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json` (currently `64`). This is recorded as `oracle.logits_oracle.acceptance.topk_k` (and `oracle.mtp.acceptance.topk_k`) in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` so verifiers can enforce a consistent `k`.
 - Ensure the oracle covers both prefill (`start_pos == 0`) and decode (`start_pos > 0`) so KV-cache semantics are exercised.
 
 Machine-readable MTP gating:

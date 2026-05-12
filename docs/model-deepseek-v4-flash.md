@@ -108,6 +108,7 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
   - Upstream sources: `encoding/tests/*` (encoding oracle vectors) and `oracle/prompts.json` (logits-oracle prompt set).
   - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` and `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`.
   - DS4 contract: `contract_summary.json` `oracle.*` plus sha256 pinning under `upstream.fixtures_sha256.*`.
+    - The pinned prompt set’s `default_topk` (currently `64`) is recorded as `oracle.logits_oracle.acceptance.topk_k` and `oracle.mtp.acceptance.topk_k` so oracle consumers enforce a consistent `k` when comparing `topk_ids`/`topk_logits`.
 
 ## Contract map (machine-readable `contract_summary.json`)
 

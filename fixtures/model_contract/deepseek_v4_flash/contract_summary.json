@@ -1526,7 +1526,8 @@
       "acceptance": {
         "logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
         "requires_prefill_and_decode": true,
-        "topk_ids_exact": true
+        "topk_ids_exact": true,
+        "topk_k": 64
       },
       "generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
       "note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
@@ -1539,7 +1540,8 @@
       "acceptance": {
         "logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
         "requires_mtp_trace": true,
-        "topk_ids_exact": true
+        "topk_ids_exact": true,
+        "topk_k": 64
       },
       "generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
       "required": true,

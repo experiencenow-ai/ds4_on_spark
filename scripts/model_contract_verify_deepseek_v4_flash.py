@@ -1068,6 +1068,15 @@ def main() -> int:
 				if not isinstance(oracle, dict):
 					failures.append(Failure(90, f"contract summary oracle must be an object: {contract_summary}"))
 				else:
+					prompts_default_topk = None
+					prompts_path = FIX / "oracle" / "prompts.json"
+					try:
+						prompts = load_json(prompts_path)
+						if isinstance(prompts, dict) and isinstance(prompts.get("default_topk"), int):
+							prompts_default_topk = int(prompts.get("default_topk"))
+					except Exception:
+						prompts_default_topk = None
+
 					enc_oracle = oracle.get("encoding_oracle", {})
 					log_oracle = oracle.get("logits_oracle", {})
 					mtp_oracle = oracle.get("mtp", {})
@@ -1077,6 +1086,18 @@ def main() -> int:
 						failures.append(Failure(92, f"contract summary oracle.logits_oracle must declare weights_required=true and generator: {contract_summary}"))
 					if not (isinstance(mtp_oracle, dict) and mtp_oracle.get("weights_required") is True and isinstance(mtp_oracle.get("generator_hint"), str)):
 						failures.append(Failure(93, f"contract summary oracle.mtp must declare weights_required=true and generator_hint: {contract_summary}"))
+					if isinstance(log_oracle, dict):
+						acc = log_oracle.get("acceptance", {})
+						if not (isinstance(acc, dict) and isinstance(acc.get("topk_k"), int)):
+							failures.append(Failure(181, f"contract summary oracle.logits_oracle.acceptance.topk_k must be an integer: {contract_summary}"))
+						elif prompts_default_topk is not None and int(acc.get("topk_k")) != int(prompts_default_topk):
+							failures.append(Failure(182, f"contract summary oracle.logits_oracle.acceptance.topk_k mismatch (got {acc.get('topk_k')!r} expected prompts default_topk={prompts_default_topk}): {contract_summary}"))
+					if isinstance(mtp_oracle, dict):
+						acc = mtp_oracle.get("acceptance", {})
+						if not (isinstance(acc, dict) and isinstance(acc.get("topk_k"), int)):
+							failures.append(Failure(183, f"contract summary oracle.mtp.acceptance.topk_k must be an integer: {contract_summary}"))
+						elif prompts_default_topk is not None and int(acc.get("topk_k")) != int(prompts_default_topk):
+							failures.append(Failure(184, f"contract summary oracle.mtp.acceptance.topk_k mismatch (got {acc.get('topk_k')!r} expected prompts default_topk={prompts_default_topk}): {contract_summary}"))
 
 				ts = summary.get("tensor_shapes", {})
 				if not isinstance(ts, dict):
