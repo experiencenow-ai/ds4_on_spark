@@ -161,3 +161,31 @@ Next probe step:
 - Confirm that pipeline primitives (cp.async-style mainloop plumbing) compile and run on GB10; see `tools/cuda_probe/bin/cuda_sm121_pipeline_memcpy_async`.
 - If DeepGEMM depends on large dynamic shared memory, use `cuda_sm121_smem_optin` output as the initial feasibility gate before deeper porting work.
 - If DeepGEMM is blocked on missing submodules, use `cuda_sm121_devattrs` to record the baseline device limits and features while deciding whether to pull CUTLASS into the tree.
+
+## CUTLASS
+
+Implication:
+
+- CUTLASS (and CUTLASS-derived kernels) should treat GB10 as a first-class `sm_121` target (or temporarily ship a family fallback like `sm_120` alongside `sm_121` until upstream dispatch tables are updated).
+- CUDA 13 toolchain behavior matters for template-heavy CUDA code: pay attention to the CUDA 13 `nvcc` linkage defaults (`-static-global-template-stub` and device symbol visibility). `docs/cuda-sm121.md` and `scripts/cuda_probe_nvcc_minimal_spark0.sh` capture concrete gates.
+- The kernel bring-up probes in `scripts/cuda_probe_kernel_tiny_spark0.sh` cover “CUTLASS-like plumbing” on Spark0: opt-in dynamic shared memory, device attribute gates, cp.async-style pipeline helpers, TMA tensor-map encode + bulk tensor copies, cluster launches, and common warp-matrix helpers.
+- The compile-only gate `tools/cuda_probe/bin/cuda_sm121_cluster_dims_attr_compile.o` is a quick way to detect a toolchain that rejects `__cluster_dims__(...)` kernel annotations for `sm_121` (some stacks reject the annotation even when runtime cluster launch via `cudaLaunchKernelExC` works).
+
+Next probe step:
+
+- Run `./scripts/cuda_probe_kernel_tiny_spark0.sh` as the first “CUTLASS-ish kernel plumbing” acceptance gate; if it fails, capture the first failing probe name and error output before attempting any CUTLASS integration.
+- Use `./scripts/cuda_probe_cmake_minimal_spark0.sh` to choose an explicit packaging mode for CMake-based builds (`121` vs `121-real` vs `121-virtual`) before pulling CUTLASS into the tree.
+- If you need a temporary “works on GB10 now” compatibility target while waiting for `sm_121` to land upstream, validate `sm_120` on Spark0 (`tools/cuda_probe/bin/cuda_sm120_compat_probe`) and package a dual-arch fatbin (`tools/cuda_probe/bin/cuda_sm121_fatbin_probe`) as a reference.
+
+## cuBLASLt
+
+Implication:
+
+- Use cuBLASLt as the early “known-good matmul” baseline while custom kernels (DeepGEMM/CUTLASS) are being brought up on `sm_121`.
+- `scripts/cuda_probe_cublaslt_tiny_spark0.sh` is the primary acceptance gate: it builds and runs a small SGEMM via cuBLASLt (`cuda_cublaslt_smoke`) and prints `cublasLtGetVersion` / `cublasLtGetCudartVersion`, plus best-effort FP8/FP4 smoke tests.
+- Treat `CUBLAS_STATUS_NOT_SUPPORTED` in the FP8 E5M2 / FP4 probes as an expected outcome until the stack advertises support on GB10; the probe scripts deliberately continue in that case so you can still record versions and the “basic matmul works” signal.
+
+Next probe step:
+
+- Run `./scripts/cuda_probe_cublaslt_tiny_spark0.sh` and record the `cublasLtGetVersion` line as the minimal “cuBLASLt is alive” checkpoint for Spark0 images/toolkit updates.
+- When performance work begins, keep these probes as regression gates: if cuBLASLt behavior changes across CUDA driver/toolkit updates, capture the new `cublasLtGetVersion` + `nvcc --version` output and compare logs before bisecting kernel code.
