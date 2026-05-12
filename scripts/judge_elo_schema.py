@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
+SCHEMA_RECORD_V2 = "ds4_pairwise_judge_record_v2"
 SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
 SCHEMA_PROMPT_V2 = "ds4_pairwise_judge_prompt_v2"
 SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
@@ -259,8 +260,8 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         errs.append("schema is required")
     else:
         schema_v = _as_str(obj.get("schema"), "schema", errs)
-        if schema_v != "" and schema_v != SCHEMA_RECORD_V1:
-            errs.append(f"schema must be {SCHEMA_RECORD_V1!r}")
+        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2):
+            errs.append(f"schema must be {SCHEMA_RECORD_V1!r} or {SCHEMA_RECORD_V2!r}")
 
     for field in ("pair_id", "model_a", "model_b"):
         s = _as_str(obj.get(field), field, errs)
@@ -310,6 +311,10 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             if v is not None and v < 0:
                 errs.append(f"latency_ms.{k} must be >= 0")
 
+    schema_v2 = obj.get("schema") == SCHEMA_RECORD_V2
+    if schema_v2:
+        errs.extend(_validate_record_budget_required(obj))
+
     return errs
 
 
@@ -321,6 +326,29 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
     quality-adjusted tok/s without mixing judge quality and speed signals).
     """
     errs = validate_record(obj)
+
+    if obj.get("schema") != SCHEMA_RECORD_V2:
+        errs.extend(_validate_record_budget_required(obj))
+
+    parse_valid = obj.get("parse_valid")
+    if parse_valid is False:
+        raw = obj.get("raw")
+        parse_error = obj.get("parse_error")
+        if raw is None and parse_error is None:
+            errs.append("parse_invalid records should include raw and/or parse_error")
+        if isinstance(raw, str) and len(raw) > 512:
+            errs.append("raw must be <= 512 chars")
+        if isinstance(parse_error, str) and len(parse_error) > 128:
+            errs.append("parse_error must be <= 128 chars")
+
+    if parse_valid is True:
+        errs.extend(validate_decision_strict_extra(obj))
+
+    return errs
+
+
+def _validate_record_budget_required(obj: Dict[str, Any]) -> List[str]:
+    errs: List[str] = []
 
     tokens = obj.get("tokens")
     if not isinstance(tokens, dict):
@@ -351,20 +379,6 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
                 continue
             if int(v) < 0:
                 errs.append(f"latency_ms.{k} must be >= 0")
-
-    parse_valid = obj.get("parse_valid")
-    if parse_valid is False:
-        raw = obj.get("raw")
-        parse_error = obj.get("parse_error")
-        if raw is None and parse_error is None:
-            errs.append("parse_invalid records should include raw and/or parse_error")
-        if isinstance(raw, str) and len(raw) > 512:
-            errs.append("raw must be <= 512 chars")
-        if isinstance(parse_error, str) and len(parse_error) > 128:
-            errs.append("parse_error must be <= 128 chars")
-
-    if parse_valid is True:
-        errs.extend(validate_decision_strict_extra(obj))
 
     return errs
 
