@@ -296,6 +296,7 @@ class SchedulerSimTest(unittest.TestCase):
             trace = scheduler_sim.load_trace_jsonl(out_jsonl, time_mode="dt_ms", meta_out=trace_meta, non_route_policy="error", input_format="strict")
             self.assertEqual(len(trace), 2)
             self.assertEqual(trace_meta.get("source_format"), "ds4_ffn_moe_topk_i32")
+            self.assertEqual(trace_meta.get("time_synthetic"), True)
             self.assertEqual(trace_meta.get("topk"), topk)
             self.assertEqual(trace_meta.get("num_layers"), 2)
             self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.BATCH)

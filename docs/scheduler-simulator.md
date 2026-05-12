@@ -423,6 +423,16 @@ python3 scripts/ds4_topk_dump_to_trace_jsonl.py \
   --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
 ```
 
+Or, generate a single JSON recommendations bundle directly from the dump directory (same underlying simulator sweeps, still using **synthetic** timing):
+
+```bash
+python3 scripts/ds4_topk_dump_recommendations.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --out-json /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_report.json \
+  --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+  --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
+```
+
 Then run the standard trace sweep / recommendations loop:
 
 ```bash
