@@ -8,7 +8,7 @@ usage: centaur_spark0_v73_evidence_run.sh <spark0_user@host> [remote_dir] [local
 
 Runs a full Spark0 Centaur spec-impl v73 smoke evidence loop from your Mac:
   1) stage zip + fixture
-  2) stream-run the smoke
+  2) run the smoke on Spark0
   3) validate expected artifacts on Spark0
   4) fetch a small sanitized artifact bundle back to your Mac
 

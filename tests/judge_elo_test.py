@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import subprocess
@@ -36,6 +37,12 @@ class JudgeEloTest(unittest.TestCase):
         with open(path, "r", encoding="utf-8") as f:
             obj = json.load(f)
         self.assertEqual(schema.validate_prompt(obj), [])
+
+    def test_prompt_rejects_extra_keys(self) -> None:
+        msg = prompt_builder.build_messages(prompt="p", a="a", b="b", judge_out_target=64, schema_version="v2")
+        msg["extra"] = 1
+        errs = schema.validate_prompt(msg)
+        self.assertTrue(any("unexpected key in prompt" in str(e) for e in errs))
 
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -106,12 +113,49 @@ class JudgeEloTest(unittest.TestCase):
                 "--strict",
             ])
             self.assertTrue(os.path.exists(os.path.join(td, "summary.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "bundle.json")))
             subprocess.check_call([
                 "python3",
                 validate_script,
                 "--out-dir",
                 td,
             ])
+
+    def test_join_quality_cli_bundle(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        records = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        baseline = os.path.join(root, "fixtures", "judge-elo", "sample_baseline_rows.csv")
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        join_script = os.path.join(root, "scripts", "judge_elo_join_quality.py")
+        with tempfile.TemporaryDirectory() as td:
+            elo_dir = os.path.join(td, "elo")
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                records,
+                "--out-dir",
+                elo_dir,
+                "--strict",
+            ])
+            out_csv = os.path.join(td, "joined.csv")
+            subprocess.check_call([
+                "python3",
+                join_script,
+                "--in",
+                baseline,
+                "--bundle",
+                os.path.join(elo_dir, "bundle.json"),
+                "--out",
+                out_csv,
+                "--require-all",
+            ])
+            with open(out_csv, "r", encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual(len(rows), 3)
+            for row in rows:
+                self.assertNotEqual(row.get("quality_score", "").strip(), "")
+                self.assertEqual(row.get("quality_source", ""), "judge_elo_logistic_v1")
 
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -181,6 +225,27 @@ class JudgeEloTest(unittest.TestCase):
         )
         self.assertTrue(rec.get("parse_valid", False))
         self.assertEqual(rec.get("winner"), "A")
+
+    def test_decision_rejects_extra_keys(self) -> None:
+        decision = {"winner": "A", "margin": 1, "score_a": 7, "score_b": 6, "reason": "A is better.", "train_hint": "", "tags": [], "extra": 123}
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("unexpected key" in str(e) for e in errs))
+
+    def test_record_rejects_extra_keys(self) -> None:
+        decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+        rec = record_wrap.build_record(
+            pair_id="p_extra",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        rec["extra"] = 1
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("unexpected key in record" in str(e) for e in errs))
 
     def test_wrap_record_parse_invalid(self) -> None:
         rec = record_wrap.build_record(
@@ -486,9 +551,10 @@ class JudgeEloTest(unittest.TestCase):
         prompt_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v2.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
         budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
+        bundle_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_bundle_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, prompt_path, prompt_v2_path, meta_path, budget_path, qmap_path, leaderboard_path):
+        for path in (dec_path, rec_path, prompt_path, prompt_v2_path, meta_path, budget_path, bundle_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):

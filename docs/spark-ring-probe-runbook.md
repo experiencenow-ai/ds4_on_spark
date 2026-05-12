@@ -12,11 +12,18 @@ This runbook produces **commit-safe** (redacted) snapshots for ring bring-up. It
 
 ## Quickstart: one-shot snapshot set (recommended)
 
-This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts):
+This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+If each node uses a different SSH user, pass explicit `user@host` targets (the mac discovery step strips the `user@` prefix automatically):
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
 ```
 
 If you only have Spark0 online, pass a single target:
@@ -25,6 +32,8 @@ If you only have Spark0 online, pass a single target:
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local
 ```
+
+Note: `scripts/spark_ring_probe_snapshots.sh` writes `docs/spark0-probe-facts-<stamp>.md` only when `aitopatom-9ab9.local` is included in targets (either as `aitopatom-9ab9.local` or `spark0@aitopatom-9ab9.local`).
 
 ## 1) Mac-side discovery snapshot
 
@@ -47,10 +56,18 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 (SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
 ```
 
+When nodes use different SSH users, prefer explicit per-target users:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+(REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
+```
+
 The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.
 It also includes a compact link speed/duplex summary (`== network (link speed, compact) ==`) from sysfs to spot unexpectedly slow negotiated links.
 The `== network (iface matrix, compact) ==` section joins `state`/`mtu`/`speed` with per-interface v4/v6 addresses (redacted) to make the Ethernet/Wi‑Fi address matrix easier to transcribe.
 The `== clock ==` section prints a `skew_s (remote-local): ...` line as a quick clock sanity check.
+The `== clock (summary, remote-local) ==` section consolidates `epoch` + `skew_s` per host and prints a `skew span_s: ...` line to make multi-node clock skew obvious.
 The storage section uses a short `timeout` around `df -h` when available to avoid hanging on stale network mounts.
 
 If you want each host to ping **all** peers instead of only ring neighbors:

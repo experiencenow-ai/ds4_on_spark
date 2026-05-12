@@ -11,11 +11,17 @@ Rules:
 Current fixtures:
 
 - `fixtures/centaur-smoke/spark0-v73/unit_model_catalog.json`: one synthetic model candidate for `hyor-model-catalog-import`.
+- `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`: sanitized facts for the Centaur v73 zip used in the runbooks.
 
 ## Sanitized smoke bundles (outputs)
 
 We also commit *small, sanitized* Centaur smoke artifact bundles for reproducibility and bug reports.
 These are not inputs, but they are intentionally bounded (no venvs, no zips, no secrets, no model weights).
+
+Newer bundles may also include:
+
+- `smoke_facts.json` (structured zip/python/pip/requirements facts)
+- `pip_freeze.txt` (sanitized dependency versions)
 
 To create new commit-ready bundles from fetched artifacts (after review/redaction), use:
 

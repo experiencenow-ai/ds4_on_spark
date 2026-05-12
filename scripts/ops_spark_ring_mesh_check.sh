@@ -7,7 +7,8 @@ usage()
 ops_spark_ring_mesh_check.sh -- Mac-side Spark ring mesh checks (safe)
 
 Usage:
-  ops_spark_ring_mesh_check.sh [--topology ring|full] [--tcp <port>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_mesh_check.sh [--topology ring|full] [--tcp <port>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_mesh_check.sh [--topology ring|full] [--tcp <port>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -18,11 +19,13 @@ Notes:
   - With `--topology ring` (default), each host checks its previous/next ring neighbors.
   - With `--topology full`, each host checks all other hosts.
   - `--tcp <port>` runs a best-effort `nc -z` probe to peers.
+  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
 EOF
 }
 
 topology="ring"
 tcp_ports=""
+inventory_file=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -32,6 +35,10 @@ while [ $# -gt 0 ]; do
 			;;
 		--tcp)
 			tcp_ports="$tcp_ports ${2:-}"
+			shift 2
+			;;
+		--inventory-file)
+			inventory_file="${2:-}"
 			shift 2
 			;;
 		-h|--help)
@@ -52,6 +59,21 @@ case "$topology" in
 		exit 2
 		;;
 esac
+
+if [ "$inventory_file" != "" ]; then
+	if [ ! -f "$inventory_file" ]; then
+		echo "inventory file not found: $inventory_file" >&2
+		exit 2
+	fi
+	while IFS= read -r line || [ "$line" != "" ]; do
+		case "$line" in
+			""|\#*)
+				continue
+				;;
+		esac
+		set -- "$@" "$line"
+	done < "$inventory_file"
+fi
 
 if [ "$#" -lt 2 ]; then
 	usage >&2

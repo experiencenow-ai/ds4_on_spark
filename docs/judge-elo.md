@@ -19,6 +19,7 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
+- No extra keys: the decision validator rejects unknown fields.
 - Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
   - diff=1 ⇒ margin ∈ {0,1}
   - diff=2 ⇒ margin ∈ {1,2}
@@ -40,6 +41,7 @@ Required fields:
 - `pair_id`: stable identifier for this comparison
 - `model_a`, `model_b`: model identifiers (strings)
 - `parse_valid`: boolean (whether the judge decision JSON was parsed successfully)
+- No extra keys: unknown top-level fields are invalid (keep metadata in the defined optional fields).
 
 If `parse_valid` is `true`, these must also be present:
 - decision fields: `winner`, `margin`, `score_a`, `score_b`, `reason`, `train_hint`, `tags`
@@ -73,6 +75,8 @@ The offline updater emits additional machine-readable outputs intended for downs
 - `budget.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_budget_v1.schema.json`
 - `quality_map.json`: `fixtures/judge-elo/schemas/judge_elo_quality_map_v1.schema.json`
 - `leaderboard.json`: `fixtures/judge-elo/schemas/judge_elo_leaderboard_v1.schema.json`
+- `bundle.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_bundle_v1.schema.json`
+  - single-file bundle for downstream loops that want one JSON to ingest
 - `summary.md`: compact human-readable summary (parse validity + judge-out budget + top models)
 
 To validate a produced output directory (without any paid API calls):
@@ -152,6 +156,7 @@ For a CSV-first workflow, use `scripts/judge_elo_join_quality.py` to attach `qua
 
 ```bash
 python3 scripts/judge_elo_update.py --in <judge_records.jsonl> --out-dir <elo_out_dir> --strict
-python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --bundle <elo_out_dir>/bundle.json --out <baseline_with_quality.csv>
+# (equivalently) python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
 python3 scripts/model_quality_speed_score.py --in <baseline_with_quality.csv> --out-md <scored.md>
 ```

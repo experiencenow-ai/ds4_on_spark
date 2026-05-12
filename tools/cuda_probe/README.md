@@ -5,8 +5,11 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 ## Run From The Mac (ships to Spark0)
 
 - Fastest `sm_121` gate (device-props + compile-only): `./scripts/cuda_probe_sm121_gate_spark0.sh`
+- Minimal gates (no-transfer toolchain + no-transfer device-props + `sm_121` gate): `./scripts/cuda_probe_minimal_gates_spark0.sh`
 - Fast path: `./scripts/cuda_probe_tiny_spark0.sh`
 - No-transfer device-props only: `./scripts/cuda_probe_device_props_minimal_spark0.sh`
+- No-transfer `sm_121` compile probes only: `./scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh`
+- No-transfer kernel launch smoke (no `cudaMalloc`): `./scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh`
 - Compile-only fast path: `./scripts/cuda_probe_compile_only_tiny_spark0.sh`
 - Kernel bring-up tiny (no cuBLASLt): `./scripts/cuda_probe_kernel_tiny_spark0.sh`
 - Full suite: `./scripts/cuda_probe_spark0.sh` and `./scripts/cuda_probe_compile_only_spark0.sh`
@@ -29,6 +32,7 @@ To capture deterministic logs on the Mac without relying on `tee`/`pipefail`, se
 LOG_PATH=/private/tmp/ds4_cuda_probe_device_props_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_device_props_minimal_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_nvcc_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_nvcc_minimal_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_cmake_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_cmake_minimal_spark0.sh
+LOG_PATH=/private/tmp/ds4_cuda_probe_kernel_launch_tiny_minimal_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_tiny_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_capability_spark0.sh
@@ -37,6 +41,8 @@ LOG_PATH=/private/tmp/ds4_cuda_probe_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scri
 LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_spark0.sh
 LOG_PATH=/private/tmp/ds4_cuda_probe_disasm_spark0_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_disasm_spark0.sh
 ```
+
+`scripts/cuda_probe_minimal_gates_spark0.sh` and `scripts/cuda_probe_capability_spark0.sh` run the no-transfer kernel-launch smoke by default (disable with `WITH_KERNEL_LAUNCH_MINIMAL=0`) so logs capture an explicit “kernel launch + sync works” signal even when VRAM is fully allocated.
 
 ## Build (on Spark0)
 

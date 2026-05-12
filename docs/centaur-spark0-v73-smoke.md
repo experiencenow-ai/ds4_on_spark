@@ -17,6 +17,7 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 - Centaur package zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
   - Zip contains `centaur_spec_impl_v73/` with `centaur.py`, `requirements.txt`, and tests.
   - Do **not** commit the zip or venvs into this repo.
+  - Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
   - Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
 
     ```bash
@@ -29,12 +30,8 @@ The smoke prints “package facts” early in the run so bug reports can include
 
 - `zip_mtime/size`: from `ls -la "$CENTAUR_ZIP"`
 - `zip_sha256`: computed from the zip bytes
-- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (observed in `/Users/mac/Downloads/centaur_spec_impl_v73.zip` mtime `2026-05-11 02:08` local: `centaur-impl-0.68`)
-- `zip_sha256` (observed in the same zip): `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
-- `requirements.txt` (observed in the same zip):
-  - `numpy>=1.26`
-  - `scipy>=1.11`
-  - `scikit-learn>=1.4`
+- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (see `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`)
+- `requirements.txt`: extracted from the zip (see `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`)
 
 If `pip install` falls back to building these from source (missing wheels for your Python/OS), treat that as a **DS4 runtime/host compatibility** issue for the purposes of triage (not a Centaur logic bug).
 
@@ -69,7 +66,7 @@ sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 
 This writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/` and fetches a small sanitized bundle back to your Mac under `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`).
 
-If you only want to stage + stream-run the smoke (no validate/fetch), use:
+If you only want to stage + run the smoke (no validate/fetch), use:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
@@ -81,10 +78,10 @@ From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 ./scripts/centaur_spark0_v73_stage.sh spark0@<spark0-host>
 ```
 
-Then run the smoke on Spark0 (the stage script prints the exact command). The smoke script is streamed over SSH, so nothing new needs to be installed on Spark0 besides python3 + unzip:
+Then run the smoke on Spark0 (the stage script prints the exact command). `scripts/centaur_spark0_v73_stage.sh` stages `centaur_spark0_v73_smoke.sh` onto Spark0 so you can run it directly (no streaming required). Nothing new needs to be installed on Spark0 besides python3 + unzip:
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "cd ~/centaur-smoke/v73 && sh -s" < ./scripts/centaur_spark0_v73_smoke.sh
+ssh $SSH_OPTS spark0@<spark0-host> 'cd ~/centaur-smoke/v73 && export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)" && export CENTAUR_LOG=~/centaur-smoke/v73/run/"$CENTAUR_RUN_ID"/smoke.log && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_CATALOG_JSON=~/centaur-smoke/v73/unit_model_catalog.json && sh ./centaur_spark0_v73_smoke.sh'
 ```
 
 Artifacts are written under:
@@ -157,8 +154,9 @@ When saving a smoke excerpt for PRs/issues, capture:
 
 - The exact Spark0 command line and working directory (`pwd`, `CENTAUR_ZIP`, `CENTAUR_WORKDIR`)
 - `python3 -V` and venv python path
-- `pip freeze` output
+- `pip freeze` output (or attach `pip_freeze.txt` if present)
 - `sha256` of the Centaur zip (the smoke prints it as `zip_sha256: ...`)
+- `smoke_facts.json` (when present; structured zip/python/pip context)
 - Command outputs for each failing sub-step (bounded tails)
 
 Avoid committing:
@@ -167,7 +165,7 @@ Avoid committing:
 - private IPs / MAC addresses
 - any API keys / tokens (Centaur provider registration should only reference env var names via `--auth-env`, not values)
 
-If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact bundle (log + manifests + dashboard) back to your Mac:
+If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact bundle (log + manifests + dashboard, plus optional facts) back to your Mac:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
@@ -205,7 +203,7 @@ The repo includes sanitized, commit-safe Spark0 v73 smoke artifact bundles:
 - Bundle path:
   - `fixtures/centaur-smoke/spark0-v73/20260512T073455Z/`
 
-The bundle contains `smoke.log`, `effective_manifests/`, `hyor_effective/`, and `hyor_dashboard/`.
+Newer bundles may also include `smoke_facts.json` and `pip_freeze.txt` (older checked-in bundles only include `smoke.log` + the artifact dirs).
 
 ## Bug triage: Centaur vs DS4 runtime
 

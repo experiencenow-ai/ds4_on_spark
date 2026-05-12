@@ -25,7 +25,7 @@ Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or
 
 The evidence helper runs:
 
-- stage + smoke (streamed)
+- stage + smoke (Spark0)
 - Spark0 artifact validation
 - Mac-side artifact fetch into `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`)
 
@@ -79,7 +79,7 @@ If you also have Spark3, use:
 
 - Spark0 smoke:
   - `scripts/centaur_spark0_v73_run.sh` (Mac-side wrapper)
-  - `scripts/centaur_spark0_v73_stage.sh` (stages zip + fixture)
+  - `scripts/centaur_spark0_v73_stage.sh` (stages zip + fixture + smoke helpers)
   - `scripts/centaur_spark0_v73_smoke.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_validate_artifacts.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_fetch_artifacts.sh` (Mac-side fetch helper)

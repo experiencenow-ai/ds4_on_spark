@@ -37,6 +37,11 @@ Recommended (stages all 4 Sparks, avoids instance-name mistakes):
 # optional: add --tcp 29500 --tcp 9090
 ```
 
+Optional: keep the ordered inventory in a file (any newline-delimited list of `<user>@<host>` works; see `deploy/config/inventory.ds4.spark_ring.example` for the format):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file <path-to-your-inventory>
+```
 At the end of staging, the helper runs a safe staged env audit to catch common ring mismatches before install:
 
 - `scripts/ops_spark_ring_staged_env_audit.sh` (reads `/tmp/ds4-config/ds4-<instance>.env.example` on each Spark)

@@ -249,7 +249,7 @@ This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/
 3. Captures `hyor-sync-effective` manifests under `RING_WORKDIR/effective_manifests/`
 4. Pushes the mutated node roots back to the remote Sparks (and optionally effective dirs when `RING_APPLY=1`)
 
-From your Mac repo root (stream-run on Spark0, passing Spark1/2 SSH targets as args):
+From your Mac repo root (runs on Spark0 over SSH, passing Spark1/2 SSH targets as args):
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
@@ -428,6 +428,7 @@ If you can provide a shared writable filesystem path visible on Spark0/1/2 (NFS,
 When the ring sim/rsync run fails, capture:
 
 - Centaur zip facts: `ls -la` and `sha256` of `centaur_spec_impl_v73.zip`
+- Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
 - Mac-side helper: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip`
 - `python3 -V` and `pip freeze` (at least numpy/scipy/scikit-learn)
 - Exact Centaur command lines that failed (copy/paste)

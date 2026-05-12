@@ -38,6 +38,12 @@ Topology:
 - `sliding_window=128`
 - `vocab_size=129280`
 
+Tokenizer / encoding (special-token IDs are derived from `tokenizer.json` and recorded machine-readably under `contract_summary.json` `tokenizer.encoding_token_ids`):
+
+- `<think>`=`128821`, `</think>`=`128822`
+- `<｜User｜>`=`128803`, `<｜Assistant｜>`=`128804`, `<｜latest_reminder｜>`=`128828`, `｜DSML｜`=`128825`
+- Quick-task tokens: `<｜action｜>`=`128829`, `<｜query｜>`=`128830`, `<｜authority｜>`=`128831`, `<｜domain｜>`=`128832`, `<｜title｜>`=`128836`, `<｜read_url｜>`=`128845`
+
 MoE:
 
 - `n_routed_experts=256`, `n_shared_experts=1`
@@ -89,7 +95,7 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
 - **Sparse-attn sentinel masking rule**:
   - Upstream source: `inference/kernel.py` (`sparse_attn`; `idx == -1` must behave as `score=-inf` and `kv=0`).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/kernel.py`.
-  - DS4 contract: `contract_summary.json` `cache.topk_mask_value` + `cache.sparse_attn_mask_rule`.
+  - DS4 contract: `contract_summary.json` `cache.topk_mask_value` + `cache.sparse_attn_mask` (with the human summary in `cache.sparse_attn_mask_rule`).
 - **MoE routing + gate tensor semantics**:
   - Upstream source: `inference/model.py` (MoE forward/routing; hash-gated vs score-gated layers).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/model.py`.
@@ -126,9 +132,9 @@ Key JSON paths by concern:
 
 - Topology (layers/hidden/heads/vocab): `topology.*`
 - Sliding/CSA/HCA schedule: `attention_schedule.main_compress_ratios` + `attention_schedule.mtp_compress_ratios` (raw upstream array: `attention_schedule.compress_ratios`), `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
-  - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type` and `attention_schedule.main_layer_ids_by_compress_ratio`
+  - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type`, `attention_schedule.main_layer_ids_by_compress_ratio`, plus direct maps `attention_schedule.main_layer_type_by_layer_id` / `attention_schedule.main_compress_ratio_by_layer_id` and the full (main+MTP) maps `attention_schedule.layer_type_by_layer_id` / `attention_schedule.compress_ratio_by_layer_id`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
-- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
+- Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask` (and the human summary in `cache.sparse_attn_mask_rule`; MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
 - MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
 - MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)
@@ -156,7 +162,7 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
 - Encoding gate: `oracle.encoding_oracle.required == true` and the pinned vectors under `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` must pass via `scripts/model_contract_verify_deepseek_v4_flash.py`.
 - Topology gate: `topology.*` must match (`n_layers=43`, `hidden_size=4096`, `n_heads=64`, `head_dim=512`, `vocab_size=129280`).
 - Attention schedule gate: `attention_schedule.main_compress_ratios` must match exactly (2 sliding, then CSA/HCA alternation), and `attention_schedule.mtp_compress_ratios` must satisfy `mtp.compress_ratio_rule` (the raw upstream array is also recorded as `attention_schedule.compress_ratios`).
-- Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask_rule`.
+- Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask` (`cache.sparse_attn_mask_rule` is the human summary).
 - MoE routing gate: hash routing (`ffn.gate.tid2eid`, `int32`) applies only to layers `0..n_hash_layers-1`; score routing uses `ffn.gate.bias` for selection only (`moe.hash_routing.*`, `moe.semantics.*`).
 - Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
 - Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
@@ -416,7 +422,12 @@ To guard against silent drift in the sliding/CSA/HCA KV update rules, this repo 
 - `indexer_forward` (CSA-only scoring path + top-k selection)
 - `attention_forward` (sliding ring update + prefill wrap + top-k concat)
 
-For run-report interpretation (including quantized single-Spark external runtimes), `contract_summary.json` also carries short cache semantics summaries under `cache.semantics.{kv_layout,sparse_topk_rule,sliding_summary,csa_summary,hca_summary}` so tooling can explain sliding vs CSA vs HCA behavior without scraping Markdown.
+For run-report interpretation (including quantized single-Spark external runtimes), `contract_summary.json` also carries compact cache semantics summaries under `cache.semantics.*`:
+
+- `cache.semantics.reference_source`: pinned upstream source for the summary
+- `cache.semantics.kv_layout`: exact “sliding ring + compressed linear segment” layout + indexing model
+- `cache.semantics.sparse_topk_rule`: exact top‑k index selection/offset rules (prefill vs decode; CSA vs HCA)
+- `cache.semantics.{sliding_summary,csa_summary,hca_summary}`: short layer-kind summaries for tooling/UI
 
 Sparse attention index selection:
 
@@ -452,7 +463,7 @@ Reference implementation: `inference/kernel.py` (`sparse_attn`).
 - Sparse top-k index buffers use `topk_mask_value == -1` as a sentinel.
 - When an index is masked (`idx == -1`), the kernel must behave as if `score=-inf` and `kv=0` (i.e. it contributes nothing to the softmax numerator and cannot introduce NaNs via invalid gathers).
 
-These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value` and `cache.sparse_attn_mask_rule`.
+These invariants are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `cache.topk_mask_value`, `cache.sparse_attn_mask` (machine-readable), and `cache.sparse_attn_mask_rule` (human summary).
 
 ### MLA positional semantics (partial RoPE + inverse on output)
 
@@ -647,9 +658,10 @@ To make the key set easy to reference in downstream tooling (and to detect accid
 - `checkpoint_index.weight_map_num_tensors`
 - `checkpoint_index.weight_map_keys_sha256`
 - `checkpoint_index.weight_map_top_level_keys_sha256`, `checkpoint_index.weight_map_top_level_tensor_key_count` (fingerprint/count for the non-`layers.*` / non-`mtp.*` top-level keys like `embed.weight` and `head.weight`)
-- `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`)
+- `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`; includes small `first_keys_sample`/`last_keys_sample` lists for debugging)
 - `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256` (convenience copies of the per-prefix `layers` / `mtp` hashes)
 - `mtp.checkpoint_key_fingerprint` (official `mtp.*` subset fingerprint; useful for deciding whether an artifact set plausibly preserves upstream `mtp.0.*`)
+- `mtp.checkpoint_key_examples` (debug-only: official `mtp.*` layer IDs/prefixes plus small `first_keys_sample`/`last_keys_sample` lists)
 - `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
 
 ### Quantization scale tensor semantics (FP8/FP4)

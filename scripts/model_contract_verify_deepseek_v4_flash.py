@@ -61,8 +61,29 @@ def repo_relpath(path: Path) -> str:
 	except ValueError:
 		return str(path)
 
+def parse_tokenizer_added_token_ids(tokenizer_json: Path):
+	if not tokenizer_json.exists():
+		return None
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return None
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	if not isinstance(added_tokens, list):
+		return None
+	out: dict[str, int] = {}
+	for t in added_tokens:
+		if not isinstance(t, dict):
+			continue
+		content = t.get("content", None)
+		tid = t.get("id", None)
+		if not isinstance(content, str) or not isinstance(tid, int):
+			continue
+		out[content] = int(tid)
+	return out
 
-def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+
+def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
 	for k in weight_keys:
 		prefix = k.split(".", 1)[0]
@@ -71,9 +92,20 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	out: dict[str, dict] = {}
 	for prefix in sorted(prefix_to_keys.keys()):
 		keys = sorted(prefix_to_keys[prefix])
+		first_sample = None
+		last_sample = None
+		try:
+			n = int(sample_n)
+		except Exception:
+			n = 0
+		if n > 0 and len(keys) > 0:
+			first_sample = list(keys[:n])
+			last_sample = list(keys[-n:])
 		out[prefix] = {
 			"count": int(len(keys)),
 			"keys_sha256": sha256_lines(keys),
+			"first_keys_sample": first_sample,
+			"last_keys_sample": last_sample,
 		}
 	return out
 
@@ -273,6 +305,52 @@ def main() -> int:
 						expected_task_keys = {"action", "query", "authority", "domain", "title", "read_url"}
 						if set(task_tokens.keys()) != expected_task_keys:
 							failures.append(Failure(39, f"contract summary encoding_constants.ds_task_sp_tokens keys mismatch (expected {sorted(expected_task_keys)}): {contract_summary}"))
+					encoding_token_ids = tok.get("encoding_token_ids")
+					added_ids = parse_tokenizer_added_token_ids(FIX / "tokenizer.json")
+					if not isinstance(added_ids, dict) or not added_ids:
+						failures.append(Failure(89, f"fixtures tokenizer.json must include added_tokens with stable ids: {FIX / 'tokenizer.json'}"))
+					elif not isinstance(encoding_token_ids, dict):
+						failures.append(Failure(93, f"contract summary tokenizer.encoding_token_ids missing or invalid (expected dict): {contract_summary}"))
+					else:
+						want_ref = f"{repo_relpath(FIX / 'tokenizer.json')}:added_tokens"
+						if encoding_token_ids.get("reference_source") != want_ref:
+							failures.append(Failure(94, f"contract summary tokenizer.encoding_token_ids.reference_source mismatch (expected {want_ref!r}): {contract_summary}"))
+
+						def _want_id(token: object):
+							if not isinstance(token, str):
+								return None
+							return added_ids.get(token)
+
+						for k in (
+							"bos_token",
+							"eos_token",
+							"user_sp_token",
+							"assistant_sp_token",
+							"latest_reminder_sp_token",
+							"thinking_start_token",
+							"thinking_end_token",
+							"dsml_token",
+						):
+							want_id = _want_id(enc.get(k))
+							if not isinstance(want_id, int):
+								failures.append(Failure(95, f"fixtures tokenizer.json missing expected token {k}={enc.get(k)!r}: {FIX / 'tokenizer.json'}"))
+								break
+							if encoding_token_ids.get(k) != int(want_id):
+								failures.append(Failure(96, f"contract summary tokenizer.encoding_token_ids.{k} mismatch (expected {int(want_id)}): {contract_summary}"))
+								break
+						got_task = encoding_token_ids.get("ds_task_sp_tokens")
+						if isinstance(task_tokens, dict):
+							want_task: dict[str, int] = {}
+							for name in sorted(task_tokens.keys()):
+								tok_val = task_tokens.get(name)
+								tid = _want_id(tok_val)
+								if isinstance(tid, int):
+									want_task[str(name)] = int(tid)
+							if not isinstance(got_task, dict):
+								failures.append(Failure(97, f"contract summary tokenizer.encoding_token_ids.ds_task_sp_tokens missing or invalid (expected dict): {contract_summary}"))
+							else:
+								if got_task != want_task:
+									failures.append(Failure(98, f"contract summary tokenizer.encoding_token_ids.ds_task_sp_tokens mismatch (expected {want_task}): {contract_summary}"))
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 				if upstream_commit:
@@ -475,6 +553,27 @@ def main() -> int:
 						]
 						if any(n not in src for n in need):
 							failures.append(Failure(140, f"contract summary cache.topk_index_helpers.get_compress_topk_idxs source missing required markers: {contract_summary}"))
+
+				if cache_obj.get("topk_mask_value") != -1:
+					failures.append(Failure(5200, f"contract summary cache.topk_mask_value must be -1: {contract_summary}"))
+				sparse_rule = cache_obj.get("sparse_attn_mask_rule", None)
+				if not (isinstance(sparse_rule, str) and "idx == -1" in sparse_rule and "score=-inf" in sparse_rule and "kv=0" in sparse_rule):
+					failures.append(Failure(5201, f"contract summary cache.sparse_attn_mask_rule must be a string describing idx==-1 masking (score=-inf, kv=0): {contract_summary}"))
+				sparse_mask = cache_obj.get("sparse_attn_mask", None)
+				if not isinstance(sparse_mask, dict):
+					failures.append(Failure(5202, f"contract summary cache.sparse_attn_mask must be an object: {contract_summary}"))
+				else:
+					ref = sparse_mask.get("reference_source")
+					if not (isinstance(ref, str) and ref):
+						failures.append(Failure(5203, f"contract summary cache.sparse_attn_mask.reference_source must be a non-empty string: {contract_summary}"))
+					elif ref.startswith("/"):
+						failures.append(Failure(5204, f"contract summary cache.sparse_attn_mask.reference_source must not be absolute: {contract_summary}"))
+					if sparse_mask.get("sentinel_index") != -1:
+						failures.append(Failure(5205, f"contract summary cache.sparse_attn_mask.sentinel_index must be -1: {contract_summary}"))
+					if sparse_mask.get("masked_kv_fill_value") != 0:
+						failures.append(Failure(5206, f"contract summary cache.sparse_attn_mask.masked_kv_fill_value must be 0: {contract_summary}"))
+					if sparse_mask.get("masked_score_fill_value") != "-inf":
+						failures.append(Failure(5207, f"contract summary cache.sparse_attn_mask.masked_score_fill_value must be '-inf': {contract_summary}"))
 
 				cache_sem = cache_obj.get("semantics", None)
 				if not isinstance(cache_sem, dict):
@@ -1012,6 +1111,24 @@ def main() -> int:
 					got_ratios = mtp.get("compress_ratios", None)
 					if not (isinstance(want_ratios, list) and isinstance(got_ratios, list) and got_ratios == want_ratios):
 						failures.append(Failure(153, f"contract summary mtp.compress_ratios mismatch (expected attention_schedule.mtp_compress_ratios): {contract_summary}"))
+					ex = mtp.get("checkpoint_key_examples", None)
+					if want_layers > 0:
+						expected_layer_ids = list(range(int(want_layers)))
+						if not isinstance(ex, dict):
+							failures.append(Failure(185, f"contract summary mtp.checkpoint_key_examples must be an object when num_nextn_predict_layers>0: {contract_summary}"))
+						else:
+							if ex.get("layer_ids") != expected_layer_ids:
+								failures.append(Failure(186, f"contract summary mtp.checkpoint_key_examples.layer_ids mismatch (got {ex.get('layer_ids')!r} expected {expected_layer_ids}): {contract_summary}"))
+							want_prefixes = [f"mtp.{i}." for i in expected_layer_ids]
+							if ex.get("prefixes") != want_prefixes:
+								failures.append(Failure(187, f"contract summary mtp.checkpoint_key_examples.prefixes mismatch (got {ex.get('prefixes')!r} expected {want_prefixes}): {contract_summary}"))
+							for k in ("first_keys_sample", "last_keys_sample"):
+								v = ex.get(k, None)
+								if v is None:
+									continue
+								if not (isinstance(v, list) and all(isinstance(x, str) and x.startswith("mtp.") for x in v)):
+									failures.append(Failure(188, f"contract summary mtp.checkpoint_key_examples.{k} must be a list of mtp.* strings or null: {contract_summary}"))
+									break
 
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):
@@ -1331,6 +1448,61 @@ def main() -> int:
 						if tf_mtp[j] != want:
 							failures.append(Failure(105, f"contract summary transformers_mtp_layer_types[{j}] mismatch (got {tf_mtp[j]!r} expected {want!r}): {contract_summary}"))
 							break
+
+			def ratio_kind(r: int) -> str:
+				if r == 0:
+					return("sliding")
+				if r == 4:
+					return("csa")
+				if r == 128:
+					return("hca")
+				return("unknown")
+
+			main_kind_map = attn.get("main_layer_type_by_layer_id", None)
+			if not isinstance(main_kind_map, dict) or len(main_kind_map) != n_layers:
+				failures.append(Failure(154, f"contract summary attention_schedule.main_layer_type_by_layer_id must be an object with n_layers={n_layers} entries: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:n_layers]):
+					want = ratio_kind(int(r))
+					if want == "unknown":
+						failures.append(Failure(155, f"unexpected trunk compress_ratio {r!r} at layer {i}: {contract_summary}"))
+						break
+					got = main_kind_map.get(str(i))
+					if got != want:
+						failures.append(Failure(156, f"contract summary attention_schedule.main_layer_type_by_layer_id[{i}] mismatch (got {got!r} expected {want!r}): {contract_summary}"))
+						break
+
+			main_ratio_map = attn.get("main_compress_ratio_by_layer_id", None)
+			if not isinstance(main_ratio_map, dict) or len(main_ratio_map) != n_layers:
+				failures.append(Failure(157, f"contract summary attention_schedule.main_compress_ratio_by_layer_id must be an object with n_layers={n_layers} entries: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:n_layers]):
+					got = main_ratio_map.get(str(i))
+					if got != int(r):
+						failures.append(Failure(158, f"contract summary attention_schedule.main_compress_ratio_by_layer_id[{i}] mismatch (got {got!r} expected {int(r)!r}): {contract_summary}"))
+						break
+
+			full_kind_map = attn.get("layer_type_by_layer_id", None)
+			full_ratio_map = attn.get("compress_ratio_by_layer_id", None)
+			want_total = int(n_layers + n_mtp_layers)
+			if not isinstance(full_kind_map, dict) or len(full_kind_map) != want_total:
+				failures.append(Failure(159, f"contract summary attention_schedule.layer_type_by_layer_id must be an object with n_layers+n_mtp_layers={want_total} entries: {contract_summary}"))
+			elif not isinstance(full_ratio_map, dict) or len(full_ratio_map) != want_total:
+				failures.append(Failure(160, f"contract summary attention_schedule.compress_ratio_by_layer_id must be an object with n_layers+n_mtp_layers={want_total} entries: {contract_summary}"))
+			else:
+				for i, r in enumerate(compress_ratios[:want_total]):
+					got_kind = full_kind_map.get(str(i))
+					got_ratio = full_ratio_map.get(str(i))
+					want_kind = ratio_kind(int(r))
+					if want_kind == "unknown":
+						failures.append(Failure(161, f"unexpected compress_ratio {r!r} at layer_id {i}: {contract_summary}"))
+						break
+					if got_kind != want_kind:
+						failures.append(Failure(162, f"contract summary attention_schedule.layer_type_by_layer_id[{i}] mismatch (got {got_kind!r} expected {want_kind!r}): {contract_summary}"))
+						break
+					if got_ratio != int(r):
+						failures.append(Failure(163, f"contract summary attention_schedule.compress_ratio_by_layer_id[{i}] mismatch (got {got_ratio!r} expected {int(r)!r}): {contract_summary}"))
+						break
 
 			moe = summary.get("moe", {}) if isinstance(summary, dict) else {}
 			if isinstance(moe, dict):

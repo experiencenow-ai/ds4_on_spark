@@ -16,6 +16,31 @@ This gate also includes a compile-only “fatbin packaging” probe using `-genc
 
 The runtime probes are best-effort: `cuda_sm121_kernel_launch_tiny` (no `cudaMalloc`) and the “arch report” binaries can be skipped if Spark0’s GPU is busy/unavailable or allocations fail with `out of memory`; the gate still reports compile-only results so you can distinguish “toolchain can target `sm_121`” from “device was runnable right now”.
 
+## Spark0: Minimal Gates (nvcc + Device Props + `sm_121` Gate)
+
+When you want a single command that:
+
+- runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior)
+- runs `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile/run gates)
+- runs `scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh` (no repo transfer; minimal “launch a kernel and sync” smoke without `cudaMalloc`)
+- runs `scripts/cuda_probe_sm121_gate_spark0.sh` (ships `tools/cuda_probe/`; fastest “device-props + compile-only gates” build)
+
+```bash
+./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
+To skip the kernel-launch smoke (for example when Spark0 is heavily loaded), run:
+
+```bash
+WITH_KERNEL_LAUNCH_MINIMAL=0 ./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
+To include the heavier “kernel plumbing” gates, run:
+
+```bash
+WITH_KERNEL_TINY=1 ./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
 ## Spark0: Tiny Smoke (Fast Path)
 
 When you just need a quick “is CUDA alive + can we compile/run `sm_121`?” check:
@@ -213,6 +238,30 @@ This also performs best-effort toolchain-only checks when supported:
 - If `cuobjdump` is available and `compute_121` is advertised, emit `-fatbin` artifacts with explicit `-gencode` (`code=sm_121` only, `code=compute_121` only, and `sm_121+compute_121` via both repeated `-gencode` and bracket-list `code=[sm_121,compute_121]`) and report whether embedded PTX is present (expected: SM-only missing; PTX-only present; SM+PTX present).
 - If `cuobjdump` is available, emit a `-fatbin` with `-arch=native` and report whether an embedded PTX section exists (expected missing per `nvcc` docs).
 - When PTX is present, the script also prints the first PTX `.target` line (`ptx_target_*`) so the embedded PTX arch is explicit in logs.
+
+## Spark0: `sm_121` Compile Probes Minimal (No Repo Transfer)
+
+When you want a tiny compile-only “does `nvcc` accept and device-compile `sm_121`?” check without shipping `tools/cuda_probe/` to Spark0:
+
+```bash
+./scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh
+```
+
+This script compiles a minimal `sm_121` compile probe with multiple flag spellings (`-arch=sm_121`, `--gpu-architecture=sm_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121`) and then runs best-effort alias acceptance probes for `sm_121a` / `sm_121f`. It also includes compile-only gates for CUTLASS/DeepGEMM-style `-std=c++20 --extended-lambda --expt-relaxed-constexpr` and a standalone `__cluster_dims__(2,1,1)` annotation compile check (same flag-spelling variants).
+
+## Spark0: Kernel Launch Tiny Minimal (No Repo Transfer)
+
+When you want the smallest possible “compile + run a `sm_121` kernel” smoke test without shipping `tools/cuda_probe/` and without calling `cudaMalloc` (useful when Spark0 VRAM is fully allocated, but you still want a direct “kernel launch path works” signal):
+
+```bash
+./scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh
+```
+
+By default this uses `nvcc -arch=sm_121`. To override the exact `nvcc` arch flags (for example: `-arch=native` or `--gpu-architecture=sm_121`), set `NVCC_FLAGS`:
+
+```bash
+NVCC_FLAGS="-arch=native" ./scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh
+```
 
 ## Spark0: Minimal `nvcc` Compile + Run (No Repo Transfer)
 

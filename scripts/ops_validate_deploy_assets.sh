@@ -108,10 +108,14 @@ need_file "deploy/config/ds4-spark2.conf.example"
 need_file "deploy/config/ds4-spark3.conf.example"
 need_file "deploy/config/journald.ds4.conf.example"
 need_file "deploy/config/logrotate.ds4.conf.example"
+need_file "deploy/config/prometheus-alerts.ds4.yml.example"
 need_file "deploy/config/prometheus-scrape.ds4.yml.example"
 need_file "deploy/config/spark-spark0.env.example"
 need_file "deploy/config/spark-spark1.env.example"
 need_file "deploy/config/spark-spark2.env.example"
+need_file "deploy/config/inventory.ds4.spark01.example"
+need_file "deploy/config/inventory.ds4.spark012.example"
+need_file "deploy/config/inventory.ds4.spark_ring.example"
 need_file "deploy/config/hosts.ds4.spark01.example"
 need_file "deploy/config/hosts.ds4.spark012.example"
 need_file "deploy/config/hosts.ds4.spark_ring.example"
@@ -135,6 +139,7 @@ need_file "scripts/ops_spark012_mesh_check.sh"
 need_file "scripts/ops_spark_ring_mesh_check.sh"
 need_file "scripts/ops_spark_ring_staged_env_audit.sh"
 need_file "scripts/ops_spark_ring_status.sh"
+need_file "scripts/ops_spark_ring_ops_check.sh"
 need_file "scripts/ops_collect_support_bundle.sh"
 need_file "scripts/ops_validate_staged_assets.sh"
 need_file "scripts/ops_validate_installed_assets.sh"
@@ -156,6 +161,7 @@ sh -n scripts/ops_spark012_mesh_check.sh
 sh -n scripts/ops_spark_ring_mesh_check.sh
 sh -n scripts/ops_spark_ring_staged_env_audit.sh
 sh -n scripts/ops_spark_ring_status.sh
+sh -n scripts/ops_spark_ring_ops_check.sh
 sh -n scripts/ops_collect_support_bundle.sh
 sh -n scripts/ops_validate_deploy_assets.sh
 sh -n scripts/ops_validate_staged_assets.sh
