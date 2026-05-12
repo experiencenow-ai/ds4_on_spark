@@ -43,15 +43,33 @@ PROMPTS: List[Prompt] = [
 
 
 def parse_args() -> argparse.Namespace:
+    concurrency_default = 1
+    try:
+        concurrency_default = int(os.environ.get("OPENAI_STREAM_CONCURRENCY", "1"))
+    except ValueError:
+        concurrency_default = 1
+
+    timeout_default = 600.0
+    try:
+        timeout_default = float(os.environ.get("OPENAI_STREAM_TIMEOUT_S", "600.0"))
+    except ValueError:
+        timeout_default = 600.0
+
+    max_prompts_default = 0
+    try:
+        max_prompts_default = int(os.environ.get("OPENAI_STREAM_MAX_PROMPTS", "0"))
+    except ValueError:
+        max_prompts_default = 0
+
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--endpoint", default=os.environ.get("OPENAI_CHAT_ENDPOINT", "http://localhost:8000/v1/chat/completions"))
     p.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "aeon-ultimate"))
     p.add_argument("--api-key", default=os.environ.get("OPENAI_API_KEY", os.environ.get("VLLM_API_KEY", "")))
     p.add_argument("--thinking", choices=("off", "on"), default=os.environ.get("BENCH_THINKING", "off"))
     p.add_argument("--temperature", type=float, default=0.0)
-    p.add_argument("--concurrency", type=int, default=1)
-    p.add_argument("--timeout", type=float, default=600.0)
-    p.add_argument("--max-prompts", type=int, default=0, help="limit prompt count after filtering; 0 means all")
+    p.add_argument("--concurrency", type=int, default=concurrency_default)
+    p.add_argument("--timeout", type=float, default=timeout_default)
+    p.add_argument("--max-prompts", type=int, default=max_prompts_default, help="limit prompt count after filtering; 0 means all")
     p.add_argument("--category", action="append", default=[], help="include only this category; repeatable")
     p.add_argument("--out-dir", default=os.environ.get("OUT_DIR", ""), help="optional output directory; sets default jsonl/csv/summary paths inside it")
     p.add_argument("--jsonl-out", default="")
