@@ -255,6 +255,25 @@ def run_runtime_trace_mtp_ablation(
                 "output_token_p95_batch_ms",
                 "output_token_p95_batch_ms",
             )
+            base_drop = _as_float(sweep_base, drop_key)
+            best_drop = _as_float(v_sum, drop_key)
+            base_lat = _as_float(sweep_base, lat_key)
+            best_lat = _as_float(v_sum, lat_key)
+            delta_drop = (best_drop - base_drop)
+            delta_lat = (best_lat - base_lat)
+            max_latency_increase_frac = 0.10
+            max_latency_increase_ms = max(5.0, (max_latency_increase_frac * base_lat)) if base_lat > 0.0 else 0.0
+            supported = False
+            reason = "No best scheduler variant available."
+            if base_drop <= 0.0:
+                reason = f"Baseline drop metric is 0.0 (metric={drop_key}); no backpressure evidence to justify expert queueing changes."
+            elif delta_drop >= 0.0:
+                reason = f"Best scheduler variant does not reduce drops (metric={drop_key}); delta_drop={delta_drop:+.6f}."
+            elif base_lat > 0.0 and delta_lat > max_latency_increase_ms:
+                reason = f"Drop reduction comes with a large p95 latency increase (metric={lat_key}); delta_p95_latency_ms={delta_lat:+.3f} exceeds heuristic cap={max_latency_increase_ms:.3f} (max({int(max_latency_increase_frac*100)}%,5ms))."
+            else:
+                supported = True
+                reason = f"Best scheduler variant reduces drops (metric={drop_key}) with acceptable p95 latency impact (metric={lat_key}); delta_drop={delta_drop:+.6f}, delta_p95_latency_ms={delta_lat:+.3f}, cap={max_latency_increase_ms:.3f}."
             evidence["expert_queueing"] = {
                 "present": True,
                 "drop_metric": str(drop_key),
@@ -264,6 +283,12 @@ def run_runtime_trace_mtp_ablation(
                     "delta_drop": float(_delta(sweep_base, v_sum, drop_key)),
                     "delta_p95_latency_ms": float(_delta(sweep_base, v_sum, lat_key)),
                 },
+                "supported_by_trace_counters": bool(supported),
+                "heuristic": {
+                    "max_p95_latency_increase_frac": float(max_latency_increase_frac),
+                    "max_p95_latency_increase_ms": float(max_latency_increase_ms),
+                },
+                "reason": str(reason),
             }
         else:
             evidence["expert_queueing"] = {"present": True, "note": "No scheduler variants produced comparable summaries."}
