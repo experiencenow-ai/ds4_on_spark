@@ -17,6 +17,12 @@ ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
 MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
 MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-b0c3326-payload64.json"
 
+def repo_relpath(path: Path) -> str:
+	try:
+		return path.relative_to(ROOT).as_posix()
+	except ValueError:
+		return str(path)
+
 
 def load_json(path: Path):
 	with path.open("r", encoding="utf-8") as f:
@@ -84,9 +90,10 @@ def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path) -> Optional[list
 
 
 def parse_ds4_mtp_sidecar_payload_samples_fingerprint(reference_json: Path) -> dict:
+	reference_json_display = repo_relpath(reference_json)
 	if not reference_json.exists():
 		return {
-			"reference_json": str(reference_json),
+			"reference_json": reference_json_display,
 			"reference_sha256": None,
 			"payload_sample_bytes": None,
 			"payload_samples_count": None,
@@ -97,7 +104,7 @@ def parse_ds4_mtp_sidecar_payload_samples_fingerprint(reference_json: Path) -> d
 		doc = load_json(reference_json)
 	except Exception:
 		return {
-			"reference_json": str(reference_json),
+			"reference_json": reference_json_display,
 			"reference_sha256": sha256_file(reference_json),
 			"payload_sample_bytes": None,
 			"payload_samples_count": None,
@@ -122,7 +129,7 @@ def parse_ds4_mtp_sidecar_payload_samples_fingerprint(reference_json: Path) -> d
 
 	out_sha = sha256_lines(lines) if lines else None
 	return {
-		"reference_json": str(reference_json),
+		"reference_json": reference_json_display,
 		"reference_sha256": sha256_file(reference_json),
 		"payload_sample_bytes": int(sample_bytes) if isinstance(sample_bytes, int) else None,
 		"payload_samples_count": int(len(lines)) if lines else None,

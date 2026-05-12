@@ -55,6 +55,12 @@ def sha256_file(path: Path) -> str:
 			h.update(chunk)
 	return h.hexdigest()
 
+def repo_relpath(path: Path) -> str:
+	try:
+		return path.relative_to(ROOT).as_posix()
+	except ValueError:
+		return str(path)
+
 
 def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
@@ -344,6 +350,12 @@ def main() -> int:
 					if not isinstance(ref, dict):
 						failures.append(Failure(146, f"contract summary mtp_sidecar.reference_payload_samples must be a dict: {contract_summary}"))
 					else:
+						want_ref_json = repo_relpath(MTP_SIDECAR_REFERENCE_JSON)
+						got_ref_json = ref.get("reference_json")
+						if got_ref_json != want_ref_json:
+							failures.append(Failure(151, f"contract summary mtp_sidecar.reference_payload_samples.reference_json must be repo-relative {want_ref_json!r} (got {got_ref_json!r}): {contract_summary}"))
+						if isinstance(got_ref_json, str) and got_ref_json.startswith("/"):
+							failures.append(Failure(152, f"contract summary mtp_sidecar.reference_payload_samples.reference_json must not be absolute: {contract_summary}"))
 						if ref.get("reference_sha256") != sha256_file(MTP_SIDECAR_REFERENCE_JSON):
 							failures.append(Failure(147, f"contract summary mtp_sidecar.reference_payload_samples.reference_sha256 mismatch: {contract_summary}"))
 						ref_doc = load_json(MTP_SIDECAR_REFERENCE_JSON)
