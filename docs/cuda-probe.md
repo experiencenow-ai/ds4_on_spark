@@ -21,12 +21,19 @@ The runtime probes are best-effort: `cuda_sm121_kernel_launch_tiny` (no `cudaMal
 When you want a single command that:
 
 - runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior)
+- runs `scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh` (no repo transfer; compile-only `sm_121` / `compute_121` flag spelling gates)
 - runs `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile/run gates)
 - runs `scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh` (no repo transfer; minimal “launch a kernel and sync” smoke without `cudaMalloc`)
 - runs `scripts/cuda_probe_sm121_gate_spark0.sh` (ships `tools/cuda_probe/`; fastest “device-props + compile-only gates” build)
 
 ```bash
 ./scripts/cuda_probe_minimal_gates_spark0.sh
+```
+
+To skip the compile-only `sm_121` flag-spelling gates, run:
+
+```bash
+WITH_SM121_COMPILE_PROBES_MINIMAL=0 ./scripts/cuda_probe_minimal_gates_spark0.sh
 ```
 
 To skip the kernel-launch smoke (for example when Spark0 is heavily loaded), run:
