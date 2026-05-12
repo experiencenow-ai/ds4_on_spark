@@ -30,6 +30,15 @@ If you want a known-good reference bundle for what “PASS” looks like, see:
 
 2) Run the Spark0-local ring sim rehearsal (does not require Spark1/2 hardware):
 
+	Recommended: one-command evidence loop (run → validate → fetch):
+
+	```bash
+	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
+	```
+
+	If you prefer running the pieces manually:
+
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 	sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@<spark0-host>

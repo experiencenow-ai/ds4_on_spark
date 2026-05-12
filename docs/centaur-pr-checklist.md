@@ -40,6 +40,14 @@ export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Example (Spark12 ring sim, from Mac):
+
+```bash
+export SSH_OPTS="..."
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
+```
+
 ## Centaur smoke status (Spark0 v73)
 
 - Status: PASS | FAIL | NOT RUN

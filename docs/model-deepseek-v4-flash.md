@@ -738,6 +738,8 @@ Per-layer required suffixes (`tensor_keys.required_layer_suffixes`, appended und
 - `hc_attn_fn`, `hc_attn_base`, `hc_attn_scale`
 - `hc_ffn_fn`, `hc_ffn_base`, `hc_ffn_scale`
 
+Full key templates (including the namespace prefix and `{layer_id}` / `{mtp_layer_id}` placeholders) are recorded in `contract_summary.json` under `tensor_keys.tensor_key_templates` to avoid consumers having to manually concatenate prefixes.
+
 Expert-key completeness expectation (`contract_summary.json` `tensor_keys.expected_expert_key_count_per_layer`):
 
 - For each layer, there must be `256 experts × 3 linears × 2 tensors (weight+scale) = 1536` expert keys of the form `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` with `eid ∈ [0,255]`.

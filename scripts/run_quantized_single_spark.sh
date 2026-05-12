@@ -55,38 +55,9 @@ remote_select_model_gguf()
     if [ "$glob" = "" ]; then
         return 0
     fi
-    glob_lit="$(quote_sh "$glob")"
-    exclude_lit="$(quote_sh "$exclude_re")"
-    include_lit="$(quote_sh "$include_re")"
-
-    # NOTE: ssh concatenates argv into one string on the remote end, so we must quote
-    # arguments ourselves and pass them as part of the single remote command string.
-    ssh $SSH_OPTS "$target" "sh -s -- $glob_lit $exclude_lit $include_lit" 2>/dev/null <<'EOF' || true
-set -eu
-glob="${1:-}"
-exclude_re="${2:-}"
-include_re="${3:-}"
-best_path=""
-best_size=""
-for f in $glob; do
-    [ -r "$f" ] || continue
-    base="${f##*/}"
-    if [ "$exclude_re" != "" ] && printf %s "$base" | grep -Eiq "$exclude_re"; then
-        continue
-    fi
-    if [ "$include_re" != "" ] && ! printf %s "$base" | grep -Eiq "$include_re"; then
-        continue
-    fi
-    sz=$(wc -c "$f" 2>/dev/null | awk '{print $1}' || true)
-    [ "$sz" != "" ] || continue
-    if [ "$best_size" = "" ] || [ "$sz" -lt "$best_size" ]; then
-        best_size="$sz"
-        best_path="$f"
-    fi
-done
-[ "$best_path" != "" ]
-printf "%s\n" "$best_path"
-EOF
+    # Avoid quote injection by passing the glob/regex as positional args to `sh -lc`.
+    # Note: `sh -c <script> arg0 arg1 arg2 ...` maps arg1->"$1", arg2->"$2", etc.
+    ssh $SSH_OPTS "$target" "sh -lc 'set -eu; glob=\"\$1\"; exclude_re=\"\$2\"; include_re=\"\$3\"; best_path=\"\"; best_size=\"\"; for f in \$glob; do [ -r \"\$f\" ] || continue; base=\"\${f##*/}\"; if [ \"\$exclude_re\" != \"\" ] && printf %s \"\$base\" | grep -Eiq \"\$exclude_re\"; then continue; fi; if [ \"\$include_re\" != \"\" ] && ! printf %s \"\$base\" | grep -Eiq \"\$include_re\"; then continue; fi; sz=\$(stat -c %s \"\$f\" 2>/dev/null || (wc -c <\"\$f\" 2>/dev/null | tr -d \"[:space:]\") || true); [ \"\$sz\" != \"\" ] || continue; if [ \"\$best_size\" = \"\" ] || [ \"\$sz\" -lt \"\$best_size\" ]; then best_size=\"\$sz\"; best_path=\"\$f\"; fi; done; [ \"\$best_path\" != \"\" ]; printf \"%s\\n\" \"\$best_path\"' sh $(quote_sh "$glob") $(quote_sh "$exclude_re") $(quote_sh "$include_re")" 2>/dev/null || true
 }
 
 if [ "$MODEL_GGUF" = "" ] && [ "$MODEL_GGUF_GLOB" != "" ]; then

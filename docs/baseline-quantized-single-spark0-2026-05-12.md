@@ -1,6 +1,6 @@
-# Baseline: Quantized Single-Spark Spark0 (DeepSeek V4 Flash IQ2XXS auto-select smallest)
+# Baseline: Quantized Single-Spark Spark0 (DeepSeek V4 Flash V4 Flash)
 
-Date (UTC): 2026-05-12T14:16:51Z
+Date (UTC): 2026-05-12T13:47:58Z
 
 Baseline type:
 
@@ -18,7 +18,7 @@ Baseline type:
 ```text
 aitopatom-9ab9
 Linux aitopatom-9ab9 6.17.0-1014-nvidia #14-Ubuntu SMP PREEMPT_DYNAMIC Tue Mar 17 19:01:40 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
-Tue May 12 23:16:49 2026       
+Tue May 12 22:47:55 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 580.142                Driver Version: 580.142        CUDA Version: 13.0     |
 +-----------------------------------------+------------------------+----------------------+
@@ -44,10 +44,10 @@ Tue May 12 23:16:49 2026
 
 ## Repo + Upstream Revisions
 
-- ds4_on_spark commit: `c59b5abe2721cb0d75af1d8cbf5babe4112da8cc`
+- ds4_on_spark commit: `908f7e61575eefc01c0ae24ed67cd667bb2381a5`
 - Upstream commit(s):
   - llama.cpp fork: `9222e55c13c965ccb7e9104fda58796edd84a732`
-  - runtime_label: `v4flash-external`
+  - runtime_label: `v4flash-external-kamnxt`
   - llama_cli: `/home/spark0/src/llama.cpp-kamnxt/build-cuda/bin/llama-cli`
 
 ## Fixture Manifest
@@ -58,17 +58,13 @@ Fixture:
   path: /home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf
   sha256: 31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c
   size_bytes: 86720111200
-  runtime_label: v4flash-external
-  notes: staged:/home/spark0/models/ds4 (auto-select smallest trunk) (IQ2XXS auto-select smallest)
+  runtime_label: v4flash-external-kamnxt
+  notes: unknown (unknown)
 ```
 
 ## Command Line
 
-Remote llama env (from baseline report):
-
-```sh
-ALLOW_RUN=1 MODEL_SOURCE='staged:/home/spark0/models/ds4 (auto-select smallest trunk)' MODEL_QUANT='IQ2XXS auto-select smallest' MODEL_GGUF='/home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf' LLAMA_CLI='/home/spark0/src/llama.cpp-kamnxt/build-cuda/bin/llama-cli' LLAMA_DIR='/home/spark0/src/llama.cpp-kamnxt' RUNTIME_LABEL='v4flash-external' CTX='512' N_TOKENS='8' N_GPU_LAYERS='99'
-```
+- See local run dir for REMOTE_LLAMA_ENV: `/private/tmp/ds4_on_spark_baseline/20260512T134755Z-spark0-v4flash-iq2xxs/baseline_existing_runtime.md`
 
 ## Results
 
@@ -99,12 +95,12 @@ GGUF contract inspector (metadata-only):
 
 Core metrics (from `== baseline summary (approx) ==`):
 
-- ttft_s: `0.056846`
-- prefill_tps: `22.900000`
-- decode_tps: `14.800000`
-- total_wall_s: `516.176880`
-- output_tokens: `8`
-- max_rss_kb: `85003332`
+- ttft_s: `0.050539`
+- prefill_tps: `21.400000`
+- decode_tps: `14.400000`
+- total_wall_s: `504.377915`
+- output_tokens: `16`
+- max_rss_kb: `85003312`
 
 Timing breakdown (from `llama_print_timings`, when available):
 
@@ -113,7 +109,7 @@ Timing breakdown (from `llama_print_timings`, when available):
 Flash Attention scheduling signal (from baseline summary):
 
 - fattn_unique_nodes: `43`
-- fattn_log_lines: `4730`
+- fattn_log_lines: `6450`
 
 Patch probes (read-only):
 
@@ -129,25 +125,25 @@ Raw summary block:
 exit_code=0
 llama_cli=/home/spark0/src/llama.cpp-kamnxt/build-cuda/bin/llama-cli
 llama_commit=9222e55c13c965ccb7e9104fda58796edd84a732
-runtime_label=v4flash-external
-model_source=staged:/home/spark0/models/ds4 (auto-select smallest trunk)
-model_quant=IQ2XXS auto-select smallest
+runtime_label=v4flash-external-kamnxt
+model_source=unknown
+model_quant=unknown
 model_gguf=/home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf
 model_sha256=31598c67c8b8744d3bcebcd19aa62253c6dc43cef3b8adf9f593656c9e86fd8c
 ctx=512
-n_tokens=8
+n_tokens=16
 n_gpu_layers=99
 model_size_bytes=86720111200
-ttft_first_output_s=0.056846
-ttft_s=0.056846
-wall_s=516.176880
-total_wall_s=516.176880
-max_rss_kb=85003332
-prefill_tps=22.900000
-generation_tps=14.800000
-decode_tps=14.800000
-output_tokens=8
-fattn_log_lines=4730
+ttft_first_output_s=0.050539
+ttft_s=0.050539
+wall_s=504.377915
+total_wall_s=504.377915
+max_rss_kb=85003312
+prefill_tps=21.400000
+generation_tps=14.400000
+decode_tps=14.400000
+output_tokens=16
+fattn_log_lines=6450
 fattn_unique_nodes=43
 fattn_cli_probe_path=/tmp/baseline_llamacpp/fattn_cli_probe.json
 ```
