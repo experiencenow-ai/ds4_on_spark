@@ -117,6 +117,8 @@ def summarize_mtp_trust(mt: Any) -> Optional[dict[str, Any]]:
 		"status": _get_str(mt, "status"),
 		"trusted": _get_bool(mt, "trusted"),
 		"reasons_sample": list(reasons)[:10],
+		"expected_mtp_keys_sha256": _get_str(mt, "expected_mtp_keys_sha256"),
+		"mtp_keys_sha256_match_official": _get_bool(mt, "mtp_keys_sha256_match_official"),
 	}
 
 
@@ -130,6 +132,8 @@ def summarize_mtp_preservation(mp: Any) -> Optional[dict[str, Any]]:
 		"status": _get_str(mp, "status"),
 		"preserves": _get_bool(mp, "preserves"),
 		"reasons_sample": list(reasons)[:10],
+		"expected_mtp_keys_sha256": _get_str(mp, "expected_mtp_keys_sha256"),
+		"mtp_keys_sha256_match_official": _get_bool(mp, "mtp_keys_sha256_match_official"),
 	}
 
 def summarize_ds4_mtp_sidecar_contract(dc: Any) -> Optional[dict[str, Any]]:

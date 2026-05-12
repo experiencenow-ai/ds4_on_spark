@@ -79,6 +79,20 @@ int32_t test_cuda(void)
 	st0 = DS4_CUDA_CALL(0);
 	if ( ds4_cuda_is_ok(st0) == 0 )
 		return(-9);
+#if !DS4_HAS_CUDA
+	st0 = DS4_CUDA_KERNEL_LAUNCH((void)0);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-301);
+	{
+		int32_t side;
+		side = 0;
+		st0 = DS4_CUDA_KERNEL_LAUNCH((side = 1));
+		if ( st0.code != DS4_CUDA_ERR_DISABLED )
+			return(-302);
+		if ( side != 0 )
+			return(-303);
+	}
+#endif
 #if DS4_HAS_CUDA
 	if ( ds4_cuda_is_enabled_build() != 1 )
 		return(-10);

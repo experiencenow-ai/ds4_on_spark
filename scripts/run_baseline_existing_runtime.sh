@@ -409,7 +409,7 @@ PY
     if [ "$MODEL_RUNS_CSV" != "" ] || [ "$PUBLIC_QUALITY_PRIOR" != "" ] || [ "$PUBLIC_QUALITY_BASIS" != "" ] || [ "$PUBLIC_QUALITY_SOURCE" != "" ] || [ "$PASSED_TASKS" != "" ] || [ "$TOTAL_TASKS" != "" ] || [ "$LOCAL_QUALITY_SCORE" != "" ] || [ "$QUALITY_SCORE" != "" ]; then
         echo "## Quality Metadata (Local)"
         echo
-        echo "These fields are recorded into `MODEL_RUNS_CSV` when enabled, and should be copied into committed baseline reports when doing multi-model comparisons."
+        echo 'These fields are recorded into `MODEL_RUNS_CSV` when enabled, and should be copied into committed baseline reports when doing multi-model comparisons.'
         echo
         echo "- public_quality_prior: ${PUBLIC_QUALITY_PRIOR:-NA}"
         echo "- public_quality_basis: ${PUBLIC_QUALITY_BASIS:-NA}"
@@ -624,7 +624,7 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$FETCH_LLAMA_OUT_DIR" = "1" ] && [ "${LLAMACPP
                 echo "## llama.cpp out_dir artifacts (Spark)"
                 echo
                 echo "This is an opt-in tarball fetch of the remote llama.cpp runner output directory."
-                echo "It is useful for preserving `fattn_cli_probe.json` and the raw runner logs alongside the baseline report."
+                echo 'It is useful for preserving `fattn_cli_probe.json` and the raw runner logs alongside the baseline report.'
                 echo
                 echo "Artifacts:"
                 echo

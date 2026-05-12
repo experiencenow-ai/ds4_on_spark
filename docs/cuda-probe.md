@@ -4,11 +4,13 @@ This track keeps probe-only CUDA snippets that answer: “Can we compile for and
 
 ## Spark0: `sm_121` Gate (Fastest)
 
-When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`):
+When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
 
 ```bash
 ./scripts/cuda_probe_sm121_gate_spark0.sh
 ```
+
+This gate also includes a compile-only “fatbin packaging” probe using `-gencode arch=compute_121,code=[sm_121,compute_121]` when `nvcc --list-gpu-arch` is supported (quick confirmation that CUDA 13’s multi-code `-gencode` bracket-list spelling works for GB10 bring-up).
 
 ## Spark0: Tiny Smoke (Fast Path)
 
@@ -72,7 +74,10 @@ This builds and runs only:
 - `cuda_sm121_gpuarch_code_compile_probe.o` (compile-only gate for build systems that split `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
+- `cuda_sm121_cxx20_flags_gpuarch_code_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` with C++20 flags; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_cluster_dims_attr_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `-arch=sm_121`; cluster/CUTLASS-style toolchain gate)
+- `cuda_sm121_cluster_dims_attr_gpuarch_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `nvcc --gpu-architecture=sm_121`; cluster/CUTLASS-style toolchain gate)
+- `cuda_sm121_cluster_dims_attr_gpuarch_code_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121`; cluster/CUTLASS-style toolchain gate)
 - `nvcc -gencode arch=compute_121,code=[sm_121,compute_121]` compile-only gate (runs when `nvcc --list-gpu-arch` is supported and advertises `compute_121`; fails if multi-code `-gencode` packaging is broken)
 - `cuda_sm121_probe`
 - `cuda_sm121_rdc_probe` (separate compilation + device link smoke test for `sm_121`)
@@ -287,6 +292,10 @@ This builds and runs a curated subset of probes (all `sm_121` unless noted):
 - `cuda_sm121_gpuarch_code_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121`)
 - `cuda_sm121_cxx20_flags_compile_probe.o` (compile-only gate for `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121`)
 - `cuda_sm121_cxx20_flags_gpuarch_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=sm_121` with C++20 flags)
+- `cuda_sm121_cxx20_flags_gpuarch_code_compile_probe.o` (compile-only gate for `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` with C++20 flags)
+- `cuda_sm121_cluster_dims_attr_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `-arch=sm_121`)
+- `cuda_sm121_cluster_dims_attr_gpuarch_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `nvcc --gpu-architecture=sm_121`)
+- `cuda_sm121_cluster_dims_attr_gpuarch_code_compile.o` (compile-only gate for `__cluster_dims__(...)` kernel annotations with `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121`)
 - `cuda_sm121_arch_report` (runtime CC + compiled `__CUDA_ARCH__`)
 - `cuda_sm121_arch_list_report` (`__CUDA_ARCH_LIST__` + CUDA 13 feature macro sanity)
 - `cuda_sm121_rdc_probe` (separate compilation + device link smoke test for `sm_121`)

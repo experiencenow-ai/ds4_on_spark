@@ -19,6 +19,8 @@ WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
 
 The fast path `scripts/cuda_probe_tiny_spark0.sh` also includes an explicit compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate when `nvcc --list-gpu-arch` is supported and advertises `compute_121` (quick “fatbin PTX+SASS packaging works” signal).
 
+The fastest gate `scripts/cuda_probe_sm121_gate_spark0.sh` also includes the same compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` probe (so the minimal “device-props + compile-only gates” set still exercises the multi-code `-gencode` bracket-list spelling on Spark0’s `nvcc`).
+
 To capture deterministic logs on the Mac without relying on `tee`/`pipefail`, set `LOG_PATH`:
 
 ```bash
@@ -43,7 +45,7 @@ make
 
 Subset builds:
 
-- `make sm121_gate` builds the smallest “device-props + `sm_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh`.
+- `make sm121_gate` builds the smallest “device-props + `sm_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh` (also builds `cuda_sm121{a,f}_arch_list_report` for CUDA 13 alias acceptance visibility).
 - `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh` (the script also builds the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates on top).
 - `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
 
@@ -56,7 +58,10 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_code_compile_probe.o`: compile-only object that requires `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` support (build-system compatibility gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_flags_compile_probe.o`: compile-only object that requires `-std=c++20 --extended-lambda --expt-relaxed-constexpr -arch=sm_121` (DeepGEMM/CUTLASS-style toolchain gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_cxx20_flags_gpuarch_compile_probe.o`: same as `cuda_sm121_cxx20_flags_compile_probe.o`, but compiled via `nvcc --gpu-architecture=sm_121` (build-system compatibility gate; no runtime needed).
+- `tools/cuda_probe/bin/cuda_sm121_cxx20_flags_gpuarch_code_compile_probe.o`: same as `cuda_sm121_cxx20_flags_compile_probe.o`, but compiled via `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (build-system compatibility gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_cluster_dims_attr_compile.o`: compile-only object that requires `__cluster_dims__(...)` kernel annotations to compile for `sm_121` (cluster/CUTLASS-style toolchain gate; no runtime needed).
+- `tools/cuda_probe/bin/cuda_sm121_cluster_dims_attr_gpuarch_compile.o`: same as `cuda_sm121_cluster_dims_attr_compile.o`, but compiled via `nvcc --gpu-architecture=sm_121` (build-system compatibility gate; no runtime needed).
+- `tools/cuda_probe/bin/cuda_sm121_cluster_dims_attr_gpuarch_code_compile.o`: same as `cuda_sm121_cluster_dims_attr_compile.o`, but compiled via `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` (build-system compatibility gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_probe`: compile/run sanity kernel for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe`: compile/run separate-compilation (`-rdc=true`) device-link smoke test for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe`: compile/run sanity kernel built with explicit `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX).

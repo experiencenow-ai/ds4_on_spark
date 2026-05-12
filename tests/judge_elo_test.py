@@ -98,6 +98,7 @@ class JudgeEloTest(unittest.TestCase):
                 td,
                 "--strict",
             ])
+            self.assertTrue(os.path.exists(os.path.join(td, "summary.md")))
             subprocess.check_call([
                 "python3",
                 validate_script,

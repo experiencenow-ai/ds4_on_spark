@@ -46,13 +46,14 @@ MoE:
 - Hash-gated layers (`ffn.gate.tid2eid`): layer IDs `[0,1,2]` (`num_hash_layers=3`)
 - Score-gated layers (`ffn.gate.bias`): layer IDs `[3..42]`
 
-Attention schedule (main trunk; derived from `compress_ratios`):
+Attention schedule (main trunk; derived from `config.json` `compress_ratios[]`):
 
 - Layer-type counts: `sliding=2`, `csa=21` (`compress_ratio=4`), `hca=20` (`compress_ratio=128`)
 - Sliding-only layer IDs: `[0,1]`
 - CSA layer IDs: `[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42]`
 - HCA layer IDs: `[3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41]`
-- Main trunk compress-ratio schedule (entries `0..42`; length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
+- Main trunk compress-ratio schedule (`attention_schedule.main_compress_ratios`; entries `0..42`; length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
+- Full `compress_ratios[]` (as published in `config.json` and recorded in `attention_schedule.compress_ratios`) has length `44 == num_hidden_layers + num_nextn_predict_layers` with a single trailing `0` entry for MTP.
 
 MTP:
 
@@ -75,7 +76,7 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
 - **Topology + per-layer compress ratios**:
   - Upstream source: `config.json` (`num_hidden_layers`, `hidden_size`, `num_attention_heads`, `head_dim`, `compress_ratios`, `vocab_size`, MoE shape knobs).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/config.json`.
-  - DS4 contract: `contract_summary.json` `topology.*` and `attention_schedule.compress_ratios`.
+  - DS4 contract: `contract_summary.json` `topology.*`, `attention_schedule.main_compress_ratios`, and `attention_schedule.mtp_compress_ratios` (the raw upstream array is also recorded as `attention_schedule.compress_ratios`).
 - **Sliding/CSA/HCA schedule + cache update semantics**:
   - Upstream source: `inference/model.py` (`Attention.forward`, `Compressor`, `Indexer`, and the `compress_ratio`-driven branching).
   - Pinned fixture: `fixtures/model_contract/deepseek_v4_flash/inference/model.py`.
@@ -118,7 +119,7 @@ DS4 tooling should treat `fixtures/model_contract/deepseek_v4_flash/contract_sum
 Key JSON paths by concern:
 
 - Topology (layers/hidden/heads/vocab): `topology.*`
-- Sliding/CSA/HCA schedule: `attention_schedule.compress_ratios`, `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
+- Sliding/CSA/HCA schedule: `attention_schedule.main_compress_ratios` + `attention_schedule.mtp_compress_ratios` (raw upstream array: `attention_schedule.compress_ratios`), `attention_schedule.main_layer_types`, `attention_schedule.type_counts`, and the derived Transformers compatibility arrays under `attention_schedule.transformers_*`
   - Layer ID helpers for DS4 implementers: `attention_schedule.main_layer_ids_by_type` and `attention_schedule.main_layer_ids_by_compress_ratio`
   - Full Transformers `layer_types[]` compat list (main + MTP): `attention_schedule.transformers_layer_types`
 - Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask_rule` (and MTP cache expectations under `cache.mtp_*`)
@@ -148,7 +149,7 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
 
 - Encoding gate: `oracle.encoding_oracle.required == true` and the pinned vectors under `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` must pass via `scripts/model_contract_verify_deepseek_v4_flash.py`.
 - Topology gate: `topology.*` must match (`n_layers=43`, `hidden_size=4096`, `n_heads=64`, `head_dim=512`, `vocab_size=129280`).
-- Attention schedule gate: `attention_schedule.compress_ratios` must match exactly (2 sliding, then CSA/HCA alternation), and MTP trailing ratios must satisfy `mtp.compress_ratio_rule`.
+- Attention schedule gate: `attention_schedule.main_compress_ratios` must match exactly (2 sliding, then CSA/HCA alternation), and `attention_schedule.mtp_compress_ratios` must satisfy `mtp.compress_ratio_rule` (the raw upstream array is also recorded as `attention_schedule.compress_ratios`).
 - Cache semantics gate: decode-time ring-buffer update and compressed-cache update must follow `cache.update_semantics.*` (including `start_pos % window_size` and `start_pos // compress_ratio`), and sparse-attn masking must follow `cache.sparse_attn_mask_rule`.
 - MoE routing gate: hash routing (`ffn.gate.tid2eid`, `int32`) applies only to layers `0..n_hash_layers-1`; score routing uses `ffn.gate.bias` for selection only (`moe.hash_routing.*`, `moe.semantics.*`).
 - Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
@@ -738,6 +739,8 @@ Per-layer required suffixes (`tensor_keys.required_layer_suffixes`, appended und
 - `hc_attn_fn`, `hc_attn_base`, `hc_attn_scale`
 - `hc_ffn_fn`, `hc_ffn_base`, `hc_ffn_scale`
 
+Full key templates (including the namespace prefix and `{layer_id}` / `{mtp_layer_id}` placeholders) are recorded in `contract_summary.json` under `tensor_keys.tensor_key_templates` to avoid consumers having to manually concatenate prefixes.
+
 Expert-key completeness expectation (`contract_summary.json` `tensor_keys.expected_expert_key_count_per_layer`):
 
 - For each layer, there must be `256 experts × 3 linears × 2 tensors (weight+scale) = 1536` expert keys of the form `layers.{i}.ffn.experts.{eid}.w{1,2,3}.{weight,scale}` with `eid ∈ [0,255]`.
@@ -907,6 +910,7 @@ MTP acceptance gates (high-performance / quantized path):
 - Fingerprint gate: when `mtp_present==true`, require `mtp_keys_sha256 == fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256` (otherwise the artifact is not the official `mtp.0.*` tensor key subset); machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
 - Structural gate: `mtp_contract.complete == true` (and `mtp_namespace.has_mtp0 == true`) is necessary to claim the artifact preserves upstream `mtp.0.*`.
 - Oracle gate: even if structurally complete, treat MTP as **untrusted** until a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`; compare both prefill + decode; top-k IDs must match exactly; see `contract_summary.json` `mtp.trust_gates`).
+- Inspector note: when a DeepSeek V4 Flash `contract_summary.json` is available, `scripts/model_contract_inspect_quantized_artifact.py` includes `mtp_trust.expected_mtp_keys_sha256` and `mtp_trust.mtp_keys_sha256_match_official` (and the same fields under `mtp_preservation.*`) so run reports can machine-check the fingerprint gate without scraping free-form `reasons[]`.
 
 ## Next steps (oracle + remaining unknowns)
 
