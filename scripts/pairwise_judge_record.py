@@ -50,6 +50,7 @@ def build_record(
     decision_text: str,
     tokens: Optional[Dict[str, int]],
     latency_ms: Optional[Dict[str, int]],
+    strict: bool,
 ) -> Dict[str, Any]:
     obj, perr = schema.parse_json_object_loose(decision_text)
     if obj is None:
@@ -70,6 +71,8 @@ def build_record(
         return rec
 
     errs = schema.validate_decision(obj)
+    if len(errs) == 0 and strict:
+        errs.extend(schema.validate_decision_strict_extra(obj))
     if len(errs) != 0:
         rec2: Dict[str, Any] = {
             "schema": schema.SCHEMA_RECORD_V1,
@@ -111,6 +114,7 @@ def main() -> None:
     ap.add_argument("--model-b", required=True)
     ap.add_argument("--judge-model", required=True)
     ap.add_argument("--decision", required=True, help="path to raw judge decision text (possibly with extra text)")
+    ap.add_argument("--strict", action="store_true", help="enforce strict margin/score and compact tag constraints")
     ap.add_argument("--tokens-a-out")
     ap.add_argument("--tokens-b-out")
     ap.add_argument("--tokens-judge-in")
@@ -162,6 +166,7 @@ def main() -> None:
         decision_text=decision_text,
         tokens=tokens,
         latency_ms=latency_ms,
+        strict=bool(args.strict),
     )
     print(json.dumps(rec, separators=(",", ":"), ensure_ascii=False))
 

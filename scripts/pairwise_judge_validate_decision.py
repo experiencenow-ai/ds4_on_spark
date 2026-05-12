@@ -36,13 +36,17 @@ def _read_text(path: str) -> str:
         return f.read()
 
 
-def parse_and_validate_decision_text(text: str) -> Tuple[Optional[Dict[str, Any]], str]:
+def parse_and_validate_decision_text(text: str, strict: bool) -> Tuple[Optional[Dict[str, Any]], str]:
     obj, perr = schema.parse_json_object_loose(text)
     if obj is None:
         return None, str(perr)
     errs = schema.validate_decision(obj)
     if len(errs) != 0:
         return None, "; ".join(errs)
+    if strict:
+        extra = schema.validate_decision_strict_extra(obj)
+        if len(extra) != 0:
+            return None, "; ".join(extra)
     return obj, ""
 
 
@@ -50,10 +54,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="input_path", required=True, help="path to raw judge decision output text")
     ap.add_argument("--pretty", action="store_true", help="pretty-print JSON (default: minified)")
+    ap.add_argument("--strict", action="store_true", help="enforce strict margin/score and compact tag constraints")
     args = ap.parse_args()
 
     text = _read_text(str(args.input_path))
-    obj, err = parse_and_validate_decision_text(text)
+    obj, err = parse_and_validate_decision_text(text, strict=bool(args.strict))
     if obj is None:
         _print_err(f"{str(args.input_path)}: {err}")
         raise SystemExit(2)
