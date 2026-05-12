@@ -135,6 +135,11 @@ If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/
 python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
 ```
 
+The report also includes an `evidence` block intended for fast go/no-go checks:
+
+- `evidence.mtp.supported_by_trace_counters`: `true` when the replayed MTP-on run is efficiency-positive vs `mtp_off` (by `service_slot_ms_per_output_token`).
+- `evidence.expert_queueing.best_variant_by_drop`: the scheduler sweep variant that most reduces backpressure drops (and its p95-latency delta) on the same trace with MTP disabled.
+
 If the same runtime trace also includes speculative-decoding comparator counters (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the report includes a separate `dflash_comparator` block and keeps those counters isolated from DeepSeek MTP acceptance assumptions.
 
 If the runtime trace omits `cost_scale` but includes `kv_tokens` or `decode_ms`, you can ask the ablation tool to derive a simple proxy cost_scale before replay (helps explore work-weighted pending/backpressure signals later):
