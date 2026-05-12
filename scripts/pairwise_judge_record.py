@@ -125,22 +125,34 @@ def main() -> None:
     tokens: Optional[Dict[str, int]] = None
     latency_ms: Optional[Dict[str, int]] = None
 
+    tokens_obj: Dict[str, int] = {}
     t_a = _as_int_opt(args.tokens_a_out, "tokens_a_out")
     t_b = _as_int_opt(args.tokens_b_out, "tokens_b_out")
     t_ji = _as_int_opt(args.tokens_judge_in, "tokens_judge_in")
     t_jo = _as_int_opt(args.tokens_judge_out, "tokens_judge_out")
-    if t_a is not None or t_b is not None or t_ji is not None or t_jo is not None:
-        if t_a is None or t_b is None or t_ji is None or t_jo is None:
-            raise SystemExit("all tokens fields must be provided when any are provided")
-        tokens = {"a_out": int(t_a), "b_out": int(t_b), "judge_in": int(t_ji), "judge_out": int(t_jo)}
+    if t_a is not None:
+        tokens_obj["a_out"] = int(t_a)
+    if t_b is not None:
+        tokens_obj["b_out"] = int(t_b)
+    if t_ji is not None:
+        tokens_obj["judge_in"] = int(t_ji)
+    if t_jo is not None:
+        tokens_obj["judge_out"] = int(t_jo)
+    if len(tokens_obj) != 0:
+        tokens = tokens_obj
 
+    latency_obj: Dict[str, int] = {}
     l_a = _as_int_opt(args.latency_a_ms, "latency_a_ms")
     l_b = _as_int_opt(args.latency_b_ms, "latency_b_ms")
     l_j = _as_int_opt(args.latency_judge_ms, "latency_judge_ms")
-    if l_a is not None or l_b is not None or l_j is not None:
-        if l_a is None or l_b is None or l_j is None:
-            raise SystemExit("all latency fields must be provided when any are provided")
-        latency_ms = {"a": int(l_a), "b": int(l_b), "judge": int(l_j)}
+    if l_a is not None:
+        latency_obj["a"] = int(l_a)
+    if l_b is not None:
+        latency_obj["b"] = int(l_b)
+    if l_j is not None:
+        latency_obj["judge"] = int(l_j)
+    if len(latency_obj) != 0:
+        latency_ms = latency_obj
 
     rec = build_record(
         pair_id=str(args.pair_id),

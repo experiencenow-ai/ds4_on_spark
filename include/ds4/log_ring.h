@@ -21,6 +21,6 @@ DS4_EXTERN_C_BEGIN
 int32_t ds4_log_ring_init(ds4_log_ring_t *lr,ds4_log_entry_t *entries,int32_t entry_count);
 int32_t ds4_log_ring_count(ds4_log_ring_t *lr,int32_t *out_count);
 int32_t ds4_log_ring_pop(ds4_log_ring_t *lr,ds4_log_entry_t *out);
+int32_t ds4_log_entry_format(const ds4_log_entry_t *e,char *out,int32_t cap);
 void ds4_log_ring_sink(void *ctx,int32_t level,const char *msg);
 DS4_EXTERN_C_END
-

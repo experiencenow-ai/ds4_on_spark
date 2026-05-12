@@ -36,6 +36,7 @@ For fixed-size log capture with per-entry metadata, `ds4/log_ring.h` provides:
 
 - `ds4_log_ring_sink`: Captures `{level,truncated,msg[]}` entries into a caller-provided ring.
 - `ds4_log_ring_pop`: Pops the oldest entry.
+- `ds4_log_entry_format`: Formats a popped `ds4_log_entry_t` as `level: msg` (appends ` [truncated]` when the entry was truncated).
 
 This is intended for embedded-style “keep the last N events” debugging without allocations.
 
