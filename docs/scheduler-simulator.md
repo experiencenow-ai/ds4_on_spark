@@ -163,6 +163,7 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
   - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
   - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
+  - To model draft work as lower priority (so it can be backpressured without blocking verify work), set `--mtp-draft-queue-cls batch` (default is `inherit`).
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
 - Accept/reject: sample an **accept length** in `[1, --mtp-draft-len + 1]`:
   - Default `--mtp-accept-model geom` accepts draft position `i` with conditional probability `--mtp-accept-prob * (--mtp-accept-decay ** i)` until the first rejection.
@@ -175,6 +176,7 @@ Notes:
 - Output tokens are tracked separately in the metrics JSON (`mtp.output_tokens`); the main `sim.num_tokens` is still the number of trace steps.
 - Queueing effects are broken down by phase in the metrics JSON under `mtp.task_queue_wait_ms.{draft,verify}` and `mtp.starved_task_frac.{draft,verify}` (useful for spotting draft-induced verify starvation).
 - Phase-specific queue pressure is summarized under `mtp.pending_depth_time_weighted.{draft,verify}` (time-weighted per-expert pending depth while draft/verify tasks are queued or in flight).
+- If a draft **layer0** stage admits `0` tasks due to backpressure, the simulator clamps `mtp_draft_attempt_len` and conservatively clamps `mtp_accept_len` to at most `(draft_pos + 1)` and reports `mtp.draft_layer0_skipped_backpressure` / `mtp.accept_len_clamped_backpressure`.
 - If the verify **layer0** stage admits `0` tasks due to backpressure (all candidates full), the simulator conservatively clamps `mtp_accept_len` to `1` (treat as “no drafts accepted”) and reports `mtp.verify_layer0_skipped_backpressure` / `mtp.accept_len_clamped_backpressure` (also surfaced in `--summary-json`).
 
 ### Arrival Rate Units (MTP Comparisons)
