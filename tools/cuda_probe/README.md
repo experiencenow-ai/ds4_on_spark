@@ -45,7 +45,7 @@ make
 
 Subset builds:
 
-- `make sm121_gate` builds the smallest “device-props + `sm_121` / `compute_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh` (also builds `cuda_sm121{a,f}_arch_list_report` for CUDA 13 alias acceptance visibility).
+- `make sm121_gate` builds the smallest “device-props + `sm_121` / `compute_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh`. It also builds `cuda_sm121_kernel_launch_tiny` (a no-`cudaMalloc` kernel-launch smoke) and `cuda_sm121{a,f}_arch_list_report` (CUDA 13 alias acceptance visibility).
 - `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh` (the script also builds the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates on top).
 - `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
 
@@ -53,6 +53,7 @@ Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
 - `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); includes `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`); ends with `schema=4` for parsing).
+- `tools/cuda_probe/bin/cuda_sm121_kernel_launch_tiny`: minimal “launch a `sm_121` kernel and synchronize” smoke test that does not allocate device memory (useful when Spark0 VRAM is fully allocated, but you still want a direct “kernel launch path works” signal).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_compute121_compile_probe.o`: compile-only object that requires `-arch=compute_121` support (PTX-only toolchain gate; no runtime needed).
 - `tools/cuda_probe/bin/cuda_sm121_gpuarch_compile_probe.o`: compile-only object that requires `nvcc --gpu-architecture=sm_121` support (build-system compatibility gate; no runtime needed).

@@ -105,10 +105,10 @@ else
 	echo \"(nvidia-smi not found)\"
 fi
 
-run_best_effort() {
-	name=\"\$1\"
-	shift
-	echo \"== run: \${name} ==\"
+	run_best_effort() {
+		name=\"\$1\"
+		shift
+		echo \"== run: \${name} ==\"
 	set +e
 	out=\$(\"\$@\" 2>&1)
 	rc=\$?
@@ -118,21 +118,22 @@ run_best_effort() {
 		echo
 		return 0
 	fi
-	if printf \"%s\\n\" \"\${out}\" | grep -qi \"out of memory\"; then
-		echo \"(\${name} skipped: GPU OOM/busy rc=\${rc})\" >&2
-		echo
-		return 0
-	fi
+		if printf \"%s\\n\" \"\${out}\" | grep -Eqi \"out of memory|busy or unavailable|device is busy\"; then
+			echo \"(\${name} skipped: GPU OOM/busy rc=\${rc})\" >&2
+			echo
+			return 0
+		fi
 	echo \"(\${name} failed rc=\${rc})\" >&2
 	echo
 	return \"\${rc}\"
-}
-
-run_best_effort cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
-run_best_effort cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
-run_best_effort cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
-run_best_effort cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
-run_best_effort cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
+	}
+	
+	run_best_effort cuda_device_props_tiny \"$REMOTE_DIR\"/bin/cuda_device_props_tiny
+	run_best_effort cuda_sm121_kernel_launch_tiny \"$REMOTE_DIR\"/bin/cuda_sm121_kernel_launch_tiny
+	run_best_effort cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
+	run_best_effort cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+	run_best_effort cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
+	run_best_effort cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
 "
 }
 
