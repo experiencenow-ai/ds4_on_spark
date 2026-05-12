@@ -9,14 +9,14 @@ Always classify first:
 
 ## Recommended workflow (Spark0 v73 smoke)
 
-1) Run the smoke with a run id so artifacts are isolated:
+Recommended: run the one-command evidence loop (stage → smoke → validate → fetch):
 
 ```bash
 export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
-2) Fetch a small artifact bundle back to your Mac (no venv, no source tree):
+If you already ran the smoke and only want to fetch:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
@@ -28,14 +28,14 @@ Default local output directory:
 
 ## Recommended workflow (Spark1/Spark2 ring rsync)
 
-1) Run the rsync-staged ring-step with a run id so artifacts are isolated:
+Recommended: run the one-command evidence loop (optional node setup → ring rsync → validate → fetch):
 
 ```bash
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
-2) Fetch a small artifact bundle back to your Mac:
+If you already ran the ring rsync and only want to fetch:
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
@@ -44,6 +44,25 @@ sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-ho
 Default local output directory:
 
 - `/private/tmp/centaur-ring/spark12-v73/<ring_run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)
+
+## Recommended workflow (Spark12 ring sim)
+
+Recommended: run the one-command evidence loop (run → validate → fetch):
+
+```bash
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
+```
+
+If you already ran the ring sim and only want to fetch:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Default local output directory:
+
+- `/private/tmp/centaur-ring-sim/spark12-v73/<ring_run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)
 
 ## What to include (both bug types)
 
