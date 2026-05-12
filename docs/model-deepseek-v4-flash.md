@@ -808,6 +808,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
 - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
 - `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json`
+- `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json` (trunk + sidecar inspected as an artifact set)
 - The nsparks “native FP4/FP8” GGUF includes DeepSeek4 fork `ggml_type` tensors like `F8_E4M3_B128` (commonly type code `42`) and MoE experts as `MXFP4`, but the pinned artifact is still a **mixed** type set (many `F32`/`BF16` tensors). Treat this as non-authoritative for “Flash-native” quant semantics unless `quantization_contract.{dense_fp8_like,expert_fp4_like}` is satisfied.
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
@@ -819,6 +820,7 @@ Pinned GGUF MTP status snapshot (derived from `fixtures/model_contract/deepseek_
 | Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
 | nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
 | antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json` | false | false | — | absent |
+| antirez trunk + MTP sidecar (artifact set; DS4-tuned sidecar is complete) | `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json` | true | true | false | incomplete |
 | antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json` | true | true | false | incomplete |
 
 For external/quantized artifacts:

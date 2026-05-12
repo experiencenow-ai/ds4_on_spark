@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-12T08:02:13Z",
+  "generated_at_utc": "2026-05-12T10:41:20Z",
   "items": [
     {
       "artifact_type": "gguf.url",
@@ -331,6 +331,12 @@
           "mtp_contract.complete != true"
         ],
         "status": "incomplete"
+      },
+      "mtp_tensor_count": 32,
+      "mtp_tensor_type_counts": {
+        "F32": 19,
+        "Q4_K": 3,
+        "Q8_0": 10
       },
       "mtp_trust": {
         "reasons_sample": [

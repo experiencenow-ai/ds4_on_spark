@@ -190,7 +190,7 @@ Interpreting the result:
   - When available, also record `tensor_type_profile` so the report captures the expert-vs-dense quant split (useful for spotting Flash-leaning `MXFP4` experts in “native FP4/FP8” GGUFs).
   - If `topology_contract.checked == true` and `topology_contract.mismatches` is non-empty, treat the artifact as **suspect** (topology mismatch) until a human explains the discrepancy.
 
-Observed metadata-only inspections (2026-05-10):
+Observed metadata-only inspections (2026-05-12):
 
 | Artifact URL (pinned) | `tensor_key_namespace_guess` | `mtp_present` | `url_prefix_bytes` | Recorded probe |
 | --- | --- | --- | --- | --- |
@@ -198,11 +198,17 @@ Observed metadata-only inspections (2026-05-10):
 | `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` |
 | `https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json` |
 
-MTP sidecar example (metadata-only inspection; 2026-05-10):
+MTP sidecar example (metadata-only inspection; 2026-05-12):
 
 - `antirez/deepseek-v4-gguf` `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` @ `c566ab6d7c696ddd0c7f124e115228af1a326824`:
   - Recorded output: `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json`
   - Summary: `mtp_present=true` and `tensor_key_namespace_guess=deepseek-upstream-mtp-only`, but `mtp_contract.complete=false` with `mtp_tensor_count=32` (compact DS4-tuned sidecar, not a full upstream `mtp.0.*` checkpoint).
+
+Trunk + sidecar artifact-set example (metadata-only inspection; 2026-05-12):
+
+- `antirez/deepseek-v4-gguf` trunk + MTP sidecar inspected together:
+  - Recorded output: `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json`
+  - Summary (combined view): `mtp_present=true` and `ds4_mtp_sidecar_complete=true`, but `mtp_contract.complete=false` with `missing_required_count=1568` (sidecar is a compact DS4-tuned 32‑tensor table; it does not preserve the official upstream `mtp.0.*` checkpoint keyset).
 
 To validate a sidecar that is already present on Spark (no downloads; no trunk model load), prefer the dedicated Spark-side contract probe runner:
 
