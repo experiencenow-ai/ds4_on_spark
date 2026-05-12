@@ -25,6 +25,7 @@ LOAD_WEIGHTS="${LOAD_WEIGHTS:-0}"
 JSON_ONLY="${JSON_ONLY:-0}"
 
 CUDACXX="${CUDACXX:-}"
+GGML_CUDA="${GGML_CUDA:-0}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_PATCH="${ALLOW_PATCH:-0}"
@@ -49,6 +50,7 @@ if [ "$JSON_ONLY" != "1" ]; then
 	echo "llama_repo=$LLAMA_REPO"
 	echo "llama_commit=$LLAMA_COMMIT"
 	echo "patch_file=$PATCH_FILE"
+	echo "ggml_cuda=$GGML_CUDA"
 	echo "payload_sample_bytes=$PAYLOAD_SAMPLE_BYTES"
 	echo "load_weights=$LOAD_WEIGHTS"
 	echo
@@ -126,30 +128,38 @@ if [ "$ALLOW_BUILD" != "1" ]; then
 		echo "build skipped (set ALLOW_BUILD=1 to compile llama-ds4-mtp-sidecar-probe)"
 	fi
 else
-	if [ "$CUDACXX" = "" ]; then
-		if command -v nvcc >/dev/null 2>&1; then
-			CUDACXX="$(command -v nvcc)"
-		else
-			for p in /usr/local/cuda/bin/nvcc /opt/cuda/bin/nvcc /usr/local/cuda-*/bin/nvcc /usr/local/cuda*/bin/nvcc; do
-				if [ -x "$p" ]; then
-					CUDACXX="$p"
-					break
-				fi
-			done
+	cmake_cuda_flag=""
+	cmake_cuda_compiler_arg=""
+	if [ "$GGML_CUDA" = "1" ]; then
+		cmake_cuda_flag="-DGGML_CUDA=ON"
+		if [ "$CUDACXX" = "" ]; then
+			if command -v nvcc >/dev/null 2>&1; then
+				CUDACXX="$(command -v nvcc)"
+			else
+				for p in /usr/local/cuda/bin/nvcc /opt/cuda/bin/nvcc /usr/local/cuda-*/bin/nvcc /usr/local/cuda*/bin/nvcc; do
+					if [ -x "$p" ]; then
+						CUDACXX="$p"
+						break
+					fi
+				done
+			fi
+		fi
+		if [ "$CUDACXX" != "" ]; then
+			cmake_cuda_compiler_arg="-DCMAKE_CUDA_COMPILER=$CUDACXX"
 		fi
 	fi
 	if [ "$JSON_ONLY" != "1" ]; then
-		if [ "$CUDACXX" != "" ]; then
-			echo "cudacxx=$CUDACXX"
+		if [ "$GGML_CUDA" = "1" ]; then
+			if [ "$CUDACXX" != "" ]; then
+				echo "cudacxx=$CUDACXX"
+			else
+				echo "cudacxx=not-found (set CUDACXX=/abs/path/to/nvcc if CMake cannot discover CUDA)"
+			fi
 		else
-			echo "cudacxx=not-found (set CUDACXX=/abs/path/to/nvcc if CMake cannot discover CUDA)"
+			echo "note: GGML_CUDA=0 (CPU-only build; faster for metadata probes)"
 		fi
 	fi
-	cmake_cuda_compiler_arg=""
-	if [ "$CUDACXX" != "" ]; then
-		cmake_cuda_compiler_arg="-DCMAKE_CUDA_COMPILER=$CUDACXX"
-	fi
-	(cd "$LLAMA_DIR" && cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release $cmake_cuda_compiler_arg)
+	(cd "$LLAMA_DIR" && cmake -B build $cmake_cuda_flag -DCMAKE_BUILD_TYPE=Release $cmake_cuda_compiler_arg)
 	(cd "$LLAMA_DIR" && cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j)
 fi
 
