@@ -442,6 +442,11 @@ These MLA/cache update semantics are also extracted (source-derived) into `fixtu
 - `mla.*` records the presence of the extra per-token Q normalization and the output de-rotation marker.
 - `cache.update_semantics.*` records the decode-time KV ring-buffer update expression (`start_pos % win`) and the compressed-cache update expression (`start_pos // ratio`).
 
+To avoid silent RoPE / YaRN drift (common when porting `view_as_complex` rotary code to CUDA or C++), the contract also pins the exact upstream helper implementations (verbatim source lines + sha256) in `contract_summary.json`:
+
+- `mla.source_helpers.precompute_freqs_cis` (YaRN smoothing + `torch.polar` complex frequency table)
+- `mla.source_helpers.apply_rotary_emb` (complex multiply + `inverse=True` conjugate de-rotation + `y.copy_` in-place writeback)
+
 ### Attention scaling + activation QAT constants
 
 These constants are **source-derived** from `fixtures/model_contract/deepseek_v4_flash/inference/model.py` and are recorded in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `quantization.inference_model_constants` to avoid accidental drift:

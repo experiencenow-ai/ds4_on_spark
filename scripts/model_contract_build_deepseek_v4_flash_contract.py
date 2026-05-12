@@ -674,6 +674,9 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	compress_freqs_prefill = find_first_line_containing(text, "freqs_cis = self.freqs_cis[:cutoff:ratio]")
 	compress_freqs_decode = find_first_line_containing(text, "freqs_cis = self.freqs_cis[start_pos + 1 - self.compress_ratio].unsqueeze(0)")
 
+	precompute_freqs_lines = extract_function_source_lines(text, "precompute_freqs_cis")
+	apply_rotary_lines = extract_function_source_lines(text, "apply_rotary_emb")
+
 	win_topk_lines = extract_function_source_lines(text, "get_window_topk_idxs")
 	compress_topk_lines = extract_function_source_lines(text, "get_compress_topk_idxs")
 
@@ -690,6 +693,17 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"output_derotate_expr": o_derotate,
 			"q_rope_apply_expr": rope_q,
 			"kv_rope_apply_expr": rope_kv,
+			"source_helpers": {
+				"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (precompute_freqs_cis, apply_rotary_emb)",
+				"precompute_freqs_cis": {
+					"source_lines": precompute_freqs_lines,
+					"source_lines_sha256": sha256_lines(precompute_freqs_lines) if isinstance(precompute_freqs_lines, list) else None,
+				},
+				"apply_rotary_emb": {
+					"source_lines": apply_rotary_lines,
+					"source_lines_sha256": sha256_lines(apply_rotary_lines) if isinstance(apply_rotary_lines, list) else None,
+				},
+			},
 		},
 		"cache_update_semantics": {
 			"decode_sliding_ring_update_expr": kv_decode_ring,

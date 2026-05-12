@@ -295,6 +295,41 @@ def main() -> int:
 					failures.append(Failure(15, f"contract summary missing MLA output de-rotation marker (mla.output_derotate_present=true): {contract_summary}"))
 				if mla.get("q_extra_rms_norm_present") is not True:
 					failures.append(Failure(16, f"contract summary missing MLA Q extra RMS normalization marker (mla.q_extra_rms_norm_present=true): {contract_summary}"))
+				mla_src = mla.get("source_helpers", None) if isinstance(mla, dict) else None
+				if not isinstance(mla_src, dict):
+					failures.append(Failure(177, f"contract summary mla.source_helpers missing or invalid (expected dict): {contract_summary}"))
+				else:
+					ref = mla_src.get("reference_source", None)
+					if not (isinstance(ref, str) and ref):
+						failures.append(Failure(178, f"contract summary mla.source_helpers.reference_source missing or invalid: {contract_summary}"))
+					for name, markers, mismatch_id, marker_id in [
+						(
+							"precompute_freqs_cis",
+							["torch.polar", "original_seq_len > 0", "freqs = freqs / factor"],
+							181,
+							182,
+						),
+						(
+							"apply_rotary_emb",
+							["torch.view_as_complex", "freqs_cis.conj", "torch.view_as_real", "y.copy_"],
+							184,
+							185,
+						),
+					]:
+						obj = mla_src.get(name, None)
+						if not isinstance(obj, dict):
+							failures.append(Failure(179, f"contract summary mla.source_helpers.{name} missing or invalid (expected dict): {contract_summary}"))
+							continue
+						lines = obj.get("source_lines", None)
+						if not (isinstance(lines, list) and lines and all(isinstance(x, str) for x in lines)):
+							failures.append(Failure(180, f"contract summary mla.source_helpers.{name}.source_lines missing or invalid: {contract_summary}"))
+							continue
+						want_sha = sha256_lines(lines)
+						if obj.get("source_lines_sha256") != want_sha:
+							failures.append(Failure(mismatch_id, f"contract summary mla.source_helpers.{name}.source_lines_sha256 mismatch: {contract_summary}"))
+						joined = "\n".join(lines)
+						if any(m not in joined for m in markers):
+							failures.append(Failure(marker_id, f"contract summary mla.source_helpers.{name} source missing required markers: {contract_summary}"))
 				cache_obj = summary.get("cache", {})
 				try:
 					n_layers_cfg = int(cfg.get("num_hidden_layers", 0))

@@ -31,6 +31,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Cache section also pins the exact sparse-attention top-k index helper definitions from the upstream reference (`cache.topk_index_helpers`) so external runtimes can reproduce index matrices (including `-1` sentinel placement) without guessing.
   - Cache section also pins verbatim forward-path helper source lines (`cache.semantics.source_helpers`: `Compressor.forward`, `Indexer.forward`, `Attention.forward`) so KV update + CSA/HCA index selection semantics are reproducible without guessing.
+  - MLA section also pins verbatim RoPE / YaRN helper sources (`mla.source_helpers`) so complex-rotary + de-rotation semantics are reproducible without guessing.
   - MoE section also pins verbatim `Gate.forward` and `MoE.forward` helper sources (`moe.semantics.source_helpers`) so expert selection and routing-weight semantics are reproducible without guessing.
   - MTP section also pins verbatim `MTPBlock.forward` helper source lines (`mtp.semantics.source_helpers`) so draft-path semantics are reproducible without guessing.
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
