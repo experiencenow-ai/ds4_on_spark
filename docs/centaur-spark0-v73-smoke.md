@@ -69,7 +69,7 @@ sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 
 This writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/` and fetches a small sanitized bundle back to your Mac under `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`).
 
-If you only want to stage + stream-run the smoke (no validate/fetch), use:
+If you only want to stage + run the smoke (no validate/fetch), use:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
@@ -81,10 +81,10 @@ From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 ./scripts/centaur_spark0_v73_stage.sh spark0@<spark0-host>
 ```
 
-Then run the smoke on Spark0 (the stage script prints the exact command). The smoke script is streamed over SSH, so nothing new needs to be installed on Spark0 besides python3 + unzip:
+Then run the smoke on Spark0 (the stage script prints the exact command). `scripts/centaur_spark0_v73_stage.sh` stages `centaur_spark0_v73_smoke.sh` onto Spark0 so you can run it directly (no streaming required). Nothing new needs to be installed on Spark0 besides python3 + unzip:
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "cd ~/centaur-smoke/v73 && sh -s" < ./scripts/centaur_spark0_v73_smoke.sh
+ssh $SSH_OPTS spark0@<spark0-host> 'cd ~/centaur-smoke/v73 && export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)" && export CENTAUR_LOG=~/centaur-smoke/v73/run/"$CENTAUR_RUN_ID"/smoke.log && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_CATALOG_JSON=~/centaur-smoke/v73/unit_model_catalog.json && sh ./centaur_spark0_v73_smoke.sh'
 ```
 
 Artifacts are written under:

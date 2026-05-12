@@ -6,8 +6,7 @@ usage()
 	cat <<'USAGE'
 usage: centaur_spark12_v73_ring_sim_run.sh <spark0_user@host> [remote_ring_workdir] [local_log]
 
-Runs a Spark0-local Spark1/Spark2 ring simulation by streaming
-`scripts/centaur_spark_ring_sim_spark12_v73.sh` to Spark0.
+Runs a Spark0-local Spark1/Spark2 ring simulation on Spark0.
 
 This is the recommended rehearsal before Spark1/2 hardware exists. It requires:
   - Spark0 has already run the v73 smoke (Centaur extracted + venv present).
@@ -64,6 +63,28 @@ need_cmd()
 	fi
 	echo "missing required command: $1" >&2
 	exit 2
+}
+
+have_copy_tool()
+{
+	if command -v rsync >/dev/null 2>&1; then
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		return 0
+	fi
+	return 1
+}
+
+copy_to_remote()
+{
+	src="$1"
+	dst="$2"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$src" "$dst"
+		return 0
+	fi
+	scp $SSH_OPTS "$src" "$dst"
 }
 
 ssh_preflight()
@@ -146,6 +167,8 @@ if [ "$local_log" != "" ]; then
 	echo "local_log: $local_log"
 fi
 
+remote_ring_script="$ring_workdir_abs/centaur_spark_ring_sim_v73.sh"
+
 ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export SPARK_NODE_COUNT=\"$node_count\" && export RING_WORKDIR=\"$ring_workdir_abs\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
 if [ "${NODE_TYPE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export NODE_TYPE=\"${NODE_TYPE}\""
@@ -153,18 +176,32 @@ fi
 if [ "${RING_TRACE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export RING_TRACE=\"${RING_TRACE}\""
 fi
-ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\" && sh -s"
+ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\""
 
-echo "== run ring sim (streamed) =="
-echo "ssh $SSH_OPTS $target \"$ssh_cmd\" < $ring"
-
-if [ "$local_log" = "" ]; then
-	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$ring"
+if have_copy_tool; then
+	echo "== stage ring script to spark0 =="
+	copy_to_remote "$ring" "$target:$remote_ring_script"
+	ssh $SSH_OPTS "$target" "chmod 0755 \"$remote_ring_script\""
+	echo "== run ring sim (remote) =="
+	if [ "$local_log" = "" ]; then
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh \"$remote_ring_script\""
+	else
+		need_cmd tee
+		need_cmd dirname
+		mkdir -p "$(dirname -- "$local_log")"
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh \"$remote_ring_script\"" 2>&1 | tee "$local_log"
+	fi
 else
-	need_cmd tee
-	need_cmd dirname
-	mkdir -p "$(dirname -- "$local_log")"
-	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$ring" 2>&1 | tee "$local_log"
+	echo "== run ring sim (streamed; no rsync/scp on Mac) =="
+	echo "ssh $SSH_OPTS $target \"$ssh_cmd && sh -s\" < $ring"
+	if [ "$local_log" = "" ]; then
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh -s" < "$ring"
+	else
+		need_cmd tee
+		need_cmd dirname
+		mkdir -p "$(dirname -- "$local_log")"
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh -s" < "$ring" 2>&1 | tee "$local_log"
+	fi
 fi
 
 echo "== next: fetch artifacts (Mac) =="

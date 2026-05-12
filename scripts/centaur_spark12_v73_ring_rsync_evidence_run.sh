@@ -8,7 +8,7 @@ usage: centaur_spark12_v73_ring_rsync_evidence_run.sh <spark0_user@host> <spark1
 
 Runs a full Spark1/Spark2 rsync-staged ring evidence loop from your Mac:
   0) (optional) stage + node-setup Spark1/2 (creates Centaur v73 venv + runs selftest)
-  1) run the rsync-staged ring-step on Spark0 (streams scripts/centaur_spark_ring_rsync_v73.sh)
+  1) run the rsync-staged ring-step on Spark0
   2) validate expected ring artifacts on Spark0
   3) fetch a small sanitized artifact bundle back to your Mac
 

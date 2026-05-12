@@ -7,7 +7,7 @@ usage()
 usage: centaur_spark12_v73_ring_sim_evidence_run.sh <spark0_user@host> [remote_ring_workdir] [local_ring_out_dir]
 
 Runs a full Spark0-local Spark1/Spark2 ring-sim evidence loop from your Mac:
-  1) run the Spark0-local ring sim (streams scripts/centaur_spark_ring_sim_v73.sh)
+  1) run the Spark0-local ring sim
   2) validate expected ring artifacts on Spark0
   3) fetch a small sanitized artifact bundle back to your Mac
 
@@ -27,7 +27,7 @@ Pass-through env (see underlying scripts):
 
 Notes:
   - This is the rehearsal path before Spark1/2 hardware exists.
-  - Requires Mac-side: ssh + rsync.
+  - Requires Mac-side: ssh + (rsync preferred, scp fallback).
 USAGE
 }
 
