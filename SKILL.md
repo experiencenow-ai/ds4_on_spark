@@ -227,7 +227,6 @@ Include order in project headers:
 ❌ `/* */` comments inside functions
 ❌ Guessing struct fields without reading the source
 
-
 --- project-doc ---
 
 # Project Instructions
