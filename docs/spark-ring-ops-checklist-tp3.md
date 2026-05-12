@@ -7,6 +7,7 @@ This is a **human-run** checklist for operating a 3-node ring layout safely.
 - Pick stable hostnames for Spark0/Spark1/Spark2 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark012.example`).
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory)
+  - Confirm the staged env audit passes (safe; catches DS4 ring config mismatches before install): `scripts/ops_spark_ring_staged_env_audit.sh`
 - Install staged templates on each Spark:
   - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight --preflight tp3`
 - Confirm systemd templates and scripts are present:

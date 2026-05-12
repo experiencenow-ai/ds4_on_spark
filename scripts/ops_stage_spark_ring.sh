@@ -159,4 +159,21 @@ while [ "$i" -lt "$node_count" ]; do
 	i=$((i + 1))
 done
 
+if [ -x "$root/scripts/ops_spark_ring_staged_env_audit.sh" ]; then
+	echo "== audit staged ring envs (Mac-side, optional) =="
+	set --
+	i=0
+	while [ "$i" -lt "$node_count" ]; do
+		set -- "$@" "--instance$i" "$(instance_for_index "$i")"
+		i=$((i + 1))
+	done
+	i=0
+	while [ "$i" -lt "$node_count" ]; do
+		set -- "$@" "$(value_at target "$i")"
+		i=$((i + 1))
+	done
+	"$root/scripts/ops_spark_ring_staged_env_audit.sh" "$@"
+	echo
+fi
+
 echo "== done =="

@@ -80,6 +80,8 @@ hosts only in this command line/inventory, not inside the helper script:
 Legacy fixed-name wrappers remain for older docs/scripts, but they delegate to
 the inventory-driven helpers above.
 
+Note: `scripts/ops_stage_spark_ring.sh` also runs a staged env audit at the end (safe) to verify ring env consistency across hosts: `scripts/ops_spark_ring_staged_env_audit.sh`.
+
 Optional: add a best-effort TCP probe to each ring peer (only meaningful if
 something is listening):
 
