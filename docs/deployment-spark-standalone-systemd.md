@@ -4,6 +4,8 @@ This repo does not apply changes to Sparks automatically. Everything below is **
 
 This is optional: DS4 can run under systemd without managing Spark via systemd.
 
+If you prefer a non-root bring-up via `systemd --user`, see `docs/deployment-spark-standalone-systemd-user.md`.
+
 ## What This Provides
 
 Templates under `deploy/systemd/`:

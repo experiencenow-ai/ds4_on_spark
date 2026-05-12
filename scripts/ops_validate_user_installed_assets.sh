@@ -113,6 +113,17 @@ need_file "$systemd_dir/ds4-preflight-tp3@.service"
 need_file "$systemd_dir/ds4-preflight-tp3-strict@.service"
 need_file "$systemd_dir/ds4-preflight-tp4@.service"
 need_file "$systemd_dir/ds4-preflight-tp4-strict@.service"
+if [ -f "$systemd_dir/spark-master@.service" ] || [ -f "$systemd_dir/spark-worker@.service" ]; then
+    echo
+    echo "== optional: Spark standalone user templates =="
+    if [ -f "$systemd_dir/spark-master@.service" ]; then
+        need_file "$systemd_dir/spark-master@.service"
+    fi
+    if [ -f "$systemd_dir/spark-worker@.service" ]; then
+        need_file "$systemd_dir/spark-worker@.service"
+    fi
+    need_file "$config_dir/spark-${instance}.env"
+fi
 echo
 
 echo "== ~/.config/ds4 configs =="

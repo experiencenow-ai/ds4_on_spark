@@ -218,9 +218,11 @@ cat <<'EOF'
 #   /tmp/ds4-systemd-user/
 #
 # Optional (non-root) installer wrapper:
-#   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance ${instance} --start-preflight
+#   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance <instance> --start-preflight
+# Optional (Spark standalone user units):
+#   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance <instance> --install-spark-units
 # Optional validator (non-root):
-#   /tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance ${instance} --strict
+#   /tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance <instance> --strict
 # Optional support bundle collector (no sudo):
 #   systemctl --user start ds4-support-bundle@<instance>.service
 # Optional weekly timer:
