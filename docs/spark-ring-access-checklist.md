@@ -78,6 +78,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 - Use ping RTT as the minimum viable latency check:
   - `./scripts/mac_spark_discovery.sh` prints `== ping (mac->targets, compact) ==` (Mac→target RTT/loss; no SSH required).
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
+  - Note: ICMP can be blocked (100% loss) even when SSH works; treat ping as a signal, not an access gate.
 - The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
 - Optional (no installs): quick Mac<->Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
   - `BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true`
