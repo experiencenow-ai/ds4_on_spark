@@ -37,7 +37,7 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
-- Recommended stronger gate (still no trunk load): run the combined **contract + loader** probe. This validates the 32 `mtp.0.*` tensors twice (Python contract probe + llama.cpp-side probe binary) and cross-checks the JSON inventories. The output directory includes a machine-readable `summary.json`.
+- Recommended stronger gate (still no trunk load): run the combined **contract + loader** probe. This validates the 32 `mtp.0.*` tensors twice (Python contract probe + llama.cpp-side probe binary), can optionally `--load-weights` the sidecar tensor blob into RAM to ensure all payloads are readable, and cross-checks the JSON inventories. The output directory includes a machine-readable `summary.json`.
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \

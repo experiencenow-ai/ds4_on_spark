@@ -8,7 +8,7 @@ Upstream repo + pin:
 - Commit: `99a5c13ba82e05bd2e47a90cdf4825fc7840cf96` (see `docs/upstream-ds4.md`)
 - File: `upstreams/ds4/ds4.c` (fetched via `./scripts/fetch_upstreams.sh ds4`, ignored by git)
 
-Convenience: to print the current pin’s key MTP entrypoints (binder + `gamma=1` draft helpers) with line numbers, run:
+Convenience: to print the current pin’s key MTP entrypoints (binder + `gamma=1` draft helpers) with line numbers (including the `gamma=1` draft call sequence excerpt + raw-cache frontier bookkeeping), run:
 
 ```bash
 ALLOW_FETCH=1 scripts/extract_ds4_mtp_gamma1_steps.sh
