@@ -75,6 +75,7 @@ Notes:
 - For multi-model comparisons, fill out quality metadata (`PUBLIC_QUALITY_PRIOR`,
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.
+- The bundle wrapper also emits `model_quality_speed_scored_summary.txt` (per-run `key=value` blocks including Pareto `dominated_by`) for copy/paste into baseline docs.
 - Do not download large model weights unless explicitly approved.
 - These wrappers default to `ALLOW_RUN=0` so nothing executes on Spark unless you opt in.
 
