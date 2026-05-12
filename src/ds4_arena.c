@@ -180,3 +180,26 @@ int32_t ds4_arena_alloc_zero(ds4_arena_t *a,int32_t size,int32_t align,void **ou
 	*out = p;
 	return(0);
 }
+
+int32_t ds4_arena_alloc_zero_n(ds4_arena_t *a,int32_t count,int32_t elem_size,int32_t align,void **out)
+{
+	int64_t bytes_64;
+	int32_t bytes;
+	if ( a == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( count <= 0 )
+		return(-3);
+	if ( elem_size <= 0 )
+		return(-4);
+	bytes_64 = ((int64_t)count * (int64_t)elem_size);
+	if ( bytes_64 > (int64_t)INT32_MAX )
+		return(-5);
+	bytes = (int32_t)bytes_64;
+	if ( bytes <= 0 )
+		return(-6);
+	if ( ds4_arena_alloc_zero(a,bytes,align,out) < 0 )
+		return(-7);
+	return(0);
+}

@@ -13,6 +13,7 @@ int32_t test_cuda_arena(void)
 #endif
 	_Alignas(32) uint8_t mem[128];
 	void *p0,*p1,*p2;
+	void *pz;
 	if ( ds4_cuda_arena_init(&a,mem,(int64_t)sizeof(mem)) < 0 )
 		return(-1);
 	p0 = 0;
@@ -56,6 +57,13 @@ int32_t test_cuda_arena(void)
 			return(-15);
 		if ( a.used != used0 )
 			return(-16);
+		pz = (void *)1;
+		if ( ds4_cuda_arena_alloc_zero_n(&a,2,4,4,&pz) != DS4_CUDA_ERR_DISABLED )
+			return(-22);
+		if ( pz != 0 )
+			return(-23);
+		if ( a.used != used0 )
+			return(-24);
 	}
 #endif
 #if DS4_HAS_CUDA

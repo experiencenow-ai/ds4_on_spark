@@ -174,3 +174,26 @@ int32_t ds4_cuda_arena_alloc_zero(ds4_cuda_arena_t *a,int64_t size,int32_t align
 	*out = p;
 	return(0);
 }
+
+int32_t ds4_cuda_arena_alloc_zero_n(ds4_cuda_arena_t *a,int64_t count,int64_t elem_size,int32_t align,void **out)
+{
+	int64_t bytes;
+	int32_t err;
+	if ( a == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( count <= 0 )
+		return(-3);
+	if ( elem_size <= 0 )
+		return(-4);
+	if ( count > (INT64_MAX / elem_size) )
+		return(-5);
+	bytes = (count * elem_size);
+	if ( bytes <= 0 )
+		return(-6);
+	err = ds4_cuda_arena_alloc_zero(a,bytes,align,out);
+	if ( err != 0 )
+		return(err);
+	return(0);
+}

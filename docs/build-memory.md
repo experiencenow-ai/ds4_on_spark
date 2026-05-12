@@ -9,6 +9,7 @@ The build skeleton aims for predictable, static allocation. Most call sites shou
 - `ds4_arena_alloc`: allocates aligned slices (no free).
 - `ds4_arena_alloc_n`: `count*elem_size` allocation with overflow checks (useful for arrays).
 - `ds4_arena_alloc_zero`: allocates and zero-fills the returned region.
+- `ds4_arena_alloc_zero_n`: `count*elem_size` array allocation with overflow checks and zero-fill.
 - `ds4_arena_mark` / `ds4_arena_release`: coarse rollback to a prior mark.
 - `ds4_arena_reset`: discard all allocations.
 
@@ -55,4 +56,5 @@ When built with CUDA, `ds4_cuda_arena_t` is a bump allocator over a single `cuda
 - `ds4_cuda_arena_alloc`: allocates aligned device slices (no free).
 - `ds4_cuda_arena_alloc_n`: `count*elem_size` allocation with overflow checks.
 - `ds4_cuda_arena_alloc_zero`: allocates and zero-fills via `cudaMemset` (returns `DS4_CUDA_ERR_DISABLED` in CPU-only builds).
+- `ds4_cuda_arena_alloc_zero_n`: `count*elem_size` array allocation with overflow checks and zero-fill (returns `DS4_CUDA_ERR_DISABLED` in CPU-only builds).
 - `ds4_cuda_arena_reset`: discard all allocations.
