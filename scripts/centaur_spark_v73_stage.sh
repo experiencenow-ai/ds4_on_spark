@@ -17,7 +17,7 @@ Environment:
 
 Examples:
   ./scripts/centaur_spark_v73_stage.sh spark1@aitopatom-spark1.local
-  ./scripts/centaur_spark_v73_stage.sh spark2@aitopatom-spark2.local ~/centaur-smoke/v73
+  ./scripts/centaur_spark_v73_stage.sh spark2@aitopatom-spark2.local "~/centaur-smoke/v73"
 USAGE
 }
 

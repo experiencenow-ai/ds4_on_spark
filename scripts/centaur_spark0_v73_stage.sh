@@ -14,7 +14,7 @@ Environment:
 
 Examples:
   ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local
-  CENTAUR_ZIP=/path/to/centaur_spec_impl_v73.zip ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local ~/centaur-smoke/v73
+  CENTAUR_ZIP=/path/to/centaur_spec_impl_v73.zip ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73"
 USAGE
 }
 

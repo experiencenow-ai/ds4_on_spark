@@ -122,8 +122,8 @@ export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=
 
 # 1) Per-node setup on Spark1/2 (stages zip + creates venv + runs selftest)
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
-sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
+sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 
 # 2) Rsync-staged ring-step orchestrated from Spark0 (stages zip to Spark1/2 by default)
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
