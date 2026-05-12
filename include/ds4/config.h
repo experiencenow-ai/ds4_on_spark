@@ -39,6 +39,7 @@ const char *ds4_config_diag_stage_name(int32_t stage);
 int32_t ds4_config_diag_format(const ds4_config_diag_t *d,char *out,int32_t cap);
 int32_t ds4_config_known_key_count(int32_t *out_count);
 const char *ds4_config_known_key(int32_t idx);
+const char *ds4_config_known_key_help(int32_t idx);
 int32_t ds4_config_defaults(ds4_config_t *cfg);
 int32_t ds4_config_validate(const ds4_config_t *cfg);
 int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const char *v,int32_t vlen);

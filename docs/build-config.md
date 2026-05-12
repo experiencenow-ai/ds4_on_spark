@@ -33,7 +33,7 @@ Supported keys:
 
 `ds4_config_format` prints `log_level` using the name form when the value is in-range (otherwise it falls back to the raw integer).
 
-For programmatic introspection, `ds4_config_known_key_count` and `ds4_config_known_key` expose the supported key list (no allocation). The CLI also supports `ds4_cli --dump-config-keys`.
+For programmatic introspection, `ds4_config_known_key_count`, `ds4_config_known_key`, and `ds4_config_known_key_help` expose the supported key list and a one-line value hint (no allocation). The CLI also supports `ds4_cli --dump-config-keys` and `ds4_cli --dump-config-help`.
 
 ## Validation helper
 
