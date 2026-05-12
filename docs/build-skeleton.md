@@ -28,6 +28,11 @@ The build skeleton avoids heap allocation in core paths. The primary pattern is:
 
 `ds4_ctx_init()` expects an arena memory region supplied by the caller; `ds4_ctx_init_auto()` can optionally allocate a log ring from that arena when `cfg->log_ring_entries > 0`.
 
+For sizing caller-provided static backing storage without duplicating overflow checks, use:
+
+- `ds4_pool_bytes_needed(block_count,block_size,&out_bytes)`
+- `ds4_ring_bytes_needed(elem_count,elem_size,&out_bytes)`
+
 ## Logging
 
 Logging is intentionally minimal and allocation-free:
