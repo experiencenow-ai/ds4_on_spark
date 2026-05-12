@@ -104,10 +104,16 @@ To capture a full log file on the Mac (without relying on `tee` + shell `pipefai
 LOG_PATH=/private/tmp/ds4_cuda_probe_capability_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_capability_spark0.sh
 ```
 
+The capability sweep also sets per-step `REMOTE_DIR` values using a unique `REMOTE_TAG` so concurrent runs do not clobber `/tmp/ds4_cuda_probe_*` directories on Spark0. To make the remote directory names deterministic (useful for debugging), set:
+
+```bash
+REMOTE_TAG=manual ./scripts/cuda_probe_capability_spark0.sh
+```
+
 This runs, in order:
 
 - `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer)
-- `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile gates)
+- `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile gates + end-to-end `-arch=sm_121` / `nvcc --gpu-architecture=sm_121` build+run)
 - `scripts/cuda_probe_cmake_minimal_spark0.sh` (no repo transfer; CMake build-system gate)
 - `scripts/cuda_probe_tiny_spark0.sh` (tiny build+run)
 - `scripts/cuda_probe_compile_only_tiny_spark0.sh` (variant + PTX-embed probes)
@@ -136,6 +142,12 @@ To skip the device-props minimal gate (faster), run:
 
 ```bash
 WITH_DEVICE_PROPS_MINIMAL=0 ./scripts/cuda_probe_capability_spark0.sh
+```
+
+To keep the device-props “`sm_121` end-to-end” builds off (compile-only gates still run), set:
+
+```bash
+WITH_DEVICE_PROPS_SM121_RUN=0 ./scripts/cuda_probe_capability_spark0.sh
 ```
 
 Observed on Spark0 (2026-05-11): `scripts/cuda_probe_capability_spark0.sh` completes end-to-end on CUDA 13.0 `V13.0.88`, including NVRTC (`supportedArchs` includes `121`), nvJitLink, TMA tensor-map encode, and cluster launch probes.
