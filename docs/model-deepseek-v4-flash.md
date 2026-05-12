@@ -907,6 +907,7 @@ MTP acceptance gates (high-performance / quantized path):
 - Fingerprint gate: when `mtp_present==true`, require `mtp_keys_sha256 == fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256` (otherwise the artifact is not the official `mtp.0.*` tensor key subset); machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
 - Structural gate: `mtp_contract.complete == true` (and `mtp_namespace.has_mtp0 == true`) is necessary to claim the artifact preserves upstream `mtp.0.*`.
 - Oracle gate: even if structurally complete, treat MTP as **untrusted** until a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`; compare both prefill + decode; top-k IDs must match exactly; see `contract_summary.json` `mtp.trust_gates`).
+- Inspector note: when a DeepSeek V4 Flash `contract_summary.json` is available, `scripts/model_contract_inspect_quantized_artifact.py` includes `mtp_trust.expected_mtp_keys_sha256` and `mtp_trust.mtp_keys_sha256_match_official` (and the same fields under `mtp_preservation.*`) so run reports can machine-check the fingerprint gate without scraping free-form `reasons[]`.
 
 ## Next steps (oracle + remaining unknowns)
 

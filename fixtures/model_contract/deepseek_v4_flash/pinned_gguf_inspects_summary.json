@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-12T10:41:20Z",
+  "generated_at_utc": "2026-05-12T13:24:36Z",
   "items": [
     {
       "artifact_type": "gguf.url",
@@ -22,6 +22,8 @@
       },
       "mtp_present": false,
       "mtp_preservation": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "preserves": false,
         "reasons_sample": [
           "no mtp.* tensors present"
@@ -30,6 +32,8 @@
       },
       "mtp_tensor_count": 0,
       "mtp_trust": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "reasons_sample": [
           "no mtp.* tensors present"
         ],
@@ -91,6 +95,8 @@
       },
       "mtp_present": false,
       "mtp_preservation": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "preserves": false,
         "reasons_sample": [
           "no mtp.* tensors present"
@@ -99,6 +105,8 @@
       },
       "mtp_tensor_count": 0,
       "mtp_trust": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "reasons_sample": [
           "no mtp.* tensors present"
         ],
@@ -164,6 +172,8 @@
       },
       "mtp_present": false,
       "mtp_preservation": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "preserves": false,
         "reasons_sample": [
           "no mtp.* tensors present"
@@ -172,6 +182,8 @@
       },
       "mtp_tensor_count": 0,
       "mtp_trust": {
+        "expected_mtp_keys_sha256": null,
+        "mtp_keys_sha256_match_official": null,
         "reasons_sample": [
           "no mtp.* tensors present"
         ],
@@ -248,6 +260,8 @@
       },
       "mtp_present": true,
       "mtp_preservation": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
         "preserves": false,
         "reasons_sample": [
           "mtp_contract.complete != true"
@@ -256,6 +270,8 @@
       },
       "mtp_tensor_count": 32,
       "mtp_trust": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
         "reasons_sample": [
           "mtp_contract.complete != true",
           "mtp_keys_sha256 != official mtp checkpoint fingerprint"
@@ -326,6 +342,8 @@
       },
       "mtp_present": true,
       "mtp_preservation": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
         "preserves": false,
         "reasons_sample": [
           "mtp_contract.complete != true"
@@ -339,6 +357,8 @@
         "Q8_0": 10
       },
       "mtp_trust": {
+        "expected_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "mtp_keys_sha256_match_official": false,
         "reasons_sample": [
           "mtp_contract.complete != true",
           "mtp_keys_sha256 != official mtp checkpoint fingerprint"
