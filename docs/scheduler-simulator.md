@@ -561,6 +561,8 @@ The first useful runtime patch can be instrumentation-only. Expert queueing
 should be enabled only after replay shows a throughput win without unacceptable
 interactive p95, starvation, or partial-admit regressions.
 
+When replaying real traces with `python3 sim/scheduler/recommendations.py --trace-jsonl ...`, prefer the report’s `evidence` block as a quick go/no-go sanity check (`evidence.expert_queueing` and, when MTP counters exist, `evidence.mtp`).
+
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
 
 ## MTP Simulation

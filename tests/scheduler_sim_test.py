@@ -333,6 +333,8 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIsInstance(dflash, dict)
         if not isinstance(dflash, dict):
             return
+        self.assertIn("evidence", out)
+        self.assertIsInstance(out.get("evidence"), dict)
         summary = dflash.get("summary")
         self.assertIsInstance(summary, dict)
         if not isinstance(summary, dict):
@@ -4141,6 +4143,9 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("trace_summary", out)
         self.assertIn("scheduler_sweeps", out)
         self.assertIn("arrival_units_steps", out["scheduler_sweeps"])
+        self.assertIn("evidence", out)
+        self.assertIn("mtp", out["evidence"])
+        self.assertTrue(bool(out["evidence"]["mtp"].get("present")))
         self.assertIn("results", out)
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])
