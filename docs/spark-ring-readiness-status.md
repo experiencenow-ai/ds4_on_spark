@@ -1,28 +1,22 @@
 # Spark Ring Readiness Status (Spark0..Spark2)
 
-Status as of `2026-05-12T1502Z` (UTC).
+Status as of `2026-05-12T1606Z` (UTC).
 
 ## Latest commit-safe snapshots
 
-- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-12T1502Z.md`
-- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-12T1502Z.md`
-- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-12T1502Z.md`
-- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T1502Z.md`
-- Spark0 facts-only probe (refreshed): `docs/spark0-probe-facts-2026-05-12T1502Z.md`
+- Mac discovery (mDNS + reachability): `docs/spark-ring-mac-discovery-2026-05-12T1606Z.md`
+- Ring probe (clock + network + GPU/storage facts): `docs/spark-ring-probe-2026-05-12T1606Z.md`
+- Ring MTU probe (DF ping payloads): `docs/spark-ring-mtu-probe-2026-05-12T1606Z.md`
+- Ring bandwidth probe (Mac<->host, best-effort): `docs/spark-ring-bw-probe-2026-05-12T1606Z.md`
+- Spark0 facts-only probe (refreshed): `docs/spark0-probe-facts-2026-05-12T1606Z.md`
 - Per-node facts-only probes:
-  - `docs/spark-ring-node-facts-aitopatom-9ab9.local-2026-05-12T1502Z.md`
-  - `docs/spark-ring-node-facts-spark1.local-2026-05-12T1502Z.md`
-  - `docs/spark-ring-node-facts-spark2.local-2026-05-12T1502Z.md`
+  - `docs/spark-ring-node-facts-aitopatom-9ab9.local-2026-05-12T1606Z.md`
+  - `docs/spark-ring-node-facts-spark1.local-2026-05-12T1606Z.md`
+  - `docs/spark-ring-node-facts-spark2.local-2026-05-12T1606Z.md`
 
 ## Latest smoke verification (non-committed)
 
-As of `2026-05-12T1532Z` (UTC), the Spark0 facts-only probe still runs cleanly and reports the same core CUDA/toolchain facts (GB10, `compute_cap=12.1`, `nvcc 13.0.88`, driver `580.142`). No new snapshot docs were committed to avoid churn.
-
-Command run (commit-safe output, not committed):
-
-```bash
-DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_probe.sh spark0@aitopatom-9ab9.local
-```
+As of `2026-05-12T1606Z` (UTC), the snapshots above reflect the current Spark0 probe output and ring bring-up status.
 
 ## Ring readiness matrix
 
