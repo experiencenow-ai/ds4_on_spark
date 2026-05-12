@@ -522,7 +522,7 @@ Reference implementation: `inference/model.py` (`MTPBlock`, `Transformer.mtp`).
   4. Run the normal `Block` forward (attention + MoE + HC mixing).
   5. Compute logits with a **separate** HC head: `hc_head_{fn,base,scale}` under `mtp.0.*`.
 
-These key MTP expressions are also extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `mtp.semantics` and gated by `scripts/model_contract_verify_deepseek_v4_flash.py`.
+These key MTP expressions are extracted into `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `mtp.semantics` and gated by `scripts/model_contract_verify_deepseek_v4_flash.py`. The contract summary also records verbatim `MTPBlock.forward` source lines + sha256 under `mtp.semantics.source_helpers.mtp_block_forward` so external runtimes can reproduce draft semantics without guessing.
 
 DS4 must treat `mtp.*` as a distinct draft-model path with its own HC head weights, not just an alias to the main head.
 

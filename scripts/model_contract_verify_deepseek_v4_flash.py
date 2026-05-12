@@ -869,6 +869,37 @@ def main() -> int:
 					head = mtp_sem.get("head_logits_expr")
 					if not (isinstance(head, str) and head.startswith("logits = self.head(")):
 						failures.append(Failure(72, f"contract summary mtp.semantics.head_logits_expr missing or unexpected: {contract_summary}"))
+					src = mtp_sem.get("source_helpers", None)
+					if not isinstance(src, dict):
+						failures.append(Failure(159, f"contract summary mtp.semantics.source_helpers missing or invalid: {contract_summary}"))
+					else:
+						ref = src.get("reference_source", None)
+						if not (isinstance(ref, str) and "MTPBlock.forward" in ref):
+							failures.append(Failure(160, f"contract summary mtp.semantics.source_helpers.reference_source missing or unexpected: {contract_summary}"))
+						else:
+							mb = src.get("mtp_block_forward", None)
+							if not isinstance(mb, dict):
+								failures.append(Failure(161, f"contract summary mtp.semantics.source_helpers.mtp_block_forward missing or invalid: {contract_summary}"))
+							else:
+								lines = mb.get("source_lines", None)
+								digest = mb.get("source_lines_sha256", None)
+								if not (isinstance(lines, list) and lines and all(isinstance(x, str) for x in lines) and isinstance(digest, str)):
+									failures.append(Failure(162, f"contract summary mtp.semantics.source_helpers.mtp_block_forward.source_lines missing or invalid: {contract_summary}"))
+								else:
+									if digest != sha256_lines(lines):
+										failures.append(Failure(163, f"contract summary mtp.semantics.source_helpers.mtp_block_forward.source_lines_sha256 mismatch: {contract_summary}"))
+									else:
+										markers = (
+											"def forward(",
+											"self.embed(",
+											"self.e_proj(",
+											"self.h_proj(",
+											"super().forward",
+											"logits = self.head(",
+										)
+										joined = "\n".join(lines)
+										if not all(m in joined for m in markers):
+											failures.append(Failure(164, f"contract summary mtp.semantics.source_helpers.mtp_block_forward source missing required markers: {contract_summary}"))
 
 				compat = summary.get("compat", {})
 				bt = compat.get("by_transformers_key", {}) if isinstance(compat, dict) else {}
