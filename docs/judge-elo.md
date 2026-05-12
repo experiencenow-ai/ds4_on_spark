@@ -67,6 +67,12 @@ The offline updater emits additional machine-readable outputs intended for downs
 - `quality_map.json`: `fixtures/judge-elo/schemas/judge_elo_quality_map_v1.schema.json`
 - `leaderboard.json`: `fixtures/judge-elo/schemas/judge_elo_leaderboard_v1.schema.json`
 
+To validate a produced output directory (without any paid API calls):
+
+```bash
+python3 scripts/judge_elo_validate_outputs.py --out-dir <elo_out_dir>
+```
+
 ## Prompt Design (verifier budget)
 
 Use a strict system instruction:

@@ -15,6 +15,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
+SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
+SCHEMA_BUDGET_V1 = "ds4_judge_elo_budget_v1"
+SCHEMA_QUALITY_MAP_V1 = "judge_elo_quality_map_v1"
+SCHEMA_LEADERBOARD_V1 = "judge_elo_leaderboard_v1"
 
 WINNERS = ("A", "B", "tie")
 
@@ -57,6 +61,17 @@ def _as_int(v: Any, field: str, errs: List[str]) -> Optional[int]:
     if _is_int(v):
         return int(v)
     errs.append(f"{field} must be an integer")
+    return None
+
+
+def _as_num(v: Any, field: str, errs: List[str]) -> Optional[float]:
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        fv = float(v)
+        if _finite(fv):
+            return fv
+        errs.append(f"{field} must be finite")
+        return None
+    errs.append(f"{field} must be a number")
     return None
 
 
@@ -297,3 +312,171 @@ def iter_jsonl(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
             if not isinstance(obj, dict):
                 raise ValueError(f"{path}:{lineno}: JSONL line must be an object")
             yield lineno, obj
+
+
+def validate_quality_map(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["quality_map must be an object mapping model->score"]
+    for k, v in obj.items():
+        if not isinstance(k, str) or k.strip() == "":
+            errs.append("quality_map keys must be non-empty strings")
+            continue
+        fv = _as_num(v, f"quality_map[{k!r}]", errs)
+        if fv is None:
+            continue
+        if fv < 0.0 or fv > 100.0:
+            errs.append(f"quality_map[{k!r}] must be in [0,100]")
+    return errs
+
+
+def validate_leaderboard(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, list):
+        return ["leaderboard must be a JSON array"]
+    for i, row in enumerate(obj):
+        if not isinstance(row, dict):
+            errs.append(f"leaderboard[{i}] must be an object")
+            continue
+        model = _as_str(row.get("model"), f"leaderboard[{i}].model", errs).strip()
+        if model == "":
+            errs.append(f"leaderboard[{i}].model is required")
+        for k in ("games", "wins", "losses", "ties"):
+            v = _as_int(row.get(k), f"leaderboard[{i}].{k}", errs)
+            if v is not None and v < 0:
+                errs.append(f"leaderboard[{i}].{k} must be >= 0")
+        elo = _as_num(row.get("elo"), f"leaderboard[{i}].elo", errs)
+        if elo is not None and not _finite(float(elo)):
+            errs.append(f"leaderboard[{i}].elo must be finite")
+        qs = _as_num(row.get("quality_score"), f"leaderboard[{i}].quality_score", errs)
+        if qs is not None and (qs < 0.0 or qs > 100.0):
+            errs.append(f"leaderboard[{i}].quality_score must be in [0,100]")
+        src = row.get("quality_source")
+        if not isinstance(src, str) or src.strip() == "":
+            errs.append(f"leaderboard[{i}].quality_source is required")
+    return errs
+
+
+def validate_meta(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["meta must be an object"]
+    schema_v = _as_str(obj.get("schema"), "schema", errs)
+    if schema_v != "" and schema_v != SCHEMA_META_V1:
+        errs.append(f"schema must be {SCHEMA_META_V1!r}")
+
+    records = _as_int(obj.get("records"), "records", errs)
+    matches_used = _as_int(obj.get("matches_used"), "matches_used", errs)
+    k = _as_num(obj.get("k"), "k", errs)
+    scale = _as_num(obj.get("scale"), "scale", errs)
+    sort_by_pair_id = _as_bool(obj.get("sort_by_pair_id"), "sort_by_pair_id", errs)
+    if records is not None and records < 0:
+        errs.append("records must be >= 0")
+    if matches_used is not None and matches_used < 0:
+        errs.append("matches_used must be >= 0")
+    if k is not None and k <= 0.0:
+        errs.append("k must be > 0")
+    if scale is not None and scale <= 0.0:
+        errs.append("scale must be > 0")
+    if sort_by_pair_id is None:
+        pass
+
+    for field in ("parse_valid_true", "parse_valid_false", "matches_skipped_invalid_schema", "unique_models"):
+        v = obj.get(field)
+        if v is None:
+            continue
+        iv = _as_int(v, field, errs)
+        if iv is not None and iv < 0:
+            errs.append(f"{field} must be >= 0")
+
+    inputs = obj.get("inputs")
+    if inputs is None:
+        errs.append("inputs is required")
+    elif not isinstance(inputs, list) or any(not isinstance(x, str) for x in inputs):
+        errs.append("inputs must be an array of strings")
+
+    qm = obj.get("quality_mode")
+    if not isinstance(qm, str) or qm not in ("logistic", "minmax"):
+        errs.append("quality_mode must be 'logistic' or 'minmax'")
+    qs = obj.get("quality_source")
+    if not isinstance(qs, str) or qs.strip() == "":
+        errs.append("quality_source is required")
+    jot = obj.get("judge_out_target_tokens")
+    jot_i = _as_int(jot, "judge_out_target_tokens", errs)
+    if jot_i is not None and jot_i <= 0:
+        errs.append("judge_out_target_tokens must be > 0")
+    return errs
+
+
+def _validate_budget_stats(stats: Any, field: str, errs: List[str]) -> None:
+    if not isinstance(stats, dict):
+        errs.append(f"{field} must be an object")
+        return
+    count = _as_num(stats.get("count"), f"{field}.count", errs)
+    if count is not None and count < 0.0:
+        errs.append(f"{field}.count must be >= 0")
+    missing = stats.get("missing")
+    if missing is not None:
+        mv = _as_num(missing, f"{field}.missing", errs)
+        if mv is not None and mv < 0.0:
+            errs.append(f"{field}.missing must be >= 0")
+    present = stats.get("present_fraction")
+    if present is not None:
+        pv = _as_num(present, f"{field}.present_fraction", errs)
+        if pv is not None and (pv < 0.0 or pv > 1.0):
+            errs.append(f"{field}.present_fraction must be in [0,1]")
+    for k in ("min", "p50", "p90", "max", "mean"):
+        if k not in stats:
+            continue
+        _as_num(stats.get(k), f"{field}.{k}", errs)
+
+
+def validate_budget(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["budget must be an object"]
+    schema_v = _as_str(obj.get("schema"), "schema", errs)
+    if schema_v != "" and schema_v != SCHEMA_BUDGET_V1:
+        errs.append(f"schema must be {SCHEMA_BUDGET_V1!r}")
+    for field in ("records", "parse_valid_true", "parse_valid_false"):
+        iv = _as_int(obj.get(field), field, errs)
+        if iv is not None and iv < 0:
+            errs.append(f"{field} must be >= 0")
+
+    tokens = obj.get("tokens")
+    if not isinstance(tokens, dict):
+        errs.append("tokens must be an object")
+    else:
+        for k in ("a_out", "b_out", "judge_in", "judge_out"):
+            if k in tokens:
+                _validate_budget_stats(tokens.get(k), f"tokens.{k}", errs)
+
+    latency = obj.get("latency_ms")
+    if not isinstance(latency, dict):
+        errs.append("latency_ms must be an object")
+    else:
+        for k in ("a", "b", "judge"):
+            if k in latency:
+                _validate_budget_stats(latency.get(k), f"latency_ms.{k}", errs)
+
+    job = obj.get("judge_out_budget")
+    if not isinstance(job, dict):
+        errs.append("judge_out_budget must be an object")
+    else:
+        tt = _as_int(job.get("target_tokens"), "judge_out_budget.target_tokens", errs)
+        if tt is not None and tt <= 0:
+            errs.append("judge_out_budget.target_tokens must be > 0")
+        for k in (
+            "count_with_tokens",
+            "count_le_target",
+            "count_with_tokens_parse_valid_true",
+            "count_le_target_parse_valid_true",
+        ):
+            iv = _as_int(job.get(k), f"judge_out_budget.{k}", errs)
+            if iv is not None and iv < 0:
+                errs.append(f"judge_out_budget.{k} must be >= 0")
+        for k in ("fraction_le_target", "fraction_le_target_parse_valid_true"):
+            fv = _as_num(job.get(k), f"judge_out_budget.{k}", errs)
+            if fv is not None and (fv < 0.0 or fv > 1.0):
+                errs.append(f"judge_out_budget.{k} must be in [0,1]")
+    return errs
