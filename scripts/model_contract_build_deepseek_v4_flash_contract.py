@@ -165,6 +165,15 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	return out
 
 def build_oracle_contract() -> dict:
+	prompts_default_topk = None
+	prompts_path = FIX / "oracle" / "prompts.json"
+	try:
+		prompts = load_json(prompts_path)
+		default_topk = prompts.get("default_topk")
+		if isinstance(default_topk, int):
+			prompts_default_topk = int(default_topk)
+	except Exception:
+		prompts_default_topk = None
 	return {
 		"encoding_oracle": {
 			"required": True,
@@ -180,6 +189,7 @@ def build_oracle_contract() -> dict:
 			"output_fixture": "oracle/logits_oracle.json",
 			"acceptance": {
 				"requires_prefill_and_decode": True,
+				"topk_k": prompts_default_topk,
 				"topk_ids_exact": True,
 				"logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
 			},
@@ -191,6 +201,7 @@ def build_oracle_contract() -> dict:
 			"generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
 			"acceptance": {
 				"requires_mtp_trace": True,
+				"topk_k": prompts_default_topk,
 				"topk_ids_exact": True,
 				"logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
 			},
