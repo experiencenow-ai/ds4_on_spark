@@ -772,7 +772,9 @@
     },
     "weight_map_keys_sha256": "f010f0041b4630a335fcf2368134154c4e7c1e17a04e750baa62a1ffe0a4f87a",
     "weight_map_layers_keys_sha256": "a1bdd3ff48fc96f5ef8ee3e4b13fbfbb8b6d07096803c7af34f911c3953cab57",
+    "weight_map_layers_tensor_key_count": 67606,
     "weight_map_mtp_keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+    "weight_map_mtp_tensor_key_count": 1575,
     "weight_map_num_tensors": 69187,
     "weight_map_prefix_fingerprints": {
       "embed": {

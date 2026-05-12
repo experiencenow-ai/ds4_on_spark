@@ -1748,6 +1748,8 @@ def build_contract() -> dict:
 				"tensor_keys": tensor_keys,
 				"checkpoint_index": {
 					"weight_map_num_tensors": int(len(weight_keys)),
+					"weight_map_layers_tensor_key_count": int(layers_prefix_fp.get("count", 0)) if isinstance(layers_prefix_fp, dict) else None,
+					"weight_map_mtp_tensor_key_count": int(mtp_prefix_fp.get("count", 0)) if isinstance(mtp_prefix_fp, dict) else None,
 					"weight_map_keys_sha256": weight_map_keys_sha256,
 					"weight_map_top_level_keys_sha256": weight_map_top_level_keys_sha256,
 					"weight_map_top_level_tensor_key_count": int(top_level_tensor_key_count),

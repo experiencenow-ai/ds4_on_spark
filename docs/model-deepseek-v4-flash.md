@@ -58,6 +58,13 @@ MTP:
 - `num_nextn_predict_layers=1` (`mtp.0.*` namespace exists in the official checkpoint key set)
 - MTP compress ratios (length `1`): `[0]` (MTP is sliding-only; no CSA/HCA compressor/indexer tensors should exist under `mtp.0.*`)
 
+Checkpoint tensor-key counts (from `model.safetensors.index.json` `weight_map` as summarized in `contract_summary.json` `checkpoint_index.*`):
+
+- Total tensor keys: `69187`
+- Main trunk (`layers.*`) keys: `67606`
+- MTP (`mtp.*`) keys: `1575`
+- Top-level (neither `layers.*` nor `mtp.*`) keys: `6`
+
 ## Source trace (official → pinned fixtures → DS4 contract)
 
 This contract is intentionally **source-traceable**: every claim is either taken directly from a pinned upstream file in `fixtures/model_contract/deepseek_v4_flash/` or is a deterministic derivation recorded in `contract_summary.json`.
