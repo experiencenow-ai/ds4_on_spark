@@ -195,10 +195,10 @@ This script writes a tiny `CMakeLists.txt` + `main.cu` directly into a Spark0 te
 
 - Prints `cmake --version` and fails if `cmake` is missing or older than 3.18 (first version with `CMAKE_CUDA_ARCHITECTURES`)
 - Prints `nvcc --version`
-- Configures with `-DCMAKE_CUDA_ARCHITECTURES="121"` and builds a single tiny CUDA executable
+- Configures with `-DCMAKE_CUDA_ARCHITECTURES="121"` and builds a single tiny CUDA executable with `cmake --build --verbose` (captures the exact `nvcc` flags in logs)
 - Runs the executable and expects `__CUDA_ARCH__=1210`
 
-Observed on Spark0 (2026-05-11): `cmake version 3.28.3`; C++ host compiler `GNU 13.3.0`; `__CUDA_ARCH__=1210`.
+Observed on Spark0 (2026-05-12): `cmake version 3.28.3`; `nvcc` CUDA 13.0 `V13.0.88`; build uses `--generate-code=arch=compute_121,code=[compute_121,sm_121]`; run prints `__CUDA_ARCH__=1210`.
 
 Environment overrides:
 

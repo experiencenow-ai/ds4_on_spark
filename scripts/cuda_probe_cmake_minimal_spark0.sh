@@ -110,8 +110,26 @@ int main(int argc,char **argv)
 }
 EOF
 
-\$CMAKE -S \"$REMOTE_DIR\" -B \"$REMOTE_DIR\"/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=\"\$NVCC\" -DCMAKE_CUDA_ARCHITECTURES=\"121\"
-\$CMAKE --build \"$REMOTE_DIR\"/build
+\$CMAKE -S \"$REMOTE_DIR\" -B \"$REMOTE_DIR\"/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=\"\$NVCC\" -DCMAKE_CUDA_ARCHITECTURES=\"121\" -DCMAKE_VERBOSE_MAKEFILE=ON
+echo
+echo \"== cmake: build (verbose) ==\"
+build_log=\"$REMOTE_DIR\"/build/build.log
+set +e
+\$CMAKE --build \"$REMOTE_DIR\"/build --verbose >\"\${build_log}\" 2>&1
+rc=\$?
+set -e
+cat \"\${build_log}\"
+echo
+echo \"== cmake: nvcc flags check (best-effort) ==\"
+if grep -q \"sm_121\" \"\${build_log}\"; then
+	echo \"cmake_build_log_sm_121: OK\"
+else
+	echo \"(cmake build log did not mention sm_121; generator may not support verbose output)\"
+fi
+if [ \$rc -ne 0 ]; then
+	echo \"cmake build failed rc=\$rc\" >&2
+	exit 6
+fi
 \"$REMOTE_DIR\"/build/ds4_cuda_probe_cmake_sm121
 " 
 }
