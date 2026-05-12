@@ -7,6 +7,8 @@ The build skeleton aims for predictable, static allocation. Most call sites shou
 `ds4_arena_t` is a bump allocator over a caller-provided memory region:
 
 - `ds4_arena_alloc`: allocates aligned slices (no free).
+- `ds4_arena_alloc_n`: `count*elem_size` allocation with overflow checks (useful for arrays).
+- `ds4_arena_alloc_zero`: allocates and zero-fills the returned region.
 - `ds4_arena_mark` / `ds4_arena_release`: coarse rollback to a prior mark.
 - `ds4_arena_reset`: discard all allocations.
 
