@@ -13,13 +13,13 @@ Current observed Spark identity:
 - Spark wired interface: `enP7s7`, MTU 9000
 - Additional wired NICs observed: Mellanox `mlx5_core` ports at `200000Mb/s` (MTU `9000`; see latest ring probe snapshot for ifnames)
 - SSH key authentication from the Mac is now working for `spark0`.
-- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, 100% loss at `2026-05-12T1830Z`, `2026-05-12T1934Z`, and `2026-05-12T2029Z`; see latest mac discovery snapshot).
+- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, 100% loss at `2026-05-12T1830Z`, `2026-05-12T1934Z`, `2026-05-12T2029Z`, and `2026-05-12T2058Z`; see latest mac discovery snapshot).
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe ring snapshot set: `2026-05-12T2029Z` (`docs/spark-ring-*-2026-05-12T2029Z.md`)
-- Latest Spark0 facts-only snapshot: `2026-05-12T2029Z` (`docs/spark0-probe-facts-2026-05-12T2029Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T2029Z.md`
+- Latest commit-safe ring snapshot set: `2026-05-12T2058Z` (`docs/spark-ring-*-2026-05-12T2058Z.md`)
+- Latest Spark0 facts-only snapshot: `2026-05-12T2058Z` (`docs/spark0-probe-facts-2026-05-12T2058Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T2058Z.md`
 
 ## Reproducible Probes
 
@@ -70,11 +70,11 @@ rm -rf .codex_git
 git init --bare .codex_git
 git --git-dir=.codex_git remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
 mkdir -p .codex_git/objects/info
-	printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
-	git --git-dir=.codex_git fetch origin main
-	git --git-dir=.codex_git --work-tree=. reset --hard origin/main
-	git --git-dir=.codex_git --work-tree=. checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
-	```
+printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
+git --git-dir=.codex_git fetch origin main --prune
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+git --git-dir=.codex_git --work-tree=. checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
+```
 
 ```bash
 # One-time setup (from repo root, simplest gitdir shim; creates `.codex_git/` as a gitdir)
@@ -104,10 +104,10 @@ it usually means the shim gitdir has no index yet (so it sees your existing chec
 
 Fast path (overwrites the working tree; only do this when `git status` is clean and you are OK discarding any local-only files):
 
-	```bash
-	git --git-dir=.codex_git --work-tree=. fetch origin --prune
-	git --git-dir=.codex_git --work-tree=. reset --hard origin/main
-	```
+```bash
+git --git-dir=.codex_git --work-tree=. fetch origin --prune
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+```
 
 If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
 
