@@ -7,8 +7,8 @@ usage()
 ops_spark_ring_status.sh -- Mac-side DS4 systemd status snapshot (safe)
 
 Usage:
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
+  ops_spark_ring_status.sh [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_status.sh [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -97,7 +97,7 @@ case "$preflight" in
 	auto|tp2|tp3|tp4)
 		;;
 	*)
-		echo "invalid --preflight: $preflight (expected tp2|tp3|tp4)" >&2
+		echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4)" >&2
 		exit 2
 		;;
 esac

@@ -199,6 +199,10 @@ infer_preflight()
 }
 
 picked_preflight="$(infer_preflight "$@")" || exit $?
+picked_staged_preflight="$staged_readiness_preflight"
+if [ "$picked_staged_preflight" = "auto" ]; then
+	picked_staged_preflight="$picked_preflight"
+fi
 
 echo "== spark ring ops check (Mac-side) =="
 date -Is 2>/dev/null || date || true
@@ -211,7 +215,7 @@ echo "journal_lines=$journal_lines"
 echo "staged_env_audit=$staged_env_audit"
 echo "staged_readiness=$staged_readiness"
 echo "staged_readiness_strict=$staged_readiness_strict"
-echo "staged_readiness_preflight=$staged_readiness_preflight"
+echo "staged_readiness_preflight=$picked_staged_preflight"
 echo
 
 echo "== mesh check =="
@@ -231,7 +235,7 @@ if [ "$systemd_mode" = "user" ]; then
 else
 	status_args="$status_args --system"
 fi
-status_args="$status_args --preflight $preflight"
+status_args="$status_args --preflight $picked_preflight"
 if [ "$strict" -ne 0 ]; then
 	status_args="$status_args --strict"
 fi
@@ -256,7 +260,7 @@ if [ "$staged_readiness" -ne 0 ]; then
 			readiness_args="$readiness_args --tcp $p"
 		done
 	fi
-	readiness_args="$readiness_args --preflight $staged_readiness_preflight"
+	readiness_args="$readiness_args --preflight $picked_staged_preflight"
 	if [ "$staged_readiness_strict" -ne 0 ]; then
 		readiness_args="$readiness_args --strict"
 	fi
