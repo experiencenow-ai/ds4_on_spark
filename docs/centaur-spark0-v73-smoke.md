@@ -17,7 +17,7 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 - Centaur package zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
   - Zip contains `centaur_spec_impl_v73/` with `centaur.py`, `requirements.txt`, and tests.
   - Do **not** commit the zip or venvs into this repo.
-  - Optional: capture zip facts without extracting (good for bug reports):
+  - Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
 
     ```bash
     sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip

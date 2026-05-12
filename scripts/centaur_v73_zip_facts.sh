@@ -68,24 +68,31 @@ PY
 echo "zip_sha256: $sha256"
 
 decomposer_version="$(python3 - "$zip" <<'PY'
-import re
+import ast
 import sys
 import zipfile
 
 zip_path=sys.argv[1]
 try:
     with zipfile.ZipFile(zip_path) as z:
-        data=z.read("centaur_spec_impl_v73/centaur.py").decode("utf-8","replace").splitlines()
+        t=z.read("centaur_spec_impl_v73/centaur.py").decode("utf-8","replace")
 except Exception:
     print("")
-    sys.exit(0)
-
-for line in data:
-    m=re.match(r'^DECOMPOSER_VERSION\s*=\s*"([^"]+)"', line)
-    if m:
-        print(m.group(1))
-        sys.exit(0)
-print("")
+    raise SystemExit(0)
+try:
+    m=ast.parse(t)
+except Exception:
+    print("")
+    raise SystemExit(0)
+v=""
+for node in getattr(m,"body",[]):
+    if isinstance(node, ast.Assign):
+        for tgt in getattr(node,"targets",[]):
+            if isinstance(tgt, ast.Name) and tgt.id=="DECOMPOSER_VERSION":
+                val=getattr(node,"value",None)
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    v=val.value
+print(v)
 PY
 )"
 if [ "$decomposer_version" = "" ]; then

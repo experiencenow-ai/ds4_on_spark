@@ -82,9 +82,16 @@ if [ "$log" != "" ]; then
 	fifo="$workdir/.centaur_node_setup_log.fifo"
 	rm -f "$fifo"
 	mkfifo "$fifo"
+	exec 3>&1 4>&2
 	tee "$log" <"$fifo" &
 	teepid="$!"
-	trap 'rm -f "$fifo"; kill "$teepid" 2>/dev/null || true' EXIT INT TERM
+	cleanup_log()
+	{
+		exec >&3 2>&4
+		rm -f "$fifo"
+		wait "$teepid" 2>/dev/null || true
+	}
+	trap 'cleanup_log' EXIT INT TERM
 	exec >"$fifo" 2>&1
 fi
 
@@ -102,7 +109,7 @@ import hashlib,sys
 p=sys.argv[1]
 h=hashlib.sha256()
 with open(p,'rb') as f:
-    for chunk in iter(lambda: f.read(1<<20), b''):
+    for chunk in iter(lambda: f.read(1024*1024), b''):
         h.update(chunk)
 print(h.hexdigest())
 PY
@@ -123,21 +130,29 @@ fi
 
 echo "== centaur package facts =="
 decomposer_version="$(python3 - "$pkgdir/centaur.py" <<'PY'
-import re
+import ast
 import sys
 
 p=sys.argv[1]
 try:
-    data=open(p,"r",encoding="utf-8",errors="replace").read().splitlines()
+    t=open(p,"r",encoding="utf-8",errors="replace").read()
 except Exception:
     print("")
-    sys.exit(0)
-for line in data:
-    m=re.match(r'^DECOMPOSER_VERSION\s*=\s*"([^"]+)"', line)
-    if m:
-        print(m.group(1))
-        sys.exit(0)
-print("")
+    raise SystemExit(0)
+try:
+    m=ast.parse(t)
+except Exception:
+    print("")
+    raise SystemExit(0)
+v=""
+for node in getattr(m,"body",[]):
+    if isinstance(node, ast.Assign):
+        for tgt in getattr(node,"targets",[]):
+            if isinstance(tgt, ast.Name) and tgt.id=="DECOMPOSER_VERSION":
+                val=getattr(node,"value",None)
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    v=val.value
+print(v)
 PY
 )"
 if [ "$decomposer_version" = "" ]; then
