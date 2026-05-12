@@ -1785,6 +1785,22 @@
       0
     ],
     "n_mtp_layers": 1,
+    "namespace": {
+      "expected_layer_ids": [
+        0
+      ],
+      "expected_prefixes": [
+        "mtp.0."
+      ],
+      "note": "Expected mtp.* tensor namespace layout derived from config.json num_nextn_predict_layers and validated against the official checkpoint index.",
+      "official_complete": true,
+      "official_present_layer_ids": [
+        0
+      ],
+      "official_present_prefixes": [
+        "mtp.0."
+      ]
+    },
     "namespace_prefix": "mtp.{j}.",
     "num_nextn_predict_layers": 1,
     "semantics": {

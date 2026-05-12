@@ -500,6 +500,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         "sched_reserve_graph_nodes",
         "sched_reserve_graph_splits",
         "sched_reserve_took_ms",
+        "sched_reserve_fallback_line_count",
+        "sched_reserve_failure_line_count",
     )
     for k in reserve_keys:
         if k in summary_kv:
@@ -508,6 +510,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         lines.append("- fattn_seen_disabled: `true`")
     if summary_kv.get("fattn_seen_sched_reserve_cpu", ""):
         lines.append("- fattn_seen_sched_reserve_cpu: `true`")
+    if summary_kv.get("sched_reserve_seen_fallback", ""):
+        lines.append("- sched_reserve_seen_fallback: `true`")
+    if summary_kv.get("sched_reserve_seen_failure", ""):
+        lines.append("- sched_reserve_seen_failure: `true`")
     lines.append("")
     lines.append("Patch probes (read-only):")
     lines.append("")
