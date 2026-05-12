@@ -43,6 +43,15 @@ if [ "$remote_dir" = "" ]; then
 fi
 local_log="${3:-}"
 
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 if [ "${SSH_OPTS:-}" = "" ]; then
@@ -55,6 +64,8 @@ fi
 
 stage="$root/scripts/centaur_spark0_v73_stage.sh"
 smoke="$root/scripts/centaur_spark0_v73_smoke.sh"
+
+need_cmd ssh
 
 if [ ! -x "$stage" ]; then
 	echo "missing stage script: $stage" >&2
@@ -111,5 +122,8 @@ echo "remote_smoke_log: $remote_smoke_log"
 if [ "$local_log" = "" ]; then
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$smoke"
 else
+	need_cmd tee
+	need_cmd dirname
+	mkdir -p "$(dirname -- "$local_log")"
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$smoke" 2>&1 | tee "$local_log"
 fi

@@ -42,6 +42,29 @@ if [ "$run_id" = "" ]; then
 	exit 2
 fi
 
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
+need_copy_tool()
+{
+	if command -v rsync >/dev/null 2>&1; then
+		echo "copy_tool: rsync"
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		echo "copy_tool: scp"
+		return 0
+	fi
+	echo "missing required command: rsync or scp" >&2
+	exit 2
+}
+
 remote_dir="${3:-}"
 if [ "$remote_dir" = "" ]; then
 	remote_dir="~/centaur-smoke/v73"
@@ -64,6 +87,9 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
 
+need_cmd ssh
+need_copy_tool
+
 ssh_run()
 {
 	target="$1"
@@ -71,9 +97,16 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
-rsync_run()
+copy_from_remote()
 {
-	rsync -av -e "ssh $SSH_OPTS" "$@"
+	remote="$1"
+	local_path="$2"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$remote" "$local_path"
+		return 0
+	fi
+	# scp expects a local directory destination for recursive copies
+	scp -r $SSH_OPTS "$remote" "$local_path"
 }
 
 remote_dir="$(ssh_run "$target" "mkdir -p $remote_dir && cd $remote_dir && pwd -P")"
@@ -99,7 +132,7 @@ fetch_one()
 	remote_path="$1"
 	local_path="$2"
 	if ssh_run "$target" "test -e $remote_path"; then
-		rsync_run "$target:$remote_path" "$local_path"
+		copy_from_remote "$target:$remote_path" "$local_path"
 	else
 		echo "skip (not found): $remote_path"
 	fi
