@@ -20,6 +20,8 @@ python3 scripts/render_quantized_single_spark_report.py "$OUT_DIR" --write "docs
 
 If `MODEL_RUNS_CSV` is unset, `scripts/run_quantized_single_spark.sh` defaults it to `$OUT_ROOT/model_runs.csv` so the run emits `model_quality_speed_scored_summary.txt` for later quality/speed comparisons.
 
+Note: when using `MODEL_GGUF_GLOB` auto-selection, `scripts/run_quantized_single_spark.sh` records the selection inputs (`MODEL_GGUF_GLOB`, `MODEL_GGUF_EXCLUDE_EGREP`, `MODEL_GGUF_INCLUDE_EGREP`, `MODEL_GGUF_SELECT`) into the baseline report’s `REMOTE_LLAMA_ENV` block so commit-ready docs preserve how the GGUF was chosen.
+
 ## Definition of Done
 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family
