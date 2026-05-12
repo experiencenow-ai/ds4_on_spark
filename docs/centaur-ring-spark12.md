@@ -37,6 +37,8 @@ If you want a known-good reference bundle for what “PASS” looks like, see:
 	sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 	```
 
+	This writes a local Mac-side wrapper log (`ring_sim.local.log`) in the fetched bundle directory; it includes the exact `ssh ...` command used to run the ring sim (review/redact before posting).
+
 	If you prefer running the pieces manually:
 
 	```bash
@@ -76,6 +78,8 @@ The fetch helper pulls per-node artifacts (when present):
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 	```
+
+	This writes a local Mac-side wrapper log (`ring_rsync.local.log`) in the fetched bundle directory; it includes the exact `ssh ...` command used to orchestrate the ring step (review/redact before posting).
 
 	To also verify that Spark1/2 can run `hyor-sync-status` locally against the pushed node roots (recommended), set:
 
