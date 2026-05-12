@@ -53,8 +53,8 @@ From `docs/spark0-initial-probe.md` and the probe binaries in `tools/cuda_probe/
 - `./scripts/cuda_probe_capability_spark0.sh` includes the kernel-plumbing gates by default; set `WITH_KERNEL_TINY=0` to skip them for a faster sweep.
 - Capability sweep note (2026-05-12): `scripts/cuda_probe_capability_spark0.sh` completes end-to-end on Spark0 CUDA 13.0 `V13.0.88`, including NVRTC (`supportedArchs` includes `121`), nvJitLink, TMA tensor-map encode, and cluster launch probes.
 - CUDA 13 developer tooling (`cuobjdump --dump-sass`, `nvdisasm`) can decode `sm_121` binaries on Spark0 (validated via `scripts/cuda_probe_disasm_spark0.sh`: 2026-05-09)
-- `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (observed `1210` for `sm_121`)
-- `tools/cuda_probe/bin/cuda_sm121_arch_list_report` prints compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined; this is useful when diagnosing “why did `nvcc` think we compiled for X?” build issues.
+- `tools/cuda_probe/bin/cuda_sm121_arch_report` prints runtime CC + compiled `__CUDA_ARCH__` (best-effort: `cudaMemcpyFromSymbol` first, then fallback `cudaMalloc` + a tiny kernel; observed `1210` for `sm_121`)
+- `tools/cuda_probe/bin/cuda_sm121_arch_list_report` prints compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined; it also does a no-allocation kernel launch+sync so logs capture an explicit “kernel launch works” signal while avoiding `cudaMalloc`.
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe` shows that an `sm_120`-compiled kernel runs successfully on GB10 (`sm_121`) (observed `__CUDA_ARCH__=1200` on device `cc=12.1`)
 - `tools/cuda_probe/bin/cuda_sm121_smem_optin` prints `cudaDevAttrMaxSharedMemoryPerBlockOptin` and validates an opt-in dynamic shared-memory launch
   - Observed on Spark0 (2026-05-12): `MaxSharedMemoryPerBlockOptin=101376` bytes

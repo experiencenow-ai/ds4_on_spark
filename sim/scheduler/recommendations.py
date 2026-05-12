@@ -44,6 +44,225 @@ def _infer_mtp_draft_len_for_trace(trace: Sequence[scheduler_sim.TokenRoute], me
     # still run an MTP-on replay without violating bounds.
     return(max(1, int(max_accept_len) - 1))
 
+def _as_dict(obj: object) -> Dict[str, object]:
+    if isinstance(obj, dict):
+        return(obj)  # type: ignore[return-value]
+    return({})
+
+def _as_float(obj: object, key: str, default: float = 0.0) -> float:
+    if not isinstance(obj, dict):
+        return(float(default))
+    v = obj.get(key, default)
+    if isinstance(v, (int, float)):
+        return(float(v))
+    return(float(default))
+
+def _as_int(obj: object, key: str, default: int = 0) -> int:
+    if not isinstance(obj, dict):
+        return(int(default))
+    v = obj.get(key, default)
+    if isinstance(v, bool):
+        return(int(default))
+    if isinstance(v, int):
+        return(int(v))
+    if isinstance(v, float):
+        if float(int(v)) == float(v):
+            return(int(v))
+    return(int(default))
+
+def _as_str(obj: object, key: str, default: str = "") -> str:
+    if not isinstance(obj, dict):
+        return(str(default))
+    v = obj.get(key, default)
+    if isinstance(v, str):
+        return(str(v))
+    return(str(default))
+
+def _fmt_delta(x: float, *, digits: int = 3) -> str:
+    try:
+        v = float(x)
+    except Exception:
+        v = 0.0
+    sign = "+" if v >= 0.0 else ""
+    return(f"{sign}{v:.{int(digits)}f}")
+
+def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
+    trace_summary = _as_dict(out.get("trace_summary"))
+    inferred = _as_dict(trace_summary.get("inferred"))
+    evidence = _as_dict(out.get("evidence"))
+
+    mtp = _as_dict(evidence.get("mtp"))
+    expert_queueing = _as_dict(evidence.get("expert_queueing"))
+    mtp_draft_queue_cls = _as_dict(evidence.get("mtp_draft_queue_cls"))
+    dflash = _as_dict(out.get("dflash_comparator"))
+    results = _as_dict(out.get("results"))
+
+    lines: List[str] = []
+    lines.append("# Scheduler Simulator Runtime Trace Report")
+    lines.append("")
+
+    tokens = _as_dict(trace_summary.get("tokens"))
+    num_interactive = _as_int(tokens, "interactive", 0)
+    num_batch = _as_int(tokens, "batch", 0)
+
+    lines.append("## Trace")
+    lines.append(f"- name: `{_as_str(out, 'name', 'runtime_trace_mtp_ablation')}`")
+    num_records = _as_int(trace_summary, "num_records", 0)
+    if num_records > 0:
+        lines.append(f"- records: {int(num_records)}")
+    num_layers = _as_int(inferred, "num_layers", 0)
+    if num_layers > 0:
+        lines.append(f"- inferred layers: {int(num_layers)}")
+    num_experts = _as_int(inferred, "num_experts", 0)
+    if num_experts > 0:
+        lines.append(f"- inferred experts: {int(num_experts)}")
+    mtp_draft_len = _as_int(inferred, "mtp_draft_len", 0)
+    if mtp_draft_len > 0:
+        lines.append(f"- inferred mtp_draft_len: {int(mtp_draft_len)}")
+    dflash_draft_len = _as_int(inferred, "dflash_draft_len", 0)
+    if dflash_draft_len > 0:
+        lines.append(f"- inferred dflash_draft_len: {int(dflash_draft_len)}")
+    if bool(out.get("trace_assumptions")):
+        ta = _as_dict(out.get("trace_assumptions"))
+        if bool(ta.get("time_synthetic")):
+            lines.append("- time: synthetic timestamps (conditional on arrival_rate_tps/batch_size assumptions)")
+    lines.append("")
+
+    lines.append("## Evidence")
+    if bool(mtp.get("present")):
+        supported = bool(mtp.get("supported_by_trace_counters")) or bool(mtp.get("supported_by_synthetic_model"))
+        ratio = _as_float(mtp, "service_slot_ms_per_output_token_ratio_vs_mtp_off", 0.0)
+        lines.append(f"- mtp: present (mode=`{_as_str(mtp, 'mode', '')}`) supported={str(bool(supported)).lower()} ratio_vs_off={ratio:.4f}")
+        lines.append(f"  - mtp_accept_rate={_as_float(mtp, 'mtp_accept_rate', 0.0):.4f} mtp_mean_accept_len={_as_float(mtp, 'mtp_mean_accept_len', 0.0):.3f}")
+        reason = _as_str(mtp, "reason", "")
+        if reason != "":
+            lines.append(f"  - note: {reason}")
+    else:
+        lines.append("- mtp: not present in trace (or disabled)")
+
+    if bool(expert_queueing.get("present")) and isinstance(expert_queueing.get("best_variant_by_drop"), dict):
+        best = _as_dict(expert_queueing.get("best_variant_by_drop"))
+        drop_metric = _as_str(expert_queueing, "drop_metric", "")
+        lat_metric = _as_str(expert_queueing, "latency_metric", "")
+        supported_q = bool(expert_queueing.get("supported_by_trace_counters"))
+        lines.append(f"- expert_queueing: supported={str(bool(supported_q)).lower()} best_variant=`{_as_str(best, 'label', '')}`")
+        if drop_metric != "":
+            lines.append(f"  - {drop_metric} delta={_fmt_delta(_as_float(best, 'delta_drop', 0.0), digits=6)}")
+        if lat_metric != "":
+            lines.append(f"  - {lat_metric} delta_ms={_fmt_delta(_as_float(best, 'delta_p95_latency_ms', 0.0), digits=3)}")
+        reason = _as_str(expert_queueing, "reason", "")
+        if reason != "":
+            lines.append(f"  - note: {reason}")
+    elif bool(expert_queueing.get("present")):
+        note = _as_str(expert_queueing, "note", "")
+        if note != "":
+            lines.append(f"- expert_queueing: present; note: {note}")
+        else:
+            lines.append("- expert_queueing: present")
+
+    if bool(mtp_draft_queue_cls.get("present")):
+        supported_dq = bool(mtp_draft_queue_cls.get("supported_by_trace_counters")) or bool(mtp_draft_queue_cls.get("supported_by_synthetic_model"))
+        lines.append(f"- mtp_draft_queue_cls: present (variant=`{_as_str(mtp_draft_queue_cls, 'variant', '')}`) supported={str(bool(supported_dq)).lower()}")
+
+    if bool(dflash.get("present")):
+        ratio = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only", 0.0)
+        ratio_adj = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0)
+        lines.append(f"- dflash_comparator: present ratio_vs_target_only={ratio:.4f} adjusted={ratio_adj:.4f}")
+
+
+
+    def _as_summary(obj: object) -> Dict[str, float]:
+        if not isinstance(obj, dict):
+            return({})
+        raw = obj.get("summary")
+        if not isinstance(raw, dict):
+            return({})
+        out_s: Dict[str, float] = {}
+        for k, v in raw.items():
+            if not isinstance(k, str):
+                continue
+            if not isinstance(v, (int, float)):
+                continue
+            out_s[k] = float(v)
+        return(out_s)
+
+    def _fmt_float(x: float, *, digits: int = 3) -> str:
+        try:
+            v = float(x)
+        except Exception:
+            v = 0.0
+        return(f"{v:.{int(digits)}f}")
+
+    def _fmt_pct(x: float, *, digits: int = 3) -> str:
+        try:
+            v = float(x)
+        except Exception:
+            v = 0.0
+        return(f"{(100.0 * v):.{int(digits)}f}%")
+
+    def _render_sweep_table(title: str, sweep: Dict[str, object]) -> None:
+        base_node = sweep.get("baseline")
+        variants_node = sweep.get("variants")
+        if not isinstance(base_node, dict) or not isinstance(variants_node, dict):
+            return
+        base_sum = _as_summary(base_node)
+        if len(base_sum) == 0:
+            return
+
+        has_i = bool(int(num_interactive) > 0)
+        has_b = bool(int(num_batch) > 0)
+
+        headers = ["variant", "svc_ms/out", "out_tps"]
+        if has_i:
+            headers += ["drop_i", "p95_i_ms"]
+        if has_b:
+            headers += ["drop_b", "p95_b_ms"]
+        if bool(mtp.get("present")):
+            headers += ["verify_q_p95_ms", "draft_q_p95_ms"]
+
+        rows: List[Tuple[str, Dict[str, float]]] = [("baseline", base_sum)]
+        for label in sorted(variants_node.keys()):
+            node = variants_node.get(label)
+            if not isinstance(node, dict):
+                continue
+            s = _as_summary(node)
+            if len(s) == 0:
+                continue
+            rows.append((str(label), s))
+
+        lines.append(f"## {title}")
+        lines.append("")
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("| " + " | ".join(["---" for _h in headers]) + " |")
+        for label, s in rows:
+            cells: List[str] = []
+            cells.append(str(label))
+            cells.append(_fmt_float(float(s.get("service_slot_ms_per_output_token", 0.0)), digits=4))
+            cells.append(_fmt_float(float(s.get("output_token_throughput_tps", 0.0)), digits=3))
+            if has_i:
+                cells.append(_fmt_pct(float(s.get("drop_frac_tokens_interactive", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("output_token_p95_interactive_ms", 0.0)), digits=3))
+            if has_b:
+                cells.append(_fmt_pct(float(s.get("drop_frac_tokens_batch", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("output_token_p95_batch_ms", 0.0)), digits=3))
+            if bool(mtp.get("present")):
+                cells.append(_fmt_float(float(s.get("task_queue_wait_ms_p95_mtp_verify", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("task_queue_wait_ms_p95_mtp_draft", 0.0)), digits=3))
+            lines.append("| " + " | ".join(cells) + " |")
+        lines.append("")
+
+    if results is not None:
+        sweep_steps = _as_dict(results.get("arrival_units_steps"))
+        if sweep_steps is not None:
+            _render_sweep_table("Results (arrival_units=steps)", sweep_steps)
+
+        sweep_out = _as_dict(results.get("arrival_units_output_tokens"))
+        if sweep_out is not None:
+            _render_sweep_table("Results (arrival_units=output_tokens)", sweep_out)
+
+    lines.append("")
+    return("\n".join(lines))
+
 
 def run_runtime_trace_mtp_ablation(
     *,
@@ -1309,6 +1528,7 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
 def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Scheduler simulator recommendation harness (synthetic scenarios, plus optional runtime-trace MTP ablation).")
     p.add_argument("--json", action="store_true", help="Print JSON only (default).")
+    p.add_argument("--format", type=str, default="json", choices=("json", "md"), help="Output format for runtime-trace ablation mode: json (default) or md.")
     p.add_argument("--quick", action="store_true", help="Run a reduced-size scenario set (intended for unit tests).")
     p.add_argument("--trace-jsonl", type=str, default="", help="Optional: run runtime-trace MTP ablation on this JSONL trace path ('-' for stdin) instead of synthetic scenarios.")
     p.add_argument(
@@ -1397,6 +1617,11 @@ def main(argv: List[str] | None = None) -> int:
         )
     else:
         out = run_recommendations(quick=bool(args.quick))
+    if str(args.format).strip().lower() == "md":
+        if args.trace_jsonl.strip() == "":
+            raise SystemExit("--format md is supported only with --trace-jsonl (runtime-trace ablation mode).")
+        print(format_runtime_trace_ablation_markdown(out))
+        return(0)
     print(json.dumps(out, sort_keys=True))
     return(0)
 

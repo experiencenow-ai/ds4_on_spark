@@ -171,6 +171,14 @@ If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact b
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"; fi
+sh ./scripts/centaur_spark0_v73_bundle_validate.sh "$CENTAUR_RUN_ID" "$bundle_dir"
+```
+
 Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
 
 ```bash
@@ -178,6 +186,8 @@ bundle_dir="/private/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"
 if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"; fi
 sh ./scripts/centaur_spark0_v73_smoke_report.sh "$CENTAUR_RUN_ID" "$bundle_dir" "$bundle_dir/smoke_report.md"
 ```
+
+Note: when you run via `scripts/centaur_spark0_v73_evidence_run.sh`, the local bundle directory also includes `smoke.local.log` (the Mac-side wrapper log) which contains the exact `ssh ...` command used to run the smoke. The report helper will include that line when present.
 
 To pack a fetched bundle into a commit-ready fixtures directory (after review/redaction), run:
 

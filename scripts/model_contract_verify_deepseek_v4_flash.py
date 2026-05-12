@@ -1278,6 +1278,22 @@ def main() -> int:
 				if want_cfg is not None and q_cfg != want_cfg:
 					failures.append(Failure(77, f"contract summary quantization.config_quantization_config mismatch (expected config.json quantization_config): {contract_summary}"))
 
+				gc = q.get("gguf_compat", {}) if isinstance(q, dict) else {}
+				if not isinstance(gc, dict):
+					failures.append(Failure(78, f"contract summary quantization.gguf_compat must be an object: {contract_summary}"))
+				else:
+					want_prefixes = ["F8_"]
+					want_cats = ["attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"]
+					want_fp4_types = ["MXFP4"]
+					if gc.get("dense_fp8_like_type_prefixes") != want_prefixes:
+						failures.append(Failure(79, f"contract summary quantization.gguf_compat.dense_fp8_like_type_prefixes mismatch (got {gc.get('dense_fp8_like_type_prefixes')!r} expected {want_prefixes!r}): {contract_summary}"))
+					if gc.get("dense_fp8_like_evidence_categories") != want_cats:
+						failures.append(Failure(80, f"contract summary quantization.gguf_compat.dense_fp8_like_evidence_categories mismatch (got {gc.get('dense_fp8_like_evidence_categories')!r} expected {want_cats!r}): {contract_summary}"))
+					if gc.get("expert_fp4_like_types") != want_fp4_types:
+						failures.append(Failure(81, f"contract summary quantization.gguf_compat.expert_fp4_like_types mismatch (got {gc.get('expert_fp4_like_types')!r} expected {want_fp4_types!r}): {contract_summary}"))
+					if not (isinstance(gc.get("note"), str) and gc.get("note")):
+						failures.append(Failure(82, f"contract summary quantization.gguf_compat.note must be a non-empty string: {contract_summary}"))
+
 				oracle = summary.get("oracle", {})
 				if not isinstance(oracle, dict):
 					failures.append(Failure(90, f"contract summary oracle must be an object: {contract_summary}"))

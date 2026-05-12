@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
 SCHEMA_RECORD_V2 = "ds4_pairwise_judge_record_v2"
 SCHEMA_RECORD_V3 = "ds4_pairwise_judge_record_v3"
+SCHEMA_RECORD_V4 = "ds4_pairwise_judge_record_v4"
 SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
 SCHEMA_PROMPT_V2 = "ds4_pairwise_judge_prompt_v2"
 SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
@@ -29,6 +30,18 @@ WINNERS = ("A", "B", "tie")
 
 DECISION_FIELDS = ("winner", "margin", "score_a", "score_b", "reason", "train_hint", "tags")
 _DECISION_FIELD_SET = set(DECISION_FIELDS)
+
+DECISION_FIELDS_V2 = ("w", "m", "sa", "sb", "r", "h", "t")
+_DECISION_FIELD_V2_SET = set(DECISION_FIELDS_V2)
+_DECISION_V2_TO_V1 = {
+    "w": "winner",
+    "m": "margin",
+    "sa": "score_a",
+    "sb": "score_b",
+    "r": "reason",
+    "h": "train_hint",
+    "t": "tags",
+}
 
 RECORD_FIELDS = (
     "schema",
@@ -46,6 +59,13 @@ RECORD_FIELDS = (
     "reason",
     "train_hint",
     "tags",
+    "w",
+    "m",
+    "sa",
+    "sb",
+    "r",
+    "h",
+    "t",
     "raw",
     "parse_error",
     "tokens",
@@ -55,6 +75,35 @@ _RECORD_FIELD_SET = set(RECORD_FIELDS)
 
 PROMPT_FIELDS = ("schema", "judge_out_target", "system", "user", "schema_hint")
 _PROMPT_FIELD_SET = set(PROMPT_FIELDS)
+
+def canonicalize_decision_obj(obj: Any) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    """Canonicalize a decision object into v1 keys.
+
+    Supported input forms:
+    - v1 keys: winner/margin/score_a/score_b/reason/train_hint/tags
+    - v2 keys (compact): w/m/sa/sb/r/h/t
+
+    Returns (canonical_obj, errs). On error, canonical_obj is None.
+    """
+    if not isinstance(obj, dict):
+        return None, ["decision must be an object"]
+
+    has_v1 = any(k in obj for k in _DECISION_FIELD_SET)
+    has_v2 = any(k in obj for k in _DECISION_FIELD_V2_SET)
+    if has_v1 and has_v2:
+        return None, ["decision mixes v1 and v2 keys"]
+    if has_v2 and not has_v1:
+        errs: List[str] = []
+        extra = [k for k in obj.keys() if k not in _DECISION_FIELD_V2_SET]
+        if len(extra) != 0:
+            for k in sorted(extra):
+                errs.append(f"unexpected key in decision: {k}")
+        out: Dict[str, Any] = {}
+        for k2, k1 in _DECISION_V2_TO_V1.items():
+            if k2 in obj:
+                out[k1] = obj.get(k2)
+        return out, errs
+    return dict(obj), []
 
 
 def _is_int(v: Any) -> bool:
@@ -251,6 +300,13 @@ def _decision_view_from_record(obj: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _decision_view_from_record_v4(obj: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for k in DECISION_FIELDS_V2:
+        out[k] = obj.get(k)
+    return out
+
+
 def validate_record(obj: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
     extra = [k for k in obj.keys() if k not in _RECORD_FIELD_SET]
@@ -261,8 +317,10 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         errs.append("schema is required")
     else:
         schema_v = _as_str(obj.get("schema"), "schema", errs)
-        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2, SCHEMA_RECORD_V3):
-            errs.append(f"schema must be {SCHEMA_RECORD_V1!r}, {SCHEMA_RECORD_V2!r}, or {SCHEMA_RECORD_V3!r}")
+        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4):
+            errs.append(
+                f"schema must be {SCHEMA_RECORD_V1!r}, {SCHEMA_RECORD_V2!r}, {SCHEMA_RECORD_V3!r}, or {SCHEMA_RECORD_V4!r}"
+            )
 
     for field in ("pair_id", "model_a", "model_b"):
         s = _as_str(obj.get(field), field, errs)
@@ -274,10 +332,31 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         return errs
 
     schema_v3 = obj.get("schema") == SCHEMA_RECORD_V3
+    schema_v4 = obj.get("schema") == SCHEMA_RECORD_V4
+    if schema_v4:
+        # v4 is a compact record format: it must not mix v1 and v2 decision keys.
+        mixed = [k for k in DECISION_FIELDS if k in obj]
+        if len(mixed) != 0:
+            for k in mixed:
+                errs.append(f"record_v4 must not include v1 decision key: {k}")
+    else:
+        mixed = [k for k in DECISION_FIELDS_V2 if k in obj]
+        if len(mixed) != 0:
+            for k in mixed:
+                errs.append(f"record_v1/v2/v3 must not include v2 decision key: {k}")
     if parse_valid:
-        errs.extend(validate_decision(_decision_view_from_record(obj)))
-        if schema_v3:
-            errs.extend(validate_decision_strict_extra(obj))
+        if schema_v4:
+            canon, cerrs = canonicalize_decision_obj(_decision_view_from_record_v4(obj))
+            if canon is None:
+                errs.extend(cerrs)
+            else:
+                errs.extend(cerrs)
+                errs.extend(validate_decision(canon))
+                errs.extend(validate_decision_strict_extra(canon))
+        else:
+            errs.extend(validate_decision(_decision_view_from_record(obj)))
+            if schema_v3:
+                errs.extend(validate_decision_strict_extra(obj))
     else:
         # When invalid, encourage preserving the raw judge output for debugging.
         raw = obj.get("raw")
@@ -315,7 +394,7 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             if v is not None and v < 0:
                 errs.append(f"latency_ms.{k} must be >= 0")
 
-    schema_budget_required = obj.get("schema") in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3)
+    schema_budget_required = obj.get("schema") in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4)
     if schema_budget_required:
         errs.extend(_validate_record_budget_required(obj))
 
@@ -331,7 +410,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
     """
     errs = validate_record(obj)
 
-    if obj.get("schema") not in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3):
+    if obj.get("schema") not in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4):
         errs.extend(_validate_record_budget_required(obj))
 
     parse_valid = obj.get("parse_valid")
@@ -345,7 +424,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
         if isinstance(parse_error, str) and len(parse_error) > 128:
             errs.append("parse_error must be <= 128 chars")
 
-    if parse_valid is True and obj.get("schema") != SCHEMA_RECORD_V3:
+    if parse_valid is True and obj.get("schema") not in (SCHEMA_RECORD_V3, SCHEMA_RECORD_V4):
         errs.extend(validate_decision_strict_extra(obj))
 
     return errs

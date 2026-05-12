@@ -19,6 +19,8 @@ edit host-specific values, then enable services with `systemctl`.
 
 `deploy/systemd/` contains systemd templates:
 
+- Quick pointers: `deploy/systemd/README.md` and `deploy/systemd-user/README.md`.
+
 - `ds4@.service` expects:
   - an optional shared env file at `/etc/ds4/ds4.env`
   - an env file at `/etc/ds4/ds4-%i.env` (loaded after `ds4.env`)

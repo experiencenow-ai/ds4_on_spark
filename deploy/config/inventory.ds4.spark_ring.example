@@ -11,7 +11,7 @@
 #   ./scripts/ops_spark_ring_mesh_check.sh --topology ring --inventory-file deploy/config/inventory.ds4.spark_ring.example
 #   ./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file deploy/config/inventory.ds4.spark_ring.example
 #   ./scripts/ops_spark_ring_status.sh --preflight tp4 --strict --inventory-file deploy/config/inventory.ds4.spark_ring.example
-#   ./scripts/ops_spark_ring_ops_check.sh --preflight tp4 --strict --journal --lines 120 --inventory-file deploy/config/inventory.ds4.spark_ring.example
+#   ./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp4_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp4 --strict --journal --lines 120 --inventory-file deploy/config/inventory.ds4.spark_ring.example
 spark0@<spark0-host>
 spark1@<spark1-host>
 spark2@<spark2-host>

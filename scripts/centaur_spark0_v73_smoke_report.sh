@@ -78,12 +78,20 @@ out_md=sys.argv[3] if len(sys.argv) > 3 else ""
 facts_path=os.path.join(bundle_dir,"smoke_facts.json")
 freeze_path=os.path.join(bundle_dir,"pip_freeze.txt")
 log_path=os.path.join(bundle_dir,"smoke.log")
+local_log_path=os.path.join(bundle_dir,"smoke.local.log")
 
 def redact_user_paths(s: str) -> str:
     if not s:
         return s
     s=re.sub(r"/Users/[^/]+/","/Users/<redacted>/",s)
     s=re.sub(r"/home/[^/]+/","/home/<redacted>/",s)
+    return s
+
+def redact_ssh_target(s: str) -> str:
+    if not s:
+        return s
+    # Replace obvious user@host tokens in captured commands.
+    s=re.sub(r"\\b[a-zA-Z0-9_.-]+@[^\\s\"']+\\b","<redacted-target>",s)
     return s
 
 def read_json(path: str):
@@ -103,10 +111,12 @@ def read_text(path: str):
 facts=read_json(facts_path) or {}
 freeze=read_text(freeze_path)
 log=read_text(log_path)
+local_log=read_text(local_log_path)
 
 facts_present=os.path.exists(facts_path)
 freeze_present=os.path.exists(freeze_path)
 log_present=os.path.exists(log_path)
+local_log_present=os.path.exists(local_log_path)
 
 zip_path=redact_user_paths(facts.get("zip_path","") or "")
 zip_sha256=facts.get("zip_sha256","") or ""
@@ -149,6 +159,20 @@ if not decomposer_version and log:
     if m:
         decomposer_version=m.group(1).strip()
 
+ssh_line=""
+remote_smoke_log=""
+if local_log:
+    # centaur_spark0_v73_run.sh prints the exact SSH invocation and remote log.
+    m=re.search(r"^ssh\\s+.+$",local_log,re.M)
+    if m:
+        ssh_line=m.group(0).strip()
+    m=re.search(r"^remote_smoke_log:\\s+(.+)$",local_log,re.M)
+    if m:
+        remote_smoke_log=m.group(1).strip()
+
+ssh_line=redact_user_paths(redact_ssh_target(ssh_line))
+remote_smoke_log=redact_user_paths(remote_smoke_log)
+
 def list_artifacts(root: str):
     out=[]
     for base,dirs,files in os.walk(root):
@@ -186,6 +210,7 @@ lines.append("- evidence files:")
 lines.append(f"  - `smoke.log`: {'present' if log_present else 'missing'}")
 lines.append(f"  - `smoke_facts.json`: {'present' if facts_present else 'missing'}")
 lines.append(f"  - `pip_freeze.txt`: {'present' if freeze_present else 'missing'}")
+lines.append(f"  - `smoke.local.log`: {'present' if local_log_present else 'missing'}")
 lines.append("")
 lines.append("## Centaur package facts")
 lines.append("")
@@ -229,6 +254,18 @@ if numpy_ver or scipy_ver or sklearn_ver:
 lines.append("")
 lines.append("## Spark commands run (fill in)")
 lines.append("")
+if ssh_line:
+    lines.append("Observed (from `smoke.local.log`; review/redact before posting):")
+    lines.append("")
+    lines.append("```bash")
+    lines.append(ssh_line)
+    lines.append("```")
+    if remote_smoke_log:
+        lines.append("")
+        lines.append(f"- `remote_smoke_log`: `{remote_smoke_log}`")
+    lines.append("")
+    lines.append("Re-run template:")
+    lines.append("")
 lines.append("```bash")
 lines.append('export SSH_OPTS="..."')
 lines.append(f"export CENTAUR_RUN_ID={run_id}")

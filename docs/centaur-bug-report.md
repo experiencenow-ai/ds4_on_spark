@@ -30,6 +30,8 @@ if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTA
 sh ./scripts/centaur_spark0_v73_smoke_report.sh "$CENTAUR_RUN_ID" "$bundle_dir" "$bundle_dir/smoke_report.md"
 ```
 
+Tip: if you ran `scripts/centaur_spark0_v73_evidence_run.sh`, the bundle directory also contains `smoke.local.log` (Mac-side wrapper output). It includes the exact `ssh ...` command line; the report helper will include it (with the SSH target redacted) when present.
+
 Default local output directory:
 
 - `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)

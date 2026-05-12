@@ -461,6 +461,9 @@ def compute_quantization_contract_hint(
 	inf_q = q.get("inference_config", {}) if isinstance(q, dict) else {}
 	if not isinstance(inf_q, dict):
 		return None
+	gguf_compat = q.get("gguf_compat", {}) if isinstance(q, dict) else {}
+	if not isinstance(gguf_compat, dict):
+		gguf_compat = {}
 
 	expected_dense = inf_q.get("dtype", None)
 	expected_expert = inf_q.get("expert_dtype", None)
@@ -480,17 +483,30 @@ def compute_quantization_contract_hint(
 	obs_dense_type = _hint_primary_type("dense_primary")
 	obs_expert_type = _hint_primary_type("expert_primary")
 
+	dense_fp8_like_prefixes = gguf_compat.get("dense_fp8_like_type_prefixes")
+	if not isinstance(dense_fp8_like_prefixes, list) or not all(isinstance(x, str) and x for x in dense_fp8_like_prefixes):
+		dense_fp8_like_prefixes = ["F8_"]
+
+	expert_fp4_like_types = gguf_compat.get("expert_fp4_like_types")
+	if not isinstance(expert_fp4_like_types, list) or not all(isinstance(x, str) and x for x in expert_fp4_like_types):
+		expert_fp4_like_types = ["MXFP4"]
+
+	dense_fp8_like_evidence_categories = gguf_compat.get("dense_fp8_like_evidence_categories")
+	if not isinstance(dense_fp8_like_evidence_categories, list) or not all(isinstance(x, str) and x for x in dense_fp8_like_evidence_categories):
+		dense_fp8_like_evidence_categories = ["attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"]
+
 	def _fp8_like(t: Optional[str]) -> Optional[bool]:
 		if t is None:
 			return None
-		if t.startswith("F8_E4M3"):
-			return True
+		for p in dense_fp8_like_prefixes:
+			if t.startswith(p):
+				return True
 		return False
 
 	def _fp4_like(t: Optional[str]) -> Optional[bool]:
 		if t is None:
 			return None
-		if t == "MXFP4":
+		if t in expert_fp4_like_types:
 			return True
 		return False
 
@@ -501,7 +517,7 @@ def compute_quantization_contract_hint(
 
 		fp8_types: set[str] = set()
 		fp8_cats: list[str] = []
-		for cat in ("attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"):
+		for cat in dense_fp8_like_evidence_categories:
 			v = cts.get(cat, None)
 			if not isinstance(v, dict):
 				continue
