@@ -2,7 +2,7 @@
 
 Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 
-- Pinned-at: 2026-05-11 (UTC)
+- Pinned-at: 2026-05-12 (UTC)
 - Policy: do **not** vendor large third-party trees or model weights; fetch on-demand and pin exact commits.
 
 ## Canonical Upstreams (Pinned)
@@ -48,7 +48,9 @@ Pinned upstream references for `experiencenow-ai/ds4_on_spark`.
 | Qwen3.6-27B (HF) | `huggingface.co/Qwen/Qwen3.6-27B` | `refs/heads/main` | `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` | Apache-2.0 | Dense-ish comparison target (51.75 GiB safetensors); do not download weights without human approval; see `docs/upstream-qwen-dflash.md`. |
 | Qwen3.6-27B-DFlash (HF) | `huggingface.co/z-lab/Qwen3.6-27B-DFlash` | `refs/heads/main` | `0919688658996800f86b895034249700e9481106` | MIT | Paired DFlash draft checkpoint (3.22 GiB safetensors); must match the exact target; do not download weights without human approval. |
 | Qwen3.6-27B-DFlash (GGUF, spiritbuun, HF) | `huggingface.co/spiritbuun/Qwen3.6-27B-DFlash-GGUF` | `refs/heads/main` | `5e4442a299deb9282b3dfe179de6e8330b19d9de` | MIT | Community GGUF conversions of `z-lab/Qwen3.6-27B-DFlash` for llama.cpp experiments (2.68 GiB total across Q8_0 + Q4_K_M drafts); draft-only artifact; do not download without human approval; see `docs/upstream-qwen-dflash.md`. |
+| Qwen3.6-27B-DFlash (GGUF, Lucebox, HF) | `huggingface.co/Lucebox/Qwen3.6-27B-DFlash-GGUF` | `refs/heads/main` | `ad1c40503211a40b819469d402257cc9e98e5b5f` | Apache-2.0 | Community GGUF conversion of `z-lab/Qwen3.6-27B-DFlash` (1.71 GiB Q8_0); draft-only artifact; do not download without human approval; see `docs/upstream-qwen-dflash.md`. |
 | Qwen3.6-27B-DFlash (GGUF, Ardenzard, HF) | `huggingface.co/Ardenzard/Qwen3.6-27B-DFlash-GGUF` | `refs/heads/main` | `0b249ff557371b11c582f2d9cf1b0e7d99c2f06d` | MIT | Community GGUF conversions of `z-lab/Qwen3.6-27B-DFlash` (10.18 GiB total; includes F16 + Q8_0 variants); draft-only artifact; do not download without human approval; see `docs/upstream-qwen-dflash.md`. |
+| Qwen3.6-35B-A3B-DFlash (GGUF, starskyzheng, HF) | `huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF` | `refs/heads/main` | `3065fea71cafc7346ee2ab16e8fe1636eb74428a` | MIT | Community GGUF conversions of `z-lab/Qwen3.6-35B-A3B-DFlash` (1.64 GiB total across F16 + Q8_0 + Q4_K_M drafts); draft-only artifact; do not download without human approval; see `docs/upstream-qwen-dflash.md`. |
 | Qwen3.6-27B-FP8 (HF) | `huggingface.co/Qwen/Qwen3.6-27B-FP8` | `refs/heads/main` | `e89b16ebf1988b3d6befa7de50abc2d76f26eb09` | Apache-2.0 | FP8-packaged 27B target (28.75 GiB safetensors; single-Spark plausible); no official DFlash drafter found; do not download weights without human approval; see `docs/upstream-qwen-dflash.md`. |
 | Qwen3.5-27B (HF) | `huggingface.co/Qwen/Qwen3.5-27B` | `refs/heads/main` | `fc05daec18b0a78c049392ed2e771dde82bdf654` | Apache-2.0 | Dense-ish 27B comparison target (51.75 GiB safetensors); do not download weights without human approval; see `docs/upstream-qwen-dflash.md`. |
 | Qwen3.5-27B-DFlash (HF) | `huggingface.co/z-lab/Qwen3.5-27B-DFlash` | `refs/heads/main` | `b0400439c04be32c24e04d9dce3821b582c1a68a` | MIT | Paired DFlash draft checkpoint (3.22 GiB safetensors); must match the exact target; do not download weights without human approval. |

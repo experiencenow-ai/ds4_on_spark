@@ -4,7 +4,7 @@ This note tracks Qwen, Ling, and DFlash speculative-decoding candidates for the
 Spark0 evaluation matrix. It is metadata-only: no model weights were downloaded
 while preparing this document.
 
-- Pinned-at: 2026-05-11 (UTC)
+- Pinned-at: 2026-05-12 (UTC)
 - Primary goal: compare DeepSeek V4 Flash against runnable Ling and Qwen
   baselines on one Spark, then test DFlash only where an exact target/draft pair
   exists.
@@ -91,7 +91,7 @@ target checkpoint named by its model card.
 | `meta-llama/Llama-3.1-8B-Instruct` | gated target | not measured here | `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat` | `d3af30def9601abdd10810aba220d692f0e803f0` | 1.95 GiB | Exploratory; gated target and not directly comparable to DS4/Ling/Qwen. |
 
 No Ling-2.6-flash DFlash drafter was found in the checked Z Lab/Hugging Face
-search results as of 2026-05-11. Keep Ling in the target-only comparison set and
+search results as of 2026-05-12. Keep Ling in the target-only comparison set and
 watch for a paired drafter later.
 
 ## Qwen DFlash draft artifacts in GGUF (metadata-only)
@@ -106,14 +106,18 @@ gains DFlash support or if we need to inspect draft weights outside vLLM.
 | --- | --- | --- | --- | --- | --- |
 | `spiritbuun/Qwen3.5-27B-DFlash-GGUF` | `3fa59f082214838d36d01d5d1276758efb1f3b3c` | `mit` | `z-lab/Qwen3.5-27B-DFlash` | 0.96 GiB | Single-file `dflash-draft-q4_k_m.gguf`; smallest Qwen 27B-class draft GGUF found so far. |
 | `spiritbuun/Qwen3.6-27B-DFlash-GGUF` | `5e4442a299deb9282b3dfe179de6e8330b19d9de` | `mit` | `z-lab/Qwen3.6-27B-DFlash` | 2.68 GiB | Two GGUFs: `dflash-draft-3.6-q8_0.gguf` + `dflash-draft-3.6-q4_k_m.gguf`. |
+| `Lucebox/Qwen3.6-27B-DFlash-GGUF` | `ad1c40503211a40b819469d402257cc9e98e5b5f` | `apache-2.0` | `z-lab/Qwen3.6-27B-DFlash` | 1.71 GiB | Single-file `dflash-draft-3.6-q8_0.gguf`; smaller 27B draft GGUF than the earlier multi-quant conversions. |
 | `Ardenzard/Qwen3.6-27B-DFlash-GGUF` | `0b249ff557371b11c582f2d9cf1b0e7d99c2f06d` | `mit` | `z-lab/Qwen3.6-27B-DFlash` | 10.18 GiB | Includes an F16 draft GGUF; keep as provenance unless a smaller quant is needed. |
+| `starskyzheng/Qwen3.6-35B-DFlash-GGUF` | `3065fea71cafc7346ee2ab16e8fe1636eb74428a` | `mit` | `z-lab/Qwen3.6-35B-A3B-DFlash` | 1.64 GiB | Three GGUFs: F16 + Q8_0 + Q4_K_M drafts; provenance reference for future llama.cpp DFlash experiments. |
 
 Metadata-only size checks used to populate this table:
 
 ```bash
 ./scripts/upstream_hf_api_report.sh spiritbuun/Qwen3.5-27B-DFlash-GGUF --sum-gguf
 ./scripts/upstream_hf_api_report.sh spiritbuun/Qwen3.6-27B-DFlash-GGUF --sum-gguf
+./scripts/upstream_hf_api_report.sh Lucebox/Qwen3.6-27B-DFlash-GGUF --sum-gguf
 ./scripts/upstream_hf_api_report.sh Ardenzard/Qwen3.6-27B-DFlash-GGUF --sum-gguf
+./scripts/upstream_hf_api_report.sh starskyzheng/Qwen3.6-35B-DFlash-GGUF --sum-gguf
 ```
 
 ## Public quality prior (model cards, metadata-only)
