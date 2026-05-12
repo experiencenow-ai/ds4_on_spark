@@ -778,6 +778,7 @@ def main() -> int:
 				else:
 					expected = {
 						"artifact_requires_mtp_contract_complete": True,
+						"artifact_requires_mtp_keys_sha256_match_official": True,
 						"artifact_requires_namespace_prefix": "mtp.{j}.",
 						"oracle_requires_include_mtp": True,
 						"oracle_requires_mtp_trace": True,
@@ -802,6 +803,11 @@ def main() -> int:
 					got_alias = mtp.get("num_nextn_predict_layers", None)
 					if got_alias != want_layers:
 						failures.append(Failure(111, f"contract summary mtp.num_nextn_predict_layers mismatch (got {got_alias!r} expected {want_layers}): {contract_summary}"))
+					attn_obj = summary.get("attention_schedule", {})
+					want_ratios = attn_obj.get("mtp_compress_ratios", None) if isinstance(attn_obj, dict) else None
+					got_ratios = mtp.get("compress_ratios", None)
+					if not (isinstance(want_ratios, list) and isinstance(got_ratios, list) and got_ratios == want_ratios):
+						failures.append(Failure(153, f"contract summary mtp.compress_ratios mismatch (expected attention_schedule.mtp_compress_ratios): {contract_summary}"))
 
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):
