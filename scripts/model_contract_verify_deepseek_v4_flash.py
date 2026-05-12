@@ -61,6 +61,27 @@ def repo_relpath(path: Path) -> str:
 	except ValueError:
 		return str(path)
 
+def parse_tokenizer_added_token_ids(tokenizer_json: Path):
+	if not tokenizer_json.exists():
+		return None
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return None
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	if not isinstance(added_tokens, list):
+		return None
+	out: dict[str, int] = {}
+	for t in added_tokens:
+		if not isinstance(t, dict):
+			continue
+		content = t.get("content", None)
+		tid = t.get("id", None)
+		if not isinstance(content, str) or not isinstance(tid, int):
+			continue
+		out[content] = int(tid)
+	return out
+
 
 def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
@@ -284,6 +305,52 @@ def main() -> int:
 						expected_task_keys = {"action", "query", "authority", "domain", "title", "read_url"}
 						if set(task_tokens.keys()) != expected_task_keys:
 							failures.append(Failure(39, f"contract summary encoding_constants.ds_task_sp_tokens keys mismatch (expected {sorted(expected_task_keys)}): {contract_summary}"))
+					encoding_token_ids = tok.get("encoding_token_ids")
+					added_ids = parse_tokenizer_added_token_ids(FIX / "tokenizer.json")
+					if not isinstance(added_ids, dict) or not added_ids:
+						failures.append(Failure(89, f"fixtures tokenizer.json must include added_tokens with stable ids: {FIX / 'tokenizer.json'}"))
+					elif not isinstance(encoding_token_ids, dict):
+						failures.append(Failure(93, f"contract summary tokenizer.encoding_token_ids missing or invalid (expected dict): {contract_summary}"))
+					else:
+						want_ref = f"{repo_relpath(FIX / 'tokenizer.json')}:added_tokens"
+						if encoding_token_ids.get("reference_source") != want_ref:
+							failures.append(Failure(94, f"contract summary tokenizer.encoding_token_ids.reference_source mismatch (expected {want_ref!r}): {contract_summary}"))
+
+						def _want_id(token: object):
+							if not isinstance(token, str):
+								return None
+							return added_ids.get(token)
+
+						for k in (
+							"bos_token",
+							"eos_token",
+							"user_sp_token",
+							"assistant_sp_token",
+							"latest_reminder_sp_token",
+							"thinking_start_token",
+							"thinking_end_token",
+							"dsml_token",
+						):
+							want_id = _want_id(enc.get(k))
+							if not isinstance(want_id, int):
+								failures.append(Failure(95, f"fixtures tokenizer.json missing expected token {k}={enc.get(k)!r}: {FIX / 'tokenizer.json'}"))
+								break
+							if encoding_token_ids.get(k) != int(want_id):
+								failures.append(Failure(96, f"contract summary tokenizer.encoding_token_ids.{k} mismatch (expected {int(want_id)}): {contract_summary}"))
+								break
+						got_task = encoding_token_ids.get("ds_task_sp_tokens")
+						if isinstance(task_tokens, dict):
+							want_task: dict[str, int] = {}
+							for name in sorted(task_tokens.keys()):
+								tok_val = task_tokens.get(name)
+								tid = _want_id(tok_val)
+								if isinstance(tid, int):
+									want_task[str(name)] = int(tid)
+							if not isinstance(got_task, dict):
+								failures.append(Failure(97, f"contract summary tokenizer.encoding_token_ids.ds_task_sp_tokens missing or invalid (expected dict): {contract_summary}"))
+							else:
+								if got_task != want_task:
+									failures.append(Failure(98, f"contract summary tokenizer.encoding_token_ids.ds_task_sp_tokens mismatch (expected {want_task}): {contract_summary}"))
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
 				if upstream_commit:

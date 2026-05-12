@@ -691,6 +691,73 @@ def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int)
 		}
 	}
 
+def parse_tokenizer_added_token_ids(tokenizer_json: Path) -> Optional[dict[str, int]]:
+	if not tokenizer_json.exists():
+		return None
+
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return None
+
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	if not isinstance(added_tokens, list):
+		return None
+
+	out: dict[str, int] = {}
+	for t in added_tokens:
+		if not isinstance(t, dict):
+			continue
+		content = t.get("content", None)
+		tid = t.get("id", None)
+		if not isinstance(content, str) or not isinstance(tid, int):
+			continue
+		out[content] = int(tid)
+	return out
+
+def build_encoding_token_ids(tokenizer_json: Path, encoding_constants: object) -> Optional[dict]:
+	if not isinstance(encoding_constants, dict):
+		return None
+
+	ids = parse_tokenizer_added_token_ids(tokenizer_json)
+	if not isinstance(ids, dict) or not ids:
+		return None
+
+	def tok_id(token: object) -> Optional[int]:
+		if not isinstance(token, str):
+			return None
+		val = ids.get(token, None)
+		if not isinstance(val, int):
+			return None
+		return int(val)
+
+	out: dict[str, object] = {
+		"reference_source": f"{repo_relpath(tokenizer_json)}:added_tokens",
+	}
+
+	for k in (
+		"bos_token",
+		"eos_token",
+		"user_sp_token",
+		"assistant_sp_token",
+		"latest_reminder_sp_token",
+		"thinking_start_token",
+		"thinking_end_token",
+		"dsml_token",
+	):
+		out[k] = tok_id(encoding_constants.get(k))
+
+	ds_task = encoding_constants.get("ds_task_sp_tokens", None)
+	if isinstance(ds_task, dict):
+		out_task: dict[str, object] = {}
+		for name in sorted(ds_task.keys()):
+			out_task[str(name)] = tok_id(ds_task.get(name))
+		out["ds_task_sp_tokens"] = out_task
+	else:
+		out["ds_task_sp_tokens"] = None
+
+	return out
+
 
 def layer_type_from_ratio(ratio: int) -> str:
 	if ratio == 0:
@@ -1581,6 +1648,7 @@ def build_contract() -> dict:
 	moe_hash_sem = parse_inference_moe_hash_routing(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	mtp_sem = parse_inference_mtp_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
+	encoding_token_ids = build_encoding_token_ids(FIX / "tokenizer.json", enc.get("encoding_constants") if isinstance(enc, dict) else None)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
 	compress_ratios = list(cfg["compress_ratios"])
@@ -1913,6 +1981,7 @@ def build_contract() -> dict:
 					"eos_token_id": int(cfg["eos_token_id"]),
 					"pad_token_is_eos": True,
 					"encoding_oracle_dir": "encoding/tests",
+					"encoding_token_ids": encoding_token_ids,
 					**tok_json_sum,
 				},
 			"quantization": {

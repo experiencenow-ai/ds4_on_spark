@@ -38,6 +38,12 @@ Topology:
 - `sliding_window=128`
 - `vocab_size=129280`
 
+Tokenizer / encoding (special-token IDs are derived from `tokenizer.json` and recorded machine-readably under `contract_summary.json` `tokenizer.encoding_token_ids`):
+
+- `<think>`=`128821`, `</think>`=`128822`
+- `<｜User｜>`=`128803`, `<｜Assistant｜>`=`128804`, `<｜latest_reminder｜>`=`128828`, `｜DSML｜`=`128825`
+- Quick-task tokens: `<｜action｜>`=`128829`, `<｜query｜>`=`128830`, `<｜authority｜>`=`128831`, `<｜domain｜>`=`128832`, `<｜title｜>`=`128836`, `<｜read_url｜>`=`128845`
+
 MoE:
 
 - `n_routed_experts=256`, `n_shared_experts=1`

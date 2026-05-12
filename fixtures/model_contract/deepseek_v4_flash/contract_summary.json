@@ -1452,9 +1452,9 @@
   "contract_fingerprints": {
     "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
     "cache_semantics_sha256": "918d2f3d3dc5836016ca389492a24064fa01964ee913ef04059e1e59457c35e0",
-    "execution_contract_sha256": "ef4c69dcbfd225394b842bc3df2e207bbaca319ce09151f85838b42fe6150f54",
+    "execution_contract_sha256": "5f6731745c48f44cc484405a7e0c42dde38f1758bd3bd3cca706e0b413875e82",
     "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
-    "tokenizer_encoding_sha256": "1da9e95cc3cf428098ead91e8d84e54689ba83c52e1079cf2a31c21ff4fa445f",
+    "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
     "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
   },
   "encoding_constants": {
@@ -4522,6 +4522,25 @@
     "bos_token": "<\uff5cbegin\u2581of\u2581sentence\uff5c>",
     "bos_token_id": 0,
     "encoding_oracle_dir": "encoding/tests",
+    "encoding_token_ids": {
+      "assistant_sp_token": 128804,
+      "bos_token": 0,
+      "ds_task_sp_tokens": {
+        "action": 128829,
+        "authority": 128831,
+        "domain": 128832,
+        "query": 128830,
+        "read_url": 128845,
+        "title": 128836
+      },
+      "dsml_token": 128825,
+      "eos_token": 1,
+      "latest_reminder_sp_token": 128828,
+      "reference_source": "fixtures/model_contract/deepseek_v4_flash/tokenizer.json:added_tokens",
+      "thinking_end_token": 128822,
+      "thinking_start_token": 128821,
+      "user_sp_token": 128803
+    },
     "eos_token": "<\uff5cend\u2581of\u2581sentence\uff5c>",
     "eos_token_id": 1,
     "model_max_length": 1048576,
