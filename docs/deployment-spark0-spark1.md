@@ -61,6 +61,16 @@ If you prefer a single command to stage both hosts (recommended to avoid instanc
 # optional: add --mesh-check and/or --tcp <port>
 ```
 
+Optional: keep the ordered inventory in a file (recommended for repeatable runs):
+
+- `deploy/config/inventory.ds4.spark01.example`
+
+Then:
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file deploy/config/inventory.ds4.spark01.example
+```
+
 ### Optional: Validate Staged Assets (Spark Side)
 
 On each Spark, you can validate the staged `/tmp/ds4-*` directories before installing anything:
