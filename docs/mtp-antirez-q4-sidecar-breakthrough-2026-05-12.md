@@ -39,11 +39,18 @@ Patch file:
 The Q4_K dot math in the patch is derived from ggml’s `dequantize_row_q4_K` logic (scale/min unpacking + nibble unpacking). This repo includes a CPU-only verifier that checks the two formulations match (no CUDA required):
 
 - `scripts/verify_antirez_ds4_q4k_dot_math.py`
+- `fixtures/quant/q4k_llamacpp_b9110_rowdot_fixture.json` (ggml-org/llama.cpp `b9110` vectors)
 
 Run:
 
 ```bash
 python3 scripts/verify_antirez_ds4_q4k_dot_math.py
+```
+
+Unit test hook:
+
+```bash
+python3 -m unittest tests/q4k_llamacpp_fixture_test.py
 ```
 
 ## Remaining correctness risks (not solved here)

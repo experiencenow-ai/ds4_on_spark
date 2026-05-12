@@ -40,3 +40,7 @@ Host-side math sanity check (no CUDA required):
 ```bash
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_q4k_dot_math.py
 ```
+
+The verifier will also validate against the repo’s pinned llama.cpp Q4_K test vectors when the fixture file is present:
+
+- `fixtures/quant/q4k_llamacpp_b9110_rowdot_fixture.json`
