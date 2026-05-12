@@ -179,11 +179,27 @@ if [ "$#" -lt 2 ]; then
 	exit 2
 fi
 
+infer_preflight()
+{
+	if [ "$preflight" != "auto" ]; then
+		echo "$preflight"
+		return 0
+	fi
+	case "$#" in
+		2) echo "tp2" ;;
+		3) echo "tp3" ;;
+		4) echo "tp4" ;;
+		*) echo "tp2" ;;
+	esac
+}
+
+picked_preflight="$(infer_preflight "$@")"
+
 echo "== spark ring ops check (Mac-side) =="
 date -Is 2>/dev/null || date || true
 echo "topology=$topology"
 echo "systemd_mode=$systemd_mode"
-echo "preflight=$preflight"
+echo "preflight=$picked_preflight"
 echo "strict=$strict"
 echo "journal=$with_journal"
 echo "journal_lines=$journal_lines"
@@ -244,6 +260,22 @@ if [ "$staged_readiness" -ne 0 ]; then
 fi
 
 echo "== next =="
-echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
-echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
+case "$picked_preflight" in
+	tp2)
+		echo "readiness rubric: docs/ops-tp2-readiness.md"
+		echo "deployment guide: docs/deployment-spark0-spark1.md"
+		;;
+	tp3)
+		echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
+		echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
+		;;
+	tp4)
+		echo "readiness rubric: docs/ops-tp4-readiness.md"
+		echo "operating checklist: docs/spark-ring-ops-checklist.md"
+		;;
+	*)
+		echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
+		echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
+		;;
+esac
 echo "== done =="

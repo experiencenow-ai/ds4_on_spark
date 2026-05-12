@@ -15,6 +15,30 @@ On both Sparks:
 - Confirm the intended network path (wired vs Wi-Fi) and MTU.
 - Confirm time sync is sane (large skew breaks tracing + some collectives).
 
+## One Command Snapshot (Mac Side, Safe)
+
+To capture a single “are we ready?” snapshot (mesh + systemd status + optional journald tail) across an ordered Spark0/Spark1 inventory:
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp2 --strict --journal --lines 120 \
+  spark0@<spark0-host> spark1@<spark1-host>
+```
+
+Or using an inventory file (recommended for repeatable runs):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp2 --strict --journal --lines 120 \
+  --inventory-file deploy/config/inventory.ds4.spark01.example
+```
+
+If you already staged deploy assets to `/tmp/ds4-*` on both Sparks, you can also include staged readiness checks (safe; no sudo):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp2 --strict --journal --lines 120 \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp2 \
+  --inventory-file deploy/config/inventory.ds4.spark01.example
+```
+
 ## Commands (Spark Side)
 
 ```bash
