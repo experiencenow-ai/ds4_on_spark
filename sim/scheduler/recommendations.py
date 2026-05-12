@@ -1320,6 +1320,13 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--trace-non-route", type=str, default="skip", help="When --trace-jsonl contains non-route records, skip or error (default: skip).")
     p.add_argument("--trace-default-cls", type=str, default="", help="When --trace-jsonl records omit latency class, force all extracted records to this cls (interactive or batch).")
+    p.add_argument(
+        "--trace-pack-layers-by-token-index",
+        type=int,
+        default=0,
+        help="Trace replay helper: pack per-layer runtime route records that share token_index into a single multi-layer trace record (layers[]) before parsing.",
+    )
+    p.add_argument("--trace-pack-require-layer-index", type=int, default=0, help="When packing per-layer records, require every record to include layer_index (default: 0).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace time field mode: t_ms (default) or dt_ms.")
     p.add_argument("--max-tokens", type=int, default=0, help="Optional cap on number of trace records to read (0 = no cap).")
     p.add_argument("--trace-derive-cost-scale", type=str, default="none", choices=("none", "kv_tokens_p50", "decode_ms_p50"))
@@ -1353,6 +1360,8 @@ def main(argv: List[str] | None = None) -> int:
             input_format=args.trace_input_format.strip().lower(),
             route_type="",
             default_cls=args.trace_default_cls,
+            pack_layers_by_token_index=(int(args.trace_pack_layers_by_token_index) != 0),
+            pack_require_layer_index=(int(args.trace_pack_require_layer_index) != 0),
         )
         if int(args.max_tokens) > 0:
             trace = list(trace[: int(args.max_tokens)])

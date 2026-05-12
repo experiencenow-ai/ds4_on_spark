@@ -586,6 +586,8 @@ def pack_layers_by_token_index(
                 if strict:
                     raise ValueError(f"token_index={ti}: missing layer_index for per-layer pack")
                 continue
+            if li is not None:
+                layer["layer_index"] = int(li)
             layer_recs.append((li, idx, layer))
 
         if len(layer_recs) == 0:

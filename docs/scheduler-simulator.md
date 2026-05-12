@@ -402,6 +402,13 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+Some runtimes emit **one route record per token per MoE layer** (repeated `token_index`, optional `layer_index`) instead of a single `layers[]` payload. In that case, you can ask the loader to pack those per-layer records into `layers[]` before canonicalization/replay:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-pack-layers-by-token-index 1 --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
 Or, use the lightweight extractor explicitly to map common aliases into the strict simulator contract:
 
 ```bash

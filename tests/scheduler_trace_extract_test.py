@@ -20,6 +20,7 @@ class SchedulerTraceExtractTest(unittest.TestCase):
         layers = rec.get("layers")
         self.assertIsInstance(layers, list)
         self.assertEqual([l["candidates"] for l in layers], [[1], [2], [3]])
+        self.assertEqual([l.get("layer_index") for l in layers], [0, 1, 2])
 
     def test_pack_layers_by_token_index_rejects_time_mismatch(self) -> None:
         routes = [

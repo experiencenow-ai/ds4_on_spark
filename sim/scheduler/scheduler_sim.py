@@ -1346,6 +1346,8 @@ def load_trace_jsonl(
     input_format: str = "strict",
     route_type: str = "",
     default_cls: str = "",
+    pack_layers_by_token_index: bool = False,
+    pack_require_layer_index: bool = False,
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
@@ -1353,6 +1355,151 @@ def load_trace_jsonl(
         raise ValueError("non_route_policy must be 'error' or 'skip'")
     if input_format not in ("strict", "runtime"):
         raise ValueError("input_format must be 'strict' or 'runtime'")
+
+    if bool(pack_layers_by_token_index):
+        import os
+        import tempfile
+
+        from sim.scheduler import trace_extract
+
+        extracted: List[Dict[str, object]] = []
+        display_path = path if path != "-" else "<stdin>"
+
+        def _coerce_int_pack(value: object) -> Optional[int]:
+            if isinstance(value, int):
+                return(int(value))
+            if isinstance(value, float):
+                v = float(value)
+                if float(int(v)) == v:
+                    return(int(v))
+                return(None)
+            return(None)
+
+        def merge_meta_pack(payload: object, lineno: int) -> None:
+            if meta_out is None:
+                return
+            if not isinstance(payload, dict):
+                raise ValueError(f"{display_path}:{lineno}: meta payload must be a JSON object")
+            for k, v in payload.items():
+                if not isinstance(k, str):
+                    raise ValueError(f"{display_path}:{lineno}: meta keys must be strings")
+                meta_out[k] = v
+
+        f_in = sys.stdin if path == "-" else open(path, "r", encoding="utf-8")
+        try:
+            for lineno, line in enumerate(f_in, 1):
+                line = line.strip()
+                if line == "":
+                    continue
+                if line.startswith("#"):
+                    continue
+                objs: List[Dict[str, object]] = []
+                try:
+                    obj_raw = json.loads(line)
+                    if isinstance(obj_raw, dict):
+                        objs = [obj_raw]
+                    elif non_route_policy != "skip":
+                        raise ValueError(f"{display_path}:{lineno}: expected JSON object")
+                except json.JSONDecodeError:
+                    if non_route_policy != "skip":
+                        raise ValueError(f"{display_path}:{lineno}: invalid JSON")
+                    if input_format == "runtime":
+                        for sub in trace_extract._iter_json_values_from_line(line, allow_substrings=True):
+                            if isinstance(sub, dict):
+                                objs.append(sub)
+
+                for obj in objs:
+                    if "type" in obj and obj["type"] in ("meta", "trace_meta"):
+                        payload = obj.get("meta", {k: v for k, v in obj.items() if k != "type"})
+                        merge_meta_pack(payload, lineno)
+                        continue
+                    if "meta" in obj and "cls" not in obj and "candidates" not in obj and "layers" not in obj and "t_ms" not in obj and "dt_ms" not in obj:
+                        merge_meta_pack(obj["meta"], lineno)
+                        continue
+
+                    if input_format == "runtime":
+                        rec = trace_extract.extract_route_record(obj, route_type=route_type, default_cls=default_cls)
+                        if rec is None:
+                            if non_route_policy == "skip":
+                                continue
+                            raise ValueError(f"{display_path}:{lineno}: could not extract route record (try --trace-non-route skip)")
+                        obj = rec
+                    else:
+                        if non_route_policy == "skip":
+                            if "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                                if "cls" not in obj or ("candidates" not in obj and "layers" not in obj):
+                                    continue
+
+                    if time_mode == "t_ms":
+                        if "dt_ms" in obj and obj["dt_ms"] is not None:
+                            raise ValueError(f"{display_path}:{lineno}: dt_ms is only valid with time_mode=dt_ms")
+                        if "t_ms" not in obj:
+                            raise ValueError(f"{display_path}:{lineno}: missing t_ms")
+                    else:
+                        if "t_ms" in obj and obj["t_ms"] is not None:
+                            raise ValueError(f"{display_path}:{lineno}: t_ms is not valid with time_mode=dt_ms")
+                        if "dt_ms" not in obj:
+                            raise ValueError(f"{display_path}:{lineno}: missing dt_ms")
+                    if "cls" not in obj and default_cls.strip() != "":
+                        obj["cls"] = default_cls.strip().lower()
+                    if "cls" not in obj:
+                        if non_route_policy == "skip" and "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                            continue
+                        raise ValueError(f"{display_path}:{lineno}: missing cls")
+                    if "candidates" not in obj and "layers" not in obj:
+                        if non_route_policy == "skip" and "type" in obj and obj.get("type") not in ("meta", "trace_meta"):
+                            continue
+                        raise ValueError(f"{display_path}:{lineno}: missing candidates (or layers)")
+
+                    token_index_raw = obj.get("token_index")
+                    if token_index_raw is not None:
+                        ti = _coerce_int_pack(token_index_raw)
+                        if ti is None or ti < 0:
+                            raise ValueError(f"{display_path}:{lineno}: token_index must be an integer >= 0")
+                        obj["token_index"] = int(ti)
+                    layer_index_raw = obj.get("layer_index")
+                    if layer_index_raw is not None:
+                        li = _coerce_int_pack(layer_index_raw)
+                        if li is None or li < 0:
+                            raise ValueError(f"{display_path}:{lineno}: layer_index must be an integer >= 0")
+                        obj["layer_index"] = int(li)
+
+                    extracted.append(obj)
+        finally:
+            if f_in is not sys.stdin:
+                f_in.close()
+
+        packed = trace_extract.pack_layers_by_token_index(
+            extracted,
+            require_layer_index=bool(pack_require_layer_index),
+            strict=True,
+        )
+
+        tmp_path = ""
+        f_tmp = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
+        try:
+            tmp_path = str(f_tmp.name)
+            for rec in packed:
+                f_tmp.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        finally:
+            f_tmp.close()
+
+        try:
+            return load_trace_jsonl(
+                tmp_path,
+                time_mode=time_mode,
+                meta_out=None,
+                non_route_policy="error",
+                input_format="strict",
+                route_type="",
+                default_cls="",
+                pack_layers_by_token_index=False,
+                pack_require_layer_index=False,
+            )
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     routes: List[TokenRoute] = []
     t_ms_accum = 0.0
     display_path = path if path != "-" else "<stdin>"
@@ -4987,6 +5134,18 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="",
         help="Optional: when trace records omit cls/latency class, treat all routes as this value (interactive or batch). Useful for early runtime traces that do not tag QoS.",
     )
+    p.add_argument(
+        "--trace-pack-layers-by-token-index",
+        type=int,
+        default=0,
+        help="Trace replay helper: when runtime logs emit one route record per token per MoE layer (repeated token_index, optional layer_index), pack those per-layer records into a single multi-layer trace record (layers[]) before parsing. Requires token_index on every route record and fails fast if layers[] is already present.",
+    )
+    p.add_argument(
+        "--trace-pack-require-layer-index",
+        type=int,
+        default=0,
+        help="When used with --trace-pack-layers-by-token-index, require every record to include layer_index so layer ordering is explicit (default: 0).",
+    )
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -5226,6 +5385,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 input_format=args.trace_input_format.strip().lower(),
                 route_type=args.trace_route_type.strip(),
                 default_cls=args.trace_default_cls,
+                pack_layers_by_token_index=(int(args.trace_pack_layers_by_token_index) != 0),
+                pack_require_layer_index=(int(args.trace_pack_require_layer_index) != 0),
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())
