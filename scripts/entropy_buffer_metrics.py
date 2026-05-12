@@ -186,6 +186,30 @@ def _judge_slice_stats(label_counts: Dict[str, int], item_labels: Dict[str, List
         "disagreement_rate_decided_ab": disagreement_rate_decided_ab,
     })
 
+def _judge_label_stats(label_counts: Dict[str, int]) -> Dict[str, Any]:
+    total = int(sum(label_counts.values()))
+    wins_a = int(label_counts.get("a", 0))
+    wins_b = int(label_counts.get("b", 0))
+    ties = int(label_counts.get("tie", 0))
+    invalid = int(label_counts.get("invalid", 0))
+    decided = wins_a + wins_b
+    imbalance = 0.0 if decided == 0 else (abs(float(wins_a - wins_b)) / float(decided))
+    balance = 1.0 - imbalance
+    return({
+        "count": total,
+        "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "label_entropy_bits": lib.shannon_entropy(label_counts),
+        "label_entropy_norm": _entropy_norm_bits(label_counts),
+        "label_effective_num": _effective_num(label_counts),
+        "label_hhi": _hhi(label_counts),
+        "decided_count_ab": decided,
+        "decided_rate_ab": 0.0 if total == 0 else (float(decided) / float(total)),
+        "tie_rate": 0.0 if total == 0 else (float(ties) / float(total)),
+        "invalid_rate": 0.0 if total == 0 else (float(invalid) / float(total)),
+        "label_balance_ab": balance,
+        "label_imbalance_ab": imbalance,
+    })
+
 def _judge_slice_top(items: Sequence[Dict[str, Any]], key_name: str, sort_key: str, k: int = 10) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for js in items:
@@ -299,6 +323,7 @@ def _div_stats(counts: Dict[str, int]) -> Dict[str, Any]:
         "entropy_bits": lib.shannon_entropy(counts),
         "entropy_norm": _entropy_norm_bits(counts),
         "effective_num": _effective_num(counts),
+        "hhi": _hhi(counts),
         "top": lib.top_counts(counts),
     })
 
@@ -854,6 +879,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     item_judge_ids: Dict[str, Dict[str, int]] = {}
     item_pair_key: Dict[str, str] = {}
     judge_id_counts: Dict[str, int] = {}
+    judge_id_label_counts: Dict[str, Dict[str, int]] = {}
     model_pair_label_counts: Dict[str, Dict[str, int]] = {}
     tmpl_label_counts: Dict[str, Dict[str, int]] = {}
     fam_label_counts: Dict[str, Dict[str, int]] = {}
@@ -875,6 +901,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     for c in judge_pairs:
         _inc(label_counts, c.label)
         _inc(judge_id_counts, c.judge_id)
+        if c.judge_id != "":
+            judge_id_label_counts.setdefault(c.judge_id, {})
+            _inc(judge_id_label_counts[c.judge_id], c.label)
         if c.a_model_id != "" or c.b_model_id != "":
             pair_key = f"{c.a_model_id}|{c.b_model_id}"
             model_pair_label_counts.setdefault(pair_key, {})
@@ -1314,6 +1343,16 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     judge_out_budget_target = 64.0
     judge_out_budget_le_target = sum(1 for x in judge_out_tokens if x <= judge_out_budget_target)
 
+    judge_id_summary: Dict[str, Any] = {}
+    judge_id_imbalance_ab_top: List[Dict[str, Any]] = []
+    for judge_id in sorted(judge_id_label_counts.keys()):
+        counts = judge_id_label_counts.get(judge_id) or {}
+        stats = _judge_label_stats(counts)
+        judge_id_summary[judge_id] = stats
+        judge_id_imbalance_ab_top.append(dict(stats, **{"judge_id": judge_id}))
+    judge_id_imbalance_ab_top.sort(key=lambda x: (-float(x.get("label_imbalance_ab", 0.0)), -int(x.get("count", 0) or 0), str(x.get("judge_id", ""))))
+    judge_id_imbalance_ab_top = judge_id_imbalance_ab_top[:10]
+
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
@@ -1347,6 +1386,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "task_family_template_pair_nonempty_judge_pair_rate": 0.0 if len(judge_pairs) == 0 else (float(judge_family_template_pair_present) / float(len(judge_pairs))),
         "judge_id_unique": len([k for k in judge_id_counts.keys() if k != ""]),
         "judge_id_top": lib.top_counts(judge_id_counts),
+        "judge_id_summary": judge_id_summary,
+        "judge_id_imbalance_ab_top": judge_id_imbalance_ab_top,
         "model_pair_count": len(pair_summary),
         "model_pair_summary": pair_summary,
         "model_pair_top": model_pair_top,
@@ -1500,6 +1541,8 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `entropy_bits`: {js.get('entropy_bits'):.6f}")
         parts.append(f"- `entropy_norm`: {js.get('entropy_norm'):.6f}")
         parts.append(f"- `effective_num`: {js.get('effective_num'):.6f}")
+        if "hhi" in js:
+            parts.append(f"- `hhi`: {float(js.get('hhi', 0.0) or 0.0):.6f}")
         top = js.get("top") or []
         parts.append(_md_list_top(top))
         if field == "answer":
@@ -1695,6 +1738,9 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `{k}`: {v}")
     parts.append("\n### judge_id_top\n")
     parts.append(_md_list_top(report.judge.get("judge_id_top", [])))
+    parts.append("\n### judge_id_imbalance_ab_top\n")
+    for js in (report.judge.get("judge_id_imbalance_ab_top") or [])[:10]:
+        parts.append(f"- `{js.get('judge_id')}`: imbalance_ab={float(js.get('label_imbalance_ab', 0.0) or 0.0):.6f} count={int(js.get('count', 0) or 0)} label_counts={js.get('label_counts')}")
     parts.append("\n### model_pair_top\n")
     parts.append(_md_model_pair_top(report.judge.get("model_pair_top", [])))
     parts.append("\n### item_disagreement_top\n")

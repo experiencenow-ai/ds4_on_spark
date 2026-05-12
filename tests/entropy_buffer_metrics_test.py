@@ -111,6 +111,8 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(report.diversity["task_family_template_pair"]["unique"], 4)
         self.assertEqual(report.diversity["model_id"]["unique"], 3)
         self.assertEqual(report.diversity["answer"]["unique"], 3)
+        self.assertIn("hhi", report.diversity["task_id"])
+        self.assertIn("hhi", report.diversity["task_family"])
 
         self.assertEqual(report.tokens["prompt_words_total"], 61)
         self.assertEqual(report.tokens["output_words_total"], 19)
@@ -147,6 +149,15 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(float(report.judge.get("task_family_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
         self.assertAlmostEqual(float(report.judge.get("prompt_template_id_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
         self.assertAlmostEqual(float(report.judge.get("task_family_template_pair_nonempty_judge_pair_rate", 0.0)), (4.0 / 5.0))
+
+        by_judge = report.judge.get("judge_id_summary") or {}
+        self.assertIn("judge.v1", by_judge)
+        self.assertIn("judge.v2", by_judge)
+        self.assertEqual(int((by_judge.get("judge.v1") or {}).get("count", 0)), 2)
+        self.assertEqual(int((by_judge.get("judge.v2") or {}).get("count", 0)), 2)
+        imb_top = report.judge.get("judge_id_imbalance_ab_top") or []
+        self.assertGreaterEqual(len(imb_top), 2)
+        self.assertEqual(imb_top[0].get("judge_id"), "judge.v1")
 
         self.assertAlmostEqual(float(report.reuse.get("buffer_id_nonempty_task_run_rate", 0.0)), 1.0)
         self.assertAlmostEqual(float(report.reuse.get("buffer_item_id_nonempty_task_run_rate", 0.0)), 1.0)

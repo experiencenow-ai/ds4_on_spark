@@ -116,9 +116,9 @@ Optional but recommended:
 
 The scripts compute:
 
-- **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family`.
+- **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family` (also reports `hhi` concentration).
 - **Task-template diversity**: unique counts + entropy over `task_id|prompt_template_id` pairs (useful for spotting repeated reruns of the same task+template).
-- **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
+- **Prompt template diversity**: unique counts + entropy over `prompt_template_id` (also reports `hhi` concentration).
 - **Conditional diversity / coupling**: conditional entropy + mutual information between key axes (currently `prompt_template_id|task_family`, `prompt_template_id|task_id`, `prompt_template_id|model_id`, `task_family|model_id`, `prompt_template_id|answer`, and `task_family|answer` in both directions). Use `prompt_template_id_given_task_family.conditional_entropy_norm` to quantify “template variety within families” (low means each family collapses to a single template); use `mutual_info_norm` to quantify how tightly coupled the axes are.
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
   - Reports both raw entropy (`*_entropy_bits`) and normalized entropy (`*_entropy_norm`) plus `*_effective_num` for easier cross-corpus comparisons.
@@ -131,7 +131,7 @@ The scripts compute:
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
   - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
   - For MCQ-style tasks, `diversity.answer.letter` reports the same diversity stats restricted to single-letter answers (`A`-`Z`) plus `hhi` (concentration).
-- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement), plus `label_entropy_bits`/`label_entropy_norm`/`label_effective_num` and `label_hhi` for concentration; also emits per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement), plus `label_entropy_bits`/`label_entropy_norm`/`label_effective_num` and `label_hhi` for concentration; emits per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items) plus per-`judge_id` balance summaries.
 - **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
@@ -150,6 +150,29 @@ The scripts compute:
 - **Useful coverage (clean outputs)**: recomputes diversity + duplicate rates after excluding task-runs flagged by useful-novelty filters (a quick “effective coverage” view).
 - **Run slices** (optional): if `run_id` is present on `task_run` records, the report includes per-run coverage/duplicate/noise summaries and “top runs” to quickly spot regressions.
 - **Field coverage**: per-record-type presence rates for the key fields required by slices (task IDs/templates/models, judge IDs/labels, buffer IDs, and optional token/latency instrumentation). This helps validate baseline-runtime and judge-ELO ingestion.
+
+### Useful-novelty flag definitions (deterministic)
+
+`scripts/entropy_buffer_filter.py` annotates `task_run` records using `scripts/entropy_buffer_lib.useful_novelty_flags()` (unless `useful_novelty_flags` is already present and `--preserve-existing` is set).
+
+Current flag set:
+
+- `empty_output`: output is empty after normalization.
+- `no_words`: output contains no alnum “words” after normalization.
+- `very_long_output_ge_4096_chars`: normalized output length ≥ 4096 chars.
+- `very_short_output_le_2_words`: ≤ 2 words and ≤ 16 chars (fast “too short” heuristic).
+- `ai_disclaimer`: contains “as an ai” or “as a language model”.
+- `refusal_like`: contains “i can't”, “i cannot”, or “unable to”.
+- `word_repetition_ge_0.65`: most common word accounts for ≥ 65% of output words (requires ≥ 8 words).
+- `word_unique_frac_le_0.25`: unique-word fraction ≤ 25% (requires ≥ 8 words).
+- `many_urls`: output length ≥ 200 chars and contains ≥ 3 `http` substrings.
+- `echo_prompt_overlap_ge_0.90`: ≥ 90% of output words are also present in the prompt (requires ≥ 12 output words and ≥ 8 prompt words).
+- `line_repetition_ge_6`: a single normalized line repeats ≥ 6 times (requires ≥ 12 non-empty lines).
+- `few_unique_lines_le_4`: ≤ 4 unique normalized lines (requires ≥ 12 non-empty lines).
+
+Notes:
+
+- If an answer is extractable (single-letter / numeric) via `extract_answer()`, or if the output is a bare JSON object/array, the heuristic currently emits no flags (treated as “likely structured / answer-only OK”).
 
 ## Tools
 
