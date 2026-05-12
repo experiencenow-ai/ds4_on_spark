@@ -95,6 +95,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 For each node, capture:
 - GPU inventory (`nvidia-smi` CSV query output: GPU name, bus id, driver version, compute cap when available).
 - Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` (toolkit version) when present.
+- Cross-check stanza: `./scripts/spark_ring_probe.sh` now prints `== cuda/toolchain facts (summary) ==` (`driver`, `smi CUDA`, `nvcc release`, `cuda version.json`, `cuda.h CUDA_VERSION`, `compute_cap`), which is the fastest way to verify toolchain consistency across nodes.
 - Storage facts (`df -h` + `lsblk` model/size).
 
 Use `REDACT=1` for any committed output.
