@@ -66,9 +66,72 @@ fi
 python3 "$repo_root/scripts/model_quality_speed_score.py" "$csv_path" >"$bundle_dir/model_quality_speed_score.md" 2>"$bundle_dir/model_quality_speed_score_stderr.txt" || true
 python3 "$repo_root/scripts/model_quality_speed_score.py" "$csv_path" --json >"$bundle_dir/model_quality_speed_score.json" 2>>"$bundle_dir/model_quality_speed_score_stderr.txt" || true
 
+summary_path="$bundle_dir/model_quality_speed_scored_summary.txt"
+if [ -r "$bundle_dir/model_quality_speed_score.json" ]; then
+    python3 - "$bundle_dir/model_quality_speed_score.json" >"$summary_path" 2>/dev/null <<'PY' || true
+import json
+import sys
+
+json_path = sys.argv[1]
+try:
+    rows = json.load(open(json_path, "r", encoding="utf-8"))
+except OSError:
+    rows = []
+except json.JSONDecodeError:
+    rows = []
+
+def fmt(v):
+    if v is None:
+        return("")
+    if isinstance(v, float):
+        return(f"{v:.6f}")
+    return(str(v))
+
+want = [
+    "model",
+    "scope",
+    "quality_score",
+    "quality_source",
+    "public_quality_prior",
+    "public_quality_basis",
+    "public_quality_source",
+    "local_quality_score",
+    "passed_tasks",
+    "total_tasks",
+    "decode_tps",
+    "prefill_tps",
+    "ttft_s",
+    "total_wall_s",
+    "output_tokens",
+    "quality_adjusted_decode_tps",
+    "correct_task_rate",
+    "correct_tasks_per_s",
+    "tokens_per_success",
+    "wall_s_per_success",
+    "dominated_by",
+]
+
+for r in rows:
+    run_id = str(r.get("run_id", "") or "")
+    if not run_id:
+        continue
+    sys.stdout.write(f"run_id={run_id}\n")
+    for k in want:
+        if k == "dominated_by":
+            v = r.get(k, "")
+        else:
+            v = r.get(k)
+        if v is None:
+            continue
+        sys.stdout.write(f"{k}={fmt(v)}\n")
+    sys.stdout.write("\n")
+PY
+fi
+
 echo "wrote:"
 echo "- $bundle_dir/matrix_stdout.txt"
 echo "- $bundle_dir/matrix_stderr.txt"
 echo "- $csv_path"
 echo "- $bundle_dir/model_quality_speed_score.md"
 echo "- $bundle_dir/model_quality_speed_score.json"
+echo "- $summary_path"
