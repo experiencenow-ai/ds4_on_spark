@@ -454,17 +454,27 @@ fi
 	/tmp/llamacpp_mtp_sidecar_probe_patch.sh
 SH
 
-python3 - "$OUT_DIR/remote_loader_probe_stdout.txt" "$OUT_DIR/loader_probe.json" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
+python3 - "$OUT_DIR/remote_loader_probe_stdout.txt" "$OUT_DIR/remote_loader_probe_stderr.txt" "$OUT_DIR/loader_probe.json" >"$OUT_DIR/loader_probe_parse.json" 2>/dev/null <<'PY' || true
 import json
 import re
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-out_json_path = Path(sys.argv[2])
-txt = path.read_text(encoding="utf-8", errors="replace")
+stdout_path = Path(sys.argv[1])
+stderr_path = Path(sys.argv[2])
+out_json_path = Path(sys.argv[3])
+txt = stdout_path.read_text(encoding="utf-8", errors="replace")
+err = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
 
-out = {"ok": False, "errors": [], "probe_ok": None, "extracted_json_bytes": 0}
+out = {
+    "ok": False,
+    "errors": [],
+    "probe_ok": None,
+    "extracted_json_bytes": 0,
+    "arch_unknown": False,
+    "architecture": None,
+    "skipped": False,
+}
 
 decoder = json.JSONDecoder()
 best_doc = None
@@ -493,9 +503,42 @@ for m in re.finditer(r"^\\{", txt, flags=re.M):
             best_doc = doc
 
 if best_doc is None:
-    out["errors"].append(
-        "unable to locate JSON object in stdout; ensure JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV (runner defaults JSON_ONLY=1 unless overridden)"
-    )
+    m = re.search(r"unknown model architecture: '([^']+)'", err)
+    if m is None:
+        m = re.search(r"unknown model architecture: ([^\\s]+)", err)
+    if m is not None:
+        out["arch_unknown"] = True
+        out["skipped"] = True
+        out["architecture"] = str(m.group(1))
+        out["errors"].append(f"llama.cpp rejected architecture: {out['architecture']}")
+    elif "deepseek4_mtp_support is an MTP sidecar GGUF" in err:
+        out["arch_unknown"] = True
+        out["skipped"] = True
+        out["architecture"] = "deepseek4_mtp_support"
+        out["errors"].append("llama.cpp treated deepseek4_mtp_support as unknown (sidecar-only GGUF)")
+    else:
+        out["errors"].append(
+            "unable to locate JSON object in stdout; ensure JSON_ONLY=1 in REMOTE_LLAMA_MTP_SIDECAR_PROBE_ENV (runner defaults JSON_ONLY=1 unless overridden)"
+        )
+
+    try:
+        out_json_path.write_text(
+            json.dumps(
+                {
+                    "ok": False,
+                    "architecture": out["architecture"],
+                    "errors": out["errors"],
+                    "arch_unknown": out["arch_unknown"],
+                    "skipped": out["skipped"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
     print(json.dumps(out, indent=2, sort_keys=True))
     raise SystemExit(0)
 
@@ -508,6 +551,7 @@ except Exception:
 out["extracted_json_bytes"] = best_len
 out["probe_ok"] = bool(best_doc.get("ok", False))
 out["ok"] = out["probe_ok"]
+out["architecture"] = best_doc.get("architecture", None)
 errs = best_doc.get("errors", [])
 if isinstance(errs, list):
     out["errors"] = [str(x) for x in errs[:64]]
@@ -515,12 +559,25 @@ if isinstance(errs, list):
 print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
+loader_ok=0
+if [ -r "$OUT_DIR/loader_probe_parse.json" ]; then
+	if grep -q '"ok": true' "$OUT_DIR/loader_probe_parse.json"; then
+		loader_ok=1
+	fi
+fi
+
 echo "== cross-checking Python contract probe JSON vs llama.cpp probe JSON (local) =="
-python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
-	--contract-probe-json "$OUT_DIR/contract_probe.json" \
-	--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
-	--json \
-	>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+if [ "$loader_ok" != "1" ]; then
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"llama.cpp loader probe not ok (see loader_probe_parse.json)\",\"errors\":[]}" \
+		>"$OUT_DIR/contract_vs_loader_probe_parse.json"
+	printf '%s\n' "" >"$OUT_DIR/contract_vs_loader_probe_stderr.txt"
+else
+	python3 "$repo_root/scripts/verify_mtp_sidecar_contract_vs_llamacpp_probe_json.py" \
+		--contract-probe-json "$OUT_DIR/contract_probe.json" \
+		--llamacpp-probe-json "$OUT_DIR/loader_probe.json" \
+		--json \
+		>"$OUT_DIR/contract_vs_loader_probe_parse.json" 2>"$OUT_DIR/contract_vs_loader_probe_stderr.txt" || true
+fi
 fi
 
 {
