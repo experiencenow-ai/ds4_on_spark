@@ -50,7 +50,9 @@ Note: when using `MODEL_GGUF_GLOB` auto-selection, `scripts/run_quantized_single
     - `trunk_contract` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
       - `kind="deepseek-upstream"` checks `layers.{i}.*` (only applies if the artifact preserves upstream tensor names)
       - `kind="llama.cpp"` checks `blk.{i}.*` (compat-only structural signal for DeepSeek4 GGUFs)
+      - When `kind="deepseek-upstream"` and expanded per-layer non-expert key lists are available, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` (helps distinguish “missing non-expert namespace keys” from “missing expert tensors”).
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
+      - When expanded per-layer MTP non-expert key lists are available, `mtp_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample`.
     - `mtp_preservation` (structural “preserves upstream `mtp.0.*`?” status derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (structural “complete vs incomplete” status derived from the upstream MTP contract + explicit trust gates; still requires a logits oracle before enabling MTP)
     - `topology_contract` (GGUF header metadata vs expected `hidden_size`, `block_count`, head counts, vocab size, and (when present) RoPE `dimension_count` / `freq_base`)
