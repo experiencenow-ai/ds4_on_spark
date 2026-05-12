@@ -70,6 +70,12 @@ Once you have **two** probe JSON blobs (oracle + candidate), diff them before ru
 python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
+Convenience wrapper (runs the gated oracle runner + a gated candidate command, then diffs locally):
+
+```bash
+scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
+```
+
 By default this requires:
 
 - `base_next_token_id` match

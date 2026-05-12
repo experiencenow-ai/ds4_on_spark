@@ -98,6 +98,12 @@ Diff oracle vs candidate:
 python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
+Convenience wrapper (oracle + candidate + diff in one command; all Spark work remains gated):
+
+```bash
+scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
+```
+
 ## Remaining gates
 
 1. Build and run the patched antirez oracle on Spark0.
