@@ -81,7 +81,7 @@ except Exception:
     sys.exit(0)
 
 for line in data:
-    m=re.match(r'^DECOMPOSER_VERSION\\s*=\\s*\"([^\"]+)\"', line)
+    m=re.match(r'^DECOMPOSER_VERSION\s*=\s*"([^"]+)"', line)
     if m:
         print(m.group(1))
         sys.exit(0)
@@ -98,4 +98,3 @@ unzip -p "$zip" centaur_spec_impl_v73/requirements.txt 2>/dev/null || echo "(mis
 
 echo "zip entries:"
 unzip -l "$zip" | sed -n '4,$p' | awk '{print $4}' | sed -n '1,200p'
-

@@ -133,7 +133,7 @@ except Exception:
     print("")
     sys.exit(0)
 for line in data:
-    m=re.match(r'^DECOMPOSER_VERSION\\s*=\\s*\"([^\"]+)\"', line)
+    m=re.match(r'^DECOMPOSER_VERSION\s*=\s*"([^"]+)"', line)
     if m:
         print(m.group(1))
         sys.exit(0)
