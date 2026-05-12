@@ -175,7 +175,6 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
   - `num_experts_per_tok` / `n_activated_experts`: 6
   - `moe_intermediate_size` / `moe_inter_dim`: 2048
   - `swiglu_limit`: 10.0 (clamps expert activations in the reference code)
-    - Contract pin: `contract_summary.json` records `moe.swiglu_limit` plus the exact clamp expressions under `moe.semantics.swiglu_clamp_*` so external runtimes can’t silently diverge.
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:

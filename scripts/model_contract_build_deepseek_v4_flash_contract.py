@@ -590,9 +590,6 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 	score_sigmoid = find_first_line_containing(text, "scores = scores.sigmoid")
 	score_sqrtsoftplus = find_first_line_containing(text, "scores = F.softplus(scores).sqrt()")
 	expert_fp32 = find_first_line_containing(text, "gate = self.w1(x).float()")
-	swiglu_gate = find_first_line_containing(text, "if self.swiglu_limit > 0:")
-	swiglu_up_clamp = find_first_line_containing(text, "up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)")
-	swiglu_gate_clamp = find_first_line_containing(text, "gate = torch.clamp(gate, max=self.swiglu_limit)")
 
 	return {
 		"gate_scores_fp32_expr": score_fp32,
@@ -605,9 +602,6 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 			"sqrtsoftplus": score_sqrtsoftplus,
 		},
 		"expert_compute_fp32_expr": expert_fp32,
-		"swiglu_clamp_enabled_expr": swiglu_gate,
-		"swiglu_clamp_up_expr": swiglu_up_clamp,
-		"swiglu_clamp_gate_expr": swiglu_gate_clamp,
 	}
 
 def parse_inference_moe_hash_routing(model_py: Path) -> dict:
@@ -1452,7 +1446,6 @@ def build_contract() -> dict:
 			"moe_inter_dim": int(cfg["moe_intermediate_size"]),
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
-			"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"score_layer_ids": moe_score_layer_ids,
 			"transformers_mlp_layer_types": transformers_mlp_layer_types,
