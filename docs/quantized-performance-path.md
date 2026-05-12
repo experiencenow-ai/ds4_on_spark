@@ -28,7 +28,7 @@ If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven M
   - `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`
   - `docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch`
   - `docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch` (prevents trunk/sidecar cache key collisions under CUDA weight caching)
-  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`
+  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py` (fixture provenance/regeneration: `docs/mtp-q4k-dot-validation.md`)
 
 - Validate the staged MTP sidecar **contract** (Spark-safe; header + tensor table only; no trunk load):
 

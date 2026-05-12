@@ -185,6 +185,7 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
 Implementation note (Spark/Linux CUDA):
 
 - The DS4-tuned MTP sidecar uses routed experts that may be `Q4_K` (not `Q2_K`). If using `antirez/ds4` as the executable reference on CUDA, ensure the routed-MoE path supports `Q4_K` and the sidecar does not clobber the trunk CUDA model-map/fd-cache state; see `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`.
+- For a pinned, independent `Q4_K` dequantize+dot fixture (generated from `ggml-org/llama.cpp`), see `docs/mtp-q4k-dot-validation.md` and `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`.
 
 ## Comparator models (Ling / Qwen / DFlash pairs)
 
