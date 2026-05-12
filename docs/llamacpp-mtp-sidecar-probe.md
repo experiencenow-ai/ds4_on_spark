@@ -42,19 +42,20 @@ failure commit, run with `LLAMA_COMMIT=9222e55`.
 # inside your Spark working dir
 git clone https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git
 cd llama.cpp-deepseek-v4-flash-cuda-spark
-git checkout 94073e2
-
-git apply /path/to/ds4_on_spark/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch
-
-cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
-```
-
-If CMake fails with `No CMAKE_CUDA_COMPILER could be found`, set `CUDACXX` (or pass `-DCMAKE_CUDA_COMPILER=...`) to point at `nvcc`, for example:
-
-```bash
-CUDACXX=/usr/local/cuda/bin/nvcc cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
-```
+	git checkout 94073e2
+	
+	git apply /path/to/ds4_on_spark/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch
+	
+	# CPU-only build is recommended for this probe (it does not run kernels).
+	cmake -B build -DCMAKE_BUILD_TYPE=Release
+	cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j
+	```
+	
+	Optional: if you want a CUDA build anyway, add `-DGGML_CUDA=ON`. If CMake then fails with `No CMAKE_CUDA_COMPILER could be found`, set `CUDACXX` (or pass `-DCMAKE_CUDA_COMPILER=...`) to point at `nvcc`, for example:
+	
+	```bash
+	CUDACXX=/usr/local/cuda/bin/nvcc cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+	```
 
 ## Run
 
@@ -70,7 +71,7 @@ CUDACXX=/usr/local/cuda/bin/nvcc cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYP
 If `--load-weights` is reported as an unknown argument, update the ds4_on_spark patch file (`docs/llamacpp-patches/...-mtp-sidecar-probe.patch`) and rebuild the probe.
 ```
 
-Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1`, `PAYLOAD_SAMPLE_BYTES=N`, and `CUDACXX=/abs/path/to/nvcc` (auto-detects `nvcc` when unset).
+Helper script (optional; guarded by `ALLOW_*` env vars): `scripts/llamacpp_mtp_sidecar_probe_patch.sh`. It supports `LOAD_WEIGHTS=1`, `PAYLOAD_SAMPLE_BYTES=N`, `GGML_CUDA=1` (optional), and `CUDACXX=/abs/path/to/nvcc` (only needed when `GGML_CUDA=1`; auto-detects `nvcc` when unset).
 
 Notes:
 
