@@ -12,6 +12,32 @@ def _as_dict(obj: object) -> Optional[Dict[str, object]]:
         return(obj)  # type: ignore[return-value]
     return(None)
 
+def _coerce_int(value: object) -> Optional[int]:
+    if isinstance(value, int):
+        return(int(value))
+    if isinstance(value, float):
+        v = float(value)
+        if float(int(v)) == v:
+            return(int(v))
+        return(None)
+    return(None)
+
+def _coerce_nonneg_int(value: object) -> Optional[int]:
+    v = _coerce_int(value)
+    if v is None:
+        return(None)
+    if int(v) < 0:
+        return(None)
+    return(int(v))
+
+def _coerce_pos_int(value: object) -> Optional[int]:
+    v = _coerce_int(value)
+    if v is None:
+        return(None)
+    if int(v) <= 0:
+        return(None)
+    return(int(v))
+
 
 def _deep_candidates_container(obj: Dict[str, object]) -> Optional[Dict[str, object]]:
     for k in ("route", "routing", "router", "moe", "moe_route", "dispatch"):
@@ -153,11 +179,10 @@ def _extract_int_list(value: object) -> Optional[List[int]]:
         return(None)
     out: List[int] = []
     for v in value:
-        if not isinstance(v, int):
+        vi = _coerce_nonneg_int(v)
+        if vi is None:
             return(None)
-        if v < 0:
-            return(None)
-        out.append(int(v))
+        out.append(int(vi))
     if len(out) == 0:
         return(None)
     if len(set(out)) != len(out):
@@ -220,8 +245,9 @@ def _extract_layer_record(obj_in: object) -> Optional[Dict[str, object]]:
             out["scores"] = scores
 
     k = _get_any(container, ("k", "chosen_k"))
-    if isinstance(k, int) and k > 0:
-        out["k"] = int(k)
+    ki = _coerce_pos_int(k)
+    if ki is not None:
+        out["k"] = int(ki)
 
     cost_scale = _get_any(container, ("cost_scale", "cost", "work_scale"))
     if isinstance(cost_scale, (int, float)) and float(cost_scale) > 0.0:
@@ -258,8 +284,9 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     out: Dict[str, object] = {}
 
     token_index = _get_any(obj, ("token_index", "token_idx", "idx", "i"))
-    if isinstance(token_index, int) and token_index >= 0:
-        out["token_index"] = int(token_index)
+    ti = _coerce_nonneg_int(token_index)
+    if ti is not None:
+        out["token_index"] = int(ti)
 
     t_ms, dt_ms = _extract_time(obj)
     if t_ms is not None:
@@ -290,12 +317,13 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
             if not isinstance(layer_cands, list):
                 return(None)
             for e in layer_cands:
-                if not isinstance(e, int) or e < 0:
+                ei = _coerce_nonneg_int(e)
+                if ei is None:
                     return(None)
-                if e in seen:
+                if ei in seen:
                     continue
-                seen.add(e)
-                union_candidates.append(int(e))
+                seen.add(int(ei))
+                union_candidates.append(int(ei))
         if len(union_candidates) == 0:
             return(None)
         out["candidates"] = union_candidates
@@ -312,8 +340,9 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
                 out["scores"] = scores
 
         k = _get_any(container, ("k", "chosen_k"))
-        if isinstance(k, int) and k > 0:
-            out["k"] = int(k)
+        ki = _coerce_pos_int(k)
+        if ki is not None:
+            out["k"] = int(ki)
 
     # MTP (DeepSeek) stats:
     # - Prefer explicit mtp_* keys when available.
@@ -346,22 +375,25 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
             mtp_accept_len = container.get("accept_len")
     if mtp_accept_len is None and dflash is not None:
         mtp_accept_len = _get_any(dflash, ("mtp_accept_len", "mtp_len"))
-    if isinstance(mtp_accept_len, int) and mtp_accept_len > 0:
-        out["mtp_accept_len"] = int(mtp_accept_len)
+    al = _coerce_pos_int(mtp_accept_len)
+    if al is not None:
+        out["mtp_accept_len"] = int(al)
 
     if accepted_mtp is None and mtp is not None:
         accepted_mtp = _get_any(mtp, ("accepted_mtp", "mtp_accepted", "accepted"))
     if accepted_mtp is None and dflash is not None:
         accepted_mtp = _get_any(dflash, ("accepted_mtp", "mtp_accepted"))
-    if isinstance(accepted_mtp, int) and accepted_mtp >= 0:
-        out["accepted_mtp"] = int(accepted_mtp)
+    am = _coerce_nonneg_int(accepted_mtp)
+    if am is not None:
+        out["accepted_mtp"] = int(am)
 
     if rejected_mtp is None and mtp is not None:
         rejected_mtp = _get_any(mtp, ("rejected_mtp", "mtp_rejected", "rejected"))
     if rejected_mtp is None and dflash is not None:
         rejected_mtp = _get_any(dflash, ("rejected_mtp", "mtp_rejected"))
-    if isinstance(rejected_mtp, int) and rejected_mtp >= 0:
-        out["rejected_mtp"] = int(rejected_mtp)
+    rm = _coerce_nonneg_int(rejected_mtp)
+    if rm is not None:
+        out["rejected_mtp"] = int(rm)
 
     # Speculative-decoding comparator stats (kept separate from MTP).
     dflash_has_mtp_keys = False
@@ -376,24 +408,27 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
         dflash_accept_len = _get_any(container, ("dflash_accept_len", "spec_accept_len"))
     if dflash_accept_len is None and dflash is not None and dflash_has_mtp_keys is False:
         dflash_accept_len = _get_any(dflash, ("dflash_accept_len", "spec_accept_len", "accept_len"))
-    if isinstance(dflash_accept_len, int) and dflash_accept_len > 0:
-        out["dflash_accept_len"] = int(dflash_accept_len)
+    dal = _coerce_pos_int(dflash_accept_len)
+    if dal is not None:
+        out["dflash_accept_len"] = int(dal)
 
     accepted_dflash = _get_any(obj, ("accepted_dflash", "dflash_accepted", "spec_accepted"))
     if accepted_dflash is None and container is not obj:
         accepted_dflash = _get_any(container, ("accepted_dflash", "dflash_accepted", "spec_accepted"))
     if accepted_dflash is None and dflash is not None and dflash_has_mtp_keys is False:
         accepted_dflash = _get_any(dflash, ("accepted_dflash", "dflash_accepted", "spec_accepted", "accepted"))
-    if isinstance(accepted_dflash, int) and accepted_dflash >= 0:
-        out["accepted_dflash"] = int(accepted_dflash)
+    ad = _coerce_nonneg_int(accepted_dflash)
+    if ad is not None:
+        out["accepted_dflash"] = int(ad)
 
     rejected_dflash = _get_any(obj, ("rejected_dflash", "dflash_rejected", "spec_rejected"))
     if rejected_dflash is None and container is not obj:
         rejected_dflash = _get_any(container, ("rejected_dflash", "dflash_rejected", "spec_rejected"))
     if rejected_dflash is None and dflash is not None and dflash_has_mtp_keys is False:
         rejected_dflash = _get_any(dflash, ("rejected_dflash", "dflash_rejected", "spec_rejected", "rejected"))
-    if isinstance(rejected_dflash, int) and rejected_dflash >= 0:
-        out["rejected_dflash"] = int(rejected_dflash)
+    rd = _coerce_nonneg_int(rejected_dflash)
+    if rd is not None:
+        out["rejected_dflash"] = int(rd)
 
     cost_scale = _get_any(obj, ("cost_scale", "cost", "work_scale"))
     if isinstance(cost_scale, (int, float)) and float(cost_scale) > 0.0:
@@ -404,12 +439,14 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
         out["decode_ms"] = float(decode_ms)
 
     kv_tokens = _get_any(obj, ("kv_tokens", "kv_len", "kv_cache_tokens"))
-    if isinstance(kv_tokens, int) and kv_tokens >= 0:
-        out["kv_tokens"] = int(kv_tokens)
+    kv = _coerce_nonneg_int(kv_tokens)
+    if kv is not None:
+        out["kv_tokens"] = int(kv)
 
     expert_batch_size = _get_any(obj, ("expert_batch_size", "batch_size", "expert_bs"))
-    if isinstance(expert_batch_size, int) and expert_batch_size >= 0:
-        out["expert_batch_size"] = int(expert_batch_size)
+    bs = _coerce_nonneg_int(expert_batch_size)
+    if bs is not None:
+        out["expert_batch_size"] = int(bs)
 
     return(out)
 

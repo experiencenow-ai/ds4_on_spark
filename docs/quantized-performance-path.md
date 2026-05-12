@@ -135,6 +135,11 @@ If the trace includes DeepSeek MTP counters (`mtp_accept_len` or `accepted_mtp`/
 python3 sim/scheduler/recommendations.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip > /tmp/runtime_mtp_ablation.json
 ```
 
+The report also includes an `evidence` block intended for fast go/no-go checks:
+
+- `evidence.mtp.supported_by_trace_counters`: `true` when the replayed MTP-on run is efficiency-positive vs `mtp_off` (by `service_slot_ms_per_output_token`).
+- `evidence.expert_queueing.best_variant_by_drop`: the scheduler sweep variant that most reduces backpressure drops (and its p95-latency delta) on the same trace with MTP disabled.
+
 If the same runtime trace also includes speculative-decoding comparator counters (`dflash_accept_len` or `accepted_dflash`/`rejected_dflash`), the report includes a separate `dflash_comparator` block and keeps those counters isolated from DeepSeek MTP acceptance assumptions.
 
 If the runtime trace omits `cost_scale` but includes `kv_tokens` or `decode_ms`, you can ask the ablation tool to derive a simple proxy cost_scale before replay (helps explore work-weighted pending/backpressure signals later):
@@ -204,6 +209,7 @@ Trace JSONL fields:
 - `dt_ms`: optional inter-arrival delta in milliseconds (requires `--trace-time-mode dt_ms`; mutually exclusive with `t_ms`)
 - Runtime traces may emit microsecond/nanosecond variants (`t_us` / `t_ns` or `dt_us` / `dt_ns`); `--trace-input-format runtime` (or `trace_extract.py`) normalizes them into millisecond `t_ms` / `dt_ms` fields.
 - `cls`: `"interactive"` or `"batch"` (runtime input format also accepts integer class IDs `0` (interactive) and `1` (batch), normalized by `--trace-input-format runtime` / `trace_extract.py`)
+- Integer-like numeric fields (`candidates` entries, `k`, `mtp_accept_len`, `accepted_mtp`/`rejected_mtp`, `dflash_accept_len`, `accepted_dflash`/`rejected_dflash`, `kv_tokens`, `expert_batch_size`) may appear as integral floats in some runtimes (for example `2.0`). Both `--trace-input-format runtime` and strict trace replay accept these and coerce them to integers.
 - `candidates`: ordered expert candidates for that token. For minimal router logs, `--trace-input-format runtime` (or `trace_extract.py`) also accepts a single chosen expert alias like `expert_id` / `chosen_expert` and normalizes it into `candidates=[expert_id]`.
 - `layers`: optional per-layer routing list for multi-MoE-layer traces. Each element is a JSON object with:
   - `candidates`: ordered expert candidates for that layer (required)

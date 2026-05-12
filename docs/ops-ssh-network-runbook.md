@@ -11,7 +11,7 @@ SSH_OPTS='-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-
 ssh $SSH_OPTS <user>@spark0.local hostname
 ```
 
-`scripts/ops_stage_deploy_assets.sh`, `scripts/ops_spark01_mesh_check.sh`, and `scripts/ops_spark_ring_mesh_check.sh` all respect `SSH_OPTS`.
+`scripts/ops_stage_deploy_assets.sh`, `scripts/ops_spark01_mesh_check.sh`, `scripts/ops_spark_ring_mesh_check.sh`, and `scripts/ops_spark_ring_status.sh` all respect `SSH_OPTS`.
 
 If SSH breaks, use `docs/spark-access.md` to reset keys/passwords on the Spark
 console.
@@ -79,6 +79,16 @@ hosts only in this command line/inventory, not inside the helper script:
 
 Legacy fixed-name wrappers remain for older docs/scripts, but they delegate to
 the inventory-driven helpers above.
+
+Note: `scripts/ops_stage_spark_ring.sh` also runs a staged env audit at the end (safe) to verify ring env consistency across hosts: `scripts/ops_spark_ring_staged_env_audit.sh`.
+
+## Mac-Side Systemd Status Snapshot (Optional)
+
+To capture a read-only systemd status snapshot across the inventory (useful for run notes):
+
+```bash
+./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
 
 Optional: add a best-effort TCP probe to each ring peer (only meaningful if
 something is listening):

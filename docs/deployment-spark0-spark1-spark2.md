@@ -27,12 +27,22 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
+Optional: snapshot systemd status across the ring (read-only) before/after staging:
+
+```bash
+./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 Recommended (ordered inventory; this example stages three Sparks):
 
 ```bash
 ./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 # optional: add --tcp 29500 --tcp 9090
 ```
+
+At the end of staging, the helper runs a safe staged env audit to catch common ring mismatches before install:
+
+- `scripts/ops_spark_ring_staged_env_audit.sh` (reads `/tmp/ds4-config/ds4-<instance>.env.example` on each Spark)
 
 Or stage each host individually:
 

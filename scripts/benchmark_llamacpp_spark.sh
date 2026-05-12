@@ -170,7 +170,7 @@ with open(log_raw, "w", encoding="utf-8") as f:
             m = re.search(r"__fattn__-([0-9]+)", line)
             if m is not None:
                 fattn_ids.add(int(m.group(1)))
-        if "prompt eval time" in line or ("eval time" in line and "prompt eval time" not in line) or ("[ Prompt:" in line and "Generation:" in line and "t/s" in line):
+        if ("load time" in line) or ("sample time" in line) or ("total time" in line) or ("prompt eval time" in line) or ("eval time" in line and "prompt eval time" not in line) or ("[ Prompt:" in line and "Generation:" in line and "t/s" in line):
             timings_lines.append(line.strip())
         f.write(line)
         f.flush()
@@ -351,6 +351,11 @@ prefill_tokens = None
 gen_tps = None
 gen_ms_per_tok = None
 gen_tokens = None
+load_time_ms = None
+sample_time_ms = None
+prompt_eval_time_ms = None
+eval_time_ms = None
+total_time_ms = None
 for tl in timings_lines:
     if "[ Prompt:" in tl and "Generation:" in tl and "t/s" in tl:
         mp = re.search(r"Prompt:\s*([0-9]+(?:\.[0-9]+)?)\s*t/s", tl)
@@ -359,12 +364,29 @@ for tl in timings_lines:
             prefill_tps = float(mp.group(1))
         if mg is not None:
             gen_tps = float(mg.group(1))
+    elif "load time" in tl:
+        m = re.search(r"load time\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*ms", tl)
+        if m is not None:
+            load_time_ms = float(m.group(1))
+    elif "sample time" in tl:
+        m = re.search(r"sample time\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*ms", tl)
+        if m is not None:
+            sample_time_ms = float(m.group(1))
+    elif "total time" in tl:
+        m = re.search(r"total time\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*ms", tl)
+        if m is not None:
+            total_time_ms = float(m.group(1))
     elif "prompt eval time" in tl:
-
+        m = re.search(r"prompt eval time\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*ms", tl)
+        if m is not None:
+            prompt_eval_time_ms = float(m.group(1))
         prefill_tps = _last_float_before(tl, "tokens per second")
         prefill_ms_per_tok = _last_float_before(tl, "ms per token")
         prefill_tokens = _tokens_after_slash(tl)
     elif tl.startswith("eval time") or " eval time" in tl:
+        m = re.search(r"eval time\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*ms", tl)
+        if m is not None:
+            eval_time_ms = float(m.group(1))
         gen_tps = _last_float_before(tl, "tokens per second")
         gen_ms_per_tok = _last_float_before(tl, "ms per token")
         gen_tokens = _tokens_after_slash(tl)
@@ -387,6 +409,16 @@ else:
 summary_lines.append("wall_s=%.6f" % (end - start))
 summary_lines.append("total_wall_s=%.6f" % (end - start))
 summary_lines.append("max_rss_kb=%d" % int(ru.ru_maxrss))
+if load_time_ms is not None:
+    summary_lines.append("load_time_s=%.6f" % (load_time_ms / 1000.0))
+if sample_time_ms is not None:
+    summary_lines.append("sample_time_s=%.6f" % (sample_time_ms / 1000.0))
+if prompt_eval_time_ms is not None:
+    summary_lines.append("prompt_eval_s=%.6f" % (prompt_eval_time_ms / 1000.0))
+if eval_time_ms is not None:
+    summary_lines.append("eval_time_s=%.6f" % (eval_time_ms / 1000.0))
+if total_time_ms is not None:
+    summary_lines.append("total_time_s=%.6f" % (total_time_ms / 1000.0))
 if prefill_tps is not None:
     summary_lines.append("prefill_tps=%.6f" % prefill_tps)
 if prefill_ms_per_tok is not None:

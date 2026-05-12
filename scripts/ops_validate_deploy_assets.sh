@@ -133,6 +133,8 @@ need_file "scripts/ops_spark_standalone_check.sh"
 need_file "scripts/ops_spark01_mesh_check.sh"
 need_file "scripts/ops_spark012_mesh_check.sh"
 need_file "scripts/ops_spark_ring_mesh_check.sh"
+need_file "scripts/ops_spark_ring_staged_env_audit.sh"
+need_file "scripts/ops_spark_ring_status.sh"
 need_file "scripts/ops_collect_support_bundle.sh"
 need_file "scripts/ops_validate_staged_assets.sh"
 need_file "scripts/ops_validate_installed_assets.sh"
@@ -152,6 +154,8 @@ sh -n scripts/ops_spark_standalone_check.sh
 sh -n scripts/ops_spark01_mesh_check.sh
 sh -n scripts/ops_spark012_mesh_check.sh
 sh -n scripts/ops_spark_ring_mesh_check.sh
+sh -n scripts/ops_spark_ring_staged_env_audit.sh
+sh -n scripts/ops_spark_ring_status.sh
 sh -n scripts/ops_collect_support_bundle.sh
 sh -n scripts/ops_validate_deploy_assets.sh
 sh -n scripts/ops_validate_staged_assets.sh

@@ -333,6 +333,8 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIsInstance(dflash, dict)
         if not isinstance(dflash, dict):
             return
+        self.assertIn("evidence", out)
+        self.assertIsInstance(out.get("evidence"), dict)
         summary = dflash.get("summary")
         self.assertIsInstance(summary, dict)
         if not isinstance(summary, dict):
@@ -861,6 +863,42 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertEqual(meta.get("runtime_commit"), "abc123")
             self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.INTERACTIVE)
             self.assertEqual(trace[0].candidates, (3, 7, 1))
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_jsonl_runtime_accepts_integral_float_int_fields(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"dt_ms": 0.0, "cls": 1, "candidates": [7.0, 3.0], "accepted_mtp": 1.0, "rejected_mtp": 0.0, "kv_tokens": 1024.0}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, time_mode="dt_ms", input_format="runtime", non_route_policy="error")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[0].candidates, (7, 3))
+            self.assertEqual(trace[0].accepted_mtp, 1)
+            self.assertEqual(trace[0].rejected_mtp, 0)
+            self.assertEqual(trace[0].kv_tokens, 1024)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_jsonl_strict_accepts_integral_float_int_fields(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [7.0, 3.0], "accepted_mtp": 1.0, "rejected_mtp": 0.0, "kv_tokens": 1024.0}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, time_mode="t_ms", input_format="strict", non_route_policy="error")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[0].candidates, (7, 3))
+            self.assertEqual(trace[0].accepted_mtp, 1)
+            self.assertEqual(trace[0].rejected_mtp, 0)
+            self.assertEqual(trace[0].kv_tokens, 1024)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -4105,6 +4143,13 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("trace_summary", out)
         self.assertIn("scheduler_sweeps", out)
         self.assertIn("arrival_units_steps", out["scheduler_sweeps"])
+        self.assertIn("evidence", out)
+        self.assertIn("mtp", out["evidence"])
+        self.assertTrue(bool(out["evidence"]["mtp"].get("present")))
+        self.assertIn("expert_queueing", out["evidence"])
+        self.assertTrue(bool(out["evidence"]["expert_queueing"].get("present")))
+        self.assertIn("supported_by_trace_counters", out["evidence"]["expert_queueing"])
+        self.assertIsInstance(out["evidence"]["expert_queueing"].get("reason"), str)
         self.assertIn("results", out)
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])

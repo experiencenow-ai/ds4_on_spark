@@ -1136,6 +1136,9 @@
       "tensor_key_count": 1575
     },
     "compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+    "compress_ratios": [
+      0
+    ],
     "n_mtp_layers": 1,
     "namespace_prefix": "mtp.{j}.",
     "num_nextn_predict_layers": 1,
@@ -1154,6 +1157,7 @@
       "acceptance_requires_prefill_and_decode": true,
       "acceptance_topk_ids_exact": true,
       "artifact_requires_mtp_contract_complete": true,
+      "artifact_requires_mtp_keys_sha256_match_official": true,
       "artifact_requires_mtp_namespace_expected_complete": true,
       "artifact_requires_mtp_namespace_has_mtp0": true,
       "artifact_requires_namespace_prefix": "mtp.{j}.",

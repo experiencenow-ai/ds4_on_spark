@@ -145,7 +145,7 @@ Machine-readable MTP gating:
 
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
 - `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).
-- When `mtp_present==true`, `mtp_trust.reasons` also flags when `mtp_keys_sha256` does not match the official MTP subset fingerprint (`contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`), which is a strong signal the artifact does not preserve the official checkpoint’s `mtp.0.*` key set.
+- When `mtp_present==true`, `mtp_trust.reasons` also flags when `mtp_keys_sha256` does not match the official MTP subset fingerprint (`contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`), which is a strong signal the artifact does not preserve the official checkpoint’s `mtp.0.*` key set; machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
 
 ## Comparator models (Ling / Qwen / DFlash pairs)
 

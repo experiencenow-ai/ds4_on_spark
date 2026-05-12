@@ -24,6 +24,10 @@ argument when another Spark joins the ring:
 # optional: add --tcp <port> and/or --instance<N> <name>
 ```
 
+At the end of staging, the helper runs a safe staged env audit to catch common ring mismatches before install:
+
+- `scripts/ops_spark_ring_staged_env_audit.sh` (reads `/tmp/ds4-config/ds4-<instance>.env.example` on each Spark)
+
 The older two-host and three-host wrappers remain for compatibility, but new
 docs and automation should use `ops_stage_spark_ring.sh`.
 

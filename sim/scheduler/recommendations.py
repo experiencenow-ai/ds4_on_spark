@@ -179,6 +179,120 @@ def run_runtime_trace_mtp_ablation(
         "results": {},
     }
 
+
+    def _as_summary(obj: object) -> Dict[str, float]:
+        if not isinstance(obj, dict):
+            return({})
+        raw = obj.get("summary")
+        if not isinstance(raw, dict):
+            return({})
+        out_s: Dict[str, float] = {}
+        for k, v in raw.items():
+            if not isinstance(k, str):
+                continue
+            if not isinstance(v, (int, float)):
+                continue
+            out_s[k] = float(v)
+        return(out_s)
+
+    def _as_float(summary: Dict[str, float], key: str) -> float:
+        v = summary.get(key, 0.0)
+        try:
+            return(float(v))
+        except Exception:
+            return(0.0)
+
+    def _delta(a: Dict[str, float], b: Dict[str, float], key: str) -> float:
+        return(_as_float(b, key) - _as_float(a, key))
+
+    def _sweep_baseline_summary(sweep: Dict[str, object]) -> Dict[str, float]:
+        if not isinstance(sweep.get("baseline"), dict):
+            return({})
+        return(_as_summary(sweep["baseline"]))
+
+    def _sweep_variant_summary(sweep: Dict[str, object], label: str) -> Dict[str, float]:
+        variants = sweep.get("variants")
+        if not isinstance(variants, dict):
+            return({})
+        v = variants.get(label)
+        if not isinstance(v, dict):
+            return({})
+        return(_as_summary(v))
+
+    def _select_trace_metric(has_interactive: bool, has_batch: bool, interactive_key: str, batch_key: str, fallback_key: str) -> str:
+        if has_interactive and interactive_key != "":
+            return(str(interactive_key))
+        if has_batch and batch_key != "":
+            return(str(batch_key))
+        return(str(fallback_key))
+
+    evidence: Dict[str, Any] = {"mtp": {"present": bool(any_mtp)}, "expert_queueing": {"present": True}}
+
+    sweep_steps = out["scheduler_sweeps"]["arrival_units_steps"]
+    sweep_base = _sweep_baseline_summary(sweep_steps) if isinstance(sweep_steps, dict) else {}
+    if isinstance(sweep_steps, dict):
+        v_best = None
+        best_drop_delta = 0.0
+        drop_key = _select_trace_metric(bool(has_interactive), bool(has_batch), "drop_frac_tokens_interactive", "drop_frac_tokens_batch", "drop_frac_tokens")
+        for label in sched_variants:
+            if not isinstance(label, tuple) or len(label) != 2:
+                continue
+            v_label = str(label[0])
+            v_sum = _sweep_variant_summary(sweep_steps, v_label)
+            if len(v_sum) == 0:
+                continue
+            dd = _delta(sweep_base, v_sum, drop_key)
+            if v_best is None or dd < best_drop_delta:
+                v_best = v_label
+                best_drop_delta = float(dd)
+
+        if v_best is not None:
+            v_sum = _sweep_variant_summary(sweep_steps, v_best)
+            lat_key = _select_trace_metric(
+                bool(has_interactive),
+                bool(has_batch),
+                "output_token_p95_interactive_ms",
+                "output_token_p95_batch_ms",
+                "output_token_p95_batch_ms",
+            )
+            base_drop = _as_float(sweep_base, drop_key)
+            best_drop = _as_float(v_sum, drop_key)
+            base_lat = _as_float(sweep_base, lat_key)
+            best_lat = _as_float(v_sum, lat_key)
+            delta_drop = (best_drop - base_drop)
+            delta_lat = (best_lat - base_lat)
+            max_latency_increase_frac = 0.10
+            max_latency_increase_ms = max(5.0, (max_latency_increase_frac * base_lat)) if base_lat > 0.0 else 0.0
+            supported = False
+            reason = "No best scheduler variant available."
+            if base_drop <= 0.0:
+                reason = f"Baseline drop metric is 0.0 (metric={drop_key}); no backpressure evidence to justify expert queueing changes."
+            elif delta_drop >= 0.0:
+                reason = f"Best scheduler variant does not reduce drops (metric={drop_key}); delta_drop={delta_drop:+.6f}."
+            elif base_lat > 0.0 and delta_lat > max_latency_increase_ms:
+                reason = f"Drop reduction comes with a large p95 latency increase (metric={lat_key}); delta_p95_latency_ms={delta_lat:+.3f} exceeds heuristic cap={max_latency_increase_ms:.3f} (max({int(max_latency_increase_frac*100)}%,5ms))."
+            else:
+                supported = True
+                reason = f"Best scheduler variant reduces drops (metric={drop_key}) with acceptable p95 latency impact (metric={lat_key}); delta_drop={delta_drop:+.6f}, delta_p95_latency_ms={delta_lat:+.3f}, cap={max_latency_increase_ms:.3f}."
+            evidence["expert_queueing"] = {
+                "present": True,
+                "drop_metric": str(drop_key),
+                "latency_metric": str(lat_key),
+                "best_variant_by_drop": {
+                    "label": str(v_best),
+                    "delta_drop": float(_delta(sweep_base, v_sum, drop_key)),
+                    "delta_p95_latency_ms": float(_delta(sweep_base, v_sum, lat_key)),
+                },
+                "supported_by_trace_counters": bool(supported),
+                "heuristic": {
+                    "max_p95_latency_increase_frac": float(max_latency_increase_frac),
+                    "max_p95_latency_increase_ms": float(max_latency_increase_ms),
+                },
+                "reason": str(reason),
+            }
+        else:
+            evidence["expert_queueing"] = {"present": True, "note": "No scheduler variants produced comparable summaries."}
+
     if int(mtp_draft_len) <= 0:
         out["note"] = "Trace has no MTP counters; skipping mtp_off ablation."
         if any_dflash:
@@ -198,6 +312,7 @@ def run_runtime_trace_mtp_ablation(
                 "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
                 "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted": float(ratio_adj),
             }
+        out["evidence"] = evidence
         return(out)
 
     variants: List[Tuple[str, Dict[str, object]]] = [("mtp_off", {"mtp_draft_len": 0})]
@@ -219,6 +334,45 @@ def run_runtime_trace_mtp_ablation(
             "service_slot_ms_per_output_token_ratio_vs_target_only": float(ratio),
             "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted": float(ratio_adj),
         }
+
+    # Evidence: whether the trace counters support enabling DeepSeek MTP in this regime.
+    sweep_mtp = out["results"]["arrival_units_steps"]
+    base_sum = _sweep_baseline_summary(sweep_mtp) if isinstance(sweep_mtp, dict) else {}
+    off_sum = _sweep_variant_summary(sweep_mtp, "mtp_off") if isinstance(sweep_mtp, dict) else {}
+    denom = _as_float(off_sum, "service_slot_ms_per_output_token")
+    numer = _as_float(base_sum, "service_slot_ms_per_output_token")
+    ratio = (numer / denom) if denom > 0.0 and numer > 0.0 else 0.0
+
+    drop_key = _select_trace_metric(bool(has_interactive), bool(has_batch), "drop_frac_tokens_interactive", "drop_frac_tokens_batch", "drop_frac_tokens")
+    lat_key = _select_trace_metric(
+        bool(has_interactive),
+        bool(has_batch),
+        "output_token_p95_interactive_ms",
+        "output_token_p95_batch_ms",
+        "output_token_p95_batch_ms",
+    )
+    supported = False
+    reason = "No mtp_off comparison available."
+    if denom > 0.0:
+        supported = bool(ratio > 0.0 and ratio < 1.0)
+        dd = _delta(off_sum, base_sum, drop_key)
+        dl = _delta(off_sum, base_sum, lat_key)
+        reason = f"MTP appears efficiency-positive when service_slot_ms_per_output_token_ratio_vs_mtp_off < 1.0; observed ratio={ratio:.4f}, delta_drop={dd:+.4f} (metric={drop_key}), delta_p95_latency_ms={dl:+.3f} (metric={lat_key})."
+
+    evidence["mtp"] = {
+        "present": True,
+        "service_slot_ms_per_output_token_ratio_vs_mtp_off": float(ratio),
+        "mtp_accept_rate": float(_as_float(base_sum, "mtp_accept_rate")),
+        "mtp_mean_accept_len": float(_as_float(base_sum, "mtp_mean_accept_len")),
+        "supported_by_trace_counters": bool(supported),
+        "reason": str(reason),
+        "delta_vs_mtp_off": {
+            str(drop_key): float(_delta(off_sum, base_sum, drop_key)),
+            str(lat_key): float(_delta(off_sum, base_sum, lat_key)),
+        },
+    }
+    out["evidence"] = evidence
+
     return(out)
 
 
