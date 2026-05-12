@@ -5,8 +5,19 @@ target_note="llama.cpp Spark fork: MTP sidecar probe patch"
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/src/llama.cpp-deepseek-v4-flash-cuda-spark}"
 LLAMA_REPO="${LLAMA_REPO:-https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git}"
-LLAMA_COMMIT="${LLAMA_COMMIT:-9222e55}"
-PATCH_FILE="${PATCH_FILE:-$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch}"
+LLAMA_COMMIT="${LLAMA_COMMIT:-94073e2}"
+
+PATCH_FILE="${PATCH_FILE:-}"
+if [ "$PATCH_FILE" = "" ]; then
+	patch_by_commit="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-${LLAMA_COMMIT}-mtp-sidecar-probe.patch"
+	if [ -r "$patch_by_commit" ]; then
+		PATCH_FILE="$patch_by_commit"
+	elif [ -r "$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch" ]; then
+		PATCH_FILE="$PWD/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch"
+	else
+		PATCH_FILE="$patch_by_commit"
+	fi
+fi
 
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
 PAYLOAD_SAMPLE_BYTES="${PAYLOAD_SAMPLE_BYTES:-0}"

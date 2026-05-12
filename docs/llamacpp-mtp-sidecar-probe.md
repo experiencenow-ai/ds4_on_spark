@@ -25,8 +25,12 @@ It does **not** require loading the trunk GGUF. By default it does **not** read 
 
 ## Patch
 
-- Patch file: `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
-- Target upstream: `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` at commit `9222e55`
+- Patch file: `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch`
+- Target upstream: `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark` at commit `94073e2`
+
+Legacy patch (for older checkouts):
+
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
 
 ## Apply + build (Spark)
 
@@ -34,9 +38,9 @@ It does **not** require loading the trunk GGUF. By default it does **not** read 
 # inside your Spark working dir
 git clone https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark.git
 cd llama.cpp-deepseek-v4-flash-cuda-spark
-git checkout 9222e55
+git checkout 94073e2
 
-git apply /path/to/ds4_on_spark/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch
+git apply /path/to/ds4_on_spark/docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch
 
 cmake -B build -DGGML_CUDA=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --target llama-ds4-mtp-sidecar-probe -j

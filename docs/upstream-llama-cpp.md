@@ -73,9 +73,10 @@ Spark/CUDA llama.cpp forks may reject the sidecar if treated as a normal model (
 
 - `docs/llamacpp-mtp-sidecar-probe.md`
 
-Patch asset (prepared against older pinned commit `9222e55`; refresh if needed for `94073e2`):
+Patch assets:
 
-- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch`
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-94073e2-mtp-sidecar-probe.patch` (current pinned fork commit)
+- `docs/llamacpp-patches/kamnxt-llamacpp-deepseek-v4-flash-cuda-spark-9222e55-mtp-sidecar-probe.patch` (legacy; older checkout)
 
 ## Upstream build/docs pointers
 
