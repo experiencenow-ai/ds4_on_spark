@@ -37,6 +37,13 @@ Topology:
 - `head_dim=512` (MLA: `rope_head_dim=64`, `nope_head_dim=448`)
 - `sliding_window=128`
 - `vocab_size=129280`
+- `max_position_embeddings=1048576` (Transformers config context cap; separate from the reference runtime defaults in `contract_summary.json` `runtime.reference_defaults`)
+
+Config semantics (from pinned `config.json`, also recorded in `contract_summary.json` `config_summary.*`):
+
+- `rms_norm_eps=1e-6`, `hidden_act="silu"`
+- `attention_bias=false`, `attention_dropout=0.0`
+- `torch_dtype="bfloat16"`, `transformers_version="4.57.1"`
 
 Tokenizer / encoding (special-token IDs are derived from `tokenizer.json` and recorded machine-readably under `contract_summary.json` `tokenizer.encoding_token_ids`):
 
