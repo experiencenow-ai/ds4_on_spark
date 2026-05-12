@@ -37,6 +37,7 @@ DS4_EXTERN_C_BEGIN
 int32_t ds4_config_diag_init(ds4_config_diag_t *d);
 const char *ds4_config_diag_stage_name(int32_t stage);
 int32_t ds4_config_diag_format(const ds4_config_diag_t *d,char *out,int32_t cap);
+const char *ds4_config_env_err_var(int32_t err);
 int32_t ds4_config_known_key_count(int32_t *out_count);
 const char *ds4_config_known_key(int32_t idx);
 const char *ds4_config_known_key_help(int32_t idx);

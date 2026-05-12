@@ -54,6 +54,7 @@ int32_t test_config(void)
 	char env_path[96];
 	char out[128];
 	const char *k0,*h0;
+	const char *ev;
 	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
@@ -81,6 +82,26 @@ int32_t test_config(void)
 		return(-1819);
 	if ( ds4_cstr_len_i32(h0) <= 0 )
 		return(-1820);
+	ev = ds4_config_env_err_var(-3);
+	if ( ev == 0 || strcmp(ev,"DS4_LOG_LEVEL") != 0 )
+		return(-1821);
+	ev = ds4_config_env_err_var(-7);
+	if ( ev == 0 || strcmp(ev,"DS4_ENABLE_CUDA") != 0 )
+		return(-1822);
+	ev = ds4_config_env_err_var(-12);
+	if ( ev == 0 || strcmp(ev,"DS4_CUDA_DEVICE") != 0 )
+		return(-1823);
+	ev = ds4_config_env_err_var(-15);
+	if ( ev == 0 || strcmp(ev,"DS4_ARENA_SIZE") != 0 )
+		return(-1824);
+	ev = ds4_config_env_err_var(-21);
+	if ( ev == 0 || strcmp(ev,"DS4_CUDA_ARENA_SIZE") != 0 )
+		return(-1825);
+	ev = ds4_config_env_err_var(-18);
+	if ( ev == 0 || strcmp(ev,"DS4_LOG_RING_ENTRIES") != 0 )
+		return(-1826);
+	if ( ds4_config_env_err_var(0) != 0 )
+		return(-1827);
 	if ( ds4_config_validate(&cfg) < 0 )
 		return(-1800);
 	cfg.log_level = -1;
