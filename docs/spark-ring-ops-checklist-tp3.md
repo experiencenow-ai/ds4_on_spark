@@ -17,7 +17,7 @@ For a one-page readiness rubric (what “ready” means, and what blocks a run),
 - Optional: take a read-only systemd status snapshot from the Mac (useful for run notes):
   - `./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Optional: capture a single combined snapshot (mesh + status; safe):
-  - `./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
+  - `./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory)
   - Confirm the staged env audit passes (safe; catches DS4 ring config mismatches before install): `scripts/ops_spark_ring_staged_env_audit.sh`

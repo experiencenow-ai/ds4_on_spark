@@ -20,14 +20,16 @@ On both Sparks:
 To capture a single “are we ready?” snapshot (mesh + systemd status + optional journald tail) across an ordered Spark0/Spark1 inventory:
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp2 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp2 --strict --journal --lines 120 \
   spark0@<spark0-host> spark1@<spark1-host>
 ```
 
 Or using an inventory file (recommended for repeatable runs):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp2 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp2 --strict --journal --lines 120 \
   --inventory-file deploy/config/inventory.ds4.spark01.example
 ```
 

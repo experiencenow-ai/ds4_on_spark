@@ -51,14 +51,16 @@ Optional (recommended): run staged TP readiness checks immediately after staging
 Optional: capture a single “snapshot” (mesh + systemd status + optional journald tail) for run notes (safe):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --journal --lines 120 \
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
 Optional: if you already staged assets, include staged readiness in the same snapshot (safe; uses `/tmp/ds4-*`):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --journal --lines 120 \
   --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
