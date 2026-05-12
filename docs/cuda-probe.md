@@ -16,6 +16,16 @@ This gate also includes a compile-only “fatbin packaging” probe using `-genc
 
 The runtime probes are best-effort: `cuda_sm121_kernel_launch_tiny` (no `cudaMalloc`) and the “arch report” binaries can be skipped if Spark0’s GPU is busy/unavailable or allocations fail with `out of memory`; the gate still reports compile-only results so you can distinguish “toolchain can target `sm_121`” from “device was runnable right now”.
 
+## Spark0: Micro Gate (No Repo Transfer; Single SSH)
+
+When you want a minimal “toolchain + compile-only `sm_121` gates + one-line device props + kernel launch smoke” check without shipping `tools/cuda_probe/` to Spark0:
+
+```bash
+./scripts/cuda_probe_micro_spark0.sh
+```
+
+This runs in a single SSH session and is intended as the quickest preflight before attempting DeepGEMM/CUTLASS/cuBLASLt builds on Spark0.
+
 ## Spark0: Minimal Gates (nvcc + Device Props + `sm_121` Gate)
 
 When you want a single command that:
