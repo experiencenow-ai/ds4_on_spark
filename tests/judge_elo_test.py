@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 
@@ -222,6 +223,37 @@ class JudgeEloTest(unittest.TestCase):
         self.assertNotIn("\r", raw)
         self.assertNotIn("\n", perr)
         self.assertNotIn("\r", perr)
+
+    def test_pairwise_judge_record_cli_accepts_partial_tokens_latency(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_record.py")
+        with tempfile.TemporaryDirectory() as td:
+            dec_path = os.path.join(td, "decision.txt")
+            with open(dec_path, "w", encoding="utf-8") as f:
+                f.write("{\"winner\":\"A\",\"margin\":1,\"score_a\":7,\"score_b\":6,\"reason\":\"ok\",\"train_hint\":\"\",\"tags\":[\"clarity\"]}\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--pair-id",
+                "p0",
+                "--model-a",
+                "mA",
+                "--model-b",
+                "mB",
+                "--judge-model",
+                "ds4",
+                "--decision",
+                dec_path,
+                "--tokens-judge-out",
+                "40",
+                "--latency-judge-ms",
+                "123",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertTrue(bool(obj.get("parse_valid", False)))
+            self.assertEqual(obj.get("tokens"), {"judge_out": 40})
+            self.assertEqual(obj.get("latency_ms"), {"judge": 123})
+            self.assertEqual(schema.validate_record(obj), [])
 
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
