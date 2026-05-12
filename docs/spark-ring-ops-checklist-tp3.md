@@ -5,6 +5,8 @@ This is a **human-run** checklist for operating a 3-node ring layout safely.
 ## Bring-up (Once)
 
 - Pick stable hostnames for Spark0/Spark1/Spark2 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark012.example`).
+- Optional: take a read-only systemd status snapshot from the Mac (useful for run notes):
+  - `./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory)
   - Confirm the staged env audit passes (safe; catches DS4 ring config mismatches before install): `scripts/ops_spark_ring_staged_env_audit.sh`
@@ -43,6 +45,8 @@ If you are doing a non-root bring-up (developer path), follow `docs/deployment-s
   - `journalctl -t ds4-spark0 -f`
   - `journalctl -t ds4-spark1 -f`
   - `journalctl -t ds4-spark2 -f`
+- Optional: capture a quick Mac-side systemd status snapshot (read-only):
+  - `./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - If you are scraping Prometheus, confirm target health and sample freshness (see `docs/ops-logging-metrics.md` and `deploy/config/prometheus-scrape.ds4.yml.example`).
 - If an instance stops unexpectedly, capture a support bundle early (non-destructive; review before sharing):
   - `/opt/ds4/scripts/ops_collect_support_bundle.sh --instance spark1 --since "30 minutes ago" --env -/etc/ds4/ds4.env --env /etc/ds4/ds4-spark1.env`
