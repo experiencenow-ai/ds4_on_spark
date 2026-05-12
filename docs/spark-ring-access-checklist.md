@@ -20,6 +20,21 @@ Quick validation targets (paste-friendly stanzas):
 - `docs/spark-ring-bw-probe-<stamp>.md`: `bw up/down` smoke numbers (best-effort)
 - `docs/spark-ring-node-facts-<host>-<stamp>.md`: stable per-node GPU/CUDA/storage facts
 
+## Three-node Ring Access Checklist (Spark0..Spark2)
+
+For a three-node ring, treat these as the “ready” bar, with the probe output as the source of truth:
+
+| Check | Where to verify (commit-safe) | Ready when |
+|------|-------------------------------|-----------|
+| Hostnames + TCP/22 | `docs/spark-ring-mac-discovery-<stamp>.md`: `== mdns resolution ==`, `== known target checks ==` | Each target resolves and TCP/22 is reachable |
+| SSH key auth | `docs/spark-ring-probe-<stamp>.md`: per-target header + `ssh: failed` lines | `BatchMode=yes` SSH succeeds to each node |
+| Clock sync | `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==` | `skew span_s <= 1` and (when available) `NTPSynchronized=yes` |
+| Ethernet/Wi‑Fi matrix | `docs/spark-ring-probe-<stamp>.md`: `== network (iface matrix, compact) ==` | ifnames + MTU + speed + redacted v4/v6 captured for each node |
+| MTU (end-to-end) | `docs/spark-ring-mtu-probe-<stamp>.md` | Intended fabric passes DF payloads (jumbo vs standard) |
+| Latency (best-effort) | `docs/spark-ring-mac-discovery-<stamp>.md`: ping; `docs/spark-ring-probe-<stamp>.md`: `== peer ping ==` | RTT/loss is acceptable and peer names resolve for the chosen topology |
+| Bandwidth (smoke) | `docs/spark-ring-bw-probe-<stamp>.md` | Mac↔host smoke numbers recorded (best-effort) |
+| GPU + storage facts | `docs/spark-ring-node-facts-<host>-<stamp>.md` | `cuda/toolchain facts` + `df/lsblk` present per node |
+
 ## 1) Hostnames + Resolution
 
 - Decide stable identities for each node:

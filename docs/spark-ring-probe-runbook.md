@@ -12,18 +12,20 @@ This runbook produces **commit-safe** (redacted) snapshots for ring bring-up. It
 
 ## Quickstart: one-shot snapshot set (recommended)
 
-This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets):
+This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets).
+
+For three-node ring bring-up, prefer `--topology full` (peer ping to all) and `SPARK_NODE_FACTS=1` (one facts file per host):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full aitopatom-9ab9.local spark1.local spark2.local
 ```
 
 If each node uses a different SSH user, pass explicit `user@host` targets (the mac discovery step strips the `user@` prefix automatically):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
 ```
 
 If you only have Spark0 online, pass a single target:
