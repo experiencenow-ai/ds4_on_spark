@@ -4140,7 +4140,9 @@
       "upstream_commit.txt": "d8249ed1b51232dccf45c69169711e62b7bcf7b82100dbec557984aea7838aa9"
     },
     "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
-    "hf_revision": "main",
+    "hf_revision": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+    "hf_revision_pinned": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+    "hf_revision_requested": "main",
     "x_repo_commit": "6976c7ff1b30a1b2cb7805021b8ba4684041f136"
   },
   "yarn_rope": {

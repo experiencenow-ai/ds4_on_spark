@@ -24,6 +24,7 @@ Notes on config sources:
 
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records both the requested HF revision (`upstream.hf_revision_requested`, typically `main`) and the pinned immutable revision actually used (`upstream.hf_revision_pinned == upstream.x_repo_commit`).
 
 ## Quick constants (from pinned fixtures)
 
