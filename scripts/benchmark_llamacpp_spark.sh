@@ -126,10 +126,10 @@ echo "runtime_label=$RUNTIME_LABEL"
 echo "cmd=$LLAMA_CLI -m $MODEL_GGUF -p <prompt> -n $N_TOKENS -c $CTX -ngl $N_GPU_LAYERS <timings-flags> $EXTRA_ARGS"
 echo
 
-python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$MODEL_SHA256"
+python3 - <<'PY' "$LLAMA_CLI" "$MODEL_GGUF" "$PROMPT" "$N_TOKENS" "$CTX" "$N_GPU_LAYERS" "$EXTRA_ARGS" "$LOG_RAW" "$LOG_SUMMARY" "$RUNTIME_LABEL" "$MODEL_SOURCE" "$MODEL_QUANT" "$MODEL_SHA256" "$LLAMA_DIR"
 import json, os, resource, re, subprocess, sys, time, shlex
 
-llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, model_sha256 = sys.argv[1:]
+llama_cli, model, prompt, n_tokens, ctx, ngl, extra_args, log_raw, log_summary, runtime_label, model_source, model_quant, model_sha256, llama_dir = sys.argv[1:]
 
 help_text = ""
 try:
@@ -160,6 +160,15 @@ start = time.monotonic()
 timings_lines = []
 fattn_ids = set()
 fattn_lines = 0
+llama_commit = ""
+try:
+    if llama_dir and os.path.isdir(llama_dir):
+        gr = subprocess.run(["git", "-C", llama_dir, "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=5)
+        sha = (gr.stdout or "").strip()
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            llama_commit = sha
+except Exception:
+    llama_commit = ""
 with open(log_raw, "w", encoding="utf-8") as f:
     f.write("cmd=" + " ".join(shlex.quote(x) for x in cmd) + "\n")
     f.write("utc_start=" + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
@@ -402,6 +411,8 @@ for tl in timings_lines:
 summary_lines = []
 summary_lines.append("exit_code=%d" % rc)
 summary_lines.append("llama_cli=%s" % llama_cli)
+if llama_commit:
+    summary_lines.append("llama_commit=%s" % llama_commit)
 summary_lines.append("runtime_label=%s" % runtime_label)
 summary_lines.append("model_source=%s" % model_source)
 summary_lines.append("model_quant=%s" % model_quant)

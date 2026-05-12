@@ -246,6 +246,10 @@ count from the llama.cpp `eval time = ... / <tokens>` timing line), plus
 canonical aliases `ttft_s`, `total_wall_s`, and `decode_tps` for cross-runtime
 comparisons.
 
+The llama.cpp baseline summary also includes `llama_commit` when the runner can
+resolve it from `LLAMA_DIR` (best-effort provenance pin for the external
+runtime).
+
 Compatibility notes (llama.cpp forks):
 
 - Some V4-capable forks expose `--show-timings` + `--perf` instead of `--timings`. The Spark-side probe auto-detects the supported flags via `llama-cli --help` and parses either the classic `eval time = ... / <tokens>` lines or the fork-style `[ Prompt: <t/s> | Generation: <t/s> ]` summary.
@@ -258,6 +262,12 @@ summarizes them as:
 
 - `fattn_log_lines=<n>`: number of log lines containing `__fattn__`
 - `fattn_unique_nodes=<n>`: count of distinct `__fattn__-<id>` nodes observed
+- `fattn_expected_id_0_42_ok=<true|false>`: best-effort check that the expected contiguous node IDs were observed for the DeepSeek V4 Flash trunk (`0..42` for `block_count=43`)
+- `fattn_id_min=<n>`, `fattn_id_max=<n>`, `fattn_id_missing_count=<n>`: observed FA node ID range and missing ID count (best-effort)
+- `fattn_backend0_only=<true|false>`: best-effort signal that all `__fattn__` nodes ran on CUDA backend `0` (only when the runtime prints backend IDs)
+- `fattn_cuda_device0_only=<true|false>`: best-effort signal that all `__fattn__` nodes ran on CUDA device `0` (only when the runtime prints device IDs)
+- `fattn_seen_disabled=true`: the runtime printed a “fattn disabled” line; treat FA scheduling as off until proven otherwise
+- `fattn_seen_sched_reserve_cpu=true`: the runtime logged a graph-reservation path that included CPU FA nodes; this often correlates with FA being disabled globally after a fallback
 
 This is **not** a correctness proof, but it is a coarse signal that a Flash
 Attention schedule node executed instead of falling back to a slow path. Always
