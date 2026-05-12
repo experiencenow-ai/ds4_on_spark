@@ -677,6 +677,16 @@ def main() -> int:
 						if "min=-self.swiglu_limit" not in up_expr or "max=self.swiglu_limit" not in up_expr:
 							failures.append(Failure(144, f"contract summary moe.semantics.swiglu_clamp_up_expr must clamp to [-swiglu_limit,+swiglu_limit]: {contract_summary}"))
 				moe_hash = moe.get("hash_routing", {}) if isinstance(moe, dict) else {}
+				if isinstance(moe, dict):
+					want_topk_method = cfg.get("topk_method", None)
+					got_topk_method = moe.get("topk_method", None)
+					if want_topk_method is not None and got_topk_method != want_topk_method:
+						failures.append(Failure(145, f"contract summary moe.topk_method mismatch vs config.json topk_method={want_topk_method!r}: {contract_summary}"))
+
+					want_norm_topk_prob = cfg.get("norm_topk_prob", None)
+					got_norm_topk_prob = moe.get("norm_topk_prob", None)
+					if want_norm_topk_prob is not None and got_norm_topk_prob != want_norm_topk_prob:
+						failures.append(Failure(146, f"contract summary moe.norm_topk_prob mismatch vs config.json norm_topk_prob={want_norm_topk_prob!r}: {contract_summary}"))
 				try:
 					n_hash = int(moe.get("n_hash_layers", 0)) if isinstance(moe, dict) else 0
 				except Exception:
@@ -1039,6 +1049,8 @@ def main() -> int:
 						"compress_rate_csa": "attention_schedule.transformers_compress_rates.compressed_sparse_attention",
 						"compress_rate_hca": "attention_schedule.transformers_compress_rates.heavily_compressed_attention",
 						"mlp_layer_types": "moe.transformers_mlp_layer_types",
+						"topk_method": "moe.topk_method",
+						"norm_topk_prob": "moe.norm_topk_prob",
 						"expert_dtype": "quantization.inference_config.expert_dtype",
 						"quantization_config.quant_method": "quantization.config_quantization_config.quant_method",
 						"quantization_config.fmt": "quantization.config_quantization_config.fmt",
