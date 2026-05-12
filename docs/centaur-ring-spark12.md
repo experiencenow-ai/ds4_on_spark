@@ -29,7 +29,16 @@ If you want a known-good reference bundle for what “PASS” looks like, see:
 
 - `fixtures/centaur-smoke/spark0-v73/20260512T030829Z/`
 
-2) Stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
+2) Run the Spark0-local ring sim rehearsal (does not require Spark1/2 hardware):
+
+```bash
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@<spark0-host>
+ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
+sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+3) When Spark1/2 hardware exists: stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
 
 ```bash
 sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
@@ -37,7 +46,7 @@ ssh $SSH_OPTS spark1@<spark1-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP
 ssh $SSH_OPTS spark2@<spark2-host> "cd ~/centaur-smoke/v73 && export CENTAUR_ZIP=~/centaur-smoke/v73/centaur_spec_impl_v73.zip && export CENTAUR_LOG=~/centaur-smoke/v73/run/node_setup_spark2.log && sh -s" < ./scripts/centaur_spark_v73_node_setup.sh
 ```
 
-3) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
+4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
 
 ```bash
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
