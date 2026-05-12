@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
+SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
 SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
 SCHEMA_BUDGET_V1 = "ds4_judge_elo_budget_v1"
 SCHEMA_QUALITY_MAP_V1 = "judge_elo_quality_map_v1"
@@ -312,6 +313,28 @@ def iter_jsonl(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
             if not isinstance(obj, dict):
                 raise ValueError(f"{path}:{lineno}: JSONL line must be an object")
             yield lineno, obj
+
+
+def validate_prompt(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["prompt must be an object"]
+    schema_v = _as_str(obj.get("schema"), "schema", errs)
+    if schema_v != "" and schema_v != SCHEMA_PROMPT_V1:
+        errs.append(f"schema must be {SCHEMA_PROMPT_V1!r}")
+    jot = _as_int(obj.get("judge_out_target"), "judge_out_target", errs)
+    if jot is not None and jot <= 0:
+        errs.append("judge_out_target must be > 0")
+    system = _as_str(obj.get("system"), "system", errs).strip()
+    if system == "":
+        errs.append("system is required")
+    user = _as_str(obj.get("user"), "user", errs).strip()
+    if user == "":
+        errs.append("user is required")
+    sh = obj.get("schema_hint")
+    if not isinstance(sh, dict):
+        errs.append("schema_hint must be an object")
+    return errs
 
 
 def validate_quality_map(obj: Any) -> List[str]:

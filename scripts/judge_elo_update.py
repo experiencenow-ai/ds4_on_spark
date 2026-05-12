@@ -379,7 +379,8 @@ def main() -> None:
             quality_score=float(q.get(model, 50.0)),
             quality_source=str(qsrc),
         ))
-    rows.sort(key=lambda r: (r.elo, r.games, r.model), reverse=True)
+    # Deterministic leaderboard ordering: higher Elo first; then more games; then model id ascending.
+    rows.sort(key=lambda r: (-float(r.elo), -int(r.games), str(r.model)))
     write_outputs(args.out_dir, rows)
     with open(os.path.join(args.out_dir, "meta.json"), "w", encoding="utf-8") as f:
         meta = compute_meta(args.inputs, float(args.k), float(args.scale), bool(args.sort))

@@ -8,6 +8,7 @@ from scripts import judge_elo_schema as schema
 from scripts import judge_elo_join_quality as joiner
 from scripts import judge_elo_update as updater
 from scripts import pairwise_judge_record as record_wrap
+from scripts import pairwise_judge_prompt as prompt_builder
 
 
 class JudgeEloTest(unittest.TestCase):
@@ -21,6 +22,13 @@ class JudgeEloTest(unittest.TestCase):
                 bad += 1
         # One intentionally parse-invalid record is still schema-valid.
         self.assertEqual(bad, 0)
+
+    def test_prompt_fixture_validates(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_pairwise_prompt.json")
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        self.assertEqual(schema.validate_prompt(obj), [])
 
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -339,15 +347,20 @@ class JudgeEloTest(unittest.TestCase):
             self.assertIn("Return minified JSON only", str(obj.get("system", "")))
             self.assertIn("PROMPT:", str(obj.get("user", "")))
 
+    def test_prompt_schema_validator_accepts_builder_output(self) -> None:
+        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64)
+        self.assertEqual(schema.validate_prompt(msg), [])
+
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
         rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
+        prompt_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v1.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
         budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, meta_path, budget_path, qmap_path, leaderboard_path):
+        for path in (dec_path, rec_path, prompt_path, meta_path, budget_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):
