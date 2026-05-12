@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
 SCHEMA_RECORD_V2 = "ds4_pairwise_judge_record_v2"
+SCHEMA_RECORD_V3 = "ds4_pairwise_judge_record_v3"
 SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
 SCHEMA_PROMPT_V2 = "ds4_pairwise_judge_prompt_v2"
 SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
@@ -260,8 +261,8 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         errs.append("schema is required")
     else:
         schema_v = _as_str(obj.get("schema"), "schema", errs)
-        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2):
-            errs.append(f"schema must be {SCHEMA_RECORD_V1!r} or {SCHEMA_RECORD_V2!r}")
+        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2, SCHEMA_RECORD_V3):
+            errs.append(f"schema must be {SCHEMA_RECORD_V1!r}, {SCHEMA_RECORD_V2!r}, or {SCHEMA_RECORD_V3!r}")
 
     for field in ("pair_id", "model_a", "model_b"):
         s = _as_str(obj.get(field), field, errs)
@@ -272,8 +273,15 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
     if parse_valid is None:
         return errs
 
+    schema_v = obj.get("schema")
+    schema_v3 = schema_v == SCHEMA_RECORD_V3
+
     if parse_valid:
-        errs.extend(validate_decision(_decision_view_from_record(obj)))
+        decision_view = _decision_view_from_record(obj)
+        decision_errs = validate_decision(decision_view)
+        errs.extend(decision_errs)
+        if schema_v3 and len(decision_errs) == 0:
+            errs.extend(validate_decision_strict_extra(decision_view))
     else:
         # When invalid, encourage preserving the raw judge output for debugging.
         raw = obj.get("raw")
@@ -311,8 +319,7 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             if v is not None and v < 0:
                 errs.append(f"latency_ms.{k} must be >= 0")
 
-    schema_v2 = obj.get("schema") == SCHEMA_RECORD_V2
-    if schema_v2:
+    if schema_v in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3):
         errs.extend(_validate_record_budget_required(obj))
 
     return errs
@@ -327,7 +334,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
     """
     errs = validate_record(obj)
 
-    if obj.get("schema") != SCHEMA_RECORD_V2:
+    if obj.get("schema") not in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3):
         errs.extend(_validate_record_budget_required(obj))
 
     parse_valid = obj.get("parse_valid")
@@ -341,7 +348,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
         if isinstance(parse_error, str) and len(parse_error) > 128:
             errs.append("parse_error must be <= 128 chars")
 
-    if parse_valid is True:
+    if parse_valid is True and obj.get("schema") != SCHEMA_RECORD_V3:
         errs.extend(validate_decision_strict_extra(obj))
 
     return errs

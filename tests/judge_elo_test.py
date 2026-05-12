@@ -14,7 +14,7 @@ from scripts import pairwise_judge_prompt as prompt_builder
 class JudgeEloTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -46,7 +46,7 @@ class JudgeEloTest(unittest.TestCase):
 
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -54,6 +54,27 @@ class JudgeEloTest(unittest.TestCase):
                 if len(errs) != 0:
                     bad += 1
             self.assertEqual(bad, 0)
+
+    def test_record_v3_enforces_strict_decision(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V3,
+            "pair_id": "p_v3_strict",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": True,
+            "winner": "A",
+            "margin": 1,
+            "score_a": 5,
+            "score_b": 5,
+            "reason": "A is better overall.",
+            "train_hint": "",
+            "tags": [],
+            "tokens": {"a_out": 1, "b_out": 1, "judge_in": 1, "judge_out": 1},
+            "latency_ms": {"a": 1, "b": 1, "judge": 1},
+        }
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("non-tie winners require score_a!=score_b" in str(e) for e in errs))
 
     def test_elo_deterministic(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))

@@ -53,14 +53,18 @@ def build_record(
     latency_ms: Optional[Dict[str, int]],
     strict: bool,
 ) -> Dict[str, Any]:
-    if str(record_schema) not in (schema.SCHEMA_RECORD_V1, schema.SCHEMA_RECORD_V2):
-        raise ValueError(f"record_schema must be {schema.SCHEMA_RECORD_V1!r} or {schema.SCHEMA_RECORD_V2!r}")
+    if str(record_schema) not in (schema.SCHEMA_RECORD_V1, schema.SCHEMA_RECORD_V2, schema.SCHEMA_RECORD_V3):
+        raise ValueError(
+            f"record_schema must be {schema.SCHEMA_RECORD_V1!r}, {schema.SCHEMA_RECORD_V2!r}, or {schema.SCHEMA_RECORD_V3!r}"
+        )
     schema_v2 = str(record_schema) == schema.SCHEMA_RECORD_V2
-    if schema_v2:
+    schema_v3 = str(record_schema) == schema.SCHEMA_RECORD_V3
+    schema_budget_required = schema_v2 or schema_v3
+    if schema_budget_required:
         if tokens is None:
-            raise ValueError("record_schema v2 requires tokens")
+            raise ValueError("record_schema v2/v3 requires tokens")
         if latency_ms is None:
-            raise ValueError("record_schema v2 requires latency_ms")
+            raise ValueError("record_schema v2/v3 requires latency_ms")
         missing: list[str] = []
         for k in ("a_out", "b_out", "judge_in", "judge_out"):
             if not isinstance(tokens.get(k), int) or isinstance(tokens.get(k), bool):
@@ -69,7 +73,7 @@ def build_record(
             if not isinstance(latency_ms.get(k), int) or isinstance(latency_ms.get(k), bool):
                 missing.append(f"latency_ms.{k}")
         if len(missing) != 0:
-            raise ValueError("record_schema v2 requires full budget accounting: missing " + ", ".join(missing))
+            raise ValueError("record_schema v2/v3 requires full budget accounting: missing " + ", ".join(missing))
 
     obj, perr = schema.parse_json_object_loose(decision_text)
     if obj is None:
@@ -87,14 +91,14 @@ def build_record(
             rec["tokens"] = tokens
         if latency_ms is not None:
             rec["latency_ms"] = latency_ms
-        if schema_v2:
+        if schema_budget_required:
             errs = schema.validate_record(rec)
             if len(errs) != 0:
                 raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs))
         return rec
 
     errs = schema.validate_decision(obj)
-    if len(errs) == 0 and strict:
+    if len(errs) == 0 and (strict or schema_v3):
         errs.extend(schema.validate_decision_strict_extra(obj))
     if len(errs) != 0:
         rec2: Dict[str, Any] = {
@@ -111,7 +115,7 @@ def build_record(
             rec2["tokens"] = tokens
         if latency_ms is not None:
             rec2["latency_ms"] = latency_ms
-        if schema_v2:
+        if schema_budget_required:
             errs2 = schema.validate_record(rec2)
             if len(errs2) != 0:
                 raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs2))
@@ -131,7 +135,7 @@ def build_record(
         rec3["tokens"] = tokens
     if latency_ms is not None:
         rec3["latency_ms"] = latency_ms
-    if schema_v2:
+    if schema_budget_required:
         errs3 = schema.validate_record(rec3)
         if len(errs3) != 0:
             raise ValueError("record_schema v2 produced an invalid record: " + "; ".join(errs3))
@@ -140,7 +144,7 @@ def build_record(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--record-schema", choices=["v1", "v2"], default="v1", help="record schema version (default v1)")
+    ap.add_argument("--record-schema", choices=["v1", "v2", "v3"], default="v1", help="record schema version (default v1)")
     ap.add_argument("--pair-id", required=True)
     ap.add_argument("--model-a", required=True)
     ap.add_argument("--model-b", required=True)
@@ -190,8 +194,13 @@ def main() -> None:
     if len(latency_obj) != 0:
         latency_ms = latency_obj
 
-    record_schema = (schema.SCHEMA_RECORD_V2 if str(args.record_schema) == "v2" else schema.SCHEMA_RECORD_V1)
-    if record_schema == schema.SCHEMA_RECORD_V2:
+    if str(args.record_schema) == "v3":
+        record_schema = schema.SCHEMA_RECORD_V3
+    elif str(args.record_schema) == "v2":
+        record_schema = schema.SCHEMA_RECORD_V2
+    else:
+        record_schema = schema.SCHEMA_RECORD_V1
+    if record_schema in (schema.SCHEMA_RECORD_V2, schema.SCHEMA_RECORD_V3):
         required = (
             ("tokens_a_out", t_a),
             ("tokens_b_out", t_b),
@@ -203,7 +212,7 @@ def main() -> None:
         )
         missing_fields = [name for name, val in required if val is None]
         if len(missing_fields) != 0:
-            raise SystemExit("record_schema v2 requires: " + ", ".join(missing_fields))
+            raise SystemExit("record_schema v2/v3 requires: " + ", ".join(missing_fields))
 
     try:
         rec = build_record(
