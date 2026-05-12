@@ -322,6 +322,80 @@ def write_outputs(out_dir: str, rows: Sequence[EloRow]) -> None:
         f.write("\n")
 
 
+def _fmt_frac(n: int, d: int) -> str:
+    if d <= 0:
+        return "0.000"
+    return f"{(float(n) / float(d)):.3f}"
+
+
+def write_summary_md(out_dir: str, meta: Dict[str, Any], budget: Dict[str, Any], rows: Sequence[EloRow], top_n: int = 10) -> None:
+    """Write a compact human-readable summary for PRs and dashboards.
+
+    This file is intentionally small and stable-format so other loops can grep
+    key lines without parsing JSON.
+    """
+    recs = int(meta.get("records", 0) or 0)
+    parse_ok = int(meta.get("parse_valid_true", 0) or 0)
+    parse_bad = int(meta.get("parse_valid_false", 0) or 0)
+    used = int(meta.get("matches_used", 0) or 0)
+    strict = bool(meta.get("strict", False))
+    quality_mode = str(meta.get("quality_mode", "") or "")
+    quality_source = str(meta.get("quality_source", "") or "")
+    k = float(meta.get("k", 0.0) or 0.0)
+    scale = float(meta.get("scale", 0.0) or 0.0)
+    sort_by_pair_id = bool(meta.get("sort_by_pair_id", False))
+    jot = int(meta.get("judge_out_target_tokens", 0) or 0)
+
+    job = budget.get("judge_out_budget")
+    count_with_tokens = 0
+    count_le_target = 0
+    frac_le_target = 0.0
+    count_with_tokens_parse_ok = 0
+    count_le_target_parse_ok = 0
+    frac_le_target_parse_ok = 0.0
+    if isinstance(job, dict):
+        count_with_tokens = int(job.get("count_with_tokens", 0) or 0)
+        count_le_target = int(job.get("count_le_target", 0) or 0)
+        frac_le_target = float(job.get("fraction_le_target", 0.0) or 0.0)
+        count_with_tokens_parse_ok = int(job.get("count_with_tokens_parse_valid_true", 0) or 0)
+        count_le_target_parse_ok = int(job.get("count_le_target_parse_valid_true", 0) or 0)
+        frac_le_target_parse_ok = float(job.get("fraction_le_target_parse_valid_true", 0.0) or 0.0)
+
+    top = list(rows[: max(0, int(top_n))])
+
+    with open(os.path.join(out_dir, "summary.md"), "w", encoding="utf-8") as f:
+        f.write("# Judge-ELO summary\n\n")
+        f.write("## Inputs\n\n")
+        f.write(f"- strict: {str(strict).lower()}\n")
+        f.write(f"- quality_mode: {quality_mode}\n")
+        f.write(f"- quality_source: {quality_source}\n")
+        f.write(f"- k: {k:.3f}\n")
+        f.write(f"- scale: {scale:.3f}\n")
+        f.write(f"- sort_by_pair_id: {str(sort_by_pair_id).lower()}\n")
+        f.write(f"- judge_out_target_tokens: {int(jot)}\n\n")
+
+        f.write("## Records\n\n")
+        f.write(f"- records: {recs}\n")
+        f.write(f"- parse_valid_true: {parse_ok}\n")
+        f.write(f"- parse_valid_false: {parse_bad}\n")
+        f.write(f"- parse_valid_fraction: {_fmt_frac(parse_ok, recs)}\n")
+        f.write(f"- matches_used: {used}\n\n")
+
+        f.write("## Judge-out budget\n\n")
+        f.write(f"- judge_out_tokens_present: {count_with_tokens}\n")
+        f.write(f"- judge_out_le_target: {count_le_target}\n")
+        f.write(f"- judge_out_le_target_fraction: {frac_le_target:.3f}\n")
+        f.write(f"- judge_out_tokens_present_parse_valid_true: {count_with_tokens_parse_ok}\n")
+        f.write(f"- judge_out_le_target_parse_valid_true: {count_le_target_parse_ok}\n")
+        f.write(f"- judge_out_le_target_fraction_parse_valid_true: {frac_le_target_parse_ok:.3f}\n\n")
+
+        f.write("## Top models\n\n")
+        f.write("| rank | model | elo | games | W | L | T | quality_score |\n")
+        f.write("| --- | --- | --- | --- | --- | --- | --- | --- |\n")
+        for i, r in enumerate(top, start=1):
+            f.write(f"| {i} | {r.model} | {r.elo:.1f} | {r.games} | {r.wins} | {r.losses} | {r.ties} | {r.quality_score:.1f} |\n")
+
+
 def validate_inputs_strict(paths: Sequence[str]) -> None:
     bad = 0
     for path in paths:
@@ -382,17 +456,23 @@ def main() -> None:
     # Deterministic leaderboard ordering: higher Elo first; then more games; then model id ascending.
     rows.sort(key=lambda r: (-float(r.elo), -int(r.games), str(r.model)))
     write_outputs(args.out_dir, rows)
+
+    meta = compute_meta(args.inputs, float(args.k), float(args.scale), bool(args.sort))
+    meta["strict"] = bool(args.strict)
+    meta["quality_mode"] = str(args.quality_mode)
+    meta["quality_source"] = str(qsrc)
+    meta["judge_out_target_tokens"] = int(args.judge_out_target)
+
+    budget = compute_budget(args.inputs, judge_out_target=int(args.judge_out_target))
+
     with open(os.path.join(args.out_dir, "meta.json"), "w", encoding="utf-8") as f:
-        meta = compute_meta(args.inputs, float(args.k), float(args.scale), bool(args.sort))
-        meta["strict"] = bool(args.strict)
-        meta["quality_mode"] = str(args.quality_mode)
-        meta["quality_source"] = str(qsrc)
-        meta["judge_out_target_tokens"] = int(args.judge_out_target)
         json.dump(meta, f, indent=2, sort_keys=True)
         f.write("\n")
     with open(os.path.join(args.out_dir, "budget.json"), "w", encoding="utf-8") as f:
-        json.dump(compute_budget(args.inputs, judge_out_target=int(args.judge_out_target)), f, indent=2, sort_keys=True)
+        json.dump(budget, f, indent=2, sort_keys=True)
         f.write("\n")
+
+    write_summary_md(args.out_dir, meta=meta, budget=budget, rows=rows)
 
 
 if __name__ == "__main__":
