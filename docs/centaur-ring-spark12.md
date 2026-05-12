@@ -55,6 +55,21 @@ sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> s
 
 4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
 
+	Recommended: one-command evidence loop (node setup → ring rsync → validate → fetch):
+
+	```bash
+	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+	```
+
+	If you already ran node setup and want to skip it:
+
+	```bash
+	export RING_SKIP_NODE_SETUP=1
+	```
+
+	If you prefer to run the steps manually:
+
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 	sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>

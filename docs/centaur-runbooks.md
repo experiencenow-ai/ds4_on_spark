@@ -94,6 +94,7 @@ If you also have Spark3, use:
   - `scripts/centaur_spark12_v73_ring_sim_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_rsync_run.sh` (Mac-side wrapper)
+  - `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh` (Mac-side one-command evidence helper)
   - `scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh` (Mac-side fetch helper)
   - `scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark12_v73_validate_ring_artifacts.sh` (runs on orchestrator host)
