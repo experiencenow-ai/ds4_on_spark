@@ -71,6 +71,7 @@ LOG_PATH=/private/tmp/ds4_cuda_probe_tiny_$(date -u +%Y%m%d-%H%M%S).log ./script
 This builds and runs only:
 
 - `cuda_device_props_tiny` (one-line driver/runtime + key `device[0]` limits: clocks/memory/shared-mem/L2/threads/blocks/registers + driver-reserved shared memory + memory-pool support + cooperative/cluster launch support)
+  - If the optional `cuda_arch` capture can’t run (GPU OOM/busy), the schema line still prints with `cuda_arch=0`.
 - `cuda_sm121_compile_probe.o` (compile-only gate; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_compute121_compile_probe.o` (compile-only gate for PTX-only builds via `-arch=compute_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
 - `cuda_sm121_gpuarch_compile_probe.o` (compile-only gate for build systems that use `nvcc --gpu-architecture=sm_121`; fails if the device pass does not see `__CUDA_ARCH__=1210`)
