@@ -256,7 +256,8 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		host="$(host_only "$target")"
 		echo "== target: $target =="
 		set +e
-		out="$(ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers 2>&1 <<'REMOTE'
+		out_file="$(mktemp /private/tmp/ds4_spark_ring_probe_target.XXXXXX)"
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers >"$out_file" 2>&1 <<'REMOTE'
 set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
@@ -453,6 +454,11 @@ PY
 	fi
 	[ "$cuda_ver" != "" ] && echo "cuda version.json: $cuda_ver"
 fi
+cuda_h="/usr/local/cuda/include/cuda.h"
+if [ -r "$cuda_h" ]; then
+	cuda_h_version="$(grep -E "^#define CUDA_VERSION " "$cuda_h" 2>/dev/null | awk "{ print \\$3 }" | head -n 1 || true)"
+	[ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
+fi
 echo
 	if [ "$ring_ping" = "1" ]; then
 		echo "== peer ping (best effort, rtt) =="
@@ -485,8 +491,10 @@ echo
 		fi
 	fi
 REMOTE
-)"
 		rc="$?"
+		out=""
+		[ -r "$out_file" ] && out="$(cat "$out_file" 2>/dev/null || true)"
+		rm -f "$out_file" >/dev/null 2>&1 || true
 		set -e
 		[ "$out" != "" ] && printf "%s\n" "$out"
 		epoch="$(printf "%s\n" "$out" | sed -nE 's/^epoch: ([0-9]+).*/\\1/p' | head -n 1 || true)"

@@ -25,6 +25,7 @@ Environment:
 
 Examples:
   REDACT=1 ./scripts/spark_ring_probe_facts.sh aitopatom-9ab9.local spark1.local spark2.local
+  REDACT=1 ./scripts/spark_ring_probe_facts.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
   STAMP=2026-05-12T0500Z REDACT=1 ./scripts/spark_ring_probe_facts.sh spark1.local
 EOF
 }
@@ -79,9 +80,8 @@ for host in $targets; do
 	safe_h="$(printf "%s" "$host_only" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
 	out="${DOCS_DIR}/spark-ring-node-facts-${safe_h}-${stamp}.md"
 	echo "writing: $out"
-	(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh "$host_only" || true) >"$out"
+	(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh "$host" || true) >"$out"
 done
 
 echo
 echo "done"
-

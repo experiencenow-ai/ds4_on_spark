@@ -35,10 +35,14 @@ Capture a non-secret identity snapshot suitable for commit:
 
 - One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts):
   - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
+  - If each node uses a different SSH user, pass explicit `user@host` targets:
+    - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`
 - When Spark1/Spark2 become reachable, also capture per-node facts-only snapshots (toolchain/GPU/storage facts; stable bring-up data):
   - `REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
+  - `REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`
 - Facts-only per-node snapshots without the full ring set:
   - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh aitopatom-9ab9.local spark1.local spark2.local`
+  - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`
 - Mac-side interface + route snapshot:
   - `REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local`
 - Per-node interface + address snapshot (redacted):

@@ -16,8 +16,8 @@ Current observed Spark identity:
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe snapshot set: `2026-05-12T0826Z` (`docs/spark-ring-*-2026-05-12T0826Z.md`, `docs/spark0-probe-facts-2026-05-12T0826Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0758Z.md`
+- Latest commit-safe snapshot set: `2026-05-12T0928Z` (`docs/spark-ring-*-2026-05-12T0928Z.md`, `docs/spark0-probe-facts-2026-05-12T0928Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0928Z.md`
 
 ## Reproducible Probes
 
@@ -202,6 +202,13 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
 ```
 
+If each node uses a different SSH user, pass explicit `user@host` targets (the mac discovery step strips the `user@` prefix automatically):
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+```
+
 To also capture per-node facts-only snapshots (Spark1/Spark2-ready, when reachable), set `SPARK_NODE_FACTS=1`:
 
 ```bash
@@ -214,6 +221,13 @@ For facts-only per-node snapshots without the full ring set:
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+```
+
+With explicit per-node SSH users:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
 ```
 
 ### Spark Hardware + Toolchain Probe
