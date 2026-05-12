@@ -86,6 +86,52 @@ __global__ void compute121_compile_probe(uint32_t *out)
 }
 EOF
 
+cat > \"$REMOTE_DIR\"/cuda_sm121_cxx20_flags_compile_probe_minimal.cu <<'EOF'
+#include <stdint.h>
+
+#if defined(__CUDA_ARCH__)
+#if (__CUDA_ARCH__ != 1210)
+#error \"sm_121 cxx20 flags compile probe: expected __CUDA_ARCH__=1210 (sm_121)\"
+#endif
+#if !defined(__CUDACC_EXTENDED_LAMBDA__)
+#error \"sm_121 cxx20 flags compile probe: expected __CUDACC_EXTENDED_LAMBDA__ defined\"
+#endif
+#if !defined(__CUDACC_RELAXED_CONSTEXPR__)
+#error \"sm_121 cxx20 flags compile probe: expected __CUDACC_RELAXED_CONSTEXPR__ defined\"
+#endif
+#endif
+
+template <typename T>
+__host__ __device__ constexpr T add_constexpr(T a,T b)
+{
+	return((T)(a + b));
+}
+
+__global__ void sm121_cxx20_flags_compile_probe(uint32_t *out)
+{
+#if defined(__CUDA_ARCH__)
+	auto lam = [] __host__ __device__ (uint32_t v) { return((uint32_t)(v + 1U)); };
+	constexpr uint32_t k = add_constexpr<uint32_t>(7U,9U);
+	if ( out != 0 )
+		out[0] = (uint32_t)(lam((uint32_t)__CUDA_ARCH__) + k);
+#else
+	(void)out;
+#endif
+}
+EOF
+
+cat > \"$REMOTE_DIR\"/cuda_sm121_cluster_dims_attr_compile_probe_minimal.cu <<'EOF'
+#include <stdint.h>
+
+#include <cuda_runtime.h>
+
+__global__ void __cluster_dims__(2,1,1) cluster_dims_attr_probe(uint32_t *out)
+{
+	if ( ((int32_t)threadIdx.x) == 0 )
+		out[(int32_t)blockIdx.x] = 0;
+}
+EOF
+
 compile_probe() {
 	tag=\"\$1\"
 	src=\"\$2\"
@@ -113,6 +159,18 @@ compile_probe sm121_arch_sm_121a cuda_sm121_compile_probe_minimal.cu -arch=sm_12
 compile_probe sm121_arch_sm_121f cuda_sm121_compile_probe_minimal.cu -arch=sm_121f || true
 compile_probe sm121_gpuarch_sm_121a cuda_sm121_compile_probe_minimal.cu --gpu-architecture=sm_121a || true
 compile_probe sm121_gpuarch_sm_121f cuda_sm121_compile_probe_minimal.cu --gpu-architecture=sm_121f || true
+
+echo
+echo \"== build: sm_121 c++20 flags compile probes (compile-only; no link/run) ==\"
+compile_probe sm121_cxx20_flags_arch_sm_121 cuda_sm121_cxx20_flags_compile_probe_minimal.cu -arch=sm_121 -std=c++20 --extended-lambda --expt-relaxed-constexpr
+compile_probe sm121_cxx20_flags_gpuarch_sm_121 cuda_sm121_cxx20_flags_compile_probe_minimal.cu --gpu-architecture=sm_121 -std=c++20 --extended-lambda --expt-relaxed-constexpr
+compile_probe sm121_cxx20_flags_gpuarchcode_sm_121 cuda_sm121_cxx20_flags_compile_probe_minimal.cu --gpu-architecture=compute_121 --gpu-code=sm_121 -std=c++20 --extended-lambda --expt-relaxed-constexpr
+
+echo
+echo \"== build: sm_121 cluster dims attr compile probes (compile-only; no link/run) ==\"
+compile_probe sm121_cluster_dims_attr_arch_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_minimal.cu -arch=sm_121
+compile_probe sm121_cluster_dims_attr_gpuarch_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_minimal.cu --gpu-architecture=sm_121
+compile_probe sm121_cluster_dims_attr_gpuarchcode_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_minimal.cu --gpu-architecture=compute_121 --gpu-code=sm_121
 
 echo
 echo \"== build: compute_121 compile probe (best-effort) ==\"
@@ -149,4 +207,3 @@ cat "$tmp_out"
 cat "$tmp_out" >> "$log_path"
 rm -f "$tmp_out"
 exit $rc
-
