@@ -41,6 +41,7 @@ If `parse_valid` is `true`, these must also be present:
 Optional but recommended (for speed/quality separation and budgeting):
 - `tokens`: `{ "a_out": int, "b_out": int, "judge_in": int, "judge_out": int }`
 - `latency_ms`: `{ "a": int, "b": int, "judge": int }`
+- `tokens` / `latency_ms` may be partially populated; strict validation requires all keys.
 - `judge_model`: string
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)

@@ -96,12 +96,6 @@
     "tokens": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "a_out",
-        "b_out",
-        "judge_in",
-        "judge_out"
-      ],
       "properties": {
         "a_out": {
           "type": "integer",
@@ -124,11 +118,6 @@
     "latency_ms": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "a",
-        "b",
-        "judge"
-      ],
       "properties": {
         "a": {
           "type": "integer",
