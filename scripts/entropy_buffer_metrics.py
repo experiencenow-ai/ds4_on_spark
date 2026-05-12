@@ -693,6 +693,16 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     tmpl_prompt_char3_buckets: Dict[str, List[int]] = {}
     tmpl_prompt_char3_counts: Dict[str, int] = {}
 
+    family_output_word_buckets: Dict[str, List[int]] = {}
+    family_output_word_counts: Dict[str, int] = {}
+    family_output_char3_buckets: Dict[str, List[int]] = {}
+    family_output_char3_counts: Dict[str, int] = {}
+
+    family_prompt_word_buckets: Dict[str, List[int]] = {}
+    family_prompt_word_counts: Dict[str, int] = {}
+    family_prompt_char3_buckets: Dict[str, List[int]] = {}
+    family_prompt_char3_counts: Dict[str, int] = {}
+
     input_tokens: List[float] = []
     output_tokens: List[float] = []
     wall_ms: List[float] = []
@@ -725,9 +735,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     template_out_total: Dict[str, int] = {}
     template_out_uniq: Dict[str, int] = {}
     template_out_seen: Dict[str, set] = {}
+    template_prompt_total: Dict[str, int] = {}
+    template_prompt_uniq: Dict[str, int] = {}
+    template_prompt_seen: Dict[str, set] = {}
     pair_out_total: Dict[str, int] = {}
     pair_out_uniq: Dict[str, int] = {}
     pair_out_seen: Dict[str, set] = {}
+    pair_prompt_total: Dict[str, int] = {}
+    pair_prompt_uniq: Dict[str, int] = {}
+    pair_prompt_seen: Dict[str, set] = {}
     model_out_total: Dict[str, int] = {}
     model_out_uniq: Dict[str, int] = {}
     model_out_seen: Dict[str, set] = {}
@@ -871,6 +887,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 for ng in char3:
                     model_output_char3_buckets[mid][_bucket_idx(ng, 128)] += 1
                 model_output_char3_counts[mid] = model_output_char3_counts.get(mid, 0) + len(char3)
+            if fam != "":
+                family_output_word_buckets.setdefault(fam, [0] * 128)
+                for w in ws:
+                    family_output_word_buckets[fam][_bucket_idx(w, 128)] += 1
+                family_output_word_counts[fam] = family_output_word_counts.get(fam, 0) + len(ws)
+                family_output_char3_buckets.setdefault(fam, [0] * 128)
+                for ng in char3:
+                    family_output_char3_buckets[fam][_bucket_idx(ng, 128)] += 1
+                family_output_char3_counts[fam] = family_output_char3_counts.get(fam, 0) + len(char3)
 
             out_norm = lib.normalize_text(c.output)
             out_h = lib.text_sha1(out_norm)
@@ -921,6 +946,30 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 for ng in char3:
                     tmpl_prompt_char3_buckets[tmpl][_bucket_idx(ng, 128)] += 1
                 tmpl_prompt_char3_counts[tmpl] = tmpl_prompt_char3_counts.get(tmpl, 0) + len(char3)
+            if fam != "":
+                family_prompt_word_buckets.setdefault(fam, [0] * 128)
+                for w in ws:
+                    family_prompt_word_buckets[fam][_bucket_idx(w, 128)] += 1
+                family_prompt_word_counts[fam] = family_prompt_word_counts.get(fam, 0) + len(ws)
+                family_prompt_char3_buckets.setdefault(fam, [0] * 128)
+                for ng in char3:
+                    family_prompt_char3_buckets[fam][_bucket_idx(ng, 128)] += 1
+                family_prompt_char3_counts[fam] = family_prompt_char3_counts.get(fam, 0) + len(char3)
+
+            prompt_norm = lib.normalize_text(c.prompt)
+            prompt_h = lib.text_sha1(prompt_norm)
+            if tmpl != "":
+                template_prompt_total[tmpl] = template_prompt_total.get(tmpl, 0) + 1
+                template_prompt_seen.setdefault(tmpl, set())
+                if prompt_h not in template_prompt_seen[tmpl]:
+                    template_prompt_seen[tmpl].add(prompt_h)
+                    template_prompt_uniq[tmpl] = template_prompt_uniq.get(tmpl, 0) + 1
+            if pair_k != "":
+                pair_prompt_total[pair_k] = pair_prompt_total.get(pair_k, 0) + 1
+                pair_prompt_seen.setdefault(pair_k, set())
+                if prompt_h not in pair_prompt_seen[pair_k]:
+                    pair_prompt_seen[pair_k].add(prompt_h)
+                    pair_prompt_uniq[pair_k] = pair_prompt_uniq.get(pair_k, 0) + 1
         if c.task_id != "" and c.prompt_template_id != "" and c.output != "":
             k = f"{c.task_id}|{c.prompt_template_id}"
             task_template_outputs_norm.setdefault(k, []).append(lib.normalize_text(c.output))
@@ -1335,10 +1384,14 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     tokens["slices"] = {
         "output_word_by_prompt_template_id": _bucket_slice_summary(tmpl_output_word_buckets, tmpl_output_word_counts, "prompt_template_id"),
         "output_word_by_model_id": _bucket_slice_summary(model_output_word_buckets, model_output_word_counts, "model_id"),
+        "output_word_by_task_family": _bucket_slice_summary(family_output_word_buckets, family_output_word_counts, "task_family"),
         "output_char_3gram_by_prompt_template_id": _bucket_slice_summary(tmpl_output_char3_buckets, tmpl_output_char3_counts, "prompt_template_id"),
         "output_char_3gram_by_model_id": _bucket_slice_summary(model_output_char3_buckets, model_output_char3_counts, "model_id"),
+        "output_char_3gram_by_task_family": _bucket_slice_summary(family_output_char3_buckets, family_output_char3_counts, "task_family"),
         "prompt_word_by_prompt_template_id": _bucket_slice_summary(tmpl_prompt_word_buckets, tmpl_prompt_word_counts, "prompt_template_id"),
+        "prompt_word_by_task_family": _bucket_slice_summary(family_prompt_word_buckets, family_prompt_word_counts, "task_family"),
         "prompt_char_3gram_by_prompt_template_id": _bucket_slice_summary(tmpl_prompt_char3_buckets, tmpl_prompt_char3_counts, "prompt_template_id"),
+        "prompt_char_3gram_by_task_family": _bucket_slice_summary(family_prompt_char3_buckets, family_prompt_char3_counts, "task_family"),
     }
 
     duplicates = {
@@ -1579,6 +1632,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "output_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_out_total, pair_out_uniq, "task_family_template_pair", k=10),
         "output_norm_dup_rate_by_model_id_top": _dup_rate_top(model_out_total, model_out_uniq, "model_id", k=10),
         "output_norm_dup_rate_by_buffer_item_id_top": _dup_rate_top(buffer_item_out_total, buffer_item_out_uniq, "buffer_item_id", k=10),
+        "prompt_norm_dup_rate_by_prompt_template_id_top": _dup_rate_top(template_prompt_total, template_prompt_uniq, "prompt_template_id", k=10),
+        "prompt_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_prompt_total, pair_prompt_uniq, "task_family_template_pair", k=10),
     })
 
     return(MetricsReport(
@@ -1825,6 +1880,9 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append("\n### tokens.slices.output_word_by_model_id.low_entropy_norm_top\n")
         for row in ((slices.get("output_word_by_model_id") or {}).get("low_entropy_norm_top") or [])[:10]:
             parts.append(f"- `{row.get('model_id')}`: entropy_norm={float(row.get('entropy_norm', 0.0)):.6f} distinct_1={float(row.get('distinct_1', 0.0)):.6f} count={int(row.get('count', 0) or 0)} unique={int(row.get('unique', 0) or 0)}")
+        parts.append("\n### tokens.slices.output_word_by_task_family.low_entropy_norm_top\n")
+        for row in ((slices.get("output_word_by_task_family") or {}).get("low_entropy_norm_top") or [])[:10]:
+            parts.append(f"- `{row.get('task_family')}`: entropy_norm={float(row.get('entropy_norm', 0.0)):.6f} distinct_1={float(row.get('distinct_1', 0.0)):.6f} count={int(row.get('count', 0) or 0)} unique={int(row.get('unique', 0) or 0)}")
     parts.append("\n## Duplicates\n")
     for k, v in report.duplicates.items():
         if isinstance(v, list):
@@ -1851,6 +1909,12 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### output_norm_dup_rate_by_buffer_item_id_top\n")
     for js in report.duplicates.get("output_norm_dup_rate_by_buffer_item_id_top", [])[:10]:
         parts.append(f"- `{js.get('buffer_item_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### prompt_norm_dup_rate_by_prompt_template_id_top\n")
+    for js in report.duplicates.get("prompt_norm_dup_rate_by_prompt_template_id_top", [])[:10]:
+        parts.append(f"- `{js.get('prompt_template_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
+    parts.append("\n### prompt_norm_dup_rate_by_family_template_top\n")
+    for js in report.duplicates.get("prompt_norm_dup_rate_by_family_template_top", [])[:10]:
+        parts.append(f"- `{js.get('task_family_template_pair')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
     parts.append(f"- `label_entropy_norm`: {float(report.judge.get('label_entropy_norm', 0.0) or 0.0):.6f}")

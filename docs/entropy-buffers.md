@@ -123,7 +123,7 @@ The scripts compute:
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
   - Reports both raw entropy (`*_entropy_bits`) and normalized entropy (`*_entropy_norm`) plus `*_effective_num` for easier cross-corpus comparisons.
 - **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
-- **Token distribution slices** (approx): hashed-bucket word + char-3gram entropy by `prompt_template_id` and by `model_id`, with “low entropy” tops to flag template/model lexical collapse even when outputs are not exact duplicates.
+- **Token distribution slices** (approx): hashed-bucket word + char-3gram entropy by `prompt_template_id`, `model_id`, and `task_family`, with “low entropy” tops to flag slice-level lexical collapse even when outputs are not exact duplicates.
 - **Distinct-n** (approx): `distinct_1/2/3` for prompt/output word n-grams (unique / total).
 - **Length distributions**: prompt/output chars + words (min/max/mean/p50/p90).
 - **Runtime / throughput** (optional): `input_tokens`, `output_tokens`, `wall_ms`, plus derived `output_tok_per_s`, `total_tok_per_s`, and `ms_per_output_token`.
@@ -271,6 +271,7 @@ Notes:
 - If candidate records include `prompt`, the recommender can reward **input lexical diversity** (approx) via:
   - `--prompt-word-weight` (word unigram entropy gain) and `--prompt-trigram-weight` (word 3-gram entropy gain).
   - `--prompt-word-limit` / `--prompt-trigram-limit` to cap per-record feature fanout (set to `0` to disable limits).
+  - Use `--avoid-seen-prompt-norm` to hard-exclude candidates whose normalized prompt already appears in history (strong “no prompt repeats” mode).
 - If candidate records include `buffer_item_id`, the recommender can reward **new buffer items** to avoid reuse concentration:
   - Use `--avoid-seen-buffer-item-id` to hard-exclude previously-used `buffer_item_id`s.
   - Tune weighting with `--buffer-id-weight` / `--buffer-item-weight` (set to `0` to disable).

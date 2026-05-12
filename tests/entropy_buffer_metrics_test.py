@@ -130,6 +130,10 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(report.duplicates["prompt_norm_dup_rate"], (1.0 / 6.0))
         self.assertAlmostEqual(report.duplicates["answer_dup_rate"], 0.25)
         self.assertEqual(report.duplicates["task_template_groups_ge2"], 1)
+        prompt_dup_top = report.duplicates.get("prompt_norm_dup_rate_by_prompt_template_id_top", [])
+        self.assertGreaterEqual(len(prompt_dup_top), 1)
+        self.assertEqual(prompt_dup_top[0].get("prompt_template_id"), "mcq.letter.v1")
+        self.assertAlmostEqual(float(prompt_dup_top[0].get("dup_rate", 0.0)), 0.5)
 
         self.assertEqual(report.judge["label_counts"]["a"], 3)
         self.assertEqual(report.judge["label_counts"]["tie"], 1)
@@ -241,6 +245,11 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         lowm = by_model.get("low_entropy_norm_top", [])
         self.assertGreaterEqual(len(lowm), 1)
         self.assertEqual(lowm[0].get("model_id"), "m_low")
+
+        by_fam = slices.get("output_word_by_task_family", {})
+        lowf = by_fam.get("low_entropy_norm_top", [])
+        self.assertGreaterEqual(len(lowf), 1)
+        self.assertEqual(lowf[0].get("task_family"), "slice_low")
 
     def test_conditional_entropy_stats_from_fixture(self) -> None:
         root = _repo_root()
@@ -581,6 +590,18 @@ class EntropyBufferMetricsTest(unittest.TestCase):
 
         scored = recommend._score(history, candidates, prompt_trigram_weight=2.0)
         top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, prompt_trigram_weight=2.0)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0].task_id, "math.prompt.aaa")
+
+    def test_recommendations_avoid_seen_prompt_norm_when_enabled(self) -> None:
+        root = _repo_root()
+        hist_path = os.path.join(root, "fixtures", "entropy-buffer", "history_prompt_ngrams_mini.jsonl")
+        cand_path = os.path.join(root, "fixtures", "entropy-buffer", "candidates_prompt_ngrams_mini.jsonl")
+        history = lib.load_jsonl([hist_path])
+        candidates = lib.load_jsonl([cand_path])
+
+        scored = recommend._score(history, candidates)
+        top = recommend._select(scored, history, limit=1, max_per_family=0, max_per_template=0, avoid_seen_task_id=False, avoid_seen_prompt_norm=True)
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0].task_id, "math.prompt.aaa")
 
