@@ -789,6 +789,7 @@ MoE gate conditional keys:
 Per-layer helper views (exact tensor-name + count contract):
 
 - `tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` records the full non-expert suffix list for each trunk layer ID (base + CSA/HCA conditionals + correct gate suffix).
+- `tensor_keys.layer_required_nonexpert_keys_by_layer_id` expands the suffix list into exact checkpoint tensor names (`layers.{i}.*`) so external-runtime tooling can check “missing keys” without re-deriving templates.
 - `tensor_keys.layer_expected_tensor_key_count_by_layer_id` records the expected **total** per-layer tensor-key count (experts + non-expert suffixes).
 - `tensor_keys.layer_tensor_key_count_by_layer_id` records the observed official checkpoint per-layer tensor-key counts.
 - `tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok` is `true` for all trunk layers in the pinned official checkpoint (sanity check that the derived count formulas match reality).
@@ -800,6 +801,7 @@ MTP block (`mtp.0.*`):
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
 - The full non-expert MTP suffix set (required layer suffixes + MTP-only suffixes + score gate bias) is recorded as `tensor_keys.mtp_required_nonexpert_suffixes` for quick contract checks.
+- The expanded “exact tensor names” view is recorded as `tensor_keys.mtp_required_nonexpert_keys_by_layer_id` (and duplicated for convenience under `tensor_keys.mtp0.required_nonexpert_keys`).
 - Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
 - `contract_summary.json` also records the expected per-MTP-layer tensor-key count (`tensor_keys.mtp_expected_tensor_key_count_per_layer`) and the observed counts in the official safetensors index (`tensor_keys.mtp_tensor_key_count_by_layer_id`) so tooling can sanity-check “full upstream `mtp.0.*` preserved?” quickly.
 
