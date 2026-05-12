@@ -269,6 +269,7 @@ class SchedulerSimTest(unittest.TestCase):
             md = recommendations.format_runtime_trace_ablation_markdown(out)
             self.assertIn("# Scheduler Simulator Runtime Trace Report", md)
             self.assertIn("- mtp: present", md)
+            self.assertIn("## Results (arrival_units=steps)", md)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)

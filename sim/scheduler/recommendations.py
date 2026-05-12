@@ -95,10 +95,15 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     expert_queueing = _as_dict(evidence.get("expert_queueing"))
     mtp_draft_queue_cls = _as_dict(evidence.get("mtp_draft_queue_cls"))
     dflash = _as_dict(out.get("dflash_comparator"))
+    results = _as_dict(out.get("results"))
 
     lines: List[str] = []
     lines.append("# Scheduler Simulator Runtime Trace Report")
     lines.append("")
+
+    tokens = _as_dict(trace_summary.get("tokens"))
+    num_interactive = _as_int(tokens, "interactive", 0)
+    num_batch = _as_int(tokens, "batch", 0)
 
     lines.append("## Trace")
     lines.append(f"- name: `{_as_str(out, 'name', 'runtime_trace_mtp_ablation')}`")
@@ -163,6 +168,97 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
         ratio = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only", 0.0)
         ratio_adj = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0)
         lines.append(f"- dflash_comparator: present ratio_vs_target_only={ratio:.4f} adjusted={ratio_adj:.4f}")
+
+
+
+    def _as_summary(obj: object) -> Dict[str, float]:
+        if not isinstance(obj, dict):
+            return({})
+        raw = obj.get("summary")
+        if not isinstance(raw, dict):
+            return({})
+        out_s: Dict[str, float] = {}
+        for k, v in raw.items():
+            if not isinstance(k, str):
+                continue
+            if not isinstance(v, (int, float)):
+                continue
+            out_s[k] = float(v)
+        return(out_s)
+
+    def _fmt_float(x: float, *, digits: int = 3) -> str:
+        try:
+            v = float(x)
+        except Exception:
+            v = 0.0
+        return(f"{v:.{int(digits)}f}")
+
+    def _fmt_pct(x: float, *, digits: int = 3) -> str:
+        try:
+            v = float(x)
+        except Exception:
+            v = 0.0
+        return(f"{(100.0 * v):.{int(digits)}f}%")
+
+    def _render_sweep_table(title: str, sweep: Dict[str, object]) -> None:
+        base_node = sweep.get("baseline")
+        variants_node = sweep.get("variants")
+        if not isinstance(base_node, dict) or not isinstance(variants_node, dict):
+            return
+        base_sum = _as_summary(base_node)
+        if len(base_sum) == 0:
+            return
+
+        has_i = bool(int(num_interactive) > 0)
+        has_b = bool(int(num_batch) > 0)
+
+        headers = ["variant", "svc_ms/out", "out_tps"]
+        if has_i:
+            headers += ["drop_i", "p95_i_ms"]
+        if has_b:
+            headers += ["drop_b", "p95_b_ms"]
+        if bool(mtp.get("present")):
+            headers += ["verify_q_p95_ms", "draft_q_p95_ms"]
+
+        rows: List[Tuple[str, Dict[str, float]]] = [("baseline", base_sum)]
+        for label in sorted(variants_node.keys()):
+            node = variants_node.get(label)
+            if not isinstance(node, dict):
+                continue
+            s = _as_summary(node)
+            if len(s) == 0:
+                continue
+            rows.append((str(label), s))
+
+        lines.append(f"## {title}")
+        lines.append("")
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("| " + " | ".join(["---" for _h in headers]) + " |")
+        for label, s in rows:
+            cells: List[str] = []
+            cells.append(str(label))
+            cells.append(_fmt_float(float(s.get("service_slot_ms_per_output_token", 0.0)), digits=4))
+            cells.append(_fmt_float(float(s.get("output_token_throughput_tps", 0.0)), digits=3))
+            if has_i:
+                cells.append(_fmt_pct(float(s.get("drop_frac_tokens_interactive", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("output_token_p95_interactive_ms", 0.0)), digits=3))
+            if has_b:
+                cells.append(_fmt_pct(float(s.get("drop_frac_tokens_batch", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("output_token_p95_batch_ms", 0.0)), digits=3))
+            if bool(mtp.get("present")):
+                cells.append(_fmt_float(float(s.get("task_queue_wait_ms_p95_mtp_verify", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("task_queue_wait_ms_p95_mtp_draft", 0.0)), digits=3))
+            lines.append("| " + " | ".join(cells) + " |")
+        lines.append("")
+
+    if results is not None:
+        sweep_steps = _as_dict(results.get("arrival_units_steps"))
+        if sweep_steps is not None:
+            _render_sweep_table("Results (arrival_units=steps)", sweep_steps)
+
+        sweep_out = _as_dict(results.get("arrival_units_output_tokens"))
+        if sweep_out is not None:
+            _render_sweep_table("Results (arrival_units=output_tokens)", sweep_out)
 
     lines.append("")
     return("\n".join(lines))
