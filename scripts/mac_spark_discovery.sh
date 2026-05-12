@@ -146,6 +146,16 @@ for host in $targets; do
 		if [ "$out" = "" ]; then
 			echo "route: (no output)"
 		else
+			case "$out" in
+				*"Operation not permitted"*)
+					echo "route: permission_denied (sandbox?)"
+					continue
+					;;
+				*"not in table"*)
+					echo "route: not_in_table (resolve_failed?)"
+					continue
+					;;
+			esac
 			echo "$out" | awk '
 				/^[[:space:]]*(route to:|destination:|gateway:|interface:|ifscope:|flags:|mtu:|recvpipe:|sendpipe:|ssthresh:|rtt,|rttvar:|hopcount:)/ { print; next }
 				/^route: / { print; next }
