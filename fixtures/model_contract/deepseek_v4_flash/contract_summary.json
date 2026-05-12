@@ -1200,6 +1200,25 @@
       "head_logits_expr": "logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)",
       "hnorm_expr": "x = self.hnorm(x)",
       "input_shape_comment": "# x: [b,s,hc,d], hc_fn: [mix_hc,hc*d], hc_scale: [3], hc_base: [mix_hc], y: [b,s,hc,d]",
+      "source_helpers": {
+        "mtp_block_forward": {
+          "source_lines": [
+            "    @torch.inference_mode()",
+            "    def forward(self, x: torch.Tensor, start_pos: int, input_ids: torch.Tensor) -> torch.Tensor:",
+            "        # x: [b,s,hc,d]",
+            "        assert self.embed is not None and self.head is not None",
+            "        e = self.embed(input_ids)",
+            "        e = self.enorm(e)",
+            "        x = self.hnorm(x)",
+            "        x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)",
+            "        x = super().forward(x, start_pos, input_ids)",
+            "        logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)",
+            "        return logits"
+          ],
+          "source_lines_sha256": "f8ead39bd5f9f1258a4c403ee4e814c078bc5ca5f648e058b5f0b366dc957b27"
+        },
+        "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (MTPBlock.forward)"
+      },
       "super_forward_expr": "x = super().forward(x, start_pos, input_ids)"
     },
     "trust_gates": {

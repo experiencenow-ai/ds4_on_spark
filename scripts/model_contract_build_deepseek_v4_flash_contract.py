@@ -784,6 +784,7 @@ def parse_inference_mtp_semantics(model_py: Path) -> dict:
 	combine = find_first_line_containing(text, "x = self.e_proj(e).unsqueeze(2) + self.h_proj(x)")
 	super_forward = find_first_line_containing(text, "x = super().forward(x, start_pos, input_ids)")
 	head = find_first_line_containing(text, "logits = self.head(x, self.hc_head_fn, self.hc_head_scale, self.hc_head_base, self.norm)")
+	mtp_forward_lines = extract_class_method_source_lines(text, "MTPBlock", "forward")
 
 	return {
 		"input_shape_comment": input_shape_comment,
@@ -794,6 +795,13 @@ def parse_inference_mtp_semantics(model_py: Path) -> dict:
 		"combine_e_and_h_expr": combine,
 		"super_forward_expr": super_forward,
 		"head_logits_expr": head,
+		"source_helpers": {
+			"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (MTPBlock.forward)",
+			"mtp_block_forward": {
+				"source_lines": mtp_forward_lines,
+				"source_lines_sha256": sha256_lines(mtp_forward_lines) if isinstance(mtp_forward_lines, list) else None,
+			},
+		},
 	}
 
 def kv_cache_size(window_size: int, max_seq_len: int, compress_ratio: int) -> int:
