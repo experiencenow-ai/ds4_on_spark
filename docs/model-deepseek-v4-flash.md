@@ -67,6 +67,10 @@ Checkpoint tensor-key counts (from `model.safetensors.index.json` `weight_map` a
 - MTP (`mtp.*`) keys: `1575`
 - Top-level (neither `layers.*` nor `mtp.*`) keys: `6`
 
+Contract digests (for run reports / quick “did the execution contract change?” checks):
+
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `contract_fingerprints.execution_contract_sha256`: stable sha256 over the core execution contract (topology + schedule + cache semantics + tensor-key invariants + tokenizer/encoding + quantization).
+
 ## Source trace (official → pinned fixtures → DS4 contract)
 
 This contract is intentionally **source-traceable**: every claim is either taken directly from a pinned upstream file in `fixtures/model_contract/deepseek_v4_flash/` or is a deterministic derivation recorded in `contract_summary.json`.

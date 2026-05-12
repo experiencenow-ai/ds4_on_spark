@@ -51,6 +51,97 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(b"\n")
 	return h.hexdigest()
 
+def sha256_json(obj) -> str:
+	b = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+	return sha256(b).hexdigest()
+
+def build_contract_fingerprints(contract: dict) -> dict:
+	up = contract.get("upstream", {}) if isinstance(contract, dict) else {}
+	checkpoint_index = contract.get("checkpoint_index", {}) if isinstance(contract, dict) else {}
+	tensor_keys = contract.get("tensor_keys", {}) if isinstance(contract, dict) else {}
+	cache = contract.get("cache", {}) if isinstance(contract, dict) else {}
+	moe = contract.get("moe", {}) if isinstance(contract, dict) else {}
+	mtp = contract.get("mtp", {}) if isinstance(contract, dict) else {}
+
+	exec_subset = {
+		"model": contract.get("model"),
+		"upstream": {
+			"hf_repo_id": up.get("hf_repo_id"),
+			"hf_revision_pinned": up.get("hf_revision_pinned"),
+			"x_repo_commit": up.get("x_repo_commit"),
+		},
+		"topology": contract.get("topology", {}),
+		"attention_schedule": contract.get("attention_schedule", {}),
+		"mla": contract.get("mla", {}),
+		"moe": {
+			"n_routed_experts": moe.get("n_routed_experts"),
+			"n_shared_experts": moe.get("n_shared_experts"),
+			"n_activated_experts": moe.get("n_activated_experts"),
+			"moe_inter_dim": moe.get("moe_inter_dim"),
+			"scoring_func": moe.get("scoring_func"),
+			"route_scale": moe.get("route_scale"),
+			"n_hash_layers": moe.get("n_hash_layers"),
+		},
+		"mtp": {
+			"num_nextn_predict_layers": mtp.get("num_nextn_predict_layers"),
+			"compress_ratios": mtp.get("compress_ratios"),
+			"checkpoint_key_fingerprint": mtp.get("checkpoint_key_fingerprint"),
+			"trust_gates": mtp.get("trust_gates"),
+		},
+		"quantization": contract.get("quantization", {}),
+		"tokenizer": contract.get("tokenizer", {}),
+		"encoding_constants": contract.get("encoding_constants", {}),
+		"tensor_keys": {
+			"required_top_level": tensor_keys.get("required_top_level"),
+			"required_layer_suffixes": tensor_keys.get("required_layer_suffixes"),
+			"required_layer_suffixes_compress_ratio_nonzero": tensor_keys.get("required_layer_suffixes_compress_ratio_nonzero"),
+			"required_layer_suffixes_compress_ratio_4": tensor_keys.get("required_layer_suffixes_compress_ratio_4"),
+			"required_mtp_additional_suffixes": tensor_keys.get("required_mtp_additional_suffixes"),
+			"mtp_required_nonexpert_suffixes": tensor_keys.get("mtp_required_nonexpert_suffixes"),
+			"mtp_forbidden_key_suffixes": tensor_keys.get("mtp_forbidden_key_suffixes"),
+			"hash_gate_tensor_key_suffix": tensor_keys.get("hash_gate_tensor_key_suffix"),
+			"score_gate_tensor_key_suffix": tensor_keys.get("score_gate_tensor_key_suffix"),
+			"mtp_score_gate_tensor_key_suffix": tensor_keys.get("mtp_score_gate_tensor_key_suffix"),
+			"tensor_key_templates": tensor_keys.get("tensor_key_templates"),
+			"expert_tensor_key_templates": tensor_keys.get("expert_tensor_key_templates"),
+		},
+		"cache": {
+			"window_size": cache.get("window_size"),
+			"kv_cache_size_formula": cache.get("kv_cache_size_formula"),
+			"kv_cache_shape": cache.get("kv_cache_shape"),
+			"layer_cache_kind_by_layer_id": cache.get("layer_cache_kind_by_layer_id"),
+			"layer_compress_ratio_by_layer_id": cache.get("layer_compress_ratio_by_layer_id"),
+			"mtp_cache_kind_by_mtp_layer_id": cache.get("mtp_cache_kind_by_mtp_layer_id"),
+			"mtp_compress_ratio_by_mtp_layer_id": cache.get("mtp_compress_ratio_by_mtp_layer_id"),
+			"sparse_attn_mask_rule": cache.get("sparse_attn_mask_rule"),
+			"topk_mask_value": cache.get("topk_mask_value"),
+			"update_semantics": cache.get("update_semantics"),
+			"topk_index_helpers": cache.get("topk_index_helpers"),
+			"semantics_source_helpers": (cache.get("semantics", {}) if isinstance(cache.get("semantics", {}), dict) else {}).get("source_helpers", {}),
+		},
+		"checkpoint_index": {
+			"weight_map_num_tensors": checkpoint_index.get("weight_map_num_tensors"),
+			"weight_map_keys_sha256": checkpoint_index.get("weight_map_keys_sha256"),
+			"weight_map_layers_keys_sha256": checkpoint_index.get("weight_map_layers_keys_sha256"),
+			"weight_map_mtp_keys_sha256": checkpoint_index.get("weight_map_mtp_keys_sha256"),
+			"weight_map_top_level_keys_sha256": checkpoint_index.get("weight_map_top_level_keys_sha256"),
+		},
+	}
+
+	return {
+		"execution_contract_sha256": sha256_json(exec_subset),
+		"topology_sha256": sha256_json(contract.get("topology", {})),
+		"attention_schedule_sha256": sha256_json(contract.get("attention_schedule", {})),
+		"tensor_key_invariants_sha256": sha256_json(exec_subset.get("tensor_keys", {})),
+		"cache_semantics_sha256": sha256_json(exec_subset.get("cache", {})),
+		"tokenizer_encoding_sha256": sha256_json(
+			{
+				"tokenizer": contract.get("tokenizer", {}),
+				"encoding_constants": contract.get("encoding_constants", {}),
+			}
+		),
+	}
+
 
 
 def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path) -> Optional[list[str]]:
@@ -1805,6 +1896,7 @@ def build_contract() -> dict:
 					"metadata": idx.get("metadata", {}),
 				},
 		}
+	contract["contract_fingerprints"] = build_contract_fingerprints(contract)
 	return contract
 
 
