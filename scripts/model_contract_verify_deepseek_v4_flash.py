@@ -62,7 +62,7 @@ def repo_relpath(path: Path) -> str:
 		return str(path)
 
 
-def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
 	for k in weight_keys:
 		prefix = k.split(".", 1)[0]
@@ -71,9 +71,20 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	out: dict[str, dict] = {}
 	for prefix in sorted(prefix_to_keys.keys()):
 		keys = sorted(prefix_to_keys[prefix])
+		first_sample = None
+		last_sample = None
+		try:
+			n = int(sample_n)
+		except Exception:
+			n = 0
+		if n > 0 and len(keys) > 0:
+			first_sample = list(keys[:n])
+			last_sample = list(keys[-n:])
 		out[prefix] = {
 			"count": int(len(keys)),
 			"keys_sha256": sha256_lines(keys),
+			"first_keys_sample": first_sample,
+			"last_keys_sample": last_sample,
 		}
 	return out
 
@@ -1012,6 +1023,24 @@ def main() -> int:
 					got_ratios = mtp.get("compress_ratios", None)
 					if not (isinstance(want_ratios, list) and isinstance(got_ratios, list) and got_ratios == want_ratios):
 						failures.append(Failure(153, f"contract summary mtp.compress_ratios mismatch (expected attention_schedule.mtp_compress_ratios): {contract_summary}"))
+					ex = mtp.get("checkpoint_key_examples", None)
+					if want_layers > 0:
+						expected_layer_ids = list(range(int(want_layers)))
+						if not isinstance(ex, dict):
+							failures.append(Failure(185, f"contract summary mtp.checkpoint_key_examples must be an object when num_nextn_predict_layers>0: {contract_summary}"))
+						else:
+							if ex.get("layer_ids") != expected_layer_ids:
+								failures.append(Failure(186, f"contract summary mtp.checkpoint_key_examples.layer_ids mismatch (got {ex.get('layer_ids')!r} expected {expected_layer_ids}): {contract_summary}"))
+							want_prefixes = [f"mtp.{i}." for i in expected_layer_ids]
+							if ex.get("prefixes") != want_prefixes:
+								failures.append(Failure(187, f"contract summary mtp.checkpoint_key_examples.prefixes mismatch (got {ex.get('prefixes')!r} expected {want_prefixes}): {contract_summary}"))
+							for k in ("first_keys_sample", "last_keys_sample"):
+								v = ex.get(k, None)
+								if v is None:
+									continue
+								if not (isinstance(v, list) and all(isinstance(x, str) and x.startswith("mtp.") for x in v)):
+									failures.append(Failure(188, f"contract summary mtp.checkpoint_key_examples.{k} must be a list of mtp.* strings or null: {contract_summary}"))
+									break
 
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):

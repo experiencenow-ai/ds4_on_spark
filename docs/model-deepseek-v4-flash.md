@@ -647,9 +647,10 @@ To make the key set easy to reference in downstream tooling (and to detect accid
 - `checkpoint_index.weight_map_num_tensors`
 - `checkpoint_index.weight_map_keys_sha256`
 - `checkpoint_index.weight_map_top_level_keys_sha256`, `checkpoint_index.weight_map_top_level_tensor_key_count` (fingerprint/count for the non-`layers.*` / non-`mtp.*` top-level keys like `embed.weight` and `head.weight`)
-- `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`)
+- `checkpoint_index.weight_map_prefix_fingerprints` (per top-level prefix, including `layers` and `mtp`; includes small `first_keys_sample`/`last_keys_sample` lists for debugging)
 - `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256` (convenience copies of the per-prefix `layers` / `mtp` hashes)
 - `mtp.checkpoint_key_fingerprint` (official `mtp.*` subset fingerprint; useful for deciding whether an artifact set plausibly preserves upstream `mtp.0.*`)
+- `mtp.checkpoint_key_examples` (debug-only: official `mtp.*` layer IDs/prefixes plus small `first_keys_sample`/`last_keys_sample` lists)
 - `checkpoint_index.weight_map_file_counts` (how many keys map to each shard filename, from `model.safetensors.index.json`)
 
 ### Quantization scale tensor semantics (FP8/FP4)

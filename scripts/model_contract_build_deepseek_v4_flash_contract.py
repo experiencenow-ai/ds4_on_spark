@@ -242,7 +242,7 @@ def build_ds4_mtp_sidecar_contract() -> dict:
 		"reference_payload_samples": parse_ds4_mtp_sidecar_payload_samples_fingerprint(MTP_SIDECAR_REFERENCE_JSON),
 	}
 
-def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
 	for k in weight_keys:
 		prefix = k.split(".", 1)[0]
@@ -251,9 +251,20 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	out: dict[str, dict] = {}
 	for prefix in sorted(prefix_to_keys.keys()):
 		keys = sorted(prefix_to_keys[prefix])
+		first_sample: Optional[list[str]] = None
+		last_sample: Optional[list[str]] = None
+		try:
+			n = int(sample_n)
+		except Exception:
+			n = 0
+		if n > 0 and len(keys) > 0:
+			first_sample = list(keys[:n])
+			last_sample = list(keys[-n:])
 		out[prefix] = {
 			"count": int(len(keys)),
 			"keys_sha256": sha256_lines(keys),
+			"first_keys_sample": first_sample,
+			"last_keys_sample": last_sample,
 		}
 	return out
 
@@ -1607,6 +1618,24 @@ def build_contract() -> dict:
 	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	top_level_tensor_key_count = sum(int(v.get("count", 0)) for k, v in weight_map_prefix_fingerprints.items() if k not in ("layers", "mtp") and isinstance(v, dict))
 
+	mtp_weight_keys = [k for k in weight_keys if k.startswith("mtp.")]
+	mtp_layer_ids_present: list[int] = []
+	mtp_prefixes_present: list[str] = []
+	if mtp_weight_keys:
+		layer_ids: set[int] = set()
+		prefixes: set[str] = set()
+		for k in mtp_weight_keys:
+			parts = k.split(".", 2)
+			if len(parts) >= 2:
+				try:
+					layer_id = int(parts[1])
+					layer_ids.add(layer_id)
+					prefixes.add(f"mtp.{layer_id}.")
+				except ValueError:
+					pass
+		mtp_layer_ids_present = sorted(layer_ids)
+		mtp_prefixes_present = sorted(prefixes)
+
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
 	ref_max_seq_len = ref_defaults.get("max_seq_len", None)
@@ -1832,6 +1861,13 @@ def build_contract() -> dict:
 						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
 						"tensor_key_count": mtp_prefix_fp.get("count", None),
 						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					},
+					"checkpoint_key_examples": {
+						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
+						"layer_ids": mtp_layer_ids_present,
+						"prefixes": mtp_prefixes_present,
+						"first_keys_sample": list(mtp_weight_keys[:10]) if mtp_weight_keys else None,
+						"last_keys_sample": list(mtp_weight_keys[-10:]) if mtp_weight_keys else None,
 					},
 					"semantics": mtp_sem,
 						"trust_gates": {

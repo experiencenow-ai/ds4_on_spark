@@ -830,35 +830,99 @@
     "weight_map_prefix_fingerprints": {
       "embed": {
         "count": 1,
-        "keys_sha256": "acf578a8bb1d904fe7e55b31c99bd84cd59e3edd1a66ddda7e0689d5b183b8ad"
+        "first_keys_sample": [
+          "embed.weight"
+        ],
+        "keys_sha256": "acf578a8bb1d904fe7e55b31c99bd84cd59e3edd1a66ddda7e0689d5b183b8ad",
+        "last_keys_sample": [
+          "embed.weight"
+        ]
       },
       "hc_head_base": {
         "count": 1,
-        "keys_sha256": "c5182905c29b7ab1698ea6cd5f1a1ba5c879b5d785465ba699b7567220927fd3"
+        "first_keys_sample": [
+          "hc_head_base"
+        ],
+        "keys_sha256": "c5182905c29b7ab1698ea6cd5f1a1ba5c879b5d785465ba699b7567220927fd3",
+        "last_keys_sample": [
+          "hc_head_base"
+        ]
       },
       "hc_head_fn": {
         "count": 1,
-        "keys_sha256": "2d3db9c796531c22509d98707a4a714e2bcabda5e89e4ab5a24f32eefd351690"
+        "first_keys_sample": [
+          "hc_head_fn"
+        ],
+        "keys_sha256": "2d3db9c796531c22509d98707a4a714e2bcabda5e89e4ab5a24f32eefd351690",
+        "last_keys_sample": [
+          "hc_head_fn"
+        ]
       },
       "hc_head_scale": {
         "count": 1,
-        "keys_sha256": "c3a24882990dfa7b77e630996a77e0ec82d0e3f6d1a810ecfc8b469b919e33d1"
+        "first_keys_sample": [
+          "hc_head_scale"
+        ],
+        "keys_sha256": "c3a24882990dfa7b77e630996a77e0ec82d0e3f6d1a810ecfc8b469b919e33d1",
+        "last_keys_sample": [
+          "hc_head_scale"
+        ]
       },
       "head": {
         "count": 1,
-        "keys_sha256": "ec3156bdb31fc93968681938bb5e2e1a08dbe81481a398d1412f03ec3dc26a66"
+        "first_keys_sample": [
+          "head.weight"
+        ],
+        "keys_sha256": "ec3156bdb31fc93968681938bb5e2e1a08dbe81481a398d1412f03ec3dc26a66",
+        "last_keys_sample": [
+          "head.weight"
+        ]
       },
       "layers": {
         "count": 67606,
-        "keys_sha256": "a1bdd3ff48fc96f5ef8ee3e4b13fbfbb8b6d07096803c7af34f911c3953cab57"
+        "first_keys_sample": [
+          "layers.0.attn.attn_sink",
+          "layers.0.attn.kv_norm.weight",
+          "layers.0.attn.q_norm.weight",
+          "layers.0.attn.wkv.scale",
+          "layers.0.attn.wkv.weight"
+        ],
+        "keys_sha256": "a1bdd3ff48fc96f5ef8ee3e4b13fbfbb8b6d07096803c7af34f911c3953cab57",
+        "last_keys_sample": [
+          "layers.9.hc_attn_fn",
+          "layers.9.hc_attn_scale",
+          "layers.9.hc_ffn_base",
+          "layers.9.hc_ffn_fn",
+          "layers.9.hc_ffn_scale"
+        ]
       },
       "mtp": {
         "count": 1575,
-        "keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62"
+        "first_keys_sample": [
+          "mtp.0.attn.attn_sink",
+          "mtp.0.attn.kv_norm.weight",
+          "mtp.0.attn.q_norm.weight",
+          "mtp.0.attn.wkv.scale",
+          "mtp.0.attn.wkv.weight"
+        ],
+        "keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
+        "last_keys_sample": [
+          "mtp.0.hc_head_base",
+          "mtp.0.hc_head_fn",
+          "mtp.0.hc_head_scale",
+          "mtp.0.hnorm.weight",
+          "mtp.0.norm.weight"
+        ]
       },
       "norm": {
         "count": 1,
-        "keys_sha256": "14109a40d47d1f284fdf3c644ea81582c1f144f7bd4762d2220c3e565c6a4a3d"
+        "first_keys_sample": [
+          "norm.weight"
+        ],
+        "keys_sha256": "14109a40d47d1f284fdf3c644ea81582c1f144f7bd4762d2220c3e565c6a4a3d",
+        "last_keys_sample": [
+          "norm.weight"
+        ]
       }
     },
     "weight_map_top_level_keys_sha256": "6a3f38353214cde43e43b9603b9eed9e26d75ee7ccabd5366041f58d168e2703",
@@ -1490,6 +1554,39 @@
     ]
   },
   "mtp": {
+    "checkpoint_key_examples": {
+      "first_keys_sample": [
+        "mtp.0.attn.attn_sink",
+        "mtp.0.attn.kv_norm.weight",
+        "mtp.0.attn.q_norm.weight",
+        "mtp.0.attn.wkv.scale",
+        "mtp.0.attn.wkv.weight",
+        "mtp.0.attn.wo_a.scale",
+        "mtp.0.attn.wo_a.weight",
+        "mtp.0.attn.wo_b.scale",
+        "mtp.0.attn.wo_b.weight",
+        "mtp.0.attn.wq_a.scale"
+      ],
+      "last_keys_sample": [
+        "mtp.0.hc_attn_fn",
+        "mtp.0.hc_attn_scale",
+        "mtp.0.hc_ffn_base",
+        "mtp.0.hc_ffn_fn",
+        "mtp.0.hc_ffn_scale",
+        "mtp.0.hc_head_base",
+        "mtp.0.hc_head_fn",
+        "mtp.0.hc_head_scale",
+        "mtp.0.hnorm.weight",
+        "mtp.0.norm.weight"
+      ],
+      "layer_ids": [
+        0
+      ],
+      "note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
+      "prefixes": [
+        "mtp.0."
+      ]
+    },
     "checkpoint_key_fingerprint": {
       "keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
       "note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
