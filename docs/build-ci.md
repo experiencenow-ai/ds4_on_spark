@@ -4,6 +4,8 @@ This document describes CI-friendly command lines for CPU-only and CUDA-enabled 
 
 The default CI posture should be CPU-only (`DS4_ENABLE_CUDA=OFF`) so it can run on macOS and generic Linux runners.
 
+When `DS4_ENABLE_TESTS=ON`, CTest also runs a small build-matrix smoke test (`ds4_build_matrix`) that configures/builds a few option combinations (library-only, CLI-only, tests-without-CLI) in CPU-only mode.
+
 ## CPU-only (portable)
 
 Makefile wrapper (recommended):
