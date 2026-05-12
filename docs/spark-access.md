@@ -70,10 +70,11 @@ rm -rf .codex_git
 git init --bare .codex_git
 git --git-dir=.codex_git remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
 mkdir -p .codex_git/objects/info
-printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
-git --git-dir=.codex_git fetch origin main
-git --git-dir=.codex_git --work-tree=. checkout -f -B codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
-```
+	printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
+	git --git-dir=.codex_git fetch origin main
+	git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+	git --git-dir=.codex_git --work-tree=. checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
+	```
 
 ```bash
 # One-time setup (from repo root, simplest gitdir shim; creates `.codex_git/` as a gitdir)
@@ -103,10 +104,10 @@ it usually means the shim gitdir has no index yet (so it sees your existing chec
 
 Fast path (overwrites the working tree; only do this when `git status` is clean and you are OK discarding any local-only files):
 
-```bash
-git --git-dir=.codex_git --work-tree=. fetch origin --prune
-git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
-```
+	```bash
+	git --git-dir=.codex_git --work-tree=. fetch origin --prune
+	git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+	```
 
 If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
 
