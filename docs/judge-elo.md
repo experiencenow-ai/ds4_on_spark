@@ -15,7 +15,7 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `margin`: integer `0..3` (strength of preference; `0` == near-tie)
 - `score_a`: integer `0..10`
 - `score_b`: integer `0..10`
-- `reason`: string, **≤ 18 words** (prefer ≤ 12), **single-line**
+- `reason`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
 - `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
@@ -46,6 +46,7 @@ Optional but recommended (for speed/quality separation and budgeting):
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
 - `parse_error`: short string when `parse_valid=false`
+  - When `parse_valid=false`, include `raw` and/or `parse_error` (at least one is required; both is recommended).
   - `raw` is capped at 512 chars; `parse_error` at 128 chars.
 
 For baseline-quality joins, treat `tokens` and `latency_ms` as required and validate with:

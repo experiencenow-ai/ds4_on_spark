@@ -94,6 +94,8 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
         errs.append("score_b must be in [0,10]")
 
     reason = _as_str(obj.get("reason"), "reason", errs)
+    if reason.strip() == "":
+        errs.append("reason must be non-empty")
     if reason != "" and _words(reason) > 18:
         errs.append("reason must be <= 18 words")
     if reason != "" and len(reason) > 200:
@@ -177,6 +179,8 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             errs.append("parse_error must be <= 128 chars")
         if isinstance(parse_error, str) and _has_newline(parse_error):
             errs.append("parse_error must be a single line (no newlines)")
+        if raw is None and parse_error is None:
+            errs.append("parse_invalid records must include raw and/or parse_error")
 
     tokens = _as_obj(obj.get("tokens"), "tokens", errs)
     if tokens is not None:
