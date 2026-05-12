@@ -17,6 +17,7 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 - Centaur package zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
   - Zip contains `centaur_spec_impl_v73/` with `centaur.py`, `requirements.txt`, and tests.
   - Do **not** commit the zip or venvs into this repo.
+  - Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
   - Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
 
     ```bash
@@ -29,12 +30,8 @@ The smoke prints “package facts” early in the run so bug reports can include
 
 - `zip_mtime/size`: from `ls -la "$CENTAUR_ZIP"`
 - `zip_sha256`: computed from the zip bytes
-- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (observed in `/Users/mac/Downloads/centaur_spec_impl_v73.zip` mtime `2026-05-11 02:08` local: `centaur-impl-0.68`)
-- `zip_sha256` (observed in the same zip): `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
-- `requirements.txt` (observed in the same zip):
-  - `numpy>=1.26`
-  - `scipy>=1.11`
-  - `scikit-learn>=1.4`
+- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (see `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`)
+- `requirements.txt`: extracted from the zip (see `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`)
 
 If `pip install` falls back to building these from source (missing wheels for your Python/OS), treat that as a **DS4 runtime/host compatibility** issue for the purposes of triage (not a Centaur logic bug).
 

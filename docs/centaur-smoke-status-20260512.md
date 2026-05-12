@@ -9,9 +9,7 @@ weight downloads.
 ## Inputs
 
 - Centaur zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
-  - mtime/size: `-rw-r--r--@ 1 mac  staff  385391 May 11 02:08 /Users/mac/Downloads/centaur_spec_impl_v73.zip`
-  - `zip_sha256`: `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
-  - `decomposer_version`: `centaur-impl-0.68`
+  - Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
 
 ## Spark0 v73 smoke (PASS)
 

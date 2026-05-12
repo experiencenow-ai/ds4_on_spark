@@ -1,0 +1,27 @@
+{
+  "artifact": {
+    "basename": "centaur_spec_impl_v73.zip",
+    "sha256": "3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a",
+    "size_bytes": 385391,
+    "mtime_utc": "2026-05-11T02:08:11Z"
+  },
+  "centaur": {
+    "decomposer_version": "centaur-impl-0.68"
+  },
+  "requirements_txt": [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-learn>=1.4"
+  ],
+  "zip_entries_prefixes": [
+    "centaur_spec_impl_v73/",
+    "centaur_spec_impl_v73/docs/",
+    "centaur_spec_impl_v73/tests/"
+  ],
+  "generated_by": {
+    "script": "scripts/centaur_v73_zip_facts.sh",
+    "source_path_example": "/Users/mac/Downloads/centaur_spec_impl_v73.zip",
+    "observed_utc": "2026-05-12T18:11:31Z",
+    "notes": "Facts for the Centaur v73 zip used by Spark0 smoke/ring runbooks. Do not commit the zip itself."
+  }
+}

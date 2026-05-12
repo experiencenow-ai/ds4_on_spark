@@ -428,6 +428,7 @@ If you can provide a shared writable filesystem path visible on Spark0/1/2 (NFS,
 When the ring sim/rsync run fails, capture:
 
 - Centaur zip facts: `ls -la` and `sha256` of `centaur_spec_impl_v73.zip`
+- Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
 - Mac-side helper: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip`
 - `python3 -V` and `pip freeze` (at least numpy/scipy/scikit-learn)
 - Exact Centaur command lines that failed (copy/paste)

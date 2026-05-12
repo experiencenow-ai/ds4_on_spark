@@ -112,6 +112,7 @@ class JudgeEloTest(unittest.TestCase):
                 "--strict",
             ])
             self.assertTrue(os.path.exists(os.path.join(td, "summary.md")))
+            self.assertTrue(os.path.exists(os.path.join(td, "bundle.json")))
             subprocess.check_call([
                 "python3",
                 validate_script,
@@ -513,9 +514,10 @@ class JudgeEloTest(unittest.TestCase):
         prompt_v2_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v2.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
         budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
+        bundle_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_bundle_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, prompt_path, prompt_v2_path, meta_path, budget_path, qmap_path, leaderboard_path):
+        for path in (dec_path, rec_path, prompt_path, prompt_v2_path, meta_path, budget_path, bundle_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):

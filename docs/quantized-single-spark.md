@@ -38,6 +38,7 @@ If `MODEL_RUNS_CSV` is unset, `scripts/run_quantized_single_spark.sh` defaults i
 - Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
+  - The commit-ready report rendered by `scripts/render_quantized_single_spark_report.py` surfaces the contract-aware fields from `remote_gguf_inspect_stdout.txt`, including (when present): `mtp_keys_sha256`, `mtp_namespace.*`, `mtp_preservation.*`, and `mtp_trust.*`.
 - The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
   - Always record `weight_keys_sha256` (stable fingerprint of the artifact’s tensor key set). When `mtp_present=true`, also record `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
   - When available, also record `tensor_type_profile` (best-effort expert vs dense split for known DeepSeek-V4 GGUF naming), since it captures whether MoE experts appear to be `MXFP4` (Flash-leaning) vs primarily FP8.

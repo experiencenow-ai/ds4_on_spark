@@ -11,6 +11,7 @@ Rules:
 Current fixtures:
 
 - `fixtures/centaur-smoke/spark0-v73/unit_model_catalog.json`: one synthetic model candidate for `hyor-model-catalog-import`.
+- `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`: sanitized facts for the Centaur v73 zip used in the runbooks.
 
 ## Sanitized smoke bundles (outputs)
 

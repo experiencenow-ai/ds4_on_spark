@@ -360,9 +360,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         wks = inspect.get("weight_keys_sha256")
         if isinstance(wks, str) and wks.strip():
             lines.append(f"- weight_keys_sha256={wks.strip()}")
+        mks = inspect.get("mtp_keys_sha256")
+        if isinstance(mks, str) and mks.strip():
+            lines.append(f"- mtp_keys_sha256={mks.strip()}")
         tns = inspect.get("tensor_key_namespace_guess")
         if isinstance(tns, str) and tns.strip():
             lines.append(f"- tensor_key_namespace_guess={tns.strip()}")
+        ttop = inspect.get("topology_contract")
+        if isinstance(ttop, dict):
+            checked = ttop.get("checked")
+            mismatches = ttop.get("mismatches")
+            mismatch_count = len(mismatches) if isinstance(mismatches, list) else 0
+            if checked is not None:
+                lines.append(f"- topology_contract: checked={checked} mismatch_count={mismatch_count}")
+                if mismatch_count and isinstance(mismatches[0], str) and mismatches[0].strip():
+                    lines.append(f"- topology_contract_first_mismatch={mismatches[0].strip()}")
         tc = inspect.get("trunk_contract")
         if isinstance(tc, dict):
             kind = tc.get("kind")
@@ -378,6 +390,31 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if isinstance(reason, str) and reason.strip():
                     extra = f" reason={reason.strip()}"
                 lines.append(f"- mtp_contract: checked={checked}{extra}")
+        mns = inspect.get("mtp_namespace")
+        if isinstance(mns, dict):
+            has_mtp0 = mns.get("has_mtp0")
+            expected_complete = mns.get("expected_complete")
+            present_prefixes = mns.get("present_prefixes")
+            if present_prefixes is None:
+                present_prefixes = []
+            if has_mtp0 is not None or expected_complete is not None or present_prefixes:
+                prefixes = ",".join([str(p) for p in present_prefixes]) if isinstance(present_prefixes, list) else ""
+                lines.append(
+                    f"- mtp_namespace: has_mtp0={has_mtp0} expected_complete={expected_complete} present_prefixes=[{prefixes}]"
+                )
+        mp = inspect.get("mtp_preservation")
+        if isinstance(mp, dict):
+            status = mp.get("status")
+            match_official = mp.get("mtp_keys_sha256_match_official")
+            preserves = mp.get("preserves")
+            if status is not None or match_official is not None or preserves is not None:
+                lines.append(f"- mtp_preservation: status={status} preserves={preserves} mtp_keys_sha256_match_official={match_official}")
+        mt = inspect.get("mtp_trust")
+        if isinstance(mt, dict):
+            status = mt.get("status")
+            trusted = mt.get("trusted")
+            if status is not None or trusted is not None:
+                lines.append(f"- mtp_trust: status={status} trusted={trusted}")
         qc = inspect.get("quantization_contract")
         if isinstance(qc, dict) and qc.get("checked") is not None:
             obs = qc.get("observed", {})
