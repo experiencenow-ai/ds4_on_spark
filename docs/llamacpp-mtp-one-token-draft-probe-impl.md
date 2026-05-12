@@ -106,6 +106,7 @@ This repo ships a **skeleton** patch against the pinned Spark fork (`9222e55`) t
   - `mtp_stub_head_norm_fnv64`
   - `mtp_stub_head_norm_nbytes`
   - `mtp_stub_head_norm_shape`
+- optional (still not a real draft): when stub head-norm exists, it best-effort projects that vector through the trunk vocab matrix (`output.weight`) and takes `argmax`, reporting the result via `mtp_draft_token_id` / `mtp_draft_token` (still `ok=false` until the full MTP block + cache exists)
 - emits the required JSON contract, including optional debug keys `trunk_pre_hc_head_fnv64`, `trunk_pre_hc_head_nbytes`, and `trunk_pre_hc_head_shape`, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
 
 Patch file:
