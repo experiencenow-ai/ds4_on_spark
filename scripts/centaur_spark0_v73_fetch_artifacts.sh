@@ -24,7 +24,7 @@ Environment:
 
 Examples:
   ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> 20260511T120827Z
-  ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> 20260511T120827Z ~/centaur-smoke/v73 /private/tmp/centaur-smoke/spark0-v73/20260511T120827Z
+  ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> 20260511T120827Z "~/centaur-smoke/v73" /private/tmp/centaur-smoke/spark0-v73/20260511T120827Z
 USAGE
 }
 

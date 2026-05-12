@@ -148,6 +148,12 @@ except Exception as e:
 print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
+echo "== fetching remote one-token validation JSON (best-effort) =="
+ssh $SSH_OPTS "$target" "cat /tmp/mtp_one_token_probe_validate.json" \
+	>"$OUT_DIR/mtp_one_token_probe_validate_remote.json" 2>"$OUT_DIR/mtp_one_token_probe_validate_remote_stderr.txt" || true
+ssh $SSH_OPTS "$target" "cat /tmp/mtp_one_token_probe_validate_sidecar.json" \
+	>"$OUT_DIR/mtp_one_token_probe_validate_sidecar_remote.json" 2>"$OUT_DIR/mtp_one_token_probe_validate_sidecar_remote_stderr.txt" || true
+
 {
 	echo "## Results"
 	echo
@@ -171,7 +177,53 @@ PY
 	echo "- stderr: $OUT_DIR/remote_mtp_one_token_stderr.txt"
 	echo "- probe JSON (if parseable): $OUT_DIR/mtp_one_token_probe.json"
 	echo "- parsed status: $OUT_DIR/mtp_one_token_probe_parse.json"
+	echo "- validate JSON (remote; best-effort): $OUT_DIR/mtp_one_token_probe_validate_remote.json"
+	echo "- validate stderr (remote; best-effort): $OUT_DIR/mtp_one_token_probe_validate_remote_stderr.txt"
+	echo "- validate sidecar JSON (remote; best-effort): $OUT_DIR/mtp_one_token_probe_validate_sidecar_remote.json"
+	echo "- validate sidecar stderr (remote; best-effort): $OUT_DIR/mtp_one_token_probe_validate_sidecar_remote_stderr.txt"
 	echo
 } >>"$REPORT_MD"
 
 echo "done: $REPORT_MD"
+
+python3 - "$OUT_DIR" "$REPORT_MD" 2>/dev/null <<'PY' || true
+import json
+import sys
+from pathlib import Path
+
+out_dir = Path(sys.argv[1])
+report_md = Path(sys.argv[2])
+
+def read_json(p: Path):
+	try:
+		return json.loads(p.read_text(encoding="utf-8"))
+	except Exception:
+		return None
+
+probe_parse = read_json(out_dir / "mtp_one_token_probe_parse.json") or {}
+v1 = read_json(out_dir / "mtp_one_token_probe_validate_remote.json")
+v2 = read_json(out_dir / "mtp_one_token_probe_validate_sidecar_remote.json")
+
+probe_ok = bool(probe_parse.get("ok", False))
+validate_ok = bool(v1.get("ok", False)) if isinstance(v1, dict) else False
+validate_sidecar_ok = bool(v2.get("ok", False)) if isinstance(v2, dict) else False
+
+summary = {
+	"ok": bool(probe_ok and validate_ok),
+	"probe_ok": probe_ok,
+	"validate_ok": validate_ok,
+	"validate_sidecar_ok": validate_sidecar_ok,
+	"artifacts": {
+		"report_md": str(report_md),
+		"probe_json": str(out_dir / "mtp_one_token_probe.json"),
+		"probe_parse_json": str(out_dir / "mtp_one_token_probe_parse.json"),
+		"validate_remote_json": str(out_dir / "mtp_one_token_probe_validate_remote.json"),
+		"validate_sidecar_remote_json": str(out_dir / "mtp_one_token_probe_validate_sidecar_remote.json"),
+	},
+	"probe_parse": probe_parse,
+	"validate_remote": v1 if isinstance(v1, dict) else None,
+	"validate_sidecar_remote": v2 if isinstance(v2, dict) else None,
+}
+
+(out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY

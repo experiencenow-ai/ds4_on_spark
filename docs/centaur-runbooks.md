@@ -17,12 +17,21 @@ From your Mac (repo root):
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
-sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
+export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or `scp` (fallback).
 
-After the run, validate that expected outputs exist (run on Spark0):
+The evidence helper runs:
+
+- stage + smoke (streamed)
+- Spark0 artifact validation
+- Mac-side artifact fetch into `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`)
+
+If you prefer running the pieces manually, see `docs/centaur-spark0-v73-smoke.md`.
+
+After a manual run, validate that expected outputs exist (run on Spark0):
 
 ```bash
 ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_RUN_ID=...; sh -s" < ./scripts/centaur_spark0_v73_validate_artifacts.sh
@@ -32,6 +41,12 @@ To fetch a small sanitized artifact bundle (log + manifests + dashboard) back to
 
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+```
+
+To promote a fetched bundle into a commit-ready fixtures directory (after review/redaction):
+
+```bash
+sh ./scripts/centaur_spark0_v73_fixture_pack.sh "$CENTAUR_RUN_ID"
 ```
 
 Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
@@ -68,6 +83,7 @@ If you also have Spark3, use:
   - `scripts/centaur_spark0_v73_smoke.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_validate_artifacts.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark0_v73_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
 - Spark1/2 ring:
   - `scripts/centaur_spark12_v73_stage.sh`
   - `scripts/centaur_spark12_v73_node_setup_run.sh` (Mac-side wrapper)
@@ -75,9 +91,12 @@ If you also have Spark3, use:
   - `scripts/centaur_spark_ring_sim_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_sim_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_ring_sim_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_rsync_run.sh` (Mac-side wrapper)
+  - `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh` (Mac-side one-command evidence helper)
   - `scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark12_v73_validate_ring_artifacts.sh` (runs on orchestrator host)
   - `scripts/centaur_spark_v73_node_setup_run.sh` (single-node wrapper; Spark1/Spark2/etc)
 - Optional HTTP transport helpers:

@@ -15,6 +15,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
+SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
+SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
+SCHEMA_BUDGET_V1 = "ds4_judge_elo_budget_v1"
+SCHEMA_QUALITY_MAP_V1 = "judge_elo_quality_map_v1"
+SCHEMA_LEADERBOARD_V1 = "judge_elo_leaderboard_v1"
 
 WINNERS = ("A", "B", "tie")
 
@@ -60,8 +65,36 @@ def _as_int(v: Any, field: str, errs: List[str]) -> Optional[int]:
     return None
 
 
+def _as_num(v: Any, field: str, errs: List[str]) -> Optional[float]:
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        fv = float(v)
+        if _finite(fv):
+            return fv
+        errs.append(f"{field} must be finite")
+        return None
+    errs.append(f"{field} must be a number")
+    return None
+
+
 def _finite(v: float) -> bool:
     return not (math.isnan(v) or math.isinf(v))
+
+def _allowed_margins_for_score_diff(diff: int) -> Tuple[int, ...]:
+    """Allowed margin values given abs(score_a-score_b).
+
+    This is enforced only in strict mode (validate_record_strict). It keeps the
+    decision internally consistent while still allowing "near-tie but pick a
+    winner" cases.
+    """
+    if diff <= 0:
+        return (0,)
+    if diff == 1:
+        return (0, 1)
+    if diff == 2:
+        return (1, 2)
+    if diff == 3:
+        return (2,)
+    return (3,)
 
 
 @dataclass(frozen=True)
@@ -94,6 +127,8 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
         errs.append("score_b must be in [0,10]")
 
     reason = _as_str(obj.get("reason"), "reason", errs)
+    if reason.strip() == "":
+        errs.append("reason must be non-empty")
     if reason != "" and _words(reason) > 18:
         errs.append("reason must be <= 18 words")
     if reason != "" and len(reason) > 200:
@@ -177,6 +212,8 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             errs.append("parse_error must be <= 128 chars")
         if isinstance(parse_error, str) and _has_newline(parse_error):
             errs.append("parse_error must be a single line (no newlines)")
+        if raw is None and parse_error is None:
+            errs.append("parse_invalid records must include raw and/or parse_error")
 
     tokens = _as_obj(obj.get("tokens"), "tokens", errs)
     if tokens is not None:
@@ -249,6 +286,20 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
         if isinstance(parse_error, str) and len(parse_error) > 128:
             errs.append("parse_error must be <= 128 chars")
 
+    if parse_valid is True:
+        winner = obj.get("winner")
+        score_a = obj.get("score_a")
+        score_b = obj.get("score_b")
+        margin = obj.get("margin")
+        if isinstance(winner, str) and winner in ("A", "B"):
+            if _is_int(score_a) and _is_int(score_b) and _is_int(margin):
+                diff = abs(int(score_a) - int(score_b))
+                if diff <= 0:
+                    errs.append("non-tie winners require score_a!=score_b")
+                allowed = _allowed_margins_for_score_diff(int(diff))
+                if int(margin) not in allowed:
+                    errs.append(f"margin must be in {list(allowed)} for score diff {diff}")
+
     return errs
 
 
@@ -293,3 +344,197 @@ def iter_jsonl(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
             if not isinstance(obj, dict):
                 raise ValueError(f"{path}:{lineno}: JSONL line must be an object")
             yield lineno, obj
+
+
+def validate_prompt(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["prompt must be an object"]
+    schema_v = _as_str(obj.get("schema"), "schema", errs)
+    if schema_v != "" and schema_v != SCHEMA_PROMPT_V1:
+        errs.append(f"schema must be {SCHEMA_PROMPT_V1!r}")
+    jot = _as_int(obj.get("judge_out_target"), "judge_out_target", errs)
+    if jot is not None and jot <= 0:
+        errs.append("judge_out_target must be > 0")
+    system = _as_str(obj.get("system"), "system", errs).strip()
+    if system == "":
+        errs.append("system is required")
+    user = _as_str(obj.get("user"), "user", errs).strip()
+    if user == "":
+        errs.append("user is required")
+    sh = obj.get("schema_hint")
+    if not isinstance(sh, dict):
+        errs.append("schema_hint must be an object")
+    return errs
+
+
+def validate_quality_map(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["quality_map must be an object mapping model->score"]
+    for k, v in obj.items():
+        if not isinstance(k, str) or k.strip() == "":
+            errs.append("quality_map keys must be non-empty strings")
+            continue
+        fv = _as_num(v, f"quality_map[{k!r}]", errs)
+        if fv is None:
+            continue
+        if fv < 0.0 or fv > 100.0:
+            errs.append(f"quality_map[{k!r}] must be in [0,100]")
+    return errs
+
+
+def validate_leaderboard(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, list):
+        return ["leaderboard must be a JSON array"]
+    for i, row in enumerate(obj):
+        if not isinstance(row, dict):
+            errs.append(f"leaderboard[{i}] must be an object")
+            continue
+        model = _as_str(row.get("model"), f"leaderboard[{i}].model", errs).strip()
+        if model == "":
+            errs.append(f"leaderboard[{i}].model is required")
+        for k in ("games", "wins", "losses", "ties"):
+            v = _as_int(row.get(k), f"leaderboard[{i}].{k}", errs)
+            if v is not None and v < 0:
+                errs.append(f"leaderboard[{i}].{k} must be >= 0")
+        elo = _as_num(row.get("elo"), f"leaderboard[{i}].elo", errs)
+        if elo is not None and not _finite(float(elo)):
+            errs.append(f"leaderboard[{i}].elo must be finite")
+        qs = _as_num(row.get("quality_score"), f"leaderboard[{i}].quality_score", errs)
+        if qs is not None and (qs < 0.0 or qs > 100.0):
+            errs.append(f"leaderboard[{i}].quality_score must be in [0,100]")
+        src = row.get("quality_source")
+        if not isinstance(src, str) or src.strip() == "":
+            errs.append(f"leaderboard[{i}].quality_source is required")
+    return errs
+
+
+def validate_meta(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["meta must be an object"]
+    schema_v = _as_str(obj.get("schema"), "schema", errs)
+    if schema_v != "" and schema_v != SCHEMA_META_V1:
+        errs.append(f"schema must be {SCHEMA_META_V1!r}")
+
+    records = _as_int(obj.get("records"), "records", errs)
+    matches_used = _as_int(obj.get("matches_used"), "matches_used", errs)
+    k = _as_num(obj.get("k"), "k", errs)
+    scale = _as_num(obj.get("scale"), "scale", errs)
+    sort_by_pair_id = _as_bool(obj.get("sort_by_pair_id"), "sort_by_pair_id", errs)
+    if records is not None and records < 0:
+        errs.append("records must be >= 0")
+    if matches_used is not None and matches_used < 0:
+        errs.append("matches_used must be >= 0")
+    if k is not None and k <= 0.0:
+        errs.append("k must be > 0")
+    if scale is not None and scale <= 0.0:
+        errs.append("scale must be > 0")
+    if sort_by_pair_id is None:
+        pass
+
+    for field in ("parse_valid_true", "parse_valid_false", "matches_skipped_invalid_schema", "unique_models"):
+        v = obj.get(field)
+        if v is None:
+            continue
+        iv = _as_int(v, field, errs)
+        if iv is not None and iv < 0:
+            errs.append(f"{field} must be >= 0")
+
+    inputs = obj.get("inputs")
+    if inputs is None:
+        errs.append("inputs is required")
+    elif not isinstance(inputs, list) or any(not isinstance(x, str) for x in inputs):
+        errs.append("inputs must be an array of strings")
+
+    strict_v = obj.get("strict")
+    if strict_v is not None and not isinstance(strict_v, bool):
+        errs.append("strict must be a boolean when present")
+
+    qm = obj.get("quality_mode")
+    if not isinstance(qm, str) or qm not in ("logistic", "minmax"):
+        errs.append("quality_mode must be 'logistic' or 'minmax'")
+    qs = obj.get("quality_source")
+    if not isinstance(qs, str) or qs.strip() == "":
+        errs.append("quality_source is required")
+    jot = obj.get("judge_out_target_tokens")
+    jot_i = _as_int(jot, "judge_out_target_tokens", errs)
+    if jot_i is not None and jot_i <= 0:
+        errs.append("judge_out_target_tokens must be > 0")
+    return errs
+
+
+def _validate_budget_stats(stats: Any, field: str, errs: List[str]) -> None:
+    if not isinstance(stats, dict):
+        errs.append(f"{field} must be an object")
+        return
+    count = _as_num(stats.get("count"), f"{field}.count", errs)
+    if count is not None and count < 0.0:
+        errs.append(f"{field}.count must be >= 0")
+    missing = stats.get("missing")
+    if missing is not None:
+        mv = _as_num(missing, f"{field}.missing", errs)
+        if mv is not None and mv < 0.0:
+            errs.append(f"{field}.missing must be >= 0")
+    present = stats.get("present_fraction")
+    if present is not None:
+        pv = _as_num(present, f"{field}.present_fraction", errs)
+        if pv is not None and (pv < 0.0 or pv > 1.0):
+            errs.append(f"{field}.present_fraction must be in [0,1]")
+    for k in ("min", "p50", "p90", "max", "mean"):
+        if k not in stats:
+            continue
+        _as_num(stats.get(k), f"{field}.{k}", errs)
+
+
+def validate_budget(obj: Any) -> List[str]:
+    errs: List[str] = []
+    if not isinstance(obj, dict):
+        return ["budget must be an object"]
+    schema_v = _as_str(obj.get("schema"), "schema", errs)
+    if schema_v != "" and schema_v != SCHEMA_BUDGET_V1:
+        errs.append(f"schema must be {SCHEMA_BUDGET_V1!r}")
+    for field in ("records", "parse_valid_true", "parse_valid_false"):
+        iv = _as_int(obj.get(field), field, errs)
+        if iv is not None and iv < 0:
+            errs.append(f"{field} must be >= 0")
+
+    tokens = obj.get("tokens")
+    if not isinstance(tokens, dict):
+        errs.append("tokens must be an object")
+    else:
+        for k in ("a_out", "b_out", "judge_in", "judge_out"):
+            if k in tokens:
+                _validate_budget_stats(tokens.get(k), f"tokens.{k}", errs)
+
+    latency = obj.get("latency_ms")
+    if not isinstance(latency, dict):
+        errs.append("latency_ms must be an object")
+    else:
+        for k in ("a", "b", "judge"):
+            if k in latency:
+                _validate_budget_stats(latency.get(k), f"latency_ms.{k}", errs)
+
+    job = obj.get("judge_out_budget")
+    if not isinstance(job, dict):
+        errs.append("judge_out_budget must be an object")
+    else:
+        tt = _as_int(job.get("target_tokens"), "judge_out_budget.target_tokens", errs)
+        if tt is not None and tt <= 0:
+            errs.append("judge_out_budget.target_tokens must be > 0")
+        for k in (
+            "count_with_tokens",
+            "count_le_target",
+            "count_with_tokens_parse_valid_true",
+            "count_le_target_parse_valid_true",
+        ):
+            iv = _as_int(job.get(k), f"judge_out_budget.{k}", errs)
+            if iv is not None and iv < 0:
+                errs.append(f"judge_out_budget.{k} must be >= 0")
+        for k in ("fraction_le_target", "fraction_le_target_parse_valid_true"):
+            fv = _as_num(job.get(k), f"judge_out_budget.{k}", errs)
+            if fv is not None and (fv < 0.0 or fv > 1.0):
+                errs.append(f"judge_out_budget.{k} must be in [0,1]")
+    return errs

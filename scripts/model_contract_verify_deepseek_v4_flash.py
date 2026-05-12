@@ -275,6 +275,17 @@ def main() -> int:
 							failures.append(Failure(39, f"contract summary encoding_constants.ds_task_sp_tokens keys mismatch (expected {sorted(expected_task_keys)}): {contract_summary}"))
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
+				if upstream_commit:
+					want_pinned = upstream_commit
+					got_rev = up.get("hf_revision")
+					got_pinned = up.get("hf_revision_pinned")
+					got_requested = up.get("hf_revision_requested")
+					if got_requested not in (None, "main"):
+						failures.append(Failure(400, f"contract summary upstream.hf_revision_requested must be 'main' (or null), got {got_requested!r}: {contract_summary}"))
+					if got_pinned != want_pinned:
+						failures.append(Failure(401, f"contract summary upstream.hf_revision_pinned must match upstream_commit.txt ({want_pinned}), got {got_pinned!r}: {contract_summary}"))
+					if got_rev != want_pinned:
+						failures.append(Failure(402, f"contract summary upstream.hf_revision must be pinned to upstream_commit.txt ({want_pinned}), got {got_rev!r}: {contract_summary}"))
 
 				ckpt = summary.get("checkpoint_index", {}) if isinstance(summary, dict) else {}
 				if isinstance(ckpt, dict):
@@ -1068,6 +1079,15 @@ def main() -> int:
 				if not isinstance(oracle, dict):
 					failures.append(Failure(90, f"contract summary oracle must be an object: {contract_summary}"))
 				else:
+					prompts_default_topk = None
+					prompts_path = FIX / "oracle" / "prompts.json"
+					try:
+						prompts = load_json(prompts_path)
+						if isinstance(prompts, dict) and isinstance(prompts.get("default_topk"), int):
+							prompts_default_topk = int(prompts.get("default_topk"))
+					except Exception:
+						prompts_default_topk = None
+
 					enc_oracle = oracle.get("encoding_oracle", {})
 					log_oracle = oracle.get("logits_oracle", {})
 					mtp_oracle = oracle.get("mtp", {})
@@ -1077,6 +1097,18 @@ def main() -> int:
 						failures.append(Failure(92, f"contract summary oracle.logits_oracle must declare weights_required=true and generator: {contract_summary}"))
 					if not (isinstance(mtp_oracle, dict) and mtp_oracle.get("weights_required") is True and isinstance(mtp_oracle.get("generator_hint"), str)):
 						failures.append(Failure(93, f"contract summary oracle.mtp must declare weights_required=true and generator_hint: {contract_summary}"))
+					if isinstance(log_oracle, dict):
+						acc = log_oracle.get("acceptance", {})
+						if not (isinstance(acc, dict) and isinstance(acc.get("topk_k"), int)):
+							failures.append(Failure(181, f"contract summary oracle.logits_oracle.acceptance.topk_k must be an integer: {contract_summary}"))
+						elif prompts_default_topk is not None and int(acc.get("topk_k")) != int(prompts_default_topk):
+							failures.append(Failure(182, f"contract summary oracle.logits_oracle.acceptance.topk_k mismatch (got {acc.get('topk_k')!r} expected prompts default_topk={prompts_default_topk}): {contract_summary}"))
+					if isinstance(mtp_oracle, dict):
+						acc = mtp_oracle.get("acceptance", {})
+						if not (isinstance(acc, dict) and isinstance(acc.get("topk_k"), int)):
+							failures.append(Failure(183, f"contract summary oracle.mtp.acceptance.topk_k must be an integer: {contract_summary}"))
+						elif prompts_default_topk is not None and int(acc.get("topk_k")) != int(prompts_default_topk):
+							failures.append(Failure(184, f"contract summary oracle.mtp.acceptance.topk_k mismatch (got {acc.get('topk_k')!r} expected prompts default_topk={prompts_default_topk}): {contract_summary}"))
 
 				ts = summary.get("tensor_shapes", {})
 				if not isinstance(ts, dict):

@@ -50,6 +50,8 @@ const char *ds4_config_diag_stage_name(int32_t stage)
 		return("load");
 	if ( stage == DS4_CONFIG_DIAG_STAGE_ENV )
 		return("env");
+	if ( stage == DS4_CONFIG_DIAG_STAGE_ENV_CONFIG )
+		return("env_config");
 	return("unknown");
 }
 
@@ -437,6 +439,11 @@ static int32_t ds4_config_parse_env_config_ex_diag(ds4_config_t *cfg,int32_t fla
 	err = ds4_config_parse_mem_ex_diag(cfg,(const uint8_t *)tv,tvlen,flags,&unknown,diag);
 	if ( err < 0 )
 	{
+		if ( diag != 0 )
+		{
+			if ( diag->stage == DS4_CONFIG_DIAG_STAGE_MEM )
+				diag->stage = DS4_CONFIG_DIAG_STAGE_ENV_CONFIG;
+		}
 		if ( out_unknown != 0 )
 			*out_unknown = unknown;
 		return(-3);
@@ -1160,7 +1167,10 @@ int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t 
 		unknown = (unknown_file + unknown_env_cfg);
 		if ( diag != 0 )
 		{
-			diag->stage = DS4_CONFIG_DIAG_STAGE_LOAD;
+			if ( diag->stage == DS4_CONFIG_DIAG_STAGE_MEM )
+				diag->stage = DS4_CONFIG_DIAG_STAGE_ENV_CONFIG;
+			if ( diag->stage == DS4_CONFIG_DIAG_STAGE_NONE )
+				diag->stage = DS4_CONFIG_DIAG_STAGE_ENV_CONFIG;
 			diag->unknown = unknown;
 		}
 		if ( out_unknown != 0 )

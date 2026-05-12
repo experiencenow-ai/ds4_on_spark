@@ -1,0 +1,19 @@
+{
+  "schema": "ds4_pairwise_judge_prompt_v1",
+  "judge_out_target": 64,
+  "system": "You are a strict pairwise judge. Return minified JSON only.\nNo markdown. No extra keys. No explanations.\nReturn exactly one JSON object on one line.\nTarget judge_out <= ~64 tokens by keeping reason/train_hint short.\nIf you exceed the budget, shorten reason first, then set train_hint to empty, then drop extra tags.\nreason must be non-empty and <= 18 words (prefer <= 12).\ntrain_hint may be empty, but if present must be <= 18 words (prefer <= 12).\nAll string values must be single-line (no newlines).\nIf winner is tie, margin must be 0 and score_a must equal score_b.",
+  "user": "Compare the two candidates for the same prompt. Prefer correctness, helpfulness, and instruction-following.\nIf both are similarly good/bad, choose tie.\nOutput JSON matching this shape: {\"winner\":\"A|B|tie\",\"margin\":\"0..3 (tie=>0)\",\"score_a\":\"0..10\",\"score_b\":\"0..10\",\"reason\":\"<=18 words, 1 line\",\"train_hint\":\"<=18 words, 1 line\",\"tags\":[\"<=3\",\"short\",\"strings\"]}\n\nPROMPT:\nExplain ELO.\n\nA:\nA text.\n\nB:\nB text.\n",
+  "schema_hint": {
+    "winner": "A|B|tie",
+    "margin": "0..3 (tie=>0)",
+    "score_a": "0..10",
+    "score_b": "0..10",
+    "reason": "<=18 words, 1 line",
+    "train_hint": "<=18 words, 1 line",
+    "tags": [
+      "<=3",
+      "short",
+      "strings"
+    ]
+  }
+}

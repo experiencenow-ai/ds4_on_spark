@@ -8,6 +8,7 @@ from scripts import judge_elo_schema as schema
 from scripts import judge_elo_join_quality as joiner
 from scripts import judge_elo_update as updater
 from scripts import pairwise_judge_record as record_wrap
+from scripts import pairwise_judge_prompt as prompt_builder
 
 
 class JudgeEloTest(unittest.TestCase):
@@ -20,6 +21,23 @@ class JudgeEloTest(unittest.TestCase):
             if len(errs) != 0:
                 bad += 1
         # One intentionally parse-invalid record is still schema-valid.
+        self.assertEqual(bad, 0)
+
+    def test_prompt_fixture_validates(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_pairwise_prompt.json")
+        with open(path, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        self.assertEqual(schema.validate_prompt(obj), [])
+
+    def test_fixture_strict_validates(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        bad = 0
+        for _, obj in schema.iter_jsonl(path):
+            errs = schema.validate_record_strict(obj)
+            if len(errs) != 0:
+                bad += 1
         self.assertEqual(bad, 0)
 
     def test_elo_deterministic(self) -> None:
@@ -64,6 +82,28 @@ class JudgeEloTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.csv")))
             self.assertTrue(os.path.exists(os.path.join(td, "leaderboard.md")))
             self.assertTrue(os.path.exists(os.path.join(td, "quality_map.json")))
+
+    def test_update_cli_outputs_validate(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        validate_script = os.path.join(root, "scripts", "judge_elo_validate_outputs.py")
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                path,
+                "--out-dir",
+                td,
+                "--strict",
+            ])
+            subprocess.check_call([
+                "python3",
+                validate_script,
+                "--out-dir",
+                td,
+            ])
 
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -192,6 +232,38 @@ class JudgeEloTest(unittest.TestCase):
         errs3 = schema.validate_decision(decision3)
         self.assertTrue(any("tags[1] must be a single line" in e for e in errs3))
 
+    def test_decision_reason_must_be_non_empty(self) -> None:
+        decision = {"winner": "A", "margin": 1, "score_a": 7, "score_b": 6, "reason": "", "train_hint": "", "tags": []}
+        errs = schema.validate_decision(decision)
+        self.assertTrue(any("reason must be non-empty" in e for e in errs))
+
+    def test_strict_requires_margin_score_consistency(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V1,
+            "pair_id": "p_strict0",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": True,
+            "winner": "A",
+            "margin": 3,
+            "score_a": 7,
+            "score_b": 6,
+            "reason": "A is better.",
+            "train_hint": "Fix the main issue.",
+            "tags": ["quality"],
+            "tokens": {"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            "latency_ms": {"a": 5, "b": 6, "judge": 7},
+        }
+        errs = schema.validate_record_strict(rec)
+        self.assertTrue(any("margin must be in" in e for e in errs))
+
+        rec2 = dict(rec)
+        rec2["margin"] = 0
+        rec2["score_b"] = 7
+        errs2 = schema.validate_record_strict(rec2)
+        self.assertTrue(any("non-tie winners require" in e for e in errs2))
+
     def test_record_raw_char_limit(self) -> None:
         rec = {
             "schema": schema.SCHEMA_RECORD_V1,
@@ -205,6 +277,18 @@ class JudgeEloTest(unittest.TestCase):
         }
         errs = schema.validate_record(rec)
         self.assertTrue(any("raw must be <= 512 chars" in e for e in errs))
+
+    def test_record_parse_invalid_requires_raw_or_error(self) -> None:
+        rec = {
+            "schema": schema.SCHEMA_RECORD_V1,
+            "pair_id": "p0",
+            "model_a": "mA",
+            "model_b": "mB",
+            "judge_model": "ds4",
+            "parse_valid": False,
+        }
+        errs = schema.validate_record(rec)
+        self.assertTrue(any("raw and/or parse_error" in e for e in errs))
 
     def test_wrap_record_sanitizes_raw_newlines(self) -> None:
         rec = record_wrap.build_record(
@@ -255,15 +339,55 @@ class JudgeEloTest(unittest.TestCase):
             self.assertEqual(obj.get("latency_ms"), {"judge": 123})
             self.assertEqual(schema.validate_record(obj), [])
 
+    def test_pairwise_judge_prompt_cli_json_format(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_prompt.py")
+        with tempfile.TemporaryDirectory() as td:
+            p_path = os.path.join(td, "prompt.txt")
+            a_path = os.path.join(td, "a.txt")
+            b_path = os.path.join(td, "b.txt")
+            with open(p_path, "w", encoding="utf-8") as f:
+                f.write("Explain what ELO rating means.\n")
+            with open(a_path, "w", encoding="utf-8") as f:
+                f.write("Elo is a rating system used for head-to-head games.\n")
+            with open(b_path, "w", encoding="utf-8") as f:
+                f.write("ELO is a ranking thing.\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--prompt",
+                p_path,
+                "--a",
+                a_path,
+                "--b",
+                b_path,
+                "--judge-out-target",
+                "64",
+                "--format",
+                "json",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertEqual(obj.get("schema"), "ds4_pairwise_judge_prompt_v1")
+            self.assertIn("system", obj)
+            self.assertIn("user", obj)
+            self.assertIn("schema_hint", obj)
+            self.assertIn("Return minified JSON only", str(obj.get("system", "")))
+            self.assertIn("PROMPT:", str(obj.get("user", "")))
+
+    def test_prompt_schema_validator_accepts_builder_output(self) -> None:
+        msg = prompt_builder.build_messages("p", "a", "b", judge_out_target=64)
+        self.assertEqual(schema.validate_prompt(msg), [])
+
     def test_json_schema_files_present(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         dec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_decision_v1.schema.json")
         rec_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_record_v1.schema.json")
+        prompt_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_pairwise_judge_prompt_v1.schema.json")
         meta_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_meta_v1.schema.json")
         budget_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "ds4_judge_elo_budget_v1.schema.json")
         qmap_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_quality_map_v1.schema.json")
         leaderboard_path = os.path.join(root, "fixtures", "judge-elo", "schemas", "judge_elo_leaderboard_v1.schema.json")
-        for path in (dec_path, rec_path, meta_path, budget_path, qmap_path, leaderboard_path):
+        for path in (dec_path, rec_path, prompt_path, meta_path, budget_path, qmap_path, leaderboard_path):
             with open(path, "r", encoding="utf-8") as f:
                 obj = json.load(f)
             if path.endswith("leaderboard_v1.schema.json"):

@@ -25,7 +25,7 @@ Environment:
 
 Examples:
   ./scripts/centaur_spark_v73_node_setup_run.sh spark1@<spark1-host>
-  ./scripts/centaur_spark_v73_node_setup_run.sh spark2@<spark2-host> ~/centaur-smoke/v73 20260512T120000Z /private/tmp/node_setup_spark2.log
+  ./scripts/centaur_spark_v73_node_setup_run.sh spark2@<spark2-host> "~/centaur-smoke/v73" 20260512T120000Z /private/tmp/node_setup_spark2.log
 USAGE
 }
 
@@ -111,4 +111,3 @@ if [ "$local_log" = "" ]; then
 else
 	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$node_setup" 2>&1 | tee "$local_log"
 fi
-

@@ -24,6 +24,7 @@ Notes on config sources:
 
 - `config.json` is the canonical Transformers config and contains all architectural constants.
 - `inference/config.json` is the canonical runtime config for the upstream reference code. Some values are duplicated (e.g. `head_dim`), and some runtime-only defaults live there (e.g. `rope_head_dim` naming, `moe_inter_dim`).
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records both the requested HF revision (`upstream.hf_revision_requested`, typically `main`) and the pinned immutable revision actually used (`upstream.hf_revision_pinned == upstream.x_repo_commit`).
 
 ## Quick constants (from pinned fixtures)
 
@@ -51,7 +52,7 @@ Attention schedule (main trunk; derived from `compress_ratios`):
 - Sliding-only layer IDs: `[0,1]`
 - CSA layer IDs: `[2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42]`
 - HCA layer IDs: `[3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41]`
-- Main compress-ratio schedule (length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
+- Main trunk compress-ratio schedule (entries `0..42`; length `43`): `[0,0,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4,128,4]`
 
 MTP:
 
@@ -108,6 +109,7 @@ High-signal mapping (where to look upstream, and where DS4 reads it):
   - Upstream sources: `encoding/tests/*` (encoding oracle vectors) and `oracle/prompts.json` (logits-oracle prompt set).
   - Pinned fixtures: `fixtures/model_contract/deepseek_v4_flash/encoding/tests/*` and `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json`.
   - DS4 contract: `contract_summary.json` `oracle.*` plus sha256 pinning under `upstream.fixtures_sha256.*`.
+    - The pinned prompt set’s `default_topk` (currently `64`) is recorded as `oracle.logits_oracle.acceptance.topk_k` and `oracle.mtp.acceptance.topk_k` so oracle consumers enforce a consistent `k` when comparing `topk_ids`/`topk_logits`.
 
 ## Contract map (machine-readable `contract_summary.json`)
 
@@ -195,6 +197,23 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
   - `beta_fast`: 32
   - `beta_slow`: 1
 
+### MoE routing semantics (hash vs score gate)
+
+Upstream source of truth: `fixtures/model_contract/deepseek_v4_flash/inference/model.py` (`Gate.forward`, `MoE.forward`), pinned in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics.source_helpers`.
+
+Key rules DS4 must match (contract-traceable via `contract_summary.json` `moe.semantics.*`):
+
+- Gate score compute is FP32: `scores = linear(x.float(), gate.weight.float())`.
+- `scoring_func == "sqrtsoftplus"`: `scores = sqrt(softplus(scores))`.
+- Score-gated layers (`layer_id >= n_hash_layers`):
+  - `gate.bias` shifts **selection only**: indices are chosen from `(scores + bias).topk(k)`, but the routing weights are gathered from the **original** un-biased `scores`.
+  - If `scoring_func != "softmax"` (true for V4 Flash), weights are normalized: `weights /= sum(weights)` before `weights *= route_scale`.
+- Hash-gated layers (`layer_id < n_hash_layers`):
+  - Expert indices come from the checkpoint mapping `gate.tid2eid[input_ids]` (int32); there is no `gate.bias`.
+  - Weights are still gathered from the score tensor at those indices, normalized (non-softmax case), then scaled by `route_scale`.
+- MoE dispatch is top-k routed experts **plus one shared expert**:
+  - Each TP rank executes its local expert subset; the reference runtime `all_reduce`s the routed expert output across ranks, then adds `shared_experts(x)`.
+
 ### Config key normalization (Transformers vs inference config)
 
 Upstream publishes two “official” configs with different key naming: `config.json` (Transformers) and `inference/config.json` (reference runtime). External runtimes and conversion pipelines may log either set of keys (`hidden_size` vs `dim`, `num_hidden_layers` vs `n_layers`, etc.).
@@ -213,6 +232,7 @@ Upstream encodes the per-layer cache mode as `compress_ratios[]`:
 - `compress_ratios` length is `44`:
   - entries `0..42` are the 43 main trunk layers (`layers.{i}.*`)
   - entry `43` is the MTP layer (`mtp.0.*`)
+- Convenience view: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` also records `attention_schedule.main_compress_ratios` as the trunk-only slice (length `43`) so contract consumers don’t need to slice the raw config array.
 - Main layer type counts (derived from `fixtures/model_contract/deepseek_v4_flash/config.json` and recorded in `contract_summary.json`):
   - sliding-only: 2 layers (`layer_id ∈ {0,1}`)
   - CSA (`compress_ratio == 4`): 21 layers
@@ -808,6 +828,7 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 - `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`
 - `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`
 - `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json`
+- `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json` (trunk + sidecar inspected as an artifact set)
 - The nsparks “native FP4/FP8” GGUF includes DeepSeek4 fork `ggml_type` tensors like `F8_E4M3_B128` (commonly type code `42`) and MoE experts as `MXFP4`, but the pinned artifact is still a **mixed** type set (many `F32`/`BF16` tensors). Treat this as non-authoritative for “Flash-native” quant semantics unless `quantization_contract.{dense_fp8_like,expert_fp4_like}` is satisfied.
 - These three pinned trunk GGUFs report `mtp_present=false`, `mtp_namespace.has_mtp0=false`, and `mtp_trust.status=absent` (i.e. they do **not** preserve the upstream `mtp.0.*` namespace).
 - To refresh the pinned probe JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
@@ -819,6 +840,7 @@ Pinned GGUF MTP status snapshot (derived from `fixtures/model_contract/deepseek_
 | Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
 | nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
 | antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json` | false | false | — | absent |
+| antirez trunk + MTP sidecar (artifact set; DS4-tuned sidecar is complete) | `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json` | true | true | false | incomplete |
 | antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json` | true | true | false | incomplete |
 
 For external/quantized artifacts:
@@ -887,6 +909,28 @@ MTP acceptance gates (high-performance / quantized path):
 - Oracle gate: even if structurally complete, treat MTP as **untrusted** until a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`; compare both prefill + decode; top-k IDs must match exactly; see `contract_summary.json` `mtp.trust_gates`).
 
 ## Next steps (oracle + remaining unknowns)
+
+- Machine-readable oracle requirements live in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `oracle.*`.
+- Oracle acceptance rule is pinned to a top-k size (`oracle.logits_oracle.acceptance.topk_k` and `oracle.mtp.acceptance.topk_k`, currently `64`) so tooling can enforce a consistent comparison window across runs.
+
+Encoding oracle (no weights; required):
+
+- Executed by `python3 scripts/model_contract_verify_deepseek_v4_flash.py`.
+- Uses the pinned upstream `encoding/tests/*` vectors to validate message/tool/thinking rendering and parsing behavior.
+
+Logits oracle (weights required; required before semantic claims):
+
+- Generator: `scripts/model_contract_generate_deepseek_v4_flash_oracle.py` (writes `fixtures/model_contract/deepseek_v4_flash/oracle/logits_oracle.json`).
+- Must cover both:
+  - prefill (`start_pos == 0`) to exercise the prefill cache path and wrap rules
+  - decode (`start_pos > 0`) to exercise the ring-buffer + compressed-cache update semantics
+- Acceptance rule (recommended DS4 gate): compare top-k token IDs exactly; compare logits within a tolerance appropriate for FP8/FP4 kernels.
+
+MTP oracle (weights required; required before trusting/spec-enabling MTP):
+
+- Even when an artifact set structurally preserves `mtp.0.*` (`mtp_contract.complete==true` and `mtp_keys_sha256` matches the official fingerprint), treat MTP as **untrusted** until an MTP logits oracle passes.
+- Generate with `scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp` (records `cases[].mtp_trace[]` draft logits alongside the main `cases[].trace[]`).
+- Gate against the same top-k acceptance rule, and include both prefill + decode cases.
 
 - The encoding oracle is fully local and is executed by `scripts/model_contract_verify_deepseek_v4_flash.py`.
 - A Spark-side logit oracle generator is provided:

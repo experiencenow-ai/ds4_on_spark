@@ -50,17 +50,24 @@ Mac-side prerequisites for the helper scripts:
 
 - `ssh`
 - `rsync` (preferred) or `scp` (fallback)
-- `tee` (only if you pass a `local_log` to `scripts/centaur_spark0_v73_run.sh`)
+- `tee` (used by `scripts/centaur_spark0_v73_evidence_run.sh` and when you pass a `local_log`)
 
 ### One-command run from your Mac (recommended)
 
-This stages the zip + fixture and then streams the smoke over SSH:
+This runs the full evidence loop (stage → smoke → validate → fetch):
+
+```bash
+export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
+```
+
+This writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/` and fetches a small sanitized bundle back to your Mac under `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`).
+
+If you only want to stage + stream-run the smoke (no validate/fetch), use:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 ```
-
-This auto-generates a UTC `CENTAUR_RUN_ID` and writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/`.
 
 From your Mac repo root, stage the zip + tiny model catalog fixture to Spark0:
 
@@ -158,6 +165,12 @@ If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact b
 
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+```
+
+To pack a fetched bundle into a commit-ready fixtures directory (after review/redaction), run:
+
+```bash
+sh ./scripts/centaur_spark0_v73_fixture_pack.sh "$CENTAUR_RUN_ID"
 ```
 
 For a fuller bug-report checklist and sanitization guidance, see:

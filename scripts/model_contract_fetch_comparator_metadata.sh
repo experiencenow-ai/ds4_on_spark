@@ -145,38 +145,57 @@ tok_cfg = load_json(out_dir / "tokenizer_config.json") or {}
 spec_map = load_json(out_dir / "special_tokens_map.json") or {}
 gen_cfg = load_json(out_dir / "generation_config.json") or {}
 
+def pick_model_config(cfg: dict):
+    if not isinstance(cfg, dict):
+        return {}
+    # Common pattern for multimodal checkpoints (e.g. Qwen3.5-27B): topology lives
+    # under text_config, while the top-level config holds vision/audio knobs.
+    for k in ("text_config", "language_config", "llm_config"):
+        v = cfg.get(k)
+        if isinstance(v, dict):
+            return v
+    return cfg
+
+model_cfg = pick_model_config(config)
+
 x_repo_commit = None
 up = out_dir / "upstream_commit.txt"
 if up.exists():
     x_repo_commit = up.read_text(encoding="utf-8").strip() or None
+
+def first_non_null(*vals):
+    for v in vals:
+        if v is not None:
+            return v
+    return None
 
 summary = {
     "repo_id": repo_id,
     "rev": rev,
     "x_repo_commit": x_repo_commit,
     "model": {
-        "model_type": config.get("model_type"),
-        "architectures": config.get("architectures"),
-        "hidden_size": config.get("hidden_size"),
-        "num_hidden_layers": config.get("num_hidden_layers"),
-        "num_attention_heads": config.get("num_attention_heads"),
-        "num_key_value_heads": config.get("num_key_value_heads"),
-        "head_dim": config.get("head_dim") or config.get("v_head_dim"),
-        "vocab_size": config.get("vocab_size"),
-        "max_position_embeddings": config.get("max_position_embeddings"),
-        "num_nextn_predict_layers": config.get("num_nextn_predict_layers"),
+        "model_type": first_non_null(model_cfg.get("model_type"), config.get("model_type")),
+        "architectures": first_non_null(config.get("architectures"), model_cfg.get("architectures")),
+        "hidden_size": model_cfg.get("hidden_size"),
+        "num_hidden_layers": model_cfg.get("num_hidden_layers"),
+        "num_attention_heads": model_cfg.get("num_attention_heads"),
+        "num_key_value_heads": model_cfg.get("num_key_value_heads"),
+        "head_dim": first_non_null(model_cfg.get("head_dim"), model_cfg.get("v_head_dim"), config.get("head_dim"), config.get("v_head_dim")),
+        "vocab_size": model_cfg.get("vocab_size"),
+        "max_position_embeddings": model_cfg.get("max_position_embeddings"),
+        "num_nextn_predict_layers": model_cfg.get("num_nextn_predict_layers"),
     },
     "moe": {
-        "num_experts": config.get("num_experts") or config.get("n_routed_experts"),
-        "num_shared_experts": config.get("num_shared_experts") or config.get("n_shared_experts"),
-        "num_experts_per_tok": config.get("num_experts_per_tok"),
-        "routed_scaling_factor": config.get("routed_scaling_factor"),
-        "scoring_func": config.get("scoring_func") or config.get("score_function"),
+        "num_experts": first_non_null(model_cfg.get("num_experts"), model_cfg.get("n_routed_experts"), config.get("num_experts"), config.get("n_routed_experts")),
+        "num_shared_experts": first_non_null(model_cfg.get("num_shared_experts"), model_cfg.get("n_shared_experts"), config.get("num_shared_experts"), config.get("n_shared_experts")),
+        "num_experts_per_tok": first_non_null(model_cfg.get("num_experts_per_tok"), config.get("num_experts_per_tok")),
+        "routed_scaling_factor": first_non_null(model_cfg.get("routed_scaling_factor"), config.get("routed_scaling_factor")),
+        "scoring_func": first_non_null(model_cfg.get("scoring_func"), model_cfg.get("score_function"), config.get("scoring_func"), config.get("score_function")),
     },
     "tokenizer": {
-        "bos_token_id": config.get("bos_token_id"),
-        "eos_token_id": config.get("eos_token_id"),
-        "pad_token_id": config.get("pad_token_id"),
+        "bos_token_id": first_non_null(model_cfg.get("bos_token_id"), config.get("bos_token_id")),
+        "eos_token_id": first_non_null(model_cfg.get("eos_token_id"), config.get("eos_token_id")),
+        "pad_token_id": first_non_null(model_cfg.get("pad_token_id"), config.get("pad_token_id")),
         "tokenizer_class": tok_cfg.get("tokenizer_class"),
         "model_max_length": tok_cfg.get("model_max_length"),
         "chat_template_present": (out_dir / "chat_template.jinja").exists() or tok_cfg.get("chat_template") is not None,
@@ -195,4 +214,3 @@ summary = {
 PY
 
 echo "OK: fetched metadata into $OUT_DIR"
-

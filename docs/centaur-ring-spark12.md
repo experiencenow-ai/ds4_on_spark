@@ -21,8 +21,7 @@ REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-ho
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 If you want a known-good reference bundle for what “PASS” looks like, see:
@@ -31,33 +30,60 @@ If you want a known-good reference bundle for what “PASS” looks like, see:
 
 2) Run the Spark0-local ring sim rehearsal (does not require Spark1/2 hardware):
 
-```bash
-export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@<spark0-host>
-ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
-sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
-```
+	```bash
+	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	sh ./scripts/centaur_spark12_v73_ring_sim_run.sh spark0@<spark0-host>
+	ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- --mode sim" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
+	sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+	```
 
-Note: `scripts/centaur_spark12_v73_ring_sim_run.sh` accepts an optional `remote_ring_workdir` argument; `~/...` and `$HOME/...` are fine (the wrapper resolves to an absolute path to avoid creating literal `~` directories on Spark0).
+	To promote a fetched ring-sim bundle into a commit-ready fixtures directory (after review/redaction):
+
+	```bash
+	sh ./scripts/centaur_spark12_v73_ring_sim_fixture_pack.sh "$RING_RUN_ID"
+	```
+
+	Note: `scripts/centaur_spark12_v73_ring_sim_run.sh` accepts an optional `remote_ring_workdir` argument; `~/...` and `$HOME/...` are fine (the wrapper resolves to an absolute path to avoid creating literal `~` directories on Spark0).
 
 3) When Spark1/2 hardware exists: stage the Centaur v73 zip to Spark1/2 and run per-node setup (creates `~/centaur-smoke/v73/run/` with extracted Centaur + venv):
 
 ```bash
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
-sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
+sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
 4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
 
-```bash
-export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
-ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- --mode rsync" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
-sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
-```
+	Recommended: one-command evidence loop (node setup → ring rsync → validate → fetch):
 
-Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
+	```bash
+	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+	```
+
+	If you already ran node setup and want to skip it:
+
+	```bash
+	export RING_SKIP_NODE_SETUP=1
+	```
+
+	If you prefer to run the steps manually:
+
+	```bash
+	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+	ssh $SSH_OPTS spark0@<spark0-host> "export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- --mode rsync" < ./scripts/centaur_spark12_v73_validate_ring_artifacts.sh
+	sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+	```
+
+	To promote a fetched ring-rsync bundle into a commit-ready fixtures directory (after review/redaction):
+
+	```bash
+	sh ./scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh "$RING_RUN_ID"
+	```
+
+	Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
 
 ## Spark1/Spark2 bring-up checklist (when hardware exists)
 
@@ -70,7 +96,7 @@ Before attempting a real ring on Spark1/2, ensure each node has a local Centaur 
 From your Mac repo root, you can stage the zip (and optional tiny catalog fixture) to both nodes:
 
 ```bash
-sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73"
 ```
 
 Recommended per-node setup (run on Spark{1,2}) using the reproducible setup script:
@@ -78,8 +104,8 @@ Recommended per-node setup (run on Spark{1,2}) using the reproducible setup scri
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
-sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" ~/centaur-smoke/v73
+sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
+sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
 Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
@@ -92,7 +118,7 @@ Example (Spark1):
 ```bash
 export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 CENTAUR_PIP_ARGS="--no-index --find-links=/path/to/wheels" \
-  sh ./scripts/centaur_spark_v73_node_setup_run.sh spark1@<spark1-host> ~/centaur-smoke/v73 "$NODE_SETUP_RUN_ID"
+  sh ./scripts/centaur_spark_v73_node_setup_run.sh spark1@<spark1-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
 ```
 
 Minimal per-node setup (run on Spark{1,2}) if you prefer doing it manually:

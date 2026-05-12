@@ -46,6 +46,51 @@
       4,
       0
     ],
+    "main_compress_ratios": [
+      0,
+      0,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4,
+      128,
+      4
+    ],
     "main_layer_ids_by_compress_ratio": {
       "0": [
         0,
@@ -1526,7 +1571,8 @@
       "acceptance": {
         "logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
         "requires_prefill_and_decode": true,
-        "topk_ids_exact": true
+        "topk_ids_exact": true,
+        "topk_k": 64
       },
       "generator": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py",
       "note": "Do not commit oracle outputs until reviewed; the default automation refuses to download weights.",
@@ -1539,7 +1585,8 @@
       "acceptance": {
         "logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
         "requires_mtp_trace": true,
-        "topk_ids_exact": true
+        "topk_ids_exact": true,
+        "topk_k": 64
       },
       "generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
       "required": true,
@@ -4138,7 +4185,9 @@
       "upstream_commit.txt": "d8249ed1b51232dccf45c69169711e62b7bcf7b82100dbec557984aea7838aa9"
     },
     "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
-    "hf_revision": "main",
+    "hf_revision": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+    "hf_revision_pinned": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+    "hf_revision_requested": "main",
     "x_repo_commit": "6976c7ff1b30a1b2cb7805021b8ba4684041f136"
   },
   "yarn_rope": {

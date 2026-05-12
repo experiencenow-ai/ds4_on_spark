@@ -65,12 +65,12 @@
     },
     "reason": {
       "type": "string",
-      "pattern": "^[^\\r\\n]*$",
+      "pattern": "^[^\\r\\n\\s]+([\\t ]+[^\\r\\n\\s]+){0,17}$",
       "maxLength": 200
     },
     "train_hint": {
       "type": "string",
-      "pattern": "^[^\\r\\n]*$",
+      "pattern": "^$|^[^\\r\\n\\s]+([\\t ]+[^\\r\\n\\s]+){0,17}$",
       "maxLength": 200
     },
     "tags": {
@@ -152,6 +152,29 @@
           "reason",
           "train_hint",
           "tags"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "parse_valid": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "raw"
+            ]
+          },
+          {
+            "required": [
+              "parse_error"
+            ]
+          }
         ]
       }
     },

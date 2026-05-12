@@ -74,6 +74,15 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
 
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
 ssh_preflight()
 {
 	t="$1"
@@ -151,5 +160,8 @@ echo "ssh $SSH_OPTS $spark0 \"$ssh_cmd\" < $ring"
 if [ "$local_log" = "" ]; then
 	ssh $SSH_OPTS "$spark0" "$ssh_cmd" < "$ring"
 else
+	need_cmd tee
+	need_cmd dirname
+	mkdir -p "$(dirname -- "$local_log")"
 	ssh $SSH_OPTS "$spark0" "$ssh_cmd" < "$ring" 2>&1 | tee "$local_log"
 fi

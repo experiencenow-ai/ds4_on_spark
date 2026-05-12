@@ -15,10 +15,15 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `margin`: integer `0..3` (strength of preference; `0` == near-tie)
 - `score_a`: integer `0..10`
 - `score_b`: integer `0..10`
-- `reason`: string, **≤ 18 words** (prefer ≤ 12), **single-line**
+- `reason`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
 - `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
 - `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
+- Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
+  - diff=1 ⇒ margin ∈ {0,1}
+  - diff=2 ⇒ margin ∈ {1,2}
+  - diff=3 ⇒ margin = 2
+  - diff≥4 ⇒ margin = 3
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
@@ -46,6 +51,7 @@ Optional but recommended (for speed/quality separation and budgeting):
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
 - `parse_error`: short string when `parse_valid=false`
+  - When `parse_valid=false`, include `raw` and/or `parse_error` (at least one is required; both is recommended).
   - `raw` is capped at 512 chars; `parse_error` at 128 chars.
 
 For baseline-quality joins, treat `tokens` and `latency_ms` as required and validate with:
@@ -62,9 +68,16 @@ Machine-readable schema:
 The offline updater emits additional machine-readable outputs intended for downstream joins (baseline runtime scoring, dashboards, etc.):
 
 - `meta.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_meta_v1.schema.json`
+  - includes `strict` flag when `scripts/judge_elo_update.py --strict` is used
 - `budget.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_budget_v1.schema.json`
 - `quality_map.json`: `fixtures/judge-elo/schemas/judge_elo_quality_map_v1.schema.json`
 - `leaderboard.json`: `fixtures/judge-elo/schemas/judge_elo_leaderboard_v1.schema.json`
+
+To validate a produced output directory (without any paid API calls):
+
+```bash
+python3 scripts/judge_elo_validate_outputs.py --out-dir <elo_out_dir>
+```
 
 ## Prompt Design (verifier budget)
 
@@ -77,6 +90,9 @@ Use a strict system instruction:
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
+For harnesses, use `--format json` to emit a single JSON object with `{system,user}` fields.
+Machine-readable schema:
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_prompt_v1.schema.json`
 
 To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use:
 

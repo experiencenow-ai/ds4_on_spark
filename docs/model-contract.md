@@ -20,6 +20,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - Source trace: see `docs/model-deepseek-v4-flash.md` “Source trace (official → pinned fixtures → DS4 contract)” for where each contract fact is derived (config vs reference code vs checkpoint key set vs tokenizer/encoding).
   - Includes `DeepSeek_V4.pdf` (technical report; metadata-only) as an additional official reference alongside `config.json` and `inference/*`.
 - Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings for interpreting external runtimes, Transformers-compatible derived schedules (`attention_schedule.transformers_*` and `moe.transformers_mlp_layer_types`), and machine-readable oracle requirements (`oracle.*.required` + `oracle.*.weights_required`))
+  - Upstream pinning is machine-recorded: `upstream.hf_revision_requested` (typically `main`) and `upstream.hf_revision_pinned == upstream.x_repo_commit` (immutable `X-Repo-Commit` used for all fixture downloads).
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
   - Also records machine-readable **tensor-key invariants** (`tensor_keys.required_top_level` and the `tensor_keys.required_layer_suffixes*` sets) and MTP trust gates (`mtp.trust_gates`) so tooling can enforce “exact tensor names” and “MTP is trusted only if…” policies without re-parsing docs.
   - Also records per-layer trunk key helpers (`tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` and `tensor_keys.layer_*_tensor_key_count_by_layer_id*`) so DS4 implementers can validate “exact tensor names” and per-layer key counts without reconstructing the CSA/HCA schedule logic.
@@ -125,6 +126,10 @@ Machine-readable view:
   - MTP namespace preservation: `items[].mtp_namespace.present_prefixes` (for example `["mtp.0."]` when an artifact set actually preserves the upstream `mtp.0.*` namespace).
   - Quant-format compatibility: `items[].quantization_contract.status` plus `items[].quantization_contract.notes_sample` (helps interpret single-Spark external-runtime results when artifacts are re-quantized or non-native).
     - Note: `dense_fp8_like` is based on FP8 tensor evidence in key dense categories (e.g. attention/shared-expert); the most common non-expert tensor type may still be `F32` due to scale/router tensors.
+    - `quantization_contract.status` interpretation:
+      - `native_like`: the artifact’s tensor-type evidence looks consistent with Flash’s expected dense FP8 + expert FP4 split (still requires a logits oracle; GGUF metadata cannot prove scale-tensor semantics like `ue8m0`).
+      - `mismatch`: the artifact appears to be a re-quantized or non-native conversion (treat results as “runs” only; do not compare to upstream semantics without an oracle + explicit compatibility notes).
+      - `unknown`: insufficient tensor evidence to classify (require explicit runtime/convertor provenance and treat semantic comparisons as high risk).
 
 | Pinned probe output | Artifact kind | `mtp_present` | `mtp_contract.complete` | Note |
 |---|---|---:|---:|---|
@@ -147,6 +152,7 @@ scripts/model_contract_refresh_v4flash_gguf_inspects.sh
 Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
+  - The pinned DeepSeek V4 Flash logits oracle uses `default_topk` from `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json` (currently `64`). This is recorded as `oracle.logits_oracle.acceptance.topk_k` (and `oracle.mtp.acceptance.topk_k`) in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` so verifiers can enforce a consistent `k`.
 - Ensure the oracle covers both prefill (`start_pos == 0`) and decode (`start_pos > 0`) so KV-cache semantics are exercised.
 
 Machine-readable MTP gating:
