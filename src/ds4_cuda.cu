@@ -285,8 +285,6 @@ ds4_cuda_status_t ds4_cuda_stream_destroy(ds4_cuda_stream_t *s)
 ds4_cuda_status_t ds4_cuda_stream_synchronize(ds4_cuda_stream_t s)
 {
 	cudaError_t err;
-	if ( s.h == 0 )
-		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	err = cudaStreamSynchronize((cudaStream_t)s.h);
 	if ( err != cudaSuccess )
 		return(ds4_cuda_fail((int32_t)err));
@@ -332,8 +330,6 @@ ds4_cuda_status_t ds4_cuda_event_record(ds4_cuda_event_t e,ds4_cuda_stream_t s)
 {
 	cudaError_t err;
 	if ( e.h == 0 )
-		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( s.h == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	err = cudaEventRecord((cudaEvent_t)e.h,(cudaStream_t)s.h);
 	if ( err != cudaSuccess )
