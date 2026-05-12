@@ -68,6 +68,21 @@ Notes:
 - If you re-run with the same `--stamp`, the scripts now fail fast unless `ALLOW_OVERWRITE=1`.
 - Prefer using a fresh stamp per run instead of overwriting.
 
+## 4b) Capture address matrix + MTU + latency/bandwidth (commit-safe)
+
+Once SSH works, use the ring probe output as the “address matrix” record for the node (wired + Wi‑Fi, v4/v6, MTU, negotiated link speed):
+
+- `docs/spark-ring-probe-<stamp>.md`: `== network (iface matrix, compact) ==` and `== network (mtu, compact) ==`
+- `docs/spark-ring-probe-<stamp>.md`: `== peer ping (best effort, rtt) ==` (node→peers, when peers resolve)
+- `docs/spark-ring-mac-discovery-<stamp>.md`: `== ping (mac->targets, compact) ==` (Mac→node RTT/loss)
+
+Optional (best-effort) Mac↔node throughput smoke test (no installs; keep `BW_MB` small):
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+(BW_MB=16 SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh spark1@spark1.local || true) > "docs/spark-ring-bw-probe-${stamp}.md"
+```
+
 ## 5) When Spark1 + Spark2 are both reachable: one-shot ring snapshot set
 
 From repo root on the Mac:
@@ -88,4 +103,3 @@ This produces a full commit-safe snapshot set plus per-node facts, which is the 
 - Ping RTT/loss (Mac→node and node→peers).
 - GPU inventory + CUDA driver/toolkit versions + compute capability.
 - Storage model/size + free space (`lsblk`, `df -h`).
-
