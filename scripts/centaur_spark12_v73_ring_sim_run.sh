@@ -42,7 +42,7 @@ remote_workdir="${2:-}"
 local_log="${3:-}"
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-ring="$root/scripts/centaur_spark_ring_sim_spark12_v73.sh"
+ring="$root/scripts/centaur_spark_ring_sim_v73.sh"
 
 if [ ! -f "$ring" ]; then
 	echo "missing ring sim script: $ring" >&2
@@ -71,8 +71,8 @@ ssh_preflight()
 
 smoke_footprint_preflight()
 {
-	remote_root="${CENTAUR_ROOT:-\\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}"
-	remote_venv="${CENTAUR_VENV:-\\$HOME/centaur-smoke/v73/run/venv}"
+	remote_root="${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}"
+	remote_venv="${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}"
 	if ssh $SSH_OPTS "$target" "test -f \"$remote_root/centaur.py\" && test -x \"$remote_venv/bin/python3\""; then
 		echo "preflight: smoke footprint ok: CENTAUR_ROOT=$remote_root CENTAUR_VENV=$remote_venv"
 		return 0
@@ -100,13 +100,15 @@ if [ "$run_id" = "" ]; then
 	run_id="$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 
+node_count="${SPARK_NODE_COUNT:-3}"
+
 ring_workdir="${RING_WORKDIR:-}"
 remote_log="${RING_LOG:-}"
 if [ "$remote_workdir" != "" ]; then
 	ring_workdir="$remote_workdir"
 fi
 if [ "$ring_workdir" = "" ]; then
-	ring_workdir="\\$HOME/centaur-smoke/v73/ring_sim_spark12"
+	ring_workdir="\$HOME/centaur-smoke/v73/ring_sim_spark12"
 fi
 if [ "$remote_log" = "" ]; then
 	remote_log="$ring_workdir/run/$run_id/ring_sim.log"
@@ -115,13 +117,14 @@ fi
 echo "== centaur v73 ring sim run (spark12) =="
 echo "spark0: $target"
 echo "ring_run_id: $run_id"
+echo "spark_node_count: $node_count"
 echo "spark0_ring_workdir: $ring_workdir"
 echo "spark0_ring_log: $remote_log"
 if [ "$local_log" != "" ]; then
 	echo "local_log: $local_log"
 fi
 
-ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\\$HOME/centaur-smoke/v73/run/venv}\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
+ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export SPARK_NODE_COUNT=\"$node_count\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
 if [ "${NODE_TYPE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export NODE_TYPE=\"${NODE_TYPE}\""
 fi
