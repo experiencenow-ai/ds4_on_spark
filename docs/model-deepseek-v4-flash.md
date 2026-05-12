@@ -869,7 +869,7 @@ As of the same pinned snapshot (`generated_at_utc=2026-05-12T02:38:41Z`), metada
 - When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `mtp_trust` (driven by `contract_summary.json` `mtp.trust_gates`) to make trust gates explicit in JSON (including namespace failures like `namespace_incomplete` / `namespace_missing_mtp0`).
 - Also record and review:
   - `tensor_key_namespace_guess` (many GGUF conversions rename tensor keys; interpret `trunk_contract` via its `kind`)
-  - `trunk_contract.complete == true` (structural trunk key completeness; for GGUF conversions this is a compatibility signal only and does not replace an oracle)
+  - `trunk_contract.complete == true` (structural trunk key completeness; for upstream-preserving artifacts this now also enforces the sliding/CSA/HCA key schedule (no compressor/indexer tensors where forbidden). For GGUF conversions this remains a compatibility signal only and does not replace an oracle.)
   - `topology_contract.mismatches` (GGUF header metadata vs expected topology); non-empty mismatches make the artifact suspect until explained.
 
 MTP acceptance gates (high-performance / quantized path):
