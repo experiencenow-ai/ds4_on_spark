@@ -410,6 +410,26 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.extracted.jsonl 
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+### DS4 `ffn_moe_topk` Dumps (Route-Only Fixture)
+
+Antirez DS4 can dump `ffn_moe_topk` as binary int32 files (`*.i32`) per layer. These dumps contain real expert routes but **no timestamps**, so any `t_ms`/`dt_ms` fields used for simulator replay are synthetic.
+
+Convert a dump directory into a multi-layer scheduler trace (one JSONL record per token, with `layers[]`):
+
+```bash
+python3 scripts/ds4_topk_dump_to_trace_jsonl.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --out-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl \
+  --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
+```
+
+Then run the standard trace sweep / recommendations loop:
+
+```bash
+python3 sim/scheduler/trace_sweep.py --trace-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl --trace-input-format strict --trace-time-mode dt_ms --num-experts 256 --max-tokens 2000
+python3 sim/scheduler/recommendations.py --trace-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl --trace-input-format strict --trace-time-mode dt_ms --num-experts 256 --max-tokens 2000 --mtp-draft-len 2 --mtp-accept-prob 0.7 --mtp-accept-decay 0.6
+```
+
 If your runtime logs prefix/suffix JSON objects with plain text (for example `INFO route={...}`), `--trace-input-format runtime --trace-non-route skip` also scans each line for embedded JSON objects. `trace_extract.py` offers the same behavior via `--extract-substrings 1` (default).
 
 When using `--trace-input-format runtime` (or `trace_extract.py`), timestamps may be emitted as `t_ms` / `t_us` / `t_ns` (absolute) or `dt_ms` / `dt_us` / `dt_ns` (delta). The extractor normalizes them into millisecond `t_ms` / `dt_ms` fields in the strict simulator trace contract.

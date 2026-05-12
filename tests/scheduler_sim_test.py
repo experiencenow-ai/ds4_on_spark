@@ -10,6 +10,7 @@ import sys
 from sim.scheduler import scheduler_sim
 from sim.scheduler import recommendations
 from sim.scheduler import trace_extract
+from sim.scheduler import ds4_topk_dump
 
 
 class SchedulerSimTest(unittest.TestCase):
@@ -245,6 +246,71 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    def test_ds4_topk_dump_to_trace_jsonl_emits_layers_and_synthetic_dt(self) -> None:
+        from array import array
+
+        tmp_dir = tempfile.TemporaryDirectory()
+        try:
+            dump_dir = tmp_dir.name
+
+            topk = 2
+            rows_layer0 = [
+                [0, 1],
+                [2, 3],
+                [4, 5],
+            ]
+            rows_layer1 = [
+                [10, 11],
+                [12, 13],
+                [14, 15],
+            ]
+            for layer, rows in [(0, rows_layer0), (1, rows_layer1)]:
+                data = array("i")
+                for row in rows:
+                    data.extend(row)
+                path = os.path.join(dump_dir, f"ffn_moe_topk-{layer}_pos0.i32")
+                with open(path, "wb") as f:
+                    f.write(data.tobytes())
+
+            meta, layers = ds4_topk_dump.load_ds4_ffn_moe_topk_dump_layers(dump_dir, pos=0, topk=topk)
+            self.assertEqual(meta.topk, topk)
+            self.assertEqual(meta.num_layers, 2)
+            self.assertEqual(meta.tokens_per_layer, 3)
+
+            out_jsonl = os.path.join(dump_dir, "routes.jsonl")
+            ds4_topk_dump.build_scheduler_trace_jsonl_from_ds4_topk_dump(
+                meta,
+                layers,
+                out_path=out_jsonl,
+                num_tokens=2,
+                seed=123,
+                sample_mode="sequential",
+                time_mode="dt_ms",
+                arrival_rate_tps=1000.0,
+                batch_size=2,
+                interactive_prob=0.0,
+            )
+
+            trace_meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(out_jsonl, time_mode="dt_ms", meta_out=trace_meta, non_route_policy="error", input_format="strict")
+            self.assertEqual(len(trace), 2)
+            self.assertEqual(trace_meta.get("source_format"), "ds4_ffn_moe_topk_i32")
+            self.assertEqual(trace_meta.get("topk"), topk)
+            self.assertEqual(trace_meta.get("num_layers"), 2)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[1].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertIsNotNone(trace[0].layers)
+            self.assertIsNotNone(trace[1].layers)
+            self.assertEqual([list(lr.candidates) for lr in trace[0].layers or ()], rows_layer0[:1] + rows_layer1[:1])
+            self.assertEqual([list(lr.candidates) for lr in trace[1].layers or ()], rows_layer0[1:2] + rows_layer1[1:2])
+
+            with open(out_jsonl, "r", encoding="utf-8") as f:
+                lines = [json.loads(line) for line in f if line.strip() != ""]
+            self.assertEqual(lines[1].get("dt_ms"), 0.0)
+            self.assertEqual(lines[2].get("dt_ms"), 0.0)
+        finally:
+            tmp_dir.cleanup()
 
     def test_trace_summary_accept_len_histogram_is_emitted_and_validates_range(self) -> None:
         trace = [

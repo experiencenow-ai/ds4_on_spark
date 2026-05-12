@@ -78,6 +78,18 @@ Use two fixture classes:
    - Artificial part: resample rows into batch sizes 16, 32, 64, 100, 128, 256.
    - Validity: every row is a real model route from a real prompt/layer.
    - Output: active expert count, queue depths, cap-N pair-work estimates.
+   - Optional: convert the dumps into a scheduler-simulator JSONL trace (`layers[]` per token) so the host-only queue/backpressure/adaptive-K model can run on real routing patterns:
+
+     ```bash
+     python3 scripts/ds4_topk_dump_to_trace_jsonl.py \
+       --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+       --out-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl \
+       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
+     ```
+
+     Notes:
+     - The `t_ms`/`dt_ms` fields are synthetic (dumps have no timestamps). Keep the report explicit about this.
+     - `--batch-size B` groups `B` tokens at the same timestamp (decode-like batch step). This is useful for stress-testing queue depth and backpressure logic; it is not a full decode replay.
 
 2. **Hidden-state replay fixture**
    - Input: real `ffn_norm`, `ffn_moe_topk`, and `ffn_moe_weights_scaled`
