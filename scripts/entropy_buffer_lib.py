@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tupl
 
 _WORD_RE = re.compile(r"[A-Za-z0-9]+")
 _WS_RE = re.compile(r"\s+")
+_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 _ANSWER_NUMERIC_RE = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*$")
 _ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*[\(\[]?([A-Z])[\)\].]?\s*$")
 _ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
@@ -76,6 +77,18 @@ def word_ngrams(ws: Sequence[str], n: int) -> Iterator[str]:
     if len(ws) < n:
         return(iter(()))
     return((" ".join(ws[i:i + n]) for i in range(0, len(ws) - n + 1)))
+
+def char_ngrams_norm(text: str, n: int) -> List[str]:
+    if n <= 0:
+        return([])
+    s = normalize_text(text)
+    s = _ALNUM_RE.sub("", s)
+    if len(s) < n:
+        return([])
+    out: List[str] = []
+    for i in range(0, len(s) - n + 1):
+        out.append(s[i:i + n])
+    return(out)
 
 
 def shannon_entropy(counts: Dict[str, int]) -> float:

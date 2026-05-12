@@ -270,7 +270,8 @@ Notes:
   - Use `--answer-letter-only` to treat answer diversity as single-letter options only (recommended for mixed corpora where many answers are numeric/freeform).
 - If candidate records include `prompt`, the recommender can reward **input lexical diversity** (approx) via:
   - `--prompt-word-weight` (word unigram entropy gain) and `--prompt-trigram-weight` (word 3-gram entropy gain).
-  - `--prompt-word-limit` / `--prompt-trigram-limit` to cap per-record feature fanout (set to `0` to disable limits).
+  - `--prompt-char3gram-weight` (normalized alnum-only char 3-gram entropy gain; catches “lexical drift” even when word 3-grams are similar).
+  - `--prompt-word-limit` / `--prompt-trigram-limit` / `--prompt-char3gram-limit` to cap per-record feature fanout (set to `0` to disable limits).
   - Use `--avoid-seen-prompt-norm` to hard-exclude candidates whose normalized prompt already appears in history (strong “no prompt repeats” mode).
 - If candidate records include `buffer_item_id`, the recommender can reward **new buffer items** to avoid reuse concentration:
   - Use `--avoid-seen-buffer-item-id` to hard-exclude previously-used `buffer_item_id`s.

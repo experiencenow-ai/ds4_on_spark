@@ -145,6 +145,10 @@ def _prompt_trigram_features(prompt: str, limit: int) -> List[str]:
     trigrams = list(lib.word_ngrams(ws, 3))
     return(_select_features(trigrams, limit))
 
+def _prompt_char3gram_features(prompt: str, limit: int) -> List[str]:
+    grams = lib.char_ngrams_norm(prompt, 3)
+    return(_select_features(grams, limit))
+
 def _answer_key(answer: str, answer_letter_only: bool) -> str:
     if not answer_letter_only:
         return(answer)
@@ -163,7 +167,7 @@ def _coverage_delta(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, 
         }
     return(out)
 
-def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, answer_letter_only: bool = False) -> Dict[str, Any]:
+def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, prompt_char3gram_limit: int = 128, answer_letter_only: bool = False) -> Dict[str, Any]:
     hist_task_id: Dict[str, int] = {}
     hist_task_family: Dict[str, int] = {}
     hist_prompt_template_id: Dict[str, int] = {}
@@ -174,6 +178,7 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
     hist_answer: Dict[str, int] = {}
     hist_prompt_words: Dict[str, int] = {}
     hist_prompt_trigrams: Dict[str, int] = {}
+    hist_prompt_char3grams: Dict[str, int] = {}
     for obj in history:
         c = lib.canonicalize_record(obj)
         if c.rtype != "task_run":
@@ -195,6 +200,8 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
             for ng in _prompt_trigram_features(c.prompt, prompt_trigram_limit):
                 hist_prompt_trigrams[ng] = hist_prompt_trigrams.get(ng, 0) + 1
+            for ng in _prompt_char3gram_features(c.prompt, prompt_char3gram_limit):
+                hist_prompt_char3grams[ng] = hist_prompt_char3grams.get(ng, 0) + 1
         for tag in lib.get_list(c.raw, "tags", "tag"):
             if tag != "":
                 hist_tags[tag] = hist_tags.get(tag, 0) + 1
@@ -206,6 +213,7 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
     coverage_before = _coverage_snapshot(hist_task_id, hist_task_family, hist_prompt_template_id, hist_pair, hist_tags, hist_buffer_id, hist_buffer_item_id, hist_answer)
     coverage_before["prompt_word"] = _coverage_stats(hist_prompt_words)
     coverage_before["prompt_trigram"] = _coverage_stats(hist_prompt_trigrams)
+    coverage_before["prompt_char_3gram"] = _coverage_stats(hist_prompt_char3grams)
 
     after_task_id = dict(hist_task_id)
     after_task_family = dict(hist_task_family)
@@ -217,6 +225,7 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
     after_answer = dict(hist_answer)
     after_prompt_words = dict(hist_prompt_words)
     after_prompt_trigrams = dict(hist_prompt_trigrams)
+    after_prompt_char3grams = dict(hist_prompt_char3grams)
     for c in top:
         if c.task_id != "":
             after_task_id[c.task_id] = after_task_id.get(c.task_id, 0) + 1
@@ -242,10 +251,13 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
                 after_prompt_words[w] = after_prompt_words.get(w, 0) + 1
             for ng in _prompt_trigram_features(c.prompt, prompt_trigram_limit):
                 after_prompt_trigrams[ng] = after_prompt_trigrams.get(ng, 0) + 1
+            for ng in _prompt_char3gram_features(c.prompt, prompt_char3gram_limit):
+                after_prompt_char3grams[ng] = after_prompt_char3grams.get(ng, 0) + 1
 
     coverage_after = _coverage_snapshot(after_task_id, after_task_family, after_prompt_template_id, after_pair, after_tags, after_buffer_id, after_buffer_item_id, after_answer)
     coverage_after["prompt_word"] = _coverage_stats(after_prompt_words)
     coverage_after["prompt_trigram"] = _coverage_stats(after_prompt_trigrams)
+    coverage_after["prompt_char_3gram"] = _coverage_stats(after_prompt_char3grams)
     coverage_delta = _coverage_delta(coverage_before, coverage_after)
 
     selected_noise = [float(c.history_noise_rate) for c in top]
@@ -444,7 +456,7 @@ def _candidate_judge_stats(template_stats: Dict[str, Dict[str, float]], pair_sta
     return(template_stats.get(prompt_template_id) or {})
 
 
-def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, answer_letter_only: bool = False) -> List[CandidateScore]:
+def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_char3gram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, prompt_char3gram_limit: int = 128, answer_letter_only: bool = False) -> List[CandidateScore]:
     hist_task_ids: Dict[str, int] = {}
     hist_family: Dict[str, int] = {}
     hist_template: Dict[str, int] = {}
@@ -455,6 +467,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
     hist_answer: Dict[str, int] = {}
     hist_prompt_words: Dict[str, int] = {}
     hist_prompt_trigrams: Dict[str, int] = {}
+    hist_prompt_char3grams: Dict[str, int] = {}
     hist_prompt_norm: Dict[str, int] = {}
 
     tmpl_noise, pair_noise, tmpl_dup, pair_dup = _history_rates(history)
@@ -488,6 +501,8 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
             for ng in _prompt_trigram_features(c.prompt, prompt_trigram_limit):
                 hist_prompt_trigrams[ng] = hist_prompt_trigrams.get(ng, 0) + 1
+            for ng in _prompt_char3gram_features(c.prompt, prompt_char3gram_limit):
+                hist_prompt_char3grams[ng] = hist_prompt_char3grams.get(ng, 0) + 1
 
     scored: List[CandidateScore] = []
     for obj in candidates:
@@ -540,6 +555,8 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
             delta["prompt_word"] = _delta_entropy_for_add_tags(hist_prompt_words, _prompt_word_features(prompt, prompt_word_limit))
         if float(prompt_trigram_weight) != 0.0:
             delta["prompt_trigram"] = _delta_entropy_for_add_tags(hist_prompt_trigrams, _prompt_trigram_features(prompt, prompt_trigram_limit))
+        if float(prompt_char3gram_weight) != 0.0:
+            delta["prompt_char_3gram"] = _delta_entropy_for_add_tags(hist_prompt_char3grams, _prompt_char3gram_features(prompt, prompt_char3gram_limit))
         score = 0.0
         score += (2.0 * delta["task_family"])
         score += (1.5 * delta["prompt_template_id"])
@@ -550,6 +567,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
         score += (float(answer_weight) * delta["answer"])
         score += (float(prompt_word_weight) * float(delta.get("prompt_word", 0.0)))
         score += (float(prompt_trigram_weight) * float(delta.get("prompt_trigram", 0.0)))
+        score += (float(prompt_char3gram_weight) * float(delta.get("prompt_char_3gram", 0.0)))
         score += (0.10 * _inv_freq_bonus(fam_c))
         score += (0.05 * _inv_freq_bonus(tmpl_c))
         score += (0.05 * _inv_freq_bonus(pair_c))
@@ -603,7 +621,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
     return(scored)
 
 
-def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, avoid_seen_buffer_item_id: bool = False, avoid_seen_prompt_norm: bool = False, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, answer_letter_only: bool = False) -> List[CandidateScore]:
+def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, avoid_seen_buffer_item_id: bool = False, avoid_seen_prompt_norm: bool = False, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_char3gram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, prompt_char3gram_limit: int = 128, answer_letter_only: bool = False) -> List[CandidateScore]:
     if limit <= 0:
         return([])
     if max_per_family < 0:
@@ -624,6 +642,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
     hist_answer: Dict[str, int] = {}
     hist_prompt_words: Dict[str, int] = {}
     hist_prompt_trigrams: Dict[str, int] = {}
+    hist_prompt_char3grams: Dict[str, int] = {}
     hist_prompt_norm: Dict[str, int] = {}
     for obj in history:
         c = lib.canonicalize_record(obj)
@@ -647,6 +666,8 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
             for ng in _prompt_trigram_features(c.prompt, prompt_trigram_limit):
                 hist_prompt_trigrams[ng] = hist_prompt_trigrams.get(ng, 0) + 1
+            for ng in _prompt_char3gram_features(c.prompt, prompt_char3gram_limit):
+                hist_prompt_char3grams[ng] = hist_prompt_char3grams.get(ng, 0) + 1
         for tag in lib.get_list(c.raw, "tags", "tag"):
             hist_tags[tag] = hist_tags.get(tag, 0) + 1
         if c.buffer_id != "":
@@ -702,6 +723,8 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                 delta["prompt_word"] = _delta_entropy_for_add_tags(hist_prompt_words, _prompt_word_features(c.prompt, prompt_word_limit))
             if float(prompt_trigram_weight) != 0.0:
                 delta["prompt_trigram"] = _delta_entropy_for_add_tags(hist_prompt_trigrams, _prompt_trigram_features(c.prompt, prompt_trigram_limit))
+            if float(prompt_char3gram_weight) != 0.0:
+                delta["prompt_char_3gram"] = _delta_entropy_for_add_tags(hist_prompt_char3grams, _prompt_char3gram_features(c.prompt, prompt_char3gram_limit))
             score = 0.0
             score += (2.0 * delta["task_family"])
             score += (1.5 * delta["prompt_template_id"])
@@ -712,6 +735,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             score += (float(answer_weight) * delta["answer"])
             score += (float(prompt_word_weight) * float(delta.get("prompt_word", 0.0)))
             score += (float(prompt_trigram_weight) * float(delta.get("prompt_trigram", 0.0)))
+            score += (float(prompt_char3gram_weight) * float(delta.get("prompt_char_3gram", 0.0)))
             score += (0.10 * _inv_freq_bonus(hist_family.get(c.task_family, 0)))
             score += (0.05 * _inv_freq_bonus(hist_template.get(c.prompt_template_id, 0)))
             score += (0.05 * _inv_freq_bonus(hist_pair.get(pair_k, 0)))
@@ -794,6 +818,8 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
             for ng in _prompt_trigram_features(best.prompt, prompt_trigram_limit):
                 hist_prompt_trigrams[ng] = hist_prompt_trigrams.get(ng, 0) + 1
+            for ng in _prompt_char3gram_features(best.prompt, prompt_char3gram_limit):
+                hist_prompt_char3grams[ng] = hist_prompt_char3grams.get(ng, 0) + 1
 
         remaining = [c for c in remaining if not (c.task_id == best.task_id and c.prompt_template_id == best.prompt_template_id)]
     return(out)
@@ -817,8 +843,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--answer-letter-only", action="store_true", help="Treat answer diversity as single-letter options only (A-Z); ignores numeric/freeform answers.")
     p.add_argument("--prompt-word-weight", type=float, default=0.0, help="Coverage weight for prompt word entropy gain (0 disables; requires candidates to include prompt).")
     p.add_argument("--prompt-trigram-weight", type=float, default=0.0, help="Coverage weight for prompt word-3gram entropy gain (0 disables; requires candidates to include prompt).")
+    p.add_argument("--prompt-char3gram-weight", type=float, default=0.0, help="Coverage weight for prompt char-3gram entropy gain (0 disables; requires candidates to include prompt).")
     p.add_argument("--prompt-word-limit", type=int, default=64, help="Max unique prompt words per record to consider (0 disables limit).")
     p.add_argument("--prompt-trigram-limit", type=int, default=64, help="Max unique prompt word-3grams per record to consider (0 disables limit).")
+    p.add_argument("--prompt-char3gram-limit", type=int, default=128, help="Max unique prompt char-3grams per record to consider (0 disables limit).")
     p.add_argument("--judge-disagree-weight", type=float, default=0.0, help="Penalty multiplier for historical judge disagreement_rate_decided_ab (0 disables).")
     p.add_argument("--judge-invalid-weight", type=float, default=0.0, help="Penalty multiplier for historical judge invalid_rate (0 disables).")
     p.add_argument("--judge-tie-weight", type=float, default=0.0, help="Penalty multiplier for historical judge tie_rate (0 disables).")
@@ -836,9 +864,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     history = lib.load_jsonl(args.history_jsonl)
     candidates = lib.load_jsonl(args.candidates_jsonl)
-    scored = _score(history, candidates, noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), answer_letter_only=bool(args.answer_letter_only))
-    top = _select(scored, history, limit=max(0, args.limit), max_per_family=args.max_per_family, max_per_template=args.max_per_template, avoid_seen_task_id=bool(args.avoid_seen_task_id), avoid_seen_buffer_item_id=bool(args.avoid_seen_buffer_item_id), avoid_seen_prompt_norm=bool(args.avoid_seen_prompt_norm), noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), answer_letter_only=bool(args.answer_letter_only))
-    predicted = _predict(history, top, prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), answer_letter_only=bool(args.answer_letter_only))
+    scored = _score(history, candidates, noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_char3gram_weight=float(args.prompt_char3gram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), prompt_char3gram_limit=int(args.prompt_char3gram_limit), answer_letter_only=bool(args.answer_letter_only))
+    top = _select(scored, history, limit=max(0, args.limit), max_per_family=args.max_per_family, max_per_template=args.max_per_template, avoid_seen_task_id=bool(args.avoid_seen_task_id), avoid_seen_buffer_item_id=bool(args.avoid_seen_buffer_item_id), avoid_seen_prompt_norm=bool(args.avoid_seen_prompt_norm), noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_char3gram_weight=float(args.prompt_char3gram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), prompt_char3gram_limit=int(args.prompt_char3gram_limit), answer_letter_only=bool(args.answer_letter_only))
+    predicted = _predict(history, top, prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), prompt_char3gram_limit=int(args.prompt_char3gram_limit), answer_letter_only=bool(args.answer_letter_only))
 
     recs: List[Dict[str, Any]] = []
     for c in top:
@@ -906,8 +934,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "answer_letter_only": bool(args.answer_letter_only),
             "prompt_word_weight": float(args.prompt_word_weight),
             "prompt_trigram_weight": float(args.prompt_trigram_weight),
+            "prompt_char3gram_weight": float(args.prompt_char3gram_weight),
             "prompt_word_limit": int(args.prompt_word_limit),
             "prompt_trigram_limit": int(args.prompt_trigram_limit),
+            "prompt_char3gram_limit": int(args.prompt_char3gram_limit),
             "max_noise_rate": float(args.max_noise_rate),
             "max_dup_rate": float(args.max_dup_rate),
         },
