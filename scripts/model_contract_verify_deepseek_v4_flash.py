@@ -275,6 +275,17 @@ def main() -> int:
 							failures.append(Failure(39, f"contract summary encoding_constants.ds_task_sp_tokens keys mismatch (expected {sorted(expected_task_keys)}): {contract_summary}"))
 				if upstream_commit and up.get("x_repo_commit") != upstream_commit:
 					failures.append(Failure(36, f"contract summary upstream.x_repo_commit must match fixtures upstream_commit.txt ({upstream_commit}): {contract_summary}"))
+				if upstream_commit:
+					want_pinned = upstream_commit
+					got_rev = up.get("hf_revision")
+					got_pinned = up.get("hf_revision_pinned")
+					got_requested = up.get("hf_revision_requested")
+					if got_requested not in (None, "main"):
+						failures.append(Failure(400, f"contract summary upstream.hf_revision_requested must be 'main' (or null), got {got_requested!r}: {contract_summary}"))
+					if got_pinned != want_pinned:
+						failures.append(Failure(401, f"contract summary upstream.hf_revision_pinned must match upstream_commit.txt ({want_pinned}), got {got_pinned!r}: {contract_summary}"))
+					if got_rev != want_pinned:
+						failures.append(Failure(402, f"contract summary upstream.hf_revision must be pinned to upstream_commit.txt ({want_pinned}), got {got_rev!r}: {contract_summary}"))
 
 				ckpt = summary.get("checkpoint_index", {}) if isinstance(summary, dict) else {}
 				if isinstance(ckpt, dict):

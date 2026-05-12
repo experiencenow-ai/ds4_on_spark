@@ -1525,13 +1525,19 @@ def build_contract() -> dict:
 			fixture_sha[rel] = sha256_file(p)
 
 	mtp_sidecar = build_ds4_mtp_sidecar_contract()
+	requested_hf_rev = "main"
+	pinned_hf_rev = requested_hf_rev
+	if isinstance(upstream_commit, str) and len(upstream_commit) == 40:
+		pinned_hf_rev = upstream_commit
 
 	contract = {
 		"format_version": 1,
 		"model": "deepseek_v4_flash",
 		"upstream": {
 			"hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
-			"hf_revision": "main",
+			"hf_revision": pinned_hf_rev,
+			"hf_revision_requested": requested_hf_rev,
+			"hf_revision_pinned": pinned_hf_rev,
 			"x_repo_commit": upstream_commit,
 			"fixtures_sha256": fixture_sha,
 			"fixtures": {
