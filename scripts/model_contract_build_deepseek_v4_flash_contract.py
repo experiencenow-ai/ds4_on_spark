@@ -677,6 +677,10 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 	win_topk_lines = extract_function_source_lines(text, "get_window_topk_idxs")
 	compress_topk_lines = extract_function_source_lines(text, "get_compress_topk_idxs")
 
+	compressor_forward_lines = extract_class_method_source_lines(text, "Compressor", "forward")
+	indexer_forward_lines = extract_class_method_source_lines(text, "Indexer", "forward")
+	attention_forward_lines = extract_class_method_source_lines(text, "Attention", "forward")
+
 	return {
 		"mla": {
 			"rope_slice_rule": "RoPE applies to trailing rope_head_dim dims via x[..., -rope_head_dim:]",
@@ -712,6 +716,21 @@ def parse_inference_mla_and_cache_semantics(model_py: Path) -> dict:
 			"get_compress_topk_idxs": {
 				"source_lines": compress_topk_lines,
 				"source_lines_sha256": sha256_lines(compress_topk_lines) if isinstance(compress_topk_lines, list) else None,
+			},
+		},
+		"cache_source_helpers": {
+			"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor.forward, Indexer.forward, Attention.forward)",
+			"compressor_forward": {
+				"source_lines": compressor_forward_lines,
+				"source_lines_sha256": sha256_lines(compressor_forward_lines) if isinstance(compressor_forward_lines, list) else None,
+			},
+			"indexer_forward": {
+				"source_lines": indexer_forward_lines,
+				"source_lines_sha256": sha256_lines(indexer_forward_lines) if isinstance(indexer_forward_lines, list) else None,
+			},
+			"attention_forward": {
+				"source_lines": attention_forward_lines,
+				"source_lines_sha256": sha256_lines(attention_forward_lines) if isinstance(attention_forward_lines, list) else None,
 			},
 		},
 	}
@@ -1567,6 +1586,9 @@ def build_contract() -> dict:
 				"mtp_compress_ratio_by_mtp_layer_id": [int(r) for r in mtp_ratios],
 				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
 				"topk_index_helpers": sem.get("cache_topk_index_helpers", {}) if isinstance(sem, dict) else {},
+				"semantics": {
+					"source_helpers": sem.get("cache_source_helpers", {}) if isinstance(sem, dict) else {},
+				},
 				"compression_semantics": {
 					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor, Indexer, Attention)",
 					"overlap_rule": "overlap = (compress_ratio == 4)",
