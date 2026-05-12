@@ -288,6 +288,11 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     if ti is not None:
         out["token_index"] = int(ti)
 
+    layer_index = _get_any(obj, ("layer_index", "layer_idx", "moe_layer", "moe_layer_index", "layer", "layer_id"))
+    li = _coerce_nonneg_int(layer_index)
+    if li is not None:
+        out["layer_index"] = int(li)
+
     t_ms, dt_ms = _extract_time(obj)
     if t_ms is not None:
         out["t_ms"] = float(t_ms)
@@ -451,6 +456,195 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     return(out)
 
 
+def pack_layers_by_token_index(
+    routes: Sequence[Dict[str, object]],
+    require_layer_index: bool = False,
+    strict: bool = True,
+) -> List[Dict[str, object]]:
+    out: List[Dict[str, object]] = []
+    by_token: Dict[int, List[Dict[str, object]]] = {}
+    order: List[int] = []
+
+    for r in routes:
+        ti_raw = r.get("token_index")
+        if not isinstance(ti_raw, int) or ti_raw < 0:
+            if strict:
+                raise ValueError("pack_layers_by_token_index requires integer token_index on every route record")
+            continue
+        ti = int(ti_raw)
+        if ti not in by_token:
+            by_token[ti] = []
+            order.append(ti)
+        by_token[ti].append(r)
+
+    for ti in order:
+        group = by_token.get(ti, [])
+        if len(group) == 0:
+            continue
+
+        first = group[0]
+        cls = first.get("cls")
+        if not isinstance(cls, str):
+            if strict:
+                raise ValueError(f"token_index={ti}: missing cls")
+            continue
+
+        have_t_ms = "t_ms" in first and first.get("t_ms") is not None
+        have_dt_ms = "dt_ms" in first and first.get("dt_ms") is not None
+        if have_t_ms and have_dt_ms:
+            if strict:
+                raise ValueError(f"token_index={ti}: record has both t_ms and dt_ms")
+            have_dt_ms = False
+        if have_t_ms is False and have_dt_ms is False:
+            if strict:
+                raise ValueError(f"token_index={ti}: missing t_ms/dt_ms")
+            continue
+
+        t_ms = float(first.get("t_ms", 0.0)) if have_t_ms else None
+        dt_ms = float(first.get("dt_ms", 0.0)) if have_dt_ms else None
+
+        cost_scale = first.get("cost_scale")
+        decode_ms = first.get("decode_ms")
+        kv_tokens = first.get("kv_tokens")
+        expert_batch_size = first.get("expert_batch_size")
+
+        mtp_accept_len = first.get("mtp_accept_len")
+        accepted_mtp = first.get("accepted_mtp")
+        rejected_mtp = first.get("rejected_mtp")
+
+        dflash_accept_len = first.get("dflash_accept_len")
+        accepted_dflash = first.get("accepted_dflash")
+        rejected_dflash = first.get("rejected_dflash")
+
+        for r in group[1:]:
+            if r.get("cls") != cls:
+                if strict:
+                    raise ValueError(f"token_index={ti}: cls mismatch within pack group")
+                continue
+
+            if have_t_ms:
+                if "t_ms" not in r or r.get("t_ms") is None:
+                    if strict:
+                        raise ValueError(f"token_index={ti}: mixed t_ms/dt_ms within pack group")
+                    continue
+                if float(r.get("t_ms")) != float(t_ms):
+                    if strict:
+                        raise ValueError(f"token_index={ti}: t_ms mismatch within pack group")
+                    continue
+            else:
+                if "dt_ms" not in r or r.get("dt_ms") is None:
+                    if strict:
+                        raise ValueError(f"token_index={ti}: mixed t_ms/dt_ms within pack group")
+                    continue
+                if float(r.get("dt_ms")) != float(dt_ms):
+                    if strict:
+                        raise ValueError(f"token_index={ti}: dt_ms mismatch within pack group")
+                    continue
+
+            # Only allow metadata fields to differ if they are consistently absent.
+            for k, first_val in (
+                ("cost_scale", cost_scale),
+                ("decode_ms", decode_ms),
+                ("kv_tokens", kv_tokens),
+                ("expert_batch_size", expert_batch_size),
+                ("mtp_accept_len", mtp_accept_len),
+                ("accepted_mtp", accepted_mtp),
+                ("rejected_mtp", rejected_mtp),
+                ("dflash_accept_len", dflash_accept_len),
+                ("accepted_dflash", accepted_dflash),
+                ("rejected_dflash", rejected_dflash),
+            ):
+                if first_val is None:
+                    continue
+                if k in r and r.get(k) is not None and r.get(k) != first_val:
+                    if strict:
+                        raise ValueError(f"token_index={ti}: {k} mismatch within pack group")
+                    continue
+
+        layer_recs: List[Tuple[Optional[int], int, Dict[str, object]]] = []
+        for idx, r in enumerate(group):
+            if "layers" in r:
+                if strict:
+                    raise ValueError(f"token_index={ti}: per-layer pack expects one-layer records, found layers[]")
+                continue
+            cands = r.get("candidates")
+            if not isinstance(cands, list) or len(cands) == 0:
+                if strict:
+                    raise ValueError(f"token_index={ti}: missing candidates")
+                continue
+            layer: Dict[str, object] = {"candidates": cands}
+            if "scores" in r and r.get("scores") is not None:
+                layer["scores"] = r.get("scores")
+            if "k" in r and r.get("k") is not None:
+                layer["k"] = r.get("k")
+            if "cost_scale" in r and r.get("cost_scale") is not None:
+                layer["cost_scale"] = r.get("cost_scale")
+
+            li_raw = r.get("layer_index")
+            li = int(li_raw) if isinstance(li_raw, int) and li_raw >= 0 else None
+            if require_layer_index and li is None:
+                if strict:
+                    raise ValueError(f"token_index={ti}: missing layer_index for per-layer pack")
+                continue
+            if li is not None:
+                layer["layer_index"] = int(li)
+            layer_recs.append((li, idx, layer))
+
+        if len(layer_recs) == 0:
+            continue
+
+        if any(li is not None for li, _, _ in layer_recs):
+            if require_layer_index is False:
+                # If some records have layer_index but others don't, fail fast in strict mode.
+                if strict and any(li is None for li, _, _ in layer_recs):
+                    raise ValueError(f"token_index={ti}: mixed presence of layer_index within pack group")
+            layer_recs.sort(key=lambda t: (t[0] if t[0] is not None else 1 << 30, t[1]))
+        else:
+            layer_recs.sort(key=lambda t: t[1])
+
+        layers: List[Dict[str, object]] = [lr for _, _, lr in layer_recs]
+
+        union_seen = set()
+        union: List[int] = []
+        for layer in layers:
+            lc = layer.get("candidates")
+            if not isinstance(lc, list):
+                continue
+            for e in lc:
+                if not isinstance(e, int) or int(e) < 0:
+                    continue
+                ei = int(e)
+                if ei in union_seen:
+                    continue
+                union_seen.add(ei)
+                union.append(ei)
+
+        rec_out: Dict[str, object] = {"token_index": int(ti), "cls": cls, "candidates": union, "layers": layers}
+        if have_t_ms:
+            rec_out["t_ms"] = float(t_ms)
+        else:
+            rec_out["dt_ms"] = float(dt_ms)
+
+        for k, v in (
+            ("cost_scale", cost_scale),
+            ("decode_ms", decode_ms),
+            ("kv_tokens", kv_tokens),
+            ("expert_batch_size", expert_batch_size),
+            ("mtp_accept_len", mtp_accept_len),
+            ("accepted_mtp", accepted_mtp),
+            ("rejected_mtp", rejected_mtp),
+            ("dflash_accept_len", dflash_accept_len),
+            ("accepted_dflash", accepted_dflash),
+            ("rejected_dflash", rejected_dflash),
+        ):
+            if v is not None:
+                rec_out[k] = v
+
+        out.append(rec_out)
+
+    return(out)
+
+
 def extract_jsonl_lines(
     lines: Iterable[str],
     route_type: str = "",
@@ -529,6 +723,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--non-route", type=str, default="skip", help="What to do for non-route input: skip (default; also skips non-JSON lines) or error.")
     p.add_argument("--default-cls", type=str, default="", help="Optional: when records omit cls/latency class, force all extracted records to this value (interactive or batch).")
     p.add_argument("--extract-substrings", type=int, default=1, help="When set, scan non-JSON log lines for embedded JSON objects and try extracting route records from them (default: 1).")
+    p.add_argument("--pack-layers-by-token-index", type=int, default=0, help="When set, pack per-layer route records sharing token_index into a single multi-layer trace record with layers[]. Requires token_index on every record; prefers layer_index ordering when present.")
+    p.add_argument("--pack-require-layer-index", type=int, default=0, help="When used with --pack-layers-by-token-index, require every record to include layer_index so layer ordering is explicit (default: 0).")
     args = p.parse_args(argv)
 
     f_in = sys.stdin if args.in_jsonl == "-" else open(args.in_jsonl, "r", encoding="utf-8")
@@ -554,10 +750,16 @@ def main(argv: Optional[List[str]] = None) -> int:
                 meta[k] = v
         meta["inferred"] = inferred
 
+    packed: Optional[List[Dict[str, object]]] = None
+    if int(args.pack_layers_by_token_index) != 0:
+        packed = pack_layers_by_token_index(recs, require_layer_index=(int(args.pack_require_layer_index) != 0), strict=True)
+        meta["packed_layers_by_token_index"] = True
+        meta["packed_routes"] = len(packed)
+
     f_out = sys.stdout if args.out_jsonl == "-" else open(args.out_jsonl, "w", encoding="utf-8")
     try:
         f_out.write(json.dumps({"type": "meta", "meta": meta}, separators=(",", ":")) + "\n")
-        for rec in recs:
+        for rec in (packed if packed is not None else recs):
             f_out.write(json.dumps(rec, separators=(",", ":")) + "\n")
     finally:
         if f_out is not sys.stdout:

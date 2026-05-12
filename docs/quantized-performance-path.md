@@ -224,6 +224,27 @@ If the runtime mixes JSON objects into plain-text log lines (for example `INFO r
 
 `trace_extract.py` preserves multi-layer routing when present (`layers[]` / `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` so the simulator can replay the trace without additional massaging.
 
+Some runtimes emit **one route record per MoE layer per token** (repeated `token_index`, optional `layer_index`) instead of a single `layers[]` object. Pack those per-layer records into `layers[]` first:
+
+```bash
+python3 sim/scheduler/trace_extract.py \
+  --in-jsonl /path/to/runtime.log \
+  --out-jsonl /tmp/routes_packed.jsonl \
+  --non-route skip \
+  --pack-layers-by-token-index 1
+```
+
+If the runtime provides a stable `layer_index`, require it so layer ordering is explicit:
+
+```bash
+python3 sim/scheduler/trace_extract.py \
+  --in-jsonl /path/to/runtime.log \
+  --out-jsonl /tmp/routes_packed.jsonl \
+  --non-route skip \
+  --pack-layers-by-token-index 1 \
+  --pack-require-layer-index 1
+```
+
 If the runtime trace includes per-token chosen `K`, replay it directly:
 
 ```bash
