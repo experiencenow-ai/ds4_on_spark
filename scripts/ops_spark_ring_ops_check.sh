@@ -306,6 +306,12 @@ if [ "$out_path" != "" ]; then
 	if [ "$out_dir" != "" ] && [ "$out_dir" != "." ]; then
 		mkdir -p "$out_dir"
 	fi
+	cleanup_tmp()
+	{
+		rm -f "$tmp" 2>/dev/null || true
+	}
+	trap cleanup_tmp EXIT INT TERM HUP
+	umask 077
 	if do_work "$@" >"$tmp" 2>&1; then rc=0; else rc=$?; fi
 	mv "$tmp" "$out_path"
 	cat "$out_path"

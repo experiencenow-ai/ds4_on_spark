@@ -29,6 +29,8 @@ Or using an inventory file (recommended for repeatable runs):
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
+Note: snapshots may include hostnames/IPs/routes and journal excerpts; keep the output private and redact before sharing externally.
+
 This is read-only. It does not start/stop services or modify networking.
 
 If you already staged deploy assets to `/tmp/ds4-*` on each Spark, you can also include staged readiness checks in the same snapshot (safe; no sudo):

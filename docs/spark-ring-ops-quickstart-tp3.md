@@ -56,6 +56,8 @@ Optional: capture a single “snapshot” (mesh + systemd status + optional jour
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
+Note: snapshots may include hostnames/IPs/routes and journal excerpts; keep the output private and redact before sharing externally.
+
 Optional: if you already staged assets, include staged readiness in the same snapshot (safe; uses `/tmp/ds4-*`):
 
 ```bash

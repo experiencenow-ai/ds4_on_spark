@@ -33,6 +33,8 @@ Or using an inventory file (recommended for repeatable runs):
   --inventory-file deploy/config/inventory.ds4.spark01.example
 ```
 
+Note: snapshots may include hostnames/IPs/routes and journal excerpts; keep the output private and redact before sharing externally.
+
 If you already staged deploy assets to `/tmp/ds4-*` on both Sparks, you can also include staged readiness checks (safe; no sudo):
 
 ```bash
