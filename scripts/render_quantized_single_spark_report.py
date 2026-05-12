@@ -423,8 +423,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         if isinstance(mt, dict):
             status = mt.get("status")
             trusted = mt.get("trusted")
-            if status is not None or trusted is not None:
-                lines.append(f"- mtp_trust: status={status} trusted={trusted}")
+            match_official = mt.get("mtp_keys_sha256_match_official")
+            expected = mt.get("expected_mtp_keys_sha256")
+            reasons = mt.get("reasons")
+            if status is not None or trusted is not None or match_official is not None:
+                lines.append(
+                    f"- mtp_trust: status={status} trusted={trusted} mtp_keys_sha256_match_official={match_official}"
+                )
+            if isinstance(expected, str) and expected.strip():
+                lines.append(f"- mtp_trust_expected_mtp_keys_sha256={expected.strip()}")
+            if isinstance(reasons, list) and reasons:
+                r0 = reasons[0]
+                if isinstance(r0, str) and r0.strip():
+                    lines.append(f"- mtp_trust_reason_first={r0.strip().replace(chr(10), ' ')}")
         qc = inspect.get("quantization_contract")
         if isinstance(qc, dict) and qc.get("checked") is not None:
             obs = qc.get("observed", {})

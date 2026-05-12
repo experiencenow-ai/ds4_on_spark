@@ -45,6 +45,7 @@ Safety gate: `scripts/run_quantized_single_spark.sh` no longer forces `ALLOW_RUN
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
   - The commit-ready report rendered by `scripts/render_quantized_single_spark_report.py` surfaces the contract-aware fields from `remote_gguf_inspect_stdout.txt`, including (when present): `mtp_keys_sha256`, `mtp_namespace.*`, `mtp_preservation.*`, and `mtp_trust.*`.
+    - The rendered report also surfaces `mtp_trust.expected_mtp_keys_sha256`, `mtp_trust.mtp_keys_sha256_match_official`, and a first `mtp_trust.reasons[]` hint when available.
 - The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
   - Always record `weight_keys_sha256` (stable fingerprint of the artifact’s tensor key set). When `mtp_present=true`, also record `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
   - When available, also record `tensor_type_profile` (best-effort expert vs dense split for known DeepSeek-V4 GGUF naming), since it captures whether MoE experts appear to be `MXFP4` (Flash-leaning) vs primarily FP8.
