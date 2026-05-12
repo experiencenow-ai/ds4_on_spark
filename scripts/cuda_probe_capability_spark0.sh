@@ -65,7 +65,7 @@ run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_compile_only_tiny_${remote_tag}" 
 
 if [ "${with_cublaslt_tiny}" = "1" ]; then
 	log_line "== cuda probe capability: cublaslt-tiny gates (cuBLASLt matmul) =="
-	run_logged "$repo_root/scripts/cuda_probe_cublaslt_tiny_spark0.sh" "$target"
+	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_cublaslt_tiny_${remote_tag}" "$repo_root/scripts/cuda_probe_cublaslt_tiny_spark0.sh" "$target"
 fi
 
 if [ "${with_kernel_tiny}" = "1" ]; then
