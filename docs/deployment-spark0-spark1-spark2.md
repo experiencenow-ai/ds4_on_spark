@@ -104,6 +104,18 @@ sudo systemctl enable ds4-tp3-strict@spark0.service
 sudo systemctl start  ds4-tp3-strict@spark0.service
 ```
 
+## Optional: Developer Path (`systemd --user`, No Sudo)
+
+If you are doing a non-root bring-up (developer path), install and run the user units (staged under `/tmp/ds4-systemd-user/`) and keep per-instance config under `~/.config/ds4/`:
+
+```bash
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight --preflight tp3
+/tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance spark0 --strict
+systemctl --user enable --now ds4-tp3-strict@spark0.service
+```
+
+See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layout.md`.
+
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`

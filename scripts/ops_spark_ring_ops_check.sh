@@ -15,6 +15,8 @@ Environment:
 
 Notes:
   - Non-destructive; intended to run from the Mac.
+  - For `--preflight auto` (default), picks based on node_count:
+      2 => tp2, 3 => tp3, 4 => tp4 (other sizes must pass --preflight explicitly)
   - Runs:
       1) mesh checks (ping/route + optional tcp probes) via ops_spark_ring_mesh_check.sh
       2) systemd status snapshot via ops_spark_ring_status.sh
@@ -189,11 +191,14 @@ infer_preflight()
 		2) echo "tp2" ;;
 		3) echo "tp3" ;;
 		4) echo "tp4" ;;
-		*) echo "tp2" ;;
+		*)
+			echo "cannot infer --preflight from node_count=$#; pass --preflight tp2|tp3|tp4" >&2
+			return 2
+			;;
 	esac
 }
 
-picked_preflight="$(infer_preflight "$@")"
+picked_preflight="$(infer_preflight "$@")" || exit $?
 
 echo "== spark ring ops check (Mac-side) =="
 date -Is 2>/dev/null || date || true
