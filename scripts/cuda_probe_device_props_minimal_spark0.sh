@@ -295,6 +295,20 @@ set -e
 		head -n 60 \"$REMOTE_DIR\"/cuda_sm121_gpuarch_compile_only.err || true
 		exit 5
 	fi
+
+	echo
+	echo \"== build: sm_121 compile-only gate (nvcc --gpu-architecture=compute_121 --gpu-code=sm_121) ==\"
+	set +e
+	\$NVCC -O2 -std=c++17 --gpu-architecture=compute_121 --gpu-code=sm_121 -c -o \"$REMOTE_DIR\"/cuda_sm121_gpuarch_code_compile_only.o \"$REMOTE_DIR\"/cuda_sm121_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_sm121_gpuarch_code_compile_only.err
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		echo \"sm_121_gpuarch_code_compile_only: OK\"
+	else
+		echo \"sm_121_gpuarch_code_compile_only: FAILED rc=\$rc\" >&2
+		head -n 60 \"$REMOTE_DIR\"/cuda_sm121_gpuarch_code_compile_only.err || true
+		exit 6
+	fi
 	
 	echo
 	echo \"== run: cuda_device_props_minimal ==\"
