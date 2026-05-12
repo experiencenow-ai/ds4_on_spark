@@ -102,7 +102,15 @@ fi
 echo
 echo \"== nvidia-smi: memory (best-effort) ==\"
 if command -v nvidia-smi >/dev/null 2>&1; then
-	nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free --format=csv,noheader,nounits 2>/dev/null || true
+	smi_out=\$(nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free --format=csv,noheader,nounits 2>/dev/null || true)
+	if [ \"\${smi_out}\" = \"\" ]; then
+		echo \"(nvidia-smi query unavailable)\"
+	else
+		printf \"%s\\n\" \"\${smi_out}\"
+		if printf \"%s\\n\" \"\${smi_out}\" | grep -qi \"N/A\"; then
+			echo \"(nvidia-smi memory fields N/A on this host/driver)\"
+		fi
+	fi
 else
 	echo \"(nvidia-smi not found)\"
 fi
