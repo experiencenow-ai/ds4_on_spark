@@ -323,10 +323,12 @@ REMOTE
 			-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 			-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
 			-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+			-e 's/UUID: [^)]*/UUID: <redacted-gpu-uuid>/g' \
+			-e 's/GPU-[0-9A-Fa-f-]{36}/<redacted-gpu-uuid>/g' \
 			"$tmp"
-else
-	cat "$tmp"
-fi
+	else
+		cat "$tmp"
+	fi
 
 if [ "${ssh_fail:-0}" != "0" ]; then
 	exit 1
