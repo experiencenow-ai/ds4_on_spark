@@ -179,6 +179,25 @@ int32_t test_cuda(void)
 		st0 = ds4_cuda_free(dev);
 		if ( ds4_cuda_is_ok(st0) == 0 )
 			return(-19);
+		st0 = ds4_cuda_stream_synchronize((ds4_cuda_stream_t){0});
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-305);
+		{
+			ds4_cuda_event_t evd;
+			evd.h = 0;
+			st0 = ds4_cuda_event_create(&evd,DS4_CUDA_EVENT_FLAGS_DEFAULT);
+			if ( ds4_cuda_is_ok(st0) == 0 || evd.h == 0 )
+				return(-306);
+			st0 = ds4_cuda_event_record(evd,(ds4_cuda_stream_t){0});
+			if ( ds4_cuda_is_ok(st0) == 0 )
+				return(-307);
+			st0 = ds4_cuda_event_synchronize(evd);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+				return(-308);
+			st0 = ds4_cuda_event_destroy(&evd);
+			if ( ds4_cuda_is_ok(st0) == 0 )
+				return(-309);
+		}
 		stream.h = 0;
 		st0 = ds4_cuda_stream_create(&stream,DS4_CUDA_STREAM_FLAGS_DEFAULT);
 		if ( ds4_cuda_is_ok(st0) == 0 || stream.h == 0 )

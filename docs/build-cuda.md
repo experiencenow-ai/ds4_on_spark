@@ -49,6 +49,8 @@ When sequencing copies or memset with a stream, use:
 - `ds4_cuda_memcpy_h2d_async(dst,src,bytes,stream)`
 - `ds4_cuda_memcpy_d2h_async(dst,src,bytes,stream)`
 
+For convenience, a zero-initialized `ds4_cuda_stream_t` (`(ds4_cuda_stream_t){0}`) represents the CUDA default stream; wrappers accept it for `ds4_cuda_stream_synchronize` and `ds4_cuda_event_record`.
+
 ## Device arena helper
 
 For a conservative device-memory pattern, DS4 provides `ds4_cuda_arena_t` (`include/ds4/cuda_arena.h`):
