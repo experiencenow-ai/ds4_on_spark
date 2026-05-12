@@ -3351,7 +3351,7 @@ def run_simulation(
             raise ValueError("mtp_draft_attempt_policy must be 'full' or 'stop_at_reject'")
         mtp_draft_queue_cls = cfg.mtp_draft_queue_cls.strip().lower()
         if mtp_draft_queue_cls not in ("inherit", "interactive", "batch", "hi", "lo"):
-            raise ValueError("mtp_draft_queue_cls must be one of: inherit, interactive, batch")
+            raise ValueError("mtp_draft_queue_cls must be one of: inherit, interactive, batch, hi, lo")
         accept_model = str(cfg.mtp_accept_model).strip().lower()
         if accept_model not in ("geom", "hist"):
             raise ValueError("mtp_accept_model must be 'geom' or 'hist'")

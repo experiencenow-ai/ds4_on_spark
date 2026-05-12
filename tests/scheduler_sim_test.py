@@ -4242,6 +4242,9 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("baseline", out["results"]["arrival_units_steps"])
         self.assertIn("variants", out["results"]["arrival_units_steps"])
         self.assertIn("mtp_off", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("mtp_draft_queue_batch", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("mtp_draft_queue_cls", out["evidence"])
+        self.assertEqual(out["evidence"]["mtp_draft_queue_cls"].get("variant"), "batch")
 
     def test_recommendations_runtime_trace_mtp_ablation_supports_synthetic_mtp(self) -> None:
         from sim.scheduler import recommendations
@@ -4265,12 +4268,18 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])
         self.assertIn("mtp_off", out["results"]["arrival_units_steps"]["variants"])
+        self.assertIn("mtp_draft_queue_batch", out["results"]["arrival_units_steps"]["variants"])
         self.assertIn("evidence", out)
         self.assertIn("mtp", out["evidence"])
         ev = out["evidence"]["mtp"]
         self.assertEqual(ev.get("mode"), "synthetic")
         self.assertFalse(bool(ev.get("supported_by_trace_counters")))
         self.assertIsInstance(ev.get("supported_by_synthetic_model"), bool)
+        self.assertIn("mtp_draft_queue_cls", out["evidence"])
+        evq = out["evidence"]["mtp_draft_queue_cls"]
+        self.assertEqual(evq.get("variant"), "batch")
+        self.assertFalse(bool(evq.get("supported_by_trace_counters")))
+        self.assertIsInstance(evq.get("supported_by_synthetic_model"), bool)
 
     def test_trace_sweep_runs_on_synthetic_trace(self) -> None:
         from sim.scheduler import scheduler_sim
