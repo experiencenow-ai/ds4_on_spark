@@ -130,7 +130,8 @@ The scripts compute:
   - Also reports instrumentation coverage rates: `input_tokens_present_task_run_rate`, `output_tokens_present_task_run_rate`, and `wall_ms_present_task_run_rate`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
   - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
-- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
+  - For MCQ-style tasks, `diversity.answer.letter` reports the same diversity stats restricted to single-letter answers (`A`-`Z`) plus `hhi` (concentration).
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement), plus `label_entropy_bits`/`label_entropy_norm`/`label_effective_num` and `label_hhi` for concentration; also emits per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
 - **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
@@ -188,6 +189,7 @@ python3 scripts/entropy_buffer_canonicalize.py \
 Use this when you want a deterministic “what should we run next?” view from history only (no candidate list required). It highlights:
 
 - Underrepresented `task_family` / `prompt_template_id` / `task_family|prompt_template_id` keys (low-count).
+- Underrepresented single-letter answers (`A`-`Z`) when present (`underrepresented_answer_letter_top`).
 - Families with low within-family template entropy (template collapse).
 - Families missing templates relative to templates seen elsewhere (cross-family template coverage).
 - Underrepresented judge model-pairs and judge `task_family|prompt_template_id` slices (when present).
@@ -234,6 +236,7 @@ Notes:
 
 - If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
 - If candidate records include an `answer`/`final_answer` (or an `output` with an extractable answer), the recommender can reward **answer-option diversity** via `--answer-weight` (set to `0` to disable).
+  - Use `--answer-letter-only` to treat answer diversity as single-letter options only (recommended for mixed corpora where many answers are numeric/freeform).
 - If candidate records include `prompt`, the recommender can reward **input lexical diversity** (approx) via:
   - `--prompt-word-weight` (word unigram entropy gain) and `--prompt-trigram-weight` (word 3-gram entropy gain).
   - `--prompt-word-limit` / `--prompt-trigram-limit` to cap per-record feature fanout (set to `0` to disable limits).
