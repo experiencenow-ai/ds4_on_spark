@@ -1,0 +1,157 @@
+diff --git a/ds4_cuda.cu b/ds4_cuda.cu
+index 34c68c7..7c6fa3c 100644
+--- a/ds4_cuda.cu
++++ b/ds4_cuda.cu
+@@ -114,13 +114,27 @@ struct cuda_q8_f32_range {
+     float *device_ptr;
+ };
+ 
++struct cuda_model_offset_key {
++    const void *host_base;
++    uint64_t offset;
++    bool operator==(const cuda_model_offset_key &o) const { return host_base == o.host_base && offset == o.offset; }
++};
++
++struct cuda_model_offset_key_hash {
++    size_t operator()(const cuda_model_offset_key &k) const noexcept {
++        const uint64_t p = (uint64_t)(uintptr_t)k.host_base;
++        const uint64_t x = k.offset;
++        return (size_t)((p >> 4) ^ p ^ (x + 0x9e3779b97f4a7c15ull + (p << 6) + (p >> 2)));
++    }
++};
++
+ static std::vector<cuda_model_range> g_model_ranges;
+ static std::vector<cuda_model_arena> g_model_arenas;
+-static std::unordered_map<uint64_t, size_t> g_model_range_by_offset;
++static std::unordered_map<cuda_model_offset_key, size_t, cuda_model_offset_key_hash> g_model_range_by_key;
+ static std::vector<cuda_q8_f16_range> g_q8_f16_ranges;
+-static std::unordered_map<uint64_t, size_t> g_q8_f16_by_offset;
++static std::unordered_map<cuda_model_offset_key, size_t, cuda_model_offset_key_hash> g_q8_f16_by_key;
+ static std::vector<cuda_q8_f32_range> g_q8_f32_ranges;
+-static std::unordered_map<uint64_t, size_t> g_q8_f32_by_offset;
++static std::unordered_map<cuda_model_offset_key, size_t, cuda_model_offset_key_hash> g_q8_f32_by_key;
+ static uint64_t g_model_range_bytes;
+ static uint64_t g_q8_f16_bytes;
+ static uint64_t g_q8_f32_bytes;
+@@ -196,8 +210,9 @@ static const char *cuda_model_range_ptr(const void *model_map, uint64_t offset,
+     if (direct_env && direct_env[0]) return cuda_model_ptr(model_map, offset);
+ 
+     const uint64_t end = offset + bytes;
+-    auto exact = g_model_range_by_offset.find(offset);
+-    if (exact != g_model_range_by_offset.end()) {
++    cuda_model_offset_key k{model_map, offset};
++    auto exact = g_model_range_by_key.find(k);
++    if (exact != g_model_range_by_key.end()) {
+         const cuda_model_range &r = g_model_ranges[exact->second];
+         if (r.host_base == model_map && end >= offset && bytes <= r.bytes) return r.device_ptr;
+     }
+@@ -236,7 +251,7 @@ static const char *cuda_model_range_ptr(const void *model_map, uint64_t offset,
+             if (err == cudaSuccess && reg_dev) {
+                 char *dev_ptr = (char *)reg_dev + reg_delta;
+                 g_model_ranges.push_back({model_map, offset, bytes, dev_ptr, (void *)reg_addr, (char *)reg_dev, reg_bytes, 1, 0});
+-                g_model_range_by_offset[offset] = g_model_ranges.size() - 1u;
++                g_model_range_by_key[cuda_model_offset_key{model_map, offset}] = g_model_ranges.size() - 1u;
+                 if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
+                     fprintf(stderr, "ds4: CUDA mapped %s %.2f MiB\n",
+                             what ? what : "weights",
+@@ -280,7 +295,7 @@ static const char *cuda_model_range_ptr(const void *model_map, uint64_t offset,
+         }
+     }
+     g_model_ranges.push_back({model_map, offset, bytes, (char *)dev, NULL, NULL, 0, 0, 0});
+-    g_model_range_by_offset[offset] = g_model_ranges.size() - 1u;
++    g_model_range_by_key[cuda_model_offset_key{model_map, offset}] = g_model_ranges.size() - 1u;
+     g_model_range_bytes += bytes;
+     if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
+         fprintf(stderr, "ds4: CUDA cached %s %.2f MiB (total %.2f GiB)\n",
+@@ -382,8 +397,9 @@ static const __half *cuda_q8_f16_ptr(
+         uint64_t in_dim,
+         uint64_t out_dim,
+         const char *label) {
+-    auto exact = g_q8_f16_by_offset.find(offset);
+-    if (exact != g_q8_f16_by_offset.end()) {
++    cuda_model_offset_key k{model_map, offset};
++    auto exact = g_q8_f16_by_key.find(k);
++    if (exact != g_q8_f16_by_key.end()) {
+         const cuda_q8_f16_range &r = g_q8_f16_ranges[exact->second];
+         if (r.host_base == model_map && r.weight_bytes == weight_bytes &&
+             r.in_dim == in_dim && r.out_dim == out_dim) {
+@@ -416,7 +432,7 @@ static const __half *cuda_q8_f16_ptr(
+         return NULL;
+     }
+     g_q8_f16_ranges.push_back({model_map, offset, weight_bytes, in_dim, out_dim, dev});
+-    g_q8_f16_by_offset[offset] = g_q8_f16_ranges.size() - 1u;
++    g_q8_f16_by_key[cuda_model_offset_key{model_map, offset}] = g_q8_f16_ranges.size() - 1u;
+     g_q8_f16_bytes += out_bytes;
+     if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
+         fprintf(stderr, "ds4: CUDA cached q8 fp16 %.2f MiB (total %.2f GiB)\n",
+@@ -433,8 +449,9 @@ static float *cuda_q8_f32_ptr(
+         uint64_t in_dim,
+         uint64_t out_dim,
+         const char *label) {
+-    auto exact = g_q8_f32_by_offset.find(offset);
+-    if (exact != g_q8_f32_by_offset.end()) {
++    cuda_model_offset_key k{model_map, offset};
++    auto exact = g_q8_f32_by_key.find(k);
++    if (exact != g_q8_f32_by_key.end()) {
+         const cuda_q8_f32_range &r = g_q8_f32_ranges[exact->second];
+         if (r.host_base == model_map && r.weight_bytes == weight_bytes &&
+             r.in_dim == in_dim && r.out_dim == out_dim) {
+@@ -467,7 +484,7 @@ static float *cuda_q8_f32_ptr(
+         return NULL;
+     }
+     g_q8_f32_ranges.push_back({model_map, offset, weight_bytes, in_dim, out_dim, dev});
+-    g_q8_f32_by_offset[offset] = g_q8_f32_ranges.size() - 1u;
++    g_q8_f32_by_key[cuda_model_offset_key{model_map, offset}] = g_q8_f32_ranges.size() - 1u;
+     g_q8_f32_bytes += out_bytes;
+     if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
+         fprintf(stderr, "ds4: CUDA cached q8 fp32 %.2f MiB (total %.2f GiB)\n",
+@@ -926,7 +943,7 @@ static const char *cuda_model_range_ptr_from_fd(
+     }
+ 
+     g_model_ranges.push_back({model_map, offset, bytes, dev, NULL, NULL, 0, 0, 1});
+-    g_model_range_by_offset[offset] = g_model_ranges.size() - 1u;
++    g_model_range_by_key[cuda_model_offset_key{model_map, offset}] = g_model_ranges.size() - 1u;
+     g_model_range_bytes += bytes;
+     cuda_model_load_progress_note(g_model_range_bytes);
+     if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
+@@ -1038,7 +1055,7 @@ static void cuda_model_range_release_all(void) {
+     }
+     g_model_arenas.clear();
+     g_model_ranges.clear();
+-    g_model_range_by_offset.clear();
++    g_model_range_by_key.clear();
+     g_model_range_bytes = 0;
+     cuda_model_load_progress_reset();
+ }
+@@ -1081,13 +1098,13 @@ extern "C" void ds4_gpu_cleanup(void) {
+         (void)cudaFree(r.device_ptr);
+     }
+     g_q8_f16_ranges.clear();
+-    g_q8_f16_by_offset.clear();
++    g_q8_f16_by_key.clear();
+     g_q8_f16_bytes = 0;
+     for (const cuda_q8_f32_range &r : g_q8_f32_ranges) {
+         (void)cudaFree(r.device_ptr);
+     }
+     g_q8_f32_ranges.clear();
+-    g_q8_f32_by_offset.clear();
++    g_q8_f32_by_key.clear();
+     g_q8_f32_bytes = 0;
+     if (g_cuda_tmp) {
+         (void)cudaFree(g_cuda_tmp);
+@@ -1214,13 +1231,13 @@ extern "C" int ds4_gpu_set_model_map(const void *model_map, uint64_t model_size)
+         (void)cudaFree(r.device_ptr);
+     }
+     g_q8_f16_ranges.clear();
+-    g_q8_f16_by_offset.clear();
++    g_q8_f16_by_key.clear();
+     g_q8_f16_bytes = 0;
+     for (const cuda_q8_f32_range &r : g_q8_f32_ranges) {
+         (void)cudaFree(r.device_ptr);
+     }
+     g_q8_f32_ranges.clear();
+-    g_q8_f32_by_offset.clear();
++    g_q8_f32_by_key.clear();
+     g_q8_f32_bytes = 0;
+     if (g_model_device_owned && g_model_device_base) {
+         (void)cudaFree((void *)g_model_device_base);
