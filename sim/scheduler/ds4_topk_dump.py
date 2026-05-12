@@ -138,6 +138,7 @@ def build_scheduler_trace_jsonl_from_ds4_topk_dump(
             "sample_mode": str(sample_mode),
             "seed": int(seed),
             "time_mode": str(time_mode),
+            "time_synthetic": True,
             "arrival_rate_tps": float(arrival_rate_tps),
             "batch_size": int(batch_size),
             "interactive_prob": float(interactive_prob),
