@@ -19,6 +19,8 @@ export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=
 sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
 ```
 
+Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or `scp` (fallback).
+
 After the run, validate that expected outputs exist (run on Spark0):
 
 ```bash

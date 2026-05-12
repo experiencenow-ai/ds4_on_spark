@@ -31,6 +31,29 @@ if [ "$remote_dir" = "" ]; then
 	remote_dir="~/centaur-smoke/v73"
 fi
 
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
+need_copy_tool()
+{
+	if command -v rsync >/dev/null 2>&1; then
+		echo "copy_tool: rsync"
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		echo "copy_tool: scp"
+		return 0
+	fi
+	echo "missing required command: rsync or scp" >&2
+	exit 2
+}
+
 zip="${CENTAUR_ZIP:-/Users/mac/Downloads/centaur_spec_impl_v73.zip}"
 if [ ! -f "$zip" ]; then
 	echo "missing centaur zip: $zip" >&2
@@ -53,6 +76,9 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
 
+need_cmd ssh
+need_copy_tool
+
 ssh_run()
 {
 	target="$1"
@@ -60,9 +86,15 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
-rsync_run()
+copy_to_remote()
 {
-	rsync -av -e "ssh $SSH_OPTS" "$@"
+	src="$1"
+	dst="$2"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$src" "$dst"
+		return 0
+	fi
+	scp $SSH_OPTS "$src" "$dst"
 }
 
 echo "== centaur v73 stage to $target =="
@@ -71,8 +103,8 @@ echo "remote_dir: $remote_dir"
 ssh_run "$target" "mkdir -p $remote_dir"
 remote_dir_abs="$(ssh_run "$target" "cd $remote_dir && pwd -P")"
 echo "remote_dir_abs: $remote_dir_abs"
-rsync_run "$zip" "$target:$remote_dir/centaur_spec_impl_v73.zip"
-rsync_run "$catalog_src" "$target:$remote_dir/unit_model_catalog.json"
+copy_to_remote "$zip" "$target:$remote_dir/centaur_spec_impl_v73.zip"
+copy_to_remote "$catalog_src" "$target:$remote_dir/unit_model_catalog.json"
 
 cat <<EOF
 
