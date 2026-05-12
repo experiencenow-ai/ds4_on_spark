@@ -865,6 +865,42 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_jsonl_runtime_accepts_integral_float_int_fields(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"dt_ms": 0.0, "cls": 1, "candidates": [7.0, 3.0], "accepted_mtp": 1.0, "rejected_mtp": 0.0, "kv_tokens": 1024.0}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, time_mode="dt_ms", input_format="runtime", non_route_policy="error")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[0].candidates, (7, 3))
+            self.assertEqual(trace[0].accepted_mtp, 1)
+            self.assertEqual(trace[0].rejected_mtp, 0)
+            self.assertEqual(trace[0].kv_tokens, 1024)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_trace_jsonl_strict_accepts_integral_float_int_fields(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"t_ms": 0.0, "cls": "batch", "candidates": [7.0, 3.0], "accepted_mtp": 1.0, "rejected_mtp": 0.0, "kv_tokens": 1024.0}))
+            f.write("\n")
+        try:
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, time_mode="t_ms", input_format="strict", non_route_policy="error")
+            self.assertEqual(len(trace), 1)
+            self.assertEqual(trace[0].cls, scheduler_sim.LatencyClass.BATCH)
+            self.assertEqual(trace[0].candidates, (7, 3))
+            self.assertEqual(trace[0].accepted_mtp, 1)
+            self.assertEqual(trace[0].rejected_mtp, 0)
+            self.assertEqual(trace[0].kv_tokens, 1024)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_synthetic_score_mode_rejected_in_trace_replay(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
