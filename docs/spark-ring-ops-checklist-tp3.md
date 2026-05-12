@@ -5,6 +5,7 @@ This is a **human-run** checklist for operating a 3-node ring layout safely.
 ## Bring-up (Once)
 
 - Pick stable hostnames for Spark0/Spark1/Spark2 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark012.example`).
+- Recommended: keep the ordered inventory in a file so rank order is explicit and repeatable (format example: `deploy/config/inventory.ds4.spark012.example`).
 - Optional: take a read-only systemd status snapshot from the Mac (useful for run notes):
   - `./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Stage deploy assets + scripts from the Mac:

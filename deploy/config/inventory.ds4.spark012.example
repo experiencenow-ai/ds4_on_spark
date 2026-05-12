@@ -1,0 +1,16 @@
+# DS4 ordered Spark inventory example (Spark0/Spark1/Spark2)
+#
+# One target per line. Format matches the Mac-side ops helpers:
+#   <user>@<host>
+#
+# Notes:
+# - Order matters: first line => spark0, second => spark1, third => spark2.
+# - Blank lines and lines starting with `#` are ignored.
+#
+# Usage examples:
+#   ./scripts/ops_spark_ring_mesh_check.sh --topology ring --inventory-file deploy/config/inventory.ds4.spark012.example
+#   ./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file deploy/config/inventory.ds4.spark012.example
+#   ./scripts/ops_spark_ring_status.sh --preflight tp3 --strict --inventory-file deploy/config/inventory.ds4.spark012.example
+spark0@<spark0-host>
+spark1@<spark1-host>
+spark2@<spark2-host>

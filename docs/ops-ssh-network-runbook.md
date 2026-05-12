@@ -77,6 +77,17 @@ hosts only in this command line/inventory, not inside the helper script:
 ./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
 ```
 
+Optional: keep the ordered inventory in a file (recommended for repeatable runs):
+
+- `deploy/config/inventory.ds4.spark012.example`
+
+Then:
+
+```bash
+./scripts/ops_spark_ring_mesh_check.sh --topology ring --inventory-file deploy/config/inventory.ds4.spark012.example
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 Legacy fixed-name wrappers remain for older docs/scripts, but they delegate to
 the inventory-driven helpers above.
 
@@ -88,6 +99,12 @@ To capture a read-only systemd status snapshot across the inventory (useful for 
 
 ```bash
 ./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Or using an inventory file:
+
+```bash
+./scripts/ops_spark_ring_status.sh --preflight tp3 --strict --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
 Optional: add a best-effort TCP probe to each ring peer (only meaningful if
