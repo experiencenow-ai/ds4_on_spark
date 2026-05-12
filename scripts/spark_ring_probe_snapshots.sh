@@ -11,7 +11,7 @@ Mac-side wrapper that produces a commit-safe (REDACT=1) snapshot set for Spark r
   - docs/spark-ring-probe-<stamp>.md
   - docs/spark-ring-mtu-probe-<stamp>.md
   - docs/spark-ring-bw-probe-<stamp>.md
-  - docs/spark0-probe-facts-<stamp>.md
+  - docs/spark0-probe-facts-<stamp>.md (optional; only when spark0 host is in targets)
   - docs/spark-ring-node-facts-<host>-<stamp>.md (optional; SPARK_NODE_FACTS=1)
 
 Defaults:
@@ -89,6 +89,27 @@ if [ "$targets" = "" ]; then
 	targets="aitopatom-9ab9.local spark1.local spark2.local"
 fi
 
+host_only()
+{
+	t="$1"
+	case "$t" in
+		*@*)
+			printf "%s" "${t#*@}"
+			;;
+		*)
+			printf "%s" "$t"
+			;;
+	esac
+}
+
+spark0_target=""
+for t in $targets; do
+	if [ "$(host_only "$t")" = "aitopatom-9ab9.local" ]; then
+		spark0_target="$t"
+		break
+	fi
+done
+
 if [ "${DS4_GIT_DIR:-}" = "" ] && [ -d .codex_git ] && [ -r .codex_git/HEAD ]; then
 	DS4_GIT_DIR=".codex_git"
 	DS4_GIT_WORK_TREE="."
@@ -137,8 +158,12 @@ else
 fi
 
 if [ "${SKIP_SPARK0_FACTS:-0}" != "1" ]; then
-	echo "writing: $spark0_facts_out"
-	(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh aitopatom-9ab9.local || true) >"$spark0_facts_out"
+	if [ "$spark0_target" != "" ]; then
+		echo "writing: $spark0_facts_out"
+		(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh "$spark0_target" || true) >"$spark0_facts_out"
+	else
+		echo "skip: spark0 facts (spark0 host not in targets; set SKIP_SPARK0_FACTS=1 to silence)"
+	fi
 else
 	echo "skip: spark0 facts (SKIP_SPARK0_FACTS=1)"
 fi

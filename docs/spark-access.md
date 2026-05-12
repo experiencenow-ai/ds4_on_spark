@@ -16,8 +16,8 @@ Current observed Spark identity:
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe snapshot set: `2026-05-12T0928Z` (`docs/spark-ring-*-2026-05-12T0928Z.md`, `docs/spark0-probe-facts-2026-05-12T0928Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T0928Z.md`
+- Latest commit-safe snapshot set: `2026-05-12T1000Z` (`docs/spark-ring-*-2026-05-12T1000Z.md`, `docs/spark0-probe-facts-2026-05-12T1000Z.md`)
+- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T1000Z.md`
 
 ## Reproducible Probes
 
@@ -195,7 +195,7 @@ This prints:
 
 ### Spark Ring Snapshot Set (one command)
 
-To produce a full, commit-safe snapshot set for ring bring-up (mac discovery + ring probe + MTU + bandwidth + Spark0 facts), use:
+To produce a full, commit-safe snapshot set for ring bring-up (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets), use:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"

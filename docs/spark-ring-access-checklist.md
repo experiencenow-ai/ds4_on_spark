@@ -33,7 +33,7 @@ This is a **human-run** access + probe checklist for the current Spark ring. It 
 
 Capture a non-secret identity snapshot suitable for commit:
 
-- One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts):
+- One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts when `aitopatom-9ab9.local` is included in targets):
   - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
   - If each node uses a different SSH user, pass explicit `user@host` targets:
     - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`

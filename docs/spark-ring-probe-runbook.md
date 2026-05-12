@@ -12,7 +12,7 @@ This runbook produces **commit-safe** (redacted) snapshots for ring bring-up. It
 
 ## Quickstart: one-shot snapshot set (recommended)
 
-This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts):
+This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
@@ -32,6 +32,8 @@ If you only have Spark0 online, pass a single target:
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local
 ```
+
+Note: `scripts/spark_ring_probe_snapshots.sh` writes `docs/spark0-probe-facts-<stamp>.md` only when `aitopatom-9ab9.local` is included in targets (either as `aitopatom-9ab9.local` or `spark0@aitopatom-9ab9.local`).
 
 ## 1) Mac-side discovery snapshot
 
