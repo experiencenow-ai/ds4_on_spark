@@ -678,6 +678,39 @@ class SchedulerSimTest(unittest.TestCase):
         s = scheduler_sim.compare_summary_jsonable(m_stall)
         self.assertEqual(int(s["blocked_stages_backpressure_attempts"]), 1)
 
+    def test_summary_emits_task_queue_wait_and_expert_queue_wait_percentiles(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), k=1)
+            for _ in range(4)
+        ]
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=1.0,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=scheduler_sim.AdaptiveKConfig(
+                k_min_interactive=1,
+                k_max_interactive=1,
+                k_min_batch=1,
+                k_max_batch=1,
+                q_low=0,
+                q_high=0,
+            ),
+            k_mode="trace",
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(float(s["task_queue_wait_ms_p50_batch"]), 1.5, places=6)
+        self.assertAlmostEqual(float(s["task_queue_wait_ms_p95_batch"]), 2.85, places=6)
+        self.assertAlmostEqual(float(s["expert_max_task_queue_wait_ms_p50"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["expert_max_task_queue_wait_ms_p95"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["expert_max_task_queue_wait_ms_max"]), 3.0, places=6)
+        self.assertAlmostEqual(float(s["task_queue_wait_ms_p50_interactive"]), 0.0, places=6)
+        self.assertAlmostEqual(float(s["task_queue_wait_ms_p95_interactive"]), 0.0, places=6)
+
     def test_partial_admit_any_layer_counts_layer_drops(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:

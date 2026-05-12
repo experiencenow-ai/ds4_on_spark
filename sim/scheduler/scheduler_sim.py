@@ -4390,6 +4390,17 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     starved_task_queue_wait_ms_p95_batch = _p_or_zero(metrics.starved_task_queue_wait_ms_batch, 0.95)
     starved_task_queue_wait_ms_p95_mtp_draft = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_draft, 0.95)
     starved_task_queue_wait_ms_p95_mtp_verify = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_verify, 0.95)
+    task_queue_wait_ms_p50_interactive = _p_or_zero(metrics.task_queue_wait_ms_interactive, 0.50)
+    task_queue_wait_ms_p95_interactive = _p_or_zero(metrics.task_queue_wait_ms_interactive, 0.95)
+    task_queue_wait_ms_p50_batch = _p_or_zero(metrics.task_queue_wait_ms_batch, 0.50)
+    task_queue_wait_ms_p95_batch = _p_or_zero(metrics.task_queue_wait_ms_batch, 0.95)
+    task_queue_wait_ms_p50_mtp_draft = _p_or_zero(metrics.task_queue_wait_ms_mtp_draft, 0.50)
+    task_queue_wait_ms_p95_mtp_draft = _p_or_zero(metrics.task_queue_wait_ms_mtp_draft, 0.95)
+    task_queue_wait_ms_p50_mtp_verify = _p_or_zero(metrics.task_queue_wait_ms_mtp_verify, 0.50)
+    task_queue_wait_ms_p95_mtp_verify = _p_or_zero(metrics.task_queue_wait_ms_mtp_verify, 0.95)
+    expert_max_task_queue_wait_ms_p50 = _p_or_zero(metrics.max_task_queue_wait_ms_per_expert, 0.50)
+    expert_max_task_queue_wait_ms_p95 = _p_or_zero(metrics.max_task_queue_wait_ms_per_expert, 0.95)
+    expert_max_task_queue_wait_ms_max = float(max(metrics.max_task_queue_wait_ms_per_expert)) if len(metrics.max_task_queue_wait_ms_per_expert) != 0 else 0.0
     partial_admit_frac = (float(metrics.partial_admit_tokens) / float(metrics.admitted_tokens)) if metrics.admitted_tokens > 0 else 0.0
     mtp_accept_rate = (float(metrics.mtp_draft_tokens_accepted) / float(metrics.mtp_draft_tokens_total)) if metrics.mtp_draft_tokens_total > 0 else 0.0
     mtp_mean_accept_len = (float(metrics.mtp_output_tokens) / float(metrics.mtp_verify_steps)) if metrics.mtp_draft_len > 0 and metrics.mtp_verify_steps > 0 else 0.0
@@ -4501,6 +4512,17 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_p95_interactive_ms": float(_p_or_zero(metrics.output_token_lat_ms_interactive, 0.95)),
             "output_token_p50_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.50)),
             "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
+            "task_queue_wait_ms_p50_interactive": float(task_queue_wait_ms_p50_interactive),
+            "task_queue_wait_ms_p95_interactive": float(task_queue_wait_ms_p95_interactive),
+            "task_queue_wait_ms_p50_batch": float(task_queue_wait_ms_p50_batch),
+            "task_queue_wait_ms_p95_batch": float(task_queue_wait_ms_p95_batch),
+            "task_queue_wait_ms_p50_mtp_draft": float(task_queue_wait_ms_p50_mtp_draft),
+            "task_queue_wait_ms_p95_mtp_draft": float(task_queue_wait_ms_p95_mtp_draft),
+            "task_queue_wait_ms_p50_mtp_verify": float(task_queue_wait_ms_p50_mtp_verify),
+            "task_queue_wait_ms_p95_mtp_verify": float(task_queue_wait_ms_p95_mtp_verify),
+            "expert_max_task_queue_wait_ms_p50": float(expert_max_task_queue_wait_ms_p50),
+            "expert_max_task_queue_wait_ms_p95": float(expert_max_task_queue_wait_ms_p95),
+            "expert_max_task_queue_wait_ms_max": float(expert_max_task_queue_wait_ms_max),
             "sla_violation_frac_tokens_interactive": float(sla_violation_frac_interactive),
             "sla_violation_frac_tokens_batch": float(sla_violation_frac_batch),
             "starved_tasks": float(metrics.starved_tasks),
