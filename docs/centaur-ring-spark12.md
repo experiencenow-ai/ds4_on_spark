@@ -239,6 +239,14 @@ To fetch a small sanitized ring-sim bundle (log + effective manifests + effectiv
 sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-ring-sim/spark12-v73/$RING_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring-sim/spark12-v73/$RING_RUN_ID"; fi
+sh ./scripts/centaur_spark12_v73_ring_bundle_validate.sh "$RING_RUN_ID" "$bundle_dir" sim
+```
+
 ## Next step (when Spark1/2 hardware exists)
 
 Decide one of:
@@ -297,6 +305,14 @@ After a wrapper run, you can fetch a small artifact bundle (log + manifests) bac
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+sh ./scripts/centaur_spark12_v73_ring_bundle_validate.sh "$RING_RUN_ID" "$bundle_dir" rsync
 ```
 
 To validate expected ring artifacts exist on the orchestrator host (Spark0):
