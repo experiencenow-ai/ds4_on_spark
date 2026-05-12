@@ -7,8 +7,8 @@ usage()
 ops_spark_ring_status.sh -- Mac-side DS4 systemd status snapshot (safe)
 
 Usage:
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
+  ops_spark_ring_status.sh [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_status.sh [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -97,7 +97,7 @@ case "$preflight" in
 	auto|tp2|tp3|tp4)
 		;;
 	*)
-		echo "invalid --preflight: $preflight (expected tp2|tp3|tp4)" >&2
+		echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4)" >&2
 		exit 2
 		;;
 esac
@@ -169,7 +169,10 @@ infer_preflight()
 		2) echo "tp2" ;;
 		3) echo "tp3" ;;
 		4) echo "tp4" ;;
-		*) echo "tp2" ;;
+		*)
+			echo "cannot infer --preflight from node_count=$node_count; pass --preflight tp2|tp3|tp4" >&2
+			return 2
+			;;
 	esac
 }
 
@@ -212,7 +215,7 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
-topo="$(infer_preflight)"
+topo="$(infer_preflight)" || exit $?
 
 echo "== spark ring systemd status (Mac-side) =="
 date -Is 2>/dev/null || date || true

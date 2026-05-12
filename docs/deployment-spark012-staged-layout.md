@@ -19,6 +19,13 @@ Use the wrapper that validates once, then stages to Spark0/Spark1/Spark2:
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional (recommended): also run staged TP readiness checks (safe; no sudo):
+
+```bash
+./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 Optional: keep the ordered inventory in a file and use the inventory-driven helper directly:
 
 ```bash

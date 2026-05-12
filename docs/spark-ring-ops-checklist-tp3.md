@@ -21,6 +21,8 @@ For a one-page readiness rubric (what “ready” means, and what blocks a run),
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory)
   - Confirm the staged env audit passes (safe; catches DS4 ring config mismatches before install): `scripts/ops_spark_ring_staged_env_audit.sh`
+  - Optional (recommended): run staged TP readiness checks before any install/system changes (safe; uses staged `/tmp/ds4-*` assets):
+    - `./scripts/ops_spark_ring_staged_readiness.sh --topology ring --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Install staged templates on each Spark:
   - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight --preflight tp3`
 - Confirm systemd templates and scripts are present:

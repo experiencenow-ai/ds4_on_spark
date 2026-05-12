@@ -94,6 +94,20 @@ the inventory-driven helpers above.
 
 Note: `scripts/ops_stage_spark_ring.sh` also runs a staged env audit at the end (safe) to verify ring env consistency across hosts: `scripts/ops_spark_ring_staged_env_audit.sh`.
 
+Optional: you can also run staged TP readiness checks (safe; runs the readiness scripts on each Spark using `/tmp/ds4-*` paths):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional: you can also add staged readiness to the one-shot ops snapshot (safe; combines mesh + status + staged readiness):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 ## Mac-Side Systemd Status Snapshot (Optional)
 
 To capture a read-only systemd status snapshot across the inventory (useful for run notes):

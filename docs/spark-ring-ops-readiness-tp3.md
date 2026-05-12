@@ -29,6 +29,14 @@ Or using an inventory file (recommended for repeatable runs):
 
 This is read-only. It does not start/stop services or modify networking.
 
+If you already staged deploy assets to `/tmp/ds4-*` on each Spark, you can also include staged readiness checks in the same snapshot (safe; no sudo):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 ## Readiness Rubric (TP=3)
 
 Mark each item as:
@@ -73,6 +81,13 @@ If you staged assets, you can audit staged env consistency (safe):
 ./scripts/ops_spark_ring_staged_env_audit.sh spark0@... spark1@... spark2@...
 ```
 
+If the staged env audit is clean, you can run staged TP=3 readiness checks (safe; no sudo; uses staged `/tmp/ds4-*` assets):
+
+```bash
+./scripts/ops_spark_ring_staged_readiness.sh --topology ring --preflight tp3 --strict \
+  spark0@... spark1@... spark2@...
+```
+
 ### Systemd Templates + Preflight (Strict Gate)
 
 - **READY**: the strict TP=3 preflight unit exists and succeeds on all hosts:
@@ -98,4 +113,3 @@ TP=2 readiness (Spark0/Spark1) is still useful as a baseline even when targeting
 - Then run TP=3 strict preflight on all three hosts to validate rank + ring host list.
 
 Do not change firewall rules, routing, or system services as part of automation loops; document proposed changes for human approval.
-
