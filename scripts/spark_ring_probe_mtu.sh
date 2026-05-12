@@ -206,6 +206,27 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.codex_git/.git" ] && [ -r "$git_worktree/.codex_git/.git/HEAD" ]; then
 			git_dir="$git_worktree/.codex_git/.git"
 		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex" ] && [ -r "$git_worktree/.git-codex/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.git-codex/.git" ] && [ -r "$git_worktree/.git-codex/.git/HEAD" ]; then
+			git_dir="$git_worktree/.git-codex/.git"
+		fi
+		if [ "$git_dir" = "" ] && [ -d "$git_worktree/.gitshim/repo/.git" ] && [ -r "$git_worktree/.gitshim/repo/.git/HEAD" ]; then
+			git_dir="$git_worktree/.gitshim/repo/.git"
+		fi
+		if [ "$git_dir" = "" ] && [ -r "$git_worktree/.git" ] && [ ! -d "$git_worktree/.git" ]; then
+			worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' "$git_worktree/.git" | head -n 1 || true)"
+			if [ "$worktree_gitdir" != "" ] && [ -r "$worktree_gitdir/commondir" ]; then
+				common_rel="$(cat "$worktree_gitdir/commondir" 2>/dev/null || true)"
+				if [ "$common_rel" != "" ]; then
+					common_abs="$(cd "$worktree_gitdir" 2>/dev/null && cd "$common_rel" 2>/dev/null && pwd -P 2>/dev/null || true)"
+					if [ "$common_abs" != "" ] && [ -r "$common_abs/HEAD" ]; then
+						git_dir="$common_abs"
+					fi
+				fi
+			fi
+		fi
 		git_hash=""
 		if [ "$git_dir" != "" ]; then
 			git_hash="$(git --git-dir="$git_dir" --work-tree="$git_worktree" rev-parse --short HEAD 2>/dev/null || true)"
@@ -323,10 +344,12 @@ REMOTE
 			-e 's/([0-9A-Fa-f]{1,2}:){5}[0-9A-Fa-f]{1,2}/<redacted-mac>/g' \
 			-e 's/(^|[^0-9A-Za-z_.-])([0-9A-Fa-f:]*::[0-9A-Fa-f:]*)([^0-9A-Za-z_.-]|$)/\1<redacted-ipv6>\3/g' \
 			-e 's/([0-9A-Fa-f]{0,4}:){3,7}[0-9A-Fa-f]{0,4}/<redacted-ipv6>/g' \
+			-e 's/UUID: [^)]*/UUID: <redacted-gpu-uuid>/g' \
+			-e 's/GPU-[0-9A-Fa-f-]{36}/<redacted-gpu-uuid>/g' \
 			"$tmp"
-else
-	cat "$tmp"
-fi
+	else
+		cat "$tmp"
+	fi
 
 if [ "${ssh_fail:-0}" != "0" ]; then
 	exit 1

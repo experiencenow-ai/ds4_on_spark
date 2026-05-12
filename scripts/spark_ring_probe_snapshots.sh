@@ -11,7 +11,8 @@ Mac-side wrapper that produces a commit-safe (REDACT=1) snapshot set for Spark r
   - docs/spark-ring-probe-<stamp>.md
   - docs/spark-ring-mtu-probe-<stamp>.md
   - docs/spark-ring-bw-probe-<stamp>.md
-  - docs/spark0-probe-facts-<stamp>.md
+  - docs/spark0-probe-facts-<stamp>.md (optional; only when spark0 host is in targets)
+  - docs/spark-ring-node-facts-<host>-<stamp>.md (optional; SPARK_NODE_FACTS=1)
 
 Defaults:
   - Targets: aitopatom-9ab9.local spark1.local spark2.local
@@ -22,6 +23,7 @@ Environment:
   STAMP               Override stamp (default: date -u +%Y-%m-%dT%H%MZ)
   DOCS_DIR            Output directory (default: docs)
   REDACT              Redact IP/MAC/GPU UUID tokens (default: 1)
+  ALLOW_OVERWRITE=1   Allow overwriting existing snapshot files (default: 0; fails fast if files exist)
   SPARK_SSH_USER      Default SSH user for host-only args (default: spark0)
   SPARK_KNOWN_HOSTS_PER_HOST   Default: 1
   DS4_GIT_DIR/DS4_GIT_WORK_TREE Optional git hash source for probe meta
@@ -29,6 +31,7 @@ Environment:
   SKIP_MTU=1          Skip MTU DF-ping snapshot
   SKIP_BW=1           Skip bandwidth smoke snapshot
   SKIP_SPARK0_FACTS=1 Skip Spark0 facts-only probe snapshot
+  SPARK_NODE_FACTS=1  Also capture per-node facts-only snapshots (writes one file per target)
 
 Examples:
   DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh
@@ -70,6 +73,7 @@ esac
 
 DOCS_DIR="${DOCS_DIR:-docs}"
 REDACT="${REDACT:-1}"
+ALLOW_OVERWRITE="${ALLOW_OVERWRITE:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-1}"
 BW_MB="${BW_MB:-16}"
@@ -87,6 +91,27 @@ if [ "$targets" = "" ]; then
 	targets="aitopatom-9ab9.local spark1.local spark2.local"
 fi
 
+host_only()
+{
+	t="$1"
+	case "$t" in
+		*@*)
+			printf "%s" "${t#*@}"
+			;;
+		*)
+			printf "%s" "$t"
+			;;
+	esac
+}
+
+spark0_target=""
+for t in $targets; do
+	if [ "$(host_only "$t")" = "aitopatom-9ab9.local" ]; then
+		spark0_target="$t"
+		break
+	fi
+done
+
 if [ "${DS4_GIT_DIR:-}" = "" ] && [ -d .codex_git ] && [ -r .codex_git/HEAD ]; then
 	DS4_GIT_DIR=".codex_git"
 	DS4_GIT_WORK_TREE="."
@@ -101,11 +126,44 @@ mtu_out="${DOCS_DIR}/spark-ring-mtu-probe-${stamp}.md"
 bw_out="${DOCS_DIR}/spark-ring-bw-probe-${stamp}.md"
 spark0_facts_out="${DOCS_DIR}/spark0-probe-facts-${stamp}.md"
 
+would_overwrite="0"
+check_out()
+{
+	out="$1"
+	if [ -e "$out" ] && [ "$ALLOW_OVERWRITE" != "1" ]; then
+		echo "error: would overwrite existing file: $out (set ALLOW_OVERWRITE=1 to allow)" >&2
+		would_overwrite="1"
+	fi
+}
+
+check_out "$mac_out"
+check_out "$ring_out"
+if [ "${SKIP_MTU:-0}" != "1" ]; then
+	check_out "$mtu_out"
+fi
+if [ "${SKIP_BW:-0}" != "1" ]; then
+	check_out "$bw_out"
+fi
+if [ "${SKIP_SPARK0_FACTS:-0}" != "1" ] && [ "$spark0_target" != "" ]; then
+	check_out "$spark0_facts_out"
+fi
+if [ "${SPARK_NODE_FACTS:-0}" = "1" ]; then
+	for t in $targets; do
+		h="${t#*@}"
+		safe_h="$(printf "%s" "$h" | sed -E 's/[^A-Za-z0-9_.-]/_/g')"
+		check_out "${DOCS_DIR}/spark-ring-node-facts-${safe_h}-${stamp}.md"
+	done
+fi
+if [ "$would_overwrite" = "1" ]; then
+	exit 3
+fi
+
 echo "stamp: $stamp"
 echo "targets: $targets"
 echo "topology: $topology"
 echo "docs dir: $DOCS_DIR"
 echo "REDACT: $REDACT"
+echo "ALLOW_OVERWRITE: $ALLOW_OVERWRITE"
 echo "SPARK_SSH_USER: $SPARK_SSH_USER"
 echo "SPARK_KNOWN_HOSTS_PER_HOST: $SPARK_KNOWN_HOSTS_PER_HOST"
 echo
@@ -135,10 +193,21 @@ else
 fi
 
 if [ "${SKIP_SPARK0_FACTS:-0}" != "1" ]; then
-	echo "writing: $spark0_facts_out"
-	(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh aitopatom-9ab9.local || true) >"$spark0_facts_out"
+	if [ "$spark0_target" != "" ]; then
+		echo "writing: $spark0_facts_out"
+		(SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_probe.sh "$spark0_target" || true) >"$spark0_facts_out"
+	else
+		echo "skip: spark0 facts (spark0 host not in targets; set SKIP_SPARK0_FACTS=1 to silence)"
+	fi
 else
 	echo "skip: spark0 facts (SKIP_SPARK0_FACTS=1)"
+fi
+
+if [ "${SPARK_NODE_FACTS:-0}" = "1" ]; then
+	echo "capturing: per-node facts (SPARK_NODE_FACTS=1)"
+	(DOCS_DIR="$DOCS_DIR" STAMP="$stamp" ALLOW_OVERWRITE="$ALLOW_OVERWRITE" SPARK_SSH_USER="$SPARK_SSH_USER" REDACT="$REDACT" SPARK_KNOWN_HOSTS_PER_HOST="$SPARK_KNOWN_HOSTS_PER_HOST" ./scripts/spark_ring_probe_facts.sh $targets || true) >/dev/null
+else
+	echo "skip: per-node facts (SPARK_NODE_FACTS!=1)"
 fi
 
 echo

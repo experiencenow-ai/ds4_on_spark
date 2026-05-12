@@ -2,6 +2,8 @@
 
 This is a **human-run** access + probe checklist for the current Spark ring. It is safe-by-default (no `sudo`, no service changes, no writes outside `/private/tmp` on the Mac). Treat the ordered host list as the inventory; when a Spark is added, append it to the list used by the probe commands.
 
+For new node onboarding (Spark1/Spark2 bring-up), see `docs/spark-ring-node-bringup.md`.
+
 ## 1) Hostnames + Resolution
 
 - Decide stable identities for each node:
@@ -26,14 +28,23 @@ This is a **human-run** access + probe checklist for the current Spark ring. It 
 
 - Verify each node’s UTC time is sane and NTP is synchronized (or at least consistent):
   - Use `./scripts/spark_ring_probe.sh` output `== clock ==` (prints UTC + epoch + `timedatectl` fields when available).
+  - Also check `== clock (summary, remote-local) ==` and the `skew span_s:` line for a quick multi-node skew sanity check.
 - Rule of thumb: if `skew_s (remote-local)` exceeds about `±1s`, treat it as a blocker for distributed experiments (TP>1) until a human fixes time sync.
 
 ## 4) Address Matrix (Wired + Wi‑Fi + v4/v6)
 
 Capture a non-secret identity snapshot suitable for commit:
 
-- One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts):
+- One-shot (recommended): produce a full snapshot set (mac discovery + ring probe + MTU + BW + Spark0 facts when `aitopatom-9ab9.local` is included in targets):
   - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
+  - If each node uses a different SSH user, pass explicit `user@host` targets:
+    - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`
+- When Spark1/Spark2 become reachable, also capture per-node facts-only snapshots (toolchain/GPU/storage facts; stable bring-up data):
+  - `REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh aitopatom-9ab9.local spark1.local spark2.local`
+  - `REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`
+- Facts-only per-node snapshots without the full ring set:
+  - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh aitopatom-9ab9.local spark1.local spark2.local`
+  - `REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local`
 - Mac-side interface + route snapshot:
   - `REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/mac_spark_discovery.sh aitopatom-9ab9.local spark1.local spark2.local`
 - Per-node interface + address snapshot (redacted):
@@ -49,7 +60,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 
 | Node | SSH target | SSH path | Wired ifname | Wired MTU | Wi‑Fi ifname | Wi‑Fi MTU | Notes |
 |------|------------|----------|--------------|----------:|--------------|----------:|-------|
-| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | 10GbE link expected |
+| spark0 | `aitopatom-9ab9.local` | `v6 link-local` / `v4` | `enP7s7` | `9000` | `wlP9s9` | `1500` | 10GbE jumbo on `enP7s7`; 200GbE Mellanox ports also present (see latest ring probe) |
 | spark1 | `spark1.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 | spark2 | `spark2.local` | `v6 link-local` / `v4` | — | — | — | — | not provisioned |
 
@@ -67,6 +78,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 - Use ping RTT as the minimum viable latency check:
   - `./scripts/mac_spark_discovery.sh` prints `== ping (mac->targets, compact) ==` (Mac→target RTT/loss; no SSH required).
   - `./scripts/spark_ring_probe.sh` prints `== peer ping ==` results from each host to its neighbors (ring topology) or to all peers (`--topology full`), including packet loss and RTT summary when available.
+  - Note: ICMP can be blocked (100% loss) even when SSH works; treat ping as a signal, not an access gate.
 - The ring probe also prints `== network (link speed, compact) ==` (sysfs `speed`/`duplex`) so you can sanity-check whether links negotiated at the expected rate without running active traffic.
 - Optional (no installs): quick Mac<->Spark single-stream throughput smoke test (writes nothing; consumes CPU/network briefly):
   - `BW_MB=16 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh aitopatom-9ab9.local spark1.local spark2.local || true`
@@ -83,6 +95,7 @@ Optional: write down the matrix (fill with redacted values as needed):
 For each node, capture:
 - GPU inventory (`nvidia-smi` CSV query output: GPU name, bus id, driver version, compute cap when available).
 - Toolkit banner (`nvcc --version`) and `/usr/local/cuda/version.json` (toolkit version) when present.
+- Cross-check stanza: `./scripts/spark_ring_probe.sh` now prints `== cuda/toolchain facts (summary) ==` (`driver`, `smi CUDA`, `nvcc release`, `cuda version.json`, `cuda.h CUDA_VERSION`, `compute_cap`), which is the fastest way to verify toolchain consistency across nodes.
 - Storage facts (`df -h` + `lsblk` model/size).
 
 Use `REDACT=1` for any committed output.
