@@ -773,7 +773,7 @@ For each quantized artifact tested, record:
 - captured quantization metadata from `scripts/model_contract_inspect_quantized_artifact.py`:
   - `tensor_type_counts` (overall GGUF tensor types present)
   - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
-  - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`)
+  - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`; includes `status ∈ {"native_like","mismatch","unknown"}` plus `dense_fp8_like` / `expert_fp4_like` and `notes_sample`)
   - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
     - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
     - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)

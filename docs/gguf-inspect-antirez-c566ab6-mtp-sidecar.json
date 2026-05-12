@@ -140,6 +140,10 @@
       "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
       "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
     ],
+    "notes_sample": [
+      "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
+      "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
+    ],
     "observed": {
       "dense_fp8_evidence": {
         "checked": true,
@@ -149,7 +153,8 @@
       },
       "dense_primary_type": "F32",
       "expert_primary_type": null
-    }
+    },
+    "status": "mismatch"
   },
   "tensor_count": 32,
   "tensor_key_namespace_evidence": [
