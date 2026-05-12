@@ -849,6 +849,8 @@ Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published a
 
 Machine-readable sidecar contract: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp_sidecar.*` (expected tensor table + pinned payload-sample fingerprint reference).
 
+When `--contract-summary` is available, `scripts/model_contract_inspect_quantized_artifact.py` also emits `ds4_mtp_sidecar_contract` for `general.architecture=deepseek4_mtp_support` artifacts (expected 32‑tensor table completeness check). This DS4 sidecar contract is **separate** from the upstream `mtp_contract` (official `mtp.0.*` completeness), since DS4-tuned sidecars use different tensor suffix naming (for example `mtp.0.attn_q_a.weight`, not `mtp.0.attn.wq_a.weight`).
+
 ```sh
 python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json
 # Or, for metadata-only validation without a full download:

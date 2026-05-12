@@ -1,5 +1,18 @@
 {
   "artifact_type": "gguf.url",
+  "ds4_mtp_sidecar_contract": {
+    "candidate": true,
+    "checked": true,
+    "complete": true,
+    "expected_general_architecture": "deepseek4_mtp_support",
+    "expected_tensor_count": 32,
+    "general_architecture": "deepseek4_mtp_support",
+    "missing_expected_count": 0,
+    "missing_expected_sample": [],
+    "present_expected_count": 32,
+    "unexpected_present_count": 0,
+    "unexpected_present_sample": []
+  },
   "first_mtp_keys": [
     "mtp.0.hc_head_base.weight",
     "mtp.0.hc_head_fn.weight",

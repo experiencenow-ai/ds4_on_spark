@@ -132,6 +132,20 @@ def summarize_mtp_preservation(mp: Any) -> Optional[dict[str, Any]]:
 		"reasons_sample": list(reasons)[:10],
 	}
 
+def summarize_ds4_mtp_sidecar_contract(dc: Any) -> Optional[dict[str, Any]]:
+	if not isinstance(dc, dict):
+		return None
+	if dc.get("checked") is not True:
+		return None
+	return {
+		"complete": _get_bool(dc, "complete"),
+		"missing_expected_count": _get_int(dc, "missing_expected_count"),
+		"unexpected_present_count": _get_int(dc, "unexpected_present_count"),
+		"general_architecture": _get_str(dc, "general_architecture"),
+		"expected_general_architecture": _get_str(dc, "expected_general_architecture"),
+		"expected_tensor_count": _get_int(dc, "expected_tensor_count"),
+	}
+
 def summarize_mtp_namespace(mn: Any) -> Optional[dict[str, Any]]:
 	if not isinstance(mn, dict) or mn.get("checked") is not True:
 		return None
@@ -164,6 +178,7 @@ def summarize_single_doc(doc_obj: dict[str, Any], rel_path: str) -> dict[str, An
 		"path": _get_str(doc_obj, "path"),
 		"tensor_key_namespace_guess": _get_str(doc_obj, "tensor_key_namespace_guess"),
 		"weight_keys_sha256": _get_str(doc_obj, "weight_keys_sha256"),
+		"ds4_mtp_sidecar_contract": summarize_ds4_mtp_sidecar_contract(doc_obj.get("ds4_mtp_sidecar_contract")),
 		"mtp_present": _get_bool(doc_obj, "mtp_present"),
 		"mtp_layer_ids": doc_obj.get("mtp_layer_ids"),
 		"mtp_namespace": summarize_mtp_namespace(doc_obj.get("mtp_namespace")),
@@ -186,6 +201,8 @@ def summarize_combined_doc(doc_obj: dict[str, Any], rel_path: str) -> dict[str, 
 		"artifact_set": True,
 		"paths": combined.get("paths"),
 		"weight_keys_union_sha256": _get_str(combined, "weight_keys_union_sha256"),
+		"ds4_mtp_sidecar_present": _get_bool(combined, "ds4_mtp_sidecar_present"),
+		"ds4_mtp_sidecar_complete": _get_bool(combined, "ds4_mtp_sidecar_complete"),
 		"mtp_present": _get_bool(combined, "mtp_present"),
 		"mtp_layer_ids": combined.get("mtp_layer_ids"),
 		"mtp_namespace": summarize_mtp_namespace(combined.get("mtp_namespace")),

@@ -967,6 +967,55 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 		"forbidden_present": forbidden_sorted[:20],
 	}
 
+def compute_ds4_mtp_sidecar_contract(weight_keys: set[str], metadata: dict[str, Any], contract_summary: dict[str, Any]) -> dict[str, Any]:
+	if not isinstance(contract_summary, dict):
+		return {"checked": False, "reason": "missing contract_summary"}
+
+	sidecar = contract_summary.get("mtp_sidecar", None)
+	if not isinstance(sidecar, dict):
+		return {"checked": False, "reason": "contract_summary missing mtp_sidecar"}
+
+	expected_names = sidecar.get("expected_tensor_names", None)
+	if not isinstance(expected_names, list) or not all(isinstance(x, str) for x in expected_names):
+		return {"checked": False, "reason": "contract_summary mtp_sidecar missing expected_tensor_names"}
+
+	expected_arch = sidecar.get("general_architecture", None)
+	if not isinstance(expected_arch, str) or not expected_arch:
+		expected_arch = None
+
+	arch = metadata.get("general.architecture", None) if isinstance(metadata, dict) else None
+	is_arch_match = (expected_arch is not None and arch == expected_arch)
+
+	expected_set = set(expected_names)
+	present_expected = sorted([k for k in expected_set if k in weight_keys])
+	missing_expected = sorted([k for k in expected_set if k not in weight_keys])
+
+	# Only treat this as a sidecar candidate when either the GGUF declares the
+	# DS4 sidecar architecture or it contains at least one expected tensor name.
+	is_candidate = bool(is_arch_match or present_expected)
+	if not is_candidate:
+		return {
+			"checked": False,
+			"candidate": False,
+			"reason": "artifact does not look like a DS4-tuned MTP sidecar (no arch match and no expected tensor names present)",
+			"expected_general_architecture": expected_arch,
+		}
+
+	unexpected_present = sorted([k for k in weight_keys if k not in expected_set])
+	return {
+		"checked": True,
+		"candidate": True,
+		"general_architecture": arch,
+		"expected_general_architecture": expected_arch,
+		"expected_tensor_count": int(len(expected_names)),
+		"present_expected_count": int(len(present_expected)),
+		"missing_expected_count": int(len(missing_expected)),
+		"missing_expected_sample": missing_expected[:20],
+		"unexpected_present_count": int(len(unexpected_present)),
+		"unexpected_present_sample": unexpected_present[:20],
+		"complete": (len(missing_expected) == 0 and len(unexpected_present) == 0),
+	}
+
 
 def compute_mtp_namespace_status(mtp_layer_ids: list[int], contract_summary: Optional[dict[str, Any]]) -> dict[str, Any]:
 	present_ids: list[int] = sorted({int(i) for i in mtp_layer_ids})
@@ -1403,6 +1452,7 @@ def main() -> int:
 		trunk_contract = None
 		topology_contract = None
 		quantization_contract = None
+		ds4_sidecar_candidates: list[dict[str, Any]] = []
 		mtp_namespace = compute_mtp_namespace_status(sorted(mtp_layer_ids), contract_summary)
 		weight_keys_union_sha256 = sha256_lines(sorted(weight_keys_union))
 		mtp_keys_union_sha256 = (None if not mtp_keys_union else sha256_lines(sorted(mtp_keys_union)))
@@ -1413,6 +1463,17 @@ def main() -> int:
 				topology_contract = compute_topology_contract(topology_candidate.metadata, contract_summary)
 			if topology_candidate is not None:
 				quantization_contract = compute_quantization_contract_hint(topology_candidate.tensor_type_profile, contract_summary)
+			for res in results:
+				c = compute_ds4_mtp_sidecar_contract(set(res.weight_keys_all), res.metadata, contract_summary)
+				if isinstance(c, dict) and c.get("checked") is True and c.get("candidate") is True:
+					ds4_sidecar_candidates.append(
+						{
+							"path": res.path,
+							"complete": bool(c.get("complete", False)),
+							"missing_expected_count": int(c.get("missing_expected_count", 0) or 0),
+							"unexpected_present_count": int(c.get("unexpected_present_count", 0) or 0),
+						}
+					)
 		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary, mtp_keys_union_sha256)
 		mtp_preservation = compute_mtp_preservation(any(r.mtp_present for r in results), mtp_namespace, mtp_contract)
 		return {
@@ -1437,6 +1498,9 @@ def main() -> int:
 			"topology_contract": topology_contract,
 			"quantization_contract_source_path": (None if topology_candidate is None else topology_candidate.path),
 			"quantization_contract": quantization_contract,
+			"ds4_mtp_sidecar_present": bool(ds4_sidecar_candidates),
+			"ds4_mtp_sidecar_complete": any(bool(c.get("complete", False)) for c in ds4_sidecar_candidates),
+			"ds4_mtp_sidecar_candidates": ds4_sidecar_candidates,
 		}
 
 	if args.json:
@@ -1453,6 +1517,7 @@ def main() -> int:
 				out["mtp_preservation"] = compute_mtp_preservation(bool(out.get("mtp_present", False)), out.get("mtp_namespace"), out.get("mtp_contract"))
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
+				out["ds4_mtp_sidecar_contract"] = compute_ds4_mtp_sidecar_contract(set(results[0].weight_keys_all), results[0].metadata, contract_summary)
 			print(json.dumps(out, indent=2, sort_keys=True))
 		else:
 			print(
@@ -1476,6 +1541,7 @@ def main() -> int:
 										"mtp_preservation": compute_mtp_preservation(bool(r.mtp_present), compute_mtp_namespace_status(r.mtp_layer_ids, contract_summary), compute_mtp_contract(set(r.mtp_keys_all), contract_summary)),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
+										"ds4_mtp_sidecar_contract": compute_ds4_mtp_sidecar_contract(set(r.weight_keys_all), r.metadata, contract_summary),
 									}
 								),
 							}
