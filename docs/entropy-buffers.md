@@ -215,6 +215,8 @@ Use this when you want a deterministic “what should we run next?” view from 
 
 - Underrepresented `task_family` / `prompt_template_id` / `task_family|prompt_template_id` keys (low-count).
 - Underrepresented single-letter answers (`A`-`Z`) when present (`underrepresented_answer_letter_top`).
+- The same underrepresentation lists restricted to **clean outputs only** (excludes `task_run`s flagged by useful-novelty heuristics; keys suffixed `_clean_top`).
+- “Noise saturated” pairs where raw volume is high but clean-rate is low (`noise_saturated_task_family_template_pair_top`).
 - Families with low within-family template entropy (template collapse).
 - Families missing templates relative to templates seen elsewhere (cross-family template coverage).
 - Underrepresented judge model-pairs and judge `task_family|prompt_template_id` slices (when present).
@@ -225,6 +227,10 @@ python3 scripts/entropy_buffer_gaps.py \
   --out-json /tmp/entropy_gaps.json \
   --out-md /tmp/entropy_gaps.md
 ```
+
+Notes:
+
+- Use `--noise-saturated-min-raw-count` to only list “noise saturated” pairs after enough raw volume (default `3`).
 
 ### Annotate or filter useful-novelty flagged outputs
 

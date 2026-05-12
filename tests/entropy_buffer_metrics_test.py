@@ -366,6 +366,31 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         judge_low = report.get("judge_pair", {}).get("underrepresented_model_pair_top", [])
         self.assertGreaterEqual(len(judge_low), 1)
 
+    def test_gaps_report_clean_and_noise_saturated_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_gaps_useful_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = gaps.summarize(records, low_count_max=1, min_family_count=1, top_k=10, missing_template_limit=10, noise_saturated_min_raw_count=2)
+
+        totals = report.get("totals") or {}
+        self.assertEqual(int(totals.get("task_run_records", 0)), 5)
+        self.assertEqual(int(totals.get("task_run_clean_records", 0)), 3)
+        self.assertAlmostEqual(float(totals.get("task_run_clean_rate", 0.0)), 0.6, places=6)
+
+        tr = report.get("task_run") or {}
+        raw_pairs = tr.get("underrepresented_task_family_template_pair_top", [])
+        self.assertFalse(any(str(x.get("task_family_template_pair", "")) == "math|cot.v1" for x in raw_pairs))
+
+        clean_pairs = tr.get("underrepresented_task_family_template_pair_clean_top", [])
+        self.assertTrue(any(str(x.get("task_family_template_pair", "")) == "math|cot.v1" and int(x.get("count", 0)) == 1 for x in clean_pairs))
+
+        noise = tr.get("noise_saturated_task_family_template_pair_top", [])
+        self.assertGreaterEqual(len(noise), 1)
+        self.assertEqual(str(noise[0].get("task_family_template_pair", "")), "math|cot.v1")
+        self.assertEqual(int(noise[0].get("raw_count", 0)), 3)
+        self.assertEqual(int(noise[0].get("clean_count", 0)), 1)
+        self.assertAlmostEqual(float(noise[0].get("clean_rate", 0.0)), (1.0 / 3.0), places=6)
+
     def test_recommend_answer_letter_only_ignores_numeric_answers(self) -> None:
         history = [
             {"type": "task_run", "task_id": "math.add.001", "task_family": "math", "prompt_template_id": "cot.v1", "output": "42"},
