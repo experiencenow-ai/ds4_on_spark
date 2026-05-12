@@ -19,6 +19,10 @@ For Runtime API calls that return a CUDA error code, use:
 - `DS4_CUDA_CHECK_LAST_ERROR()`
 - `DS4_CUDA_CHECK_PEEK_LAST_ERROR()`
 
+For allocation-free error reporting in CLI/tests, format a status into a caller-provided buffer:
+
+- `ds4_cuda_status_format(st,buf,cap)`
+
 For kernel launches (or any void-returning CUDA statements compiled by NVCC), use:
 
 - `DS4_CUDA_KERNEL_LAUNCH(kernel<<<grid,block,shared,stream>>>(...))`

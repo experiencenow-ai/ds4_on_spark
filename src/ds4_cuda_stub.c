@@ -1,6 +1,8 @@
 #include "ds4/cuda.h"
 #include "ds4/common.h"
 
+#include <stdio.h>
+
 ds4_cuda_status_t ds4_cuda_ok(void)
 {
 	ds4_cuda_status_t st;
@@ -62,6 +64,29 @@ const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 	if ( st.code < 0 )
 		return("DS4 CUDA internal error");
 	return("CUDA error (disabled build)");
+}
+
+int32_t ds4_cuda_status_format(ds4_cuda_status_t st,char *out,int32_t cap)
+{
+	const char *s;
+	int32_t n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	s = ds4_cuda_errstr(st);
+	if ( s == 0 )
+		s = "?";
+	n = (int32_t)snprintf(out,(size_t)cap,"code=%d err=%s",st.code,s);
+	if ( n < 0 )
+	{
+		out[0] = 0;
+		return(-3);
+	}
+	out[cap - 1] = 0;
+	if ( n >= cap )
+		return(-4);
+	return(n);
 }
 
 ds4_cuda_status_t ds4_cuda_last_error(void)

@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 #include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
 
 extern "C" {
 
@@ -104,6 +105,29 @@ const char *ds4_cuda_errstr(ds4_cuda_status_t st)
 		return("DS4 CUDA internal error");
 	err = (cudaError_t)st.code;
 	return(cudaGetErrorString(err));
+}
+
+int32_t ds4_cuda_status_format(ds4_cuda_status_t st,char *out,int32_t cap)
+{
+	const char *s;
+	int32_t n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	s = ds4_cuda_errstr(st);
+	if ( s == 0 )
+		s = "?";
+	n = (int32_t)snprintf(out,(size_t)cap,"code=%d err=%s",st.code,s);
+	if ( n < 0 )
+	{
+		out[0] = 0;
+		return(-3);
+	}
+	out[cap - 1] = 0;
+	if ( n >= cap )
+		return(-4);
+	return(n);
 }
 
 ds4_cuda_status_t ds4_cuda_last_error(void)
