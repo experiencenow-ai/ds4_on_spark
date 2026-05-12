@@ -703,6 +703,8 @@ class SchedulerSimTest(unittest.TestCase):
         )
         m = scheduler_sim.run_simulation(cfg, trace)
         s = scheduler_sim.compare_summary_jsonable(m)
+        self.assertAlmostEqual(float(s["task_queue_wait_ms_p50"]), 1.5, places=6)
+        self.assertAlmostEqual(float(s["task_queue_wait_ms_p95"]), 2.85, places=6)
         self.assertAlmostEqual(float(s["task_queue_wait_ms_p50_batch"]), 1.5, places=6)
         self.assertAlmostEqual(float(s["task_queue_wait_ms_p95_batch"]), 2.85, places=6)
         self.assertAlmostEqual(float(s["expert_max_task_queue_wait_ms_p50"]), 3.0, places=6)

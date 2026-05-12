@@ -4390,6 +4390,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
     starved_task_queue_wait_ms_p95_batch = _p_or_zero(metrics.starved_task_queue_wait_ms_batch, 0.95)
     starved_task_queue_wait_ms_p95_mtp_draft = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_draft, 0.95)
     starved_task_queue_wait_ms_p95_mtp_verify = _p_or_zero(metrics.starved_task_queue_wait_ms_mtp_verify, 0.95)
+    task_queue_wait_ms_p50 = _p_or_zero((metrics.task_queue_wait_ms_interactive + metrics.task_queue_wait_ms_batch), 0.50)
+    task_queue_wait_ms_p95 = _p_or_zero((metrics.task_queue_wait_ms_interactive + metrics.task_queue_wait_ms_batch), 0.95)
     task_queue_wait_ms_p50_interactive = _p_or_zero(metrics.task_queue_wait_ms_interactive, 0.50)
     task_queue_wait_ms_p95_interactive = _p_or_zero(metrics.task_queue_wait_ms_interactive, 0.95)
     task_queue_wait_ms_p50_batch = _p_or_zero(metrics.task_queue_wait_ms_batch, 0.50)
@@ -4512,6 +4514,8 @@ def compare_summary_jsonable(metrics: SimMetrics) -> Dict[str, float]:
             "output_token_p95_interactive_ms": float(_p_or_zero(metrics.output_token_lat_ms_interactive, 0.95)),
             "output_token_p50_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.50)),
             "output_token_p95_batch_ms": float(_p_or_zero(metrics.output_token_lat_ms_batch, 0.95)),
+            "task_queue_wait_ms_p50": float(task_queue_wait_ms_p50),
+            "task_queue_wait_ms_p95": float(task_queue_wait_ms_p95),
             "task_queue_wait_ms_p50_interactive": float(task_queue_wait_ms_p50_interactive),
             "task_queue_wait_ms_p95_interactive": float(task_queue_wait_ms_p95_interactive),
             "task_queue_wait_ms_p50_batch": float(task_queue_wait_ms_p50_batch),
