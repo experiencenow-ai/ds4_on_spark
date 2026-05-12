@@ -119,7 +119,7 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### antirez/deepseek-v4-gguf (DS4-tuned IQ2XXS)
 
-- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `b0c3326275d2207e25e42bc8ac0704952466b5bb` (`refs/heads/main`)
+- Source: `https://huggingface.co/antirez/deepseek-v4-gguf` @ `c566ab6d7c696ddd0c7f124e115228af1a326824` (`refs/heads/main`)
 - License: MIT (model card)
 - Artifacts (not fetched here; sizes are from git-lfs pointer metadata):
   - IQ2XXS: `DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` (86720111200 bytes, 80.8 GiB)

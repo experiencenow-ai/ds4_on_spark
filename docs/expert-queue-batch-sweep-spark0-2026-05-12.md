@@ -27,6 +27,11 @@ OUT_DIR=/tmp/ds4_moe_batch_sweep_20260512 \
 scripts/run_ds4_moe_batch_sweep_spark.sh spark0@aitopatom-9ab9.local
 ```
 
+The runner sets `DS4_METAL_PREFILL_CHUNK=<batch_rows>` for each frontier so
+batch sizes above 2048 remain one real graph/MoE batch instead of being silently
+split into the runtime's default 2048-token chunks. Set `SET_PREFILL_CHUNK=0`
+only when intentionally measuring the default chunking policy.
+
 Then copy the logs locally and summarize with:
 
 ```bash
@@ -59,6 +64,14 @@ Median per-layer CUDA MoE timings:
 from the same process family. It estimates the cost of sending the same number
 of rows through the one-token decode MoE path one at a time.
 
+Large tiled-only checks with `DS4_METAL_PREFILL_CHUNK=<batch_rows>`:
+
+| Batch rows | Tiled MoE ms/layer | Tiled MoE ms/row, 43 layers | Prefill TPS |
+| ---: | ---: | ---: | ---: |
+| 2048 | 79.546 | 1.670 | 315.82 |
+| 4096 | 155.339 | 1.631 | 289.14 |
+| 8192 | 306.202 | 1.607 | 276.77 |
+
 ## Interpretation
 
 At the user-relevant `B=100` point, the real expert-tiled CUDA MoE path is:
@@ -71,6 +84,13 @@ This supports a credible `3x-4x` MoE-side gain if the decode scheduler can pack
 roughly 100 independent rows into the existing `n_tokens > 1` MoE kernel path.
 The larger-batch tail shows that the expert-tile path keeps improving as route
 queues deepen.
+
+For pure throughput work, larger batches help: per-row MoE cost falls from
+`4.899 ms` at `B=100` to `2.268 ms` at `B=256`, `1.924 ms` at `B=512`, and
+about `1.6-1.7 ms` at `B=2048-8192`. The marginal MoE gain beyond roughly
+`B=2048` is small, so the throughput scheduler should treat `B=256-1024` as
+the first practical batch lane and `B=2048+` as a bulk/offline lane, not as the
+default interactive policy.
 
 This still does not prove a `3x-4x` full decode speedup. The single-token decode
 benchmark is about `14-15 tok/s`, or roughly `67-71 ms/token`. The one-token MoE
