@@ -20,9 +20,9 @@ static const char *DS4_CONFIG_KEY_HELP[] =
 	"0..3 or error/warn/info/debug (default=info)",
 	"bool 0/1 true/false yes/no on/off (default=0)",
 	"-1=auto or >=0 device index (default=-1)",
-	"bytes (k/m/g suffix ok), advisory (default=0)",
-	"bytes (k/m/g suffix ok), advisory; requires enable_cuda=1 (default=0)",
-	"entries (k/m/g suffix ok), advisory (default=0)",
+	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory (default=0)",
+	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory; requires enable_cuda=1 (default=0)",
+	"entries (k/m/g or KiB/MiB/GiB suffix ok), advisory (default=0)",
 };
 
 _Static_assert((sizeof(DS4_CONFIG_KEYS) / sizeof(DS4_CONFIG_KEYS[0])) == (sizeof(DS4_CONFIG_KEY_HELP) / sizeof(DS4_CONFIG_KEY_HELP[0])),"DS4_CONFIG_KEY_HELP mismatch");
@@ -189,7 +189,7 @@ static int32_t ds4_parse_i32_kmg(const char *s,int32_t slen,int32_t *out)
 {
 	int32_t base_len,iv;
 	int64_t scale,scaled;
-	uint8_t suf;
+	uint8_t suf,c0,c1,c2;
 	if ( s == 0 )
 		return(-1);
 	if ( out == 0 )
@@ -198,21 +198,48 @@ static int32_t ds4_parse_i32_kmg(const char *s,int32_t slen,int32_t *out)
 		return(-3);
 	base_len = slen;
 	scale = 1;
-	suf = (uint8_t)s[slen - 1];
-	if ( suf == 'k' || suf == 'K' )
+	if ( slen >= 3 )
 	{
-		scale = 1024;
-		base_len = (slen - 1);
+		c0 = (uint8_t)s[slen - 3];
+		c1 = (uint8_t)s[slen - 2];
+		c2 = (uint8_t)s[slen - 1];
+		if ( (c1 == 'i' || c1 == 'I') && (c2 == 'b' || c2 == 'B') )
+		{
+			if ( c0 == 'k' || c0 == 'K' )
+			{
+				scale = 1024;
+				base_len = (slen - 3);
+			}
+			else if ( c0 == 'm' || c0 == 'M' )
+			{
+				scale = (1024 * 1024);
+				base_len = (slen - 3);
+			}
+			else if ( c0 == 'g' || c0 == 'G' )
+			{
+				scale = (1024 * 1024 * 1024);
+				base_len = (slen - 3);
+			}
+		}
 	}
-	else if ( suf == 'm' || suf == 'M' )
+	if ( scale == 1 )
 	{
-		scale = (1024 * 1024);
-		base_len = (slen - 1);
-	}
-	else if ( suf == 'g' || suf == 'G' )
-	{
-		scale = (1024 * 1024 * 1024);
-		base_len = (slen - 1);
+		suf = (uint8_t)s[slen - 1];
+		if ( suf == 'k' || suf == 'K' )
+		{
+			scale = 1024;
+			base_len = (slen - 1);
+		}
+		else if ( suf == 'm' || suf == 'M' )
+		{
+			scale = (1024 * 1024);
+			base_len = (slen - 1);
+		}
+		else if ( suf == 'g' || suf == 'G' )
+		{
+			scale = (1024 * 1024 * 1024);
+			base_len = (slen - 1);
+		}
 	}
 	if ( base_len <= 0 )
 		return(-4);

@@ -153,10 +153,26 @@ int32_t test_config(void)
 		return(-170);
 	if ( cfg.arena_size != 65536 )
 		return(-171);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","64KiB") != 0 )
+		return(-1710);
+	if ( cfg.arena_size != 65536 )
+		return(-1711);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","1MiB") != 0 )
+		return(-1712);
+	if ( cfg.arena_size != 1048576 )
+		return(-1713);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","1GiB") != 0 )
+		return(-1714);
+	if ( cfg.arena_size != 1073741824 )
+		return(-1715);
 	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","256") != 0 )
 		return(-1810);
 	if ( cfg.cuda_arena_size != 256 )
 		return(-1811);
+	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","1MiB") != 0 )
+		return(-1812);
+	if ( cfg.cuda_arena_size != 1048576 )
+		return(-1813);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","9") != 0 )
 		return(-142);
 	if ( cfg.log_ring_entries != 9 )
@@ -165,6 +181,10 @@ int32_t test_config(void)
 		return(-172);
 	if ( cfg.log_ring_entries != 2048 )
 		return(-173);
+	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","2KiB") != 0 )
+		return(-1730);
+	if ( cfg.log_ring_entries != 2048 )
+		return(-1731);
 	if ( ds4_config_parse_kv_cstr(&cfg,0,"1") >= 0 )
 		return(-64);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
