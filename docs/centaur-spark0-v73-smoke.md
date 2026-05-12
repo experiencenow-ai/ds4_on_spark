@@ -157,8 +157,9 @@ When saving a smoke excerpt for PRs/issues, capture:
 
 - The exact Spark0 command line and working directory (`pwd`, `CENTAUR_ZIP`, `CENTAUR_WORKDIR`)
 - `python3 -V` and venv python path
-- `pip freeze` output
+- `pip freeze` output (or attach `pip_freeze.txt` if present)
 - `sha256` of the Centaur zip (the smoke prints it as `zip_sha256: ...`)
+- `smoke_facts.json` (when present; structured zip/python/pip context)
 - Command outputs for each failing sub-step (bounded tails)
 
 Avoid committing:
@@ -167,7 +168,7 @@ Avoid committing:
 - private IPs / MAC addresses
 - any API keys / tokens (Centaur provider registration should only reference env var names via `--auth-env`, not values)
 
-If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact bundle (log + manifests + dashboard) back to your Mac:
+If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact bundle (log + manifests + dashboard, plus optional facts) back to your Mac:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
@@ -205,7 +206,7 @@ The repo includes sanitized, commit-safe Spark0 v73 smoke artifact bundles:
 - Bundle path:
   - `fixtures/centaur-smoke/spark0-v73/20260512T073455Z/`
 
-The bundle contains `smoke.log`, `effective_manifests/`, `hyor_effective/`, and `hyor_dashboard/`.
+Newer bundles may also include `smoke_facts.json` and `pip_freeze.txt` (older checked-in bundles only include `smoke.log` + the artifact dirs).
 
 ## Bug triage: Centaur vs DS4 runtime
 

@@ -54,8 +54,8 @@ sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 - Status: PASS | FAIL | NOT RUN
 - Run id: `<CENTAUR_RUN_ID>`
 - Zip facts: `zip_sha256`, zip `mtime`, `decomposer_version`
-- Deps: `python3 -V`, `pip freeze` excerpt (at least numpy/scipy/scikit-learn)
-- Artifacts: `effective_manifests/`, `hyor_effective/`, `hyor_dashboard/`, `smoke.log`
+- Deps: `python3 -V`, `pip freeze` excerpt (at least numpy/scipy/scikit-learn) or attach `pip_freeze.txt`
+- Artifacts: `effective_manifests/`, `hyor_effective/`, `hyor_dashboard/`, `smoke.log`, `smoke_facts.json`, `pip_freeze.txt`
 
 Tip: `scripts/centaur_spark0_v73_fetch_artifacts.sh` is the preferred sanitized bundle.
 Tip: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip` captures zip facts without extracting.
