@@ -195,6 +195,23 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
   - `beta_fast`: 32
   - `beta_slow`: 1
 
+### MoE routing semantics (hash vs score gate)
+
+Upstream source of truth: `fixtures/model_contract/deepseek_v4_flash/inference/model.py` (`Gate.forward`, `MoE.forward`), pinned in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` under `moe.semantics.source_helpers`.
+
+Key rules DS4 must match (contract-traceable via `contract_summary.json` `moe.semantics.*`):
+
+- Gate score compute is FP32: `scores = linear(x.float(), gate.weight.float())`.
+- `scoring_func == "sqrtsoftplus"`: `scores = sqrt(softplus(scores))`.
+- Score-gated layers (`layer_id >= n_hash_layers`):
+  - `gate.bias` shifts **selection only**: indices are chosen from `(scores + bias).topk(k)`, but the routing weights are gathered from the **original** un-biased `scores`.
+  - If `scoring_func != "softmax"` (true for V4 Flash), weights are normalized: `weights /= sum(weights)` before `weights *= route_scale`.
+- Hash-gated layers (`layer_id < n_hash_layers`):
+  - Expert indices come from the checkpoint mapping `gate.tid2eid[input_ids]` (int32); there is no `gate.bias`.
+  - Weights are still gathered from the score tensor at those indices, normalized (non-softmax case), then scaled by `route_scale`.
+- MoE dispatch is top-k routed experts **plus one shared expert**:
+  - Each TP rank executes its local expert subset; the reference runtime `all_reduce`s the routed expert output across ranks, then adds `shared_experts(x)`.
+
 ### Config key normalization (Transformers vs inference config)
 
 Upstream publishes two “official” configs with different key naming: `config.json` (Transformers) and `inference/config.json` (reference runtime). External runtimes and conversion pipelines may log either set of keys (`hidden_size` vs `dim`, `num_hidden_layers` vs `n_layers`, etc.).
