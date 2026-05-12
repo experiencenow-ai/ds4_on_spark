@@ -27,6 +27,12 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 ./scripts/ops_validate_deploy_assets.sh
 ```
 
+Optional: snapshot systemd status across the ring (read-only) before/after staging:
+
+```bash
+./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 Recommended (ordered inventory; this example stages three Sparks):
 
 ```bash
