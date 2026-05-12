@@ -24,6 +24,12 @@ before the native FP4/FP8 loader and dual-Spark TP path are complete.
 
 If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven MTP path), add an explicit correctness gate *before* any acceptance/perf claims:
 
+- If your reference runtime is `antirez/ds4` on Spark/Linux CUDA, note that the DS4-tuned sidecar uses `Q4_K` routed experts and requires a CUDA fallback path (otherwise MTP draft fails before it can be compared). This repo tracks the minimal patch + a host-side math verifier:
+  - `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`
+  - `docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch`
+  - `docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch` (prevents trunk/sidecar cache key collisions under CUDA weight caching)
+  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`
+
 - Validate the staged MTP sidecar **contract** (Spark-safe; header + tensor table only; no trunk load):
 
 ```bash
@@ -43,6 +49,12 @@ scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 
 ```bash
 scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+- Before any acceptance or speedup claims, capture an **oracle** one-token probe JSON (for example from `antirez/ds4`, patched as needed) and diff it against the candidate probe JSON:
+
+```bash
+python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
 Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.

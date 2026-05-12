@@ -42,12 +42,16 @@ Keep this probe *fast*: it should stop after the first verify step and draft com
 
 Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`.
 
-Optional debug keys (non-normative; used by the skeleton patch to stage wiring work):
+Optional debug keys (non-normative; used by the skeleton patch to stage wiring work and by the oracle for diffs):
 
-- `trunk_token_embd_{fnv64,nbytes,shape}`
-- `trunk_pre_hc_head_{fnv64,nbytes,shape}`
-- `mtp_stub_input_hc_{fnv64,nbytes,shape}` (stub pre-block input computed from sidecar `enorm/e_proj` + `hnorm/h_proj` + add; still not a real draft)
-- `mtp_stub_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
+- `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
+- `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
+- `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
+
+Notes:
+
+- Prefer fingerprinting intermediate tensors over dumping raw floats/logits. Fingerprints are stable, small, and diff-friendly.
+- Avoid dumping full vocab logits (huge + tokenizer/runtime-dependent); fingerprint the normalized head stream instead and require exact `mtp_draft_token_id` equality.
 
 ## Validation
 
@@ -57,6 +61,27 @@ After capturing the JSON, validate its shape (and optionally cross-check `mtp_pa
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json
 python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json /path/to/mtp_one_token_probe.json --sidecar-probe-json /path/to/mtp_sidecar_probe.json
 ```
+
+## Oracle diff (required before acceptance sweeps)
+
+Once you have **two** probe JSON blobs (oracle + candidate), diff them before running any acceptance/throughput experiments:
+
+```bash
+python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
+By default this requires:
+
+- `base_next_token_id` match
+- `mtp_draft_token_id` match
+- `runtime_repo`, `runtime_commit`, `trunk_gguf_path`, and `mtp_sidecar_path` are required to be present in both probes, but do not need to match (oracle vs candidate runs will often differ); differences are recorded as `notes[]` in the diff output.
+- when present, any optional debug capture fingerprints match (all keys ending in `*_fnv64`, plus matching `*_nbytes` and `*_shape` companions). Common early captures:
+  - `trunk_token_embd_*` / `trunk_pre_hc_head_*`
+  - `mtp_input_hc_*` / `mtp_head_norm_*`
+  - once the real draft is implemented: `mtp_block_out_hc_*` (plus the token ID match)
+
+If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
+The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.
 
 ## Spark runner (llama.cpp skeleton patch; available now)
 
@@ -73,6 +98,15 @@ Notes:
 - The output directory includes a machine-readable `summary.json` (probe parse + local validator status).
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
 - As of 2026-05-12, the patch is still a **skeleton**: it validates sidecar binding and can compute a debug-only stub output-head tensor when `LOAD_SIDECAR_WEIGHTS=1`, but it emits `ok=false` with a TODO until the real `gamma=1` draft compute is implemented.
+
+## Spark runner (antirez/ds4 oracle; build + one-token JSON)
+
+This repo also ships a **gated** Spark runner that can clone/patch/build/run `antirez/ds4@3630e64` with the Q4_K + secondary-map fixes and the `--dump-mtp-one-token-json` oracle capture:
+
+```bash
+REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1' \
+scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
+```
 
 ## Spark runner (when the fork has a real one-token command)
 
