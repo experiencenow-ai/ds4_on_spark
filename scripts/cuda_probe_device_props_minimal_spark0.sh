@@ -6,6 +6,8 @@ SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInter
 REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_device_props_minimal}"
 log_path="${LOG_PATH:-}"
 with_sm121_run="${WITH_SM121_RUN:-0}"
+with_compute121_run="${WITH_COMPUTE121_RUN:-0}"
+with_gencode_run="${WITH_GENCODE_RUN:-0}"
 
 main() {
 ssh $SSH_OPTS "$target" "set -eu
@@ -20,6 +22,21 @@ else
 	exit 3
 fi
 \$NVCC --version
+
+echo
+echo \"== nvcc: --list-gpu-arch / --list-gpu-code (best-effort) ==\"
+list_gpu_arch=\$(\$NVCC --list-gpu-arch 2>/dev/null || true)
+if [ \"\${list_gpu_arch}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-arch not supported)\"
+else
+	printf \"%s\n\" \"\${list_gpu_arch}\"
+fi
+list_gpu_code=\$(\$NVCC --list-gpu-code 2>/dev/null || true)
+if [ \"\${list_gpu_code}\" = \"\" ]; then
+	echo \"(nvcc --list-gpu-code not supported)\"
+else
+	printf \"%s\n\" \"\${list_gpu_code}\"
+fi
 
 echo
 echo \"== build: cuda_device_props_minimal (-arch=native) ==\"
@@ -176,6 +193,62 @@ if [ \"${with_sm121_run}\" = \"1\" ]; then
 	\$NVCC -O2 -std=c++17 --gpu-architecture=sm_121 -o \"$REMOTE_DIR\"/cuda_device_props_minimal_gpuarch_sm121 \"$REMOTE_DIR\"/cuda_device_props_minimal.cu -lcuda
 fi
 
+if [ \"${with_compute121_run}\" = \"1\" ]; then
+	echo
+	echo \"== build: cuda_device_props_minimal (-arch=compute_121; best-effort) ==\"
+	do_build_compute121=1
+	if [ \"\${list_gpu_arch}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-arch not supported; attempting build anyway)\"
+	else
+		if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+			:
+		else
+			echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\" >&2
+			do_build_compute121=0
+		fi
+	fi
+	if [ \"\${do_build_compute121}\" = \"1\" ]; then
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/cuda_device_props_minimal_compute121 \"$REMOTE_DIR\"/cuda_device_props_minimal.cu -lcuda 2>\"$REMOTE_DIR\"/cuda_device_props_minimal_compute121.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"compute_121_build: OK\"
+		else
+			echo \"compute_121_build: FAILED rc=\$rc\" >&2
+			head -n 60 \"$REMOTE_DIR\"/cuda_device_props_minimal_compute121.err || true
+		fi
+	fi
+fi
+
+if [ \"${with_gencode_run}\" = \"1\" ]; then
+	echo
+	echo \"== build: cuda_device_props_minimal (-gencode compute_121->[sm_121,compute_121]; best-effort) ==\"
+	do_build_gencode=1
+	if [ \"\${list_gpu_arch}\" = \"\" ]; then
+		echo \"(nvcc --list-gpu-arch not supported; attempting build anyway)\"
+	else
+		if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+			:
+		else
+			echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\" >&2
+			do_build_gencode=0
+		fi
+	fi
+	if [ \"\${do_build_gencode}\" = \"1\" ]; then
+		set +e
+		\$NVCC -O2 -std=c++17 -gencode arch=compute_121,code=sm_121 -gencode arch=compute_121,code=compute_121 -o \"$REMOTE_DIR\"/cuda_device_props_minimal_gencode \"$REMOTE_DIR\"/cuda_device_props_minimal.cu -lcuda 2>\"$REMOTE_DIR\"/cuda_device_props_minimal_gencode.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"gencode_build: OK\"
+		else
+			echo \"gencode_build: FAILED rc=\$rc\" >&2
+			head -n 60 \"$REMOTE_DIR\"/cuda_device_props_minimal_gencode.err || true
+		fi
+	fi
+fi
+
 echo
 echo \"== build: sm_121 compile-only gate ==\"
 cat > \"$REMOTE_DIR\"/cuda_sm121_compile_only.cu <<'EOF'
@@ -233,6 +306,16 @@ set -e
 		echo
 		echo \"== run: cuda_device_props_minimal_gpuarch_sm121 ==\"
 		\"$REMOTE_DIR\"/cuda_device_props_minimal_gpuarch_sm121
+	fi
+	if [ -x \"$REMOTE_DIR\"/cuda_device_props_minimal_compute121 ]; then
+		echo
+		echo \"== run: cuda_device_props_minimal_compute121 ==\"
+		\"$REMOTE_DIR\"/cuda_device_props_minimal_compute121
+	fi
+	if [ -x \"$REMOTE_DIR\"/cuda_device_props_minimal_gencode ]; then
+		echo
+		echo \"== run: cuda_device_props_minimal_gencode ==\"
+		\"$REMOTE_DIR\"/cuda_device_props_minimal_gencode
 	fi
 "
 }
