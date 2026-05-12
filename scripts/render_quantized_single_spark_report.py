@@ -94,6 +94,23 @@ def _extract_code_block_after(section_text: str, anchor: str) -> str:
         return _extract_first_code_block(section_text)
     return _extract_first_code_block(section_text[pos:])
 
+def _parse_quality_metadata(report_md: str) -> Dict[str, str]:
+    section = _extract_section(report_md, "Quality Metadata (Local)")
+    out: Dict[str, str] = {}
+    for raw in section.splitlines():
+        line = raw.strip()
+        if not line.startswith("- "):
+            continue
+        line = line[2:].strip()
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        k = k.strip()
+        v = v.strip()
+        if k:
+            out[k] = v
+    return out
+
 
 def _parse_utc(remote_llama_stdout: str) -> Optional[str]:
     for line in remote_llama_stdout.splitlines():
@@ -138,6 +155,22 @@ def _fmt_float(v: str) -> str:
         return v
 
 
+def _na(v: Optional[str]) -> str:
+    s = (v or "").strip()
+    if not s or s.upper() == "NA":
+        return "NA"
+    return s
+
+
+def _inspect_path(inspect: Optional[Dict[str, Any]]) -> str:
+    if not inspect:
+        return "unknown"
+    p = inspect.get("path")
+    if isinstance(p, str) and p.strip():
+        return p.strip()
+    return "unknown"
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     p = argparse.ArgumentParser(
         description="Render a quantized single-Spark baseline markdown report from a local OUT_DIR."
@@ -174,7 +207,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     summary_kv = _extract_kv_block(remote_llama_stdout, "== baseline summary (approx) ==")
     model_source = summary_kv.get("model_source", "unknown")
     model_quant = summary_kv.get("model_quant", "unknown")
-    model_gguf = summary_kv.get("model_gguf", "unknown")
+    model_gguf = summary_kv.get("model_gguf", "") or _inspect_path(_read_json(gguf_inspect_path)) or "unknown"
     model_sha256 = summary_kv.get("model_sha256", "")
     model_size_bytes = summary_kv.get("model_size_bytes", "")
     llama_cli = summary_kv.get("llama_cli", "")
@@ -187,6 +220,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     max_rss_kb = summary_kv.get("max_rss_kb", "")
 
     inspect = _read_json(gguf_inspect_path)
+    quality_kv = _parse_quality_metadata(report_md)
     mtp_present = None if not inspect else bool(inspect.get("mtp_present", False))
     arch = None
     file_type = None
@@ -272,15 +306,52 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append("")
     lines.append("Quality:")
     lines.append("")
-    lines.append("- Public quality prior: NA")
-    lines.append("- Public quality basis/source: NA")
-    lines.append("- Local quality score: NA")
-    lines.append("- Passed tasks: NA")
-    lines.append("- Total tasks: NA")
-    lines.append("- Quality score: NA")
+    lines.append(f"- public_quality_prior: {_na(quality_kv.get('public_quality_prior'))}")
+    basis = _na(quality_kv.get("public_quality_basis"))
+    source = _na(quality_kv.get("public_quality_source"))
+    if basis != "NA" or source != "NA":
+        lines.append(f"- public_quality_basis/source: {basis} / {source}")
+    else:
+        lines.append("- public_quality_basis/source: NA")
+    lines.append(f"- local_quality_score: {_na(quality_kv.get('local_quality_score'))}")
+    lines.append(f"- passed_tasks: {_na(quality_kv.get('passed_tasks'))}")
+    lines.append(f"- total_tasks: {_na(quality_kv.get('total_tasks'))}")
+    lines.append(f"- quality_score: {_na(quality_kv.get('quality_score'))}")
     lines.append("")
     lines.append("GGUF contract inspector (metadata-only):")
     lines.append("")
+    if inspect:
+        wks = inspect.get("weight_keys_sha256")
+        if isinstance(wks, str) and wks.strip():
+            lines.append(f"- weight_keys_sha256={wks.strip()}")
+        tns = inspect.get("tensor_key_namespace_guess")
+        if isinstance(tns, str) and tns.strip():
+            lines.append(f"- tensor_key_namespace_guess={tns.strip()}")
+        tc = inspect.get("trunk_contract")
+        if isinstance(tc, dict):
+            kind = tc.get("kind")
+            complete = tc.get("complete")
+            if kind is not None or complete is not None:
+                lines.append(f"- trunk_contract: kind={kind} complete={complete}")
+        mc = inspect.get("mtp_contract")
+        if isinstance(mc, dict):
+            checked = mc.get("checked")
+            reason = mc.get("reason")
+            if checked is not None or reason is not None:
+                extra = ""
+                if isinstance(reason, str) and reason.strip():
+                    extra = f" reason={reason.strip()}"
+                lines.append(f"- mtp_contract: checked={checked}{extra}")
+        qc = inspect.get("quantization_contract")
+        if isinstance(qc, dict) and qc.get("checked") is not None:
+            obs = qc.get("observed", {})
+            if not isinstance(obs, dict):
+                obs = {}
+            dense = obs.get("dense_primary_type")
+            expert = obs.get("expert_primary_type")
+            df8 = qc.get("dense_fp8_like")
+            ef4 = qc.get("expert_fp4_like")
+            lines.append(f"- quantization_contract: checked={qc.get('checked')} dense={dense} expert={expert} dense_fp8_like={df8} expert_fp4_like={ef4}")
     if arch is not None or file_type is not None or block_count is not None or mtp_present is not None:
         parts = []
         if arch is not None:
@@ -351,4 +422,4 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-	raise SystemExit(main())
+    raise SystemExit(main())
