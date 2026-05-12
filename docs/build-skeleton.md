@@ -33,6 +33,11 @@ For sizing caller-provided static backing storage without duplicating overflow c
 - `ds4_pool_bytes_needed(block_count,block_size,&out_bytes)`
 - `ds4_ring_bytes_needed(elem_count,elem_size,&out_bytes)`
 
+For overflow-checked allocations from arenas without repeating `count*elem_size` math, use:
+
+- `ds4_arena_alloc_n(&arena,count,elem_size,align,&out)` and `ds4_arena_alloc_zero(&arena,size,align,&out)`
+- `ds4_cuda_arena_alloc_n(&cuda_arena,count,elem_size,align,&out)` and `ds4_cuda_arena_alloc_zero(&cuda_arena,size,align,&out)`
+
 ## Logging
 
 Logging is intentionally minimal and allocation-free:
