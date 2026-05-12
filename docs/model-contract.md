@@ -110,13 +110,14 @@ MTP (multi-token prediction) oracle requirements:
   - Next gating experiment once an external runtime can load the sidecar: `docs/mtp-one-token-draft-probe.md` (one-token draft wiring probe; do not jump to acceptance metrics first).
     - Validate the probe JSON shape with: `python3 scripts/model_contract_validate_mtp_one_token_draft_probe.py --probe-json ...`
 
-Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-11; refreshed via `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`):
+Pinned quantized/MTP status snapshot (metadata-only; **no full GGUF downloads**) (as of 2026-05-12; refreshed via `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`):
 
 Machine-readable view:
 
 - `fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` summarizes the pinned `docs/gguf-inspect-*.json` into a small fixture for tooling.
   - MTP namespace preservation: `items[].mtp_namespace.present_prefixes` (for example `["mtp.0."]` when an artifact set actually preserves the upstream `mtp.0.*` namespace).
   - Quant-format compatibility: `items[].quantization_contract.status` plus `items[].quantization_contract.notes_sample` (helps interpret single-Spark external-runtime results when artifacts are re-quantized or non-native).
+    - Note: `dense_fp8_like` is based on FP8 tensor evidence in key dense categories (e.g. attention/shared-expert); the most common non-expert tensor type may still be `F32` due to scale/router tensors.
 
 | Pinned probe output | Artifact kind | `mtp_present` | `mtp_contract.complete` | Note |
 |---|---|---:|---:|---|
