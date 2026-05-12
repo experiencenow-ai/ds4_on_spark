@@ -105,6 +105,10 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(float(report.reuse.get("buffer_item_id_nonempty_task_run_rate", 0.0)), 1.0)
 
         self.assertEqual(report.useful_novelty["flagged_task_runs"], 1)
+
+        useful = report.useful_coverage
+        self.assertEqual(int(useful.get("clean_task_run_records", 0)), 5)
+        self.assertAlmostEqual(float(useful.get("clean_task_run_rate", 0.0)), (5.0 / 6.0))
         flagged_model_top = report.useful_novelty.get("flagged_rate_by_model_id_top", [])
         self.assertGreaterEqual(len(flagged_model_top), 1)
         self.assertEqual(flagged_model_top[0].get("model_id"), "bad-model")
@@ -166,6 +170,7 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertIn("coverage_delta", predicted)
         self.assertGreaterEqual(int((predicted.get("coverage_after") or {}).get("task_family", {}).get("unique", 0)), int((predicted.get("coverage_before") or {}).get("task_family", {}).get("unique", 0)))
         self.assertIsInstance(float(predicted.get("selected_history_noise_rate_mean", 0.0)), float)
+        self.assertIsInstance(float(predicted.get("selected_expected_clean_rate_mean", 0.0)), float)
         self.assertIsInstance(float(predicted.get("selected_history_dup_rate_mean", 0.0)), float)
         self.assertIsInstance(float(predicted.get("selected_history_judge_disagreement_rate_decided_ab_mean", 0.0)), float)
         self.assertIsInstance(float(predicted.get("selected_history_judge_invalid_rate_mean", 0.0)), float)

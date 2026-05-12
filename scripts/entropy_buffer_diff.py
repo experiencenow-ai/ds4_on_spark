@@ -44,6 +44,8 @@ DEFAULT_KEY_PATHS = [
     "reuse.buffer_item_hhi",
     "reuse.buffer_id_hhi",
     "useful_novelty.flagged_task_run_rate",
+    "useful_coverage.clean_task_run_rate",
+    "useful_coverage.diversity.task_family.entropy_norm",
     "judge.label_balance_ab",
     "judge.disagreement_rate",
     "judge.invalid_rate",
@@ -132,6 +134,7 @@ def _report_dict(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
         "judge": report.judge,
         "reuse": report.reuse,
         "useful_novelty": report.useful_novelty,
+        "useful_coverage": report.useful_coverage,
     })
 
 
@@ -216,4 +219,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

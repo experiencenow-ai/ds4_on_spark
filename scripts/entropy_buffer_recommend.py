@@ -258,6 +258,7 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
         "coverage_after": coverage_after,
         "coverage_delta": coverage_delta,
         "selected_history_noise_rate_mean": noise_mean,
+        "selected_expected_clean_rate_mean": max(0.0, 1.0 - noise_mean),
         "selected_history_dup_rate_mean": dup_mean,
         "selected_history_judge_disagreement_rate_decided_ab_mean": judge_disagree_ab_mean,
         "selected_history_judge_invalid_rate_mean": judge_invalid_mean,

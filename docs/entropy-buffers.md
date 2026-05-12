@@ -141,6 +141,7 @@ The scripts compute:
 - **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
   - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
   - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
+- **Useful coverage (clean outputs)**: recomputes diversity + duplicate rates after excluding task-runs flagged by useful-novelty filters (a quick “effective coverage” view).
 - **Run slices** (optional): if `run_id` is present on `task_run` records, the report includes per-run coverage/duplicate/noise summaries and “top runs” to quickly spot regressions.
 
 ## Tools
@@ -196,6 +197,7 @@ Notes:
   - `coverage_before` / `coverage_after`: entropy stats if you add the selected batch to history (count-only; deterministic).
   - `coverage_delta`: entropy deltas per dimension (useful for comparing parameter sweeps).
   - `selected_history_noise_rate_mean` / `selected_history_dup_rate_mean`: expected slice-level penalties for the chosen batch.
+  - `selected_expected_clean_rate_mean`: shorthand for `1 - selected_history_noise_rate_mean` (clamped to `[0,1]`).
   - `selected_history_judge_*_mean`: expected judge-stability penalty components for the chosen batch (rates only; weights are in `meta`).
 
 ## Integration notes

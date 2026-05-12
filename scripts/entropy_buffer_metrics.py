@@ -26,6 +26,7 @@ class MetricsReport:
     judge: Dict[str, Any]
     reuse: Dict[str, Any]
     useful_novelty: Dict[str, Any]
+    useful_coverage: Dict[str, Any]
     runs: Dict[str, Any]
 
 
@@ -464,6 +465,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     buffer_item_out_uniq: Dict[str, int] = {}
     buffer_item_out_seen: Dict[str, set] = {}
 
+    clean_task_runs: List[lib.CanonicalRecord] = []
     for c in task_runs:
         tmpl = c.prompt_template_id
         fam = c.task_family
@@ -543,6 +545,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 model_task_flagged[mid] = model_task_flagged.get(mid, 0) + 1
             for f in flags:
                 novelty_flag_counts[f] = novelty_flag_counts.get(f, 0) + 1
+        else:
+            clean_task_runs.append(c)
 
         if c.output != "":
             outputs_exact.append(c.output)
@@ -995,6 +999,15 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "flagged_rate_by_model_id_top": _rate_top(model_task_total, model_task_flagged, "model_id", k=10),
     }
 
+    clean_summary = _run_summary(clean_task_runs)
+    useful_coverage = {
+        "task_run_records": len(task_runs),
+        "clean_task_run_records": len(clean_task_runs),
+        "clean_task_run_rate": 0.0 if len(task_runs) == 0 else (float(len(clean_task_runs)) / float(len(task_runs))),
+        "diversity": clean_summary.get("diversity") or {},
+        "duplicates": clean_summary.get("duplicates") or {},
+    }
+
     duplicates.update({
         "output_norm_dup_rate_by_prompt_template_id_top": _dup_rate_top(template_out_total, template_out_uniq, "prompt_template_id", k=10),
         "output_norm_dup_rate_by_family_template_top": _dup_rate_top(pair_out_total, pair_out_uniq, "task_family_template_pair", k=10),
@@ -1010,6 +1023,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         judge=judge,
         reuse=reuse,
         useful_novelty=useful_novelty,
+        useful_coverage=useful_coverage,
         runs=_runs_block(task_runs),
     ))
 
@@ -1257,6 +1271,18 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append(_md_list_top(report.reuse.get("buffer_id_top", [])))
     parts.append("\n### buffer_item_top\n")
     parts.append(_md_list_top(report.reuse.get("buffer_item_top", [])))
+    useful = report.useful_coverage or {}
+    parts.append("\n## Useful coverage (clean outputs)\n")
+    parts.append(f"- `clean_task_run_records`: {int(useful.get('clean_task_run_records', 0) or 0)}")
+    parts.append(f"- `clean_task_run_rate`: {float(useful.get('clean_task_run_rate', 0.0) or 0.0):.6f}")
+    div = useful.get("diversity") or {}
+    for field in ("task_id", "task_family", "prompt_template_id", "task_family_template_pair", "model_id", "answer", "tags"):
+        js = div.get(field) or {}
+        parts.append(f"- `clean.{field}.unique`: {int(js.get('unique', 0) or 0)}")
+        parts.append(f"- `clean.{field}.entropy_norm`: {float(js.get('entropy_norm', 0.0) or 0.0):.6f}")
+    dups = useful.get("duplicates") or {}
+    parts.append(f"- `clean.output_norm_dup_rate`: {float(dups.get('output_norm_dup_rate', 0.0) or 0.0):.6f}")
+    parts.append(f"- `clean.answer_dup_rate`: {float(dups.get('answer_dup_rate', 0.0) or 0.0):.6f}")
     parts.append("\n## Useful novelty flags\n")
     parts.append(f"- `flagged_task_run_rate`: {report.useful_novelty.get('flagged_task_run_rate'):.6f}")
     parts.append("\n### flag_counts\n")
@@ -1308,6 +1334,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "judge": report.judge,
         "reuse": report.reuse,
         "useful_novelty": report.useful_novelty,
+        "useful_coverage": report.useful_coverage,
     }
 
     if args.out_json != "":
