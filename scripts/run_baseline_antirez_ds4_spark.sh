@@ -62,7 +62,7 @@ SUMMARY_TXT="$OUT_DIR/antirez_ds4_spark_summary.txt"
 
 sh_quote()
 {
-	printf "'%s'" "$(printf %s "${1:-}" | sed "s/'/'\\\\''/g")"
+	printf "'%s'" "$(printf %s "${1:-}" | sed "s/'/'\\\\\\\\''/g")"
 }
 
 extract_baseline_summary()

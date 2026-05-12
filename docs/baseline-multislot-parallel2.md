@@ -97,5 +97,7 @@ Heuristic booleans:
 
 - `swa_stream_view_found`
 - `reserve_cap_n_ctx_seq_found`
+- `reserve_bound_tokens_found` (heuristic for fix (3); not tied to a pinned patch artifact)
+- `skip_impossible_windows_found` (heuristic for fix (4); not tied to a pinned patch artifact)
 
-Note: the source probe currently only checks for the two pinned patch artifacts above. For fixes (3) and (4), record the exact runtime repo/commit and preserve the server log + probe JSON so the failure mode is explicit.
+The source probe always records bounded match samples under `*_matches` for debugging. For fixes (3) and (4), treat the booleans as a best-effort hint: record the exact runtime repo/commit and preserve the server log + probe JSON so the failure mode is explicit.

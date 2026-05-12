@@ -4,8 +4,9 @@ Goal: for DeepSeek V4 Flash-family runs on Spark0, identify which batching level
 
 Status note: this document and the companion sweep scripts were rescued from
 the superseded baseline-runtime PR #27 as standalone artifacts. The baseline
-wrapper now supports `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and will fetch a tarball
-of the sweep output into the local report directory.
+wrapper supports `LLAMA_SERVER_THROUGHPUT_SWEEP=1`, fetches a tarball of the
+sweep output into the local report directory, and (when `MODEL_RUNS_CSV` is set)
+appends a best-decode summary row for quality/speed scoring.
 
 This complements the prompt-size sweep (`scripts/benchmark_llamacpp_server_sweep.py`) by treating these knobs as **first-class** experiment variables:
 
@@ -55,6 +56,18 @@ wrapper hook is wired, the artifacts directory contains:
   - `fattn_reservation_probe.json` (best-effort; see `docs/baseline-fattn-reservation.md`)
   - `multislot_reservation_probe.json` (best-effort; see `docs/baseline-multislot-parallel2.md`)
   - `metrics_start.prom` / `metrics_end.prom` plus `metrics_delta.json` / `metrics_delta.md` when `/metrics` is enabled and scraping is requested
+
+When `MODEL_RUNS_CSV` is set and you run the sweep via `scripts/run_baseline_existing_runtime.sh`, the wrapper also appends one extra CSV row capturing the **best decode** configuration:
+
+- `decode_tps`: `agg_generated_tok_s` from `throughput_best_decode.json`
+- `prefill_tps`: `agg_prompt_tok_s` from `throughput_best_decode.json`
+- `total_wall_s`: `wave_wall_s`
+- `output_tokens`: `agg_generated_tokens`
+
+Defaults:
+
+- CSV scope: `llama_server_throughput` (override with `LLAMA_SERVER_THROUGHPUT_SCOPE`)
+- CSV model label: `MODEL_SOURCE` (override with `LLAMA_SERVER_MODEL_ID`)
 
 ## Canonical Run Shape (Mac → Spark0)
 

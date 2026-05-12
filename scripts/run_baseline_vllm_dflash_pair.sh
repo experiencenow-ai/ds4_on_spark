@@ -40,7 +40,7 @@ QUALITY_SCORE="${QUALITY_SCORE:-}"
 sh_quote()
 {
     v="${1:-}"
-    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\''/g")"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
 }
 
 base_env="ALLOW_RUN=$(sh_quote "$ALLOW_RUN") ALLOW_FETCH=$(sh_quote "$ALLOW_FETCH") VLLM_MODEL=$(sh_quote "$VLLM_TARGET_MODEL") PROMPT=$(sh_quote "$PROMPT") MAX_TOKENS=$(sh_quote "$MAX_TOKENS") TENSOR_PARALLEL_SIZE=$(sh_quote "$TENSOR_PARALLEL_SIZE") VLLM_TRUST_REMOTE_CODE=$(sh_quote "$VLLM_TRUST_REMOTE_CODE") VLLM_EXTRA_LLM_KWARGS_JSON=$(sh_quote "$VLLM_EXTRA_LLM_KWARGS_JSON") VLLM_EXTRA_SAMPLING_KWARGS_JSON=$(sh_quote "$VLLM_EXTRA_SAMPLING_KWARGS_JSON") SMOKE_EVAL=$(sh_quote "$SMOKE_EVAL") SMOKE_MAX_TOKENS_PER_TASK=$(sh_quote "$SMOKE_MAX_TOKENS_PER_TASK")"

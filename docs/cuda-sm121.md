@@ -26,7 +26,7 @@ CUDA 13 changes `nvcc` defaults that can matter for CUTLASS/DeepGEMM-style build
 - `-static-global-template-stub=true` (default in CUDA 13) can break “explicitly instantiate a `__global__` template in TU A, launch it from TU B” in whole-program compilation mode (`-rdc=false`). Fix options include `-rdc=true` or `-static-global-template-stub=false`. `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints `template_stub_default` / `template_stub_stubfalse` / `template_stub_rdc` as a concrete Spark0 check.
 - `-device-entity-has-hidden-visibility=true` (default in CUDA 13) forces hidden ELF visibility for `__global__` functions and device variables when building shared libraries (can cause link errors across `.so` boundaries unless you opt out and ensure a single shared CUDART).
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `template_stub_default` fails to link (warning `#20280-D` + undefined reference), while `template_stub_stubfalse` (`-static-global-template-stub=false`) and `template_stub_rdc` (`-rdc=true`) both build and run successfully.
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `template_stub_default` fails to link (warning `#20280-D` + undefined reference), while `template_stub_stubfalse` (`-static-global-template-stub=false`) and `template_stub_rdc` (`-rdc=true`) both build and run successfully.
 
 ### `sm_121a` / `sm_121f` Variant Targets (Toolchain Probe)
 
@@ -34,11 +34,11 @@ CUDA 13 toolchains may also advertise variant targets like `sm_121a` and `sm_121
 
 `scripts/cuda_probe_compile_only_tiny_spark0.sh` always attempts best-effort compile-only builds for `sm_121a` and `sm_121f`, and reports whether each target was advertised by `nvcc --list-gpu-code` (`advertised=yes/no/unknown`) plus `variant_sm_121a` / `variant_sm_121f` as `OK` or `FAILED` (informational; the script still treats missing `sm_121` as the hard failure). It also runs the same best-effort probe via the long-form flag `nvcc --gpu-architecture=...` and prints `variant_gpuarch_sm_121a` / `variant_gpuarch_sm_121f`.
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, best-effort compile-only `--gpu-architecture=sm_121a` / `sm_121f` also succeeds, best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both, and best-effort build+run of `cuda_sm121_fatbin_probe` via `scripts/cuda_probe_kernel_tiny_spark0.sh` reports `__CUDA_ARCH_LIST__=1210` with kernel `__CUDA_ARCH__=1210` for both `sm_121a` and `sm_121f` (treat as “accepted aliases”, not a distinct target).
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `nvcc --list-gpu-code` includes `sm_121` but does not list `sm_121a` or `sm_121f`; best-effort compile-only `-arch=sm_121a` and `-arch=sm_121f` both succeed, best-effort compile-only `--gpu-architecture=sm_121a` / `sm_121f` also succeeds, best-effort build+run via `scripts/cuda_probe_nvcc_minimal_spark0.sh` also succeeds for both, and best-effort build+run of `cuda_sm121_fatbin_probe` via `scripts/cuda_probe_kernel_tiny_spark0.sh` reports `__CUDA_ARCH_LIST__=1210` with kernel `__CUDA_ARCH__=1210` for both `sm_121a` and `sm_121f` (treat as “accepted aliases”, not a distinct target).
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `scripts/cuda_probe_tiny_spark0.sh` best-effort builds and runs `cuda_sm121a_arch_list_report` / `cuda_sm121f_arch_list_report`; both print `__CUDA_ARCH_LIST__=1210` and still report `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “aliases accepted, feature-set macros not surfaced”).
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `scripts/cuda_probe_tiny_spark0.sh` best-effort builds and runs `cuda_sm121a_arch_list_report` / `cuda_sm121f_arch_list_report`; both print `__CUDA_ARCH_LIST__=1210` and still report `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “aliases accepted, feature-set macros not surfaced”).
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): `cuobjdump --dump-ptx` reports embedded PTX for binaries built via `-arch=sm_121a` / `-arch=sm_121f`, and the first PTX `.target` line is still `.target sm_121` (treat the `a`/`f` variants as “toolchain accepts and runs them”, not as a distinct PTX target for portability planning).
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `scripts/cuda_probe_nvcc_minimal_spark0.sh` reports that `nvcc -ptx -arch=sm_121a` / `sm_121f` emits PTX whose `.target` line is `.target sm_121a` / `.target sm_121f`, but `cuobjdump --dump-ptx` on the resulting `-arch=sm_121a` / `sm_121f` fatbins reports embedded PTX whose first `.target` line is still `.target sm_121` (and kernels still report `__CUDA_ARCH__=1210`) (treat as accepted aliases, not a distinct target for portability planning).
 
 ### `compute_121` Virtual-Arch Compile (Toolchain Probe)
 
@@ -57,7 +57,7 @@ CUDA 13 adds architecture-specific (`a`) and family-specific (`f`) feature-set t
 
 These probes are informational; the hard failure for GB10 targeting remains “missing `sm_121` support”.
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, and the compile-report probe currently reports `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, and the compile-report probe currently reports `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
 
 ### NVCC `__CUDA_ARCH_LIST__` (Toolchain Introspection)
 
@@ -65,7 +65,7 @@ NVCC defines `__CUDA_ARCH_LIST__` as a comma-separated list of virtual architect
 
 Both `scripts/cuda_probe_nvcc_minimal_spark0.sh` and `scripts/cuda_probe_compile_only_tiny_spark0.sh` print a best-effort `__CUDA_ARCH_LIST__` snapshot for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` (tags: `arch_list_sm_121`, `arch_list_sm_121a`, `arch_list_sm_121f`). Use this when you need to confirm what “extra virtual arches” NVCC adds when compiling `sm_121a` / `sm_121f`.
 
-Observed on Spark0 (2026-05-11 / CUDA 13.0 `V13.0.88`): all three probes report `__CUDA_ARCH_LIST__=1210` (so the `a`/`f` suffix does not show up in the macro list).
+Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): all three probes report `__CUDA_ARCH_LIST__=1210` (so the `a`/`f` suffix does not show up in the macro list).
 
 ### NVCC `-arch=sm_121` Shorthand PTX Embed (Best-Effort)
 
@@ -127,7 +127,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_rdc_probe` is a tiny multi-translatio
 
 If this probe fails to link for `sm_121`, treat it as a toolchain/blocker for any multi-file CUDA components (even if single-file `-arch=sm_121` probes compile and run).
 
-Observed on Spark0 (2026-05-11): `rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de`.
+Observed on Spark0 (2026-05-12): `rdc_probe in=0x12345678 out=0xb791f3de expect=0xb791f3de`.
 
 ## Device LTO (`-dlto`)
 
@@ -135,7 +135,7 @@ Some CUDA build systems enable device link-time optimization (LTO) to reduce reg
 
 The probe `tools/cuda_probe/bin/cuda_sm121_dlto_probe` is a tiny compile/run gate that builds with `nvcc -arch=sm_121 -dlto` and validates a one-word kernel writeback.
 
-Observed on Spark0 (2026-05-11): `dlto_probe in=0x12345678 out=0xce5cb9c3 expect=0xce5cb9c3`.
+Observed on Spark0 (2026-05-12): `dlto_probe in=0x12345678 out=0xce5cb9c3 expect=0xce5cb9c3`.
 
 ## NVRTC JIT Compile For `compute_121`
 
@@ -149,7 +149,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_jit`:
 
 If this probe fails with `NVRTC_ERROR_INVALID_OPTION` or `NVRTC_ERROR_COMPILATION`, treat it as “NVRTC cannot target `compute_121` on this host/toolkit” even if `nvcc -arch=sm_121` works.
 
-Observed on Spark0 (2026-05-11): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
+Observed on Spark0 (2026-05-12): `nvrtc supportedArchs` includes `121`, and the probe prints `nvrtc_jit ok`.
 
 ### NVRTC `--std=c++20` Gate (DeepGEMM-style JIT)
 
@@ -162,7 +162,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvrtc_cxx20_jit` is a tiny compile/ru
 
 If this probe fails, treat it as “NVRTC cannot compile C++20 for `compute_121` on this toolkit”, even if `nvcc -arch=sm_121 -std=c++20` works.
 
-Observed on Spark0 (2026-05-11): probe prints `nvrtc_cxx20_jit ok out=0x1234567a`.
+Observed on Spark0 (2026-05-12): probe prints `nvrtc_cxx20_jit ok out=0x1234567a`.
 
 ## nvcc Extended Lambda + Relaxed Constexpr Gate
 
@@ -177,7 +177,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvcc_flags_probe` is a tiny compile/r
 - uses a device lambda in a kernel (exercises `--extended-lambda`)
 - runs a one-word sanity writeback (`0x12345679`)
 
-Observed on Spark0 (2026-05-11): probe prints `nvcc_flags_probe ok out=0x12345679`.
+Observed on Spark0 (2026-05-12): probe prints `nvcc_flags_probe ok out=0x12345679`.
 
 ## nvJitLink JIT Link For `sm_121` (PTX → CUBIN)
 
@@ -191,7 +191,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_nvjitlink_jit`:
 
 If this probe fails with `NVJITLINK_ERROR_MISSING_ARCH` or linker errors, treat it as “nvJitLink cannot target `sm_121` on this host/toolkit” even if `nvcc -arch=sm_121` works.
 
-Observed on Spark0 (2026-05-11): probe prints `nvJitLinkVersion=13.0` and `nvjitlink_jit ok`.
+Observed on Spark0 (2026-05-12): probe prints `nvJitLinkVersion=13.0` and `nvjitlink_jit ok`.
 
 ## CUDA Graph Stream Capture / Launch
 
@@ -205,7 +205,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_cuda_graph_smoke` is a tiny compile/r
 - ends capture to a `cudaGraph_t`, instantiates it (`cudaGraphInstantiateWithFlags`), and launches it (`cudaGraphLaunch`)
 - validates that the final writeback matches the expected value
 
-Observed on Spark0 (2026-05-11): probe prints `cuda_graph_smoke out=22222222`.
+Observed on Spark0 (2026-05-12): probe prints `cuda_graph_smoke out=22222222`.
 
 ## `sm_120` → `sm_121` Binary Compatibility Probe
 
@@ -321,7 +321,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_wmma_smoke` is a tiny compile/run che
 - runs a single warp WMMA matmul on `sm_121`
 - prints a couple of output elements plus `max_abs_err` against an expected result
 
-Observed on Spark0 (2026-05-11): `wmma_smoke ... max_abs_err=0`.
+Observed on Spark0 (2026-05-12): `wmma_smoke ... max_abs_err=0`.
 
 ## Thread Block Clusters (CUTLASS-style scheduling)
 
@@ -333,7 +333,7 @@ The probe `tools/cuda_probe/bin/cuda_sm121_cluster_launch` is a tiny compile/run
 - uses `cudaLaunchKernelExC` + `cudaLaunchAttributeClusterDimension` to launch a 2-block cluster
 - validates `cooperative_groups::this_cluster().block_rank()` via a device writeback
 
-Observed on Spark0 (2026-05-11): `cluster_launch_supported=1`, `max_cluster_size_portable=8`, `max_active_clusters_for_2x1x1=48`.
+Observed on Spark0 (2026-05-12): `cluster_launch_supported=1`, `max_cluster_size_portable=8`, `max_active_clusters_for_2x1x1=48`.
 
 ### Cluster-Dims Attribute Note
 
@@ -343,7 +343,7 @@ On some toolkit/architecture combinations, `nvcc -arch=sm_121` may reject `__clu
 
 The compile-only scripts `./scripts/cuda_probe_compile_only_spark0.sh` and `./scripts/cuda_probe_compile_only_tiny_spark0.sh`, plus the no-transfer `./scripts/cuda_probe_nvcc_minimal_spark0.sh`, include a standalone compile of a kernel annotated with `__cluster_dims__(2,1,1)` and print either `cluster_dims_attr_compile: OK` or the first lines of the compilation error.
 
-Observed on Spark0 (2026-05-11): `cluster_dims_attr_compile: OK` (CUDA 13.0 `V13.0.88`).
+Observed on Spark0 (2026-05-12): `cluster_dims_attr_compile: OK` (CUDA 13.0 `V13.0.88`).
 
 ## cuBLASLt FP8 Matmul Smoke
 

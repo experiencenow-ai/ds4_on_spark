@@ -79,6 +79,12 @@ Artifacts are written under:
 - `~/centaur-smoke/v73/run/<run_id>/` when `CENTAUR_RUN_ID` is set (recommended), or
 - `~/centaur-smoke/v73/run/` otherwise.
 
+Convenience symlinks (recommended for ring runbooks):
+
+- When `CENTAUR_RUN_ID` is set, the smoke also updates:
+  - `~/centaur-smoke/v73/run/centaur_spec_impl_v73` -> `~/centaur-smoke/v73/run/<run_id>/centaur_spec_impl_v73`
+  - `~/centaur-smoke/v73/run/venv` -> `~/centaur-smoke/v73/run/<run_id>/venv`
+
 Notable outputs:
 
 - `effective_manifests/hyor_effective_manifest_spark0.json` (from `hyor-sync-effective`)
@@ -160,7 +166,7 @@ For a fuller bug-report checklist and sanitization guidance, see:
 
 ## Known-good evidence (Spark0 v73 PASS)
 
-The repo includes one sanitized, commit-safe Spark0 v73 smoke artifact bundle:
+The repo includes sanitized, commit-safe Spark0 v73 smoke artifact bundles:
 
 - Run id: `20260512T030829Z`
 - Zip: `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
@@ -170,6 +176,15 @@ The repo includes one sanitized, commit-safe Spark0 v73 smoke artifact bundle:
 - Spark0 deps (pip): `numpy==2.4.4`, `scipy==1.17.1`, `scikit-learn==1.8.0`
 - Bundle path:
   - `fixtures/centaur-smoke/spark0-v73/20260512T030829Z/`
+
+- Run id: `20260512T073455Z`
+- Zip: `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
+  - `zip_sha256`: `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
+  - `decomposer_version`: `centaur-impl-0.68`
+- Spark0 python: `Python 3.12.3` (`aarch64`, Ubuntu `6.17.0-1014-nvidia`)
+- Spark0 deps (pip): `numpy==2.4.4`, `scipy==1.17.1`, `scikit-learn==1.8.0`
+- Bundle path:
+  - `fixtures/centaur-smoke/spark0-v73/20260512T073455Z/`
 
 The bundle contains `smoke.log`, `effective_manifests/`, `hyor_effective/`, and `hyor_dashboard/`.
 

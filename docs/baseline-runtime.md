@@ -51,7 +51,7 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
-- `ds4_on_spark` commit hash (best-effort; uses `.codex_git` or `.git2/.git` when present)
+- `ds4_on_spark` commit hash (best-effort; prefers `DS4_GIT_DIR`/`DS4_GIT_WORK_TREE` when set, otherwise checks `.codex_git`, `git-local/baseline-runtime.git`, and `.git2/.git` when present)
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
 
@@ -71,6 +71,8 @@ section to make it harder to forget which quality numbers were used for a compar
 For vLLM runs, you can also set `SMOKE_EVAL=1` (and optionally `SMOKE_MAX_TOKENS_PER_TASK=64`) to run a tiny deterministic smoke-eval task set that emits `passed_tasks`, `total_tasks`, and `local_quality_score` into the remote baseline summary block; the baseline wrapper will ingest those values into `MODEL_RUNS_CSV` when the corresponding env vars are not set. See `docs/baseline-smoke-eval.md`.
 
 When the remote baseline summary includes speculative-decoding metadata (for example from vLLM DFlash runs), the wrapper also records `speculative_method`, `speculative_draft_model`, and `speculative_num_speculative_tokens` into `MODEL_RUNS_CSV`.
+
+When `LLAMA_SERVER_THROUGHPUT_SWEEP=1` is enabled (see `docs/baseline-batching-throughput.md`) and `MODEL_RUNS_CSV` is set, the wrapper appends an additional CSV row for the sweep’s **best decode** configuration (mapping `agg_generated_tok_s` → `decode_tps`, `agg_prompt_tok_s` → `prefill_tps`, `wave_wall_s` → `total_wall_s`, and `agg_generated_tokens` → `output_tokens`). Use `LLAMA_SERVER_THROUGHPUT_SCOPE` (default `llama_server_throughput`) to keep these rows separate from the single-prompt llama.cpp baseline.
 
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:

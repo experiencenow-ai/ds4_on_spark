@@ -185,6 +185,20 @@ if [ ! -x "$venv_py" ]; then
 	exit 2
 fi
 
+if [ "$run_id" != "" ]; then
+	stable_base="$(dirname -- "$workdir")"
+	if [ -d "$stable_base" ]; then
+		need_cmd ln
+		echo "== stable paths (convenience) =="
+		echo "stable_base: $stable_base"
+		rm -f "$stable_base/centaur_spec_impl_v73" "$stable_base/venv"
+		ln -s "$pkgdir" "$stable_base/centaur_spec_impl_v73"
+		ln -s "$venvdir" "$stable_base/venv"
+		echo "stable_centaur_root: $stable_base/centaur_spec_impl_v73"
+		echo "stable_venv: $stable_base/venv"
+	fi
+fi
+
 echo "== pip install (centaur requirements) =="
 "$venv_py" -m pip -V
 if [ "${CENTAUR_SKIP_PIP:-0}" = "1" ]; then
