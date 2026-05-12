@@ -102,6 +102,7 @@ DS4_CONFIG="log_level=debug" ./build_cli/ds4_cli --dump-config
 When `DS4_ENABLE_TESTS=ON` and `DS4_ENABLE_CLI=ON`, CTest includes smoke tests that run:
 
 - `ds4_cli --version`
+- `ds4_cli --help`
 - `ds4_cli --dump-config`
 - `ds4_cli --dump-config-keys`
 - `ds4_cli --dump-config-help`

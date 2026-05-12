@@ -82,6 +82,35 @@ if(DS4_MODE STREQUAL "dump_config_help")
 	return()
 endif()
 
+if(DS4_MODE STREQUAL "help")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --help
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli --help failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "usage:" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli --help output missing 'usage:'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "--dump-config-help" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli --help output missing '--dump-config-help'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "--strict-config" _ds4_idx3)
+	if(_ds4_idx3 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli --help output missing '--strict-config'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "--smoke-cuda" _ds4_idx4)
+	if(_ds4_idx4 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli --help output missing '--smoke-cuda'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
 if(DS4_MODE STREQUAL "ctx_smoke")
 	execute_process(
 		COMMAND "${DS4_CLI_PATH}" --no-cuda --arena-size 16384 --log-ring-entries 4 --smoke-ctx
