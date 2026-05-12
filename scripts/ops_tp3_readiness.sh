@@ -446,6 +446,10 @@ hosts_unique()
 strict_validate()
 {
     fail=0
+    csv=""
+    h0=""
+    h1=""
+    h2=""
 
     if [ "${DS4_WORLD_SIZE:-}" = "" ]; then
         echo "strict: DS4_WORLD_SIZE is required" >&2
@@ -513,6 +517,23 @@ strict_validate()
         else
             if ! hosts_unique "$1" "$2" "$3"; then
                 echo "strict: DS4_RING_HOSTS entries must be unique: $csv" >&2
+                fail=1
+            else
+                h0="$1"
+                h1="$2"
+                h2="$3"
+            fi
+        fi
+    fi
+
+    if [ "$h0" != "" ] && [ "${DS4_MASTER_ADDR:-}" != "" ]; then
+        master="${DS4_MASTER_ADDR:-}"
+        if [ "$master" != "$h0" ]; then
+            h0_ip="$(resolve_ipv4_best_effort "$h0" 2>/dev/null || true)"
+            master_ip="$(resolve_ipv4_best_effort "$master" 2>/dev/null || true)"
+            if [ "$h0_ip" != "" ] && [ "$master_ip" != "" ] && [ "$h0_ip" != "$master_ip" ]; then
+                echo "strict: DS4_MASTER_ADDR does not match ring rank0 host (ring[0]=$h0, master=$master)" >&2
+                echo "strict: ring[0] ipv4=$h0_ip master ipv4=$master_ip" >&2
                 fail=1
             fi
         fi

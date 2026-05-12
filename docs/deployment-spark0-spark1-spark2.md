@@ -97,6 +97,7 @@ Notes:
 - If you stage hosts manually, set `DS4_ENV_VARIANT=tp3` to swap `ds4-<instance>.tp3.env.example` into `ds4-<instance>.env.example` on the Spark (see `deploy/README.md`).
 - For TP=3, prefer a rank-ordered host list in the env file (example):
   `DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local`
+- For TP=3, prefer `DS4_MASTER_ADDR` to resolve to the same host as `DS4_RING_HOSTS` entry 0 (Spark0).
 
 If you want strict TP=3 gating on start (recommended for early bring-up), enable the topology-specific strict unit:
 
