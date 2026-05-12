@@ -136,10 +136,11 @@ Repeat for other HF GGUF repos (e.g. `deepseek_v4_gguf_antirez`, `deepseek_v4_gg
 
 ### ssweens/DeepSeek-V4-Flash-GGUF-YMMV (IQ1_M + IQ2_XXS + IQ3_XXS)
 
-- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `1387c955943485e273ba1b0f7564b4134cf0e3cb` (`refs/heads/main`)
+- Source: `https://huggingface.co/ssweens/DeepSeek-V4-Flash-GGUF-YMMV` @ `e559a88dbceeed0e531257bbcdd66c3cc7359ddd` (`refs/heads/main`)
 - License: MIT (model card)
 - Runtime requirement:
-  - Requires `ssweens/llama.cpp-deepseek-v4` (`bb648b31e137a44b1ee72907e20ad8fb1f21d644`) per upstream README (tested CPU/CUDA/ROCm/Vulkan).
+  - Requires `ssweens/llama.cpp-deepseek-v4` (pinned in `docs/upstream-manifest.md` @ `5b36105bae79a7127b39780c77ed22265d963f9a`, `refs/heads/main`).
+  - Upstream README claims the fork is tested on CPU/CUDA/ROCm/Vulkan.
   - Upstream README also claims compatibility with `antirez/deepseek-v4-gguf`.
 - Artifacts (not fetched here; sizes are from HF API / git-lfs pointer metadata):
   - IQ1_M: `deepseek-ai__DeepSeek-V4-Flash-IQ1_M.gguf` (67505962560 bytes, 62.9 GiB)
