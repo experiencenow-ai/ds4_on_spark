@@ -274,7 +274,7 @@ Initial scope:
   - As of 2026-05-12, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
   - Treat MTP presence as a property of the **artifact set**:
     - trunk-only GGUFs commonly report `mtp_present=false` and `mtp_namespace.has_mtp0=false` (the upstream `mtp.0.*` namespace was dropped during conversion).
-    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars; see `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json`).
+    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars; see `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json`).
   - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
   - When `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, also record `mtp_namespace`, `mtp_contract`, and `mtp_trust` from `scripts/model_contract_inspect_quantized_artifact.py --json`.
     - `mtp_trust.status=absent|namespace_missing_mtp0|namespace_incomplete|incomplete|structural_complete_untrusted` is the expected progression for artifact sets that lack upstream-complete `mtp.0.*`.
@@ -284,7 +284,7 @@ Initial scope:
   - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load) + pinned payload fingerprint gate: `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Local combined runner (no fetch/build; requires a prebuilt `llama-ds4-mtp-sidecar-probe`): `scripts/run_mtp_sidecar_loader_probe_local.sh`
-- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

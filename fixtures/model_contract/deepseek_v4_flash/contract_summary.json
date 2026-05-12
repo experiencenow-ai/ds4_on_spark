@@ -1581,8 +1581,8 @@
       "payload_sample_bytes": 64,
       "payload_samples_count": 32,
       "payload_samples_sha256": "2b55f715ee1e1c8513be91e2eee561ed832820129c1459bfd0766b124c43a287",
-      "reference_json": "docs/mtp-sidecar-probe-antirez-c566ab6-payload64.json",
-      "reference_sha256": "cbb1db6c28fddec3caebfbb59cd38ccaef192766123d84871d15dd1cb969b99e"
+      "reference_json": "docs/mtp-sidecar-probe-antirez-3274cdc-payload64.json",
+      "reference_sha256": "af222984b97fe32bbf53efa12a86e4eaab58d76a3ec82caacc272cc72e441e73"
     },
     "reference_source": "scripts/model_contract_probe_mtp_sidecar.py (DS4-tuned sidecar tensor table)"
   },

@@ -15,7 +15,7 @@ DEFAULT_OUT = FIX / "contract_summary.json"
 INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
 MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
-MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-c566ab6-payload64.json"
+MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-3274cdc-payload64.json"
 
 def repo_relpath(path: Path) -> str:
 	try:
