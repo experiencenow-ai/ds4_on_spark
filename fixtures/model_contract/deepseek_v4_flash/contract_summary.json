@@ -897,6 +897,12 @@
       },
       "sparse_topk_rule": "topk_idxs = window_topk_idxs (+ compress_topk_idxs when compress_ratio!=0); indices are int32; idx==-1 means masked slot (score=-inf, kv=0)."
     },
+    "sparse_attn_mask": {
+      "masked_kv_fill_value": 0,
+      "masked_score_fill_value": "-inf",
+      "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/kernel.py (sparse_attn_kernel_ sentinel masking)",
+      "sentinel_index": -1
+    },
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_index_helpers": {
       "get_compress_topk_idxs": {
@@ -1451,8 +1457,8 @@
   },
   "contract_fingerprints": {
     "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
-    "cache_semantics_sha256": "918d2f3d3dc5836016ca389492a24064fa01964ee913ef04059e1e59457c35e0",
-    "execution_contract_sha256": "5f6731745c48f44cc484405a7e0c42dde38f1758bd3bd3cca706e0b413875e82",
+    "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
+    "execution_contract_sha256": "6a633d40fc6925bbf01dbe90c8c6562eb11e4426f223ddd3a3f0ae92fa59e437",
     "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
     "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
     "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
