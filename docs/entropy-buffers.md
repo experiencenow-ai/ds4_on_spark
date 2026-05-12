@@ -118,6 +118,7 @@ The scripts compute:
 - **Task diversity**: unique counts + Shannon entropy over `task_id` and `task_family`.
 - **Task-template diversity**: unique counts + entropy over `task_id|prompt_template_id` pairs (useful for spotting repeated reruns of the same task+template).
 - **Prompt template diversity**: unique counts + entropy over `prompt_template_id`.
+- **Conditional diversity / coupling**: conditional entropy + mutual information between key axes (currently `prompt_template_id|task_family` and `prompt_template_id|task_id` in both directions). Use `prompt_template_id_given_task_family.conditional_entropy_norm` to quantify “template variety within families” (low means each family collapses to a single template); use `mutual_info_norm` to quantify how tightly coupled the axes are.
 - **Token / n-gram distribution** (approx): prompt/output word uni/bi/tri stats + top n-grams + repetition heuristics.
   - Reports both raw entropy (`*_entropy_bits`) and normalized entropy (`*_entropy_norm`) plus `*_effective_num` for easier cross-corpus comparisons.
 - **Character n-gram distribution** (approx): prompt/output normalized char 3-grams (alnum-only) + entropy + tops.
