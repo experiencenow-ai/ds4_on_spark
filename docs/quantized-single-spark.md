@@ -258,6 +258,12 @@ summarizes them as:
 
 - `fattn_log_lines=<n>`: number of log lines containing `__fattn__`
 - `fattn_unique_nodes=<n>`: count of distinct `__fattn__-<id>` nodes observed
+- `fattn_expected_id_0_42_ok=<true|false>`: best-effort check that the expected contiguous node IDs were observed for the DeepSeek V4 Flash trunk (`0..42` for `block_count=43`)
+- `fattn_id_min=<n>`, `fattn_id_max=<n>`, `fattn_id_missing_count=<n>`: observed FA node ID range and missing ID count (best-effort)
+- `fattn_backend0_only=<true|false>`: best-effort signal that all `__fattn__` nodes ran on CUDA backend `0` (only when the runtime prints backend IDs)
+- `fattn_cuda_device0_only=<true|false>`: best-effort signal that all `__fattn__` nodes ran on CUDA device `0` (only when the runtime prints device IDs)
+- `fattn_seen_disabled=true`: the runtime printed a “fattn disabled” line; treat FA scheduling as off until proven otherwise
+- `fattn_seen_sched_reserve_cpu=true`: the runtime logged a graph-reservation path that included CPU FA nodes; this often correlates with FA being disabled globally after a fallback
 
 This is **not** a correctness proof, but it is a coarse signal that a Flash
 Attention schedule node executed instead of falling back to a slow path. Always

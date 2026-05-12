@@ -376,10 +376,42 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append(f"- output_tokens: `{output_tokens if output_tokens else 'NA'}`")
     lines.append(f"- max_rss_kb: `{max_rss_kb if max_rss_kb else 'NA'}`")
     lines.append("")
+    lines.append("Timing breakdown (from `llama_print_timings`, when available):")
+    lines.append("")
+    timing_keys = (
+        "load_time_s",
+        "sample_time_s",
+        "prompt_eval_s",
+        "eval_time_s",
+        "total_time_s",
+    )
+    timing_present = False
+    for k in timing_keys:
+        if k in summary_kv:
+            timing_present = True
+            break
+    if timing_present:
+        for k in timing_keys:
+            if k in summary_kv:
+                lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
+    else:
+        lines.append("- NA (timings not captured by the runtime)")
+    lines.append("")
     lines.append("Flash Attention scheduling signal (from baseline summary):")
     lines.append("")
     lines.append(f"- fattn_unique_nodes: `{summary_kv.get('fattn_unique_nodes', 'NA') or 'NA'}`")
     lines.append(f"- fattn_log_lines: `{summary_kv.get('fattn_log_lines', 'NA') or 'NA'}`")
+    extra_fattn_keys = (
+        "fattn_id_min",
+        "fattn_id_max",
+        "fattn_id_missing_count",
+        "fattn_expected_id_0_42_ok",
+        "fattn_backend0_only",
+        "fattn_cuda_device0_only",
+    )
+    for k in extra_fattn_keys:
+        if k in summary_kv:
+            lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
     if summary_kv.get("fattn_seen_disabled", ""):
         lines.append("- fattn_seen_disabled: `true`")
     if summary_kv.get("fattn_seen_sched_reserve_cpu", ""):
