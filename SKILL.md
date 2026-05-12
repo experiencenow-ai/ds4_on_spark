@@ -5,7 +5,7 @@ description: C coding style for Tockchain/Valis firmware development. Use when w
 
 # ct C Style
 
-High-performance C for Tockchain/Valis firmware development.
+High-performance C for Tockchain/Valis firmware on little-endian AVX2 Linux. Correctness over speed, but both matter.
 
 ## Core Philosophy
 
@@ -73,12 +73,12 @@ Pointer style: `type *name` (space after type, `*` with name).
 ```c
 int32_t funcname(type1 arg1,type2 arg2)
 {
-	type1 local1,local2;
-	type2 local3 = init;
-	if ( condition != 0 )
-		return(-1);
-	// body with no blank lines
-	return(0);
+    type1 local1,local2;
+    type2 local3 = init;
+    if ( condition != 0 )
+        return(-1);
+    // body with no blank lines
+    return(0);
 }
 ```
 
@@ -98,9 +98,9 @@ Opening brace on own line, vertically aligned with closing brace.
 
 ```c
 if ( x != 0 )
-	do_thing();
+    do_thing();
 for (i=0; i<n; i++)
-	process(i);
+    process(i);
 ```
 
 **Multi-statement**: Braces required.
@@ -108,8 +108,8 @@ for (i=0; i<n; i++)
 ```c
 if ( x != 0 )
 {
-	do_thing();
-	do_other();
+    do_thing();
+    do_other();
 }
 ```
 
@@ -138,13 +138,13 @@ Unique negative values per error path — the code itself identifies the line:
 ```c
 int32_t process(data_t *d)
 {
-	if ( d == 0 )
-		return(-1);
-	if ( d->len > MAX )
-		return(-2);
-	if ( validate(d) < 0 )
-		return(-3);
-	return(0);
+    if ( d == 0 )
+        return(-1);
+    if ( d->len > MAX )
+        return(-2);
+    if ( validate(d) < 0 )
+        return(-3);
+    return(0);
 }
 ```
 
@@ -171,14 +171,14 @@ Wire structs with `#pragma pack(1)` (set globally in `_valis.h`). Use bitfields 
 ```c
 typedef struct
 {
-	uint32_t utime;
-	uint16_t numtx;
-	uint16_t rawvanid;
-	uint8_t is_vip : 1;
-	uint8_t lastvan : 1;
-	uint8_t coldvan : 1;
-	uint8_t reserved : 5;
-	uint8_t nodeid;
+    uint32_t utime;
+    uint16_t numtx;
+    uint16_t rawvanid;
+    uint8_t is_vip : 1;
+    uint8_t lastvan : 1;
+    uint8_t coldvan : 1;
+    uint8_t reserved : 5;
+    uint8_t nodeid;
 } van_header_t;
 ```
 
@@ -226,6 +226,35 @@ Include order in project headers:
 ❌ Blank lines inside functions
 ❌ `/* */` comments inside functions
 ❌ Guessing struct fields without reading the source
+
+--- project-doc ---
+
+# Project Instructions
+
+This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
+
+## C/CUDA Style
+
+- Verify existing structs, fields, function signatures, and semantics before
+  writing code that touches them.
+- Use `<stdint.h>` types internally: `uint8_t`, `int32_t`, `uint64_t`, etc.
+- Avoid `malloc`/`free` in hot paths. Prefer startup allocation, arenas, or
+  fixed pools.
+- Keep functions under roughly 50 lines by splitting helpers before callers.
+- Use compact Allman braces.
+- Use explicit comparisons: `ptr != 0`, `err < 0`, `count == 0`.
+- Return unique negative error codes per failure path.
+- Keep functions in dependency order where practical.
+- Use `#pragma once` for headers.
+- No hidden semantic guesses. If the model or cache structure is unclear, read
+  the source or generated contract first.
+
+## Repo Practice
+
+- Keep benchmark claims tied to scripts, hardware metadata, and command lines.
+- Commit generated probe outputs only after redacting secrets, usernames that
+  should not be public, tokens, and private LAN details if needed.
+- Prefer narrow, measurable milestones over broad framework work.
 
 --- project-doc ---
 

@@ -113,6 +113,10 @@ qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwe
 
 Repo template file: `fixtures/baseline/vllm_matrix_template.tsv`.
 
+Spark0 ladder template (recommended starting point; fill in staged paths):
+
+- `fixtures/baseline/vllm_ling_qwen_dflash_ladder_spark0.tsv`
+
 ## Recommended measurement order
 
 Follow `docs/upstream-qwen-dflash.md` for the pinned target/draft commits and
