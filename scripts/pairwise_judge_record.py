@@ -26,6 +26,9 @@ def _read_text(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
+def _one_line(s: str) -> str:
+    return " ".join(str(s).replace("\r", " ").replace("\n", " ").split())
+
 
 def _as_int_opt(v: Optional[str], field: str) -> Optional[int]:
     if v is None:
@@ -57,8 +60,8 @@ def build_record(
             "model_b": model_b,
             "judge_model": judge_model,
             "parse_valid": False,
-            "raw": decision_text.strip()[:512],
-            "parse_error": perr,
+            "raw": _one_line(decision_text)[:512],
+            "parse_error": _one_line(perr)[:128],
         }
         if tokens is not None:
             rec["tokens"] = tokens
@@ -75,8 +78,8 @@ def build_record(
             "model_b": model_b,
             "judge_model": judge_model,
             "parse_valid": False,
-            "raw": json.dumps(obj, separators=(",", ":"), ensure_ascii=False)[:512],
-            "parse_error": "; ".join(errs)[:128],
+            "raw": _one_line(json.dumps(obj, separators=(",", ":"), ensure_ascii=False))[:512],
+            "parse_error": _one_line("; ".join(errs))[:128],
         }
         if tokens is not None:
             rec2["tokens"] = tokens
@@ -153,4 +156,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

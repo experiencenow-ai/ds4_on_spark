@@ -15,10 +15,10 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `margin`: integer `0..3` (strength of preference; `0` == near-tie)
 - `score_a`: integer `0..10`
 - `score_b`: integer `0..10`
-- `reason`: string, **≤ 18 words**
-- `train_hint`: string, **≤ 18 words** (actionable improvement hint for the loser; empty allowed)
+- `reason`: string, **≤ 18 words** (prefer ≤ 12), **single-line**
+- `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
-- `tags`: array of short strings (0..8); e.g. `["format","factuality"]`
+- `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
@@ -61,6 +61,7 @@ Machine-readable schema:
 Use a strict system instruction:
 - "Return minified JSON only; no explanation."
 - "Keep `reason` and `train_hint` under 18 words each."
+- "All string values must be single-line (no newlines)."
 - "Use scores to justify the margin; do not add extra keys."
 - Keep the JSON short: target `judge_out <= ~64 tokens` (reason/hint are the budget drivers).
 
@@ -84,6 +85,7 @@ python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b 
   - `meta.json` (record/match counts and updater parameters)
   - `budget.json` (token/latency/parse-validity summary over the input JSONL)
     - includes `judge_out_budget` (how often judge outputs meet the compact token target)
+      - reports both overall and `parse_valid=true`-only fractions when `tokens.judge_out` is present
     - compact target is configurable via `--judge-out-target` (default 64)
 
 Quality mapping defaults to `--quality-mode logistic` (anchored: Elo 1000 -> quality_score 50). Use `--quality-mode minmax` only for quick relative comparisons within a single closed set of models.

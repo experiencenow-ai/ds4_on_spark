@@ -18,7 +18,8 @@ SYSTEM = (
     "No markdown. No extra keys. No explanations.\n"
     "Return exactly one JSON object on one line.\n"
     "Target judge_out <= ~{judge_out_target} tokens by keeping reason/train_hint short.\n"
-    "reason and train_hint must each be <= 18 words.\n"
+    "reason and train_hint must each be <= 18 words (prefer <= 12).\n"
+    "All string values must be single-line (no newlines).\n"
     "If winner is tie, margin must be 0 and score_a must equal score_b."
 )
 
@@ -33,9 +34,9 @@ def build_user(prompt: str, a: str, b: str) -> str:
         "margin": "0..3 (tie=>0)",
         "score_a": "0..10",
         "score_b": "0..10",
-        "reason": "<=18 words",
-        "train_hint": "<=18 words",
-        "tags": ["short", "strings"],
+        "reason": "<=18 words, 1 line",
+        "train_hint": "<=18 words, 1 line",
+        "tags": ["<=3", "short", "strings"],
     }
     return (
         "Compare the two candidates for the same prompt. Prefer correctness, helpfulness, and instruction-following.\n"
