@@ -22,7 +22,8 @@ SYSTEM = (
     "reason must be non-empty and <= 18 words (prefer <= 12).\n"
     "train_hint may be empty, but if present must be <= 18 words (prefer <= 12).\n"
     "All string values must be single-line (no newlines).\n"
-    "If winner is tie, margin must be 0 and score_a must equal score_b."
+    "If winner is tie, margin must be 0 and score_a must equal score_b.\n"
+    "Keep margin consistent with |score_a-score_b|: 1->0/1, 2->1/2, 3->2, >=4->3."
 )
 
 
