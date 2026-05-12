@@ -8,6 +8,14 @@ Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` requ
 
 From your Mac (repo root), in order:
 
+0) Preflight: confirm each Spark hostname resolves and SSH is reachable.
+Both `scripts/centaur_spark12_v73_stage.sh` and `scripts/centaur_spark12_v73_ring_rsync_run.sh` run SSH preflight checks by default (set `STAGE_SKIP_PREFLIGHT=1` / `RING_SKIP_PREFLIGHT=1` to bypass).
+When a hostname does not resolve (common before Spark1/2 exist), use an explicit `user@ip` target instead of `spark1.local`/`spark2.local`.
+
+```bash
+REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
+```
+
 1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
 
 ```bash
