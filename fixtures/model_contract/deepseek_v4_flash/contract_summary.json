@@ -1076,6 +1076,56 @@
         "softmax": "scores = scores.softmax(dim=-1)",
         "sqrtsoftplus": "scores = F.softplus(scores).sqrt()"
       },
+      "source_helpers": {
+        "gate_forward": {
+          "source_lines": [
+            "    def forward(self, x: torch.Tensor, input_ids: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:",
+            "        scores = linear(x.float(), self.weight.float())",
+            "        if self.score_func == \"softmax\":",
+            "            scores = scores.softmax(dim=-1)",
+            "        elif self.score_func == \"sigmoid\":",
+            "            scores = scores.sigmoid()",
+            "        else:",
+            "            scores = F.softplus(scores).sqrt()",
+            "        original_scores = scores",
+            "        # Bias shifts scores for expert selection (topk) but does not affect routing weights.",
+            "        if self.bias is not None:",
+            "            scores = scores + self.bias",
+            "        if self.hash:",
+            "            indices = self.tid2eid[input_ids]",
+            "        else:",
+            "            indices = scores.topk(self.topk, dim=-1)[1]",
+            "        weights = original_scores.gather(1, indices)",
+            "        if self.score_func != \"softmax\":",
+            "            weights /= weights.sum(dim=-1, keepdim=True)",
+            "        weights *= self.route_scale",
+            "        return weights, indices"
+          ],
+          "source_lines_sha256": "a837224d609555c9f11b17528a704613ce4c9c21aecb9fa9466f855533a55aa1"
+        },
+        "moe_forward": {
+          "source_lines": [
+            "    def forward(self, x: torch.Tensor, input_ids: torch.Tensor) -> torch.Tensor:",
+            "        shape = x.size()",
+            "        x = x.view(-1, self.dim)",
+            "        weights, indices = self.gate(x, input_ids.flatten())",
+            "        y = torch.zeros_like(x, dtype=torch.float32)",
+            "        counts = torch.bincount(indices.flatten(), minlength=self.n_routed_experts).tolist()",
+            "        for i in range(self.experts_start_idx, self.experts_end_idx):",
+            "            if counts[i] == 0:",
+            "                continue",
+            "            expert = self.experts[i]",
+            "            idx, top = torch.where(indices == i)",
+            "            y[idx] += expert(x[idx], weights[idx, top, None])",
+            "        if world_size > 1:",
+            "            dist.all_reduce(y)",
+            "        y += self.shared_experts(x)",
+            "        return y.type_as(x).view(shape)"
+          ],
+          "source_lines_sha256": "aeeda09c0734337357353f2b18fa13656b1d540898133e9235d8138121463473"
+        },
+        "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Gate.forward, MoE.forward)"
+      },
       "swiglu_clamp_enabled_expr": "if self.swiglu_limit > 0:",
       "swiglu_clamp_gate_expr": "gate = torch.clamp(gate, max=self.swiglu_limit)",
       "swiglu_clamp_up_expr": "up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)",
