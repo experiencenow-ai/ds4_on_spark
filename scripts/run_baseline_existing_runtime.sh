@@ -448,6 +448,8 @@ for raw_line in open(run_ids_path, "r", encoding="utf-8").read().splitlines():
         "local_quality_score",
         "quality_score",
         "decode_tps",
+        "prefill_tps",
+        "ttft_s",
         "total_wall_s",
         "output_tokens",
         "speculative_method",
@@ -459,9 +461,11 @@ for raw_line in open(run_ids_path, "r", encoding="utf-8").read().splitlines():
         "spec_decode_mean_accept_len",
         "spec_decode_accept_rate",
         "quality_adjusted_decode_tps",
+        "quality_adjusted_prefill_tps",
         "correct_task_rate",
         "correct_tasks_per_s",
         "tokens_per_success",
+        "wall_s_per_success",
         "dominated_by",
     ]:
         v = r.get(k, "")
