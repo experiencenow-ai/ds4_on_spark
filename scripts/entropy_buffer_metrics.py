@@ -173,6 +173,9 @@ def _judge_slice_stats(label_counts: Dict[str, int], item_labels: Dict[str, List
         "pair_item_count": len(item_labels),
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
+        "label_entropy_norm": _entropy_norm_bits(label_counts),
+        "label_effective_num": _effective_num(label_counts),
+        "label_hhi": _hhi(label_counts),
         "decided_count_ab": decided,
         "decided_rate_ab": 0.0 if total == 0 else (float(decided) / float(total)),
         "tie_rate": 0.0 if total == 0 else (float(ties) / float(total)),
@@ -1314,6 +1317,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
+        "label_entropy_norm": _entropy_norm_bits(label_counts),
+        "label_effective_num": _effective_num(label_counts),
+        "label_hhi": _hhi(label_counts),
         "pair_item_count": len(item_labels),
         "item_disagreement_top": item_disagreement_top,
         "disagreement_rate": disagreement_rate,
@@ -1644,6 +1650,9 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `{js.get('buffer_item_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
+    parts.append(f"- `label_entropy_norm`: {float(report.judge.get('label_entropy_norm', 0.0) or 0.0):.6f}")
+    parts.append(f"- `label_effective_num`: {float(report.judge.get('label_effective_num', 0.0) or 0.0):.6f}")
+    parts.append(f"- `label_hhi`: {float(report.judge.get('label_hhi', 0.0) or 0.0):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
     parts.append(f"- `disagreement_rate`: {report.judge.get('disagreement_rate'):.6f}")
     parts.append(f"- `disagreement_rate_decided_ab`: {report.judge.get('disagreement_rate_decided_ab'):.6f}")

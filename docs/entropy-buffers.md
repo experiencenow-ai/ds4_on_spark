@@ -131,7 +131,7 @@ The scripts compute:
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
   - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
   - For MCQ-style tasks, `diversity.answer.letter` reports the same diversity stats restricted to single-letter answers (`A`-`Z`) plus `hhi` (concentration).
-- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement), plus `label_entropy_bits`/`label_entropy_norm`/`label_effective_num` and `label_hhi` for concentration; also emits per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
 - **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
