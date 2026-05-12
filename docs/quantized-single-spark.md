@@ -106,6 +106,18 @@ By default the wrapper excludes likely non-trunk artifacts (`MTP`, `DFlash`,
 `draft`, `sidecar`) via `MODEL_GGUF_EXCLUDE_EGREP`. Override it when you
 intentionally want a different selection policy.
 
+If you want to force the selection into a “credible minimum” quant band (for
+example, prefer `Q2_K` or `IQ2XXS` over tiny test artifacts), set
+`MODEL_GGUF_INCLUDE_EGREP` and the wrapper will select the smallest match after
+the exclude filter:
+
+```sh
+MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
+MODEL_GGUF_INCLUDE_EGREP='Q2_K|IQ2XXS' \
+LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
+scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
+```
+
 ## MTP (multi-token prediction) expectations
 
 DeepSeek V4 Flash’s official checkpoint includes an MTP module namespace (`mtp.0.*`).
