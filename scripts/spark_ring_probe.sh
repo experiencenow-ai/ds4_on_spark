@@ -319,6 +319,31 @@ if command -v ip >/dev/null 2>&1; then
 		printf "%s mtu=%s state=%s\n", name, mtu, state
 	}' | head -n 80 || true
 	echo
+	echo "== network (iface matrix, compact) =="
+	if [ -d /sys/class/net ]; then
+		for iface in $(ls /sys/class/net 2>/dev/null || true); do
+			if [ "$iface" = "lo" ]; then
+				continue
+			fi
+			state="$(ip -o link show dev "$iface" 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="state") { print $(i+1); exit } }' || true)"
+			mtu="$(ip -o link show dev "$iface" 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="mtu") { print $(i+1); exit } }' || true)"
+			speed="$(cat "/sys/class/net/$iface/speed" 2>/dev/null || true)"
+			duplex="$(cat "/sys/class/net/$iface/duplex" 2>/dev/null || true)"
+			v4="$(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{ print $4 }' | paste -sd "," - 2>/dev/null | head -c 200 || true)"
+			v6="$(ip -6 -o addr show dev "$iface" 2>/dev/null | awk '{ print $4 }' | paste -sd "," - 2>/dev/null | head -c 200 || true)"
+			[ "$state" = "" ] && state="?"
+			[ "$mtu" = "" ] && mtu="?"
+			[ "$speed" = "" ] && speed="?"
+			[ "$speed" = "-1" ] && speed="unknown"
+			[ "$duplex" = "" ] && duplex="?"
+			[ "$v4" = "" ] && v4="-"
+			[ "$v6" = "" ] && v6="-"
+			echo "$iface state=$state mtu=$mtu speed_mbps=$speed duplex=$duplex v4=$v4 v6=$v6"
+		done | head -n 80 || true
+	else
+		echo "/sys/class/net not found"
+	fi
+	echo
 	ip -4 -br addr 2>/dev/null || true
 	echo
 	ip -6 -br addr 2>/dev/null || true

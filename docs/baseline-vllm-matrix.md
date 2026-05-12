@@ -23,6 +23,11 @@ scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
 
+Matrix error handling:
+
+- Default: `MATRIX_CONTINUE_ON_ERROR=1` continues after a failing row (records the row rc in stdout/stderr).
+- Set `MATRIX_CONTINUE_ON_ERROR=0` to fail fast on the first non-zero row.
+
 ## Defaults (cost control)
 
 The matrix runner defaults these to keep Ling/Qwen runs clean:
@@ -57,6 +62,7 @@ scripts/run_baseline_vllm_matrix_bundle.sh spark0@aitopatom-9ab9.local /path/to/
 Notes:
 
 - Keep `PROMPT`, `MAX_TOKENS`, and `TENSOR_PARALLEL_SIZE` constant across the matrix.
+- The vLLM probe emits best-effort speculative-decoding counters (accepted/draft tokens, mean accept length) when `VLLM_SPECULATIVE_CONFIG_JSON` is set and the installed vLLM exposes `llm.get_metrics()`.
 - For multi-model comparisons, fill out quality metadata (`PUBLIC_QUALITY_PRIOR`,
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.

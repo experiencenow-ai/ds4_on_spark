@@ -109,7 +109,7 @@ By default this Spark-only runner also samples 64 bytes from each tensor payload
 
 If the probe does not return `ok=true` with `missing_tensors=[]` and `extra_tensors=[]`, do not proceed to loader work.
 
-Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez.sh` now defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`) and validating the pinned file size, still avoiding full weight downloads. The recorded output is `docs/mtp-sidecar-probe-antirez-b0c3326-payload64.json`.
+Optional stronger check: `scripts/model_contract_probe_mtp_sidecar_antirez.sh` defaults to sampling 64 bytes from each tensor payload via HTTP range reads (`--payload-sample-bytes 64`) and validating the pinned file size, still avoiding full weight downloads. When payload sampling is enabled, it also runs the pinned payload fingerprint gate (`scripts/verify_mtp_sidecar_payload_fingerprint.py`) and prints the gate JSON to stderr. Disable with `FINGERPRINT_GATE=0` or `PAYLOAD_SAMPLE_BYTES=0`. The recorded probe output is `docs/mtp-sidecar-probe-antirez-b0c3326-payload64.json`.
 
 ### Step 1: sidecar weight loader (not a model loader)
 

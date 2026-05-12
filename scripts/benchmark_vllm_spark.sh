@@ -121,6 +121,11 @@ local_quality_score = None
 spec_method = None
 spec_model = None
 spec_num_spec_tokens = None
+spec_decode_num_drafts = None
+spec_decode_num_draft_tokens = None
+spec_decode_num_accepted_tokens = None
+spec_decode_mean_accept_len = None
+spec_decode_accept_rate = None
 
 raw_lines = []
 raw_lines.append("utc_start=" + utc_start)
@@ -314,6 +319,34 @@ try:
                 generated_tokens = len(o0.token_ids)
         except Exception:
             pass
+
+    try:
+        if hasattr(llm, "get_metrics"):
+            metrics = llm.get_metrics()
+            by_name = {}
+            for m in metrics:
+                name = getattr(m, "name", None)
+                if not name or "spec_decode" not in str(name):
+                    continue
+                v = getattr(m, "value", None)
+                if v is None:
+                    continue
+                if isinstance(v, (int, float)):
+                    by_name[str(name)] = float(v)
+                else:
+                    try:
+                        by_name[str(name)] = float(v)
+                    except Exception:
+                        pass
+            spec_decode_num_drafts = by_name.get("vllm:spec_decode_num_drafts")
+            spec_decode_num_draft_tokens = by_name.get("vllm:spec_decode_num_draft_tokens")
+            spec_decode_num_accepted_tokens = by_name.get("vllm:spec_decode_num_accepted_tokens")
+            if spec_decode_num_drafts is not None and spec_decode_num_drafts > 0 and spec_decode_num_accepted_tokens is not None:
+                spec_decode_mean_accept_len = 1.0 + (spec_decode_num_accepted_tokens / spec_decode_num_drafts)
+            if spec_decode_num_draft_tokens is not None and spec_decode_num_draft_tokens > 0 and spec_decode_num_accepted_tokens is not None:
+                spec_decode_accept_rate = (spec_decode_num_accepted_tokens / spec_decode_num_draft_tokens)
+    except Exception as e:
+        raw_lines.append("spec_decode_metrics_error=" + repr(e))
 except Exception as e:
     rc = 3
     raw_lines.append("error=" + repr(e))
@@ -344,6 +377,16 @@ if spec_model:
     summary.append("speculative_draft_model=" + str(spec_model))
 if spec_num_spec_tokens is not None:
     summary.append("speculative_num_speculative_tokens=%d" % int(spec_num_spec_tokens))
+if spec_decode_num_drafts is not None:
+    summary.append("spec_decode_num_drafts=%.0f" % float(spec_decode_num_drafts))
+if spec_decode_num_draft_tokens is not None:
+    summary.append("spec_decode_num_draft_tokens=%.0f" % float(spec_decode_num_draft_tokens))
+if spec_decode_num_accepted_tokens is not None:
+    summary.append("spec_decode_num_accepted_tokens=%.0f" % float(spec_decode_num_accepted_tokens))
+if spec_decode_mean_accept_len is not None:
+    summary.append("spec_decode_mean_accept_len=%.6f" % float(spec_decode_mean_accept_len))
+if spec_decode_accept_rate is not None:
+    summary.append("spec_decode_accept_rate=%.6f" % float(spec_decode_accept_rate))
 if passed_tasks is not None and total_tasks is not None:
     summary.append("passed_tasks=%d" % int(passed_tasks))
     summary.append("total_tasks=%d" % int(total_tasks))

@@ -30,6 +30,18 @@ WITH_SM121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
 
 This additionally builds and runs the same tiny probe via `nvcc -arch=sm_121` and `nvcc --gpu-architecture=sm_121`.
 
+To validate “PTX-only + driver JIT” for GB10 (toolchain emits `compute_121` PTX, Spark0 JITs to `sm_121`), run:
+
+```bash
+WITH_COMPUTE121_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
+To validate “fatbin packaging” via explicit `-gencode` (embed both `sm_121` SASS and `compute_121` PTX), run:
+
+```bash
+WITH_GENCODE_RUN=1 ./scripts/cuda_probe_device_props_minimal_spark0.sh
+```
+
 When you specifically want a quick “does cuBLASLt build + run on `sm_121`?” gate:
 
 ```bash

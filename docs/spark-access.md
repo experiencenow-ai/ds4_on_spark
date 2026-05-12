@@ -12,6 +12,8 @@ Current observed Spark identity:
 - Spark Wi-Fi IPv4 observed during probe: `<redacted-ipv4cidr>`
 - Spark wired interface: `enP7s7`, MTU 9000
 - SSH key authentication from the Mac is now working for `spark0`.
+- GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
+- CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
 
 ## Reproducible Probes
 

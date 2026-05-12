@@ -13,6 +13,12 @@ from sim.scheduler import trace_extract
 
 
 class SchedulerSimTest(unittest.TestCase):
+    _recommendations_quick_cache = None
+
+    def _recommendations_quick(self):
+        if SchedulerSimTest._recommendations_quick_cache is None:
+            SchedulerSimTest._recommendations_quick_cache = recommendations.run_recommendations(quick=True)
+        return SchedulerSimTest._recommendations_quick_cache
     def test_synthetic_trace_deterministic(self) -> None:
         cfg = scheduler_sim.TraceConfig(
             num_tokens=10,
@@ -4041,9 +4047,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertEqual(out[1]["candidates"], [1])
 
     def test_recommendations_quick_expert_queue_reserve_prevents_interactive_drops(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["expert_queue_reserve"]
         base = scenario["results"]["baseline"]["summary"]
         no_reserve = scenario["results"]["variants"]["no_reserve"]["summary"]
@@ -4051,9 +4055,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(float(no_reserve["drop_frac_tokens_interactive"]), 0.0)
 
     def test_recommendations_quick_mtp_sweep_has_breakeven(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         sweep = out["scenarios"]["mtp_efficiency_sweep"]["sweep"]
         self.assertGreaterEqual(len(sweep), 3)
         worst = float(sweep[0]["service_slot_ms_per_output_token_ratio_vs_no_mtp"])
@@ -4062,9 +4064,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLess(best, 1.0)
 
     def test_recommendations_quick_adaptive_k_batch_avoids_fixed_batch_k2_drop_spike(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["adaptive_k_batch"]
         base = scenario["results"]["baseline"]["summary"]
         fixed_hi = scenario["results"]["variants"]["batch_k_fixed_2"]["summary"]
@@ -4074,9 +4074,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreaterEqual(fixed_hi_drop, (base_drop + 0.05))
 
     def test_recommendations_quick_mtp_congestion_sweep_stop_at_reject_reduces_overhead_at_zero_accept(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         sweep = out["scenarios"]["mtp_congestion_sweep"]["sweep"]
         row0 = next(r for r in sweep if float(r["accept_prob"]) == 0.0)
         full = row0["mtp_full"]
@@ -4084,9 +4082,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
 
     def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["backpressure_zero_admit_policy"]
         base = scenario["results"]["baseline"]["summary"]
         stall = scenario["results"]["variants"]["stall"]["summary"]
@@ -4107,6 +4103,8 @@ class SchedulerSimTest(unittest.TestCase):
         out = recommendations.run_runtime_trace_mtp_ablation(trace=trace, trace_meta={})
         self.assertEqual(out["name"], "runtime_trace_mtp_ablation")
         self.assertIn("trace_summary", out)
+        self.assertIn("scheduler_sweeps", out)
+        self.assertIn("arrival_units_steps", out["scheduler_sweeps"])
         self.assertIn("results", out)
         self.assertIn("arrival_units_steps", out["results"])
         self.assertIn("arrival_units_output_tokens", out["results"])
@@ -4509,9 +4507,7 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertAlmostEqual(float(s.get("promoted_task_frac", -1.0)), 0.25, places=9)
 
     def test_recommendations_quick_expert_batching_reduces_service_per_output_token(self) -> None:
-        from sim.scheduler import recommendations
-
-        out = recommendations.run_recommendations(quick=True)
+        out = self._recommendations_quick()
         scenario = out["scenarios"]["expert_batching"]
         base = scenario["results"]["baseline"]["summary"]
         b4 = scenario["results"]["variants"]["batch_max_batch_4"]["summary"]

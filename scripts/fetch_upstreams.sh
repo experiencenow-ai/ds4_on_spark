@@ -38,7 +38,9 @@ Targets:
   qwen3_6_27b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_dflash_gguf_spiritbuun_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_6_27b_dflash_gguf_lucebox_hf    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_dflash_gguf_ardenzard_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+  qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_fp8_hf                   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_27b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_27b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -378,10 +380,20 @@ fetch_one()
 			upstream="huggingface.co/spiritbuun/Qwen3.6-27B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_6_27b_dflash_gguf_spiritbuun_hf" "https://huggingface.co/spiritbuun/Qwen3.6-27B-DFlash-GGUF" "${ref}" "${expected}"
 			;;
+		qwen3_6_27b_dflash_gguf_lucebox_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/Lucebox/Qwen3.6-27B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_6_27b_dflash_gguf_lucebox_hf" "https://huggingface.co/Lucebox/Qwen3.6-27B-DFlash-GGUF" "${ref}" "${expected}"
+			;;
 		qwen3_6_27b_dflash_gguf_ardenzard_hf)
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/Ardenzard/Qwen3.6-27B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_6_27b_dflash_gguf_ardenzard_hf" "https://huggingface.co/Ardenzard/Qwen3.6-27B-DFlash-GGUF" "${ref}" "${expected}"
+			;;
+		qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf)
+			# HF metadata/config only: do not download weights.
+			upstream="huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update_nolfs "qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf" "https://huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF" "${ref}" "${expected}"
 			;;
 		qwen3_6_27b_fp8_hf)
 			# HF metadata/config only: do not download weights.

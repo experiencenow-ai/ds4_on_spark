@@ -43,6 +43,7 @@ Record (for each node):
 - Primary SSH-reachable name (and whether it’s IPv4, IPv6 link-local, or routed v4).
 - Wired interface name(s) and MTU (jumbo vs standard).
 - Wi‑Fi interface name(s) and MTU.
+- Use the ring probe `== network (iface matrix, compact) ==` section to join interface `state`/`mtu`/`speed` with per-interface v4/v6 addresses (already redacted).
 
 Optional: write down the matrix (fill with redacted values as needed):
 

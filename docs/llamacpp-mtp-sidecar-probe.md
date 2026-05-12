@@ -103,6 +103,11 @@ Pinned reference runner:
 ./scripts/model_contract_probe_mtp_sidecar_antirez.sh
 ```
 
+Notes:
+
+- The script prints the probe JSON to stdout (so you can pipe it).
+- When payload sampling is enabled (default `PAYLOAD_SAMPLE_BYTES=64`), it also runs the pinned payload fingerprint gate and prints the gate JSON to stderr. Disable with `FINGERPRINT_GATE=0` or `PAYLOAD_SAMPLE_BYTES=0`.
+
 Recorded reference output for a pinned antirez sidecar is in `docs/mtp-sidecar-probe-antirez-b0c3326.json`.
 
 Stronger pinned output (includes `--payload-sample-bytes 64`) is in `docs/mtp-sidecar-probe-antirez-b0c3326-payload64.json`.
