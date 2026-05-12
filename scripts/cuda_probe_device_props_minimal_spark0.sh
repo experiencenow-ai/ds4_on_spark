@@ -310,12 +310,28 @@ set -e
 	if [ -x \"$REMOTE_DIR\"/cuda_device_props_minimal_compute121 ]; then
 		echo
 		echo \"== run: cuda_device_props_minimal_compute121 ==\"
+		set +e
 		\"$REMOTE_DIR\"/cuda_device_props_minimal_compute121
+		rc_run=\$?
+		set -e
+		if [ \$rc_run -eq 0 ]; then
+			echo \"compute_121_run: OK\"
+		else
+			echo \"compute_121_run: FAILED rc=\$rc_run\" >&2
+		fi
 	fi
 	if [ -x \"$REMOTE_DIR\"/cuda_device_props_minimal_gencode ]; then
 		echo
 		echo \"== run: cuda_device_props_minimal_gencode ==\"
+		set +e
 		\"$REMOTE_DIR\"/cuda_device_props_minimal_gencode
+		rc_run=\$?
+		set -e
+		if [ \$rc_run -eq 0 ]; then
+			echo \"gencode_run: OK\"
+		else
+			echo \"gencode_run: FAILED rc=\$rc_run\" >&2
+		fi
 	fi
 "
 }
