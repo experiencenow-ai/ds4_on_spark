@@ -1351,6 +1351,16 @@ def load_trace_jsonl(
     t_ms_accum = 0.0
     display_path = path if path != "-" else "<stdin>"
 
+    def _coerce_int(value: object) -> Optional[int]:
+        if isinstance(value, int):
+            return(int(value))
+        if isinstance(value, float):
+            v = float(value)
+            if float(int(v)) == v:
+                return(int(v))
+            return(None)
+        return(None)
+
     def merge_meta(payload: object, lineno: int) -> None:
         if meta_out is None:
             return
@@ -1434,11 +1444,12 @@ def load_trace_jsonl(
                 token_index: Optional[int] = None
                 if "token_index" in obj and obj["token_index"] is not None:
                     ti_raw = obj["token_index"]
-                    if not isinstance(ti_raw, int):
+                    ti = _coerce_int(ti_raw)
+                    if ti is None:
                         raise ValueError(f"{display_path}:{lineno}: token_index must be an integer")
-                    if ti_raw < 0:
+                    if ti < 0:
                         raise ValueError(f"{display_path}:{lineno}: token_index must be >= 0")
-                    token_index = int(ti_raw)
+                    token_index = int(ti)
 
                 if time_mode == "t_ms":
                     t_ms = float(obj["t_ms"])
@@ -1481,11 +1492,12 @@ def load_trace_jsonl(
                             raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be a JSON list")
                         lcands: List[int] = []
                         for c in lcand_raw:
-                            if not isinstance(c, int):
+                            ci = _coerce_int(c)
+                            if ci is None:
                                 raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be integers")
-                            if c < 0:
+                            if ci < 0:
                                 raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be >= 0")
-                            lcands.append(int(c))
+                            lcands.append(int(ci))
                         if len(lcands) == 0:
                             raise ValueError(f"{display_path}:{lineno}: layers[{li}].candidates must be non-empty")
                         if len(set(lcands)) != len(lcands):
@@ -1493,11 +1505,12 @@ def load_trace_jsonl(
                         layer_k: Optional[int] = None
                         if "k" in lobj and lobj["k"] is not None:
                             lk_raw = lobj["k"]
-                            if not isinstance(lk_raw, int):
+                            lk = _coerce_int(lk_raw)
+                            if lk is None:
                                 raise ValueError(f"{display_path}:{lineno}: layers[{li}].k must be an integer")
-                            if lk_raw <= 0:
+                            if lk <= 0:
                                 raise ValueError(f"{display_path}:{lineno}: layers[{li}].k must be > 0")
-                            layer_k = int(lk_raw)
+                            layer_k = int(lk)
 
                         layer_scores: Optional[Tuple[float, ...]] = None
                         if "scores" in lobj and lobj["scores"] is not None:
@@ -1540,11 +1553,12 @@ def load_trace_jsonl(
                             raise ValueError(f"{display_path}:{lineno}: candidates must be a JSON list")
                         top_candidates: List[int] = []
                         for c in cand_raw:
-                            if not isinstance(c, int):
+                            ci = _coerce_int(c)
+                            if ci is None:
                                 raise ValueError(f"{display_path}:{lineno}: candidates must be integers")
-                            if c < 0:
+                            if ci < 0:
                                 raise ValueError(f"{display_path}:{lineno}: candidates must be >= 0")
-                            top_candidates.append(int(c))
+                            top_candidates.append(int(ci))
                         if len(top_candidates) == 0:
                             raise ValueError(f"{display_path}:{lineno}: candidates must be non-empty")
                         if len(set(top_candidates)) != len(top_candidates):
@@ -1560,11 +1574,12 @@ def load_trace_jsonl(
                     if not isinstance(cand_raw, list):
                         raise ValueError(f"{display_path}:{lineno}: candidates must be a JSON list")
                     for c in cand_raw:
-                        if not isinstance(c, int):
+                        ci = _coerce_int(c)
+                        if ci is None:
                             raise ValueError(f"{display_path}:{lineno}: candidates must be integers")
-                        if c < 0:
+                        if ci < 0:
                             raise ValueError(f"{display_path}:{lineno}: candidates must be >= 0")
-                        candidates.append(int(c))
+                        candidates.append(int(ci))
                     if len(candidates) == 0:
                         raise ValueError(f"{display_path}:{lineno}: candidates must be non-empty")
                     if len(set(candidates)) != len(candidates):
@@ -1573,11 +1588,12 @@ def load_trace_jsonl(
                 k: Optional[int] = None
                 if "k" in obj and obj["k"] is not None:
                     k_raw = obj["k"]
-                    if not isinstance(k_raw, int):
+                    ki = _coerce_int(k_raw)
+                    if ki is None:
                         raise ValueError(f"{display_path}:{lineno}: k must be an integer")
-                    if k_raw <= 0:
+                    if ki <= 0:
                         raise ValueError(f"{display_path}:{lineno}: k must be > 0")
-                    k = int(k_raw)
+                    k = int(ki)
 
                 scores: Optional[Tuple[float, ...]] = None
                 if layers is None and "scores" in obj and obj["scores"] is not None:
@@ -1596,56 +1612,62 @@ def load_trace_jsonl(
                 mtp_accept_len: Optional[int] = None
                 if "mtp_accept_len" in obj and obj["mtp_accept_len"] is not None:
                     al_raw = obj["mtp_accept_len"]
-                    if not isinstance(al_raw, int):
+                    al = _coerce_int(al_raw)
+                    if al is None:
                         raise ValueError(f"{display_path}:{lineno}: mtp_accept_len must be an integer")
-                    if al_raw < 1:
+                    if al < 1:
                         raise ValueError(f"{display_path}:{lineno}: mtp_accept_len must be >= 1")
-                    mtp_accept_len = int(al_raw)
+                    mtp_accept_len = int(al)
 
                 accepted_mtp: Optional[int] = None
                 if "accepted_mtp" in obj and obj["accepted_mtp"] is not None:
                     am_raw = obj["accepted_mtp"]
-                    if not isinstance(am_raw, int):
+                    am = _coerce_int(am_raw)
+                    if am is None:
                         raise ValueError(f"{display_path}:{lineno}: accepted_mtp must be an integer")
-                    if am_raw < 0:
+                    if am < 0:
                         raise ValueError(f"{display_path}:{lineno}: accepted_mtp must be >= 0")
-                    accepted_mtp = int(am_raw)
+                    accepted_mtp = int(am)
 
                 rejected_mtp: Optional[int] = None
                 if "rejected_mtp" in obj and obj["rejected_mtp"] is not None:
                     rm_raw = obj["rejected_mtp"]
-                    if not isinstance(rm_raw, int):
+                    rm = _coerce_int(rm_raw)
+                    if rm is None:
                         raise ValueError(f"{display_path}:{lineno}: rejected_mtp must be an integer")
-                    if rm_raw < 0:
+                    if rm < 0:
                         raise ValueError(f"{display_path}:{lineno}: rejected_mtp must be >= 0")
-                    rejected_mtp = int(rm_raw)
+                    rejected_mtp = int(rm)
 
                 dflash_accept_len: Optional[int] = None
                 if "dflash_accept_len" in obj and obj["dflash_accept_len"] is not None:
                     dal_raw = obj["dflash_accept_len"]
-                    if not isinstance(dal_raw, int):
+                    dal = _coerce_int(dal_raw)
+                    if dal is None:
                         raise ValueError(f"{display_path}:{lineno}: dflash_accept_len must be an integer")
-                    if dal_raw < 1:
+                    if dal < 1:
                         raise ValueError(f"{display_path}:{lineno}: dflash_accept_len must be >= 1")
-                    dflash_accept_len = int(dal_raw)
+                    dflash_accept_len = int(dal)
 
                 accepted_dflash: Optional[int] = None
                 if "accepted_dflash" in obj and obj["accepted_dflash"] is not None:
                     ad_raw = obj["accepted_dflash"]
-                    if not isinstance(ad_raw, int):
+                    ad = _coerce_int(ad_raw)
+                    if ad is None:
                         raise ValueError(f"{display_path}:{lineno}: accepted_dflash must be an integer")
-                    if ad_raw < 0:
+                    if ad < 0:
                         raise ValueError(f"{display_path}:{lineno}: accepted_dflash must be >= 0")
-                    accepted_dflash = int(ad_raw)
+                    accepted_dflash = int(ad)
 
                 rejected_dflash: Optional[int] = None
                 if "rejected_dflash" in obj and obj["rejected_dflash"] is not None:
                     rd_raw = obj["rejected_dflash"]
-                    if not isinstance(rd_raw, int):
+                    rd = _coerce_int(rd_raw)
+                    if rd is None:
                         raise ValueError(f"{display_path}:{lineno}: rejected_dflash must be an integer")
-                    if rd_raw < 0:
+                    if rd < 0:
                         raise ValueError(f"{display_path}:{lineno}: rejected_dflash must be >= 0")
-                    rejected_dflash = int(rd_raw)
+                    rejected_dflash = int(rd)
 
                 cost_scale: Optional[float] = None
                 if "cost_scale" in obj and obj["cost_scale"] is not None:
@@ -1668,20 +1690,22 @@ def load_trace_jsonl(
                 kv_tokens: Optional[int] = None
                 if "kv_tokens" in obj and obj["kv_tokens"] is not None:
                     kv_raw = obj["kv_tokens"]
-                    if not isinstance(kv_raw, int):
+                    kv = _coerce_int(kv_raw)
+                    if kv is None:
                         raise ValueError(f"{display_path}:{lineno}: kv_tokens must be an integer")
-                    if kv_raw < 0:
+                    if kv < 0:
                         raise ValueError(f"{display_path}:{lineno}: kv_tokens must be >= 0")
-                    kv_tokens = int(kv_raw)
+                    kv_tokens = int(kv)
 
                 expert_batch_size: Optional[int] = None
                 if "expert_batch_size" in obj and obj["expert_batch_size"] is not None:
                     bs_raw = obj["expert_batch_size"]
-                    if not isinstance(bs_raw, int):
+                    bs = _coerce_int(bs_raw)
+                    if bs is None:
                         raise ValueError(f"{display_path}:{lineno}: expert_batch_size must be an integer")
-                    if bs_raw < 0:
+                    if bs < 0:
                         raise ValueError(f"{display_path}:{lineno}: expert_batch_size must be >= 0")
-                    expert_batch_size = int(bs_raw)
+                    expert_batch_size = int(bs)
 
                 routes.append(
                     TokenRoute(
@@ -1723,7 +1747,13 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
         try:
             v = int(s)
         except ValueError:
-            raise ValueError(f"{path}:{lineno}: {key} must be an integer")
+            try:
+                vf = float(s)
+            except ValueError:
+                raise ValueError(f"{path}:{lineno}: {key} must be an integer")
+            if float(int(vf)) != vf:
+                raise ValueError(f"{path}:{lineno}: {key} must be an integer")
+            v = int(vf)
         return(v)
 
     def parse_optional_float(cell: str, key: str, lineno: int) -> Optional[float]:
@@ -1746,9 +1776,15 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
                 raise ValueError(f"{path}:{lineno}: {key} must be a JSON list")
             out: List[int] = []
             for c in obj:
-                if not isinstance(c, int):
+                if isinstance(c, bool):
                     raise ValueError(f"{path}:{lineno}: {key} must be integers")
-                out.append(int(c))
+                if isinstance(c, int):
+                    out.append(int(c))
+                    continue
+                if isinstance(c, float) and float(int(float(c))) == float(c):
+                    out.append(int(float(c)))
+                    continue
+                    raise ValueError(f"{path}:{lineno}: {key} must be integers")
             return(out)
         # Allow a simple delimiter format: "1 2 3" or "1,2,3" or "1;2;3".
         cleaned = s.replace(",", " ").replace(";", " ")
@@ -1758,7 +1794,13 @@ def load_trace_csv(path: str, time_mode: str = "t_ms") -> List[TokenRoute]:
             try:
                 out.append(int(p))
             except ValueError:
-                raise ValueError(f"{path}:{lineno}: {key} list element '{p}' must be an integer")
+                try:
+                    vf = float(p)
+                except ValueError:
+                    raise ValueError(f"{path}:{lineno}: {key} list element '{p}' must be an integer")
+                if float(int(vf)) != vf:
+                    raise ValueError(f"{path}:{lineno}: {key} list element '{p}' must be an integer")
+                out.append(int(vf))
         return(out)
 
     def parse_optional_float_list(cell: str, key: str, lineno: int) -> Optional[Tuple[float, ...]]:
