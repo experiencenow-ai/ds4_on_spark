@@ -59,6 +59,18 @@ Keep Qwen comparator notes separate from DeepSeek V4 Flash MTP claims:
 - Qwen results are used as “target-only” comparators (prompting + tokenizer + runtime behavior).
 - DeepSeek V4 Flash MTP namespace / trust gates remain defined by `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` and related tooling.
 
+### Qwen 3.5 27B (pinned baseline target)
+
+Fixture folders:
+
+- `fixtures/model_contract/comparators/qwen3_5_27b/`
+- `fixtures/model_contract/comparators/qwen3_5_27b_dflash/` (paired draft; metadata-only)
+
+Notes:
+
+- Use `fixtures/model_contract/comparators/qwen3_5_27b/metadata_summary.json` as the “what did we pin?” view for target-only runs (topology + tokenizer/chat-template presence).
+- For “target + DFlash” runs, record both pinned commits and the runtime’s speculative settings (e.g. `num_speculative_tokens`) alongside acceptance counters; do not label these counters as `mtp_*` (DFlash is not DeepSeek V4 Flash MTP).
+
 ## DFlash draft pairs (target + DFlash speculative decoding)
 
 “DFlash” here refers to **paired draft checkpoints** (for example `z-lab/*-DFlash`) used for speculative decoding in external runtimes (typically vLLM/SGLang). This is **not** DeepSeek V4 Flash MTP.
