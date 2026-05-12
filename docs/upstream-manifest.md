@@ -11,7 +11,7 @@ Scope hygiene: treat DeepSeek V4 Flash, Qwen/Ling comparator targets (target-onl
 
 | Name | Upstream | Ref | Commit | License | Notes |
 | --- | --- | --- | --- | --- | --- |
-| ds4 | `antirez/ds4` | `refs/heads/main` | `e801b2b60a1ba5b3e0ff9147cee4a634f51649c4` | MIT | DeepSeek-V4-Flash-specific native engine with Metal and CUDA graph paths; upstream README reports DGX Spark GB10 q2 `343.81` prefill t/s + `13.75` generation t/s; do not run upstream model-download scripts without human approval. |
+| ds4 | `antirez/ds4` | `refs/heads/main` | `3630e64ea2aadb4d069a30dc3369f2b2950d6cb3` | MIT | DeepSeek-V4-Flash-specific native engine with Metal and CUDA graph paths; upstream README reports DGX Spark GB10 q2 `343.81` prefill t/s + `13.75` generation t/s; do not run upstream model-download scripts without human approval. |
 | DeepGEMM | `deepseek-ai/DeepGEMM` | `refs/tags/v2.1.1.post3` | `c9f8b34dcdacc20aa746b786f983492c51072870` | MIT | CUDA GEMM kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); pinned to a release tag (vs `main`). |
 | FlashMLA | `deepseek-ai/FlashMLA` | `refs/heads/main` | `9241ae3ef9bac614dd25e45e507e089f888280e0` | MIT | Efficient Multi-head Latent Attention kernels; upstream support is SM90/SM100 only (Spark SM121 not covered yet); treat as kernel-design reference for V4-Flash-style MLA. |
 | DeepSeek-V3 (code) | `deepseek-ai/DeepSeek-V3` | `refs/tags/v1.0.0` | `f6e34dd26772dd4a216be94a8899276c5dca9e43` | MIT (code) | Repo has distinct code vs model/weights licensing. |
