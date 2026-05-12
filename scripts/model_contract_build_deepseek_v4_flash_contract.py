@@ -6,7 +6,7 @@ import json
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ DEFAULT_OUT = FIX / "contract_summary.json"
 INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
 MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
-MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-c566ab6-payload64.json"
+MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-3274cdc-payload64.json"
 
 def repo_relpath(path: Path) -> str:
 	try:
@@ -50,6 +50,119 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(line.encode("utf-8"))
 		h.update(b"\n")
 	return h.hexdigest()
+
+def sha256_json(obj) -> str:
+	b = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+	return sha256(b).hexdigest()
+
+def build_sparse_attn_mask_contract(kernel_py: Path) -> dict:
+	text = kernel_py.read_text(encoding="utf-8")
+	expected_lines = (
+		"idxs[i] = T.if_then_else(t * block + i < topk, topk_idxs[by, bx, t * block + i], -1)",
+		"kv_shared[i, j] = T.if_then_else(idxs[i] != -1, kv[by, idxs[i], j], 0)",
+		"acc_s[i, j] = T.if_then_else(idxs[j] != -1, 0, -T.infinity(FP32))",
+	)
+	missing = [line for line in expected_lines if line not in text]
+	if missing:
+		raise RuntimeError(
+			f"sparse_attn mask semantics probe failed; kernel changed? missing={missing} kernel={repo_relpath(kernel_py)}"
+		)
+	return {
+		"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/kernel.py (sparse_attn_kernel_ sentinel masking)",
+		"sentinel_index": -1,
+		"masked_kv_fill_value": 0,
+		"masked_score_fill_value": "-inf",
+	}
+
+def build_contract_fingerprints(contract: dict) -> dict:
+	up = contract.get("upstream", {}) if isinstance(contract, dict) else {}
+	checkpoint_index = contract.get("checkpoint_index", {}) if isinstance(contract, dict) else {}
+	tensor_keys = contract.get("tensor_keys", {}) if isinstance(contract, dict) else {}
+	cache = contract.get("cache", {}) if isinstance(contract, dict) else {}
+	moe = contract.get("moe", {}) if isinstance(contract, dict) else {}
+	mtp = contract.get("mtp", {}) if isinstance(contract, dict) else {}
+
+	exec_subset = {
+		"model": contract.get("model"),
+		"upstream": {
+			"hf_repo_id": up.get("hf_repo_id"),
+			"hf_revision_pinned": up.get("hf_revision_pinned"),
+			"x_repo_commit": up.get("x_repo_commit"),
+		},
+		"topology": contract.get("topology", {}),
+		"attention_schedule": contract.get("attention_schedule", {}),
+		"mla": contract.get("mla", {}),
+		"moe": {
+			"n_routed_experts": moe.get("n_routed_experts"),
+			"n_shared_experts": moe.get("n_shared_experts"),
+			"n_activated_experts": moe.get("n_activated_experts"),
+			"moe_inter_dim": moe.get("moe_inter_dim"),
+			"scoring_func": moe.get("scoring_func"),
+			"route_scale": moe.get("route_scale"),
+			"n_hash_layers": moe.get("n_hash_layers"),
+			"topk_method": moe.get("topk_method"),
+			"norm_topk_prob": moe.get("norm_topk_prob"),
+		},
+		"mtp": {
+			"num_nextn_predict_layers": mtp.get("num_nextn_predict_layers"),
+			"compress_ratios": mtp.get("compress_ratios"),
+			"checkpoint_key_fingerprint": mtp.get("checkpoint_key_fingerprint"),
+			"trust_gates": mtp.get("trust_gates"),
+		},
+		"quantization": contract.get("quantization", {}),
+		"tokenizer": contract.get("tokenizer", {}),
+		"encoding_constants": contract.get("encoding_constants", {}),
+		"tensor_keys": {
+			"required_top_level": tensor_keys.get("required_top_level"),
+			"required_layer_suffixes": tensor_keys.get("required_layer_suffixes"),
+			"required_layer_suffixes_compress_ratio_nonzero": tensor_keys.get("required_layer_suffixes_compress_ratio_nonzero"),
+			"required_layer_suffixes_compress_ratio_4": tensor_keys.get("required_layer_suffixes_compress_ratio_4"),
+			"required_mtp_additional_suffixes": tensor_keys.get("required_mtp_additional_suffixes"),
+			"mtp_required_nonexpert_suffixes": tensor_keys.get("mtp_required_nonexpert_suffixes"),
+			"mtp_forbidden_key_suffixes": tensor_keys.get("mtp_forbidden_key_suffixes"),
+			"hash_gate_tensor_key_suffix": tensor_keys.get("hash_gate_tensor_key_suffix"),
+			"score_gate_tensor_key_suffix": tensor_keys.get("score_gate_tensor_key_suffix"),
+			"mtp_score_gate_tensor_key_suffix": tensor_keys.get("mtp_score_gate_tensor_key_suffix"),
+			"tensor_key_templates": tensor_keys.get("tensor_key_templates"),
+			"expert_tensor_key_templates": tensor_keys.get("expert_tensor_key_templates"),
+		},
+		"cache": {
+			"window_size": cache.get("window_size"),
+			"kv_cache_size_formula": cache.get("kv_cache_size_formula"),
+			"kv_cache_shape": cache.get("kv_cache_shape"),
+			"layer_cache_kind_by_layer_id": cache.get("layer_cache_kind_by_layer_id"),
+			"layer_compress_ratio_by_layer_id": cache.get("layer_compress_ratio_by_layer_id"),
+			"mtp_cache_kind_by_mtp_layer_id": cache.get("mtp_cache_kind_by_mtp_layer_id"),
+			"mtp_compress_ratio_by_mtp_layer_id": cache.get("mtp_compress_ratio_by_mtp_layer_id"),
+			"sparse_attn_mask_rule": cache.get("sparse_attn_mask_rule"),
+			"sparse_attn_mask": cache.get("sparse_attn_mask"),
+			"topk_mask_value": cache.get("topk_mask_value"),
+			"update_semantics": cache.get("update_semantics"),
+			"topk_index_helpers": cache.get("topk_index_helpers"),
+			"semantics_source_helpers": (cache.get("semantics", {}) if isinstance(cache.get("semantics", {}), dict) else {}).get("source_helpers", {}),
+		},
+		"checkpoint_index": {
+			"weight_map_num_tensors": checkpoint_index.get("weight_map_num_tensors"),
+			"weight_map_keys_sha256": checkpoint_index.get("weight_map_keys_sha256"),
+			"weight_map_layers_keys_sha256": checkpoint_index.get("weight_map_layers_keys_sha256"),
+			"weight_map_mtp_keys_sha256": checkpoint_index.get("weight_map_mtp_keys_sha256"),
+			"weight_map_top_level_keys_sha256": checkpoint_index.get("weight_map_top_level_keys_sha256"),
+		},
+	}
+
+	return {
+		"execution_contract_sha256": sha256_json(exec_subset),
+		"topology_sha256": sha256_json(contract.get("topology", {})),
+		"attention_schedule_sha256": sha256_json(contract.get("attention_schedule", {})),
+		"tensor_key_invariants_sha256": sha256_json(exec_subset.get("tensor_keys", {})),
+		"cache_semantics_sha256": sha256_json(exec_subset.get("cache", {})),
+		"tokenizer_encoding_sha256": sha256_json(
+			{
+				"tokenizer": contract.get("tokenizer", {}),
+				"encoding_constants": contract.get("encoding_constants", {}),
+			}
+		),
+	}
 
 
 
@@ -149,7 +262,7 @@ def build_ds4_mtp_sidecar_contract() -> dict:
 		"reference_payload_samples": parse_ds4_mtp_sidecar_payload_samples_fingerprint(MTP_SIDECAR_REFERENCE_JSON),
 	}
 
-def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
+def build_weight_key_prefix_fingerprints(weight_keys: list[str], sample_n: int = 5) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
 	for k in weight_keys:
 		prefix = k.split(".", 1)[0]
@@ -158,13 +271,33 @@ def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	out: dict[str, dict] = {}
 	for prefix in sorted(prefix_to_keys.keys()):
 		keys = sorted(prefix_to_keys[prefix])
+		first_sample: Optional[list[str]] = None
+		last_sample: Optional[list[str]] = None
+		try:
+			n = int(sample_n)
+		except Exception:
+			n = 0
+		if n > 0 and len(keys) > 0:
+			first_sample = list(keys[:n])
+			last_sample = list(keys[-n:])
 		out[prefix] = {
 			"count": int(len(keys)),
 			"keys_sha256": sha256_lines(keys),
+			"first_keys_sample": first_sample,
+			"last_keys_sample": last_sample,
 		}
 	return out
 
 def build_oracle_contract() -> dict:
+	prompts_default_topk = None
+	prompts_path = FIX / "oracle" / "prompts.json"
+	try:
+		prompts = load_json(prompts_path)
+		default_topk = prompts.get("default_topk")
+		if isinstance(default_topk, int):
+			prompts_default_topk = int(default_topk)
+	except Exception:
+		prompts_default_topk = None
 	return {
 		"encoding_oracle": {
 			"required": True,
@@ -180,6 +313,7 @@ def build_oracle_contract() -> dict:
 			"output_fixture": "oracle/logits_oracle.json",
 			"acceptance": {
 				"requires_prefill_and_decode": True,
+				"topk_k": prompts_default_topk,
 				"topk_ids_exact": True,
 				"logits_tolerance_note": "Tolerance depends on quantization/kernels; see docs/model-contract.md.",
 			},
@@ -191,6 +325,7 @@ def build_oracle_contract() -> dict:
 			"generator_hint": "scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp",
 			"acceptance": {
 				"requires_mtp_trace": True,
+				"topk_k": prompts_default_topk,
 				"topk_ids_exact": True,
 				"logits_tolerance_note": "MTP is a separate execution path; validate draft logits against the upstream oracle before trusting speculative decoding.",
 			},
@@ -575,6 +710,73 @@ def parse_tokenizer_json_summary(tokenizer_json: Path, expected_vocab_size: int)
 			"decoder": summarize_tok_component(tok.get("decoder")),
 		}
 	}
+
+def parse_tokenizer_added_token_ids(tokenizer_json: Path) -> Optional[dict[str, int]]:
+	if not tokenizer_json.exists():
+		return None
+
+	try:
+		tok = load_json(tokenizer_json)
+	except Exception:
+		return None
+
+	added_tokens = tok.get("added_tokens") if isinstance(tok, dict) else None
+	if not isinstance(added_tokens, list):
+		return None
+
+	out: dict[str, int] = {}
+	for t in added_tokens:
+		if not isinstance(t, dict):
+			continue
+		content = t.get("content", None)
+		tid = t.get("id", None)
+		if not isinstance(content, str) or not isinstance(tid, int):
+			continue
+		out[content] = int(tid)
+	return out
+
+def build_encoding_token_ids(tokenizer_json: Path, encoding_constants: object) -> Optional[dict]:
+	if not isinstance(encoding_constants, dict):
+		return None
+
+	ids = parse_tokenizer_added_token_ids(tokenizer_json)
+	if not isinstance(ids, dict) or not ids:
+		return None
+
+	def tok_id(token: object) -> Optional[int]:
+		if not isinstance(token, str):
+			return None
+		val = ids.get(token, None)
+		if not isinstance(val, int):
+			return None
+		return int(val)
+
+	out: dict[str, object] = {
+		"reference_source": f"{repo_relpath(tokenizer_json)}:added_tokens",
+	}
+
+	for k in (
+		"bos_token",
+		"eos_token",
+		"user_sp_token",
+		"assistant_sp_token",
+		"latest_reminder_sp_token",
+		"thinking_start_token",
+		"thinking_end_token",
+		"dsml_token",
+	):
+		out[k] = tok_id(encoding_constants.get(k))
+
+	ds_task = encoding_constants.get("ds_task_sp_tokens", None)
+	if isinstance(ds_task, dict):
+		out_task: dict[str, object] = {}
+		for name in sorted(ds_task.keys()):
+			out_task[str(name)] = tok_id(ds_task.get(name))
+		out["ds_task_sp_tokens"] = out_task
+	else:
+		out["ds_task_sp_tokens"] = None
+
+	return out
 
 
 def layer_type_from_ratio(ratio: int) -> str:
@@ -1182,11 +1384,13 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 	mtp_expected_tensor_key_count_per_layer = (
 		expected_expert_key_count_per_layer + len(required_layer_suffixes) + len(required_mtp_additional_suffixes) + 1
 	)
+	mtp_required_nonexpert_keys_by_layer_id: dict[str, list[str]] = {}
 	mtp_key_count_by_layer_id: dict[str, int] = {}
 	mtp_expected_key_count_by_layer_id_ok: dict[str, bool] = {}
 	for mtp_id in mtp_layer_ids:
 		prefix = f"mtp.{mtp_id}."
 		c = sum(1 for k in weight_keys if k.startswith(prefix))
+		mtp_required_nonexpert_keys_by_layer_id[str(mtp_id)] = [prefix + str(s) for s in mtp_required_nonexpert_suffixes]
 		mtp_key_count_by_layer_id[str(mtp_id)] = int(c)
 		mtp_expected_key_count_by_layer_id_ok[str(mtp_id)] = (int(c) == int(mtp_expected_tensor_key_count_per_layer))
 
@@ -1198,6 +1402,31 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"head.weight",
 	]
 
+	tensor_key_templates = {
+		"reference_source": "scripts/model_contract_build_deepseek_v4_flash_contract.py:build_tensor_key_summary (templates derived from required suffix sets)",
+		"placeholders": {
+			"trunk_layer_id": "{layer_id}",
+			"mtp_layer_id": "{mtp_layer_id}",
+			"expert_id": "{eid}",
+		},
+		"layers": {
+			"required_top_level": list(required_top_level),
+			"required_nonexpert": [f"layers.{{layer_id}}.{s}" for s in required_layer_suffixes],
+			"required_compress_ratio_nonzero": [f"layers.{{layer_id}}.{s}" for s in required_layer_suffixes_compress_ratio_nonzero],
+			"required_compress_ratio_4": [f"layers.{{layer_id}}.{s}" for s in required_layer_suffixes_compress_ratio_4],
+			"gate_tid2eid": f"layers.{{layer_id}}.{hash_gate_tensor_key_suffix}",
+			"gate_bias": f"layers.{{layer_id}}.{score_gate_tensor_key_suffix}",
+			"expert_tensors": [f"layers.{{layer_id}}.{t}" for t in expert_tensor_key_templates],
+		},
+		"mtp": {
+			"required_nonexpert": [f"mtp.{{mtp_layer_id}}.{s}" for s in mtp_required_nonexpert_suffixes],
+			"required_additional": [f"mtp.{{mtp_layer_id}}.{s}" for s in required_mtp_additional_suffixes],
+			"gate_bias": f"mtp.{{mtp_layer_id}}.{mtp_score_gate_tensor_key_suffix}",
+			"expert_tensors": [f"mtp.{{mtp_layer_id}}.{t}" for t in expert_tensor_key_templates],
+			"forbidden_suffixes": list(mtp_forbidden_key_suffixes),
+		},
+	}
+
 	return {
 		"tensor_key_count": len(weight_keys),
 		"namespaces": sorted(top.keys()),
@@ -1206,6 +1435,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"mtp0": {
 			"present": mtp0_key_count > 0,
 			"tensor_key_count": mtp0_key_count,
+			"required_nonexpert_keys": mtp_required_nonexpert_keys_by_layer_id.get("0", []) if mtp0_key_count > 0 else [],
 		},
 		"mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
 		"mtp_embed_present": mtp_embed_present,
@@ -1215,6 +1445,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 			"tid2eid_layer_ids": layer_ids_matching("ffn.gate.tid2eid"),
 			"gate_bias_layer_ids": layer_ids_matching("ffn.gate.bias"),
 		},
+		"tensor_key_templates": tensor_key_templates,
 		"expected_expert_key_count_per_layer": expected_expert_key_count_per_layer,
 		"required_top_level": required_top_level,
 		"required_layer_suffixes": required_layer_suffixes,
@@ -1234,6 +1465,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		},
 		"mtp_tensor_key_count_by_layer_id": mtp_key_count_by_layer_id,
 		"mtp_expected_tensor_key_count_by_layer_id_ok": mtp_expected_key_count_by_layer_id_ok,
+		"mtp_required_nonexpert_keys_by_layer_id": mtp_required_nonexpert_keys_by_layer_id,
 		"mtp_forbidden_key_suffixes": mtp_forbidden_key_suffixes,
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
@@ -1296,7 +1528,13 @@ def augment_tensor_key_summary_with_trunk_layer_expectations(
 		key = str(i)
 		ok_by_layer_id[key] = (int(actual_counts[i]) == int(expected_count_by_layer_id[key]))
 
+	required_keys_by_layer_id: dict[str, list[str]] = {}
+	for i in range(n_layers):
+		prefix = f"layers.{i}."
+		required_keys_by_layer_id[str(i)] = [prefix + str(s) for s in required_by_layer_id[str(i)]]
+
 	tensor_keys["layer_required_nonexpert_suffixes_by_layer_id"] = required_by_layer_id
+	tensor_keys["layer_required_nonexpert_keys_by_layer_id"] = required_keys_by_layer_id
 	tensor_keys["layer_expected_tensor_key_count_by_layer_id"] = expected_count_by_layer_id
 	tensor_keys["layer_tensor_key_count_by_layer_id"] = actual_by_layer_id
 	tensor_keys["layer_expected_tensor_key_count_by_layer_id_ok"] = ok_by_layer_id
@@ -1363,6 +1601,20 @@ def build_compat_mappings() -> dict:
 		},
 		{"concept": "route_scale", "transformers_key": "routed_scaling_factor", "inference_key": "route_scale", "canonical_path": "moe.route_scale"},
 		{"concept": "scoring_func", "transformers_key": "scoring_func", "inference_key": "score_func", "canonical_path": "moe.scoring_func"},
+		{
+			"concept": "topk_method",
+			"transformers_key": "topk_method",
+			"inference_key": None,
+			"canonical_path": "moe.topk_method",
+			"note": "Transformers-only MoE routing knob (e.g. noaux_tc); the pinned reference inference/model.py does not consume this field.",
+		},
+		{
+			"concept": "norm_topk_prob",
+			"transformers_key": "norm_topk_prob",
+			"inference_key": None,
+			"canonical_path": "moe.norm_topk_prob",
+			"note": "Transformers-only MoE knob controlling top-k probability normalization; recorded to interpret external runtimes/configs without guessing.",
+		},
 		{"concept": "num_nextn_predict_layers", "transformers_key": "num_nextn_predict_layers", "inference_key": None, "canonical_path": "mtp.n_mtp_layers"},
 		{"concept": "rope_theta", "transformers_key": "rope_theta", "inference_key": "rope_theta", "canonical_path": "yarn_rope.rope_theta"},
 		{"concept": "compress_rope_theta", "transformers_key": "compress_rope_theta", "inference_key": "compress_rope_theta", "canonical_path": "yarn_rope.compress_rope_theta"},
@@ -1426,6 +1678,7 @@ def build_contract() -> dict:
 	moe_hash_sem = parse_inference_moe_hash_routing(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	mtp_sem = parse_inference_mtp_semantics(INFERENCE_MODEL_PY) if INFERENCE_MODEL_PY.exists() else {}
 	enc = parse_encoding_constants(ENCODING_PY)
+	encoding_token_ids = build_encoding_token_ids(FIX / "tokenizer.json", enc.get("encoding_constants") if isinstance(enc, dict) else None)
 
 	upstream_commit = (FIX / "upstream_commit.txt").read_text(encoding="utf-8").strip()
 	compress_ratios = list(cfg["compress_ratios"])
@@ -1462,6 +1715,27 @@ def build_contract() -> dict:
 	mtp_prefix_fp = weight_map_prefix_fingerprints.get("mtp", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	layers_prefix_fp = weight_map_prefix_fingerprints.get("layers", {}) if isinstance(weight_map_prefix_fingerprints, dict) else {}
 	top_level_tensor_key_count = sum(int(v.get("count", 0)) for k, v in weight_map_prefix_fingerprints.items() if k not in ("layers", "mtp") and isinstance(v, dict))
+
+	mtp_weight_keys = [k for k in weight_keys if k.startswith("mtp.")]
+	mtp_layer_ids_present: list[int] = []
+	mtp_prefixes_present: list[str] = []
+	if mtp_weight_keys:
+		layer_ids: set[int] = set()
+		prefixes: set[str] = set()
+		for k in mtp_weight_keys:
+			parts = k.split(".", 2)
+			if len(parts) >= 2:
+				try:
+					layer_id = int(parts[1])
+					layer_ids.add(layer_id)
+					prefixes.add(f"mtp.{layer_id}.")
+				except ValueError:
+					pass
+		mtp_layer_ids_present = sorted(layer_ids)
+		mtp_prefixes_present = sorted(prefixes)
+	mtp_layer_ids_expected = list(range(int(n_mtp_layers)))
+	mtp_prefixes_expected = [f"mtp.{i}." for i in mtp_layer_ids_expected]
+	mtp_official_namespace_complete = (mtp_layer_ids_present == mtp_layer_ids_expected and mtp_prefixes_present == mtp_prefixes_expected)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1514,13 +1788,20 @@ def build_contract() -> dict:
 			fixture_sha[rel] = sha256_file(p)
 
 	mtp_sidecar = build_ds4_mtp_sidecar_contract()
+	sparse_attn_mask = build_sparse_attn_mask_contract(FIX / "inference" / "kernel.py")
+	requested_hf_rev = "main"
+	pinned_hf_rev = requested_hf_rev
+	if isinstance(upstream_commit, str) and len(upstream_commit) == 40:
+		pinned_hf_rev = upstream_commit
 
 	contract = {
 		"format_version": 1,
 		"model": "deepseek_v4_flash",
 		"upstream": {
 			"hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
-			"hf_revision": "main",
+			"hf_revision": pinned_hf_rev,
+			"hf_revision_requested": requested_hf_rev,
+			"hf_revision_pinned": pinned_hf_rev,
 			"x_repo_commit": upstream_commit,
 			"fixtures_sha256": fixture_sha,
 			"fixtures": {
@@ -1574,13 +1855,18 @@ def build_contract() -> dict:
 				},
 			},
 		},
-		"attention_schedule": {
-			"compress_ratios": [int(r) for r in compress_ratios],
-			"main_layer_types": layer_types,
-			"main_layer_ids_by_type": layer_ids_by_type,
-			"main_layer_ids_by_compress_ratio": layer_ids_by_compress_ratio,
-			"transformers_main_layer_types": transformers_layer_types,
-			"transformers_layer_types": transformers_layer_types_full,
+			"attention_schedule": {
+				"compress_ratios": [int(r) for r in compress_ratios],
+				"main_compress_ratios": [int(r) for r in compress_ratios[:n_layers]],
+				"main_layer_types": layer_types,
+				"main_layer_type_by_layer_id": {str(i): str(layer_types[i]) for i in range(n_layers)},
+				"main_compress_ratio_by_layer_id": {str(i): int(compress_ratios[i]) for i in range(n_layers)},
+				"layer_type_by_layer_id": {str(i): layer_type_from_ratio(int(compress_ratios[i])) for i in range(n_layers + len(mtp_ratios))},
+				"compress_ratio_by_layer_id": {str(i): int(compress_ratios[i]) for i in range(n_layers + len(mtp_ratios))},
+				"main_layer_ids_by_type": layer_ids_by_type,
+				"main_layer_ids_by_compress_ratio": layer_ids_by_compress_ratio,
+				"transformers_main_layer_types": transformers_layer_types,
+				"transformers_layer_types": transformers_layer_types_full,
 			"transformers_compress_rates": {
 				"compressed_sparse_attention": 4,
 				"heavily_compressed_attention": 128,
@@ -1601,6 +1887,12 @@ def build_contract() -> dict:
 				"update_semantics": sem.get("cache_update_semantics", {}) if isinstance(sem, dict) else {},
 				"topk_index_helpers": sem.get("cache_topk_index_helpers", {}) if isinstance(sem, dict) else {},
 				"semantics": {
+					"reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Attention.forward; get_window_topk_idxs; get_compress_topk_idxs)",
+					"kv_layout": "kv_cache[:,:window_size] is the sliding ring; kv_cache[:,window_size:] is the compressed segment (size max_seq_len//compress_ratio when compress_ratio!=0).",
+					"sparse_topk_rule": "topk_idxs = window_topk_idxs (+ compress_topk_idxs when compress_ratio!=0); indices are int32; idx==-1 means masked slot (score=-inf, kv=0).",
+					"sliding_summary": "Sliding-only layers keep only the window ring buffer. Prefill writes the last window_size KV vectors (wrapping if seqlen>window_size); decode writes kv_cache[:bsz, start_pos%window_size]=kv.squeeze(1).",
+					"csa_summary": "CSA layers (compress_ratio==4) add a learned Indexer: window indices plus Indexer-derived compressed indices (offset=seqlen in prefill, offset=window_size in decode). The attention compressor writes compressed KV into kv_cache[:,window_size:] at index start_pos//4 on compression steps ((start_pos+1)%4==0).",
+					"hca_summary": "HCA layers (compress_ratio==128) select compressed indices via get_compress_topk_idxs (no Indexer). The attention compressor writes compressed KV into kv_cache[:,window_size:] at index start_pos//128 on compression steps ((start_pos+1)%128==0).",
 					"source_helpers": sem.get("cache_source_helpers", {}) if isinstance(sem, dict) else {},
 				},
 				"compression_semantics": {
@@ -1631,6 +1923,7 @@ def build_contract() -> dict:
 			},
 			"topk_mask_value": -1,
 			"sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
+			"sparse_attn_mask": sparse_attn_mask,
 			"prefill": {
 				"compressed_index_offset": "seqlen",
 				"window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)",
@@ -1649,6 +1942,8 @@ def build_contract() -> dict:
 			"moe_inter_dim": int(cfg["moe_intermediate_size"]),
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
+			"topk_method": cfg.get("topk_method", None),
+			"norm_topk_prob": cfg.get("norm_topk_prob", None),
 			"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"score_layer_ids": moe_score_layer_ids,
@@ -1666,13 +1961,28 @@ def build_contract() -> dict:
 					"mtp": {
 						"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 						"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
-						"compress_ratios": [int(r) for r in mtp_ratios],
-						"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-						"namespace_prefix": "mtp.{j}.",
-						"checkpoint_key_fingerprint": {
-						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
-						"tensor_key_count": mtp_prefix_fp.get("count", None),
-						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					"compress_ratios": [int(r) for r in mtp_ratios],
+					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+					"namespace_prefix": "mtp.{j}.",
+					"namespace": {
+						"expected_layer_ids": mtp_layer_ids_expected,
+						"expected_prefixes": mtp_prefixes_expected,
+						"official_present_layer_ids": mtp_layer_ids_present,
+						"official_present_prefixes": mtp_prefixes_present,
+						"official_complete": bool(mtp_official_namespace_complete),
+						"note": "Expected mtp.* tensor namespace layout derived from config.json num_nextn_predict_layers and validated against the official checkpoint index.",
+					},
+					"checkpoint_key_fingerprint": {
+					"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
+					"tensor_key_count": mtp_prefix_fp.get("count", None),
+					"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+				},
+					"checkpoint_key_examples": {
+						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
+						"layer_ids": mtp_layer_ids_present,
+						"prefixes": mtp_prefixes_present,
+						"first_keys_sample": list(mtp_weight_keys[:10]) if mtp_weight_keys else None,
+						"last_keys_sample": list(mtp_weight_keys[-10:]) if mtp_weight_keys else None,
 					},
 					"semantics": mtp_sem,
 						"trust_gates": {
@@ -1714,6 +2024,7 @@ def build_contract() -> dict:
 					"eos_token_id": int(cfg["eos_token_id"]),
 					"pad_token_is_eos": True,
 					"encoding_oracle_dir": "encoding/tests",
+					"encoding_token_ids": encoding_token_ids,
 					**tok_json_sum,
 				},
 			"quantization": {
@@ -1748,6 +2059,8 @@ def build_contract() -> dict:
 				"tensor_keys": tensor_keys,
 				"checkpoint_index": {
 					"weight_map_num_tensors": int(len(weight_keys)),
+					"weight_map_layers_tensor_key_count": int(layers_prefix_fp.get("count", 0)) if isinstance(layers_prefix_fp, dict) else None,
+					"weight_map_mtp_tensor_key_count": int(mtp_prefix_fp.get("count", 0)) if isinstance(mtp_prefix_fp, dict) else None,
 					"weight_map_keys_sha256": weight_map_keys_sha256,
 					"weight_map_top_level_keys_sha256": weight_map_top_level_keys_sha256,
 					"weight_map_top_level_tensor_key_count": int(top_level_tensor_key_count),
@@ -1759,6 +2072,7 @@ def build_contract() -> dict:
 					"metadata": idx.get("metadata", {}),
 				},
 		}
+	contract["contract_fingerprints"] = build_contract_fingerprints(contract)
 	return contract
 
 

@@ -6,8 +6,7 @@ usage()
 	cat <<'USAGE'
 usage: centaur_spark12_v73_ring_sim_run.sh <spark0_user@host> [remote_ring_workdir] [local_log]
 
-Runs a Spark0-local Spark1/Spark2 ring simulation by streaming
-`scripts/centaur_spark_ring_sim_spark12_v73.sh` to Spark0.
+Runs a Spark0-local Spark1/Spark2 ring simulation on Spark0.
 
 This is the recommended rehearsal before Spark1/2 hardware exists. It requires:
   - Spark0 has already run the v73 smoke (Centaur extracted + venv present).
@@ -42,7 +41,7 @@ remote_workdir="${2:-}"
 local_log="${3:-}"
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-ring="$root/scripts/centaur_spark_ring_sim_spark12_v73.sh"
+ring="$root/scripts/centaur_spark_ring_sim_v73.sh"
 
 if [ ! -f "$ring" ]; then
 	echo "missing ring sim script: $ring" >&2
@@ -56,6 +55,37 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	fi
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
+
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
+have_copy_tool()
+{
+	if command -v rsync >/dev/null 2>&1; then
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		return 0
+	fi
+	return 1
+}
+
+copy_to_remote()
+{
+	src="$1"
+	dst="$2"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$src" "$dst"
+		return 0
+	fi
+	scp $SSH_OPTS "$src" "$dst"
+}
 
 ssh_preflight()
 {
@@ -71,8 +101,8 @@ ssh_preflight()
 
 smoke_footprint_preflight()
 {
-	remote_root="${CENTAUR_ROOT:-\\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}"
-	remote_venv="${CENTAUR_VENV:-\\$HOME/centaur-smoke/v73/run/venv}"
+	remote_root="${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}"
+	remote_venv="${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}"
 	if ssh $SSH_OPTS "$target" "test -f \"$remote_root/centaur.py\" && test -x \"$remote_venv/bin/python3\""; then
 		echo "preflight: smoke footprint ok: CENTAUR_ROOT=$remote_root CENTAUR_VENV=$remote_venv"
 		return 0
@@ -100,43 +130,78 @@ if [ "$run_id" = "" ]; then
 	run_id="$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 
+node_count="${SPARK_NODE_COUNT:-3}"
+
 ring_workdir="${RING_WORKDIR:-}"
-remote_log="${RING_LOG:-}"
 if [ "$remote_workdir" != "" ]; then
 	ring_workdir="$remote_workdir"
 fi
 if [ "$ring_workdir" = "" ]; then
-	ring_workdir="\\$HOME/centaur-smoke/v73/ring_sim_spark12"
+	ring_workdir="\$HOME/centaur-smoke/v73/ring_sim_spark12"
 fi
+if [ "$remote_workdir" != "" ]; then
+	case "$ring_workdir" in
+		*ring_sim_spark12*|*ring_sim_*|*ring_rsync_*|*ring_node*)
+			;;
+		*centaur-smoke/v73|*centaur-smoke/v73/|~/centaur-smoke/v73|~/centaur-smoke/v73/|\$HOME/centaur-smoke/v73|\$HOME/centaur-smoke/v73/)
+			echo "note: remote_ring_workdir looks like the v73 base dir; using ring_sim_spark12 under it" >&2
+			ring_workdir="$ring_workdir/ring_sim_spark12"
+			;;
+	esac
+fi
+ring_workdir_abs="$(ssh $SSH_OPTS "$target" "mkdir -p $ring_workdir && cd $ring_workdir && pwd -P")"
+remote_log="${RING_LOG:-}"
 if [ "$remote_log" = "" ]; then
-	remote_log="$ring_workdir/run/$run_id/ring_sim.log"
+	remote_log="$ring_workdir_abs/run/$run_id/ring_sim.log"
+else
+	remote_log="$(ssh $SSH_OPTS "$target" "python3 -c 'import os,sys; print(os.path.abspath(os.path.expandvars(os.path.expanduser(sys.argv[1]))))' \"$remote_log\"")"
 fi
 
 echo "== centaur v73 ring sim run (spark12) =="
 echo "spark0: $target"
 echo "ring_run_id: $run_id"
-echo "spark0_ring_workdir: $ring_workdir"
+echo "spark_node_count: $node_count"
+echo "spark0_ring_workdir: $ring_workdir_abs"
 echo "spark0_ring_log: $remote_log"
 if [ "$local_log" != "" ]; then
 	echo "local_log: $local_log"
 fi
 
-ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\\$HOME/centaur-smoke/v73/run/venv}\" && export RING_WORKDIR=\"$ring_workdir\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
+remote_ring_script="$ring_workdir_abs/centaur_spark_ring_sim_v73.sh"
+
+ssh_cmd="export CENTAUR_ROOT=\"${CENTAUR_ROOT:-\$HOME/centaur-smoke/v73/run/centaur_spec_impl_v73}\" && export CENTAUR_VENV=\"${CENTAUR_VENV:-\$HOME/centaur-smoke/v73/run/venv}\" && export SPARK_NODE_COUNT=\"$node_count\" && export RING_WORKDIR=\"$ring_workdir_abs\" && export RING_RUN_ID=\"$run_id\" && export RING_LOG=\"$remote_log\""
 if [ "${NODE_TYPE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export NODE_TYPE=\"${NODE_TYPE}\""
 fi
 if [ "${RING_TRACE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export RING_TRACE=\"${RING_TRACE}\""
 fi
-ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\" && sh -s"
+ssh_cmd="$ssh_cmd && mkdir -p \"$(dirname -- "$remote_log")\""
 
-echo "== run ring sim (streamed) =="
-echo "ssh $SSH_OPTS $target \"$ssh_cmd\" < $ring"
-
-if [ "$local_log" = "" ]; then
-	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$ring"
+if have_copy_tool; then
+	echo "== stage ring script to spark0 =="
+	copy_to_remote "$ring" "$target:$remote_ring_script"
+	ssh $SSH_OPTS "$target" "chmod 0755 \"$remote_ring_script\""
+	echo "== run ring sim (remote) =="
+	if [ "$local_log" = "" ]; then
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh \"$remote_ring_script\""
+	else
+		need_cmd tee
+		need_cmd dirname
+		mkdir -p "$(dirname -- "$local_log")"
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh \"$remote_ring_script\"" 2>&1 | tee "$local_log"
+	fi
 else
-	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$ring" 2>&1 | tee "$local_log"
+	echo "== run ring sim (streamed; no rsync/scp on Mac) =="
+	echo "ssh $SSH_OPTS $target \"$ssh_cmd && sh -s\" < $ring"
+	if [ "$local_log" = "" ]; then
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh -s" < "$ring"
+	else
+		need_cmd tee
+		need_cmd dirname
+		mkdir -p "$(dirname -- "$local_log")"
+		ssh $SSH_OPTS "$target" "$ssh_cmd && sh -s" < "$ring" 2>&1 | tee "$local_log"
+	fi
 fi
 
 echo "== next: fetch artifacts (Mac) =="

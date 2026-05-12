@@ -40,9 +40,34 @@ Recommended (ordered inventory; this example stages three Sparks):
 # optional: add --tcp 29500 --tcp 9090
 ```
 
+Optional: keep the ordered inventory in a file (recommended for repeatable runs):
+
+- `deploy/config/inventory.ds4.spark012.example`
+
+Then:
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 At the end of staging, the helper runs a safe staged env audit to catch common ring mismatches before install:
 
 - `scripts/ops_spark_ring_staged_env_audit.sh` (reads `/tmp/ds4-config/ds4-<instance>.env.example` on each Spark)
+
+Optional (recommended): run staged TP readiness checks after staging (safe; no sudo; uses staged `/tmp/ds4-*` assets):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
+Or run staged readiness via the snapshot helper (safe; adds readiness to the Mac-side mesh+status snapshot):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
 
 Or stage each host individually:
 
@@ -79,6 +104,18 @@ sudo systemctl enable ds4-tp3-strict@spark0.service
 sudo systemctl start  ds4-tp3-strict@spark0.service
 ```
 
+## Optional: Developer Path (`systemd --user`, No Sudo)
+
+If you are doing a non-root bring-up (developer path), install and run the user units (staged under `/tmp/ds4-systemd-user/`) and keep per-instance config under `~/.config/ds4/`:
+
+```bash
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight --preflight tp3
+/tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance spark0 --strict
+systemctl --user enable --now ds4-tp3-strict@spark0.service
+```
+
+See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layout.md`.
+
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`
@@ -87,3 +124,4 @@ sudo systemctl start  ds4-tp3-strict@spark0.service
 - TP=3 network + ports: `docs/ops-spark012-network-ports.md`
 - TP=3 readiness checks: `docs/ops-tp3-readiness.md`
 - Three-node operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
+- Optional Centaur ops hooks: `docs/ops-centaur-operational-hooks.md`

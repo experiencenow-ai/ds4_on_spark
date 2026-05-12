@@ -77,7 +77,7 @@ def _run_summary(task_runs: Sequence[lib.CanonicalRecord]) -> Dict[str, Any]:
             _inc(tag_counts, tag)
         if c.output != "":
             outputs_norm.append(lib.normalize_text(c.output))
-        if len(lib.useful_novelty_flags(c.output, c.prompt)) != 0:
+        if len(lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)) != 0:
             novelty_flagged += 1
 
     count = len(task_runs)
@@ -173,6 +173,9 @@ def _judge_slice_stats(label_counts: Dict[str, int], item_labels: Dict[str, List
         "pair_item_count": len(item_labels),
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
+        "label_entropy_norm": _entropy_norm_bits(label_counts),
+        "label_effective_num": _effective_num(label_counts),
+        "label_hhi": _hhi(label_counts),
         "decided_count_ab": decided,
         "decided_rate_ab": 0.0 if total == 0 else (float(decided) / float(total)),
         "tie_rate": 0.0 if total == 0 else (float(ties) / float(total)),
@@ -569,8 +572,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     family_model_counts: Dict[str, int] = {}
     template_answer_counts: Dict[str, int] = {}
     family_answer_counts: Dict[str, int] = {}
+    template_answer_letter_counts: Dict[str, int] = {}
+    family_answer_letter_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answers: Dict[str, int] = {}
+    answer_letters: Dict[str, int] = {}
     tag_counts: Dict[str, int] = {}
     buffer_ids: Dict[str, int] = {}
     buffer_items: Dict[str, int] = {}
@@ -622,6 +628,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     wall_ms_present = 0
 
     answers_nonempty: List[str] = []
+    answer_letters_nonempty = 0
     answer_source_counts: Dict[str, int] = {}
     answer_task_runs_nonempty = 0
     answer_task_runs_extracted = 0
@@ -676,14 +683,22 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             _inc(task_template_counts, f"{c.task_id}|{c.prompt_template_id}")
         _inc(model_counts, c.model_id)
         _inc(answers, c.answer)
+        letter = lib.answer_letter(c.answer)
+        if letter != "":
+            _inc(answer_letters, letter)
+            answer_letters_nonempty += 1
         if c.prompt_template_id != "" and c.model_id != "":
             _inc(template_model_counts, f"{c.prompt_template_id}|{c.model_id}")
         if c.task_family != "" and c.model_id != "":
             _inc(family_model_counts, f"{c.task_family}|{c.model_id}")
         if c.prompt_template_id != "" and c.answer != "":
             _inc(template_answer_counts, f"{c.prompt_template_id}|{c.answer}")
+        if c.prompt_template_id != "" and letter != "":
+            _inc(template_answer_letter_counts, f"{c.prompt_template_id}|{letter}")
         if c.task_family != "" and c.answer != "":
             _inc(family_answer_counts, f"{c.task_family}|{c.answer}")
+        if c.task_family != "" and letter != "":
+            _inc(family_answer_letter_counts, f"{c.task_family}|{letter}")
         if c.answer != "":
             answers_nonempty.append(c.answer)
             answer_task_runs_nonempty += 1
@@ -727,7 +742,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
                 total_tok = float(itok + otok)
                 total_tok_per_s.append((total_tok * 1000.0) / float(wms))
 
-        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        flags = lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)
         if len(flags) != 0:
             novelty_flagged += 1
             if tmpl != "":
@@ -1072,6 +1087,11 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "extracted_task_run_rate": 0.0 if len(task_runs) == 0 else (float(answer_task_runs_extracted) / float(len(task_runs))),
         "extracted_rate_among_nonempty": 0.0 if answer_task_runs_nonempty == 0 else (float(answer_task_runs_extracted) / float(answer_task_runs_nonempty)),
         "source_counts": dict(sorted(answer_source_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "letter": dict(_div_stats(answer_letters), **{
+            "nonempty_task_runs": int(answer_letters_nonempty),
+            "nonempty_task_run_rate": 0.0 if len(task_runs) == 0 else (float(answer_letters_nonempty) / float(len(task_runs))),
+            "hhi": _hhi(answer_letters),
+        }),
     })
     diversity["answer"] = ans
     diversity["conditional"] = {
@@ -1087,6 +1107,10 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "prompt_template_id_given_answer": _pair_conditional_stats(_swap_pair_counts(template_answer_counts)),
         "answer_given_task_family": _pair_conditional_stats(family_answer_counts),
         "task_family_given_answer": _pair_conditional_stats(_swap_pair_counts(family_answer_counts)),
+        "answer_letter_given_prompt_template_id": _pair_conditional_stats(template_answer_letter_counts),
+        "prompt_template_id_given_answer_letter": _pair_conditional_stats(_swap_pair_counts(template_answer_letter_counts)),
+        "answer_letter_given_task_family": _pair_conditional_stats(family_answer_letter_counts),
+        "task_family_given_answer_letter": _pair_conditional_stats(_swap_pair_counts(family_answer_letter_counts)),
     }
 
     word_counts: Dict[str, int] = {}
@@ -1293,6 +1317,9 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
         "label_entropy_bits": lib.shannon_entropy(label_counts),
+        "label_entropy_norm": _entropy_norm_bits(label_counts),
+        "label_effective_num": _effective_num(label_counts),
+        "label_hhi": _hhi(label_counts),
         "pair_item_count": len(item_labels),
         "item_disagreement_top": item_disagreement_top,
         "disagreement_rate": disagreement_rate,
@@ -1475,6 +1502,31 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `effective_num`: {js.get('effective_num'):.6f}")
         top = js.get("top") or []
         parts.append(_md_list_top(top))
+        if field == "answer":
+            for key in ("nonempty_task_runs", "nonempty_task_run_rate", "extracted_task_runs", "extracted_task_run_rate", "extracted_rate_among_nonempty"):
+                v = js.get(key)
+                if isinstance(v, float):
+                    parts.append(f"- `{key}`: {v:.6f}")
+                else:
+                    parts.append(f"- `{key}`: {v}")
+            src = js.get("source_counts")
+            if isinstance(src, dict) and len(src) != 0:
+                parts.append(f"- `source_counts`: {src}")
+            letter = js.get("letter")
+            if isinstance(letter, dict) and len(letter) != 0:
+                parts.append("\n#### answer.letter\n")
+                parts.append(f"- `unique`: {int(letter.get('unique', 0) or 0)}")
+                parts.append(f"- `entropy_bits`: {float(letter.get('entropy_bits', 0.0) or 0.0):.6f}")
+                parts.append(f"- `entropy_norm`: {float(letter.get('entropy_norm', 0.0) or 0.0):.6f}")
+                parts.append(f"- `effective_num`: {float(letter.get('effective_num', 0.0) or 0.0):.6f}")
+                parts.append(f"- `hhi`: {float(letter.get('hhi', 0.0) or 0.0):.6f}")
+                for k in ("nonempty_task_runs", "nonempty_task_run_rate"):
+                    v = letter.get(k)
+                    if isinstance(v, float):
+                        parts.append(f"- `{k}`: {v:.6f}")
+                    else:
+                        parts.append(f"- `{k}`: {v}")
+                parts.append(_md_list_top(letter.get("top", [])))
     cond = report.diversity.get("conditional") or {}
     if isinstance(cond, dict) and len(cond) != 0:
         parts.append("\n### conditional\n")
@@ -1598,6 +1650,9 @@ def to_markdown(report: MetricsReport) -> str:
         parts.append(f"- `{js.get('buffer_item_id')}`: dup_rate={float(js.get('dup_rate', 0.0)):.6f} count={int(js.get('count', 0))} unique={int(js.get('unique', 0))}")
     parts.append("\n## Judge\n")
     parts.append(f"- `label_entropy_bits`: {report.judge.get('label_entropy_bits'):.6f}")
+    parts.append(f"- `label_entropy_norm`: {float(report.judge.get('label_entropy_norm', 0.0) or 0.0):.6f}")
+    parts.append(f"- `label_effective_num`: {float(report.judge.get('label_effective_num', 0.0) or 0.0):.6f}")
+    parts.append(f"- `label_hhi`: {float(report.judge.get('label_hhi', 0.0) or 0.0):.6f}")
     parts.append(f"- `pair_item_count`: {report.judge.get('pair_item_count')}")
     parts.append(f"- `disagreement_rate`: {report.judge.get('disagreement_rate'):.6f}")
     parts.append(f"- `disagreement_rate_decided_ab`: {report.judge.get('disagreement_rate_decided_ab'):.6f}")

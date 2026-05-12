@@ -16,7 +16,7 @@ Environment:
   STAGE_SKIP_PREFLIGHT    Set to 1 to skip SSH preflight checks
 
 Example:
-  ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73
+  ./scripts/centaur_spark12_v73_stage.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73"
 USAGE
 }
 

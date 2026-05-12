@@ -4,8 +4,9 @@ Goal: for DeepSeek V4 Flash-family runs on Spark0, identify which batching level
 
 Status note: this document and the companion sweep scripts were rescued from
 the superseded baseline-runtime PR #27 as standalone artifacts. The baseline
-wrapper now supports `LLAMA_SERVER_THROUGHPUT_SWEEP=1` and will fetch a tarball
-of the sweep output into the local report directory.
+wrapper supports `LLAMA_SERVER_THROUGHPUT_SWEEP=1`, fetches a tarball of the
+sweep output into the local report directory, and (when `MODEL_RUNS_CSV` is set)
+appends a best-decode summary row for quality/speed scoring.
 
 This complements the prompt-size sweep (`scripts/benchmark_llamacpp_server_sweep.py`) by treating these knobs as **first-class** experiment variables:
 
@@ -17,7 +18,7 @@ This complements the prompt-size sweep (`scripts/benchmark_llamacpp_server_sweep
 
 This sweep is expensive: it starts resident `llama-server` instances and may reload the model for each `(parallel,batch,ubatch)` combination. Do not automate large runs without an explicit human-approved plan.
 
-## Current Spark0 Snapshot (2026-05-11)
+## Current Spark0 Snapshot (2026-05-12)
 
 These numbers summarize the current **single-Spark Spark0** DeepSeek V4 Flash IQ2XXS llama.cpp-fork baseline status after the Flash-Attention reservation fix and the initial multi-slot reservation fixes.
 
@@ -29,6 +30,7 @@ These numbers summarize the current **single-Spark Spark0** DeepSeek V4 Flash IQ
 - Prefill throughput probe (measured with `n_predict=1`): ~220–286 prompt tok/s for ~64–384 word prompts.
 - Larger batches did not help: `-b 4096 -ub 1024` became runnable after the `n_ctx_seq` reserve caps, but did not improve throughput.
 - HTTP overhead is not the likely bottleneck: a high-concurrency server probe (`--parallel 128 -b 1024 -ub 64`, 16-word prompt, `n_predict=8`) degraded to ~9.6 aggregate output tok/s, while direct `llama-batched-bench` `-npl 1,8,32,64,128` plateaus at ~13.5–14.2 aggregate decode tok/s.
+- Route probe signal: a `MUL_MAT_ID` sampler (5000 calls) observed routed MoE shapes up to `dst_ne[2]=38`, where larger shapes were routed through `mmq` while smaller shapes used `mmvq`; this suggests some MoE grouping exists but does not yet yield a throughput step-change.
 
 Decision gate reminder: do **not** recommend buying additional Sparks for this llama.cpp path until single-Spark proof shows ~50–100 aggregate output tok/s, or an alternative runtime path (vLLM / expert-parallel / MTP / DFlash) shows stable scaling with quality-adjusted scoring.
 
@@ -55,6 +57,18 @@ wrapper hook is wired, the artifacts directory contains:
   - `fattn_reservation_probe.json` (best-effort; see `docs/baseline-fattn-reservation.md`)
   - `multislot_reservation_probe.json` (best-effort; see `docs/baseline-multislot-parallel2.md`)
   - `metrics_start.prom` / `metrics_end.prom` plus `metrics_delta.json` / `metrics_delta.md` when `/metrics` is enabled and scraping is requested
+
+When `MODEL_RUNS_CSV` is set and you run the sweep via `scripts/run_baseline_existing_runtime.sh`, the wrapper also appends one extra CSV row capturing the **best decode** configuration:
+
+- `decode_tps`: `agg_generated_tok_s` from `throughput_best_decode.json`
+- `prefill_tps`: `agg_prompt_tok_s` from `throughput_best_decode.json`
+- `total_wall_s`: `wave_wall_s`
+- `output_tokens`: `agg_generated_tokens`
+
+Defaults:
+
+- CSV scope: `llama_server_throughput` (override with `LLAMA_SERVER_THROUGHPUT_SCOPE`)
+- CSV model label: `MODEL_SOURCE` (override with `LLAMA_SERVER_MODEL_ID`)
 
 ## Canonical Run Shape (Mac → Spark0)
 
@@ -99,7 +113,24 @@ If you want a quick starting grid without typing `*_BATCH_VALUES` / `*_UBATCH_VA
 - `LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET=quick` (small grid)
 - `LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET=highbatch` (the documented “high batching” grid)
 
-The preset only fills in values you did not explicitly set (so you can still override `*_BATCH_VALUES` / `*_UBATCH_VALUES` by providing them directly).
+Preset details (only fills values you did not explicitly set):
+
+- `quick`:
+  - `PROMPT_WORDS=16`
+  - `CONCURRENCY=8`
+  - `PARALLEL_VALUES=8`
+  - `BATCH_VALUES=2048`
+  - `UBATCH_VALUES=512`
+  - `N_PREDICT=64`
+- `highbatch`:
+  - `PROMPT_WORDS=4096`
+  - `CONCURRENCY=1 2 4 8`
+  - `PARALLEL_VALUES=1 2 8` (includes the current stable `--parallel 8` point)
+  - `BATCH_VALUES=512 1024 2048`
+  - `UBATCH_VALUES=128 256 512`
+  - `N_PREDICT=64`
+
+The sweep writes `preset` and `preset_applied` into `throughput_sweep.md` metadata so commit-ready reports preserve which defaults came from the preset vs explicit env.
 
 ## Interpreting Results
 

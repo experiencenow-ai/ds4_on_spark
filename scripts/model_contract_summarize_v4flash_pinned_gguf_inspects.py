@@ -14,9 +14,9 @@ DEFAULT_OUT = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash" / "pinn
 PINNED_DOCS = [
 	"gguf-inspect-preyazz-6c6d74c-q4-k-m.json",
 	"gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json",
-	"gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json",
-	"gguf-inspect-antirez-c566ab6-mtp-sidecar.json",
-	"gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json",
+	"gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json",
+	"gguf-inspect-antirez-3274cdc-mtp-sidecar.json",
+	"gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json",
 ]
 
 
@@ -117,6 +117,8 @@ def summarize_mtp_trust(mt: Any) -> Optional[dict[str, Any]]:
 		"status": _get_str(mt, "status"),
 		"trusted": _get_bool(mt, "trusted"),
 		"reasons_sample": list(reasons)[:10],
+		"expected_mtp_keys_sha256": _get_str(mt, "expected_mtp_keys_sha256"),
+		"mtp_keys_sha256_match_official": _get_bool(mt, "mtp_keys_sha256_match_official"),
 	}
 
 
@@ -130,6 +132,8 @@ def summarize_mtp_preservation(mp: Any) -> Optional[dict[str, Any]]:
 		"status": _get_str(mp, "status"),
 		"preserves": _get_bool(mp, "preserves"),
 		"reasons_sample": list(reasons)[:10],
+		"expected_mtp_keys_sha256": _get_str(mp, "expected_mtp_keys_sha256"),
+		"mtp_keys_sha256_match_official": _get_bool(mp, "mtp_keys_sha256_match_official"),
 	}
 
 def summarize_ds4_mtp_sidecar_contract(dc: Any) -> Optional[dict[str, Any]]:
@@ -206,6 +210,8 @@ def summarize_combined_doc(doc_obj: dict[str, Any], rel_path: str) -> dict[str, 
 		"mtp_present": _get_bool(combined, "mtp_present"),
 		"mtp_layer_ids": combined.get("mtp_layer_ids"),
 		"mtp_namespace": summarize_mtp_namespace(combined.get("mtp_namespace")),
+		"mtp_tensor_count": _get_int(combined, "mtp_tensor_count"),
+		"mtp_tensor_type_counts": combined.get("mtp_tensor_type_counts"),
 		"mtp_keys_union_sha256": _get_str(combined, "mtp_keys_union_sha256"),
 		"mtp_contract": summarize_mtp_contract(combined.get("mtp_contract")),
 		"mtp_preservation": summarize_mtp_preservation(combined.get("mtp_preservation")),

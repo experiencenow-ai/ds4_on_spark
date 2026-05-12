@@ -28,12 +28,24 @@ The build skeleton avoids heap allocation in core paths. The primary pattern is:
 
 `ds4_ctx_init()` expects an arena memory region supplied by the caller; `ds4_ctx_init_auto()` can optionally allocate a log ring from that arena when `cfg->log_ring_entries > 0`.
 
+For sizing caller-provided static backing storage without duplicating overflow checks, use:
+
+- `ds4_pool_bytes_needed(block_count,block_size,&out_bytes)`
+- `ds4_ring_bytes_needed(elem_count,elem_size,&out_bytes)`
+
+For overflow-checked allocations from arenas without repeating `count*elem_size` math, use:
+
+- `ds4_arena_alloc_n(&arena,count,elem_size,align,&out)` and `ds4_arena_alloc_zero(&arena,size,align,&out)`
+- `ds4_arena_alloc_zero_n(&arena,count,elem_size,align,&out)`
+- `ds4_cuda_arena_alloc_n(&cuda_arena,count,elem_size,align,&out)` and `ds4_cuda_arena_alloc_zero(&cuda_arena,size,align,&out)`
+- `ds4_cuda_arena_alloc_zero_n(&cuda_arena,count,elem_size,align,&out)`
+
 ## Logging
 
 Logging is intentionally minimal and allocation-free:
 
 - `include/ds4/log.h` + `src/ds4_log.c`: global log level + pluggable sink
-- `include/ds4/log_ring.h` + `src/ds4_log_ring.c`: fixed-size ring capture sink
+- `include/ds4/log_ring.h` + `src/ds4_log_ring.c`: fixed-size ring capture sink (drops oldest when full; drop count via `ds4_log_ring_dropped`)
 
 See `docs/build-logging.md`.
 
@@ -66,6 +78,8 @@ See `docs/build-cuda.md`.
 Tests are a single executable (`ds4_tests`) that calls per-module test functions and returns non-zero on failure.
 
 In addition to runtime checks, the test build also compiles a small “header smoke” object library to ensure each public header in `include/ds4/*.h` is self-contained (compiles when included as the only project header in a translation unit).
+
+CTest also includes a build-matrix smoke test (`ds4_build_matrix`) that configures/builds a few CPU-only option combinations to catch accidental option coupling early.
 
 Use the Makefile wrapper on macOS:
 

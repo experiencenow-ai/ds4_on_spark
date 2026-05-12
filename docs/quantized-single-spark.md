@@ -8,7 +8,7 @@ in `docs/quantized-performance-path.md`. A slow or low-quality first token
 stream is useful if it proves the model artifact, runtime, CUDA path,
 tokenizer/chat format, and memory envelope are real.
 
-Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-11.md`.
+Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-12T141651Z-smallest.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-12.md`).
 
 To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
 
@@ -18,13 +18,18 @@ OUT_DIR=/private/tmp/ds4_on_spark_baseline/<ts>-<optional-label>
 python3 scripts/render_quantized_single_spark_report.py "$OUT_DIR" --write "docs/baseline-quantized-single-spark0-YYYY-MM-DD.md"
 ```
 
+If `MODEL_RUNS_CSV` is unset, `scripts/run_quantized_single_spark.sh` defaults it to `$OUT_ROOT/model_runs.csv` so the run emits `model_quality_speed_scored_summary.txt` for later quality/speed comparisons.
+
+Note: when using `MODEL_GGUF_GLOB` auto-selection, `scripts/run_quantized_single_spark.sh` records the selection inputs (`MODEL_GGUF_GLOB`, `MODEL_GGUF_EXCLUDE_EGREP`, `MODEL_GGUF_INCLUDE_EGREP`, `MODEL_GGUF_SELECT`) into the baseline report’s `REMOTE_LLAMA_ENV` block so commit-ready docs preserve how the GGUF was chosen.
+
 ## Definition of Done
 
 - One Spark0 command produces non-empty generated text from a V4 Flash-family
   quantized artifact.
 - The run records exact runtime source, runtime commit, model source, quant,
-  file size, sha256, command line, context length, token count, TTFT, tokens/sec
-  where available, GPU memory snapshot, CPU RSS, stdout, stderr, and exit code.
+  runtime label, file size, sha256, command line, context length, token count,
+  TTFT, tokens/sec where available, GPU memory snapshot, CPU RSS, stdout, stderr,
+  and exit code.
 - The run preserves the baseline-summary key/value block (so `decode_tps`,
   `total_wall_s`, and `output_tokens` are recoverable for later scoring), plus
   the read-only patch probes when enabled (`LLAMA_FATTN_PATCH_PROBE=1`,
@@ -35,6 +40,7 @@ python3 scripts/render_quantized_single_spark_report.py "$OUT_DIR" --write "docs
 - Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
+  - The commit-ready report rendered by `scripts/render_quantized_single_spark_report.py` surfaces the contract-aware fields from `remote_gguf_inspect_stdout.txt`, including (when present): `mtp_keys_sha256`, `mtp_namespace.*`, `mtp_preservation.*`, and `mtp_trust.*`.
 - The report includes `scripts/model_contract_inspect_quantized_artifact.py --json` output for the tested artifact (at minimum: `metadata.general.*`, `tensor_type_counts`, and `mtp_tensor_type_counts` when present).
   - Always record `weight_keys_sha256` (stable fingerprint of the artifact’s tensor key set). When `mtp_present=true`, also record `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
   - When available, also record `tensor_type_profile` (best-effort expert vs dense split for known DeepSeek-V4 GGUF naming), since it captures whether MoE experts appear to be `MXFP4` (Flash-leaning) vs primarily FP8.
@@ -44,7 +50,9 @@ python3 scripts/render_quantized_single_spark_report.py "$OUT_DIR" --write "docs
     - `trunk_contract` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
       - `kind="deepseek-upstream"` checks `layers.{i}.*` (only applies if the artifact preserves upstream tensor names)
       - `kind="llama.cpp"` checks `blk.{i}.*` (compat-only structural signal for DeepSeek4 GGUFs)
+      - When `kind="deepseek-upstream"` and expanded per-layer non-expert key lists are available, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` (helps distinguish “missing non-expert namespace keys” from “missing expert tensors”).
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
+      - When expanded per-layer MTP non-expert key lists are available, `mtp_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample`.
     - `mtp_preservation` (structural “preserves upstream `mtp.0.*`?” status derived from `mtp_namespace` + `mtp_contract`)
     - `mtp_trust` (structural “complete vs incomplete” status derived from the upstream MTP contract + explicit trust gates; still requires a logits oracle before enabling MTP)
     - `topology_contract` (GGUF header metadata vs expected `hidden_size`, `block_count`, head counts, vocab size, and (when present) RoPE `dimension_count` / `freq_base`)
@@ -89,7 +97,7 @@ model, declared license, required runtime fork, and any conversion command.
 ### Staged artifact discovery (no downloads)
 
 If multiple V4 Flash GGUFs are already staged on Spark0, pick the smallest
-credible one (usually `Q2_K`) for the first token-producing run.
+credible one (often `IQ1_M`, otherwise `IQ2XXS`/`Q2_K`) for the first token-producing run.
 
 No-download discovery commands (Mac → Spark0; metadata only):
 
@@ -108,6 +116,7 @@ metadata-only; no downloads), you can omit `MODEL_GGUF` and provide a glob:
 
 ```sh
 MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
+RUNTIME_LABEL='v4flash-external' \
 LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
@@ -124,6 +133,7 @@ the exclude filter:
 ```sh
 MODEL_GGUF_GLOB='/home/spark0/models/ds4/DeepSeek-V4-Flash-*.gguf' \
 MODEL_GGUF_INCLUDE_EGREP='Q2_K|IQ2XXS' \
+RUNTIME_LABEL='v4flash-external' \
 LLAMA_CLI='/abs/path/to/v4-capable/llama-cli' \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
@@ -185,19 +195,25 @@ Interpreting the result:
   - When available, also record `tensor_type_profile` so the report captures the expert-vs-dense quant split (useful for spotting Flash-leaning `MXFP4` experts in “native FP4/FP8” GGUFs).
   - If `topology_contract.checked == true` and `topology_contract.mismatches` is non-empty, treat the artifact as **suspect** (topology mismatch) until a human explains the discrepancy.
 
-Observed metadata-only inspections (2026-05-10):
+Observed metadata-only inspections (2026-05-12):
 
 | Artifact URL (pinned) | `tensor_key_namespace_guess` | `mtp_present` | `url_prefix_bytes` | Recorded probe |
 | --- | --- | --- | --- | --- |
 | `https://huggingface.co/Preyazz/DeepSeek-V4-Flash-GGUF/resolve/6c6d74ce4efd3e1045c15e5823d75e62b6e4ba1d/DeepSeek-V4-Flash-Q4_K_M.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` |
 | `https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` |
-| `https://huggingface.co/antirez/deepseek-v4-gguf/resolve/c566ab6d7c696ddd0c7f124e115228af1a326824/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json` |
+| `https://huggingface.co/antirez/deepseek-v4-gguf/resolve/3274cdc42be178f7384211c7463565dccfc444d7/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf` | `llama.cpp` | `false` | `8388608` | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` |
 
-MTP sidecar example (metadata-only inspection; 2026-05-10):
+MTP sidecar example (metadata-only inspection; 2026-05-12):
 
-- `antirez/deepseek-v4-gguf` `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` @ `c566ab6d7c696ddd0c7f124e115228af1a326824`:
-  - Recorded output: `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json`
+- `antirez/deepseek-v4-gguf` `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` @ `3274cdc42be178f7384211c7463565dccfc444d7`:
+  - Recorded output: `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json`
   - Summary: `mtp_present=true` and `tensor_key_namespace_guess=deepseek-upstream-mtp-only`, but `mtp_contract.complete=false` with `mtp_tensor_count=32` (compact DS4-tuned sidecar, not a full upstream `mtp.0.*` checkpoint).
+
+Trunk + sidecar artifact-set example (metadata-only inspection; 2026-05-12):
+
+- `antirez/deepseek-v4-gguf` trunk + MTP sidecar inspected together:
+  - Recorded output: `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json`
+  - Summary (combined view): `mtp_present=true` and `ds4_mtp_sidecar_complete=true`, but `mtp_contract.complete=false` with `missing_required_count=1568` (sidecar is a compact DS4-tuned 32‑tensor table; it does not preserve the official upstream `mtp.0.*` checkpoint keyset).
 
 To validate a sidecar that is already present on Spark (no downloads; no trunk model load), prefer the dedicated Spark-side contract probe runner:
 
@@ -321,7 +337,11 @@ If it loads and generates, rerun with:
 
 ## Example Baseline Report
 
-- `docs/baseline-quantized-single-spark0-2026-05-11.md` records a Spark0 run that:
+- `docs/baseline-quantized-single-spark0-2026-05-12.md` records a Spark0 run that:
+  - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
+  - captures the read-only patch probes (including `fattn_patch_probe.pad256_found=true`)
+  - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)
+- `docs/baseline-quantized-single-spark0-2026-05-11.md` records an earlier Spark0 run that:
   - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
   - captures `scripts/model_contract_inspect_quantized_artifact.py --json` output (MTP absent)
   - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)

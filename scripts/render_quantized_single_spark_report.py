@@ -94,6 +94,26 @@ def _extract_code_block_after(section_text: str, anchor: str) -> str:
         return _extract_first_code_block(section_text)
     return _extract_first_code_block(section_text[pos:])
 
+def _parse_scored_summary(scored_summary_text: str) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    found = False
+    for raw in scored_summary_text.splitlines():
+        line = raw.strip()
+        if not found:
+            if line.startswith("== scored summary"):
+                found = True
+            continue
+        if line.startswith("== "):
+            break
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        if k:
+            out[k] = v
+    return out
+
 def _parse_quality_metadata(report_md: str) -> Dict[str, str]:
     section = _extract_section(report_md, "Quality Metadata (Local)")
     out: Dict[str, str] = {}
@@ -191,6 +211,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     gguf_inspect_path = out_dir / "remote_gguf_inspect_stdout.txt"
     fattn_probe_path = out_dir / "remote_fattn_patch_probe_stdout.txt"
     multislot_probe_path = out_dir / "remote_multislot_patch_probe_stdout.txt"
+    scored_summary_path = out_dir / "model_quality_speed_scored_summary.txt"
 
     report_md = _read_text(report_md_path)
     remote_llama_stdout = _read_text(remote_llama_stdout_path)
@@ -204,6 +225,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     repo_rev = _parse_repo_rev(report_md)
     summary_kv = _extract_kv_block(remote_llama_stdout, "== baseline summary (approx) ==")
     llama_rev = summary_kv.get("llama_commit", "").strip() or _parse_llama_commit(remote_llama_stdout)
+    runtime_label = summary_kv.get("runtime_label", "").strip() or "unknown"
     model_source = summary_kv.get("model_source", "unknown")
     model_quant = summary_kv.get("model_quant", "unknown")
     model_gguf = summary_kv.get("model_gguf", "") or _inspect_path(_read_json(gguf_inspect_path)) or "unknown"
@@ -220,6 +242,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     inspect = _read_json(gguf_inspect_path)
     quality_kv = _parse_quality_metadata(report_md)
+    scored_kv = _parse_scored_summary(_read_text(scored_summary_path))
     mtp_present = None if not inspect else bool(inspect.get("mtp_present", False))
     arch = None
     file_type = None
@@ -239,8 +262,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     fattn_probe = _read_json(fattn_probe_path)
     multislot_probe = _read_json(multislot_probe_path)
 
-    remote_env_section = _extract_section(report_md, "Remote Env")
-    remote_llama_env_block = _extract_code_block_after(remote_env_section, "Remote llama.cpp env:")
+    # The baseline wrapper prints the remote env blocks as plain text labels followed by
+    # markdown code fences (not under a dedicated "## Remote Env" section).
+    remote_llama_env_block = _extract_code_block_after(report_md, "Remote llama env:")
     spark_probe_block = _extract_first_code_block(_extract_section(report_md, "Spark Probe"))
 
     title_suffix = model_quant if model_quant and model_quant != "unknown" else "V4 Flash"
@@ -274,6 +298,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append(f"- ds4_on_spark commit: `{repo_rev}`")
     lines.append("- Upstream commit(s):")
     lines.append(f"  - llama.cpp fork: `{llama_rev}`")
+    lines.append(f"  - runtime_label: `{runtime_label}`")
     if llama_cli:
         lines.append(f"  - llama_cli: `{llama_cli}`")
     lines.append("")
@@ -287,6 +312,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         lines.append(f"  sha256: {model_sha256}")
     if model_size_bytes:
         lines.append(f"  size_bytes: {model_size_bytes}")
+    if runtime_label and runtime_label != "unknown":
+        lines.append(f"  runtime_label: {runtime_label}")
     lines.append(f"  notes: {model_source} ({model_quant})")
     lines.append("```")
     lines.append("")
@@ -317,21 +344,48 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append(f"- total_tasks: {_na(quality_kv.get('total_tasks'))}")
     lines.append(f"- quality_score: {_na(quality_kv.get('quality_score'))}")
     lines.append("")
+    lines.append("Quality/Speed scoring (from `scripts/model_quality_speed_score.py`, when available):")
+    lines.append("")
+    if scored_kv:
+        lines.append(f"- quality_adjusted_decode_tps: `{_fmt_float(scored_kv.get('quality_adjusted_decode_tps', '')) if scored_kv.get('quality_adjusted_decode_tps') else 'NA'}`")
+        lines.append(f"- correct_task_rate: `{_fmt_float(scored_kv.get('correct_task_rate', '')) if scored_kv.get('correct_task_rate') else 'NA'}`")
+        lines.append(f"- tokens_per_success: `{_fmt_float(scored_kv.get('tokens_per_success', '')) if scored_kv.get('tokens_per_success') else 'NA'}`")
+        lines.append(f"- dominated_by: `{scored_kv.get('dominated_by', '') or 'NA'}`")
+    else:
+        lines.append("- NA (missing `model_quality_speed_scored_summary.txt`; set `MODEL_RUNS_CSV` for the run)")
+    lines.append("")
     lines.append("GGUF contract inspector (metadata-only):")
     lines.append("")
     if inspect:
         wks = inspect.get("weight_keys_sha256")
         if isinstance(wks, str) and wks.strip():
             lines.append(f"- weight_keys_sha256={wks.strip()}")
+        mks = inspect.get("mtp_keys_sha256")
+        if isinstance(mks, str) and mks.strip():
+            lines.append(f"- mtp_keys_sha256={mks.strip()}")
         tns = inspect.get("tensor_key_namespace_guess")
         if isinstance(tns, str) and tns.strip():
             lines.append(f"- tensor_key_namespace_guess={tns.strip()}")
+        ttop = inspect.get("topology_contract")
+        if isinstance(ttop, dict):
+            checked = ttop.get("checked")
+            mismatches = ttop.get("mismatches")
+            mismatch_count = len(mismatches) if isinstance(mismatches, list) else 0
+            if checked is not None:
+                lines.append(f"- topology_contract: checked={checked} mismatch_count={mismatch_count}")
+                if mismatch_count and isinstance(mismatches[0], str) and mismatches[0].strip():
+                    lines.append(f"- topology_contract_first_mismatch={mismatches[0].strip()}")
         tc = inspect.get("trunk_contract")
         if isinstance(tc, dict):
             kind = tc.get("kind")
             complete = tc.get("complete")
             if kind is not None or complete is not None:
                 lines.append(f"- trunk_contract: kind={kind} complete={complete}")
+            ne_used = tc.get("nonexpert_key_lists_used")
+            ne_expected = tc.get("nonexpert_required_expected_count")
+            ne_missing = tc.get("nonexpert_required_missing_count")
+            if ne_expected is not None or ne_missing is not None or ne_used is not None:
+                lines.append(f"- trunk_contract_nonexpert: used={ne_used} missing={ne_missing}/{ne_expected}")
         mc = inspect.get("mtp_contract")
         if isinstance(mc, dict):
             checked = mc.get("checked")
@@ -341,6 +395,36 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if isinstance(reason, str) and reason.strip():
                     extra = f" reason={reason.strip()}"
                 lines.append(f"- mtp_contract: checked={checked}{extra}")
+            ne_used = mc.get("nonexpert_key_lists_used")
+            ne_expected = mc.get("nonexpert_required_expected_count")
+            ne_missing = mc.get("nonexpert_required_missing_count")
+            if ne_expected is not None or ne_missing is not None or ne_used is not None:
+                lines.append(f"- mtp_contract_nonexpert: used={ne_used} missing={ne_missing}/{ne_expected}")
+        mns = inspect.get("mtp_namespace")
+        if isinstance(mns, dict):
+            has_mtp0 = mns.get("has_mtp0")
+            expected_complete = mns.get("expected_complete")
+            present_prefixes = mns.get("present_prefixes")
+            if present_prefixes is None:
+                present_prefixes = []
+            if has_mtp0 is not None or expected_complete is not None or present_prefixes:
+                prefixes = ",".join([str(p) for p in present_prefixes]) if isinstance(present_prefixes, list) else ""
+                lines.append(
+                    f"- mtp_namespace: has_mtp0={has_mtp0} expected_complete={expected_complete} present_prefixes=[{prefixes}]"
+                )
+        mp = inspect.get("mtp_preservation")
+        if isinstance(mp, dict):
+            status = mp.get("status")
+            match_official = mp.get("mtp_keys_sha256_match_official")
+            preserves = mp.get("preserves")
+            if status is not None or match_official is not None or preserves is not None:
+                lines.append(f"- mtp_preservation: status={status} preserves={preserves} mtp_keys_sha256_match_official={match_official}")
+        mt = inspect.get("mtp_trust")
+        if isinstance(mt, dict):
+            status = mt.get("status")
+            trusted = mt.get("trusted")
+            if status is not None or trusted is not None:
+                lines.append(f"- mtp_trust: status={status} trusted={trusted}")
         qc = inspect.get("quantization_contract")
         if isinstance(qc, dict) and qc.get("checked") is not None:
             obs = qc.get("observed", {})
@@ -411,10 +495,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     for k in extra_fattn_keys:
         if k in summary_kv:
             lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
+    reserve_keys = (
+        "sched_reserve_line_count",
+        "sched_reserve_graph_nodes",
+        "sched_reserve_graph_splits",
+        "sched_reserve_took_ms",
+        "sched_reserve_fallback_line_count",
+        "sched_reserve_failure_line_count",
+    )
+    for k in reserve_keys:
+        if k in summary_kv:
+            lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
     if summary_kv.get("fattn_seen_disabled", ""):
         lines.append("- fattn_seen_disabled: `true`")
     if summary_kv.get("fattn_seen_sched_reserve_cpu", ""):
         lines.append("- fattn_seen_sched_reserve_cpu: `true`")
+    if summary_kv.get("sched_reserve_seen_fallback", ""):
+        lines.append("- sched_reserve_seen_fallback: `true`")
+    if summary_kv.get("sched_reserve_seen_failure", ""):
+        lines.append("- sched_reserve_seen_failure: `true`")
     lines.append("")
     lines.append("Patch probes (read-only):")
     lines.append("")
@@ -427,6 +526,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             f"- multislot_patch_probe.reserve_cap_n_ctx_seq_found={str(bool(multislot_probe.get('reserve_cap_n_ctx_seq_found', False))).lower()}"
         )
         lines.append(f"- multislot_patch_probe.swa_stream_view_found={str(bool(multislot_probe.get('swa_stream_view_found', False))).lower()}")
+        lines.append(f"- multislot_patch_probe.reserve_bound_tokens_found={str(bool(multislot_probe.get('reserve_bound_tokens_found', False))).lower()}")
+        lines.append(f"- multislot_patch_probe.skip_impossible_windows_found={str(bool(multislot_probe.get('skip_impossible_windows_found', False))).lower()}")
     else:
         lines.append("- multislot_patch_probe: NA")
     lines.append("")

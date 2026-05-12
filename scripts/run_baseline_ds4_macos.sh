@@ -135,6 +135,9 @@ row = {
     "ttft_s": _get("ttft_first_output_s", "ttft_s"),
     "total_wall_s": _get("wall_s", "total_wall_s"),
     "output_tokens": _get("output_tokens", "generated_tokens"),
+    "speculative_method": _get("speculative_method"),
+    "speculative_draft_model": _get("speculative_draft_model"),
+    "speculative_num_speculative_tokens": _get("speculative_num_speculative_tokens"),
 }
 
 header = [
@@ -153,6 +156,9 @@ header = [
     "ttft_s",
     "total_wall_s",
     "output_tokens",
+    "speculative_method",
+    "speculative_draft_model",
+    "speculative_num_speculative_tokens",
 ]
 
 need_header = True

@@ -102,10 +102,8 @@ This repo ships a **skeleton** patch against the pinned Spark fork (`94073e2`) t
 - opens the MTP sidecar GGUF in **metadata-only** mode by default and validates the exact 32 `mtp.0.*` tensors via a generated binder header
   - optional: pass `--load-sidecar-weights` to load sidecar tensor payloads into the GGUF ggml context (large; use only when needed)
 - optional (still not a real draft): when `--load-sidecar-weights` is set and binding succeeds, computes a **stub** “MTP output head norm” tensor by applying the sidecar `hc_head_*` + `norm.weight` to the captured trunk `result_pre_hc_head` and emits:
-  - `mtp_stub_input_hc_{fnv64,nbytes,shape}` (stub pre-block input computed from sidecar `enorm/e_proj` + `hnorm/h_proj` + add, using captured `result_token_embd` and `result_pre_hc_head`)
-  - `mtp_stub_head_norm_fnv64`
-  - `mtp_stub_head_norm_nbytes`
-  - `mtp_stub_head_norm_shape`
+  - `mtp_input_hc_{fnv64,nbytes,shape}` (stub pre-block input computed from sidecar `enorm/e_proj` + `hnorm/h_proj` + add, using captured `result_token_embd` and `result_pre_hc_head`)
+  - `mtp_head_norm_{fnv64,nbytes,shape}` (stub output-head-only; not a real draft)
 - optional (still not a real draft): when stub head-norm exists, it best-effort projects that vector through the trunk vocab matrix (`output.weight`) and takes `argmax`, reporting the result via `mtp_draft_token_id` / `mtp_draft_token` (still `ok=false` until the full MTP block + cache exists)
 - emits the required JSON contract, including optional debug keys `trunk_pre_hc_head_fnv64`, `trunk_pre_hc_head_nbytes`, and `trunk_pre_hc_head_shape`, but currently reports `ok=false` with a TODO error until the real MTP draft compute is implemented
 

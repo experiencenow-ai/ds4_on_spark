@@ -1,0 +1,50 @@
+{
+  "applied_layers": [
+    {
+      "entry_count": 1,
+      "layer": "baseline",
+      "manifest_id": "baseline-all-733075e353e32dd87e77",
+      "selector": "all"
+    },
+    {
+      "entry_count": 1,
+      "layer": "node_type",
+      "manifest_id": "node_type-default-fbcf97014785a7690aa9",
+      "selector": "default"
+    }
+  ],
+  "effective_hash": "sha256:2c21027b2325ba3be4c3aae5af74cca1d7b694ceb60a19e8b3038e19cb0818aa",
+  "file_count": 2,
+  "files": [
+    {
+      "mode": 436,
+      "object_path": "objects/sha256/4b/654bd1437066b13498661f3ca14774daf1066d072036beffaf06f0c014250e",
+      "path": "baseline.txt",
+      "sha256": "sha256:4b654bd1437066b13498661f3ca14774daf1066d072036beffaf06f0c014250e",
+      "size_bytes": 9,
+      "source_layer": "baseline",
+      "source_manifest_id": "baseline-all-733075e353e32dd87e77",
+      "source_selector": "all"
+    },
+    {
+      "mode": 436,
+      "object_path": "objects/sha256/91/041095a4f1a1461293230e645ecab511a4abc0a2af28dca2e3e251663a4229",
+      "path": "model.txt",
+      "sha256": "sha256:91041095a4f1a1461293230e645ecab511a4abc0a2af28dca2e3e251663a4229",
+      "size_bytes": 10,
+      "source_layer": "node_type",
+      "source_manifest_id": "node_type-default-fbcf97014785a7690aa9",
+      "source_selector": "default"
+    }
+  ],
+  "format": "centaur-hyor-distribution-effective-v1",
+  "generated_unix_us": 1778571847022191,
+  "manifest_ids": [
+    "baseline-all-733075e353e32dd87e77",
+    "node_type-default-fbcf97014785a7690aa9"
+  ],
+  "node_id": "spark2",
+  "node_type": "default",
+  "total_size_bytes": 19,
+  "version": 1
+}

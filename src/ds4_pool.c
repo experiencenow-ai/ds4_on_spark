@@ -14,6 +14,25 @@ static void ds4_pool_write_i32(uint8_t *p,int32_t v)
 	memcpy(p,&v,sizeof(v));
 }
 
+int32_t ds4_pool_bytes_needed(int32_t block_count,int32_t block_size,int32_t *out_bytes)
+{
+	int64_t bytes64;
+	if ( out_bytes == 0 )
+		return(-1);
+	*out_bytes = 0;
+	if ( block_count <= 0 )
+		return(-2);
+	if ( block_size <= 0 )
+		return(-3);
+	if ( block_size < (int32_t)sizeof(int32_t) )
+		return(-4);
+	bytes64 = ((int64_t)block_count * (int64_t)block_size);
+	if ( bytes64 > (int64_t)INT32_MAX )
+		return(-5);
+	*out_bytes = (int32_t)bytes64;
+	return(0);
+}
+
 int32_t ds4_pool_reset(ds4_pool_t *p)
 {
 	int32_t i,count,next,block_size;
@@ -83,6 +102,25 @@ int32_t ds4_pool_alloc(ds4_pool_t *p,void **out)
 	next = ds4_pool_read_i32(p->base + (head * p->block_size));
 	p->free_head = next;
 	*out = (void *)(p->base + (head * p->block_size));
+	return(0);
+}
+
+int32_t ds4_pool_alloc_zero(ds4_pool_t *p,void **out)
+{
+	void *ptr;
+	if ( p == 0 )
+		return(-1);
+	if ( out == 0 )
+		return(-2);
+	if ( p->block_size <= 0 )
+		return(-3);
+	ptr = 0;
+	if ( ds4_pool_alloc(p,&ptr) < 0 )
+		return(-4);
+	if ( ptr == 0 )
+		return(-5);
+	memset(ptr,0,(size_t)p->block_size);
+	*out = ptr;
 	return(0);
 }
 

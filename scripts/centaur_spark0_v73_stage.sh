@@ -6,15 +6,16 @@ usage()
 	cat <<'USAGE'
 usage: centaur_spark0_v73_stage.sh <spark0_user@host> [remote_dir]
 
-Stages the Centaur spec-impl v73 zip to Spark0 without sudo/system changes.
+Stages the Centaur spec-impl v73 zip + smoke helper scripts to Spark0 without sudo/system changes.
 
 Environment:
   CENTAUR_ZIP     Local zip path (default: /Users/mac/Downloads/centaur_spec_impl_v73.zip)
   SSH_OPTS        Optional ssh options override (default includes BatchMode + temp known_hosts)
+  STAGE_SKIP_PREFLIGHT  Set to 1 to skip SSH preflight checks
 
 Examples:
   ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local
-  CENTAUR_ZIP=/path/to/centaur_spec_impl_v73.zip ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local ~/centaur-smoke/v73
+  CENTAUR_ZIP=/path/to/centaur_spec_impl_v73.zip ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73"
 USAGE
 }
 
@@ -67,6 +68,16 @@ if [ ! -f "$catalog_src" ]; then
 	echo "missing fixture: $catalog_src" >&2
 	exit 2
 fi
+smoke_src="$root/scripts/centaur_spark0_v73_smoke.sh"
+validate_src="$root/scripts/centaur_spark0_v73_validate_artifacts.sh"
+if [ ! -f "$smoke_src" ]; then
+	echo "missing smoke script: $smoke_src" >&2
+	exit 2
+fi
+if [ ! -f "$validate_src" ]; then
+	echo "missing validate script: $validate_src" >&2
+	exit 2
+fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	known_hosts="/tmp/ds4_spark_known_hosts"
@@ -86,6 +97,19 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
+ssh_preflight()
+{
+	t="$1"
+	if ssh $SSH_OPTS "$t" "true" >/dev/null 2>&1; then
+		echo "preflight: ssh ok: $t"
+		return 0
+	fi
+	echo "preflight: ssh failed: $t" >&2
+	echo "hint: check DNS/SSH reachability and keys; try:" >&2
+	echo "  REDACT=1 ./scripts/mac_spark_discovery.sh $(printf "%s" "$t" | sed 's/^[^@]*@//')" >&2
+	return 1
+}
+
 copy_to_remote()
 {
 	src="$1"
@@ -100,11 +124,21 @@ copy_to_remote()
 echo "== centaur v73 stage to $target =="
 echo "remote_dir: $remote_dir"
 
+if [ "${STAGE_SKIP_PREFLIGHT:-0}" != "1" ]; then
+	echo "== stage preflight ssh =="
+	ssh_preflight "$target" || exit 21
+else
+	echo "== skip preflight (STAGE_SKIP_PREFLIGHT=1) =="
+fi
+
 ssh_run "$target" "mkdir -p $remote_dir"
 remote_dir_abs="$(ssh_run "$target" "cd $remote_dir && pwd -P")"
 echo "remote_dir_abs: $remote_dir_abs"
 copy_to_remote "$zip" "$target:$remote_dir/centaur_spec_impl_v73.zip"
 copy_to_remote "$catalog_src" "$target:$remote_dir/unit_model_catalog.json"
+copy_to_remote "$smoke_src" "$target:$remote_dir/centaur_spark0_v73_smoke.sh"
+copy_to_remote "$validate_src" "$target:$remote_dir/centaur_spark0_v73_validate_artifacts.sh"
+ssh_run "$target" "chmod 0755 $remote_dir_abs/centaur_spark0_v73_smoke.sh $remote_dir_abs/centaur_spark0_v73_validate_artifacts.sh"
 
 cat <<EOF
 
@@ -113,8 +147,13 @@ cd $remote_dir_abs
 export CENTAUR_ZIP="$remote_dir_abs/centaur_spec_impl_v73.zip"
 export CENTAUR_CATALOG_JSON="$remote_dir_abs/unit_model_catalog.json"
 
-# Run the smoke script by streaming it over SSH from this repo:
+# Option A (recommended): run the staged smoke script on Spark0:
+export CENTAUR_RUN_ID="\$(date -u +%Y%m%dT%H%M%SZ)"
+export CENTAUR_LOG="$remote_dir_abs/run/\$CENTAUR_RUN_ID/smoke.log"
+sh ./centaur_spark0_v73_smoke.sh
+
+# Option B: run by streaming the repo smoke script over SSH from your Mac:
 # (run this from your Mac repo root)
-ssh $SSH_OPTS "$target" "cd $remote_dir_abs && sh -s" < "$root/scripts/centaur_spark0_v73_smoke.sh"
+# ssh $SSH_OPTS "$target" "cd $remote_dir_abs && sh -s" < "$root/scripts/centaur_spark0_v73_smoke.sh"
 
 EOF

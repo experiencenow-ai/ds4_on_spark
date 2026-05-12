@@ -51,9 +51,12 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
-- `ds4_on_spark` commit hash (best-effort; uses `.codex_git` or `.git2/.git` when present)
+- `ds4_on_spark` commit hash (best-effort; prefers `DS4_GIT_DIR`/`DS4_GIT_WORK_TREE` when set, otherwise checks `.codex_git`, `git-local/baseline-runtime.git`, and `.git2/.git` when present)
+
+If the Codex-provided worktree cannot write `FETCH_HEAD` during `git fetch`, use the local `.codex_git` shim helper: `docs/baseline-git-shim.md`.
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
+- optional OpenAI-compatible streaming benchmark (true TTFT + decode throughput) for endpoints that already exist on Spark (for example vLLM OpenAI server or AEON containers); gated via `SKIP_OPENAI_STREAM=0` and `REMOTE_OPENAI_STREAM_ENV`
 
 Optional: append best-effort per-run rows to a local CSV for quality/speed scoring:
 
@@ -71,6 +74,8 @@ section to make it harder to forget which quality numbers were used for a compar
 For vLLM runs, you can also set `SMOKE_EVAL=1` (and optionally `SMOKE_MAX_TOKENS_PER_TASK=64`) to run a tiny deterministic smoke-eval task set that emits `passed_tasks`, `total_tasks`, and `local_quality_score` into the remote baseline summary block; the baseline wrapper will ingest those values into `MODEL_RUNS_CSV` when the corresponding env vars are not set. See `docs/baseline-smoke-eval.md`.
 
 When the remote baseline summary includes speculative-decoding metadata (for example from vLLM DFlash runs), the wrapper also records `speculative_method`, `speculative_draft_model`, and `speculative_num_speculative_tokens` into `MODEL_RUNS_CSV`.
+
+When `LLAMA_SERVER_THROUGHPUT_SWEEP=1` is enabled (see `docs/baseline-batching-throughput.md`) and `MODEL_RUNS_CSV` is set, the wrapper appends an additional CSV row for the sweep’s **best decode** configuration (mapping `agg_generated_tok_s` → `decode_tps`, `agg_prompt_tok_s` → `prefill_tps`, `wave_wall_s` → `total_wall_s`, and `agg_generated_tokens` → `output_tokens`). Use `LLAMA_SERVER_THROUGHPUT_SCOPE` (default `llama_server_throughput`) to keep these rows separate from the single-prompt llama.cpp baseline.
 
 When `MODEL_RUNS_CSV` is set, the report directory also gets best-effort
 quality/speed scoring artifacts derived from the full CSV:
@@ -90,7 +95,7 @@ scripts/run_baseline_existing_runtime.sh spark0@aitopatom-9ab9.local
 Equivalent milestone wrapper (same run shape, fewer knobs to type):
 
 ```sh
-MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli \
+MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/model.gguf LLAMA_CLI=/abs/path/to/llama-cli RUNTIME_LABEL=v4flash-external \
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
@@ -186,15 +191,17 @@ All baseline scripts share the same safety gates:
 Per-script useful env vars:
 
 - `scripts/run_baseline_existing_runtime.sh`: `OUT_ROOT`, `SSH_OPTS`
-- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
+- `scripts/run_baseline_existing_runtime.sh`: `REMOTE_BENCH_ENV`, `REMOTE_LLAMA_ENV`, `REMOTE_VLLM_ENV`, `REMOTE_OPENAI_STREAM_ENV`, `REMOTE_MTP_SIDECAR_ENV`, `REMOTE_MTP_SIDECAR_ARGS`
 - `scripts/run_baseline_existing_runtime.sh`: `VLLM_MODEL_ID` (CSV label override; avoids absolute Spark paths)
-- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
-- `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM` (skip irrelevant probes for faster multi-model loops)
+- `scripts/run_baseline_existing_runtime.sh`: `LLAMA_SCOPE`, `VLLM_SCOPE`, `OPENAI_STREAM_SCOPE` (CSV `scope` labels; use to keep DeepSeek/Ling/Qwen/DFlash rows separate)
+- `scripts/run_baseline_existing_runtime.sh`: `OPENAI_STREAM_MODEL_ID` (CSV label override; avoids server-specific model aliases)
+- `scripts/run_baseline_existing_runtime.sh`: `SKIP_GGUF_INSPECT`, `SKIP_LLAMA`, `SKIP_MTP_SIDECAR`, `SKIP_VLLM`, `SKIP_OPENAI_STREAM` (skip irrelevant probes for faster multi-model loops)
 - `scripts/run_baseline_existing_runtime.sh`: `FETCH_LLAMA_OUT_DIR=1` (opt-in: fetch the remote llama.cpp runner `out_dir` tarball to preserve `fattn_cli_probe.json` + raw logs locally)
 - `scripts/run_baseline_ds4_macos.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`
 - `scripts/run_baseline_antirez_ds4_spark.sh`: `OUT_ROOT`, `RUN_LABEL`, `MODEL_RUNS_CSV`, `DS4_SCOPE`, `DS4_MODEL_ID`, `ALLOW_FETCH`, `ALLOW_BUILD`, `ALLOW_RUN`, remote `DS4_DIR`, remote `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `SSH_OPTS`
 - `scripts/benchmark_llamacpp_spark.sh`: `LLAMA_DIR`, `LLAMA_CLI`, `RUNTIME_LABEL`, `MODEL_SOURCE`, `MODEL_QUANT`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `N_GPU_LAYERS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/benchmark_vllm_spark.sh`: `ALLOW_FETCH`, `VLLM_MODEL`, `PROMPT`, `MAX_TOKENS`, `TENSOR_PARALLEL_SIZE`, `VLLM_TRUST_REMOTE_CODE`, `VLLM_SPECULATIVE_CONFIG_JSON`, `VLLM_EXTRA_LLM_KWARGS_JSON`, `VLLM_EXTRA_SAMPLING_KWARGS_JSON`, `OUT_DIR`
+- `scripts/benchmark_openai_chat_stream.py`: `OPENAI_CHAT_ENDPOINT`, `OPENAI_MODEL`, `OPENAI_API_KEY`, `BENCH_THINKING`, `OPENAI_STREAM_CONCURRENCY`, `OPENAI_STREAM_TIMEOUT_S`, `OPENAI_STREAM_MAX_PROMPTS`, `OUT_DIR`
 - `scripts/benchmark_ds4_macos.sh`: `DS4_DIR`, `MODEL_GGUF`, `PROMPT`, `CTX`, `N_TOKENS`, `EXTRA_ARGS`, `OUT_DIR`
 - `scripts/run_baseline_vllm_dflash_pair.sh`: `VLLM_SCOPE_TARGET`, `VLLM_SCOPE_DFLASH` (CSV `scope` labels for target-only vs DFlash)
 - `scripts/run_baseline_vllm_matrix.sh`: tab-separated matrix file runner for repeated target-only + DFlash probes with shared prompt/token settings

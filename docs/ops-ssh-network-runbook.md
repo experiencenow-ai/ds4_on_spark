@@ -77,10 +77,36 @@ hosts only in this command line/inventory, not inside the helper script:
 ./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@<spark0-host> spark1@<spark1-host> [spark2@<spark2-host> ...]
 ```
 
+Optional: keep the ordered inventory in a file (recommended for repeatable runs):
+
+- `deploy/config/inventory.ds4.spark01.example` (Spark0/Spark1)
+- `deploy/config/inventory.ds4.spark012.example` (Spark0/Spark1/Spark2)
+- `deploy/config/inventory.ds4.spark_ring.example` (Spark0..Spark3)
+
+Then:
+
+```bash
+./scripts/ops_spark_ring_mesh_check.sh --topology ring --inventory-file <path-to-inventory>
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file <path-to-inventory>
+```
 Legacy fixed-name wrappers remain for older docs/scripts, but they delegate to
 the inventory-driven helpers above.
 
 Note: `scripts/ops_stage_spark_ring.sh` also runs a staged env audit at the end (safe) to verify ring env consistency across hosts: `scripts/ops_spark_ring_staged_env_audit.sh`.
+
+Optional: you can also run staged TP readiness checks (safe; runs the readiness scripts on each Spark using `/tmp/ds4-*` paths):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional: you can also add staged readiness to the one-shot ops snapshot (safe; combines mesh + status + staged readiness):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
 
 ## Mac-Side Systemd Status Snapshot (Optional)
 
@@ -90,6 +116,11 @@ To capture a read-only systemd status snapshot across the inventory (useful for 
 ./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Or using an inventory file:
+
+```bash
+./scripts/ops_spark_ring_status.sh --preflight tp3 --strict --inventory-file <path-to-inventory>
+```
 Optional: add a best-effort TCP probe to each ring peer (only meaningful if
 something is listening):
 

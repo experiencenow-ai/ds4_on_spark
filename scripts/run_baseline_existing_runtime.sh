@@ -8,6 +8,7 @@ OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
 REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
 REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
+REMOTE_OPENAI_STREAM_ENV="${REMOTE_OPENAI_STREAM_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_GGUF_INSPECT_ENV="${REMOTE_GGUF_INSPECT_ENV:-$REMOTE_LLAMA_ENV}"
 REMOTE_MTP_SIDECAR_ENV="${REMOTE_MTP_SIDECAR_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_MTP_SIDECAR_ARGS="${REMOTE_MTP_SIDECAR_ARGS:---json --expect-deepseek-v4-flash}"
@@ -17,6 +18,8 @@ VLLM_MODEL_ID="${VLLM_MODEL_ID:-}"
 VLLM_MODEL="${VLLM_MODEL:-}"
 LLAMA_SCOPE="${LLAMA_SCOPE:-llamacpp}"
 VLLM_SCOPE="${VLLM_SCOPE:-vllm}"
+OPENAI_STREAM_SCOPE="${OPENAI_STREAM_SCOPE:-openai_chat_stream}"
+OPENAI_STREAM_MODEL_ID="${OPENAI_STREAM_MODEL_ID:-}"
 LLAMA_FATTN_PATCH_PROBE="${LLAMA_FATTN_PATCH_PROBE:-0}"
 LLAMA_MULTISLOT_PATCH_PROBE="${LLAMA_MULTISLOT_PATCH_PROBE:-0}"
 LLAMA_SERVER_SWEEP="${LLAMA_SERVER_SWEEP:-0}"
@@ -26,6 +29,7 @@ SKIP_GGUF_INSPECT="${SKIP_GGUF_INSPECT:-0}"
 SKIP_LLAMA="${SKIP_LLAMA:-0}"
 SKIP_MTP_SIDECAR="${SKIP_MTP_SIDECAR:-0}"
 SKIP_VLLM="${SKIP_VLLM:-0}"
+SKIP_OPENAI_STREAM="${SKIP_OPENAI_STREAM:-1}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -46,10 +50,25 @@ echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
-if [ -d "$repo_root/.codex_git" ]; then
-    repo_rev="$(GIT_DIR="$repo_root/.codex_git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
-elif [ -e "$repo_root/.git2/.git" ]; then
-    repo_rev="$(GIT_DIR="$repo_root/.git2/.git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
+git_dir=""
+git_worktree="$repo_root"
+if [ "${DS4_GIT_WORK_TREE:-}" != "" ]; then
+    git_worktree="$DS4_GIT_WORK_TREE"
+fi
+if [ "${DS4_GIT_DIR:-}" != "" ] && [ -r "${DS4_GIT_DIR:-}/HEAD" ]; then
+    git_dir="$DS4_GIT_DIR"
+fi
+if [ "$git_dir" = "" ] && [ -d "$repo_root/.codex_git" ] && [ -r "$repo_root/.codex_git/HEAD" ]; then
+    git_dir="$repo_root/.codex_git"
+fi
+if [ "$git_dir" = "" ] && [ -d "$repo_root/git-local/baseline-runtime.git" ] && [ -r "$repo_root/git-local/baseline-runtime.git/HEAD" ]; then
+    git_dir="$repo_root/git-local/baseline-runtime.git"
+fi
+if [ "$git_dir" = "" ] && [ -e "$repo_root/.git2/.git/HEAD" ]; then
+    git_dir="$repo_root/.git2/.git"
+fi
+if [ "$git_dir" != "" ]; then
+    repo_rev="$(GIT_DIR="$git_dir" GIT_WORK_TREE="$git_worktree" git rev-parse HEAD 2>/dev/null || echo unknown)"
 elif [ -e "$repo_root/.git" ]; then
     repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
@@ -85,7 +104,7 @@ fetch_remote_dir_tar()
 sh_quote()
 {
     v="${1:-}"
-    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\''/g")"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
 }
 
 remote_env_prefix()
@@ -226,6 +245,34 @@ if not local_quality_score and passed_tasks and total_tasks:
     except Exception:
         pass
 
+decode_tps = _get("generation_tps", "decode_tps")
+prefill_tps = _get("prefill_tps")
+ttft_s = _get("ttft_first_output_s", "ttft_s")
+total_wall_s = _get("wall_s", "total_wall_s")
+output_tokens = _get("output_tokens", "generated_tokens", "token_trace_events", "n_tokens")
+speculative_method = _get("speculative_method")
+speculative_draft_model = _get("speculative_draft_model")
+speculative_num_speculative_tokens = _get("speculative_num_speculative_tokens")
+
+if not any([
+    public_quality_prior,
+    public_quality_basis,
+    public_quality_source,
+    passed_tasks,
+    total_tasks,
+    local_quality_score,
+    quality_score,
+    decode_tps,
+    prefill_tps,
+    ttft_s,
+    total_wall_s,
+    output_tokens,
+    speculative_method,
+    speculative_draft_model,
+    speculative_num_speculative_tokens,
+]):
+    raise SystemExit(0)
+
 row = {
     "model": model,
     "run_id": run_id,
@@ -237,14 +284,14 @@ row = {
     "total_tasks": total_tasks,
     "local_quality_score": local_quality_score,
     "quality_score": quality_score,
-    "decode_tps": _get("generation_tps", "decode_tps"),
-    "prefill_tps": _get("prefill_tps"),
-    "ttft_s": _get("ttft_first_output_s", "ttft_s"),
-    "total_wall_s": _get("wall_s", "total_wall_s"),
-    "output_tokens": _get("output_tokens", "generated_tokens", "token_trace_events", "n_tokens"),
-    "speculative_method": _get("speculative_method"),
-    "speculative_draft_model": _get("speculative_draft_model"),
-    "speculative_num_speculative_tokens": _get("speculative_num_speculative_tokens"),
+    "decode_tps": decode_tps,
+    "prefill_tps": prefill_tps,
+    "ttft_s": ttft_s,
+    "total_wall_s": total_wall_s,
+    "output_tokens": output_tokens,
+    "speculative_method": speculative_method,
+    "speculative_draft_model": speculative_draft_model,
+    "speculative_num_speculative_tokens": speculative_num_speculative_tokens,
 }
 
 header = [
@@ -389,12 +436,14 @@ PY
         echo "- skip_llama: ${SKIP_LLAMA:-0}"
         echo "- skip_mtp_sidecar: ${SKIP_MTP_SIDECAR:-0}"
         echo "- skip_vllm: ${SKIP_VLLM:-0}"
+        echo "- openai_stream_scope: ${OPENAI_STREAM_SCOPE:-openai_chat_stream}"
+        echo "- skip_openai_stream: ${SKIP_OPENAI_STREAM:-1}"
     fi
     echo
     if [ "$MODEL_RUNS_CSV" != "" ] || [ "$PUBLIC_QUALITY_PRIOR" != "" ] || [ "$PUBLIC_QUALITY_BASIS" != "" ] || [ "$PUBLIC_QUALITY_SOURCE" != "" ] || [ "$PASSED_TASKS" != "" ] || [ "$TOTAL_TASKS" != "" ] || [ "$LOCAL_QUALITY_SCORE" != "" ] || [ "$QUALITY_SCORE" != "" ]; then
         echo "## Quality Metadata (Local)"
         echo
-        echo "These fields are recorded into `MODEL_RUNS_CSV` when enabled, and should be copied into committed baseline reports when doing multi-model comparisons."
+        echo 'These fields are recorded into `MODEL_RUNS_CSV` when enabled, and should be copied into committed baseline reports when doing multi-model comparisons.'
         echo
         echo "- public_quality_prior: ${PUBLIC_QUALITY_PRIOR:-NA}"
         echo "- public_quality_basis: ${PUBLIC_QUALITY_BASIS:-NA}"
@@ -417,6 +466,7 @@ PY
     echo "- REMOTE_BENCH_ENV='...'"
     echo "- REMOTE_LLAMA_ENV='...'"
     echo "- REMOTE_VLLM_ENV='...'"
+    echo "- REMOTE_OPENAI_STREAM_ENV='...'"
     echo "- REMOTE_GGUF_INSPECT_ENV='...'"
     echo
     echo "Remote llama env:"
@@ -431,6 +481,15 @@ PY
     echo
     echo '```'
     echo "$REMOTE_VLLM_ENV"
+    echo '```'
+    echo
+    echo "Remote OpenAI streaming benchmark env:"
+    echo
+    echo "This is used for the optional OpenAI-compatible streaming endpoint benchmark."
+    echo "Do not put secrets in REMOTE_* env values; this report records them."
+    echo
+    echo '```'
+    echo "$REMOTE_OPENAI_STREAM_ENV"
     echo '```'
     echo
     echo "Remote GGUF inspector env:"
@@ -609,7 +668,7 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$FETCH_LLAMA_OUT_DIR" = "1" ] && [ "${LLAMACPP
                 echo "## llama.cpp out_dir artifacts (Spark)"
                 echo
                 echo "This is an opt-in tarball fetch of the remote llama.cpp runner output directory."
-                echo "It is useful for preserving `fattn_cli_probe.json` and the raw runner logs alongside the baseline report."
+                echo 'It is useful for preserving `fattn_cli_probe.json` and the raw runner logs alongside the baseline report.'
                 echo
                 echo "Artifacts:"
                 echo
@@ -660,14 +719,68 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_SERVER_THROUGHPUT_SWEEP" = "1" ]; then
         mkdir -p "$OUT_DIR/llama_server_throughput_sweep"
         tar -xzf "$OUT_DIR/remote_llama_server_throughput_sweep.tgz" -C "$OUT_DIR/llama_server_throughput_sweep" >/dev/null 2>&1 || true
     fi
+    best_decode_json="$OUT_DIR/llama_server_throughput_sweep/throughput_best_decode.json"
+    best_decode_summary="$OUT_DIR/llama_server_throughput_best_decode_summary.txt"
+    if [ -r "$best_decode_json" ]; then
+        python3 - "$best_decode_json" >"$best_decode_summary" 2>/dev/null <<'PY' || true
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    data = json.load(open(path, "r", encoding="utf-8"))
+except OSError:
+    data = {}
+except json.JSONDecodeError:
+    data = {}
+
+def _v(k, default=""):
+    v = data.get(k, default)
+    if v is None:
+        return ""
+    return str(v)
+
+print("decode_tps=" + _v("agg_generated_tok_s"))
+print("prefill_tps=" + _v("agg_prompt_tok_s"))
+print("wall_s=" + _v("wave_wall_s"))
+print("output_tokens=" + _v("agg_generated_tokens"))
+for k in [
+    "parallel",
+    "batch",
+    "ubatch",
+    "prompt_words",
+    "concurrency",
+    "repeats",
+    "ok",
+    "errors",
+    "fattn_disabled",
+    "fattn_backend0_only",
+    "multislot_sched_reserve_fail",
+]:
+    if k in data:
+        print(f"llama_server_{k}=" + _v(k))
+PY
+        append_model_runs_csv "${LLAMA_SERVER_THROUGHPUT_SCOPE:-llama_server_throughput}" "${LLAMA_SERVER_MODEL_ID:-${MODEL_SOURCE:-llama-server}}" "$best_decode_summary"
+    fi
     {
         echo "## llama-server throughput sweep (Spark)"
         echo
+        if [ -r "$best_decode_summary" ]; then
+            echo "Best decode row (best-effort):"
+            echo
+            echo '```'
+            cat "$best_decode_summary" 2>/dev/null || true
+            echo '```'
+            echo
+        fi
         echo "Full logs:"
         echo
         echo "- stdout: $OUT_DIR/remote_llama_server_throughput_sweep_stdout.txt"
         echo "- stderr: $OUT_DIR/remote_llama_server_throughput_sweep_stderr.txt"
         echo "- tarball: $OUT_DIR/remote_llama_server_throughput_sweep.tgz"
+        if [ -r "$best_decode_summary" ]; then
+            echo "- best_decode_summary: $best_decode_summary"
+        fi
         echo
 } >>"$REPORT_MD"
 fi
@@ -752,6 +865,52 @@ else
         echo '```'
         sed -n '1,200p' "$OUT_DIR/remote_vllm_stderr.txt" || true
         echo '```'
+        echo
+    } >>"$REPORT_MD"
+fi
+
+if [ "$SKIP_OPENAI_STREAM" = "1" ]; then
+    echo "== skipping OpenAI streaming benchmark =="
+else
+    echo "== running OpenAI-compatible streaming benchmark on spark (may be gated) =="
+    remote_dir="/tmp/ds4_openai_chat_stream_$ts"
+    ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_openai_chat_stream.py && chmod +x /tmp/benchmark_openai_chat_stream.py && $REMOTE_OPENAI_STREAM_ENV sh -lc '
+set -eu
+if [ \"\${ALLOW_RUN:-0}\" != \"1\" ]; then
+  echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
+  exit 0
+fi
+OUT_DIR=$remote_dir /tmp/benchmark_openai_chat_stream.py --out-dir $remote_dir
+' " <"$repo_root/scripts/benchmark_openai_chat_stream.py" \
+        >"$OUT_DIR/remote_openai_chat_stream_stdout.txt" 2>"$OUT_DIR/remote_openai_chat_stream_stderr.txt" || true
+
+    openai_model_label="$OPENAI_STREAM_MODEL_ID"
+    if [ "$openai_model_label" = "" ]; then
+        openai_model_label="openai_stream"
+    fi
+    append_model_runs_csv "${OPENAI_STREAM_SCOPE:-openai_chat_stream}" "$openai_model_label" "$OUT_DIR/remote_openai_chat_stream_stdout.txt"
+
+    fetch_remote_dir_tar "$remote_dir" "$OUT_DIR/remote_openai_chat_stream.tgz"
+    if [ -s "$OUT_DIR/remote_openai_chat_stream.tgz" ]; then
+        mkdir -p "$OUT_DIR/openai_chat_stream"
+        tar -xzf "$OUT_DIR/remote_openai_chat_stream.tgz" -C "$OUT_DIR/openai_chat_stream" >/dev/null 2>&1 || true
+    fi
+
+    {
+        echo "## OpenAI chat streaming benchmark (Spark)"
+        echo
+        echo "Summary (best-effort):"
+        echo
+        echo '```'
+        extract_baseline_summary "$OUT_DIR/remote_openai_chat_stream_stdout.txt"
+        echo '```'
+        echo
+        echo "Full logs:"
+        echo
+        echo "- stdout: $OUT_DIR/remote_openai_chat_stream_stdout.txt"
+        echo "- stderr: $OUT_DIR/remote_openai_chat_stream_stderr.txt"
+        echo "- tarball: $OUT_DIR/remote_openai_chat_stream.tgz"
+        echo "- unpacked_dir: $OUT_DIR/openai_chat_stream"
         echo
     } >>"$REPORT_MD"
 fi

@@ -22,6 +22,9 @@ scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
 
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
+It also writes a self-contained bundle report (`baseline_vllm_matrix_bundle.md`)
+into the output directory with the exact command line and a copy/paste-ready
+scored summary block.
 
 Matrix error handling:
 
@@ -75,15 +78,16 @@ Notes:
 - For multi-model comparisons, fill out quality metadata (`PUBLIC_QUALITY_PRIOR`,
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.
+- The bundle wrapper also emits `model_quality_speed_scored_summary.txt` (per-run `key=value` blocks including Pareto `dominated_by`) for copy/paste into baseline docs.
 - Do not download large model weights unless explicitly approved.
 - These wrappers default to `ALLOW_RUN=0` so nothing executes on Spark unless you opt in.
 
 ## Matrix TSV format
 
-Tab-separated values with 6 columns:
+Tab-separated values with 6 required columns plus 3 optional per-row quality-metadata columns:
 
 ```text
-run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
+run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir	public_quality_prior	public_quality_basis	public_quality_source
 ```
 
 Rules:
@@ -93,21 +97,26 @@ Rules:
 - `draft_model_dir` may be empty to run target-only.
 - `scope_target` and `scope_dflash` may be empty; defaults are `vllm_target` and `vllm_dflash`.
 - Use absolute Spark paths for `target_model_dir` / `draft_model_dir`.
+- Optional `public_quality_*` columns override the global `PUBLIC_QUALITY_*` env vars for that row.
 
 Template:
 
 ```text
-# run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir
-ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4	
-qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/z-lab/Qwen3.5-4B-DFlash
-qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/z-lab/Qwen3.5-9B-DFlash
-qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/z-lab/Qwen3.5-27B-DFlash
-qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/z-lab/Qwen3.6-27B-DFlash
-qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/z-lab/Qwen3-Coder-30B-A3B-DFlash
-qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/z-lab/Qwen3.6-35B-A3B-DFlash
+# run_label	scope_target	scope_dflash	target_id	target_model_dir	draft_model_dir	public_quality_prior	public_quality_basis	public_quality_source
+ling26-int4	ling_target		inclusionAI/Ling-2.6-flash-int4	/abs/path/to/Ling-2.6-flash-int4			
+qwen35-4b	qwen_target	qwen_dflash	Qwen/Qwen3.5-4B	/abs/path/to/Qwen3.5-4B	/abs/path/to/z-lab/Qwen3.5-4B-DFlash			
+qwen35-9b	qwen_target	qwen_dflash	Qwen/Qwen3.5-9B	/abs/path/to/Qwen3.5-9B	/abs/path/to/z-lab/Qwen3.5-9B-DFlash			
+qwen35-27b	qwen_target	qwen_dflash	Qwen/Qwen3.5-27B	/abs/path/to/Qwen3.5-27B	/abs/path/to/z-lab/Qwen3.5-27B-DFlash			
+qwen36-27b	qwen_target	qwen_dflash	Qwen/Qwen3.6-27B	/abs/path/to/Qwen3.6-27B	/abs/path/to/z-lab/Qwen3.6-27B-DFlash			
+qwen3-coder-30b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/Qwen3-Coder-30B-A3B-Instruct-FP8	/abs/path/to/z-lab/Qwen3-Coder-30B-A3B-DFlash			
+qwen36-35b-a3b	qwen_target	qwen_dflash	Qwen/Qwen3.6-35B-A3B-FP8	/abs/path/to/Qwen3.6-35B-A3B-FP8	/abs/path/to/z-lab/Qwen3.6-35B-A3B-DFlash			
 ```
 
 Repo template file: `fixtures/baseline/vllm_matrix_template.tsv`.
+
+Spark0 ladder template (recommended starting point; fill in staged paths):
+
+- `fixtures/baseline/vllm_ling_qwen_dflash_ladder_spark0.tsv`
 
 ## Recommended measurement order
 

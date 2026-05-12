@@ -23,6 +23,8 @@ Checks (required):
 
 Checks (optional):
   - smoke.log (when the run used CENTAUR_LOG)
+  - smoke_facts.json (newer runs)
+  - pip_freeze.txt (newer runs)
 USAGE
 }
 
@@ -91,6 +93,16 @@ if [ -f "$workdir/smoke.log" ]; then
 	echo "ok file: $workdir/smoke.log"
 else
 	echo "warn missing file: $workdir/smoke.log (set CENTAUR_LOG to capture)" >&2
+fi
+if [ -f "$workdir/smoke_facts.json" ]; then
+	echo "ok file: $workdir/smoke_facts.json"
+else
+	echo "warn missing file: $workdir/smoke_facts.json" >&2
+fi
+if [ -f "$workdir/pip_freeze.txt" ]; then
+	echo "ok file: $workdir/pip_freeze.txt"
+else
+	echo "warn missing file: $workdir/pip_freeze.txt" >&2
 fi
 
 if [ "$missing" -eq 0 ]; then

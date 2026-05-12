@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_judge_elo_budget_v1",
+  "description": "Token/latency/parse-validity budgeting summary emitted by scripts/judge_elo_update.py.",
+  "type": "object",
+  "additionalProperties": true,
+  "$defs": {
+    "pctl_stats_v1": {
+      "type": "object",
+      "description": "Percentile/mean stats over non-negative integer samples (serialized as numbers).",
+      "additionalProperties": true,
+      "required": [
+        "count",
+        "missing",
+        "present_fraction"
+      ],
+      "properties": {
+        "count": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "missing": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "present_fraction": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "min": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "p50": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "p90": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "mean": {
+          "type": "number",
+          "minimum": 0.0
+        }
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "records",
+    "parse_valid_true",
+    "parse_valid_false",
+    "tokens",
+    "latency_ms",
+    "judge_out_budget"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "ds4_judge_elo_budget_v1"
+    },
+    "records": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parse_valid_true": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "parse_valid_false": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "a_out",
+        "b_out",
+        "judge_in",
+        "judge_out"
+      ],
+      "properties": {
+        "a_out": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        },
+        "b_out": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        },
+        "judge_in": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        },
+        "judge_out": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        }
+      }
+    },
+    "latency_ms": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "a",
+        "b",
+        "judge"
+      ],
+      "properties": {
+        "a": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        },
+        "b": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        },
+        "judge": {
+          "$ref": "#/$defs/pctl_stats_v1"
+        }
+      }
+    },
+    "judge_out_budget": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "target_tokens",
+        "count_with_tokens",
+        "count_le_target",
+        "fraction_le_target",
+        "count_with_tokens_parse_valid_true",
+        "count_le_target_parse_valid_true",
+        "fraction_le_target_parse_valid_true"
+      ],
+      "properties": {
+        "target_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "count_with_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "count_le_target": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fraction_le_target": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "count_with_tokens_parse_valid_true": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "count_le_target_parse_valid_true": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fraction_le_target_parse_valid_true": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    }
+  }
+}

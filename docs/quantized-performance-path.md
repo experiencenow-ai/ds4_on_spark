@@ -24,14 +24,20 @@ before the native FP4/FP8 loader and dual-Spark TP path are complete.
 
 If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven MTP path), add an explicit correctness gate *before* any acceptance/perf claims:
 
-- Validate the staged MTP sidecar contract (Spark-safe; header + tensor table only; no trunk load):
+- If your reference runtime is `antirez/ds4` on Spark/Linux CUDA, note that the DS4-tuned sidecar uses `Q4_K` routed experts and requires a CUDA fallback path (otherwise MTP draft fails before it can be compared). This repo tracks the minimal patch + a host-side math verifier:
+  - `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`
+  - `docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch`
+  - `docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch` (prevents trunk/sidecar cache key collisions under CUDA weight caching)
+  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`
+
+- Validate the staged MTP sidecar **contract** (Spark-safe; header + tensor table only; no trunk load):
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
-- Optional stronger loader-side check (still no trunk load): run the combined contract + llama.cpp sidecar loader probe runner. This can build/run `llama-ds4-mtp-sidecar-probe` (gated) and optionally `--load-weights` the sidecar tensor blob into RAM to ensure all 32 tensors have readable payloads.
+- Recommended stronger gate (still no trunk load): run the combined **contract + loader** probe. This validates the 32 `mtp.0.*` tensors twice (Python contract probe + llama.cpp-side probe binary), can optionally `--load-weights` the sidecar tensor blob into RAM to ensure all payloads are readable, and cross-checks the JSON inventories. The output directory includes a machine-readable `summary.json`.
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
@@ -43,6 +49,12 @@ scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 
 ```bash
 scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
+```
+
+- Before any acceptance or speedup claims, capture an **oracle** one-token probe JSON (for example from `antirez/ds4`, patched as needed) and diff it against the candidate probe JSON:
+
+```bash
+python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
 Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
@@ -73,10 +85,17 @@ scheduling behavior:
 - per-layer MoE dispatch counts
 - selected expert IDs and top-k scores when available
 - expert GEMM batch sizes
+- quantized-kernel routing/dispatch for MoE (`MUL_MAT_ID`): MMQ vs MMVQ counts plus a small shape histogram (for example `dst_ne[2]`, active tokens, and batch dimensions)
 - GPU memory and KV cache growth
+- CUDA fallback nodes and graph placement (for example `__fattn__` / `__op__` scheduling lines when present)
 - MTP draft tokens, accepted tokens, and rejected tokens when available
 
 Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
+
+### Current Spark0 clues (May 2026)
+
+- Single-Spark llama.cpp DeepSeek V4 Flash IQ2XXS aggregate decode plateaus around ~13.5–14.2 tok/s; see `docs/baseline-batching-throughput.md` for the pinned command-line shapes and gating notes.
+- A `MUL_MAT_ID` sampler has observed MoE routed shapes up to `dst_ne[2]=38`, with larger routed shapes hitting `mmq` while smaller shapes hit `mmvq`; treat this as a clue that some grouping exists, but require per-shape histograms and per-op timing before making any “expert queue” claims.
 
 ## Phase 0: Simulator-Only
 
@@ -205,6 +224,27 @@ If the runtime mixes JSON objects into plain-text log lines (for example `INFO r
 
 `trace_extract.py` preserves multi-layer routing when present (`layers[]` / `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` so the simulator can replay the trace without additional massaging.
 
+Some runtimes emit **one route record per MoE layer per token** (repeated `token_index`, optional `layer_index`) instead of a single `layers[]` object. Pack those per-layer records into `layers[]` first:
+
+```bash
+python3 sim/scheduler/trace_extract.py \
+  --in-jsonl /path/to/runtime.log \
+  --out-jsonl /tmp/routes_packed.jsonl \
+  --non-route skip \
+  --pack-layers-by-token-index 1
+```
+
+If the runtime provides a stable `layer_index`, require it so layer ordering is explicit:
+
+```bash
+python3 sim/scheduler/trace_extract.py \
+  --in-jsonl /path/to/runtime.log \
+  --out-jsonl /tmp/routes_packed.jsonl \
+  --non-route skip \
+  --pack-layers-by-token-index 1 \
+  --pack-require-layer-index 1
+```
+
 If the runtime trace includes per-token chosen `K`, replay it directly:
 
 ```bash
@@ -271,10 +311,10 @@ Initial scope:
 
 - confirm the quantized artifact includes usable MTP weights or document why it
   does not
-  - As of 2026-05-10, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
+  - As of 2026-05-12, metadata-only inspections of pinned community GGUF trunk artifacts reported `mtp_present=false` and `tensor_key_namespace_guess=llama.cpp` (see `docs/quantized-single-spark.md`), so assume MTP is missing unless a sidecar is supplied.
   - Treat MTP presence as a property of the **artifact set**:
     - trunk-only GGUFs commonly report `mtp_present=false` and `mtp_namespace.has_mtp0=false` (the upstream `mtp.0.*` namespace was dropped during conversion).
-    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars).
+    - some community conversions publish MTP as a sidecar GGUF; these can report `mtp_present=true` and `mtp_namespace.has_mtp0=true` but still fail `mtp_contract.complete` (example: DS4-tuned “compact” sidecars; see `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json`).
   - When available, capture `tensor_type_profile` from `scripts/model_contract_inspect_quantized_artifact.py --json` to record whether experts appear `MXFP4` (Flash-leaning) vs primarily FP8 (helps interpret external runtimes and conversions).
   - When `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, also record `mtp_namespace`, `mtp_contract`, and `mtp_trust` from `scripts/model_contract_inspect_quantized_artifact.py --json`.
     - `mtp_trust.status=absent|namespace_missing_mtp0|namespace_incomplete|incomplete|structural_complete_untrusted` is the expected progression for artifact sets that lack upstream-complete `mtp.0.*`.
@@ -284,7 +324,7 @@ Initial scope:
   - Spark-only runner (local sidecar file already staged, or `https://` URL via range reads; no trunk load): `scripts/run_mtp_sidecar_contract_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Combined contract + llama.cpp loader probe (optional `LOAD_WEIGHTS=1`, still no trunk load) + pinned payload fingerprint gate: `scripts/run_mtp_sidecar_loader_probe_spark.sh` (defaults to the Spark0-staged pinned sidecar path when readable)
   - Local combined runner (no fetch/build; requires a prebuilt `llama-ds4-mtp-sidecar-probe`): `scripts/run_mtp_sidecar_loader_probe_local.sh`
-- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json`
+- recorded metadata-only sidecar inspection (pinned antirez sidecar): `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json`
 - once the runtime can load/bind the sidecar, run the one-verify-step wiring gate before acceptance metrics: `docs/mtp-one-token-draft-probe.md`
 - implement strict accept/reject accounting before optimizing
 - measure acceptance rate by prompt class and context length

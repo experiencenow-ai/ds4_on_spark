@@ -19,5 +19,7 @@ int32_t ds4_cuda_arena_init_malloc(ds4_cuda_arena_t *a,int64_t size);
 int32_t ds4_cuda_arena_deinit(ds4_cuda_arena_t *a);
 int32_t ds4_cuda_arena_reset(ds4_cuda_arena_t *a);
 int32_t ds4_cuda_arena_alloc(ds4_cuda_arena_t *a,int64_t size,int32_t align,void **out);
+int32_t ds4_cuda_arena_alloc_n(ds4_cuda_arena_t *a,int64_t count,int64_t elem_size,int32_t align,void **out);
+int32_t ds4_cuda_arena_alloc_zero(ds4_cuda_arena_t *a,int64_t size,int32_t align,void **out);
+int32_t ds4_cuda_arena_alloc_zero_n(ds4_cuda_arena_t *a,int64_t count,int64_t elem_size,int32_t align,void **out);
 DS4_EXTERN_C_END
-

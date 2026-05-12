@@ -21,7 +21,7 @@ Environment:
 
 Examples:
   ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local
-  ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local ~/centaur-smoke/v73 /tmp/centaur_spark0_v73_smoke.log
+  ./scripts/centaur_spark0_v73_run.sh spark0@aitopatom-9ab9.local "~/centaur-smoke/v73" /tmp/centaur_spark0_v73_smoke.log
 
 Notes:
   - Artifacts are written under `remote_dir/run/$CENTAUR_RUN_ID/` on Spark0.
@@ -92,6 +92,7 @@ echo "remote_dir_abs: $remote_dir"
 
 remote_zip="$remote_dir/centaur_spec_impl_v73.zip"
 remote_catalog="$remote_dir/unit_model_catalog.json"
+remote_smoke="$remote_dir/centaur_spark0_v73_smoke.sh"
 
 run_id="${CENTAUR_RUN_ID:-}"
 if [ "$run_id" = "" ]; then
@@ -101,6 +102,9 @@ remote_run_dir="$remote_dir/run/$run_id"
 remote_smoke_log="$remote_run_dir/smoke.log"
 
 ssh_cmd="cd $remote_dir && mkdir -p $remote_run_dir && export CENTAUR_RUN_ID=\"$run_id\" && export CENTAUR_LOG=\"$remote_smoke_log\" && export CENTAUR_ZIP=\"$remote_zip\" && export CENTAUR_CATALOG_JSON=\"$remote_catalog\""
+if [ "${CENTAUR_WORKDIR:-}" = "" ]; then
+	ssh_cmd="$ssh_cmd && export CENTAUR_WORKDIR=\"$remote_run_dir\""
+fi
 if [ "${CENTAUR_PIP_ARGS:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_PIP_ARGS=\"${CENTAUR_PIP_ARGS}\""
 fi
@@ -113,17 +117,17 @@ fi
 if [ "${CENTAUR_TRACE:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_TRACE=\"${CENTAUR_TRACE}\""
 fi
-ssh_cmd="$ssh_cmd && sh -s"
+ssh_cmd="$ssh_cmd && sh \"$remote_smoke\""
 
-echo "== run smoke (streamed) =="
-echo "ssh $SSH_OPTS $target \"$ssh_cmd\" < $smoke"
+echo "== run smoke (remote) =="
+echo "ssh $SSH_OPTS $target \"$ssh_cmd\""
 echo "remote_smoke_log: $remote_smoke_log"
 
 if [ "$local_log" = "" ]; then
-	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$smoke"
+	ssh $SSH_OPTS "$target" "$ssh_cmd"
 else
 	need_cmd tee
 	need_cmd dirname
 	mkdir -p "$(dirname -- "$local_log")"
-	ssh $SSH_OPTS "$target" "$ssh_cmd" < "$smoke" 2>&1 | tee "$local_log"
+	ssh $SSH_OPTS "$target" "$ssh_cmd" 2>&1 | tee "$local_log"
 fi

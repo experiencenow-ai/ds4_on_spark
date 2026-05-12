@@ -536,8 +536,15 @@ def compute_quantization_contract_hint(
 	if expected_scale_fmt is not None:
 		notes.append(f"scale_fmt is source-derived as {expected_scale_fmt!r}; GGUF headers typically do not encode scale-tensor semantics")
 
+	status = "unknown"
+	if dense_like is True and expert_like is True:
+		status = "native_like"
+	elif dense_like is False or expert_like is False:
+		status = "mismatch"
+
 	return {
 		"checked": True,
+		"status": status,
 		"expected": {"dense_dtype": expected_dense, "expert_dtype": expected_expert, "scale_fmt": expected_scale_fmt},
 		"observed": {
 			"dense_primary_type": obs_dense_type,
@@ -547,6 +554,7 @@ def compute_quantization_contract_hint(
 		"dense_fp8_like": dense_like,
 		"expert_fp4_like": expert_like,
 		"notes": notes,
+		"notes_sample": list(notes)[:10],
 	}
 
 
@@ -563,6 +571,7 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 	required_layer_suffixes = tk.get("required_layer_suffixes", None)
 	required_nonzero = tk.get("required_layer_suffixes_compress_ratio_nonzero", None)
 	required_ratio4 = tk.get("required_layer_suffixes_compress_ratio_4", None)
+	layer_required_nonexpert_keys_by_layer_id = tk.get("layer_required_nonexpert_keys_by_layer_id", None)
 
 	hash_gate_suffix = tk.get("hash_gate_tensor_key_suffix", "ffn.gate.tid2eid")
 	score_gate_suffix = tk.get("score_gate_tensor_key_suffix", "ffn.gate.bias")
@@ -600,6 +609,29 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 				missing_sample.append(key)
 
 		return note_missing, lambda: missing_count, lambda: missing_sample
+
+	def compute_nonexpert_missing_from_expanded_key_lists(note_total_missing: Callable[[str], None]) -> tuple[bool, int, int, list[str]]:
+		# Optional: when the contract includes explicit expanded per-layer required
+		# non-expert keys, use that for a precise "namespace preserved?" signal.
+		if not isinstance(layer_required_nonexpert_keys_by_layer_id, dict):
+			return (False, 0, 0, [])
+		expected_total = 0
+		missing = 0
+		missing_sample: list[str] = []
+		for i in range(n_layers_i):
+			keys = layer_required_nonexpert_keys_by_layer_id.get(str(i), None)
+			if not isinstance(keys, list) or not keys:
+				continue
+			for need in keys:
+				if not isinstance(need, str) or not need:
+					continue
+				expected_total += 1
+				if need not in weight_keys:
+					missing += 1
+					note_total_missing(need)
+					if len(missing_sample) < 20:
+						missing_sample.append(need)
+		return (True, int(expected_total), int(missing), missing_sample)
 
 	def compute_llamacpp_trunk_contract() -> dict[str, Any]:
 		# llama.cpp DeepSeek-V4 GGUFs typically use:
@@ -712,6 +744,28 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 	forbidden_present: set[str] = set()
 
 	note_missing, get_missing_count, get_missing_sample = note_missing_factory()
+	nonexpert_expanded_used, nonexpert_expected, nonexpert_missing, nonexpert_missing_sample = compute_nonexpert_missing_from_expanded_key_lists(note_missing)
+
+	has_compressor: list[bool] = [False for _ in range(n_layers_i)]
+	has_indexer: list[bool] = [False for _ in range(n_layers_i)]
+	for k in weight_keys:
+		if not k.startswith("layers."):
+			continue
+		parts = k.split(".", 4)
+		if len(parts) < 4:
+			continue
+		try:
+			i = int(parts[1])
+		except Exception:
+			continue
+		if i < 0 or i >= n_layers_i:
+			continue
+		if parts[2] != "attn":
+			continue
+		if parts[3] == "compressor":
+			has_compressor[i] = True
+		elif parts[3] == "indexer":
+			has_indexer[i] = True
 
 	for k in required_top_level:
 		if not isinstance(k, str) or not k:
@@ -726,40 +780,56 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 		except Exception:
 			ratio_i = 0
 
-		for suffix in required_layer_suffixes:
-			if not isinstance(suffix, str) or not suffix:
-				continue
-			need = prefix + suffix
-			if need not in weight_keys:
-				note_missing(need)
-
-		if ratio_i != 0:
-			for suffix in required_nonzero:
+		# When expanded non-expert key lists are available, treat them as the
+		# authoritative per-layer requirements and avoid duplicating missing counts.
+		if not nonexpert_expanded_used:
+			for suffix in required_layer_suffixes:
 				if not isinstance(suffix, str) or not suffix:
 					continue
 				need = prefix + suffix
 				if need not in weight_keys:
 					note_missing(need)
 
-		if ratio_i == 4:
-			for suffix in required_ratio4:
-				if not isinstance(suffix, str) or not suffix:
-					continue
-				need = prefix + suffix
-				if need not in weight_keys:
-					note_missing(need)
+			if ratio_i != 0:
+				for suffix in required_nonzero:
+					if not isinstance(suffix, str) or not suffix:
+						continue
+					need = prefix + suffix
+					if need not in weight_keys:
+						note_missing(need)
+			if ratio_i == 4:
+				for suffix in required_ratio4:
+					if not isinstance(suffix, str) or not suffix:
+						continue
+					need = prefix + suffix
+					if need not in weight_keys:
+						note_missing(need)
+
+			if i < n_hash_layers_i:
+				need_hash = prefix + str(hash_gate_suffix)
+				if need_hash not in weight_keys:
+					note_missing(need_hash)
+			else:
+				need_score = prefix + str(score_gate_suffix)
+				if need_score not in weight_keys:
+					note_missing(need_score)
+
+		# Forbidden keys are schedule-sensitive and remain enforced even when the
+		# contract provides expanded required key lists.
+		if ratio_i == 0:
+			if has_compressor[i]:
+				forbidden_present.add(prefix + "attn.compressor.")
+			if has_indexer[i]:
+				forbidden_present.add(prefix + "attn.indexer.")
+		else:
+			if ratio_i != 4 and has_indexer[i]:
+				forbidden_present.add(prefix + "attn.indexer.")
 
 		if i < n_hash_layers_i:
-			need_hash = prefix + str(hash_gate_suffix)
-			if need_hash not in weight_keys:
-				note_missing(need_hash)
 			bad_score = prefix + str(score_gate_suffix)
 			if bad_score in weight_keys:
 				forbidden_present.add(bad_score)
 		else:
-			need_score = prefix + str(score_gate_suffix)
-			if need_score not in weight_keys:
-				note_missing(need_score)
 			bad_hash = prefix + str(hash_gate_suffix)
 			if bad_hash in weight_keys:
 				forbidden_present.add(bad_hash)
@@ -778,6 +848,10 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 		"kind": "deepseek-upstream",
 		"complete": (missing_count == 0 and len(forbidden_sorted) == 0),
 		"n_layers_checked": n_layers_i,
+		"nonexpert_key_lists_used": bool(nonexpert_expanded_used),
+		"nonexpert_required_expected_count": int(nonexpert_expected),
+		"nonexpert_required_missing_count": int(nonexpert_missing),
+		"nonexpert_required_missing_sample": nonexpert_missing_sample,
 		"missing_required_count": missing_count,
 		"missing_required_sample": get_missing_sample(),
 		"forbidden_present": forbidden_sorted,
@@ -897,6 +971,7 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 
 	tk = contract_summary.get("tensor_keys", {})
 	moe = contract_summary.get("moe", {})
+	mtp_required_nonexpert_keys_by_layer_id = tk.get("mtp_required_nonexpert_keys_by_layer_id", None)
 
 	required_layer_suffixes = tk.get("required_layer_suffixes", None)
 	required_mtp_additional_suffixes = tk.get("required_mtp_additional_suffixes", None)
@@ -923,6 +998,7 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 			continue
 
 	missing_required: set[str] = set()
+	missing_nonexpert: set[str] = set()
 	forbidden_present: set[str] = set()
 
 	for mtp_id in sorted(mtp_layer_ids_present):
@@ -956,12 +1032,32 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 			if need not in mtp_keys:
 				missing_required.add(need)
 
+		if isinstance(mtp_required_nonexpert_keys_by_layer_id, dict):
+			keys = mtp_required_nonexpert_keys_by_layer_id.get(str(mtp_id), None)
+			if isinstance(keys, list):
+				for need in keys:
+					if not isinstance(need, str) or not need:
+						continue
+					if need not in mtp_keys:
+						missing_nonexpert.add(need)
+
 	missing_sorted = sorted(missing_required)
+	missing_nonexpert_sorted = sorted(missing_nonexpert)
 	forbidden_sorted = sorted(forbidden_present)
+	nonexpert_expected = 0
+	if isinstance(mtp_required_nonexpert_keys_by_layer_id, dict):
+		for mtp_id in sorted(mtp_layer_ids_present):
+			keys = mtp_required_nonexpert_keys_by_layer_id.get(str(mtp_id), None)
+			if isinstance(keys, list):
+				nonexpert_expected += int(len([k for k in keys if isinstance(k, str) and k]))
 	return {
 		"checked": True,
 		"complete": (len(missing_sorted) == 0 and len(forbidden_sorted) == 0),
 		"mtp_layer_ids_present": sorted(mtp_layer_ids_present),
+		"nonexpert_key_lists_used": bool(isinstance(mtp_required_nonexpert_keys_by_layer_id, dict) and nonexpert_expected > 0),
+		"nonexpert_required_expected_count": int(nonexpert_expected),
+		"nonexpert_required_missing_count": int(len(missing_nonexpert_sorted)),
+		"nonexpert_required_missing_sample": missing_nonexpert_sorted[:20],
 		"missing_required_count": len(missing_sorted),
 		"missing_required_sample": missing_sorted[:20],
 		"forbidden_present": forbidden_sorted[:20],
@@ -1048,10 +1144,24 @@ def compute_mtp_trust(
 	mtp_keys_sha256: Optional[str],
 ) -> dict[str, Any]:
 	if not mtp_present:
-		return {"checked": True, "trusted": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+		return {
+			"checked": True,
+			"trusted": False,
+			"status": "absent",
+			"reasons": ["no mtp.* tensors present"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
-		return {"checked": False, "trusted": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+		return {
+			"checked": False,
+			"trusted": False,
+			"status": "unknown",
+			"reasons": ["mtp_contract not checked"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	trust_gates = None
 	if isinstance(contract_summary, dict):
@@ -1069,6 +1179,10 @@ def compute_mtp_trust(
 		if expected_mtp_keys_sha256 is None:
 			expected_mtp_keys_sha256 = contract_summary.get("checkpoint_index", {}).get("weight_map_mtp_keys_sha256", None)
 
+	mtp_keys_sha256_match_official = None
+	if expected_mtp_keys_sha256 is not None and mtp_keys_sha256 is not None:
+		mtp_keys_sha256_match_official = (mtp_keys_sha256 == expected_mtp_keys_sha256)
+
 	# Namespace contract: MTP must preserve the expected `mtp.{j}.` prefixes (and
 	# include mtp.0.* when the contract expects mtp ids starting at 0).
 	if isinstance(contract_summary, dict):
@@ -1082,6 +1196,8 @@ def compute_mtp_trust(
 					"trusted": False,
 					"status": "namespace_incomplete",
 					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 				}
 			if trust_gates.get("artifact_requires_mtp_namespace_has_mtp0") is True and ns.get("has_mtp0") is not True:
 				return {
@@ -1089,6 +1205,8 @@ def compute_mtp_trust(
 					"trusted": False,
 					"status": "namespace_missing_mtp0",
 					"reasons": ["mtp_namespace.has_mtp0 != true"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 				}
 
 	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
@@ -1101,6 +1219,8 @@ def compute_mtp_trust(
 			"trusted": False,
 			"status": "incomplete",
 			"reasons": reasons,
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 		}
 
 	if (
@@ -1117,6 +1237,8 @@ def compute_mtp_trust(
 			"trusted": False,
 			"status": "fingerprint_mismatch",
 			"reasons": reasons,
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 		}
 
 	reasons = ["structural mtp.* keys complete"]
@@ -1128,14 +1250,52 @@ def compute_mtp_trust(
 		"trusted": False,
 		"status": "structural_complete_untrusted",
 		"reasons": reasons,
+		"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+		"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 	}
 
-def compute_mtp_preservation(mtp_present: bool, mtp_namespace: Optional[dict[str, Any]], mtp_contract: Optional[dict[str, Any]]) -> dict[str, Any]:
+def compute_mtp_preservation(
+	mtp_present: bool,
+	mtp_namespace: Optional[dict[str, Any]],
+	mtp_contract: Optional[dict[str, Any]],
+	contract_summary: Optional[dict[str, Any]],
+	mtp_keys_sha256: Optional[str],
+) -> dict[str, Any]:
 	if not mtp_present:
-		return {"checked": True, "preserves": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
+		return {
+			"checked": True,
+			"preserves": False,
+			"status": "absent",
+			"reasons": ["no mtp.* tensors present"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
 
 	if not isinstance(mtp_contract, dict) or mtp_contract.get("checked") is not True:
-		return {"checked": False, "preserves": False, "status": "unknown", "reasons": ["mtp_contract not checked"]}
+		return {
+			"checked": False,
+			"preserves": False,
+			"status": "unknown",
+			"reasons": ["mtp_contract not checked"],
+			"expected_mtp_keys_sha256": None,
+			"mtp_keys_sha256_match_official": None,
+		}
+
+	expected_mtp_keys_sha256 = None
+	trust_gates = None
+	if isinstance(contract_summary, dict):
+		fp = contract_summary.get("mtp", {}).get("checkpoint_key_fingerprint", None)
+		if isinstance(fp, dict):
+			expected_mtp_keys_sha256 = fp.get("keys_sha256", None)
+		if expected_mtp_keys_sha256 is None:
+			expected_mtp_keys_sha256 = contract_summary.get("checkpoint_index", {}).get("weight_map_mtp_keys_sha256", None)
+		trust_gates = contract_summary.get("mtp", {}).get("trust_gates", None)
+	if not isinstance(trust_gates, dict):
+		trust_gates = {}
+
+	mtp_keys_sha256_match_official = None
+	if expected_mtp_keys_sha256 is not None and mtp_keys_sha256 is not None:
+		mtp_keys_sha256_match_official = (mtp_keys_sha256 == expected_mtp_keys_sha256)
 
 	if isinstance(mtp_namespace, dict):
 		expected_ids = mtp_namespace.get("expected_layer_ids", [])
@@ -1147,6 +1307,8 @@ def compute_mtp_preservation(mtp_present: bool, mtp_namespace: Optional[dict[str
 					"preserves": False,
 					"status": "namespace_incomplete",
 					"reasons": [f"mtp_namespace.expected_complete != true (missing_expected_layer_ids={missing})"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 				}
 			if mtp_namespace.get("has_mtp0") is not True:
 				return {
@@ -1154,12 +1316,45 @@ def compute_mtp_preservation(mtp_present: bool, mtp_namespace: Optional[dict[str
 					"preserves": False,
 					"status": "namespace_missing_mtp0",
 					"reasons": ["mtp_namespace.has_mtp0 != true"],
+					"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+					"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 				}
 
 	if mtp_contract.get("complete") is not True:
-		return {"checked": True, "preserves": False, "status": "incomplete", "reasons": ["mtp_contract.complete != true"]}
+		return {
+			"checked": True,
+			"preserves": False,
+			"status": "incomplete",
+			"reasons": ["mtp_contract.complete != true"],
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
+		}
 
-	return {"checked": True, "preserves": True, "status": "complete", "reasons": ["mtp.* keys satisfy upstream contract"]}
+	if (
+		trust_gates.get("artifact_requires_mtp_keys_sha256_match_official", True) is True
+		and expected_mtp_keys_sha256 is not None
+		and mtp_keys_sha256 is not None
+		and mtp_keys_sha256 != expected_mtp_keys_sha256
+	):
+		return {
+			"checked": True,
+			"preserves": False,
+			"status": "fingerprint_mismatch",
+			"reasons": [
+				f"mtp_keys_sha256 != official mtp checkpoint fingerprint (expected={expected_mtp_keys_sha256} observed={mtp_keys_sha256})"
+			],
+			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+			"mtp_keys_sha256_match_official": False,
+		}
+
+	return {
+		"checked": True,
+		"preserves": True,
+		"status": "complete",
+		"reasons": ["mtp.* keys satisfy upstream contract"],
+		"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
+		"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
+	}
 
 
 def inspect_safetensors_index(path: Path) -> InspectResult:
@@ -1475,7 +1670,13 @@ def main() -> int:
 						}
 					)
 		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary, mtp_keys_union_sha256)
-		mtp_preservation = compute_mtp_preservation(any(r.mtp_present for r in results), mtp_namespace, mtp_contract)
+		mtp_preservation = compute_mtp_preservation(
+			any(r.mtp_present for r in results),
+			mtp_namespace,
+			mtp_contract,
+			contract_summary,
+			mtp_keys_union_sha256,
+		)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -1514,7 +1715,13 @@ def main() -> int:
 					contract_summary,
 					out.get("mtp_keys_sha256"),
 				)
-				out["mtp_preservation"] = compute_mtp_preservation(bool(out.get("mtp_present", False)), out.get("mtp_namespace"), out.get("mtp_contract"))
+				out["mtp_preservation"] = compute_mtp_preservation(
+					bool(out.get("mtp_present", False)),
+					out.get("mtp_namespace"),
+					out.get("mtp_contract"),
+					contract_summary,
+					out.get("mtp_keys_sha256"),
+				)
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 				out["ds4_mtp_sidecar_contract"] = compute_ds4_mtp_sidecar_contract(set(results[0].weight_keys_all), results[0].metadata, contract_summary)
@@ -1538,7 +1745,13 @@ def main() -> int:
 											contract_summary,
 											(None if not r.mtp_present else sha256_lines(sorted(r.mtp_keys_all))),
 										),
-										"mtp_preservation": compute_mtp_preservation(bool(r.mtp_present), compute_mtp_namespace_status(r.mtp_layer_ids, contract_summary), compute_mtp_contract(set(r.mtp_keys_all), contract_summary)),
+										"mtp_preservation": compute_mtp_preservation(
+											bool(r.mtp_present),
+											compute_mtp_namespace_status(r.mtp_layer_ids, contract_summary),
+											compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
+											contract_summary,
+											(None if not r.mtp_present else sha256_lines(sorted(r.mtp_keys_all))),
+										),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 										"ds4_mtp_sidecar_contract": compute_ds4_mtp_sidecar_contract(set(r.weight_keys_all), r.metadata, contract_summary),
@@ -1640,7 +1853,13 @@ def main() -> int:
 					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 						print(f"mtp_contract_forbidden_present: {k}")
 				mtp_namespace = compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary)
-				mtp_preservation = compute_mtp_preservation(bool(res.mtp_present), mtp_namespace, mtp_contract)
+				mtp_preservation = compute_mtp_preservation(
+					bool(res.mtp_present),
+					mtp_namespace,
+					mtp_contract,
+					contract_summary,
+					(None if not res.mtp_present else sha256_lines(sorted(res.mtp_keys_all))),
+				)
 				if isinstance(mtp_preservation, dict) and mtp_preservation.get("checked") is True:
 					print(f"mtp_preservation_status: {mtp_preservation.get('status')}")
 				trunk_contract = compute_trunk_contract(set(res.weight_keys_all), contract_summary)

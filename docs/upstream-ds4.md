@@ -4,8 +4,13 @@
 
 - Repo: `https://github.com/antirez/ds4`
 - Ref: `refs/heads/main`
-- Commit: `ed5d30dba0a1ef0f7fb863270df8f11df13653a4`
+- Commit: `f8b4ed635d559b3a5b44bf2df6a77e21b3e9178f`
 - License: MIT (see upstream `LICENSE`)
+
+## Notable upstream delta (since previous pin)
+
+- Previous pin: `8809b90a1e3247389d7652b565ab6772e036f1ea`
+- New HEAD note: upstream `main` advanced and (per commit messages) includes CUDA q8 fp16 cache behavior changes and recent MTP correctness fixes; treat any performance impact as upstream-only until reproduced locally.
 
 ## What it is
 

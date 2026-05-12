@@ -19,6 +19,19 @@ Use the wrapper that validates once, then stages to Spark0/Spark1/Spark2:
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional (recommended): also run staged TP readiness checks (safe; no sudo):
+
+```bash
+./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional: keep the ordered inventory in a file and use the inventory-driven helper directly:
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 As part of staging, the helper also runs a **staged env audit** (safe) to catch common ring misconfigurations early:
 
 - Validates `/tmp/ds4-config/ds4-<instance>.env.example` has consistent `DS4_WORLD_SIZE`, unique `DS4_RANK`, and a consistent `DS4_RING_HOSTS`.

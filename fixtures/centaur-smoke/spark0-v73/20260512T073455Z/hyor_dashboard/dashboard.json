@@ -1,0 +1,554 @@
+{
+  "api_usage": {
+    "accounting_month": "2026-05",
+    "by_provider": {},
+    "format": "centaur-hyor-api-usage-v1",
+    "provider_filter": null,
+    "record_count": 0,
+    "status": "success",
+    "total_estimated_cost_usd": 0
+  },
+  "benchmark_results": {
+    "best_by_catalog": {
+      "unit__576441fad99b56ee": {
+        "adoption_score": 45.0,
+        "benchmark_result_id": "benchmark-f4b44aa4df0e4c0788c52b729cd78d06",
+        "model_id": "unit/test-model",
+        "node_id": "spark0",
+        "suite_id": "spark0_smoke_suite"
+      }
+    },
+    "by_status": {
+      "success": 1
+    },
+    "format": "centaur-hyor-model-benchmark-result-v1",
+    "record_count": 1
+  },
+  "complexity_trend": {
+    "baseline_score_delta": null,
+    "best": null,
+    "direction": "lower_is_better",
+    "format": "centaur-complexity-trend-v1",
+    "functions_over_100_delta": null,
+    "functions_over_50_delta": null,
+    "latest": null,
+    "max_function_lines_delta": null,
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/complexity_trend.ndjson",
+    "previous_score_delta": null,
+    "record_count": 0,
+    "repeated_normalized_blocks_delta": null,
+    "returned_count": 0,
+    "status": "success",
+    "trend": "insufficient_data",
+    "version": 1
+  },
+  "controller_events": {
+    "event_count": 0,
+    "format": "centaur-hyor-controller-event-v1",
+    "recent": []
+  },
+  "created_unix_us": 1778571312082832,
+  "distribution": {
+    "distribution_present": true,
+    "format": "centaur-hyor-distribution-v1",
+    "layer_counts": {
+      "baseline": 1,
+      "node_type": 1
+    },
+    "manifest_count": 2,
+    "object_bytes": 19,
+    "object_count": 2,
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/hyor_distribution",
+    "selectors": {
+      "baseline": [
+        "all"
+      ],
+      "node_type": [
+        "default"
+      ]
+    }
+  },
+  "episodes": {
+    "actor_counts": {},
+    "average_cost_score": null,
+    "average_quality_score": null,
+    "format": "centaur-episode-record-v1",
+    "record_count": 0,
+    "state_machine_counts": {},
+    "status_counts": {},
+    "total_duration_us": 0,
+    "total_tokens_in": 0,
+    "total_tokens_out": 0
+  },
+  "executors": {
+    "by_kind": {},
+    "executor_count": 0,
+    "executors": {},
+    "format": "centaur-hyor-executor-registry-v1"
+  },
+  "format": "centaur-hyor-controller-dashboard-v1",
+  "install_results": {
+    "by_status": {},
+    "format": "centaur-hyor-model-install-result-v1",
+    "record_count": 0,
+    "records": []
+  },
+  "iteration_dry_reviews": {
+    "format": "centaur-iteration-dry-review-v1",
+    "latest_duplicate_function_group_count": null,
+    "latest_oversized_function_count": null,
+    "latest_repeated_block_group_count": null,
+    "latest_review_hash": null,
+    "latest_status": null,
+    "recent": [],
+    "review_count": 0
+  },
+  "model_catalog": {
+    "by_access_mode": {
+      "download": 1
+    },
+    "by_model_class": {
+      "code": 1
+    },
+    "candidate_count": 1,
+    "format": "centaur-hyor-model-catalog-v1",
+    "match_count": 0,
+    "matches": [],
+    "rejected_count": 1,
+    "requirements": {
+      "access_mode": [],
+      "avoided_weaknesses": [],
+      "max_memory_gib": null,
+      "min_context_tokens": 0,
+      "min_quality_tag": "low",
+      "model_class": null,
+      "required_strengths": []
+    }
+  },
+  "model_profiles": {
+    "by_model_class": {},
+    "by_node_id": {},
+    "format": "centaur-hyor-model-profile-v1",
+    "profile_count": 0
+  },
+  "node_announcements": {
+    "by_node": {
+      "spark0": 2
+    },
+    "format": "centaur-hyor-node-announcement-v1",
+    "latest_record_hash": "sha256:5c61caa8021b8c3a0f288484e6ce3da951cf28e6af3de0832901841840e67400",
+    "recent": [
+      {
+        "announcement_hash": "sha256:c8d6417262c3f21250561c80f55412059e199eb6a8ea11207ff56c2430bb157f",
+        "created_unix_us": 1778571309155057,
+        "node_id": "spark0",
+        "node_type": "default",
+        "record_hash": "sha256:d11e762b6dcbfca83f604e0f08cbf59c078829417eb2f4ccd4ee467f1f91c334",
+        "status": "applied"
+      },
+      {
+        "announcement_hash": "sha256:0812e4b924c5fdecab5f004af981047d55b80b464c87253b8697b3aa1d6117e5",
+        "created_unix_us": 1778571310216301,
+        "node_id": "spark0",
+        "node_type": "default",
+        "record_hash": "sha256:5c61caa8021b8c3a0f288484e6ce3da951cf28e6af3de0832901841840e67400",
+        "status": "applied"
+      }
+    ],
+    "record_count": 2
+  },
+  "node_discoveries": {
+    "by_node": {},
+    "by_status": {},
+    "format": "centaur-hyor-node-discovery-v1",
+    "latest_record_hash": null,
+    "recent": [],
+    "record_count": 0
+  },
+  "procedure_approval_policy": {
+    "allow_override": true,
+    "format": "centaur-procedure-approval-v1",
+    "min_approvals": 1,
+    "note": "local operator default: approval gate is disabled unless explicitly enabled",
+    "require_approval_for_apply": false,
+    "trusted_approvers": [],
+    "version": 1
+  },
+  "procedure_approvals": {
+    "by_decision": {},
+    "by_proposal": {},
+    "by_reviewer": {},
+    "format": "centaur-procedure-approval-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/procedure_approvals.ndjson",
+    "policy": {
+      "allow_override": true,
+      "format": "centaur-procedure-approval-v1",
+      "min_approvals": 1,
+      "note": "local operator default: approval gate is disabled unless explicitly enabled",
+      "require_approval_for_apply": false,
+      "trusted_approvers": [],
+      "version": 1
+    },
+    "record_count": 0,
+    "total_record_count": 0
+  },
+  "procedure_changes": {
+    "by_procedure": {},
+    "by_status": {},
+    "format": "centaur-procedure-change-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/procedure_change_proposals.ndjson",
+    "proposal_count": 0,
+    "record_count": 0
+  },
+  "procedure_registry_full": {
+    "format": "centaur-procedure-registry-v1",
+    "procedures": {},
+    "version": 2
+  },
+  "procedure_work_queue": {
+    "by_action": {},
+    "by_procedure": {},
+    "by_status": {},
+    "format": "centaur-procedure-work-queue-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/procedure_work_queue.ndjson",
+    "record_count": 0,
+    "work_item_count": 0
+  },
+  "procedures": {
+    "by_authority": {},
+    "deprecated_count": 0,
+    "format": "centaur-procedure-registry-v1",
+    "procedure_count": 0,
+    "required_count": 0,
+    "variant_count": 0
+  },
+  "project_curriculum": {
+    "by_project": {},
+    "by_status": {},
+    "format": "centaur-project-curriculum-proposal-v1",
+    "latest": null,
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/project_curriculum_proposals.ndjson",
+    "proposal_count": 0,
+    "status": "success"
+  },
+  "project_highwater": {
+    "format": "centaur-project-highwater-v1",
+    "project_count": 0,
+    "projects": {},
+    "record_count": 0,
+    "rejected_count": 0,
+    "status": "success"
+  },
+  "project_scores": {
+    "by_project": {},
+    "format": "centaur-project-score-v1",
+    "latest": null,
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/project_scores.ndjson",
+    "record_count": 0,
+    "status": "success",
+    "survivor_count": 0
+  },
+  "project_verifications": {
+    "by_status": {},
+    "format": "centaur-project-verification-v1",
+    "latest": null,
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/project_verifications.ndjson",
+    "record_count": 0,
+    "status": "success"
+  },
+  "projects": {
+    "by_status": {},
+    "format": "centaur-project-registry-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/projects.json",
+    "project_count": 0,
+    "projects": [],
+    "selected_count": 0,
+    "status": "success"
+  },
+  "projects_full": {
+    "by_status": {},
+    "format": "centaur-project-registry-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/projects.json",
+    "project_count": 0,
+    "projects": [],
+    "selected_count": 0,
+    "status": "success"
+  },
+  "provider_usage": {
+    "accounting_month": "2026-05",
+    "billing_period": "2026-05",
+    "by_provider": {},
+    "format": "centaur-hyor-api-usage-v1",
+    "provider_filter": null,
+    "provider_id": null,
+    "record_count": 0,
+    "status": "success",
+    "total_estimated_cost_usd": 0
+  },
+  "providers": {
+    "by_kind": {
+      "open_source_catalog": 1
+    },
+    "enabled_count": 1,
+    "format": "centaur-hyor-provider-registry-v1",
+    "provider_count": 1
+  },
+  "recent_telemetry": [],
+  "root": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller",
+  "runtime": {
+    "available_kv_bytes": 0,
+    "busy_module_count": 0,
+    "fixed_node_count": null,
+    "format": "centaur-hyor-runtime-v1",
+    "leased_running_count": 0,
+    "model_class_kv": {},
+    "module_runtime_count": 0,
+    "node_count_mode": "dynamic_inventory",
+    "present_module_count": 0,
+    "queue_counts": {
+      "completed": 0,
+      "deferred": 0,
+      "escalated": 0,
+      "failed": 0,
+      "queued": 0,
+      "running": 0
+    },
+    "reserved_kv_bytes": 0,
+    "task_count": 0,
+    "topology": {
+      "fixed_node_count": null,
+      "format": "centaur-hyor-topology-v1",
+      "healthy_module_count": 0,
+      "healthy_node_count": 1,
+      "model_classes": {},
+      "module_count": 0,
+      "node_count": 1,
+      "node_count_mode": "dynamic_inventory"
+    },
+    "total_kv_budget_bytes": 0
+  },
+  "runtime_full": {
+    "created_unix_us": 1778571309678100,
+    "fixed_node_count": null,
+    "format": "centaur-hyor-runtime-v1",
+    "module_runtime": {},
+    "node_count_mode": "dynamic_inventory",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/hyor_runtime.json",
+    "queues": {
+      "completed": [],
+      "deferred": [],
+      "escalated": [],
+      "failed": [],
+      "queued": [],
+      "running": []
+    },
+    "runtime_present": true,
+    "tasks": {},
+    "updated_unix_us": 1778571310217625,
+    "version": 1
+  },
+  "shorthand": {
+    "by_category": {
+      "context": 3,
+      "json_key": 2,
+      "procedure": 5,
+      "project": 3,
+      "runtime": 2,
+      "scoring": 2,
+      "state_machine": 4,
+      "telemetry": 1,
+      "tool": 10
+    },
+    "codes": [
+      "@cmd",
+      "@cost",
+      "@ctxsav",
+      "@cwd",
+      "@diag",
+      "@dur",
+      "@env",
+      "@fc",
+      "@fmt",
+      "@fp",
+      "@hashref",
+      "@mid",
+      "@next",
+      "@ns",
+      "@obs",
+      "@pid",
+      "@proc",
+      "@prop",
+      "@qual",
+      "@raw",
+      "@rawout",
+      "@rawsha",
+      "@rc",
+      "@rid",
+      "@run",
+      "@sid",
+      "@sm",
+      "@st",
+      "@tc",
+      "@tr",
+      "@vercmd",
+      "@work"
+    ],
+    "entry_count": 32,
+    "format": "centaur-shorthand-registry-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/shorthand_registry.json",
+    "policy": {
+      "ad_hoc_abbreviations_allowed": false,
+      "default_include_glossary": false,
+      "lossless_only": true,
+      "notes": "Use shorthand as a reversible shared codec for structured context, not as model-invented slang."
+    },
+    "status": "success"
+  },
+  "state_machine_runs": {
+    "by_state_machine": {},
+    "by_status": {},
+    "event_count": 0,
+    "format": "centaur-state-machine-run-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/state_machine_runs.ndjson",
+    "recent": [],
+    "run_count": 0
+  },
+  "status": "success",
+  "supervisor": {
+    "by_type": {},
+    "event_count": 0,
+    "format": "centaur-hyor-supervisor-v1",
+    "latest_event_hash": null,
+    "latest_event_type": null,
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/hyor_supervisor_events.ndjson",
+    "recent": [],
+    "status": "success"
+  },
+  "telemetry": {
+    "event_counts": {},
+    "format": "centaur-hyor-telemetry-v1",
+    "model_counts": {},
+    "record_count": 0,
+    "status_counts": {}
+  },
+  "test_groups": {
+    "format": "centaur-test-group-manifest-v1",
+    "group_count": 0,
+    "groups": [],
+    "status": "missing_tests",
+    "test_count": 0
+  },
+  "test_runs": {
+    "by_status": {},
+    "format": "centaur-test-run-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/test_runs.ndjson",
+    "recent": [],
+    "record_count": 0,
+    "returned_count": 0,
+    "total_context_saved_bytes": 0
+  },
+  "tool_contracts": {
+    "by_kind": {
+      "build": 2,
+      "command": 1,
+      "test": 3
+    },
+    "contract_count": 6,
+    "contract_ids": [
+      "build_diagnostics",
+      "cargo_test_failures",
+      "command_summary",
+      "pytest_failures",
+      "test_failures",
+      "typescript_diagnostics"
+    ],
+    "format": "centaur-tool-contract-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/tool_contracts.json"
+  },
+  "tool_fingerprints": {
+    "fingerprint_count": 0,
+    "format": "centaur-tool-diagnostic-fingerprint-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/tool_diagnostic_fingerprints.ndjson",
+    "record_count": 0,
+    "top": []
+  },
+  "tool_runs": {
+    "by_kind": {},
+    "by_status": {},
+    "format": "centaur-tool-run-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/tool_runs.ndjson",
+    "recent": [],
+    "record_count": 0,
+    "total_context_saved_bytes": 0,
+    "total_raw_bytes": 0,
+    "total_reduced_bytes": 0
+  },
+  "tool_shorthand": {
+    "default_profile_id": "tool_evidence_v1",
+    "format": "centaur-tool-shorthand-v1",
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/tool_shorthand_profiles.json",
+    "profile_count": 1,
+    "profile_ids": [
+      "tool_evidence_v1"
+    ],
+    "status": "success"
+  },
+  "topology": {
+    "fixed_node_count": null,
+    "format": "centaur-hyor-topology-v1",
+    "healthy_module_count": 0,
+    "healthy_node_count": 1,
+    "model_classes": {},
+    "module_count": 0,
+    "node_count": 1,
+    "node_count_mode": "dynamic_inventory"
+  },
+  "topology_full": {
+    "fixed_node_count": null,
+    "format": "centaur-hyor-topology-v1",
+    "inventory_present": true,
+    "node_count_mode": "dynamic_inventory",
+    "nodes": {
+      "spark0": {
+        "accelerator": "spark-class",
+        "agent_config_hash": "sha256:7f27454cc55e87b687b0bf3115f0e370076cf4a20b2b1f6f4750d535d368ef9e",
+        "agent_transport": "filesystem",
+        "announcement_hash": "sha256:0812e4b924c5fdecab5f004af981047d55b80b464c87253b8697b3aa1d6117e5",
+        "controller_url": null,
+        "cpu_cores": 20,
+        "fingerprint": {
+          "cpu_count": 20,
+          "disk_free_bytes": 3542846124032,
+          "disk_total_bytes": 4030802149376,
+          "hostname": "<redacted-hostname>",
+          "machine": "aarch64",
+          "memory_bytes": 128518373376,
+          "memory_gib": 119.692,
+          "pid": 1311354,
+          "platform": "Linux-6.17.0-1014-nvidia-aarch64-with-glibc2.39",
+          "processor": "aarch64",
+          "python_version": "3.12.3",
+          "root": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/node_spark0",
+          "system": "Linux"
+        },
+        "health_state": "healthy",
+        "interconnect": [
+          "filesystem"
+        ],
+        "internet_enabled": false,
+        "last_seen_unix_us": 1778571310206539,
+        "memory_bytes": 128518306398,
+        "modules": {},
+        "node_id": "spark0",
+        "node_type": "default",
+        "provider_ids": [],
+        "tags": [
+          "auto_announced"
+        ]
+      }
+    },
+    "notes": [],
+    "path": "/home/spark0/centaur-smoke/v73/run/20260512T073455Z/hyor/controller/.centaur/hyor_topology.json",
+    "version": 1
+  }
+}

@@ -144,6 +144,11 @@ def _prompt_trigram_features(prompt: str, limit: int) -> List[str]:
     trigrams = list(lib.word_ngrams(ws, 3))
     return(_select_features(trigrams, limit))
 
+def _answer_key(answer: str, answer_letter_only: bool) -> str:
+    if not answer_letter_only:
+        return(answer)
+    return(lib.answer_letter(answer))
+
 def _coverage_delta(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for key in sorted(before.keys()):
@@ -157,7 +162,7 @@ def _coverage_delta(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, 
         }
     return(out)
 
-def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], prompt_word_limit: int = 64, prompt_trigram_limit: int = 64) -> Dict[str, Any]:
+def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, answer_letter_only: bool = False) -> Dict[str, Any]:
     hist_task_id: Dict[str, int] = {}
     hist_task_family: Dict[str, int] = {}
     hist_prompt_template_id: Dict[str, int] = {}
@@ -181,8 +186,9 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
         if c.task_family != "" and c.prompt_template_id != "":
             k = f"{c.task_family}|{c.prompt_template_id}"
             hist_pair[k] = hist_pair.get(k, 0) + 1
-        if c.answer != "":
-            hist_answer[c.answer] = hist_answer.get(c.answer, 0) + 1
+        ans_key = _answer_key(c.answer, bool(answer_letter_only))
+        if ans_key != "":
+            hist_answer[ans_key] = hist_answer.get(ans_key, 0) + 1
         if c.prompt != "":
             for w in _prompt_word_features(c.prompt, prompt_word_limit):
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
@@ -227,8 +233,9 @@ def _predict(history: List[Dict[str, Any]], top: Sequence[CandidateScore], promp
             after_buffer_id[c.buffer_id] = after_buffer_id.get(c.buffer_id, 0) + 1
         if c.buffer_item_id != "":
             after_buffer_item_id[c.buffer_item_id] = after_buffer_item_id.get(c.buffer_item_id, 0) + 1
-        if c.answer != "":
-            after_answer[c.answer] = after_answer.get(c.answer, 0) + 1
+        ans_key = _answer_key(c.answer, bool(answer_letter_only))
+        if ans_key != "":
+            after_answer[ans_key] = after_answer.get(ans_key, 0) + 1
         if c.prompt != "":
             for w in _prompt_word_features(c.prompt, prompt_word_limit):
                 after_prompt_words[w] = after_prompt_words.get(w, 0) + 1
@@ -291,7 +298,7 @@ def _history_rates(history: List[Dict[str, Any]]) -> Tuple[Dict[str, float], Dic
         if pair_k != "":
             pair_total[pair_k] = pair_total.get(pair_k, 0) + 1
 
-        flags = lib.useful_novelty_flags(c.output, c.prompt)
+        flags = lib.get_useful_novelty_flags(c.raw, c.output, c.prompt)
         if len(flags) != 0:
             if tmpl != "":
                 tmpl_flagged[tmpl] = tmpl_flagged.get(tmpl, 0) + 1
@@ -436,7 +443,7 @@ def _candidate_judge_stats(template_stats: Dict[str, Dict[str, float]], pair_sta
     return(template_stats.get(prompt_template_id) or {})
 
 
-def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64) -> List[CandidateScore]:
+def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, answer_letter_only: bool = False) -> List[CandidateScore]:
     hist_task_ids: Dict[str, int] = {}
     hist_family: Dict[str, int] = {}
     hist_template: Dict[str, int] = {}
@@ -464,8 +471,9 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
         if c.task_family != "" and c.prompt_template_id != "":
             k = f"{c.task_family}|{c.prompt_template_id}"
             hist_pair[k] = hist_pair.get(k, 0) + 1
-        if c.answer != "":
-            hist_answer[c.answer] = hist_answer.get(c.answer, 0) + 1
+        ans_key = _answer_key(c.answer, bool(answer_letter_only))
+        if ans_key != "":
+            hist_answer[ans_key] = hist_answer.get(ans_key, 0) + 1
         for tag in lib.get_list(c.raw, "tags", "tag"):
             hist_tags[tag] = hist_tags.get(tag, 0) + 1
         if c.buffer_id != "":
@@ -490,16 +498,17 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
         answer = lib.get_str(obj, "answer", "final_answer", "expected_answer", "gold_answer")
         if answer == "":
             answer = lib.extract_answer(lib.get_str(obj, "output", "completion", "response", "assistant", "text"))
+        ans_key = _answer_key(answer, bool(answer_letter_only))
         seen = 1 if task_id in hist_task_ids else 0
         seen_buf_item = 1 if (buffer_item_id != "" and buffer_item_id in hist_buffer_item) else 0
-        seen_answer = 1 if (answer != "" and answer in hist_answer) else 0
+        seen_answer = 1 if (ans_key != "" and ans_key in hist_answer) else 0
         fam_c = hist_family.get(task_family, 0)
         tmpl_c = hist_template.get(prompt_template_id, 0)
         pair_k = f"{task_family}|{prompt_template_id}"
         pair_c = hist_pair.get(pair_k, 0)
         buf_c = hist_buffer_id.get(buffer_id, 0)
         buf_item_c = hist_buffer_item.get(buffer_item_id, 0)
-        ans_c = hist_answer.get(answer, 0)
+        ans_c = hist_answer.get(ans_key, 0)
         noise_rate = _candidate_history_rate(tmpl_noise, pair_noise, task_family, prompt_template_id)
         dup_rate = _candidate_history_rate(tmpl_dup, pair_dup, task_family, prompt_template_id)
         jstats = _candidate_judge_stats(tmpl_judge, pair_judge, task_family, prompt_template_id)
@@ -519,7 +528,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
             "tags": _delta_entropy_for_add_tags(hist_tags, tags),
             "buffer_id": _delta_entropy_for_add(hist_buffer_id, buffer_id),
             "buffer_item_id": _delta_entropy_for_add(hist_buffer_item, buffer_item_id),
-            "answer": _delta_entropy_for_add(hist_answer, answer),
+            "answer": _delta_entropy_for_add(hist_answer, ans_key),
         }
         if float(prompt_word_weight) != 0.0:
             delta["prompt_word"] = _delta_entropy_for_add_tags(hist_prompt_words, _prompt_word_features(prompt, prompt_word_limit))
@@ -587,7 +596,7 @@ def _score(history: List[Dict[str, Any]], candidates: List[Dict[str, Any]], nois
     return(scored)
 
 
-def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, avoid_seen_buffer_item_id: bool = False, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64) -> List[CandidateScore]:
+def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: int, max_per_family: int, max_per_template: int, avoid_seen_task_id: bool, avoid_seen_buffer_item_id: bool = False, noise_weight: float = 0.75, dup_weight: float = 0.50, max_noise_rate: float = 1.0, max_dup_rate: float = 1.0, buffer_id_weight: float = 0.15, buffer_item_weight: float = 0.60, answer_weight: float = 0.25, judge_disagree_weight: float = 0.0, judge_invalid_weight: float = 0.0, judge_tie_weight: float = 0.0, judge_imbalance_weight: float = 0.0, prompt_word_weight: float = 0.0, prompt_trigram_weight: float = 0.0, prompt_word_limit: int = 64, prompt_trigram_limit: int = 64, answer_letter_only: bool = False) -> List[CandidateScore]:
     if limit <= 0:
         return([])
     if max_per_family < 0:
@@ -621,8 +630,9 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
         if c.task_family != "" and c.prompt_template_id != "":
             k = f"{c.task_family}|{c.prompt_template_id}"
             hist_pair[k] = hist_pair.get(k, 0) + 1
-        if c.answer != "":
-            hist_answer[c.answer] = hist_answer.get(c.answer, 0) + 1
+        ans_key = _answer_key(c.answer, bool(answer_letter_only))
+        if ans_key != "":
+            hist_answer[ans_key] = hist_answer.get(ans_key, 0) + 1
         if c.prompt != "":
             for w in _prompt_word_features(c.prompt, prompt_word_limit):
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
@@ -658,6 +668,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             noise_rate = _candidate_history_rate(tmpl_noise, pair_noise, c.task_family, c.prompt_template_id)
             dup_rate = _candidate_history_rate(tmpl_dup, pair_dup, c.task_family, c.prompt_template_id)
             jstats = _candidate_judge_stats(tmpl_judge, pair_judge, c.task_family, c.prompt_template_id)
+            ans_key = _answer_key(c.answer, bool(answer_letter_only))
             judge_disagree = float(jstats.get("disagreement_rate", 0.0))
             judge_disagree_ab = float(jstats.get("disagreement_rate_decided_ab", 0.0))
             judge_invalid = float(jstats.get("invalid_rate", 0.0))
@@ -674,7 +685,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                 "tags": _delta_entropy_for_add_tags(hist_tags, list(c.tags)),
                 "buffer_id": _delta_entropy_for_add(hist_buffer_id, c.buffer_id),
                 "buffer_item_id": _delta_entropy_for_add(hist_buffer_item, c.buffer_item_id),
-                "answer": _delta_entropy_for_add(hist_answer, c.answer),
+                "answer": _delta_entropy_for_add(hist_answer, ans_key),
             }
             if float(prompt_word_weight) != 0.0:
                 delta["prompt_word"] = _delta_entropy_for_add_tags(hist_prompt_words, _prompt_word_features(c.prompt, prompt_word_limit))
@@ -695,7 +706,7 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             score += (0.05 * _inv_freq_bonus(hist_pair.get(pair_k, 0)))
             score += (0.02 * _inv_freq_bonus(hist_buffer_id.get(c.buffer_id, 0)))
             score += (0.05 * _inv_freq_bonus(hist_buffer_item.get(c.buffer_item_id, 0)))
-            score += (0.03 * _inv_freq_bonus(hist_answer.get(c.answer, 0)))
+            score += (0.03 * _inv_freq_bonus(hist_answer.get(ans_key, 0)))
             score -= (float(noise_weight) * float(noise_rate))
             score -= (float(dup_weight) * float(dup_rate))
             score -= (float(judge_disagree_weight) * float(judge_disagree_ab))
@@ -724,13 +735,13 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
                     answer=c.answer,
                     seen_task_id=c.seen_task_id,
                     seen_buffer_item_id=(1 if hist_buffer_item.get(c.buffer_item_id, 0) > 0 else 0),
-                    seen_answer=(1 if hist_answer.get(c.answer, 0) > 0 else 0),
+                    seen_answer=(1 if hist_answer.get(ans_key, 0) > 0 else 0),
                     family_count=c.family_count,
                     template_count=c.template_count,
                     pair_count=c.pair_count,
                     buffer_id_count=hist_buffer_id.get(c.buffer_id, 0),
                     buffer_item_count=hist_buffer_item.get(c.buffer_item_id, 0),
-                    answer_count=hist_answer.get(c.answer, 0),
+                    answer_count=hist_answer.get(ans_key, 0),
                     history_noise_rate=noise_rate,
                     history_dup_rate=dup_rate,
                     history_judge_disagreement_rate=judge_disagree,
@@ -762,8 +773,9 @@ def _select(scored: List[CandidateScore], history: List[Dict[str, Any]], limit: 
             hist_buffer_id[best.buffer_id] = hist_buffer_id.get(best.buffer_id, 0) + 1
         if best.buffer_item_id != "":
             hist_buffer_item[best.buffer_item_id] = hist_buffer_item.get(best.buffer_item_id, 0) + 1
-        if best.answer != "":
-            hist_answer[best.answer] = hist_answer.get(best.answer, 0) + 1
+        ans_key = _answer_key(best.answer, bool(answer_letter_only))
+        if ans_key != "":
+            hist_answer[ans_key] = hist_answer.get(ans_key, 0) + 1
         if best.prompt != "":
             for w in _prompt_word_features(best.prompt, prompt_word_limit):
                 hist_prompt_words[w] = hist_prompt_words.get(w, 0) + 1
@@ -788,6 +800,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--buffer-id-weight", type=float, default=0.15, help="Coverage weight for buffer_id entropy gain (0 disables).")
     p.add_argument("--buffer-item-weight", type=float, default=0.60, help="Coverage weight for buffer_item_id entropy gain (0 disables).")
     p.add_argument("--answer-weight", type=float, default=0.25, help="Coverage weight for answer entropy gain (0 disables; requires candidates to include answer).")
+    p.add_argument("--answer-letter-only", action="store_true", help="Treat answer diversity as single-letter options only (A-Z); ignores numeric/freeform answers.")
     p.add_argument("--prompt-word-weight", type=float, default=0.0, help="Coverage weight for prompt word entropy gain (0 disables; requires candidates to include prompt).")
     p.add_argument("--prompt-trigram-weight", type=float, default=0.0, help="Coverage weight for prompt word-3gram entropy gain (0 disables; requires candidates to include prompt).")
     p.add_argument("--prompt-word-limit", type=int, default=64, help="Max unique prompt words per record to consider (0 disables limit).")
@@ -809,9 +822,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     history = lib.load_jsonl(args.history_jsonl)
     candidates = lib.load_jsonl(args.candidates_jsonl)
-    scored = _score(history, candidates, noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit))
-    top = _select(scored, history, limit=max(0, args.limit), max_per_family=args.max_per_family, max_per_template=args.max_per_template, avoid_seen_task_id=bool(args.avoid_seen_task_id), avoid_seen_buffer_item_id=bool(args.avoid_seen_buffer_item_id), noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit))
-    predicted = _predict(history, top, prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit))
+    scored = _score(history, candidates, noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), answer_letter_only=bool(args.answer_letter_only))
+    top = _select(scored, history, limit=max(0, args.limit), max_per_family=args.max_per_family, max_per_template=args.max_per_template, avoid_seen_task_id=bool(args.avoid_seen_task_id), avoid_seen_buffer_item_id=bool(args.avoid_seen_buffer_item_id), noise_weight=float(args.noise_weight), dup_weight=float(args.dup_weight), max_noise_rate=float(args.max_noise_rate), max_dup_rate=float(args.max_dup_rate), buffer_id_weight=float(args.buffer_id_weight), buffer_item_weight=float(args.buffer_item_weight), answer_weight=float(args.answer_weight), judge_disagree_weight=float(args.judge_disagree_weight), judge_invalid_weight=float(args.judge_invalid_weight), judge_tie_weight=float(args.judge_tie_weight), judge_imbalance_weight=float(args.judge_imbalance_weight), prompt_word_weight=float(args.prompt_word_weight), prompt_trigram_weight=float(args.prompt_trigram_weight), prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), answer_letter_only=bool(args.answer_letter_only))
+    predicted = _predict(history, top, prompt_word_limit=int(args.prompt_word_limit), prompt_trigram_limit=int(args.prompt_trigram_limit), answer_letter_only=bool(args.answer_letter_only))
 
     recs: List[Dict[str, Any]] = []
     for c in top:
@@ -874,6 +887,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "buffer_id_weight": float(args.buffer_id_weight),
             "buffer_item_weight": float(args.buffer_item_weight),
             "answer_weight": float(args.answer_weight),
+            "answer_letter_only": bool(args.answer_letter_only),
             "prompt_word_weight": float(args.prompt_word_weight),
             "prompt_trigram_weight": float(args.prompt_trigram_weight),
             "prompt_word_limit": int(args.prompt_word_limit),

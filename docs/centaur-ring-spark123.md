@@ -26,9 +26,9 @@ Before attempting a real ring on Spark1/2/3, ensure each node has a local Centau
 From your Mac repo root, you can stage the zip to each node:
 
 ```bash
-sh ./scripts/centaur_spark_v73_stage.sh spark1@<spark1-host> ~/centaur-smoke/v73
-sh ./scripts/centaur_spark_v73_stage.sh spark2@<spark2-host> ~/centaur-smoke/v73
-sh ./scripts/centaur_spark_v73_stage.sh spark3@<spark3-host> ~/centaur-smoke/v73
+sh ./scripts/centaur_spark_v73_stage.sh spark1@<spark1-host> "~/centaur-smoke/v73"
+sh ./scripts/centaur_spark_v73_stage.sh spark2@<spark2-host> "~/centaur-smoke/v73"
+sh ./scripts/centaur_spark_v73_stage.sh spark3@<spark3-host> "~/centaur-smoke/v73"
 ```
 
 Recommended per-node setup (run on Spark{1,2,3}) using the reproducible setup script:
@@ -122,7 +122,7 @@ This script runs on Spark0 (or any orchestrator with SSH reachability to Spark1/
 3. Captures `hyor-sync-effective` manifests under `RING_WORKDIR/effective_manifests/`
 4. Pushes the mutated node roots back to the remote Sparks (and optionally effective dirs when `RING_APPLY=1`)
 
-From your Mac repo root (stream-run on Spark0, passing Spark1/2/3 SSH targets as args):
+From your Mac repo root (runs on Spark0 over SSH, passing Spark1/2/3 SSH targets as args):
 
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"

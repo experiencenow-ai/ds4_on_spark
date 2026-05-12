@@ -3,7 +3,9 @@ set -eu
 
 target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:-"-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=0 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"}"
-REMOTE_DIR="${REMOTE_DIR:-/tmp/ds4_cuda_probe_device_props_minimal}"
+remote_tag="${REMOTE_TAG:-"$(date -u +%Y%m%d-%H%M%S)-$$"}"
+default_remote_dir="/tmp/ds4_cuda_probe_device_props_minimal_${remote_tag}"
+REMOTE_DIR="${REMOTE_DIR:-${default_remote_dir}}"
 log_path="${LOG_PATH:-}"
 with_sm121_run="${WITH_SM121_RUN:-0}"
 with_compute121_run="${WITH_COMPUTE121_RUN:-0}"
@@ -99,6 +101,13 @@ __global__ void write_cuda_arch(uint32_t *out)
 #endif
 }
 
+__device__ __constant__ uint32_t ds4_cuda_arch_const =
+#if defined(__CUDA_ARCH__)
+	(uint32_t)__CUDA_ARCH__;
+#else
+	0U;
+#endif
+
 static int32_t ck(cudaError_t err,int32_t code,const char *what)
 {
 	if ( err != cudaSuccess )
@@ -161,18 +170,20 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
-	rc = ck(cudaMalloc((void **)&d_arch,sizeof(uint32_t)),-3,\"cudaMalloc(d_arch)\");
-	if ( rc == 0 )
+	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
-		rc = ck(cudaMemset(d_arch,0,sizeof(uint32_t)),-4,\"cudaMemset(d_arch)\");
-		if ( rc == 0 )
+		cuda_arch = 0;
+		if ( cudaMalloc((void **)&d_arch,sizeof(uint32_t)) == cudaSuccess )
 		{
-			write_cuda_arch<<<1,1>>>(d_arch);
-			rc = ck(cudaGetLastError(),-5,\"write_cuda_arch launch\");
-			if ( rc == 0 )
-				(void)ck(cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost),-6,\"cudaMemcpy(cuda_arch)\");
+			if ( cudaMemset(d_arch,0,sizeof(uint32_t)) == cudaSuccess )
+			{
+				write_cuda_arch<<<1,1>>>(d_arch);
+				if ( cudaGetLastError() == cudaSuccess )
+					(void)cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost);
+			}
+			cudaFree(d_arch);
+			d_arch = 0;
 		}
-		cudaFree(d_arch);
 	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;

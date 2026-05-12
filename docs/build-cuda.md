@@ -27,7 +27,9 @@ For kernel launches (or any void-returning CUDA statements compiled by NVCC), us
 
 - `DS4_CUDA_KERNEL_LAUNCH(kernel<<<grid,block,shared,stream>>>(...))`
 
-`DS4_CUDA_KERNEL_LAUNCH` returns a `ds4_cuda_status_t` and logs failures with the full callsite text.
+`DS4_CUDA_KERNEL_LAUNCH` returns a `ds4_cuda_status_t`. In CUDA-enabled builds it logs failures with the full callsite text.
+
+When DS4 is built CPU-only (`DS4_ENABLE_CUDA=OFF`), `DS4_CUDA_KERNEL_LAUNCH(...)` is still defined but always returns `DS4_CUDA_ERR_DISABLED`.
 
 ## Minimal kernel helper
 
@@ -49,9 +51,14 @@ When sequencing copies or memset with a stream, use:
 - `ds4_cuda_memcpy_h2d_async(dst,src,bytes,stream)`
 - `ds4_cuda_memcpy_d2h_async(dst,src,bytes,stream)`
 
+For convenience, a zero-initialized `ds4_cuda_stream_t` (`(ds4_cuda_stream_t){0}`) represents the CUDA default stream; wrappers accept it for `ds4_cuda_stream_synchronize` and `ds4_cuda_event_record`.
+
 ## Device arena helper
 
 For a conservative device-memory pattern, DS4 provides `ds4_cuda_arena_t` (`include/ds4/cuda_arena.h`):
 
 - `ds4_ctx_apply_config` allocates `ctx->cuda_arena` when `enable_cuda=1` and `cuda_arena_size > 0`.
 - Allocate device memory from the arena with `ds4_cuda_arena_alloc` and reset with `ds4_cuda_arena_reset`.
+- For array allocations, `ds4_cuda_arena_alloc_n` overflow-checks `count*elem_size`.
+- For eager zero-fill, `ds4_cuda_arena_alloc_zero` allocates then calls `cudaMemset` (returns `DS4_CUDA_ERR_DISABLED` in CPU-only builds).
+- For array allocations with eager zero-fill, `ds4_cuda_arena_alloc_zero_n` overflow-checks `count*elem_size` then calls `ds4_cuda_arena_alloc_zero`.

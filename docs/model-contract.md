@@ -19,23 +19,27 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
 - Fixtures: `fixtures/model_contract/deepseek_v4_flash/`
   - Source trace: see `docs/model-deepseek-v4-flash.md` “Source trace (official → pinned fixtures → DS4 contract)” for where each contract fact is derived (config vs reference code vs checkpoint key set vs tokenizer/encoding).
   - Includes `DeepSeek_V4.pdf` (technical report; metadata-only) as an additional official reference alongside `config.json` and `inference/*`.
-- Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule, cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings for interpreting external runtimes, Transformers-compatible derived schedules (`attention_schedule.transformers_*` and `moe.transformers_mlp_layer_types`), and machine-readable oracle requirements (`oracle.*.required` + `oracle.*.weights_required`))
+- Derived fixture: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` (built from pinned configs + reference code; includes attention schedule (including direct per-layer maps like `attention_schedule.{main_layer_type_by_layer_id,main_compress_ratio_by_layer_id,layer_type_by_layer_id,compress_ratio_by_layer_id}`), cache offsets + masking semantics, tokenizer + encoding constants, quantization metadata (including FP8/FP4 scale-tensor shape rules), upstream reference defaults (`max_seq_len`, `max_batch_size`), YaRN per-layer rule, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings for interpreting external runtimes, Transformers-compatible derived schedules (`attention_schedule.transformers_*` and `moe.transformers_mlp_layer_types`), and machine-readable oracle requirements (`oracle.*.required` + `oracle.*.weights_required`))
+  - Upstream pinning is machine-recorded: `upstream.hf_revision_requested` (typically `main`) and `upstream.hf_revision_pinned == upstream.x_repo_commit` (immutable `X-Repo-Commit` used for all fixture downloads).
   - Also records machine-readable logical tensor shapes (`tensor_shapes`) and correctness oracle requirements (`oracle`) so downstream tooling can validate without re-parsing upstream code.
+  - Also records stable sha256 digests for run reports (`contract_fingerprints.*`), including `contract_fingerprints.execution_contract_sha256` (topology + schedule + cache semantics + tokenizer/encoding + quantization + key-invariants digest).
   - Also records machine-readable **tensor-key invariants** (`tensor_keys.required_top_level` and the `tensor_keys.required_layer_suffixes*` sets) and MTP trust gates (`mtp.trust_gates`) so tooling can enforce “exact tensor names” and “MTP is trusted only if…” policies without re-parsing docs.
-  - Also records per-layer trunk key helpers (`tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` and `tensor_keys.layer_*_tensor_key_count_by_layer_id*`) so DS4 implementers can validate “exact tensor names” and per-layer key counts without reconstructing the CSA/HCA schedule logic.
+  - Also records per-layer trunk key helpers (`tensor_keys.layer_required_nonexpert_suffixes_by_layer_id`, `tensor_keys.layer_required_nonexpert_keys_by_layer_id`, and `tensor_keys.layer_*_tensor_key_count_by_layer_id*`) so DS4 implementers can validate “exact tensor names” and per-layer key counts without reconstructing the CSA/HCA schedule logic.
   - Compat mappings also cover MTP (`num_nextn_predict_layers`) and `config.json` quantization knobs (`quantization_config.*`) so external runtime configs can be normalized without guessing.
   - Compat mappings also record a small Transformers-specific cache-layer note (`compat.transformers_cache_layers`) so external-runtime logs can be interpreted without guessing CSA vs HCA cache class behavior.
+  - Tokenizer section also records `tokenizer.encoding_token_ids` (derived from `tokenizer.json` `added_tokens[]`) so special-token IDs used by `encoding_constants` are machine-checkable (not just “string template” assumptions).
   - Tokenizer section also records a `tokenizer.tokenizer_json_summary` snapshot (BPE backend + exact pre-tokenizer `Split` regex patterns + `ByteLevel` flags) so external runtimes can reproduce tokenization without guessing.
     - Note: `tokenizer.json`’s `added_tokens[]` list can include tokens whose IDs are *within* the base BPE vocab range. Use `tokenizer.tokenizer_json_summary.*_ge_base_vocab` fields for the contiguous “extra token IDs above base vocab” range.
   - `scripts/model_contract_verify_deepseek_v4_flash.py` also cross-checks tokenizer invariants against the pinned fixtures (BOS/EOS token IDs, `add_bos_token/add_eos_token`, `model_max_length`, and “PAD is EOS”) so contract consumers can treat these as enforced facts, not just documentation.
   - Cache section also records `kv_cache_size` values computed at the upstream reference defaults (helps interpret single-Spark KV/cache headroom without guessing).
   - Cache section also pins the exact sparse-attention top-k index helper definitions from the upstream reference (`cache.topk_index_helpers`) so external runtimes can reproduce index matrices (including `-1` sentinel placement) without guessing.
+  - Cache section also records compact cache summaries under `cache.semantics.{reference_source,kv_layout,sparse_topk_rule,sliding_summary,csa_summary,hca_summary}` so tools can explain sliding vs CSA vs HCA behavior without scraping Markdown.
   - Cache section also pins verbatim forward-path helper source lines (`cache.semantics.source_helpers`: `Compressor.forward`, `Indexer.forward`, `Attention.forward`) so KV update + CSA/HCA index selection semantics are reproducible without guessing.
   - MLA section also pins verbatim RoPE / YaRN helper sources (`mla.source_helpers`) so complex-rotary + de-rotation semantics are reproducible without guessing.
   - MoE section also pins verbatim `Gate.forward` and `MoE.forward` helper sources (`moe.semantics.source_helpers`) so expert selection and routing-weight semantics are reproducible without guessing.
   - MTP section also pins verbatim `MTPBlock.forward` helper source lines (`mtp.semantics.source_helpers`) so draft-path semantics are reproducible without guessing.
   - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
-  - It also records per-prefix fingerprints (`checkpoint_index.weight_map_prefix_fingerprints`) so consumers can independently sanity-check the `layers.*` and `mtp.*` namespaces (useful when evaluating whether an artifact set plausibly preserves upstream `mtp.0.*`).
+  - It also records per-prefix fingerprints (`checkpoint_index.weight_map_prefix_fingerprints`, with small `first_keys_sample`/`last_keys_sample` lists) so consumers can independently sanity-check the `layers.*` and `mtp.*` namespaces (useful when evaluating whether an artifact set plausibly preserves upstream `mtp.0.*`).
   - Convenience fields: `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256`, `checkpoint_index.weight_map_top_level_keys_sha256`, and `mtp.checkpoint_key_fingerprint.*`.
   - Upstream section records sha256 of the pinned upstream commit (`upstream_commit.txt`), encoding oracle vectors (`encoding/tests/*`), and oracle prompt set (`oracle/prompts.json`) to keep drift machine-detectable.
 - Contract summary also records small but correctness-critical reference expressions (e.g. attention scaling and activation-QAT group sizes) from `inference/model.py` so DS4 can validate external runtime assumptions without guessing.
@@ -74,7 +78,7 @@ MTP (multi-token prediction) oracle requirements:
   - Verify the artifact preserves the `mtp.0.*` tensor namespace (official safetensors do; conversions may not). For GGUF, use `scripts/model_contract_inspect_quantized_artifact.py` and record:
     - `tensor_type_counts` + `mtp_tensor_type_counts` (GGUF quant types present)
     - `tensor_type_profile` (best-effort expert vs dense split for known DeepSeek-V4 GGUF naming; includes `hints.flash_variant_hint` when experts appear primarily `MXFP4`)
-    - `quantization_contract` (when `--contract-summary` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `fixtures/model_contract/.../contract_summary.json` `quantization.inference_config`)
+    - `quantization_contract` (when `--contract-summary` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `fixtures/model_contract/.../contract_summary.json` `quantization.inference_config`; includes `status ∈ {"native_like","mismatch","unknown"}` plus `dense_fp8_like` / `expert_fp4_like` and `notes_sample`)
     - Note: some DeepSeek-V4-capable GGUF forks extend `ggml_type` beyond the upstream GGUF spec. For example, nsparks’ “native FP4/FP8” DeepSeek4 GGUF includes `F8_E4M3_B128` (type code `42`) and `MXFP4` experts; the inspector maps these when `metadata["general.architecture"] == "deepseek4"` (see the pinned `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`), but the pinned artifact is still mixed (many `F32`/`BF16` tensors), so prefer `quantization_contract` over assuming fully native Flash quant semantics.
     - `tensor_key_namespace_guess` (whether the artifact appears to preserve upstream `layers.{i}.*` / `mtp.0.*` key namespaces; many GGUF conversions are `llama.cpp`)
     - `mtp_namespace.has_mtp0` + `mtp_namespace.expected_complete` (whether the artifact set appears to preserve the expected `mtp.{id}.*` namespace prefixes)
@@ -82,13 +86,15 @@ MTP (multi-token prediction) oracle requirements:
     - `weight_keys_sha256` (stable fingerprint of the artifact’s tensor key set). When `mtp_present == true`, also record `mtp_keys_sha256` (stable fingerprint of the `mtp.*` subset).
     - `topology_contract` mismatches (GGUF header metadata vs expected topology, including RoPE `dimension_count` / `freq_base` when present)
     - `trunk_contract.complete == true` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
-      - `kind="deepseek-upstream"`: checks upstream-style `layers.{i}.*` keys (safetensors index or a GGUF that preserves upstream tensor names)
+      - `kind="deepseek-upstream"`: checks upstream-style `layers.{i}.*` keys (safetensors index or a GGUF that preserves upstream tensor names), including the sliding/CSA/HCA key schedule (no `attn.compressor.*` / `attn.indexer.*` tensors where forbidden by `compress_ratios[]`)
       - `kind="llama.cpp"`: checks DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only signal for quantized artifacts; does not imply semantic correctness)
+      - When `kind="deepseek-upstream"` and `contract_summary.json` includes expanded per-layer non-expert key lists, the inspector also reports `trunk_contract.nonexpert_required_missing_count` / `trunk_contract.nonexpert_required_missing_sample` as a quick “exact `layers.{i}.*` non-expert namespace preserved?” signal (separate from missing expert keys).
     - `mtp_contract.complete == true` when `mtp_present == true` (MTP tensor-key completeness)
+      - When `contract_summary.json` includes expanded per-layer MTP non-expert key lists, the inspector also reports `mtp_contract.nonexpert_required_missing_count` / `mtp_contract.nonexpert_required_missing_sample` (useful when expert-key missing lists dominate `mtp_contract.missing_required_sample`).
   - For Hugging Face-hosted GGUFs, `model_contract_inspect_quantized_artifact.py` also supports metadata-only inspection via range reads (no full download). Record the `url_prefix_bytes` used:
     - `python3 scripts/model_contract_inspect_quantized_artifact.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json`
     - If it fails with “unable to parse ... within max_bytes”, increase `--max-bytes` cautiously (it only fetches the header + tensor table, but large MoE GGUFs can have a large tensor directory).
-    - Recorded examples: `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`, `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`, `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json`.
+    - Recorded examples: `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json`, `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json`, `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json`.
     - These pinned trunk GGUFs currently report `mtp_present=false` and `mtp_namespace.has_mtp0=false` (i.e. the upstream `mtp.0.*` namespace was dropped in conversion).
     - To refresh the pinned example JSON outputs reproducibly (metadata-only Range reads; refuses servers that don’t honor Range), run: `scripts/model_contract_refresh_v4flash_gguf_inspects.sh`.
   - Some community conversions ship MTP weights as a **sidecar** GGUF separate from the main trunk GGUF. In that case, inspect *both* files and treat “MTP present” as a property of the artifact **set**:
@@ -100,6 +106,8 @@ MTP (multi-token prediction) oracle requirements:
     - For the upstream reference semantics (tensor binding, MTP raw cache, draft/verify/rollback), see `docs/mtp-ds4-reference.md` (pinned `antirez/ds4`).
     - Local file: `python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json --expect-deepseek-v4-flash`
     - Convenience runner (local file or `https://` URL, writes a small Markdown + JSON artifact bundle under `/private/tmp`): `scripts/run_mtp_sidecar_contract_probe_local.sh /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf`
+    - Combined contract + loader runner (local file; Python contract probe + optional llama.cpp-side probe + cross-check; writes `summary.json` into the output dir): `scripts/run_mtp_sidecar_loader_probe_local.sh /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf`
+    - Combined contract + loader runner (Spark; staged local file on Spark; writes `summary.json` into the output dir): `scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>`
     - Hugging Face URL (range-reads only the header/tensor table): `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://huggingface.co/<repo>/resolve/<rev>/<file>.gguf --json --expect-deepseek-v4-flash`
     - The sidecar probe also computes `payload_bytes` per tensor (ggml row-size math for `F32`, `Q8_0`, `Q4_K`) and validates that tensor payload spans do not overlap and do not run past `file_size` when available.
     - When `deepseek4.*` metadata params are present, the probe records them as `metadata_params` and cross-checks them against the tensor-derived `derived_params` (catches “header says one thing, tensor table says another”).
@@ -107,8 +115,8 @@ MTP (multi-token prediction) oracle requirements:
     - Stronger pinning gate (still no full download): compare per-tensor `--payload-sample-bytes 64` hashes against the pinned antirez reference:
       - `python3 scripts/model_contract_probe_mtp_sidecar.py --url https://.../DeepSeek-V4-Flash-MTP-*.gguf --json --expect-deepseek-v4-flash --payload-sample-bytes 64 > /tmp/mtp_sidecar_probe.json`
       - `python3 scripts/verify_mtp_sidecar_payload_fingerprint.py --probe-json /tmp/mtp_sidecar_probe.json`
-    - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-c566ab6.json`
-    - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json`
+    - Recorded example output (pinned antirez sidecar): `docs/mtp-sidecar-probe-antirez-3274cdc.json`
+    - Recorded `model_contract_inspect_quantized_artifact.py` output (range-read header + tensor table only): `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json`
     - llama.cpp Spark/CUDA local sanity check (metadata-only, no tensor payload alloc): `docs/llamacpp-mtp-sidecar-probe.md`
     - Metadata-only inspection confirms these sidecars can be `mtp_present == true` but still **incomplete** relative to the upstream `mtp.0.*` contract (example: pinned antirez sidecar has `mtp_tensor_count == 32` and `mtp_contract.complete == false`).
   - Generate an oracle that exercises the `MTPBlock.forward(...)` path and compare DS4 MTP logits against it.
@@ -123,14 +131,18 @@ Machine-readable view:
   - MTP namespace preservation: `items[].mtp_namespace.present_prefixes` (for example `["mtp.0."]` when an artifact set actually preserves the upstream `mtp.0.*` namespace).
   - Quant-format compatibility: `items[].quantization_contract.status` plus `items[].quantization_contract.notes_sample` (helps interpret single-Spark external-runtime results when artifacts are re-quantized or non-native).
     - Note: `dense_fp8_like` is based on FP8 tensor evidence in key dense categories (e.g. attention/shared-expert); the most common non-expert tensor type may still be `F32` due to scale/router tensors.
+    - `quantization_contract.status` interpretation:
+      - `native_like`: the artifact’s tensor-type evidence looks consistent with Flash’s expected dense FP8 + expert FP4 split (still requires a logits oracle; GGUF metadata cannot prove scale-tensor semantics like `ue8m0`).
+      - `mismatch`: the artifact appears to be a re-quantized or non-native conversion (treat results as “runs” only; do not compare to upstream semantics without an oracle + explicit compatibility notes).
+      - `unknown`: insufficient tensor evidence to classify (require explicit runtime/convertor provenance and treat semantic comparisons as high risk).
 
 | Pinned probe output | Artifact kind | `mtp_present` | `mtp_contract.complete` | Note |
 |---|---|---:|---:|---|
 | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
 | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
-| `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
-| `docs/gguf-inspect-antirez-c566ab6-mtp-sidecar.json` | MTP sidecar GGUF | true | false | sidecar preserves `mtp.0.*` prefix (`mtp_namespace.present_prefixes=["mtp.0."]`) but remains incomplete + `mtp_keys_sha256` mismatch vs official `mtp.0.*` |
-| `docs/gguf-inspect-antirez-c566ab6-iq2xxs-chat-v2-mtp-set.json` | trunk+sidecar set | true | false | combined artifact-set view (union key fingerprints); still incomplete MTP |
+| `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | trunk GGUF | false | n/a | conversion dropped upstream `mtp.0.*` |
+| `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | MTP sidecar GGUF | true | false | sidecar preserves `mtp.0.*` prefix (`mtp_namespace.present_prefixes=["mtp.0."]`) but remains incomplete + `mtp_keys_sha256` mismatch vs official `mtp.0.*` |
+| `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | trunk+sidecar set | true | false | combined artifact-set view (union key fingerprints); still incomplete MTP |
 
 Machine-readable summary (built from the pinned `docs/gguf-inspect-*.json` files, so tools/CI can reason about “does this preserve upstream `mtp.0.*`?” without scraping Markdown):
 
@@ -145,13 +157,33 @@ scripts/model_contract_refresh_v4flash_gguf_inspects.sh
 Recommended DS4 comparison rule (when enabling DS4 gating):
 
 - Compare **top-k token IDs** exactly and logits within a tolerance appropriate for FP8/FP4 kernels.
+  - The pinned DeepSeek V4 Flash logits oracle uses `default_topk` from `fixtures/model_contract/deepseek_v4_flash/oracle/prompts.json` (currently `64`). This is recorded as `oracle.logits_oracle.acceptance.topk_k` (and `oracle.mtp.acceptance.topk_k`) in `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` so verifiers can enforce a consistent `k`.
 - Ensure the oracle covers both prefill (`start_pos == 0`) and decode (`start_pos > 0`) so KV-cache semantics are exercised.
 
 Machine-readable MTP gating:
 
 - `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.trust_gates` so tooling can enforce a consistent “MTP is trusted only if…” policy.
+- `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` records `mtp.namespace` (expected `mtp.{j}.*` prefixes + expected MTP layer IDs, validated against the official checkpoint index) so tooling can reason about “does this artifact preserve upstream `mtp.0.*`?” without scraping docs.
 - `scripts/model_contract_inspect_quantized_artifact.py` emits `mtp_trust` derived from `mtp_contract` + `mtp.trust_gates` (structural completeness is necessary but not sufficient; an MTP logits oracle is still required before enabling MTP in DS4).
-- When `mtp_present==true`, `mtp_trust.reasons` also flags when `mtp_keys_sha256` does not match the official MTP subset fingerprint (`contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`), which is a strong signal the artifact does not preserve the official checkpoint’s `mtp.0.*` key set; machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
+- When `mtp_present==true`, `mtp_trust` reports whether `mtp_keys_sha256` matches the official MTP subset fingerprint (`contract_summary.json` `mtp.checkpoint_key_fingerprint.keys_sha256`). For machine checks, prefer `mtp_trust.mtp_keys_sha256_match_official` (and `mtp_trust.expected_mtp_keys_sha256`) over scraping `mtp_trust.reasons[]`; machine-readable gate: `mtp.trust_gates.artifact_requires_mtp_keys_sha256_match_official == true`.
+
+Machine-readable MTP *execution* gating (before acceptance sweeps):
+
+- `docs/mtp-one-token-draft-probe.md` defines a deterministic `gamma=1` one-token probe JSON contract for comparing an oracle runtime (e.g. patched `antirez/ds4`) against a candidate runtime (e.g. Spark/CUDA `llama.cpp`).
+- The **required** contract keys are validated by `scripts/model_contract_validate_mtp_one_token_draft_probe.py`.
+- The **recommended** correctness guardrail is an *oracle diff* that compares both token IDs and intermediate tensor fingerprints via `python3 scripts/diff_mtp_one_token_draft_probe.py --a oracle.json --b candidate.json --json`.
+  - Probes may include optional debug capture keys of the form `*_fnv64` + `*_nbytes` + `*_shape` (all optional unless your runbook requires them).
+  - Recommended capture prefixes (aligned to `docs/mtp-ds4-reference.md`’s `gamma=1` step list):
+    - `trunk_token_embd` (trunk token embedding output)
+    - `trunk_pre_hc_head` (trunk “target hidden buffer” before trunk `hc_head`; used as `prev_hc` for the MTP draft input build)
+    - `mtp_input_hc` (MTP block input after `(e_proj_hc + h_proj_hc)` sum)
+    - `mtp_block_out_hc` (MTP block output stream before the MTP output head)
+    - `mtp_head_norm` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection)
+  - Avoid dumping full logits: instead fingerprint the normalized head stream and rely on exact `mtp_draft_token_id` equality.
+
+Implementation note (Spark/Linux CUDA):
+
+- The DS4-tuned MTP sidecar uses routed experts that may be `Q4_K` (not `Q2_K`). If using `antirez/ds4` as the executable reference on CUDA, ensure the routed-MoE path supports `Q4_K` and the sidecar does not clobber the trunk CUDA model-map/fd-cache state; see `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`.
 
 ## Comparator models (Ling / Qwen / DFlash pairs)
 

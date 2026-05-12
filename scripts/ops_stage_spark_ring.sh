@@ -7,7 +7,8 @@ usage()
 ops_stage_spark_ring.sh -- stage DS4 deploy assets to an ordered Spark ring (Mac-side)
 
 Usage:
-  ops_stage_spark_ring.sh [--mesh-check] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_stage_spark_ring.sh [--mesh-check] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_stage_spark_ring.sh [--mesh-check] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -19,12 +20,18 @@ Notes:
   - Defaults instance names to `spark0`, `spark1`, ... based on host order.
   - Override an instance with `--instance0 name`, `--instance1 name`, etc.
   - `--mesh-check` runs `ops_spark_ring_mesh_check.sh` before staging.
+  - `--staged-readiness` runs `ops_spark_ring_staged_readiness.sh` after staging/audit (safe).
+  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
 EOF
 }
 
 mesh_check=0
+staged_readiness=0
+staged_readiness_strict=0
+staged_readiness_preflight="auto"
 topology="ring"
 tcp_ports=""
+inventory_file=""
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -32,12 +39,30 @@ while [ $# -gt 0 ]; do
 			mesh_check=1
 			shift
 			;;
+		--staged-readiness)
+			staged_readiness=1
+			shift
+			;;
+		--staged-readiness-strict)
+			staged_readiness=1
+			staged_readiness_strict=1
+			shift
+			;;
+		--staged-readiness-preflight)
+			staged_readiness=1
+			staged_readiness_preflight="${2:-}"
+			shift 2
+			;;
 		--topology)
 			topology="${2:-}"
 			shift 2
 			;;
 		--tcp)
 			tcp_ports="$tcp_ports ${2:-}"
+			shift 2
+			;;
+		--inventory-file)
+			inventory_file="${2:-}"
 			shift 2
 			;;
 		--instance[0-9]*)
@@ -69,6 +94,30 @@ case "$topology" in
 		exit 2
 		;;
 esac
+
+case "$staged_readiness_preflight" in
+	auto|tp2|tp3|tp4)
+		;;
+	*)
+		echo "invalid --staged-readiness-preflight: $staged_readiness_preflight (expected auto|tp2|tp3|tp4)" >&2
+		exit 2
+		;;
+esac
+
+if [ "$inventory_file" != "" ]; then
+	if [ ! -f "$inventory_file" ]; then
+		echo "inventory file not found: $inventory_file" >&2
+		exit 2
+	fi
+	while IFS= read -r line || [ "$line" != "" ]; do
+		case "$line" in
+			""|\#*)
+				continue
+				;;
+		esac
+		set -- "$@" "$line"
+	done < "$inventory_file"
+fi
 
 if [ "$#" -lt 2 ]; then
 	usage >&2
@@ -173,6 +222,30 @@ if [ -x "$root/scripts/ops_spark_ring_staged_env_audit.sh" ]; then
 		i=$((i + 1))
 	done
 	"$root/scripts/ops_spark_ring_staged_env_audit.sh" "$@"
+	echo
+fi
+
+if [ "$staged_readiness" -ne 0 ] && [ -x "$root/scripts/ops_spark_ring_staged_readiness.sh" ]; then
+	echo "== staged readiness (Mac-side, optional) =="
+	set --
+	set -- --topology "$topology" --preflight "$staged_readiness_preflight" "$@"
+	for p in $tcp_ports; do
+		set -- --tcp "$p" "$@"
+	done
+	if [ "$staged_readiness_strict" -ne 0 ]; then
+		set -- --strict "$@"
+	fi
+	i=0
+	while [ "$i" -lt "$node_count" ]; do
+		set -- "$@" "--instance$i" "$(instance_for_index "$i")"
+		i=$((i + 1))
+	done
+	i=0
+	while [ "$i" -lt "$node_count" ]; do
+		set -- "$@" "$(value_at target "$i")"
+		i=$((i + 1))
+	done
+	"$root/scripts/ops_spark_ring_staged_readiness.sh" "$@"
 	echo
 fi
 

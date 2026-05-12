@@ -27,7 +27,7 @@ Environment:
 
 Examples:
   ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host>
-  ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> ~/centaur-smoke/v73 20260512T120000Z /private/tmp/centaur-node-setup/spark12-v73/20260512T120000Z
+  ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" 20260512T120000Z /private/tmp/centaur-node-setup/spark12-v73/20260512T120000Z
 USAGE
 }
 
@@ -96,4 +96,3 @@ fi
 
 NODE_SETUP_SKIP_STAGE=1 "$setup_one" "$spark1" "$remote_dir" "$run_id" "$log1"
 NODE_SETUP_SKIP_STAGE=1 "$setup_one" "$spark2" "$remote_dir" "$run_id" "$log2"
-

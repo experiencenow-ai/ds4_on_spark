@@ -9,7 +9,7 @@ set -eu
 #   calls `scripts/run_baseline_existing_runtime.sh` (Spark-side gates still apply).
 #
 # Matrix TSV columns (tab-separated; comments allowed with leading '#'):
-#   run_label  scope_target  scope_dflash  target_id  target_model_dir  draft_model_dir(optional)
+#   run_label  scope_target  scope_dflash  target_id  target_model_dir  draft_model_dir(optional)  public_quality_prior(optional)  public_quality_basis(optional)  public_quality_source(optional)
 
 target="${1:-spark0@aitopatom-9ab9.local}"
 matrix_tsv="${2:-}"
@@ -17,7 +17,7 @@ matrix_tsv="${2:-}"
 if [ "$matrix_tsv" = "" ] || [ ! -r "$matrix_tsv" ]; then
     echo "usage: scripts/run_baseline_vllm_matrix.sh <target> <matrix.tsv>" >&2
     echo "matrix TSV columns:" >&2
-    echo "  run_label<TAB>scope_target<TAB>scope_dflash<TAB>target_id<TAB>target_model_dir<TAB>draft_model_dir(optional)" >&2
+    echo "  run_label<TAB>scope_target<TAB>scope_dflash<TAB>target_id<TAB>target_model_dir<TAB>draft_model_dir(optional)<TAB>public_quality_prior(optional)<TAB>public_quality_basis(optional)<TAB>public_quality_source(optional)" >&2
     exit 2
 fi
 
@@ -54,7 +54,7 @@ line_no=0
 ok_rows=0
 fail_rows=0
 fail_list=""
-while IFS="$tab" read -r run_label scope_target scope_dflash target_id target_model draft_model _rest; do
+while IFS="$tab" read -r run_label scope_target scope_dflash target_id target_model draft_model row_public_quality_prior row_public_quality_basis row_public_quality_source _rest; do
     line_no=$((line_no + 1))
     case "$run_label" in
         ""|\#*|run_label)
@@ -84,8 +84,21 @@ while IFS="$tab" read -r run_label scope_target scope_dflash target_id target_mo
     echo "smoke_eval=$SMOKE_EVAL"
     echo "smoke_max_tokens_per_task=$SMOKE_MAX_TOKENS_PER_TASK"
 
+    row_prior="$PUBLIC_QUALITY_PRIOR"
+    row_basis="$PUBLIC_QUALITY_BASIS"
+    row_source="$PUBLIC_QUALITY_SOURCE"
+    if [ "${row_public_quality_prior:-}" != "" ]; then
+        row_prior="$row_public_quality_prior"
+    fi
+    if [ "${row_public_quality_basis:-}" != "" ]; then
+        row_basis="$row_public_quality_basis"
+    fi
+    if [ "${row_public_quality_source:-}" != "" ]; then
+        row_source="$row_public_quality_source"
+    fi
+
     set +e
-    RUN_LABEL="$run_label" MODEL_RUNS_CSV="$MODEL_RUNS_CSV" PROMPT="$PROMPT" MAX_TOKENS="$MAX_TOKENS" TENSOR_PARALLEL_SIZE="$TENSOR_PARALLEL_SIZE" DFLASH_NUM_SPEC_TOKENS="$DFLASH_NUM_SPEC_TOKENS" SMOKE_EVAL="$SMOKE_EVAL" SMOKE_MAX_TOKENS_PER_TASK="$SMOKE_MAX_TOKENS_PER_TASK" ALLOW_RUN="$ALLOW_RUN" ALLOW_FETCH="$ALLOW_FETCH" VLLM_SCOPE_TARGET="$scope_target" VLLM_SCOPE_DFLASH="$scope_dflash" VLLM_TARGET_ID="$target_id" VLLM_TARGET_MODEL="$target_model" VLLM_DRAFT_MODEL="$draft_model" SKIP_GGUF_INSPECT="$SKIP_GGUF_INSPECT" SKIP_LLAMA="$SKIP_LLAMA" SKIP_MTP_SIDECAR="$SKIP_MTP_SIDECAR" PUBLIC_QUALITY_PRIOR="$PUBLIC_QUALITY_PRIOR" PUBLIC_QUALITY_BASIS="$PUBLIC_QUALITY_BASIS" PUBLIC_QUALITY_SOURCE="$PUBLIC_QUALITY_SOURCE" PASSED_TASKS="$PASSED_TASKS" TOTAL_TASKS="$TOTAL_TASKS" LOCAL_QUALITY_SCORE="$LOCAL_QUALITY_SCORE" QUALITY_SCORE="$QUALITY_SCORE" scripts/run_baseline_vllm_dflash_pair.sh "$target"
+    RUN_LABEL="$run_label" MODEL_RUNS_CSV="$MODEL_RUNS_CSV" PROMPT="$PROMPT" MAX_TOKENS="$MAX_TOKENS" TENSOR_PARALLEL_SIZE="$TENSOR_PARALLEL_SIZE" DFLASH_NUM_SPEC_TOKENS="$DFLASH_NUM_SPEC_TOKENS" SMOKE_EVAL="$SMOKE_EVAL" SMOKE_MAX_TOKENS_PER_TASK="$SMOKE_MAX_TOKENS_PER_TASK" ALLOW_RUN="$ALLOW_RUN" ALLOW_FETCH="$ALLOW_FETCH" VLLM_SCOPE_TARGET="$scope_target" VLLM_SCOPE_DFLASH="$scope_dflash" VLLM_TARGET_ID="$target_id" VLLM_TARGET_MODEL="$target_model" VLLM_DRAFT_MODEL="$draft_model" SKIP_GGUF_INSPECT="$SKIP_GGUF_INSPECT" SKIP_LLAMA="$SKIP_LLAMA" SKIP_MTP_SIDECAR="$SKIP_MTP_SIDECAR" PUBLIC_QUALITY_PRIOR="$row_prior" PUBLIC_QUALITY_BASIS="$row_basis" PUBLIC_QUALITY_SOURCE="$row_source" PASSED_TASKS="$PASSED_TASKS" TOTAL_TASKS="$TOTAL_TASKS" LOCAL_QUALITY_SCORE="$LOCAL_QUALITY_SCORE" QUALITY_SCORE="$QUALITY_SCORE" scripts/run_baseline_vllm_dflash_pair.sh "$target"
     row_rc="$?"
     set -e
     if [ "$row_rc" -ne 0 ]; then

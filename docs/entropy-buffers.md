@@ -44,6 +44,7 @@ Notes:
 
 - `answer` is optional but unlocks answer-option diversity metrics.
 - `buffer_id` / `buffer_item_id` are optional but unlock reuse metrics.
+- `useful_novelty_flags` / `useful_novelty_flagged` are optional; `scripts/entropy_buffer_filter.py` can add them deterministically for auditability.
 - Token/latency instrumentation can also be provided in nested form:
   - `tokens: {prompt, completion}` or `tokens: {in, out}` (aliases supported)
   - `latency_ms: {total}` or `latency_ms: {wall}` (best-effort)
@@ -129,7 +130,8 @@ The scripts compute:
   - Also reports instrumentation coverage rates: `input_tokens_present_task_run_rate`, `output_tokens_present_task_run_rate`, and `wall_ms_present_task_run_rate`.
 - **Answer option diversity**: distribution/entropy over `answer` (or extracted answer) when present.
   - Also reports `answer.source_counts` and extraction rates to diagnose missing/ambiguous answers.
-- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement) plus per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
+  - For MCQ-style tasks, `diversity.answer.letter` reports the same diversity stats restricted to single-letter answers (`A`-`Z`) plus `hhi` (concentration).
+- **Judge label balance**: label histogram + entropy; includes `label_balance_ab` (1.0 is perfectly balanced A/B, 0.0 is fully one-sided) and `label_imbalance_ab` (the complement), plus `label_entropy_bits`/`label_entropy_norm`/`label_effective_num` and `label_hhi` for concentration; also emits per-model-pair breakdowns (including per-pair disagreement when multiple judges rate the same items).
 - **Judge slice diagnostics**: top imbalance/disagreement slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id` to spot systemic judge skew or instability.
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
@@ -142,7 +144,7 @@ The scripts compute:
 - **Per-model degeneracy**: top normalized-output duplicate rates and useful-novelty flagged rates by `model_id`.
 - **Buffer reuse**: how often `buffer_item_id` repeats (and how concentrated usage is).
   - Also reports logging coverage rates (`buffer_id_nonempty_task_run_rate`, `buffer_item_id_nonempty_task_run_rate`) plus `buffer_id` concentration (`buffer_id_hhi`, `buffer_id_entropy_bits`, `buffer_id_top`).
-- **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition).
+- **Useful-novelty filters**: deterministic heuristics that flag “novel but useless” outputs (e.g., extreme repetition). If `task_run` records include `useful_novelty_flags`, the metrics + recommender treat them as authoritative (else they recompute).
   - Includes prompt-echo and line-repetition heuristics to catch “coverage” that is actually noise.
   - Also reports top flagged-rate slices by `prompt_template_id`, `task_family`, and `task_family|prompt_template_id`.
 - **Useful coverage (clean outputs)**: recomputes diversity + duplicate rates after excluding task-runs flagged by useful-novelty filters (a quick “effective coverage” view).
@@ -182,6 +184,42 @@ python3 scripts/entropy_buffer_canonicalize.py \
   --out-jsonl /tmp/entropy_canonical.jsonl
 ```
 
+### Suggest next-batch targets (coverage gaps)
+
+Use this when you want a deterministic “what should we run next?” view from history only (no candidate list required). It highlights:
+
+- Underrepresented `task_family` / `prompt_template_id` / `task_family|prompt_template_id` keys (low-count).
+- Underrepresented single-letter answers (`A`-`Z`) when present (`underrepresented_answer_letter_top`).
+- Families with low within-family template entropy (template collapse).
+- Families missing templates relative to templates seen elsewhere (cross-family template coverage).
+- Underrepresented judge model-pairs and judge `task_family|prompt_template_id` slices (when present).
+
+```bash
+python3 scripts/entropy_buffer_gaps.py \
+  --in-jsonl fixtures/entropy-buffer/records_gaps_mini.jsonl \
+  --out-json /tmp/entropy_gaps.json \
+  --out-md /tmp/entropy_gaps.md
+```
+
+### Annotate or filter useful-novelty flagged outputs
+
+Use this when you want to persist heuristic flags (for pipeline auditability) or to drop obviously noisy `task_run` records before computing downstream diversity metrics.
+
+```bash
+python3 scripts/entropy_buffer_filter.py \
+  --in-jsonl fixtures/entropy-buffer/records_filter_mini.jsonl \
+  --out-jsonl /tmp/entropy_filter_annotated.jsonl
+```
+
+To drop flagged task runs:
+
+```bash
+python3 scripts/entropy_buffer_filter.py \
+  --in-jsonl fixtures/entropy-buffer/records_filter_mini.jsonl \
+  --drop-flagged-task-runs \
+  --out-jsonl /tmp/entropy_filter_clean.jsonl
+```
+
 ### Recommend next tasks (coverage maximization)
 
 ```bash
@@ -198,6 +236,7 @@ Notes:
 
 - If candidate records include `tags`, the recommender gives a small bonus to underrepresented tags in addition to `task_family`/`prompt_template_id` coverage.
 - If candidate records include an `answer`/`final_answer` (or an `output` with an extractable answer), the recommender can reward **answer-option diversity** via `--answer-weight` (set to `0` to disable).
+  - Use `--answer-letter-only` to treat answer diversity as single-letter options only (recommended for mixed corpora where many answers are numeric/freeform).
 - If candidate records include `prompt`, the recommender can reward **input lexical diversity** (approx) via:
   - `--prompt-word-weight` (word unigram entropy gain) and `--prompt-trigram-weight` (word 3-gram entropy gain).
   - `--prompt-word-limit` / `--prompt-trigram-limit` to cap per-record feature fanout (set to `0` to disable limits).

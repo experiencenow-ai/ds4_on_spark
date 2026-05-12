@@ -28,8 +28,8 @@ Example (Spark0 smoke, from Mac):
 
 ```bash
 export SSH_OPTS="..."
-sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 Example (Spark1/2 ring rsync, from Mac):
@@ -37,8 +37,16 @@ Example (Spark1/2 ring rsync, from Mac):
 ```bash
 export SSH_OPTS="..."
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark12_v73_ring_rsync_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host> "$RING_RUN_ID"
-sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+export RING_REMOTE_VERIFY=1
+sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Example (Spark12 ring sim, from Mac):
+
+```bash
+export SSH_OPTS="..."
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 ```
 
 ## Centaur smoke status (Spark0 v73)
@@ -46,8 +54,8 @@ sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-ho
 - Status: PASS | FAIL | NOT RUN
 - Run id: `<CENTAUR_RUN_ID>`
 - Zip facts: `zip_sha256`, zip `mtime`, `decomposer_version`
-- Deps: `python3 -V`, `pip freeze` excerpt (at least numpy/scipy/scikit-learn)
-- Artifacts: `effective_manifests/`, `hyor_effective/`, `hyor_dashboard/`, `smoke.log`
+- Deps: `python3 -V`, `pip freeze` excerpt (at least numpy/scipy/scikit-learn) or attach `pip_freeze.txt`
+- Artifacts: `effective_manifests/`, `hyor_effective/`, `hyor_dashboard/`, `smoke.log`, `smoke_facts.json`, `pip_freeze.txt`
 
 Tip: `scripts/centaur_spark0_v73_fetch_artifacts.sh` is the preferred sanitized bundle.
 Tip: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip` captures zip facts without extracting.
@@ -72,6 +80,7 @@ For the shared checklist and sanitization rules, follow:
   - `effective_manifests/hyor_effective_manifest_spark1.json`
   - `effective_manifests/hyor_effective_manifest_spark2.json`
   - per-node `hyor-sync-status` (controller + spark0 + spark1 + spark2)
+  - remote verify logs (optional; recommended): `scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh`
   - ring log excerpt (if `RING_LOG` was enabled)
 
 ## Risks

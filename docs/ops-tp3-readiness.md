@@ -20,6 +20,27 @@ Notes:
 - `DS4_RING_HOSTS` must have exactly 3 comma-separated entries (no trailing commas). In strict mode, invalid or duplicate entries fail non-zero.
 - When using `--topology full`, the script uses `DS4_RANK` + `DS4_RING_HOSTS` to skip self and probe only peers.
 
+## Commands (Mac Side, Staged Assets)
+
+If you staged deploy assets first (so each Spark has `/tmp/ds4-scripts/` and `/tmp/ds4-config/`), you can run TP readiness checks **before installing** anything under `/etc` or systemd (safe; no sudo):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Or run staged readiness directly after staging:
+
+```bash
+./scripts/ops_spark_ring_staged_readiness.sh --preflight tp3 --strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+The staged helper runs `/tmp/ds4-scripts/ops_tp3_readiness.sh` on each Spark with:
+
+- `--env -/tmp/ds4-config/ds4.env.example`
+- `--env /tmp/ds4-config/ds4-<instance>.env.example`
+
 ## Commands (Spark Side)
 
 Ad-hoc run (no systemd required):

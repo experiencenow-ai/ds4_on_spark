@@ -84,3 +84,7 @@ DS4_EXTERN_C_END
 #if DS4_HAS_CUDA && defined(__CUDACC__)
 #define DS4_CUDA_KERNEL_LAUNCH(call) ((call),ds4_cuda_check_peek_last_error_ex(#call,__FILE__,(int32_t)__LINE__))
 #endif
+
+#if !DS4_HAS_CUDA
+#define DS4_CUDA_KERNEL_LAUNCH(call) ds4_cuda_fail(DS4_CUDA_ERR_DISABLED)
+#endif

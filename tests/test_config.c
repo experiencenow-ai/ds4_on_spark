@@ -54,6 +54,7 @@ int32_t test_config(void)
 	char env_path[96];
 	char out[128];
 	const char *k0,*h0;
+	const char *ev;
 	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
@@ -81,6 +82,26 @@ int32_t test_config(void)
 		return(-1819);
 	if ( ds4_cstr_len_i32(h0) <= 0 )
 		return(-1820);
+	ev = ds4_config_env_err_var(-3);
+	if ( ev == 0 || strcmp(ev,"DS4_LOG_LEVEL") != 0 )
+		return(-1821);
+	ev = ds4_config_env_err_var(-7);
+	if ( ev == 0 || strcmp(ev,"DS4_ENABLE_CUDA") != 0 )
+		return(-1822);
+	ev = ds4_config_env_err_var(-12);
+	if ( ev == 0 || strcmp(ev,"DS4_CUDA_DEVICE") != 0 )
+		return(-1823);
+	ev = ds4_config_env_err_var(-15);
+	if ( ev == 0 || strcmp(ev,"DS4_ARENA_SIZE") != 0 )
+		return(-1824);
+	ev = ds4_config_env_err_var(-21);
+	if ( ev == 0 || strcmp(ev,"DS4_CUDA_ARENA_SIZE") != 0 )
+		return(-1825);
+	ev = ds4_config_env_err_var(-18);
+	if ( ev == 0 || strcmp(ev,"DS4_LOG_RING_ENTRIES") != 0 )
+		return(-1826);
+	if ( ds4_config_env_err_var(0) != 0 )
+		return(-1827);
 	if ( ds4_config_validate(&cfg) < 0 )
 		return(-1800);
 	cfg.log_level = -1;
@@ -132,10 +153,26 @@ int32_t test_config(void)
 		return(-170);
 	if ( cfg.arena_size != 65536 )
 		return(-171);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","64KiB") != 0 )
+		return(-1710);
+	if ( cfg.arena_size != 65536 )
+		return(-1711);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","1MiB") != 0 )
+		return(-1712);
+	if ( cfg.arena_size != 1048576 )
+		return(-1713);
+	if ( ds4_config_parse_kv_cstr(&cfg,"arena_size","1GiB") != 0 )
+		return(-1714);
+	if ( cfg.arena_size != 1073741824 )
+		return(-1715);
 	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","256") != 0 )
 		return(-1810);
 	if ( cfg.cuda_arena_size != 256 )
 		return(-1811);
+	if ( ds4_config_parse_kv_cstr(&cfg,"cuda_arena_size","1MiB") != 0 )
+		return(-1812);
+	if ( cfg.cuda_arena_size != 1048576 )
+		return(-1813);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","9") != 0 )
 		return(-142);
 	if ( cfg.log_ring_entries != 9 )
@@ -144,6 +181,10 @@ int32_t test_config(void)
 		return(-172);
 	if ( cfg.log_ring_entries != 2048 )
 		return(-173);
+	if ( ds4_config_parse_kv_cstr(&cfg,"log_ring_entries","2KiB") != 0 )
+		return(-1730);
+	if ( cfg.log_ring_entries != 2048 )
+		return(-1731);
 	if ( ds4_config_parse_kv_cstr(&cfg,0,"1") >= 0 )
 		return(-64);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
@@ -238,6 +279,59 @@ int32_t test_config(void)
 		return(-209);
 	if ( strcmp(out,"stage=mem line=2 err=-11 unknown=1") != 0 )
 		return(-210);
+	unsetenv("DS4_CONFIG_PATH");
+	unsetenv("DS4_CONFIG");
+	if ( setenv("DS4_CONFIG",(const char *)env_cfg_unknown0,1) != 0 )
+		return(-2150);
+	unknown = -1;
+	ds4_config_diag_init(&diag);
+	if ( ds4_config_load_auto_ex_diag(&cfg,0,io_buf,(int32_t)sizeof(io_buf),0,DS4_CONFIG_PARSE_STRICT_UNKNOWN,&unknown,&diag) >= 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2151);
+	}
+	if ( unknown != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2152);
+	}
+	if ( diag.stage != DS4_CONFIG_DIAG_STAGE_ENV_CONFIG )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2153);
+	}
+	if ( diag.line != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2154);
+	}
+	if ( diag.err != -11 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2155);
+	}
+	if ( diag.unknown != 1 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2156);
+	}
+	if ( strcmp(ds4_config_diag_stage_name(diag.stage),"env_config") != 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2157);
+	}
+	n = ds4_config_diag_format(&diag,out,(int32_t)sizeof(out));
+	if ( n < 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2158);
+	}
+	if ( strcmp(out,"stage=env_config line=1 err=-11 unknown=1") != 0 )
+	{
+		unsetenv("DS4_CONFIG");
+		return(-2159);
+	}
+	unsetenv("DS4_CONFIG");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-101);
 	if ( ds4_config_parse_mem(&cfg,buf_over0,(int32_t)(sizeof(buf_over0) - 1)) >= 0 )

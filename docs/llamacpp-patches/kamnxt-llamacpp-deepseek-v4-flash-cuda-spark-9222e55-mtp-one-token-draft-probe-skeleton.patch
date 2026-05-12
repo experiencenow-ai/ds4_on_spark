@@ -989,8 +989,8 @@ index 0000000..00ef001
 +        const std::string & mtp_draft_token,
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
-+        const tensor_capture & mtp_stub_input_hc,
-+        const tensor_capture & mtp_stub_head_norm,
++        const tensor_capture & mtp_input_hc,
++        const tensor_capture & mtp_head_norm,
 +        bool ok,
 +        const std::vector<std::string> & errors) {
 +    std::printf("{\n");
@@ -1028,32 +1028,32 @@ index 0000000..00ef001
 +        std::printf("  \"trunk_pre_hc_head_shape\": null,\n");
 +    }
 +
-+    if (mtp_stub_input_hc.got) {
-+        std::printf("  \"mtp_stub_input_hc_fnv64\": \"%s\",\n",
-+                hex_u64(fnv1a64(mtp_stub_input_hc.bytes.data(), mtp_stub_input_hc.bytes.size())).c_str());
-+        std::printf("  \"mtp_stub_input_hc_nbytes\": %zu,\n", mtp_stub_input_hc.bytes.size());
-+        std::printf("  \"mtp_stub_input_hc_shape\": [%lld, %lld, %lld],\n",
-+                (long long) mtp_stub_input_hc.ne0,
-+                (long long) mtp_stub_input_hc.ne1,
-+                (long long) mtp_stub_input_hc.ne2);
++    if (mtp_input_hc.got) {
++        std::printf("  \"mtp_input_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_input_hc.bytes.data(), mtp_input_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_input_hc_nbytes\": %zu,\n", mtp_input_hc.bytes.size());
++        std::printf("  \"mtp_input_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_input_hc.ne0,
++                (long long) mtp_input_hc.ne1,
++                (long long) mtp_input_hc.ne2);
 +    } else {
-+        std::printf("  \"mtp_stub_input_hc_fnv64\": null,\n");
-+        std::printf("  \"mtp_stub_input_hc_nbytes\": null,\n");
-+        std::printf("  \"mtp_stub_input_hc_shape\": null,\n");
++        std::printf("  \"mtp_input_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_input_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_input_hc_shape\": null,\n");
 +    }
 +
-+    if (mtp_stub_head_norm.got) {
-+        std::printf("  \"mtp_stub_head_norm_fnv64\": \"%s\",\n",
-+                hex_u64(fnv1a64(mtp_stub_head_norm.bytes.data(), mtp_stub_head_norm.bytes.size())).c_str());
-+        std::printf("  \"mtp_stub_head_norm_nbytes\": %zu,\n", mtp_stub_head_norm.bytes.size());
-+        std::printf("  \"mtp_stub_head_norm_shape\": [%lld, %lld, %lld],\n",
-+                (long long) mtp_stub_head_norm.ne0,
-+                (long long) mtp_stub_head_norm.ne1,
-+                (long long) mtp_stub_head_norm.ne2);
++    if (mtp_head_norm.got) {
++        std::printf("  \"mtp_head_norm_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_head_norm.bytes.data(), mtp_head_norm.bytes.size())).c_str());
++        std::printf("  \"mtp_head_norm_nbytes\": %zu,\n", mtp_head_norm.bytes.size());
++        std::printf("  \"mtp_head_norm_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_head_norm.ne0,
++                (long long) mtp_head_norm.ne1,
++                (long long) mtp_head_norm.ne2);
 +    } else {
-+        std::printf("  \"mtp_stub_head_norm_fnv64\": null,\n");
-+        std::printf("  \"mtp_stub_head_norm_nbytes\": null,\n");
-+        std::printf("  \"mtp_stub_head_norm_shape\": null,\n");
++        std::printf("  \"mtp_head_norm_fnv64\": null,\n");
++        std::printf("  \"mtp_head_norm_nbytes\": null,\n");
++        std::printf("  \"mtp_head_norm_shape\": null,\n");
 +    }
 +
 +    std::printf("  \"seed\": %d,\n", (int) seed);

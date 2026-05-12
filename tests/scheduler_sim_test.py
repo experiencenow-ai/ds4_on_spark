@@ -969,6 +969,47 @@ class SchedulerSimTest(unittest.TestCase):
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def test_trace_jsonl_runtime_pack_layers_by_token_index_packs_into_layers(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(json.dumps({"type": "meta", "meta": {"runtime_commit": "abc123"}}))
+            f.write("\n")
+            for li, expert in ((2, 3), (0, 1), (1, 2)):
+                f.write(
+                    json.dumps(
+                        {
+                            "type": "route",
+                            "dt_ms": 0.0,
+                            "token_index": 0,
+                            "layer_index": li,
+                            "latency_class": "interactive",
+                            "routing": {"expert_ids": [expert]},
+                        }
+                    )
+                )
+                f.write("\n")
+        try:
+            meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(
+                tmp_path,
+                time_mode="dt_ms",
+                meta_out=meta,
+                non_route_policy="error",
+                input_format="runtime",
+                route_type="route",
+                pack_layers_by_token_index=True,
+                pack_require_layer_index=True,
+            )
+            self.assertEqual(meta.get("runtime_commit"), "abc123")
+            self.assertEqual(len(trace), 1)
+            self.assertIsNotNone(trace[0].layers)
+            self.assertEqual(trace[0].candidates, (1, 2, 3))
+            self.assertEqual([lr.candidates for lr in (trace[0].layers or ())], [(1,), (2,), (3,)])
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
     def test_trace_jsonl_runtime_accepts_integral_float_int_fields(self) -> None:
         tmp_path = ""
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
@@ -2306,6 +2347,47 @@ class SchedulerSimTest(unittest.TestCase):
         self.assertGreater(m_full.work_units_mtp_draft, m_stop.work_units_mtp_draft)
         self.assertAlmostEqual(m_full.work_units_mtp_draft, float(len(trace) * 4) * 0.25, places=6)
         self.assertAlmostEqual(m_stop.work_units_mtp_draft, float(len(trace) * 1) * 0.25, places=6)
+
+    def test_mtp_draft_attempt_policy_trace_uses_accepted_plus_rejected(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=float(i),
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0,),
+                accepted_mtp=2,
+                rejected_mtp=0,
+            )
+            for i in range(10)
+        ]
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=10_000,
+            service_ms=0.1,
+            starvation_ms=1e9,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            mtp_draft_len=4,
+            mtp_accept_prob=0.0,
+            mtp_accept_decay=1.0,
+            mtp_draft_cost_scale=0.25,
+            mtp_draft_attempt_policy="trace",
+        )
+        m = scheduler_sim.run_simulation(cfg, trace)
+        self.assertEqual(m.mtp_accept_len_per_step, [3 for _ in range(len(trace))])
+        self.assertEqual(m.mtp_draft_attempt_len_per_step, [2 for _ in range(len(trace))])
+        self.assertEqual(m.mtp_draft_tokens_total, len(trace) * 2)
+        self.assertEqual(m.mtp_draft_tokens_accepted, len(trace) * 2)
+        self.assertEqual(m.mtp_draft_tokens_rejected, 0)
 
     def test_mtp_accept_model_hist_can_force_bonus_tokens(self) -> None:
         trace = [

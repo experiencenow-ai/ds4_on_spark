@@ -37,11 +37,12 @@ Targets:
   qwen3_6_35b_a3b_dflash_hf            (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_6_27b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
-  qwen3_6_27b_dflash_gguf_spiritbuun_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
-  qwen3_6_27b_dflash_gguf_lucebox_hf    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
-  qwen3_6_27b_dflash_gguf_ardenzard_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
-  qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
-  qwen3_6_27b_fp8_hf                   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+	  qwen3_6_27b_dflash_gguf_spiritbuun_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+	  qwen3_6_27b_dflash_gguf_lucebox_hf    (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+	  qwen3_6_27b_dflash_gguf_ardenzard_hf  (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+	  qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+	  qwen3_6_35b_a3b_dflash_gguf_abhinand_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
+	  qwen3_6_27b_fp8_hf                   (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_27b_hf                       (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_27b_dflash_hf                (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
   qwen3_5_27b_dflash_gguf_spiritbuun_hf (HF metadata only; uses GIT_LFS_SKIP_SMUDGE=1)
@@ -93,6 +94,7 @@ Targets:
   vllm
   vllm_dflash_pr
   transformers
+  flashinfer
   sglang
   sglang_dflash_pr
   llama_cpp
@@ -329,6 +331,10 @@ fetch_one()
 			upstream="huggingface/transformers"; ref="refs/tags/v5.8.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
 			;;
+		flashinfer)
+			upstream="flashinfer-ai/flashinfer"; ref="refs/tags/v0.6.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "flashinfer" "https://github.com/flashinfer-ai/flashinfer.git" "${ref}" "${expected}"
+			;;
 		dflash_code)
 			upstream="z-lab/dflash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "dflash_code" "https://github.com/z-lab/dflash.git" "${ref}" "${expected}"
@@ -390,16 +396,21 @@ fetch_one()
 			upstream="huggingface.co/Ardenzard/Qwen3.6-27B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update_nolfs "qwen3_6_27b_dflash_gguf_ardenzard_hf" "https://huggingface.co/Ardenzard/Qwen3.6-27B-DFlash-GGUF" "${ref}" "${expected}"
 			;;
-		qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf)
-			# HF metadata/config only: do not download weights.
-			upstream="huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
-			clone_or_update_nolfs "qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf" "https://huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF" "${ref}" "${expected}"
-			;;
-		qwen3_6_27b_fp8_hf)
-			# HF metadata/config only: do not download weights.
-			upstream="huggingface.co/Qwen/Qwen3.6-27B-FP8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
-			clone_or_update_nolfs "qwen3_6_27b_fp8_hf" "https://huggingface.co/Qwen/Qwen3.6-27B-FP8" "${ref}" "${expected}"
-			;;
+			qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf)
+				# HF metadata/config only: do not download weights.
+				upstream="huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+				clone_or_update_nolfs "qwen3_6_35b_a3b_dflash_gguf_starskyzheng_hf" "https://huggingface.co/starskyzheng/Qwen3.6-35B-DFlash-GGUF" "${ref}" "${expected}"
+				;;
+			qwen3_6_35b_a3b_dflash_gguf_abhinand_hf)
+				# HF metadata/config only: do not download weights.
+				upstream="huggingface.co/abhinand/Qwen3.6-35B-A3B-DFlash-GGUF"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+				clone_or_update_nolfs "qwen3_6_35b_a3b_dflash_gguf_abhinand_hf" "https://huggingface.co/abhinand/Qwen3.6-35B-A3B-DFlash-GGUF" "${ref}" "${expected}"
+				;;
+			qwen3_6_27b_fp8_hf)
+				# HF metadata/config only: do not download weights.
+				upstream="huggingface.co/Qwen/Qwen3.6-27B-FP8"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+				clone_or_update_nolfs "qwen3_6_27b_fp8_hf" "https://huggingface.co/Qwen/Qwen3.6-27B-FP8" "${ref}" "${expected}"
+				;;
 		qwen3_5_27b_hf)
 			# HF metadata/config only: do not download weights.
 			upstream="huggingface.co/Qwen/Qwen3.5-27B"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
@@ -594,7 +605,7 @@ fetch_one()
 			clone_or_update "sglang_dflash_pr" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
 		llama_cpp)
-			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9110"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9124"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
 			;;
 		llama_cpp_deepseek_v4_flash)
@@ -676,11 +687,12 @@ main()
 		fetch_one deepseek_v4_gguf_nsparks
 		fetch_one deepseek_v4_gguf_cyberneurova
 		fetch_one deepseek_v4_gguf_teamblobfish
-		fetch_one bati_cpp
-		fetch_one vllm
-		fetch_one transformers
-		fetch_one sglang
-		fetch_one llama_cpp
+			fetch_one bati_cpp
+			fetch_one vllm
+			fetch_one transformers
+			fetch_one flashinfer
+			fetch_one sglang
+			fetch_one llama_cpp
 		fetch_one llama_cpp_deepseek_v4_flash
 		fetch_one llama_cpp_deepseek_v4_support_wip
 		fetch_one llama_cpp_deepseek_v4_port_cchuter
