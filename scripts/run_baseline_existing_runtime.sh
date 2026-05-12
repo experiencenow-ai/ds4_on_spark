@@ -46,10 +46,25 @@ echo "writing report to: $OUT_DIR"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
-if [ -d "$repo_root/.codex_git" ]; then
-    repo_rev="$(GIT_DIR="$repo_root/.codex_git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
-elif [ -e "$repo_root/.git2/.git" ]; then
-    repo_rev="$(GIT_DIR="$repo_root/.git2/.git" GIT_WORK_TREE="$repo_root" git rev-parse HEAD 2>/dev/null || echo unknown)"
+git_dir=""
+git_worktree="$repo_root"
+if [ "${DS4_GIT_WORK_TREE:-}" != "" ]; then
+    git_worktree="$DS4_GIT_WORK_TREE"
+fi
+if [ "${DS4_GIT_DIR:-}" != "" ] && [ -r "${DS4_GIT_DIR:-}/HEAD" ]; then
+    git_dir="$DS4_GIT_DIR"
+fi
+if [ "$git_dir" = "" ] && [ -d "$repo_root/.codex_git" ] && [ -r "$repo_root/.codex_git/HEAD" ]; then
+    git_dir="$repo_root/.codex_git"
+fi
+if [ "$git_dir" = "" ] && [ -d "$repo_root/git-local/baseline-runtime.git" ] && [ -r "$repo_root/git-local/baseline-runtime.git/HEAD" ]; then
+    git_dir="$repo_root/git-local/baseline-runtime.git"
+fi
+if [ "$git_dir" = "" ] && [ -e "$repo_root/.git2/.git/HEAD" ]; then
+    git_dir="$repo_root/.git2/.git"
+fi
+if [ "$git_dir" != "" ]; then
+    repo_rev="$(GIT_DIR="$git_dir" GIT_WORK_TREE="$git_worktree" git rev-parse HEAD 2>/dev/null || echo unknown)"
 elif [ -e "$repo_root/.git" ]; then
     repo_rev="$(cd "$repo_root" && git rev-parse HEAD 2>/dev/null || echo unknown)"
 fi
