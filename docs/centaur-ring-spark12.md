@@ -21,8 +21,7 @@ REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-ho
 ```bash
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-sh ./scripts/centaur_spark0_v73_run.sh spark0@<spark0-host>
-sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 If you want a known-good reference bundle for what “PASS” looks like, see:

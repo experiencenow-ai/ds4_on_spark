@@ -101,6 +101,9 @@ remote_run_dir="$remote_dir/run/$run_id"
 remote_smoke_log="$remote_run_dir/smoke.log"
 
 ssh_cmd="cd $remote_dir && mkdir -p $remote_run_dir && export CENTAUR_RUN_ID=\"$run_id\" && export CENTAUR_LOG=\"$remote_smoke_log\" && export CENTAUR_ZIP=\"$remote_zip\" && export CENTAUR_CATALOG_JSON=\"$remote_catalog\""
+if [ "${CENTAUR_WORKDIR:-}" = "" ]; then
+	ssh_cmd="$ssh_cmd && export CENTAUR_WORKDIR=\"$remote_run_dir\""
+fi
 if [ "${CENTAUR_PIP_ARGS:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_PIP_ARGS=\"${CENTAUR_PIP_ARGS}\""
 fi
