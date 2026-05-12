@@ -295,32 +295,32 @@ else
 	echo "nvidia-smi not found"
 fi
 echo
-echo "== nvidia-smi inventory (index + pci bus) =="
-q=""
-if [ "$have_smi" = "1" ]; then
-	if [ "$spark_probe_facts" = "1" ]; then
-		echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
-		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
-		if [ "$q" != "" ]; then
-			echo "$q"
+	echo "== nvidia-smi inventory (index + pci bus) =="
+	q=""
+	if [ "$have_smi" = "1" ]; then
+		if [ "$spark_probe_facts" = "1" ]; then
+			echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
+			q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+			if [ "$q" != "" ]; then
+				echo "$q"
+			else
+				echo "columns: index,gpu_name,pci.bus_id,driver_version,memory.total"
+				q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+				[ "$q" != "" ] && echo "$q"
+				echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+			fi
 		else
-			echo "columns: index,gpu_name,pci.bus_id,driver_version,memory.total"
-			q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
-			[ "$q" != "" ] && echo "$q"
-			echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+			echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
+			q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+			if [ "$q" != "" ]; then
+				echo "$q"
+			else
+				echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
+				q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+				[ "$q" != "" ] && echo "$q"
+				echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
+			fi
 		fi
-	else
-		echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total"
-		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
-		if [ "$q" != "" ]; then
-			echo "$q"
-		else
-			echo "columns: index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total"
-			q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,temperature.gpu,pstate,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
-			[ "$q" != "" ] && echo "$q"
-			echo "note: nvidia-smi compute_cap field not supported; rely on nvcc runtime probe for cc"
-		fi
-	fi
 	else
 		echo "nvidia-smi not found"
 	fi
@@ -334,20 +334,20 @@ if [ "$have_smi" = "1" ]; then
 	echo "== nvidia-smi pci ids (optional) =="
 	if command -v nvidia-smi >/dev/null 2>&1; then
 		ids_q="$(nvidia-smi --query-gpu=index,pci.bus_id,pci.device_id,pci.sub_device_id --format=csv,noheader,nounits 2>/dev/null || true)"
-	if [ "$ids_q" != "" ]; then
-		if printf "%s" "$ids_q" | grep -qi "not a valid field"; then
-			echo "pci id query not supported"
-			printf "%s\n" "$ids_q" | head -n 2
+		if [ "$ids_q" != "" ]; then
+			if printf "%s" "$ids_q" | grep -qi "not a valid field"; then
+				echo "pci id query not supported"
+				printf "%s\n" "$ids_q" | head -n 2
+			else
+				echo "columns: index,pci.bus_id,pci.device_id,pci.sub_device_id"
+				echo "$ids_q"
+			fi
 		else
-			echo "columns: index,pci.bus_id,pci.device_id,pci.sub_device_id"
-			echo "$ids_q"
+			echo "pci id query not supported"
 		fi
 	else
-		echo "pci id query not supported"
+		echo "nvidia-smi not found"
 	fi
-else
-	echo "nvidia-smi not found"
-fi
 driver_version=""
 if [ "$q" != "" ]; then
 	driver_version="$(printf "%s\n" "$q" | head -n 1 | awk -F"," "{ v=\$4; gsub(/^[ \\t]+|[ \\t]+$/, \"\", v); print v; }" || true)"
@@ -1098,8 +1098,9 @@ fi
 			lsblk_out="$(lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS -e 7 2>/dev/null || true)"
 			if [ "$lsblk_out" != "" ]; then
 				printf "%s\n" "$lsblk_out"
-		else
-			lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+			else
+				lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk '"'"'NR==1 {print; next} $1 !~ /^loop/'"'"' || true
+			fi
 		fi
 		echo
 	fi
