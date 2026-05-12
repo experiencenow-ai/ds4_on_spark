@@ -75,6 +75,8 @@ The offline updater emits additional machine-readable outputs intended for downs
 - `budget.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_budget_v1.schema.json`
 - `quality_map.json`: `fixtures/judge-elo/schemas/judge_elo_quality_map_v1.schema.json`
 - `leaderboard.json`: `fixtures/judge-elo/schemas/judge_elo_leaderboard_v1.schema.json`
+- `bundle.json`: `fixtures/judge-elo/schemas/ds4_judge_elo_bundle_v1.schema.json`
+  - single-file bundle for downstream loops that want one JSON to ingest
 - `summary.md`: compact human-readable summary (parse validity + judge-out budget + top models)
 
 To validate a produced output directory (without any paid API calls):
