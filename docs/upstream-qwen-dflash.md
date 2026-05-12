@@ -179,6 +179,15 @@ Metric separation (recommended `scope` labels for `MODEL_RUNS_CSV`):
 
 ## vLLM Probe Examples
 
+## Spark0 vLLM Status
+
+As of `2026-05-12`, the Spark0 host `aitopatom-9ab9` has Python `3.12.3` but does not have `vllm` or `torch` installed in the default `/usr/bin/python3` environment. This blocks Ling/Qwen target-only and DFlash paired baselines unless we either:
+
+- use a pinned container/runtime that bundles vLLM + torch, or
+- install vLLM + torch on Spark0 (requires explicit approval; avoid silent downloads).
+
+Reference probe report: `docs/baseline-vllm-env-probe-spark0-2026-05-12.md`.
+
 Target-only, using local paths already staged on Spark:
 
 ```sh
