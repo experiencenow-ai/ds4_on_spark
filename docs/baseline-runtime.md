@@ -52,6 +52,8 @@ This writes a markdown report to a local output directory and includes:
 
 - Spark identity + `nvidia-smi` snapshot
 - `ds4_on_spark` commit hash (best-effort; prefers `DS4_GIT_DIR`/`DS4_GIT_WORK_TREE` when set, otherwise checks `.codex_git`, `git-local/baseline-runtime.git`, and `.git2/.git` when present)
+
+If the Codex-provided worktree cannot write `FETCH_HEAD` during `git fetch`, use the local `.codex_git` shim helper: `docs/baseline-git-shim.md`.
 - llama.cpp baseline (optional build/run depending on gates)
 - vLLM presence/version probe (no installs); optional gated generate probe if a model dir is already present (TTFT is reported as `NA`; record load + generation wall time instead)
 - optional OpenAI-compatible streaming benchmark (true TTFT + decode throughput) for endpoints that already exist on Spark (for example vLLM OpenAI server or AEON containers); gated via `SKIP_OPENAI_STREAM=0` and `REMOTE_OPENAI_STREAM_ENV`
