@@ -213,7 +213,52 @@ else
 fi
 
 echo "== pip freeze (sanitized) =="
-"$venv_py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'
+freeze_file="$workdir/pip_freeze.txt"
+"$venv_py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g' >"$freeze_file"
+sed -n '1,120p' "$freeze_file"
+
+echo "== write smoke facts (json) =="
+facts_json="$workdir/smoke_facts.json"
+"$venv_py" - "$zip" "$zip_sha256" "$decomposer_version" "$workdir" "$freeze_file" >"$facts_json" <<'PY'
+import json
+import platform
+import sys
+from datetime import datetime, timezone
+
+zip_path=sys.argv[1]
+zip_sha256=sys.argv[2]
+decomposer_version=sys.argv[3]
+workdir=sys.argv[4]
+freeze_path=sys.argv[5]
+
+pip_freeze=[]
+try:
+    with open(freeze_path,"r",encoding="utf-8",errors="replace") as f:
+        for line in f:
+            line=line.strip()
+            if line:
+                pip_freeze.append(line)
+except Exception:
+    pip_freeze=[]
+
+out={
+    "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "zip_path": zip_path,
+    "zip_sha256": zip_sha256,
+    "decomposer_version": decomposer_version,
+    "workdir": workdir,
+    "python": {
+        "version": sys.version.splitlines()[0],
+        "executable": sys.executable,
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+    },
+    "pip_freeze": pip_freeze,
+}
+json.dump(out,sys.stdout,indent=2,sort_keys=True)
+sys.stdout.write("\n")
+PY
+echo "facts_json: $facts_json"
 
 centaur()
 {
