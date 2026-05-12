@@ -16,8 +16,8 @@ Current observed Spark identity:
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
 - CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe ring snapshot set: `2026-05-12T1611Z` (`docs/spark-ring-*-2026-05-12T1611Z.md`)
-- Latest Spark0 facts-only snapshot: `2026-05-12T1611Z` (`docs/spark0-probe-facts-2026-05-12T1611Z.md`)
+- Latest commit-safe ring snapshot set: `2026-05-12T1633Z` (`docs/spark-ring-*-2026-05-12T1633Z.md`)
+- Latest Spark0 facts-only snapshot: `2026-05-12T1633Z` (`docs/spark0-probe-facts-2026-05-12T1633Z.md`)
 - PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T1300Z.md`
 
 ## Reproducible Probes
