@@ -416,6 +416,8 @@ To guard against silent drift in the sliding/CSA/HCA KV update rules, this repo 
 - `indexer_forward` (CSA-only scoring path + top-k selection)
 - `attention_forward` (sliding ring update + prefill wrap + top-k concat)
 
+For run-report interpretation (including quantized single-Spark external runtimes), `contract_summary.json` also carries short cache semantics summaries under `cache.semantics.{kv_layout,sparse_topk_rule,sliding_summary,csa_summary,hca_summary}` so tooling can explain sliding vs CSA vs HCA behavior without scraping Markdown.
+
 Sparse attention index selection:
 
 - Always attends to the sliding window (`get_window_topk_idxs(...)`).

@@ -536,6 +536,11 @@
       "window_indices": "get_window_topk_idxs(window_size,...,start_pos=0)"
     },
     "semantics": {
+      "csa_summary": "CSA layers (compress_ratio==4) add a learned Indexer: window indices plus Indexer-derived compressed indices (offset=seqlen in prefill, offset=window_size in decode). The attention compressor writes compressed KV into kv_cache[:,window_size:] at index start_pos//4 on compression steps ((start_pos+1)%4==0).",
+      "hca_summary": "HCA layers (compress_ratio==128) select compressed indices via get_compress_topk_idxs (no Indexer). The attention compressor writes compressed KV into kv_cache[:,window_size:] at index start_pos//128 on compression steps ((start_pos+1)%128==0).",
+      "kv_layout": "kv_cache[:,:window_size] is the sliding ring; kv_cache[:,window_size:] is the compressed segment (size max_seq_len//compress_ratio when compress_ratio!=0).",
+      "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Attention.forward; get_window_topk_idxs; get_compress_topk_idxs)",
+      "sliding_summary": "Sliding-only layers keep only the window ring buffer. Prefill writes the last window_size KV vectors (wrapping if seqlen>window_size); decode writes kv_cache[:bsz, start_pos%window_size]=kv.squeeze(1).",
       "source_helpers": {
         "attention_forward": {
           "source_lines": [
@@ -707,7 +712,8 @@
           "source_lines_sha256": "1f3c4bf3176940d238905a79514d87fcabdd47f0cea484b87e14d2de18a2e888"
         },
         "reference_source": "fixtures/model_contract/deepseek_v4_flash/inference/model.py (Compressor.forward, Indexer.forward, Attention.forward)"
-      }
+      },
+      "sparse_topk_rule": "topk_idxs = window_topk_idxs (+ compress_topk_idxs when compress_ratio!=0); indices are int32; idx==-1 means masked slot (score=-inf, kv=0)."
     },
     "sparse_attn_mask_rule": "idx == -1 => score=-inf, kv=0",
     "topk_index_helpers": {
