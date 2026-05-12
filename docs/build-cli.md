@@ -23,6 +23,12 @@ Print the version:
 ./build_cli/ds4_cli --version
 ```
 
+Print supported config keys:
+
+```bash
+./build_cli/ds4_cli --dump-config-keys
+```
+
 Dump effective config (defaults + optional file + env):
 
 ```bash
