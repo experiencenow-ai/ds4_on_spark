@@ -1,0 +1,4 @@
+{"type":"task_run","run_id":"r.answer.letter.mini","task_id":"mcq.toy.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"m1","prompt":"Pick A/B/C.","output":"A"}
+{"type":"task_run","run_id":"r.answer.letter.mini","task_id":"mcq.toy.002","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"m1","prompt":"Pick A/B/C.","output":"Answer: B"}
+{"type":"task_run","run_id":"r.answer.letter.mini","task_id":"mcq.toy.003","task_family":"mcq","prompt_template_id":"mcq.letter.v1","model_id":"m1","prompt":"Pick A/B/C.","answer":"C","output":"C"}
+{"type":"task_run","run_id":"r.answer.letter.mini","task_id":"math.add.001","task_family":"math","prompt_template_id":"cot.v1","model_id":"m2","prompt":"Add 12+30.","output":"42"}

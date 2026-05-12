@@ -89,6 +89,7 @@ def summarize(records: Sequence[Dict[str, Any]], low_count_max: int = 1, min_fam
     task_template_counts: Dict[str, int] = {}
     model_counts: Dict[str, int] = {}
     answer_counts: Dict[str, int] = {}
+    answer_letter_counts: Dict[str, int] = {}
     tag_counts: Dict[str, int] = {}
     buffer_id_counts: Dict[str, int] = {}
     buffer_item_id_counts: Dict[str, int] = {}
@@ -113,6 +114,9 @@ def summarize(records: Sequence[Dict[str, Any]], low_count_max: int = 1, min_fam
             model_counts[c.model_id] = model_counts.get(c.model_id, 0) + 1
         if c.answer != "":
             answer_counts[c.answer] = answer_counts.get(c.answer, 0) + 1
+            letter = lib.answer_letter(c.answer)
+            if letter != "":
+                answer_letter_counts[letter] = answer_letter_counts.get(letter, 0) + 1
         for tag in lib.get_list(c.raw, "tags", "tag"):
             if tag != "":
                 tag_counts[tag] = tag_counts.get(tag, 0) + 1
@@ -147,6 +151,7 @@ def summarize(records: Sequence[Dict[str, Any]], low_count_max: int = 1, min_fam
             "underrepresented_task_id_template_pair_top": _low_count_top(task_template_counts, "task_id_template_pair", low_count_max, top_k),
             "underrepresented_model_id_top": _low_count_top(model_counts, "model_id", low_count_max, top_k),
             "underrepresented_answer_top": _low_count_top(answer_counts, "answer", low_count_max, top_k),
+            "underrepresented_answer_letter_top": _low_count_top(answer_letter_counts, "answer_letter", low_count_max, top_k),
             "underrepresented_tags_top": _low_count_top(tag_counts, "tag", low_count_max, top_k),
             "underrepresented_buffer_id_top": _low_count_top(buffer_id_counts, "buffer_id", low_count_max, top_k),
             "underrepresented_buffer_item_id_top": _low_count_top(buffer_item_id_counts, "buffer_item_id", low_count_max, top_k),
@@ -222,7 +227,9 @@ def _to_md(gaps: Dict[str, Any]) -> str:
     parts.append(_md_list(tr.get("underrepresented_task_id_template_pair_top", []), "task_id_template_pair"))
     parts.append(_md_list(tr.get("underrepresented_model_id_top", []), "model_id"))
     parts.append(_md_list(tr.get("underrepresented_answer_top", []), "answer"))
+    parts.append(_md_list(tr.get("underrepresented_answer_letter_top", []), "answer_letter"))
     parts.append(_md_list(tr.get("underrepresented_tags_top", []), "tag"))
+    parts.append(_md_list(tr.get("underrepresented_buffer_id_top", []), "buffer_id"))
     parts.append(_md_list(tr.get("underrepresented_buffer_item_id_top", []), "buffer_item_id"))
     parts.append("\n## Families to diversify templates\n")
     parts.append(_md_families_entropy(tr.get("families_low_template_entropy_norm_top", [])))
@@ -280,4 +287,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

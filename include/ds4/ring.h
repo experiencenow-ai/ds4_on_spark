@@ -10,6 +10,7 @@ typedef struct
 } ds4_ring_t;
 
 DS4_EXTERN_C_BEGIN
+int32_t ds4_ring_bytes_needed(int32_t elem_count,int32_t elem_size,int32_t *out_bytes);
 int32_t ds4_ring_init(ds4_ring_t *r,uint8_t *mem,int32_t elem_count,int32_t elem_size);
 int32_t ds4_ring_reset(ds4_ring_t *r);
 int32_t ds4_ring_count(ds4_ring_t *r,int32_t *out_count);

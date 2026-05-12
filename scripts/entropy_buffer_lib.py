@@ -18,6 +18,7 @@ _ANSWER_STANDALONE_RE = re.compile(r"(?i)^\s*[\(\[]?([A-Z])[\)\].]?\s*$")
 _ANSWER_MARKED_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s*[:=]\s*[\(\[]?([A-Z])[\)\].]?\b")
 _ANSWER_IS_LETTER_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s+is\s+[\(\[]?([A-Z])[\)\].]?\b")
 _ANSWER_IS_NUMERIC_RE = re.compile(r"(?i)\b(?:final\s+answer|answer|correct\s+answer)\s+is\s+(-?\d+(?:\.\d+)?)\b")
+_ANSWER_LETTER_ONLY_RE = re.compile(r"^[A-Za-z]$")
 
 
 @dataclass
@@ -128,6 +129,12 @@ def extract_answer(text: str) -> str:
     if m is not None:
         return(m.group(1))
     return("")
+
+def answer_letter(answer: str) -> str:
+    s = str(answer).strip()
+    if _ANSWER_LETTER_ONLY_RE.match(s) is None:
+        return("")
+    return(s.upper())
 
 
 def make_item_id(task_id: str, prompt_template_id: str, a_model_id: str, b_model_id: str) -> str:
