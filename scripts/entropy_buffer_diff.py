@@ -54,6 +54,8 @@ DEFAULT_KEY_PATHS = [
     "judge.label_balance_ab",
     "judge.disagreement_rate",
     "judge.disagreement_rate_decided_ab",
+    "judge.judge_id_disagreement_vs_majority_rate_max",
+    "judge.judge_id_disagreement_vs_majority_rate_decided_ab_max",
     "judge.invalid_rate",
     "judge.tie_rate",
     "tokens.prompt_word_entropy_bits",

@@ -1,0 +1,6 @@
+{"type":"meta","meta":{"note":"Mini fixture for per-judge disagreement vs majority diagnostics.","schema":"entropy-buffer.judge_majority.v1"}}
+{"schema":"ds4_pairwise_judge_record_v1","pair_id":"pair.majority.001","judge_model":"judge.v1","model_a":"mA","model_b":"mB","parse_valid":true,"winner":"A","task_id":"mcq.majority.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1"}
+{"schema":"ds4_pairwise_judge_record_v1","pair_id":"pair.majority.001","judge_model":"judge.v2","model_a":"mA","model_b":"mB","parse_valid":true,"winner":"A","task_id":"mcq.majority.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1"}
+{"schema":"ds4_pairwise_judge_record_v1","pair_id":"pair.majority.001","judge_model":"judge.v3","model_a":"mA","model_b":"mB","parse_valid":true,"winner":"B","task_id":"mcq.majority.001","task_family":"mcq","prompt_template_id":"mcq.letter.v1"}
+{"schema":"ds4_pairwise_judge_record_v1","pair_id":"pair.majority.002","judge_model":"judge.v1","model_a":"mA","model_b":"mB","parse_valid":true,"winner":"A","task_id":"mcq.majority.002","task_family":"mcq","prompt_template_id":"mcq.letter.v1"}
+{"schema":"ds4_pairwise_judge_record_v1","pair_id":"pair.majority.002","judge_model":"judge.v2","model_a":"mA","model_b":"mB","parse_valid":true,"winner":"B","task_id":"mcq.majority.002","task_family":"mcq","prompt_template_id":"mcq.letter.v1"}

@@ -273,6 +273,32 @@ class EntropyBufferMetricsTest(unittest.TestCase):
         self.assertEqual(int((report.judge.get("judge_latency_ms") or {}).get("count", 0)), 2)
         self.assertGreaterEqual(float(report.judge.get("judge_out_budget_le_target_rate", 0.0)), 0.5)
 
+    def test_judge_disagreement_vs_majority_from_fixture(self) -> None:
+        root = _repo_root()
+        path = os.path.join(root, "fixtures", "entropy-buffer", "records_judge_majority_mini.jsonl")
+        records = lib.load_jsonl([path])
+        report = metrics.summarize(records)
+
+        top = report.judge.get("judge_id_disagreement_vs_majority_rate_top", [])
+        self.assertGreaterEqual(len(top), 1)
+        self.assertEqual(top[0].get("judge_id"), "judge.v3")
+        self.assertAlmostEqual(float(top[0].get("disagreement_vs_majority_rate", 0.0)), 1.0)
+        self.assertEqual(int(top[0].get("majority_item_count", 0) or 0), 1)
+
+        top_ab = report.judge.get("judge_id_disagreement_vs_majority_rate_decided_ab_top", [])
+        self.assertGreaterEqual(len(top_ab), 1)
+        self.assertEqual(top_ab[0].get("judge_id"), "judge.v3")
+        self.assertAlmostEqual(float(top_ab[0].get("disagreement_vs_majority_rate_decided_ab", 0.0)), 1.0)
+
+        summ = report.judge.get("judge_id_summary", {}) or {}
+        j3 = summ.get("judge.v3") or {}
+        self.assertEqual(int(j3.get("majority_item_count", 0) or 0), 1)
+        self.assertAlmostEqual(float(j3.get("disagreement_vs_majority_rate", 0.0)), 1.0)
+        self.assertEqual(int(j3.get("majority_item_count_decided_ab", 0) or 0), 1)
+        self.assertAlmostEqual(float(j3.get("disagreement_vs_majority_rate_decided_ab", 0.0)), 1.0)
+        self.assertGreaterEqual(float(report.judge.get("judge_id_disagreement_vs_majority_rate_max", 0.0)), 1.0)
+        self.assertGreaterEqual(float(report.judge.get("judge_id_disagreement_vs_majority_rate_decided_ab_max", 0.0)), 1.0)
+
     def test_recommendations_prioritize_unseen_pairs(self) -> None:
         root = _repo_root()
         hist_path = os.path.join(root, "fixtures", "entropy-buffer", "records_mini.jsonl")

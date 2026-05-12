@@ -146,6 +146,20 @@ def _majority_disagreement(labels: Sequence[str]) -> float:
     maxc = max(counts.values())
     return(1.0 - (float(maxc) / float(len(labels))))
 
+def _majority_label(labels: Sequence[str]) -> str:
+    if len(labels) == 0:
+        return("")
+    counts: Dict[str, int] = {}
+    for lab in labels:
+        _inc(counts, lab)
+    if len(counts) == 0:
+        return("")
+    best = max(counts.values())
+    best_labels = [k for k, v in counts.items() if v == best]
+    if len(best_labels) != 1:
+        return("")
+    return(str(best_labels[0]))
+
 def _judge_slice_stats(label_counts: Dict[str, int], item_labels: Dict[str, List[str]], item_labels_decided_ab: Dict[str, List[str]]) -> Dict[str, Any]:
     total = int(sum(label_counts.values()))
     wins_a = int(label_counts.get("a", 0))
@@ -877,6 +891,7 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
     item_labels: Dict[str, List[str]] = {}
     item_labels_decided_ab: Dict[str, List[str]] = {}
     item_judge_ids: Dict[str, Dict[str, int]] = {}
+    item_judge_labels: Dict[str, Dict[str, List[str]]] = {}
     item_pair_key: Dict[str, str] = {}
     judge_id_counts: Dict[str, int] = {}
     judge_id_label_counts: Dict[str, Dict[str, int]] = {}
@@ -936,6 +951,8 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         if item != "" and c.judge_id != "":
             item_judge_ids.setdefault(item, {})
             item_judge_ids[item][c.judge_id] = item_judge_ids[item].get(c.judge_id, 0) + 1
+            item_judge_labels.setdefault(item, {})
+            item_judge_labels[item].setdefault(c.judge_id, []).append(c.label)
         if c.label in ("a", "b"):
             item_labels_decided_ab.setdefault(item, []).append(c.label)
 
@@ -972,6 +989,48 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
             if c.label in ("a", "b"):
                 pair_item_labels_decided_ab.setdefault(fam_tmpl, {})
                 pair_item_labels_decided_ab[fam_tmpl].setdefault(item, []).append(c.label)
+
+    item_majority_label: Dict[str, str] = {}
+    for item_id, labs in item_labels.items():
+        if len(labs) < 2:
+            continue
+        m = _majority_label(labs)
+        if m != "":
+            item_majority_label[item_id] = m
+
+    item_majority_label_decided_ab: Dict[str, str] = {}
+    for item_id, labs in item_labels_decided_ab.items():
+        if len(labs) < 2:
+            continue
+        m = _majority_label(labs)
+        if m != "":
+            item_majority_label_decided_ab[item_id] = m
+
+    judge_id_majority_item_count: Dict[str, int] = {}
+    judge_id_majority_disagree_count: Dict[str, int] = {}
+    judge_id_majority_item_count_decided_ab: Dict[str, int] = {}
+    judge_id_majority_disagree_count_decided_ab: Dict[str, int] = {}
+
+    for item_id, by_judge in item_judge_labels.items():
+        maj = item_majority_label.get(item_id, "")
+        maj_ab = item_majority_label_decided_ab.get(item_id, "")
+        for judge_id, labs in by_judge.items():
+            if judge_id == "":
+                continue
+            if maj != "":
+                jlab = _majority_label(labs)
+                if jlab != "":
+                    judge_id_majority_item_count[judge_id] = judge_id_majority_item_count.get(judge_id, 0) + 1
+                    if jlab != maj:
+                        judge_id_majority_disagree_count[judge_id] = judge_id_majority_disagree_count.get(judge_id, 0) + 1
+            if maj_ab != "":
+                labs_ab = [x for x in labs if x in ("a", "b")]
+                if len(labs_ab) != 0:
+                    jlab_ab = _majority_label(labs_ab)
+                    if jlab_ab != "":
+                        judge_id_majority_item_count_decided_ab[judge_id] = judge_id_majority_item_count_decided_ab.get(judge_id, 0) + 1
+                        if jlab_ab != maj_ab:
+                            judge_id_majority_disagree_count_decided_ab[judge_id] = judge_id_majority_disagree_count_decided_ab.get(judge_id, 0) + 1
 
     item_disagreements: List[float] = []
     for labs in item_labels.values():
@@ -1345,13 +1404,37 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
 
     judge_id_summary: Dict[str, Any] = {}
     judge_id_imbalance_ab_top: List[Dict[str, Any]] = []
+    judge_id_disagree_majority_rate_top: List[Dict[str, Any]] = []
+    judge_id_disagree_majority_rate_decided_ab_top: List[Dict[str, Any]] = []
     for judge_id in sorted(judge_id_label_counts.keys()):
         counts = judge_id_label_counts.get(judge_id) or {}
         stats = _judge_label_stats(counts)
+        maj_items = int(judge_id_majority_item_count.get(judge_id, 0))
+        maj_bad = int(judge_id_majority_disagree_count.get(judge_id, 0))
+        maj_items_ab = int(judge_id_majority_item_count_decided_ab.get(judge_id, 0))
+        maj_bad_ab = int(judge_id_majority_disagree_count_decided_ab.get(judge_id, 0))
+        stats["majority_item_count"] = maj_items
+        stats["disagreement_vs_majority_count"] = maj_bad
+        stats["disagreement_vs_majority_rate"] = 0.0 if maj_items == 0 else (float(maj_bad) / float(maj_items))
+        stats["majority_item_count_decided_ab"] = maj_items_ab
+        stats["disagreement_vs_majority_count_decided_ab"] = maj_bad_ab
+        stats["disagreement_vs_majority_rate_decided_ab"] = 0.0 if maj_items_ab == 0 else (float(maj_bad_ab) / float(maj_items_ab))
         judge_id_summary[judge_id] = stats
         judge_id_imbalance_ab_top.append(dict(stats, **{"judge_id": judge_id}))
+        judge_id_disagree_majority_rate_top.append(dict(stats, **{"judge_id": judge_id}))
+        judge_id_disagree_majority_rate_decided_ab_top.append(dict(stats, **{"judge_id": judge_id}))
     judge_id_imbalance_ab_top.sort(key=lambda x: (-float(x.get("label_imbalance_ab", 0.0)), -int(x.get("count", 0) or 0), str(x.get("judge_id", ""))))
     judge_id_imbalance_ab_top = judge_id_imbalance_ab_top[:10]
+    judge_id_disagree_majority_rate_top.sort(key=lambda x: (-float(x.get("disagreement_vs_majority_rate", 0.0)), -int(x.get("majority_item_count", 0) or 0), str(x.get("judge_id", ""))))
+    judge_id_disagree_majority_rate_top = [x for x in judge_id_disagree_majority_rate_top if int(x.get("majority_item_count", 0) or 0) > 0][:10]
+    judge_id_disagree_majority_rate_decided_ab_top.sort(key=lambda x: (-float(x.get("disagreement_vs_majority_rate_decided_ab", 0.0)), -int(x.get("majority_item_count_decided_ab", 0) or 0), str(x.get("judge_id", ""))))
+    judge_id_disagree_majority_rate_decided_ab_top = [x for x in judge_id_disagree_majority_rate_decided_ab_top if int(x.get("majority_item_count_decided_ab", 0) or 0) > 0][:10]
+
+    judge_id_disagreement_vs_majority_rate_max = 0.0
+    judge_id_disagreement_vs_majority_rate_decided_ab_max = 0.0
+    if len(judge_id_summary) != 0:
+        judge_id_disagreement_vs_majority_rate_max = max(float(x.get("disagreement_vs_majority_rate", 0.0) or 0.0) for x in judge_id_summary.values())
+        judge_id_disagreement_vs_majority_rate_decided_ab_max = max(float(x.get("disagreement_vs_majority_rate_decided_ab", 0.0) or 0.0) for x in judge_id_summary.values())
 
     judge = {
         "label_counts": dict(sorted(label_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
@@ -1388,6 +1471,10 @@ def summarize(records: Iterable[Dict[str, Any]]) -> MetricsReport:
         "judge_id_top": lib.top_counts(judge_id_counts),
         "judge_id_summary": judge_id_summary,
         "judge_id_imbalance_ab_top": judge_id_imbalance_ab_top,
+        "judge_id_disagreement_vs_majority_rate_max": judge_id_disagreement_vs_majority_rate_max,
+        "judge_id_disagreement_vs_majority_rate_decided_ab_max": judge_id_disagreement_vs_majority_rate_decided_ab_max,
+        "judge_id_disagreement_vs_majority_rate_top": judge_id_disagree_majority_rate_top,
+        "judge_id_disagreement_vs_majority_rate_decided_ab_top": judge_id_disagree_majority_rate_decided_ab_top,
         "model_pair_count": len(pair_summary),
         "model_pair_summary": pair_summary,
         "model_pair_top": model_pair_top,
@@ -1741,6 +1828,12 @@ def to_markdown(report: MetricsReport) -> str:
     parts.append("\n### judge_id_imbalance_ab_top\n")
     for js in (report.judge.get("judge_id_imbalance_ab_top") or [])[:10]:
         parts.append(f"- `{js.get('judge_id')}`: imbalance_ab={float(js.get('label_imbalance_ab', 0.0) or 0.0):.6f} count={int(js.get('count', 0) or 0)} label_counts={js.get('label_counts')}")
+    parts.append("\n### judge_id_disagreement_vs_majority_rate_top\n")
+    for js in (report.judge.get("judge_id_disagreement_vs_majority_rate_top") or [])[:10]:
+        parts.append(f"- `{js.get('judge_id')}`: disagree_vs_majority={float(js.get('disagreement_vs_majority_rate', 0.0) or 0.0):.6f} items={int(js.get('majority_item_count', 0) or 0)}")
+    parts.append("\n### judge_id_disagreement_vs_majority_rate_decided_ab_top\n")
+    for js in (report.judge.get("judge_id_disagreement_vs_majority_rate_decided_ab_top") or [])[:10]:
+        parts.append(f"- `{js.get('judge_id')}`: disagree_vs_majority_decided_ab={float(js.get('disagreement_vs_majority_rate_decided_ab', 0.0) or 0.0):.6f} items={int(js.get('majority_item_count_decided_ab', 0) or 0)}")
     parts.append("\n### model_pair_top\n")
     parts.append(_md_model_pair_top(report.judge.get("model_pair_top", [])))
     parts.append("\n### item_disagreement_top\n")

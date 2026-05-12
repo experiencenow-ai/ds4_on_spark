@@ -136,6 +136,7 @@ The scripts compute:
 - **Tag diversity** (optional): entropy over `tags` when present on task/judge records.
 - **Disagreement rate**: for each `item_id`, fraction of non-majority labels across judges; aggregated mean (all labels) plus `a/b`-only decided disagreement.
   - The report also includes `tie_rate` and `invalid_rate` to help debug judge stability.
+  - Per-judge outlier detection: `judge_id_disagreement_vs_majority_rate_top` (and `*_decided_ab_top`) plus scalar maxima (`judge_id_disagreement_vs_majority_rate_max`, `judge_id_disagreement_vs_majority_rate_decided_ab_max`).
 - **Judge budget / stability stats** (when present): `parse_valid_rate`, `judge_in_tokens`, `judge_out_tokens`, `judge_latency_ms`, plus `judge_out_budget_le_target_rate` (default target = 64).
   - Also reports slice-join coverage rates for judge records: `task_family_nonempty_judge_pair_rate`, `prompt_template_id_nonempty_judge_pair_rate`, and `task_family_template_pair_nonempty_judge_pair_rate`.
 - **Duplicate-output rate**: exact + normalized output duplicates (and prompt duplicates when present), plus per-`task_id|prompt_template_id` duplicate rates (summary + top repeated pairs).
