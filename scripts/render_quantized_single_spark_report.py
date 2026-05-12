@@ -204,6 +204,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     repo_rev = _parse_repo_rev(report_md)
     summary_kv = _extract_kv_block(remote_llama_stdout, "== baseline summary (approx) ==")
     llama_rev = summary_kv.get("llama_commit", "").strip() or _parse_llama_commit(remote_llama_stdout)
+    runtime_label = summary_kv.get("runtime_label", "").strip() or "unknown"
     model_source = summary_kv.get("model_source", "unknown")
     model_quant = summary_kv.get("model_quant", "unknown")
     model_gguf = summary_kv.get("model_gguf", "") or _inspect_path(_read_json(gguf_inspect_path)) or "unknown"
@@ -274,6 +275,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append(f"- ds4_on_spark commit: `{repo_rev}`")
     lines.append("- Upstream commit(s):")
     lines.append(f"  - llama.cpp fork: `{llama_rev}`")
+    lines.append(f"  - runtime_label: `{runtime_label}`")
     if llama_cli:
         lines.append(f"  - llama_cli: `{llama_cli}`")
     lines.append("")
@@ -287,6 +289,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         lines.append(f"  sha256: {model_sha256}")
     if model_size_bytes:
         lines.append(f"  size_bytes: {model_size_bytes}")
+    if runtime_label and runtime_label != "unknown":
+        lines.append(f"  runtime_label: {runtime_label}")
     lines.append(f"  notes: {model_source} ({model_quant})")
     lines.append("```")
     lines.append("")
@@ -427,6 +431,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             f"- multislot_patch_probe.reserve_cap_n_ctx_seq_found={str(bool(multislot_probe.get('reserve_cap_n_ctx_seq_found', False))).lower()}"
         )
         lines.append(f"- multislot_patch_probe.swa_stream_view_found={str(bool(multislot_probe.get('swa_stream_view_found', False))).lower()}")
+        lines.append(f"- multislot_patch_probe.reserve_bound_tokens_found={str(bool(multislot_probe.get('reserve_bound_tokens_found', False))).lower()}")
+        lines.append(f"- multislot_patch_probe.skip_impossible_windows_found={str(bool(multislot_probe.get('skip_impossible_windows_found', False))).lower()}")
     else:
         lines.append("- multislot_patch_probe: NA")
     lines.append("")
