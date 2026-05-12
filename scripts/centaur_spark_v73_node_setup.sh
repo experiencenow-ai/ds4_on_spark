@@ -129,7 +129,10 @@ if [ ! -f "$pkgdir/centaur.py" ]; then
 fi
 
 echo "== centaur package facts =="
-decomposer_version="$(python3 -c 'import ast,sys
+decomposer_version="$(python3 - "$pkgdir/centaur.py" <<'PY'
+import ast
+import sys
+
 p=sys.argv[1]
 try:
     t=open(p,"r",encoding="utf-8",errors="replace").read()
@@ -149,7 +152,9 @@ for node in getattr(m,"body",[]):
                 val=getattr(node,"value",None)
                 if isinstance(val, ast.Constant) and isinstance(val.value, str):
                     v=val.value
-print(v)' "$pkgdir/centaur.py")"
+print(v)
+PY
+)"
 if [ "$decomposer_version" = "" ]; then
 	decomposer_version="(unknown)"
 fi

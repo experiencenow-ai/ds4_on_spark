@@ -212,6 +212,7 @@ If you can provide a shared writable filesystem path visible on Spark0/1/2/3 (NF
 When the ring sim/rsync run fails, capture:
 
 - Centaur zip facts: `ls -la` and `sha256` of `centaur_spec_impl_v73.zip`
+- Mac-side helper: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip`
 - `python3 -V` and `pip freeze` (at least numpy/scipy/scikit-learn)
 - Exact Centaur command lines that failed (copy/paste)
 - Root paths involved (`controller`, `node_spark1/2/3`, and any `effective_*` dirs)

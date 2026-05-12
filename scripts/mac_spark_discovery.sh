@@ -12,11 +12,13 @@ Runs lightweight macOS-side discovery for Spark hosts:
 - Bonjour SSH browse
 - Optional mDNS resolution checks for *.local targets
 - TCP/22 reachability probes
+- Optional ping RTT/loss snapshot (mac->targets, compact)
 
 Environment:
   DS4_GIT_DIR       Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE Optional work tree override (defaults to $PWD)
   REDACT=1    Redact IPv4/IPv6/MAC addresses from output
+  PING_CHECK=0  Disable ping RTT/loss checks (default: 1)
 
 Examples:
   ./scripts/mac_spark_discovery.sh
@@ -39,6 +41,8 @@ if [ "$#" -gt 0 ]; then
 else
 	targets="aitopatom-9ab9.local spark1.local spark2.local"
 fi
+
+PING_CHECK="${PING_CHECK:-1}"
 
 tmp="$(mktemp /private/tmp/ds4_mac_spark_discovery.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
@@ -146,6 +150,36 @@ for host in $targets; do
 	host_only="${host#*@}"
 	nc -vz -G 2 "$host_only" 22 >/dev/null 2>&1 && echo "ssh reachable" || echo "not reachable"
 done
+echo
+echo "== ping (mac->targets, compact) =="
+if [ "$PING_CHECK" = "1" ]; then
+	for host in $targets; do
+		host_only="${host#*@}"
+		printf "%s: " "$host_only"
+		out="$(ping -c 3 -n -W 1000 "$host_only" 2>&1 || true)"
+		if printf "%s\n" "$out" | grep -qiE '(unknown host|cannot resolve|nodename nor servname provided|not known)'; then
+			echo "resolve_failed"
+			continue
+		fi
+		pkt="$(printf "%s\n" "$out" | grep -E "packets transmitted" | tail -n 1 || true)"
+		rtt="$(printf "%s\n" "$out" | grep -E "^round-trip" | tail -n 1 || true)"
+		if [ "$pkt" = "" ]; then
+			echo "ping_failed"
+			continue
+		fi
+		tx="$(printf "%s" "$pkt" | awk '{print $1}' 2>/dev/null || true)"
+		rx="$(printf "%s" "$pkt" | awk '{print $4}' 2>/dev/null || true)"
+		loss="$(printf "%s" "$pkt" | sed -nE 's/.* ([0-9.]+)% packet loss.*/\1/p' 2>/dev/null || true)"
+		avg_ms="$(printf "%s" "$rtt" | sed -nE 's/.*= ([0-9.]+)\/([0-9.]+)\/([0-9.]+)\/([0-9.]+) ms.*/\2/p' 2>/dev/null || true)"
+		if [ "$avg_ms" != "" ]; then
+			echo "tx=$tx rx=$rx loss=${loss}% rtt_avg_ms=$avg_ms"
+		else
+			echo "tx=$tx rx=$rx loss=${loss}%"
+		fi
+	done
+else
+	echo "disabled (PING_CHECK=0)"
+fi
 } >"$tmp"
 
 if [ "${REDACT:-0}" = "1" ]; then

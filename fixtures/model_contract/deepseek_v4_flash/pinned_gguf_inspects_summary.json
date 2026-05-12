@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-11T20:30:32Z",
+  "generated_at_utc": "2026-05-12T02:38:41Z",
   "items": [
     {
       "artifact_type": "gguf.url",
@@ -46,10 +46,16 @@
         "expert_fp4_like": false,
         "notes_sample": [
           "expected Flash experts fp4; artifact expert primary type is 'Q4_K' (likely re-quantized or non-native conversion)",
-          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
           "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
         ],
         "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
           "dense_primary_type": "F32",
           "expert_primary_type": "Q4_K"
         },
@@ -99,7 +105,7 @@
       },
       "path": "https://huggingface.co/nsparks/DeepSeek-V4-Flash-FP4-FP8-GGUF/resolve/0b34e0b629c706396002496e795e9f910f7bf69f/DeepSeek-V4-Flash-FP4-FP8-native.gguf",
       "quantization_contract": {
-        "dense_fp8_like": false,
+        "dense_fp8_like": true,
         "expected": {
           "dense_dtype": "fp8",
           "expert_dtype": "fp4",
@@ -107,14 +113,25 @@
         },
         "expert_fp4_like": true,
         "notes_sample": [
-          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "dense_fp8_like inferred from FP8 tensors present in key categories; dense_primary may be F32 due to scales/routers",
           "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
         ],
         "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [
+              "attn",
+              "shared_expert_packed"
+            ],
+            "fp8_present": true,
+            "fp8_types": [
+              "F8_E4M3_B128"
+            ]
+          },
           "dense_primary_type": "F32",
           "expert_primary_type": "MXFP4"
         },
-        "status": "mismatch"
+        "status": "native_like"
       },
       "tensor_key_namespace_guess": "llama.cpp",
       "topology_contract": {
@@ -169,10 +186,16 @@
         "expert_fp4_like": false,
         "notes_sample": [
           "expected Flash experts fp4; artifact expert primary type is 'IQ2_XXS' (likely re-quantized or non-native conversion)",
-          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
           "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
         ],
         "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
           "dense_primary_type": "F32",
           "expert_primary_type": "IQ2_XXS"
         },
@@ -239,10 +262,16 @@
         },
         "expert_fp4_like": null,
         "notes_sample": [
-          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
           "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
         ],
         "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
           "dense_primary_type": "F32",
           "expert_primary_type": null
         },
@@ -312,10 +341,16 @@
         "expert_fp4_like": false,
         "notes_sample": [
           "expected Flash experts fp4; artifact expert primary type is 'IQ2_XXS' (likely re-quantized or non-native conversion)",
-          "expected Flash trunk fp8; artifact dense primary type is 'F32' (likely re-quantized or non-native conversion)",
+          "expected Flash trunk fp8; artifact shows no FP8 tensor evidence (dense primary type is 'F32')",
           "scale_fmt is source-derived as 'ue8m0'; GGUF headers typically do not encode scale-tensor semantics"
         ],
         "observed": {
+          "dense_fp8_evidence": {
+            "checked": true,
+            "fp8_categories": [],
+            "fp8_present": false,
+            "fp8_types": []
+          },
           "dense_primary_type": "F32",
           "expert_primary_type": "IQ2_XXS"
         },
