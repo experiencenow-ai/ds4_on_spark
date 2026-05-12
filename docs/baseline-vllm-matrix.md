@@ -22,6 +22,9 @@ scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
 
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
+It also writes a self-contained bundle report (`baseline_vllm_matrix_bundle.md`)
+into the output directory with the exact command line and a copy/paste-ready
+scored summary block.
 
 Matrix error handling:
 
