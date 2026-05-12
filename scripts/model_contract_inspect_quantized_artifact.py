@@ -536,8 +536,15 @@ def compute_quantization_contract_hint(
 	if expected_scale_fmt is not None:
 		notes.append(f"scale_fmt is source-derived as {expected_scale_fmt!r}; GGUF headers typically do not encode scale-tensor semantics")
 
+	status = "unknown"
+	if dense_like is True and expert_like is True:
+		status = "native_like"
+	elif dense_like is False or expert_like is False:
+		status = "mismatch"
+
 	return {
 		"checked": True,
+		"status": status,
 		"expected": {"dense_dtype": expected_dense, "expert_dtype": expected_expert, "scale_fmt": expected_scale_fmt},
 		"observed": {
 			"dense_primary_type": obs_dense_type,
@@ -547,6 +554,7 @@ def compute_quantization_contract_hint(
 		"dense_fp8_like": dense_like,
 		"expert_fp4_like": expert_like,
 		"notes": notes,
+		"notes_sample": list(notes)[:10],
 	}
 
 
