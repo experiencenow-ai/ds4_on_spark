@@ -34,6 +34,12 @@ To fetch a small sanitized artifact bundle (log + manifests + dashboard) back to
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+To promote a fetched bundle into a commit-ready fixtures directory (after review/redaction):
+
+```bash
+sh ./scripts/centaur_spark0_v73_fixture_pack.sh "$CENTAUR_RUN_ID"
+```
+
 Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
 
 ```bash
@@ -68,6 +74,7 @@ If you also have Spark3, use:
   - `scripts/centaur_spark0_v73_smoke.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_validate_artifacts.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark0_v73_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
 - Spark1/2 ring:
   - `scripts/centaur_spark12_v73_stage.sh`
   - `scripts/centaur_spark12_v73_node_setup_run.sh` (Mac-side wrapper)

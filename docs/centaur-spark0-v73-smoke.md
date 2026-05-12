@@ -160,6 +160,12 @@ If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact b
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
 
+To pack a fetched bundle into a commit-ready fixtures directory (after review/redaction), run:
+
+```bash
+sh ./scripts/centaur_spark0_v73_fixture_pack.sh "$CENTAUR_RUN_ID"
+```
+
 For a fuller bug-report checklist and sanitization guidance, see:
 
 - `docs/centaur-bug-report.md`
