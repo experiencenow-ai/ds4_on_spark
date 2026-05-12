@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Dict
+from typing import Any, Dict
 
 
 SYSTEM = (
@@ -29,15 +29,7 @@ def build_system(judge_out_target: int) -> str:
 
 
 def build_user(prompt: str, a: str, b: str) -> str:
-    schema_hint = {
-        "winner": "A|B|tie",
-        "margin": "0..3 (tie=>0)",
-        "score_a": "0..10",
-        "score_b": "0..10",
-        "reason": "<=18 words, 1 line",
-        "train_hint": "<=18 words, 1 line",
-        "tags": ["<=3", "short", "strings"],
-    }
+    schema_hint = build_schema_hint()
     return (
         "Compare the two candidates for the same prompt. Prefer correctness, helpfulness, and instruction-following.\n"
         "If both are similarly good/bad, choose tie.\n"
@@ -55,12 +47,35 @@ def build_user(prompt: str, a: str, b: str) -> str:
     )
 
 
+def build_schema_hint() -> Dict[str, Any]:
+    return {
+        "winner": "A|B|tie",
+        "margin": "0..3 (tie=>0)",
+        "score_a": "0..10",
+        "score_b": "0..10",
+        "reason": "<=18 words, 1 line",
+        "train_hint": "<=18 words, 1 line",
+        "tags": ["<=3", "short", "strings"],
+    }
+
+
+def build_messages(prompt: str, a: str, b: str, judge_out_target: int) -> Dict[str, Any]:
+    return {
+        "schema": "ds4_pairwise_judge_prompt_v1",
+        "judge_out_target": int(judge_out_target),
+        "system": build_system(int(judge_out_target)),
+        "user": build_user(prompt, a, b),
+        "schema_hint": build_schema_hint(),
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prompt", required=True, help="path to prompt text file")
     ap.add_argument("--a", required=True, help="path to candidate A output text file")
     ap.add_argument("--b", required=True, help="path to candidate B output text file")
     ap.add_argument("--judge-out-target", type=int, default=64, help="target judge output tokens (budget guidance only)")
+    ap.add_argument("--format", choices=["blocks", "json"], default="blocks", help="output format (default blocks)")
     args = ap.parse_args()
 
     if int(args.judge_out_target) <= 0:
@@ -72,6 +87,11 @@ def main() -> None:
         a = f.read()
     with open(args.b, "r", encoding="utf-8") as f:
         b = f.read()
+
+    if str(args.format) == "json":
+        msg = build_messages(prompt, a, b, judge_out_target=int(args.judge_out_target))
+        print(json.dumps(msg, separators=(",", ":"), ensure_ascii=False))
+        return
 
     print("=== system ===")
     print(build_system(int(args.judge_out_target)))
