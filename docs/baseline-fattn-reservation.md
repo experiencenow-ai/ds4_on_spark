@@ -106,6 +106,8 @@ The script writes these fields into `server_sweep.md` metadata:
 - `fattn_cuda_device0_only` / `fattn_cuda_device_counts`: best-effort parse of `CUDA0` tags from `__fattn__` lines (not all forks include it)
 - `fattn_expected_cuda_device0_ok`: derived boolean (`cuda_device0_only`) when device tags are present; `NA` otherwise
 - `sched_reserve_graph_nodes` / `sched_reserve_graph_splits` / `sched_reserve_took_ms`: best-effort parse of reservation summary lines (helps compare graph size / split count)
+- `sched_reserve_seen_fallback` / `sched_reserve_fallback_line_count`: best-effort signature that reservation logged a fallback path (heuristic; fork-dependent)
+- `sched_reserve_seen_failure` / `sched_reserve_failure_line_count`: best-effort signature that reservation logged a failure/error path (heuristic; fork-dependent)
 - `node_kind_unique`: unique `__op__` kinds seen in the log (best-effort)
 - `node_kind_cpu_top` / `node_kind_cuda_top`: best-effort top-k counts by `__op__` kind, based on whether each matching log line mentions `cpu` / `cuda`
 
@@ -113,6 +115,8 @@ Interpretation:
 
 - `fattn_seen_disabled=True` means Flash Attention was disabled globally during reservation and the run is not a clean baseline.
 - `fattn_seen_sched_reserve_cpu=True` usually indicates a CPU placement fallback on the Flash Attention tensor during reservation.
+- `sched_reserve_seen_fallback=True` often correlates with an upstream `__fattn__` reservation fallback that can cascade into `fattn_seen_disabled=True`; treat it as a "go look at the logs" signal, not as a definitive root-cause label.
+- `sched_reserve_seen_failure=True` is a stronger hint that reservation logged an error/failure path; prioritize the resident server sweep probe JSON + raw server log for diagnosis.
 - If the fork logs `__fattn__-{id}` placement, a clean patched run should typically show `fattn_id_min=0`, `fattn_id_max>=42`, and `fattn_id_missing_count=0` (exact max may vary by build).
 - If the fork logs backend/device tags, a clean patched run should typically show `fattn_backend0_only=True` and/or `fattn_cuda_device0_only=True` (Spark0 backend/device 0).
 

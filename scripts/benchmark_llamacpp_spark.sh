@@ -204,6 +204,10 @@ def scan_fattn_cli(log_path: str):
         "log_path": log_path,
         "seen_fattn_disabled": False,
         "seen_sched_reserve_cpu_fattn": False,
+        "seen_sched_reserve_fallback": False,
+        "seen_sched_reserve_failure": False,
+        "sched_reserve_fallback_line_count": 0,
+        "sched_reserve_failure_line_count": 0,
         "fattn_line_count": 0,
         "fattn_node_unique": 0,
         "fattn_id_min": None,
@@ -242,6 +246,9 @@ def scan_fattn_cli(log_path: str):
     kind_cpu = {}
     kind_cuda = {}
     match_lines = []
+    rx_fattn_disabled = re.compile(r"flash attention.*disabl", flags=re.IGNORECASE)
+    rx_sched_reserve_fallback = re.compile(r"\bfallback\b|\bfall back\b", flags=re.IGNORECASE)
+    rx_sched_reserve_failure = re.compile(r"\bfail(?:ed|ure)?\b|\berror\b|\bunable\b|\bnot supported\b", flags=re.IGNORECASE)
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -249,6 +256,14 @@ def scan_fattn_cli(log_path: str):
                 is_match = False
                 if ln.startswith("sched_reserve:"):
                     out["sched_reserve_line_count"] += 1
+                    if rx_sched_reserve_fallback.search(ln) is not None:
+                        out["seen_sched_reserve_fallback"] = True
+                        out["sched_reserve_fallback_line_count"] += 1
+                        is_match = True
+                    if rx_sched_reserve_failure.search(ln) is not None:
+                        out["seen_sched_reserve_failure"] = True
+                        out["sched_reserve_failure_line_count"] += 1
+                        is_match = True
                     m = re.search(r"graph nodes\\s*=\\s*(\\d+)", ln)
                     if m is not None:
                         try:
@@ -267,13 +282,18 @@ def scan_fattn_cli(log_path: str):
                             out["sched_reserve_took_ms"] = float(m.group(1))
                         except ValueError:
                             pass
-                if "Flash Attention was auto, set to disabled" in ln:
+                if rx_fattn_disabled.search(ln) is not None:
                     out["seen_fattn_disabled"] = True
                     is_match = True
                 if "Flash Attention tensor is assigned to device CPU" in ln:
                     out["seen_sched_reserve_cpu_fattn"] = True
                     is_match = True
                 if "__fattn__" in ln:
+                    low = ln.lower()
+                    if "fallback" in low or "fall back" in low:
+                        out["seen_sched_reserve_fallback"] = True
+                        out["sched_reserve_fallback_line_count"] += 1
+                        is_match = True
                     out["fattn_line_count"] += 1
                     for m in re.finditer(r"__fattn__-(\\d+)", ln):
                         nodes.add("__fattn__-" + m.group(1))
@@ -295,7 +315,6 @@ def scan_fattn_cli(log_path: str):
                             fattn_cuda_dev[did] = fattn_cuda_dev.get(did, 0) + 1
                         except ValueError:
                             pass
-                    low = ln.lower()
                     if "cpu" in low:
                         out["fattn_cpu_line_count"] += 1
                     if "cuda" in low:
@@ -510,6 +529,14 @@ if probe.get("seen_fattn_disabled"):
     summary_lines.append("fattn_seen_disabled=true")
 if probe.get("seen_sched_reserve_cpu_fattn"):
     summary_lines.append("fattn_seen_sched_reserve_cpu=true")
+if probe.get("sched_reserve_fallback_line_count", 0) > 0:
+    summary_lines.append("sched_reserve_fallback_line_count=%s" % _probe_val("sched_reserve_fallback_line_count"))
+if probe.get("seen_sched_reserve_fallback"):
+    summary_lines.append("sched_reserve_seen_fallback=true")
+if probe.get("sched_reserve_failure_line_count", 0) > 0:
+    summary_lines.append("sched_reserve_failure_line_count=%s" % _probe_val("sched_reserve_failure_line_count"))
+if probe.get("seen_sched_reserve_failure"):
+    summary_lines.append("sched_reserve_seen_failure=true")
 
 with open(log_summary, "w", encoding="utf-8") as sf:
     sf.write("\n".join(summary_lines) + "\n")
