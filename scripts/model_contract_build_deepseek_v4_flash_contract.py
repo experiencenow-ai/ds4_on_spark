@@ -14,6 +14,8 @@ FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
 DEFAULT_OUT = FIX / "contract_summary.json"
 INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
+MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
+MTP_SIDECAR_REFERENCE_JSON = ROOT / "docs" / "mtp-sidecar-probe-antirez-b0c3326-payload64.json"
 
 
 def load_json(path: Path):
@@ -42,6 +44,103 @@ def sha256_lines(lines: list[str]) -> str:
 		h.update(line.encode("utf-8"))
 		h.update(b"\n")
 	return h.hexdigest()
+
+
+
+def parse_ds4_mtp_sidecar_expected_tensor_names(probe_py: Path) -> Optional[list[str]]:
+	if not probe_py.exists():
+		return None
+	text = probe_py.read_text(encoding="utf-8")
+	try:
+		mod = ast.parse(text, filename=str(probe_py))
+	except SyntaxError:
+		return None
+
+	found: list[list[str]] = []
+	for node in ast.walk(mod):
+		if not isinstance(node, ast.Assign):
+			continue
+		if len(node.targets) != 1:
+			continue
+		t = node.targets[0]
+		if not isinstance(t, ast.Name) or t.id != "expected_names":
+			continue
+		if not isinstance(node.value, ast.List):
+			continue
+		vals: list[str] = []
+		ok = True
+		for elt in node.value.elts:
+			if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+				vals.append(elt.value)
+			else:
+				ok = False
+				break
+		if ok and vals:
+			found.append(vals)
+	if not found:
+		return None
+	found.sort(key=len, reverse=True)
+	return list(found[0])
+
+
+def parse_ds4_mtp_sidecar_payload_samples_fingerprint(reference_json: Path) -> dict:
+	if not reference_json.exists():
+		return {
+			"reference_json": str(reference_json),
+			"reference_sha256": None,
+			"payload_sample_bytes": None,
+			"payload_samples_count": None,
+			"payload_samples_sha256": None,
+		}
+
+	try:
+		doc = load_json(reference_json)
+	except Exception:
+		return {
+			"reference_json": str(reference_json),
+			"reference_sha256": sha256_file(reference_json),
+			"payload_sample_bytes": None,
+			"payload_samples_count": None,
+			"payload_samples_sha256": None,
+		}
+
+	sample_bytes = doc.get("payload_sample_bytes", None) if isinstance(doc, dict) else None
+	samples = doc.get("payload_samples", None) if isinstance(doc, dict) else None
+
+	lines: list[str] = []
+	if isinstance(samples, dict):
+		for name in sorted(samples.keys()):
+			s = samples.get(name, None)
+			if not isinstance(name, str) or not isinstance(s, dict):
+				continue
+			n = s.get("n", None)
+			fnv = s.get("fnv1a64", None)
+			off = s.get("offset", None)
+			if not isinstance(n, int) or not isinstance(fnv, str) or not isinstance(off, int):
+				continue
+			lines.append(f"{name}\t{int(n)}\t{fnv}\t{int(off)}")
+
+	out_sha = sha256_lines(lines) if lines else None
+	return {
+		"reference_json": str(reference_json),
+		"reference_sha256": sha256_file(reference_json),
+		"payload_sample_bytes": int(sample_bytes) if isinstance(sample_bytes, int) else None,
+		"payload_samples_count": int(len(lines)) if lines else None,
+		"payload_samples_sha256": out_sha,
+	}
+
+
+def build_ds4_mtp_sidecar_contract() -> dict:
+	expected = parse_ds4_mtp_sidecar_expected_tensor_names(MTP_SIDECAR_PROBE_PY)
+	expected_sha = sha256_lines(expected) if isinstance(expected, list) else None
+	return {
+		"reference_source": "scripts/model_contract_probe_mtp_sidecar.py (DS4-tuned sidecar tensor table)",
+		"general_architecture": "deepseek4_mtp_support",
+		"expected_tensor_names": expected,
+		"expected_tensor_names_sha256": expected_sha,
+		"expected_tensor_count": int(len(expected)) if isinstance(expected, list) else None,
+		"reference_payload_samples": parse_ds4_mtp_sidecar_payload_samples_fingerprint(MTP_SIDECAR_REFERENCE_JSON),
+	}
 
 def build_weight_key_prefix_fingerprints(weight_keys: list[str]) -> dict:
 	prefix_to_keys: dict[str, list[str]] = {}
@@ -590,6 +689,9 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 	score_sigmoid = find_first_line_containing(text, "scores = scores.sigmoid")
 	score_sqrtsoftplus = find_first_line_containing(text, "scores = F.softplus(scores).sqrt()")
 	expert_fp32 = find_first_line_containing(text, "gate = self.w1(x).float()")
+	swiglu_gate = find_first_line_containing(text, "if self.swiglu_limit > 0:")
+	swiglu_up_clamp = find_first_line_containing(text, "up = torch.clamp(up, min=-self.swiglu_limit, max=self.swiglu_limit)")
+	swiglu_gate_clamp = find_first_line_containing(text, "gate = torch.clamp(gate, max=self.swiglu_limit)")
 
 	return {
 		"gate_scores_fp32_expr": score_fp32,
@@ -602,6 +704,9 @@ def parse_inference_moe_semantics(model_py: Path) -> dict:
 			"sqrtsoftplus": score_sqrtsoftplus,
 		},
 		"expert_compute_fp32_expr": expert_fp32,
+		"swiglu_clamp_enabled_expr": swiglu_gate,
+		"swiglu_clamp_up_expr": swiglu_up_clamp,
+		"swiglu_clamp_gate_expr": swiglu_gate_clamp,
 	}
 
 def parse_inference_moe_hash_routing(model_py: Path) -> dict:
@@ -1316,6 +1421,8 @@ def build_contract() -> dict:
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
 
+	mtp_sidecar = build_ds4_mtp_sidecar_contract()
+
 	contract = {
 		"format_version": 1,
 		"model": "deepseek_v4_flash",
@@ -1338,6 +1445,7 @@ def build_contract() -> dict:
 				"upstream_commit_txt": "upstream_commit.txt",
 			},
 		},
+		"mtp_sidecar": mtp_sidecar,
 		"compat": build_compat_mappings(),
 		"oracle": build_oracle_contract(),
 		"mla": sem.get("mla", {}) if isinstance(sem, dict) else {},
@@ -1446,6 +1554,7 @@ def build_contract() -> dict:
 			"moe_inter_dim": int(cfg["moe_intermediate_size"]),
 			"scoring_func": str(cfg["scoring_func"]),
 			"route_scale": float(cfg["routed_scaling_factor"]),
+			"swiglu_limit": float(inf["swiglu_limit"]) if "swiglu_limit" in inf else None,
 			"n_hash_layers": int(cfg["num_hash_layers"]),
 			"score_layer_ids": moe_score_layer_ids,
 			"transformers_mlp_layer_types": transformers_mlp_layer_types,

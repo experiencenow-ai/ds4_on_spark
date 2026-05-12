@@ -175,6 +175,7 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
   - `num_experts_per_tok` / `n_activated_experts`: 6
   - `moe_intermediate_size` / `moe_inter_dim`: 2048
   - `swiglu_limit`: 10.0 (clamps expert activations in the reference code)
+    - Contract pin: `contract_summary.json` records `moe.swiglu_limit` plus the exact clamp expressions under `moe.semantics.swiglu_clamp_*` so external runtimes can’t silently diverge.
   - `scoring_func`: `sqrtsoftplus`
   - `routed_scaling_factor` / `route_scale`: 1.5
 - MTP:
@@ -833,6 +834,8 @@ When multiple `--path` values are provided, the tool emits both:
 - a stable fingerprint of the union key set across the artifact set (`combined.weight_keys_union_sha256` and, when present, `combined.mtp_keys_union_sha256`)
 
 Some DS4-tuned MTP sidecars (notably `antirez/deepseek-v4-gguf`) are published as a compact 32‑tensor `mtp.0.*` table with `general.architecture=deepseek4_mtp_support` (not a full official `mtp.0.*` checkpoint). Validate these sidecars explicitly before trying to load them in external runtimes:
+
+Machine-readable sidecar contract: `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` `mtp_sidecar.*` (expected tensor table + pinned payload-sample fingerprint reference).
 
 ```sh
 python3 scripts/model_contract_probe_mtp_sidecar.py --path /abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf --json
