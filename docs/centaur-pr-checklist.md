@@ -37,6 +37,7 @@ Example (Spark1/2 ring rsync, from Mac):
 ```bash
 export SSH_OPTS="..."
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_REMOTE_VERIFY=1
 sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
@@ -79,6 +80,7 @@ For the shared checklist and sanitization rules, follow:
   - `effective_manifests/hyor_effective_manifest_spark1.json`
   - `effective_manifests/hyor_effective_manifest_spark2.json`
   - per-node `hyor-sync-status` (controller + spark0 + spark1 + spark2)
+  - remote verify logs (optional; recommended): `scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh`
   - ring log excerpt (if `RING_LOG` was enabled)
 
 ## Risks
