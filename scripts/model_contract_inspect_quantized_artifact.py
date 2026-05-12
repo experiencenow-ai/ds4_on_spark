@@ -1159,7 +1159,13 @@ def compute_mtp_trust(
 		"reasons": reasons,
 	}
 
-def compute_mtp_preservation(mtp_present: bool, mtp_namespace: Optional[dict[str, Any]], mtp_contract: Optional[dict[str, Any]]) -> dict[str, Any]:
+def compute_mtp_preservation(
+	mtp_present: bool,
+	mtp_namespace: Optional[dict[str, Any]],
+	mtp_contract: Optional[dict[str, Any]],
+	contract_summary: Optional[dict[str, Any]],
+	mtp_keys_sha256: Optional[str],
+) -> dict[str, Any]:
 	if not mtp_present:
 		return {"checked": True, "preserves": False, "status": "absent", "reasons": ["no mtp.* tensors present"]}
 
@@ -1187,6 +1193,33 @@ def compute_mtp_preservation(mtp_present: bool, mtp_namespace: Optional[dict[str
 
 	if mtp_contract.get("complete") is not True:
 		return {"checked": True, "preserves": False, "status": "incomplete", "reasons": ["mtp_contract.complete != true"]}
+
+	expected_mtp_keys_sha256 = None
+	trust_gates = None
+	if isinstance(contract_summary, dict):
+		fp = contract_summary.get("mtp", {}).get("checkpoint_key_fingerprint", None)
+		if isinstance(fp, dict):
+			expected_mtp_keys_sha256 = fp.get("keys_sha256", None)
+		if expected_mtp_keys_sha256 is None:
+			expected_mtp_keys_sha256 = contract_summary.get("checkpoint_index", {}).get("weight_map_mtp_keys_sha256", None)
+		trust_gates = contract_summary.get("mtp", {}).get("trust_gates", None)
+	if not isinstance(trust_gates, dict):
+		trust_gates = {}
+
+	if (
+		trust_gates.get("artifact_requires_mtp_keys_sha256_match_official", True) is True
+		and expected_mtp_keys_sha256 is not None
+		and mtp_keys_sha256 is not None
+		and mtp_keys_sha256 != expected_mtp_keys_sha256
+	):
+		return {
+			"checked": True,
+			"preserves": False,
+			"status": "fingerprint_mismatch",
+			"reasons": [
+				f"mtp_keys_sha256 != official mtp checkpoint fingerprint (expected={expected_mtp_keys_sha256} observed={mtp_keys_sha256})"
+			],
+		}
 
 	return {"checked": True, "preserves": True, "status": "complete", "reasons": ["mtp.* keys satisfy upstream contract"]}
 
@@ -1504,7 +1537,13 @@ def main() -> int:
 						}
 					)
 		mtp_trust = compute_mtp_trust(any(r.mtp_present for r in results), mtp_contract, contract_summary, mtp_keys_union_sha256)
-		mtp_preservation = compute_mtp_preservation(any(r.mtp_present for r in results), mtp_namespace, mtp_contract)
+		mtp_preservation = compute_mtp_preservation(
+			any(r.mtp_present for r in results),
+			mtp_namespace,
+			mtp_contract,
+			contract_summary,
+			mtp_keys_union_sha256,
+		)
 		return {
 			"paths": [r.path for r in results],
 			"artifact_types": [r.artifact_type for r in results],
@@ -1543,7 +1582,13 @@ def main() -> int:
 					contract_summary,
 					out.get("mtp_keys_sha256"),
 				)
-				out["mtp_preservation"] = compute_mtp_preservation(bool(out.get("mtp_present", False)), out.get("mtp_namespace"), out.get("mtp_contract"))
+				out["mtp_preservation"] = compute_mtp_preservation(
+					bool(out.get("mtp_present", False)),
+					out.get("mtp_namespace"),
+					out.get("mtp_contract"),
+					contract_summary,
+					out.get("mtp_keys_sha256"),
+				)
 				out["trunk_contract"] = compute_trunk_contract(set(results[0].weight_keys_all), contract_summary)
 				out["topology_contract"] = compute_topology_contract(results[0].metadata, contract_summary)
 				out["ds4_mtp_sidecar_contract"] = compute_ds4_mtp_sidecar_contract(set(results[0].weight_keys_all), results[0].metadata, contract_summary)
@@ -1567,7 +1612,13 @@ def main() -> int:
 											contract_summary,
 											(None if not r.mtp_present else sha256_lines(sorted(r.mtp_keys_all))),
 										),
-										"mtp_preservation": compute_mtp_preservation(bool(r.mtp_present), compute_mtp_namespace_status(r.mtp_layer_ids, contract_summary), compute_mtp_contract(set(r.mtp_keys_all), contract_summary)),
+										"mtp_preservation": compute_mtp_preservation(
+											bool(r.mtp_present),
+											compute_mtp_namespace_status(r.mtp_layer_ids, contract_summary),
+											compute_mtp_contract(set(r.mtp_keys_all), contract_summary),
+											contract_summary,
+											(None if not r.mtp_present else sha256_lines(sorted(r.mtp_keys_all))),
+										),
 										"trunk_contract": compute_trunk_contract(set(r.weight_keys_all), contract_summary),
 										"topology_contract": compute_topology_contract(r.metadata, contract_summary),
 										"ds4_mtp_sidecar_contract": compute_ds4_mtp_sidecar_contract(set(r.weight_keys_all), r.metadata, contract_summary),
@@ -1669,7 +1720,13 @@ def main() -> int:
 					for k in list(mtp_contract.get("forbidden_present", []))[:10]:
 						print(f"mtp_contract_forbidden_present: {k}")
 				mtp_namespace = compute_mtp_namespace_status(res.mtp_layer_ids, contract_summary)
-				mtp_preservation = compute_mtp_preservation(bool(res.mtp_present), mtp_namespace, mtp_contract)
+				mtp_preservation = compute_mtp_preservation(
+					bool(res.mtp_present),
+					mtp_namespace,
+					mtp_contract,
+					contract_summary,
+					(None if not res.mtp_present else sha256_lines(sorted(res.mtp_keys_all))),
+				)
 				if isinstance(mtp_preservation, dict) and mtp_preservation.get("checked") is True:
 					print(f"mtp_preservation_status: {mtp_preservation.get('status')}")
 				trunk_contract = compute_trunk_contract(set(res.weight_keys_all), contract_summary)
