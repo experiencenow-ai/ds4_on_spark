@@ -79,6 +79,28 @@ _RECORD_FIELD_SET = set(RECORD_FIELDS)
 PROMPT_FIELDS = ("schema", "judge_out_target", "system", "user", "schema_hint")
 _PROMPT_FIELD_SET = set(PROMPT_FIELDS)
 
+def _finite_num(v: float) -> bool:
+    return not (math.isnan(v) or math.isinf(v))
+
+def _coerce_int_like(v: Any) -> Any:
+    if isinstance(v, float) and not isinstance(v, bool):
+        fv = float(v)
+        if _finite_num(fv) and fv.is_integer():
+            return int(fv)
+    return v
+
+def _canonicalize_winner(v: Any) -> Any:
+    if not isinstance(v, str):
+        return v
+    s = v.strip()
+    if s.lower() == "a":
+        return "A"
+    if s.lower() == "b":
+        return "B"
+    if s.lower() == "tie":
+        return "tie"
+    return v
+
 def canonicalize_decision_obj(obj: Any) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     """Canonicalize a decision object into v1 keys.
 
@@ -105,8 +127,31 @@ def canonicalize_decision_obj(obj: Any) -> Tuple[Optional[Dict[str, Any]], List[
         for k2, k1 in _DECISION_V2_TO_V1.items():
             if k2 in obj:
                 out[k1] = obj.get(k2)
+        out["winner"] = _canonicalize_winner(out.get("winner"))
+        for k in ("margin", "score_a", "score_b"):
+            if k in out:
+                out[k] = _coerce_int_like(out.get(k))
+        if "reason" in out and isinstance(out.get("reason"), str):
+            out["reason"] = str(out.get("reason")).strip()
+        if "train_hint" in out and isinstance(out.get("train_hint"), str):
+            out["train_hint"] = str(out.get("train_hint")).strip()
+        tags = out.get("tags")
+        if isinstance(tags, list):
+            out["tags"] = [(t.strip() if isinstance(t, str) else t) for t in tags]
         return out, errs
-    return dict(obj), []
+    out1 = dict(obj)
+    out1["winner"] = _canonicalize_winner(out1.get("winner"))
+    for k in ("margin", "score_a", "score_b"):
+        if k in out1:
+            out1[k] = _coerce_int_like(out1.get(k))
+    if "reason" in out1 and isinstance(out1.get("reason"), str):
+        out1["reason"] = str(out1.get("reason")).strip()
+    if "train_hint" in out1 and isinstance(out1.get("train_hint"), str):
+        out1["train_hint"] = str(out1.get("train_hint")).strip()
+    tags1 = out1.get("tags")
+    if isinstance(tags1, list):
+        out1["tags"] = [(t.strip() if isinstance(t, str) else t) for t in tags1]
+    return out1, []
 
 
 def _is_int(v: Any) -> bool:

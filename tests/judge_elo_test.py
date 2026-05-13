@@ -236,6 +236,26 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(rec.get("winner"), "B")
         self.assertEqual(rec.get("margin"), 1)
 
+    def test_wrap_record_accepts_int_like_floats(self) -> None:
+        decision_v2 = {"w": "a", "m": 2.0, "sa": 8.0, "sb": 6.0, "r": "A is more correct.", "h": "Fix the key mistake.", "t": [" factuality "]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
+            pair_id="p0_floaty",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision_v2, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=True,
+        )
+        self.assertTrue(rec.get("parse_valid", False))
+        self.assertEqual(rec.get("winner"), "A")
+        self.assertEqual(rec.get("margin"), 2)
+        self.assertEqual(rec.get("score_a"), 8)
+        self.assertEqual(rec.get("score_b"), 6)
+        self.assertEqual(rec.get("tags"), ["factuality"])
+
     def test_wrap_record_v4_emits_compact_keys(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
         rec = record_wrap.build_record(
