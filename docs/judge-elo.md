@@ -2,6 +2,8 @@
 
 This track defines a compact pairwise judge contract intended for slow/high-quality DSv4 runs, plus an offline deterministic ELO updater that produces leaderboards consumable by the baseline runtime loop.
 
+If you only need the **schema contract** (decision + record v5 + outputs), start with `docs/judge-elo-schema.md`.
+
 Goals:
 - DSv4 is used as a **verifier** (compact, structured output), not a verbose author.
 - Judge quality (pairwise preference) is tracked separately from model speed (tok/s).
