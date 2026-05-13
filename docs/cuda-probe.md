@@ -6,7 +6,7 @@ All `scripts/cuda_probe*_spark0.sh` default to unique `REMOTE_DIR` paths on Spar
 
 ## Spark0: `sm_121` Gate (Fastest)
 
-When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
+When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate` including `compute_121` compile-only gates via both `-arch=compute_121` and `--gpu-architecture=compute_121` spellings, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
 
 ```bash
 ./scripts/cuda_probe_sm121_gate_spark0.sh
