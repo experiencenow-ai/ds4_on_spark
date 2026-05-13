@@ -95,7 +95,7 @@ From repo root on the Mac:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-SPARK_SSH_USER=spark0 REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full aitopatom-9ab9.local spark1.local spark2.local
 ```
 
 This produces a full commit-safe snapshot set plus per-node facts, which is the easiest way to update:
