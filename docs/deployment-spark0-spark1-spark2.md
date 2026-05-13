@@ -6,6 +6,7 @@ Goal: prepare a repeatable Spark0/Spark1/Spark2 layout with staging helpers, sys
 
 Recommended progression:
 
+- Ops index: `docs/deployment-spark012-ops-pack.md`
 - First validate Spark0/Spark1 TP=2 baseline:
   - `docs/spark-ring-ops-quickstart-tp2.md`
   - `docs/spark-ring-ops-readiness-tp2.md`
