@@ -110,6 +110,18 @@ __global__ void sm121_cxx20_flags_compile_probe(uint32_t *out)
 }
 EOF
 
+cat > \"$REMOTE_DIR\"/cuda_sm121_cluster_dims_attr_compile_probe_micro.cu <<'EOF'
+#include <stdint.h>
+
+#include <cuda_runtime.h>
+
+__global__ void __cluster_dims__(2,1,1) cluster_dims_attr_probe(uint32_t *out)
+{
+	if ( ((int32_t)threadIdx.x) == 0 )
+		out[(int32_t)blockIdx.x] = 0;
+}
+EOF
+
 compile_probe() {
 	tag=\"\$1\"
 	src=\"\$2\"
@@ -131,6 +143,19 @@ compile_probe sm121_arch_sm_121 cuda_sm121_compile_probe_micro.cu -arch=sm_121
 compile_probe sm121_gpuarch_sm_121 cuda_sm121_compile_probe_micro.cu --gpu-architecture=sm_121
 compile_probe sm121_gpuarchcode_sm_121 cuda_sm121_compile_probe_micro.cu --gpu-architecture=compute_121 --gpu-code=sm_121
 compile_probe sm121_cxx20_flags_arch_sm_121 cuda_sm121_cxx20_flags_compile_probe_micro.cu -arch=sm_121 -std=c++20 --extended-lambda --expt-relaxed-constexpr
+
+echo
+echo \"== build: sm_121 variant alias compile probes (best-effort) ==\"
+compile_probe sm121_arch_sm_121a cuda_sm121_compile_probe_micro.cu -arch=sm_121a || true
+compile_probe sm121_arch_sm_121f cuda_sm121_compile_probe_micro.cu -arch=sm_121f || true
+compile_probe sm121_gpuarch_sm_121a cuda_sm121_compile_probe_micro.cu --gpu-architecture=sm_121a || true
+compile_probe sm121_gpuarch_sm_121f cuda_sm121_compile_probe_micro.cu --gpu-architecture=sm_121f || true
+
+echo
+echo \"== build: sm_121 cluster dims attr compile probes (best-effort) ==\"
+compile_probe sm121_cluster_dims_attr_arch_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_micro.cu -arch=sm_121 || true
+compile_probe sm121_cluster_dims_attr_gpuarch_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_micro.cu --gpu-architecture=sm_121 || true
+compile_probe sm121_cluster_dims_attr_gpuarchcode_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_micro.cu --gpu-architecture=compute_121 --gpu-code=sm_121 || true
 
 echo
 echo \"== nvcc: PTX .target probe (best-effort) ==\"
