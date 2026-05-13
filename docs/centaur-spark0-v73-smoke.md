@@ -72,6 +72,12 @@ sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 
 This writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/` and fetches a small sanitized bundle back to your Mac under `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`).
 
+For exact command capture in `smoke.log` (recommended for bug reports), add:
+
+```bash
+export CENTAUR_TRACE=1
+```
+
 If you only want to stage + run the smoke (no validate/fetch), use:
 
 ```bash
