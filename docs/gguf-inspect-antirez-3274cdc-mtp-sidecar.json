@@ -13,6 +13,24 @@
     "unexpected_present_count": 0,
     "unexpected_present_sample": []
   },
+  "execution_contract": {
+    "checked": true,
+    "contract_fingerprints": {
+      "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
+      "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
+      "execution_contract_sha256": "bad6d30a8463a77d4e25980afebe123122b061473dea1b74b5b8cd0d890c7e44",
+      "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
+      "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
+      "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
+    },
+    "contract_summary_path": "/Users/mac/.codex/worktrees/923f/New project 4/fixtures/model_contract/deepseek_v4_flash/contract_summary.json",
+    "format_version": 1,
+    "upstream": {
+      "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
+      "hf_revision_pinned": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+      "x_repo_commit": "6976c7ff1b30a1b2cb7805021b8ba4684041f136"
+    }
+  },
   "first_mtp_keys": [
     "mtp.0.hc_head_base.weight",
     "mtp.0.hc_head_fn.weight",
@@ -56,6 +74,10 @@
     "checked": true,
     "complete": false,
     "forbidden_present": [],
+    "key_namespace_hint": "ds4-mtp-sidecar",
+    "key_namespace_hint_evidence": [
+      "observed DS4 MTP sidecar-style keys (attn_q_a/ffn_gate_shexp)"
+    ],
     "missing_required_count": 1568,
     "missing_required_sample": [
       "mtp.0.attn.attn_sink",
@@ -81,6 +103,31 @@
     ],
     "mtp_layer_ids_present": [
       0
+    ],
+    "nonexpert_key_lists_used": true,
+    "nonexpert_required_expected_count": 39,
+    "nonexpert_required_missing_count": 32,
+    "nonexpert_required_missing_sample": [
+      "mtp.0.attn.attn_sink",
+      "mtp.0.attn.kv_norm.weight",
+      "mtp.0.attn.q_norm.weight",
+      "mtp.0.attn.wkv.scale",
+      "mtp.0.attn.wkv.weight",
+      "mtp.0.attn.wo_a.scale",
+      "mtp.0.attn.wo_a.weight",
+      "mtp.0.attn.wo_b.scale",
+      "mtp.0.attn.wo_b.weight",
+      "mtp.0.attn.wq_a.scale",
+      "mtp.0.attn.wq_a.weight",
+      "mtp.0.attn.wq_b.scale",
+      "mtp.0.attn.wq_b.weight",
+      "mtp.0.e_proj.scale",
+      "mtp.0.ffn.gate.bias",
+      "mtp.0.ffn.gate.weight",
+      "mtp.0.ffn.shared_experts.w1.scale",
+      "mtp.0.ffn.shared_experts.w1.weight",
+      "mtp.0.ffn.shared_experts.w2.scale",
+      "mtp.0.ffn.shared_experts.w2.weight"
     ]
   },
   "mtp_keys_sha256": "d43eff0361b0ce12511f7df069f9f8dec932f75e1a8c5429f8be3fc94f84b06f",
@@ -109,7 +156,8 @@
     "mtp_keys_sha256_match_official": false,
     "preserves": false,
     "reasons": [
-      "mtp_contract.complete != true"
+      "mtp_contract.complete != true",
+      "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema"
     ],
     "status": "incomplete"
   },
@@ -125,6 +173,7 @@
     "mtp_keys_sha256_match_official": false,
     "reasons": [
       "mtp_contract.complete != true",
+      "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema",
       "mtp_keys_sha256 != official mtp checkpoint fingerprint"
     ],
     "status": "incomplete",
@@ -162,9 +211,9 @@
   },
   "tensor_count": 32,
   "tensor_key_namespace_evidence": [
-    "found mtp.* tensor namespace"
+    "found mtp.* tensors with DS4 MTP sidecar-style key schema (attn_q_a/attn_kv/attn_sinks)"
   ],
-  "tensor_key_namespace_guess": "deepseek-upstream-mtp-only",
+  "tensor_key_namespace_guess": "ds4-mtp-sidecar",
   "tensor_type_counts": {
     "F32": 19,
     "Q4_K": 3,
@@ -188,7 +237,7 @@
       "expert_primary": null,
       "shared_expert_primary": null
     },
-    "namespace_guess": "deepseek-upstream-mtp-only"
+    "namespace_guess": "ds4-mtp-sidecar"
   },
   "topology_contract": {
     "block_count": null,

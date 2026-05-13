@@ -40,7 +40,7 @@ Machine-readable schema:
 The offline tools in `scripts/judge_elo_*.py` expect one JSON object per line with:
 
 Required fields:
-- `schema`: `"ds4_pairwise_judge_record_v1" | "ds4_pairwise_judge_record_v2" | "ds4_pairwise_judge_record_v3" | "ds4_pairwise_judge_record_v4"`
+- `schema`: `"ds4_pairwise_judge_record_v1" | "ds4_pairwise_judge_record_v2" | "ds4_pairwise_judge_record_v3" | "ds4_pairwise_judge_record_v4" | "ds4_pairwise_judge_record_v5"`
 - `pair_id`: stable identifier for this comparison
 - `model_a`, `model_b`: model identifiers (strings)
 - `parse_valid`: boolean (whether the judge decision JSON was parsed successfully)
@@ -48,7 +48,7 @@ Required fields:
 
 If `parse_valid` is `true`, these must also be present:
 - For record schemas v1/v2/v3: `winner`, `margin`, `score_a`, `score_b`, `reason`, `train_hint`, `tags`
-- For record schema v4 (compact decision keys): `w`, `m`, `sa`, `sb`, `r`, `h`, `t`
+- For record schemas v4/v5 (compact decision keys): `w`, `m`, `sa`, `sb`, `r`, `h`, `t`
 
 Optional but recommended (for speed/quality separation and budgeting):
 - `tokens`: `{ "a_out": int, "b_out": int, "judge_in": int, "judge_out": int }`
@@ -56,8 +56,12 @@ Optional but recommended (for speed/quality separation and budgeting):
 - In `schema="ds4_pairwise_judge_record_v1"`, these may be omitted or partially populated; strict validation requires all keys.
 - In `schema="ds4_pairwise_judge_record_v2"` and `schema="ds4_pairwise_judge_record_v3"`, these are required (all keys required).
 - In `schema="ds4_pairwise_judge_record_v4"`, these are required (all keys required).
+- In `schema="ds4_pairwise_judge_record_v5"`, use compact budget arrays instead of objects:
+  - `tk`: `[a_out, b_out, judge_in, judge_out]` (all required; ints >= 0)
+  - `lt`: `[a_ms, b_ms, judge_ms]` (all required; ints >= 0)
 - `schema="ds4_pairwise_judge_record_v3"` is strict-by-schema: it also enforces strict decision consistency (margin/score mapping + `tags<=3`) via `scripts/judge_elo_schema.py`.
 - `schema="ds4_pairwise_judge_record_v4"` is strict-by-schema and stores **compact decision keys** (`w,m,sa,sb,r,h,t`) to reduce JSONL size; offline tools accept v4 and canonicalize it internally.
+- `schema="ds4_pairwise_judge_record_v5"` is strict-by-schema and stores **compact decision keys** plus compact budget arrays (`tk`/`lt`) to further reduce JSONL size.
 - `judge_model`: string
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
@@ -76,6 +80,7 @@ Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v2.schema.json` (tokens/latency required)
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v3.schema.json` (tokens/latency required; tags<=3)
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v4.schema.json` (compact decision keys; tokens/latency required; tags<=3)
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v5.schema.json` (compact decision keys; tk/lt required; tags<=3)
 
 ## Updater Output Schemas
 
@@ -149,6 +154,12 @@ To emit `schema="ds4_pairwise_judge_record_v4"` (compact decision keys; tokens/l
 
 ```bash
 python3 scripts/pairwise_judge_record.py --record-schema v4 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
+```
+
+To emit `schema="ds4_pairwise_judge_record_v5"` (compact decision keys; compact budget arrays `tk`/`lt`; strict-by-schema), use `--record-schema v5`:
+
+```bash
+python3 scripts/pairwise_judge_record.py --record-schema v5 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
 ```
 
 To enforce strict margin/score consistency + compact tags while wrapping for schema v1/v2, add `--strict`:

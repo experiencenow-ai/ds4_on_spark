@@ -71,6 +71,8 @@ The `== network (iface matrix, compact) ==` section joins `state`/`mtu`/`speed` 
 The `== clock ==` section prints a `skew_s (remote-local): ...` line as a quick clock sanity check.
 The `== clock (summary, remote-local) ==` section consolidates `epoch` + `skew_s` per host and prints a `skew span_s: ...` line to make multi-node clock skew obvious.
 The storage section uses a short `timeout` around `df -h` when available to avoid hanging on stale network mounts.
+When SSH cannot connect, the ring probe emits `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`) to make bring-up blockers easier to spot in committed snapshots.
+On GB10-class hosts, the GPU/toolchain section includes `== nvidia-smi -q fabric/c2c (summary) ==` (`Product Architecture`, `Peer Type`, `GPU C2C Mode`) to help interpret misleading PCIe link fields.
 
 If you want each host to ping **all** peers instead of only ring neighbors:
 

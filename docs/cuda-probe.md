@@ -24,7 +24,9 @@ When you want a minimal “toolchain + compile-only `sm_121` gates + one-line de
 ./scripts/cuda_probe_micro_spark0.sh
 ```
 
-This runs in a single SSH session and is intended as the quickest preflight before attempting DeepGEMM/CUTLASS/cuBLASLt builds on Spark0. It also includes a tiny PTX `.target` probe (`-ptx -arch=sm_121` and `-ptx -arch=compute_121`) plus a compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate so logs capture CUDA 13 “PTX target naming” and bracket-list `-gencode` behavior.
+This runs in a single SSH session and is intended as the quickest preflight before attempting DeepGEMM/CUTLASS/cuBLASLt builds on Spark0. It also includes a tiny PTX `.target` probe (`-ptx -arch=sm_121` and `-ptx -arch=compute_121`) plus a compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate so logs capture CUDA 13 “PTX target naming” and bracket-list `-gencode` behavior. The micro gate also runs best-effort alias compile probes for `sm_121a` / `sm_121f` plus a best-effort `__cluster_dims__(2,1,1)` annotation compile check (informational; helps spot CUTLASS-style cluster launch blockers early).
+
+Observed on Spark0 (2026-05-13): CUDA 13.0 `V13.0.88`; `sm_121a` / `sm_121f` alias compile probes report `OK`; the `__cluster_dims__(2,1,1)` compile checks report `OK`; `-ptx -arch=compute_121` still emits PTX whose first `.target` line is `.target sm_121`.
 
 ## Spark0: Minimal Gates (nvcc + Device Props + `sm_121` Gate)
 

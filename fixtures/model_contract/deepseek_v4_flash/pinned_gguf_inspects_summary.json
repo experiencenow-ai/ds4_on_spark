@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-05-12T16:34:45Z",
+  "generated_at_utc": "2026-05-13T00:42:19Z",
   "items": [
     {
       "artifact_type": "gguf.url",
@@ -264,7 +264,8 @@
         "mtp_keys_sha256_match_official": false,
         "preserves": false,
         "reasons_sample": [
-          "mtp_contract.complete != true"
+          "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema"
         ],
         "status": "incomplete"
       },
@@ -274,6 +275,7 @@
         "mtp_keys_sha256_match_official": false,
         "reasons_sample": [
           "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema",
           "mtp_keys_sha256 != official mtp checkpoint fingerprint"
         ],
         "status": "incomplete",
@@ -304,7 +306,7 @@
         },
         "status": "mismatch"
       },
-      "tensor_key_namespace_guess": "deepseek-upstream-mtp-only",
+      "tensor_key_namespace_guess": "ds4-mtp-sidecar",
       "topology_contract": {
         "block_count_ok": null,
         "mismatch_count": 0,
@@ -346,7 +348,8 @@
         "mtp_keys_sha256_match_official": false,
         "preserves": false,
         "reasons_sample": [
-          "mtp_contract.complete != true"
+          "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema"
         ],
         "status": "incomplete"
       },
@@ -361,6 +364,7 @@
         "mtp_keys_sha256_match_official": false,
         "reasons_sample": [
           "mtp_contract.complete != true",
+          "mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema",
           "mtp_keys_sha256 != official mtp checkpoint fingerprint"
         ],
         "status": "incomplete",
