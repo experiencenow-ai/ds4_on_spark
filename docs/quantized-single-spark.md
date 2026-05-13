@@ -66,7 +66,7 @@ Safety gate: `scripts/run_quantized_single_spark.sh` no longer forces `ALLOW_RUN
       - DS4-tuned GGUF MTP sidecars may be tagged as `ds4-mtp-sidecar` (keys like `mtp.0.attn_q_a.weight`), which is **not** the upstream DeepSeek safetensors key schema.
     - `trunk_contract` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
       - `kind="deepseek-upstream"` checks `layers.{i}.*` (only applies if the artifact preserves upstream tensor names)
-      - `kind="llama.cpp"` checks `blk.{i}.*` (compat-only structural signal for DeepSeek4 GGUFs)
+      - `kind="llama.cpp"` checks `blk.{i}.*` (compat-only structural signal for DeepSeek4 GGUFs); when present, it also records `required_top_level`, `required_block_suffixes`, and `missing_block_ids` to make “why did the contract fail?” debuggable without reading the script
       - When `kind="deepseek-upstream"` and expanded per-layer non-expert key lists are available, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` (helps distinguish “missing non-expert namespace keys” from “missing expert tensors”).
     - `mtp_contract` (upstream tensor-key completeness for `mtp.{j}.*` when present)
       - When expanded per-layer MTP non-expert key lists are available, `mtp_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample`.

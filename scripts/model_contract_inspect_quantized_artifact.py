@@ -243,9 +243,16 @@ def build_execution_contract_meta(contract_summary: Optional[dict[str, Any]], co
 	fps = contract_summary.get("contract_fingerprints", {})
 	if not isinstance(fps, dict):
 		fps = {}
+	contract_summary_path: Optional[str] = None
+	if contract_path is not None:
+		try:
+			root = Path(__file__).resolve().parents[1]
+			contract_summary_path = str(contract_path.resolve().relative_to(root))
+		except Exception:
+			contract_summary_path = str(contract_path)
 	return {
 		"checked": True,
-		"contract_summary_path": (None if contract_path is None else str(contract_path)),
+		"contract_summary_path": contract_summary_path,
 		"format_version": contract_summary.get("format_version", None),
 		"contract_fingerprints": {
 			"execution_contract_sha256": fps.get("execution_contract_sha256", None),
@@ -788,7 +795,13 @@ def compute_trunk_contract(weight_keys: set[str], contract_summary: dict[str, An
 			"kind": "llama.cpp",
 			"complete": (missing_count == 0 and len(forbidden_sorted) == 0 and not missing_blocks),
 			"n_layers_checked": n_layers_i,
+			"required_top_level": list(need_top_level),
+			"optional_top_level": list(optional_top_level),
+			"required_block_suffixes": list(need_block_suffixes),
 			"block_ids_present_sample": present_sorted[:20],
+			"block_ids_present_count": int(len(block_ids)),
+			"missing_block_ids": list(missing_blocks),
+			"extra_block_ids": list(extra_blocks),
 			"missing_required_count": missing_count,
 			"missing_required_sample": get_missing_sample(),
 			"forbidden_present": forbidden_sorted,

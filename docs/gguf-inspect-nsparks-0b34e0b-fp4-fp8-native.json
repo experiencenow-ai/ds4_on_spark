@@ -11,12 +11,12 @@
     "contract_fingerprints": {
       "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
       "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
-      "execution_contract_sha256": "bad6d30a8463a77d4e25980afebe123122b061473dea1b74b5b8cd0d890c7e44",
+      "execution_contract_sha256": "c380b82b59751d01abf047d58084f364a6abcf37393df9710ecb75877a8ee24d",
       "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
       "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
       "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
     },
-    "contract_summary_path": "/Users/mac/.codex/worktrees/923f/New project 4/fixtures/model_contract/deepseek_v4_flash/contract_summary.json",
+    "contract_summary_path": "fixtures/model_contract/deepseek_v4_flash/contract_summary.json",
     "format_version": 1,
     "upstream": {
       "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
@@ -229,6 +229,7 @@
     "vocab_size": 129280
   },
   "trunk_contract": {
+    "block_ids_present_count": 43,
     "block_ids_present_sample": [
       0,
       1,
@@ -253,12 +254,41 @@
     ],
     "checked": true,
     "complete": true,
+    "extra_block_ids": [],
     "forbidden_present": [],
     "kind": "llama.cpp",
+    "missing_block_ids": [],
     "missing_required_count": 0,
     "missing_required_sample": [],
     "n_layers_checked": 43,
-    "notes": []
+    "notes": [],
+    "optional_top_level": [
+      "hc_head_base",
+      "hc_head_fn",
+      "hc_head_scale"
+    ],
+    "required_block_suffixes": [
+      "attn_norm.weight",
+      "attn_q_a.weight",
+      "attn_q_a_norm.weight",
+      "attn_q_b.weight",
+      "attn_kv_a_norm.weight",
+      "attn_output_a.weight",
+      "attn_output_b.weight",
+      "ffn_norm.weight",
+      "ffn_gate_inp.weight",
+      "ffn_gate_exps.weight",
+      "ffn_gate_shexp.weight",
+      "ffn_up_exps.weight",
+      "ffn_up_shexp.weight",
+      "ffn_down_exps.weight",
+      "ffn_down_shexp.weight"
+    ],
+    "required_top_level": [
+      "token_embd.weight",
+      "output.weight",
+      "output_norm.weight"
+    ]
   },
   "url_prefix_bytes": 8388608,
   "weight_keys_sha256": "77fa28612383dbd157f5a765749ead1665240ce21c78d8b30479a19e5958802a"
