@@ -119,6 +119,7 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Do not put secrets in the repo. Keep `/etc/ds4/*.env` local to each Spark.
 - Prefer journald over file logs until retention/rotation is designed.
 - Tighten systemd sandboxing only after CUDA + distributed smoke tests pass.
+- Disable/uninstall runbook (human-run): `docs/deployment-systemd-disable-uninstall.md`.
 - Optional Spark standalone systemd templates exist, but are not required for DS4: `docs/deployment-spark-standalone-systemd.md`.
 - Optional periodic preflight systemd timers exist:
   - `deploy/systemd/ds4-preflight@.timer` (non-destructive)

@@ -111,6 +111,7 @@ sudo /opt/ds4/scripts/ops_validate_installed_assets.sh --instance spark0 --stric
 - Config examples (env/config, hosts pinning, ssh_config, journald, logrotate, Prometheus): `deploy/config/`
 - Logging + metrics conventions: `docs/ops-logging-metrics.md`
 - SSH + network runbook (ordered inventory): `docs/ops-ssh-network-runbook.md`
+- Disable/uninstall runbook (human-run): `docs/deployment-systemd-disable-uninstall.md`.
 - TP=2 -> TP=3 transition readiness (safe): `docs/ops-tp23-readiness.md`
 - Ports:
   - TP=2: `docs/ops-spark0-spark1-network-ports.md`
