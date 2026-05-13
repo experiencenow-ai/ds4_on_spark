@@ -13,7 +13,7 @@ Environment:
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE    Optional work tree override (defaults to $PWD)
-  REDACT=1             Redact IPv4/IPv6/MAC addresses from output
+  REDACT=1             Redact IPv4/IPv6/MAC/GPU UUID tokens from output
   SPARK_PROBE_FACTS=1  Facts-only mode (stable, compact; implies SPARK_PROBE_SUMMARY=1)
   SPARK_PROBE_SUMMARY=1  Print a smaller, Spark1-friendly subset of sections
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
