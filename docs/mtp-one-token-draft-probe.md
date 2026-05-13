@@ -89,9 +89,9 @@ By default this requires:
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
 The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.
 
-## Spark runner (llama.cpp skeleton patch; available now)
+## Spark runner (llama.cpp gamma=1 patch; available now)
 
-This repo ships a **gated** Spark runner that can clone/patch/build/run the current llama.cpp *skeleton* one-token probe patch (pinned to `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@9222e55`) and then validate the emitted JSON locally:
+This repo ships a **gated** Spark runner that can clone/patch/build/run the current llama.cpp one-token probe patch (default-pinned to `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@94073e2`) and then validate the emitted JSON locally:
 
 ```bash
 REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1' \
@@ -103,7 +103,8 @@ Notes:
 - This runner **loads the trunk GGUF** when `ALLOW_RUN=1` is set. Keep it gated and coordinate with the baseline runtime loop.
 - The output directory includes a machine-readable `summary.json` (probe parse + local validator status).
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
-- As of 2026-05-12, the patch is still a **skeleton**: it validates sidecar binding and can compute a debug-only stub output-head tensor when `LOAD_SIDECAR_WEIGHTS=1`, but it emits `ok=false` with a TODO until the real `gamma=1` draft compute is implemented.
+- As of 2026-05-13, the `94073e2` patch implements the first real `gamma=1` MTP block path and emits `mtp_block_out_hc_*` plus `mtp_head_norm_*` fingerprints. Spark0 run `20260513T005746Z` validated with `ok=true`; it renders the same DS4 chat prompt shape as antirez and matches the oracle base token `2581` (`"We"`) plus MTP draft token `1309` (`" need"`).
+- Correctness against the antirez oracle is not fully proven yet: `trunk_token_embd_fnv64` now matches, but HC/pre-head and MTP debug fingerprints still differ, so the next parity task is capture-point/layout/numerics alignment before acceptance sweeps.
 
 ## Spark runner (antirez/ds4 oracle; build + one-token JSON)
 
@@ -114,7 +115,7 @@ REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALL
 scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
 ```
 
-As of 2026-05-12 this runner emits `ok=true` on Spark0 with the staged antirez trunk + `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` sidecar. The helper sets `DS4_MTP_PROBE=1` by default because upstream `antirez/ds4` only drafts in the normal `draft=1` eval path when probe logging is enabled or `--mtp-draft` is greater than one.
+As of 2026-05-12 this runner emits `ok=true` on Spark0 with the staged antirez trunk + `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` sidecar. The helper sets `DS4_MTP_PROBE=1` by default because upstream `antirez/ds4` only drafts in the normal `draft=1` eval path when probe logging is enabled or `--mtp-draft` is greater than one. The local parser is tolerant of build/log prefixes before the final JSON object.
 
 ## Spark runner (when the fork has a real one-token command)
 
