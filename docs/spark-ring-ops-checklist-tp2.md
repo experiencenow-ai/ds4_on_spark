@@ -12,12 +12,13 @@ For a one-page readiness rubric (what “ready” means, and what blocks a run),
 
 ## Bring-up (Once)
 
+- Initialize a private run directory for notes + snapshots (recommended): `RUN_DIR="$(./scripts/ops_run_dir_init.sh --tp tp2 --tag "<tag>")"`
 - Pick stable hostnames for Spark0/Spark1 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark01.example`).
 - Recommended: keep the ordered inventory in a file so roles are explicit and repeatable (format example: `deploy/config/inventory.ds4.spark01.example`).
 - Optional: take a read-only systemd status snapshot from the Mac (useful for run notes):
   - `./scripts/ops_spark_ring_status.sh --preflight tp2 --strict spark0@... spark1@...`
 - Optional: capture a single combined snapshot (mesh + status; safe):
-  - `./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp2 --strict spark0@... spark1@...`
+  - `./scripts/ops_spark_ring_ops_check.sh --out "${RUN_DIR:-/private/tmp}/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp2 --strict spark0@... spark1@...`
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark0_spark1.sh --mesh-check spark0@... spark1@...`
   - Optional (recommended): run staged TP readiness checks before any install/system changes (safe; uses staged `/tmp/ds4-*` assets):
@@ -103,4 +104,3 @@ Until DS4 documents a safe rolling restart for TP=2, treat restarts as a coordin
 - TP=3 readiness (Spark0/Spark1/Spark2) adds rank + ring host list:
   - `DS4_WORLD_SIZE=3`, `DS4_RANK=0/1/2`, `DS4_RING_HOSTS=...`
   - Run: `sudo systemctl start ds4-preflight-tp3-strict@spark0.service`
-

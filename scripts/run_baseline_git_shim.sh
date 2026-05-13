@@ -3,6 +3,18 @@ set -eu
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 shim_dir="${GIT_SHIM_DIR:-$repo_root/.codex_git}"
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+
+safe_move_aside()
+{
+	path="${1:-}"
+	if [ "$path" = "" ] || [ ! -e "$path" ]; then
+		return 0
+	fi
+	bak="${path}.bak.${ts}.$$"
+	mv "$path" "$bak"
+	echo "moved aside: $path -> $bak" >&2
+}
 
 if [ -d "$shim_dir" ] && [ -r "$shim_dir/HEAD" ] && [ -r "$shim_dir/index" ]; then
 	echo "ok: git shim already present: $shim_dir"
@@ -43,13 +55,13 @@ if [ "$common_dir" = "" ] || [ ! -d "$common_dir" ]; then
 fi
 
 tmp="${shim_dir}.tmp.$$"
-rm -rf "$tmp"
+safe_move_aside "$tmp"
 mkdir -p "$tmp"
 cp -a "$orig_gitdir/." "$tmp"
 printf "%s\n" "$common_dir" >"$tmp/commondir"
 printf "%s\n" "$git_file" >"$tmp/gitdir"
 
-rm -rf "$shim_dir"
+safe_move_aside "$shim_dir"
 mv "$tmp" "$shim_dir"
 
 echo "ok: created writable git shim: $shim_dir"

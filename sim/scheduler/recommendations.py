@@ -1620,7 +1620,13 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--mtp-accept-decay", type=float, default=1.0)
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25)
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0)
-    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", choices=("full", "stop_at_reject"))
+    p.add_argument(
+        "--mtp-draft-attempt-policy",
+        type=str,
+        default="full",
+        choices=("full", "stop_at_reject", "trace"),
+        help="MTP: draft compute policy: full, stop_at_reject, or trace (use accepted_mtp+rejected_mtp when present).",
+    )
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Optional: override/inject meta.dflash_draft_len for runtime-trace comparator accounting (-1 = keep/infer).")
     p.add_argument("--dflash-draft-cost-scale", type=float, default=-1.0, help="Optional: draft-cost multiplier for the speculative-decoding comparator (-1 = use meta if present, 0 = disable overhead adjustment).")
     return(p.parse_args(argv))
