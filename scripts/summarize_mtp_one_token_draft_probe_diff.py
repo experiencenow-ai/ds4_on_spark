@@ -14,7 +14,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, Optional
 
-from scripts import diff_mtp_one_token_draft_probe as diff
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+	sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts import diff_mtp_one_token_draft_probe as diff  # noqa: E402
 
 
 PIPELINE_ORDER = [
@@ -144,4 +148,3 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-
