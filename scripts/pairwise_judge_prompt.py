@@ -14,6 +14,7 @@ from typing import Any, Dict, Literal
 
 
 PromptSchemaVersion = Literal["v1", "v2"]
+DecisionSchemaVersion = Literal["v1", "v2"]
 
 
 SYSTEM_V1 = (
@@ -33,21 +34,36 @@ SYSTEM_V1 = (
 SYSTEM_V2 = (
     "You are a strict pairwise judge.\n"
     "Return exactly one minified JSON object on one line (no prose/markdown, no extra keys).\n"
-    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words (non-empty), train_hint<=18 words (empty ok), tags.\n"
+    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words, train_hint<=18 words, tags(array 0..3 strings).\n"
     "Tie => margin=0 and score_a==score_b.\n"
-    "Keep within ~{judge_out_target} output tokens; shorten reason, then empty train_hint, then drop extra tags.\n"
-    "All strings must be single-line (no newlines)."
+    "winner=A => score_a>score_b; winner=B => score_b>score_a.\n"
+    "Margin must match |score_a-score_b|: 1->{{0,1}}, 2->{{1,2}}, 3->{{2}}, >=4->{{3}}.\n"
+    "Keep within ~{judge_out_target} output tokens; shorten reason, then empty train_hint, then drop tags.\n"
+    "All strings must be single-line (no newlines); tag strings must be <=24 chars."
+)
+
+SYSTEM_V2_DECISION_V2 = (
+    "You are a strict pairwise judge.\n"
+    "Return exactly one minified JSON object on one line (no prose/markdown, no extra keys).\n"
+    "Keys: w(A|B|tie), m(0..3), sa(0..10), sb(0..10), r<=18 words, h<=18 words, t(array 0..3 strings).\n"
+    "Tie => m=0 and sa==sb.\n"
+    "w=A => sa>sb; w=B => sb>sa.\n"
+    "m must match |sa-sb|: 1->{{0,1}}, 2->{{1,2}}, 3->{{2}}, >=4->{{3}}.\n"
+    "Keep within ~{judge_out_target} output tokens; shorten r, then empty h, then drop t.\n"
+    "All strings must be single-line (no newlines); tag strings must be <=24 chars."
 )
 
 
-def build_system(judge_out_target: int, schema_version: PromptSchemaVersion) -> str:
+def build_system(judge_out_target: int, schema_version: PromptSchemaVersion, decision_version: DecisionSchemaVersion) -> str:
     if schema_version == "v2":
+        if decision_version == "v2":
+            return SYSTEM_V2_DECISION_V2.format(judge_out_target=int(judge_out_target))
         return SYSTEM_V2.format(judge_out_target=int(judge_out_target))
     return SYSTEM_V1.format(judge_out_target=int(judge_out_target))
 
 
-def build_user_v1(prompt: str, a: str, b: str) -> str:
-    schema_hint = build_schema_hint()
+def build_user_v1(prompt: str, a: str, b: str, decision_version: DecisionSchemaVersion) -> str:
+    schema_hint = build_schema_hint(decision_version=decision_version)
     return (
         "Compare the two candidates for the same prompt. Prefer correctness, helpfulness, and instruction-following.\n"
         "If both are similarly good/bad, choose tie.\n"
@@ -81,7 +97,17 @@ def build_user_v2(prompt: str, a: str, b: str) -> str:
     )
 
 
-def build_schema_hint() -> Dict[str, Any]:
+def build_schema_hint(decision_version: DecisionSchemaVersion) -> Dict[str, Any]:
+    if decision_version == "v2":
+        return {
+            "w": "A|B|tie",
+            "m": "0..3 (tie=>0)",
+            "sa": "0..10",
+            "sb": "0..10",
+            "r": "<=18 words, 1 line",
+            "h": "<=18 words, 1 line",
+            "t": ["format", "factuality"],
+        }
     return {
         "winner": "A|B|tie",
         "margin": "0..3 (tie=>0)",
@@ -89,17 +115,24 @@ def build_schema_hint() -> Dict[str, Any]:
         "score_b": "0..10",
         "reason": "<=18 words, 1 line",
         "train_hint": "<=18 words, 1 line",
-        "tags": ["<=3", "short", "strings"],
+        "tags": ["format", "factuality"],
     }
 
 
-def build_messages(prompt: str, a: str, b: str, judge_out_target: int, schema_version: PromptSchemaVersion) -> Dict[str, Any]:
+def build_messages(
+    prompt: str,
+    a: str,
+    b: str,
+    judge_out_target: int,
+    schema_version: PromptSchemaVersion,
+    decision_version: DecisionSchemaVersion,
+) -> Dict[str, Any]:
     return {
         "schema": ("ds4_pairwise_judge_prompt_v2" if schema_version == "v2" else "ds4_pairwise_judge_prompt_v1"),
         "judge_out_target": int(judge_out_target),
-        "system": build_system(int(judge_out_target), schema_version=schema_version),
-        "user": (build_user_v2(prompt, a, b) if schema_version == "v2" else build_user_v1(prompt, a, b)),
-        "schema_hint": build_schema_hint(),
+        "system": build_system(int(judge_out_target), schema_version=schema_version, decision_version=decision_version),
+        "user": (build_user_v2(prompt, a, b) if schema_version == "v2" else build_user_v1(prompt, a, b, decision_version=decision_version)),
+        "schema_hint": build_schema_hint(decision_version=decision_version),
     }
 
 
@@ -109,7 +142,8 @@ def main() -> None:
     ap.add_argument("--a", required=True, help="path to candidate A output text file")
     ap.add_argument("--b", required=True, help="path to candidate B output text file")
     ap.add_argument("--judge-out-target", type=int, default=64, help="target judge output tokens (budget guidance only)")
-    ap.add_argument("--schema-version", choices=["v1", "v2"], default="v1", help="prompt schema version (default v1)")
+    ap.add_argument("--schema-version", choices=["v1", "v2"], default="v2", help="prompt schema version (default v2)")
+    ap.add_argument("--decision-version", choices=["v1", "v2"], default="v2", help="decision schema version (default v2; v2 uses compact keys w/m/sa/sb/r/h/t)")
     ap.add_argument("--format", choices=["blocks", "json"], default="blocks", help="output format (default blocks)")
     args = ap.parse_args()
 
@@ -124,17 +158,24 @@ def main() -> None:
         b = f.read()
 
     if str(args.format) == "json":
-        msg = build_messages(prompt, a, b, judge_out_target=int(args.judge_out_target), schema_version=str(args.schema_version))
+        msg = build_messages(
+            prompt,
+            a,
+            b,
+            judge_out_target=int(args.judge_out_target),
+            schema_version=str(args.schema_version),
+            decision_version=str(args.decision_version),
+        )
         print(json.dumps(msg, separators=(",", ":"), ensure_ascii=False))
         return
 
     print("=== system ===")
-    print(build_system(int(args.judge_out_target), schema_version=str(args.schema_version)))
+    print(build_system(int(args.judge_out_target), schema_version=str(args.schema_version), decision_version=str(args.decision_version)))
     print("=== user ===")
     if str(args.schema_version) == "v2":
         print(build_user_v2(prompt, a, b))
     else:
-        print(build_user_v1(prompt, a, b))
+        print(build_user_v1(prompt, a, b, decision_version=str(args.decision_version)))
 
 
 if __name__ == "__main__":

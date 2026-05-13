@@ -12,18 +12,20 @@ This runbook produces **commit-safe** (redacted) snapshots for ring bring-up. It
 
 ## Quickstart: one-shot snapshot set (recommended)
 
-This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets):
+This is the most reproducible way to produce a full commit-safe snapshot set (mac discovery + ring probe + SSH latency + MTU + bandwidth + Spark0 facts when `aitopatom-9ab9.local` is included in targets).
+
+For three-node ring bring-up, prefer `--topology full` (peer ping to all) and `SPARK_NODE_FACTS=1` (one facts file per host):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full aitopatom-9ab9.local spark1.local spark2.local
 ```
 
 If each node uses a different SSH user, pass explicit `user@host` targets (the mac discovery step strips the `user@` prefix automatically):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local
 ```
 
 If you only have Spark0 online, pass a single target:
@@ -60,7 +62,7 @@ When nodes use different SSH users, prefer explicit per-target users:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-(REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
+(REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
 ```
 
 The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.
@@ -69,6 +71,8 @@ The `== network (iface matrix, compact) ==` section joins `state`/`mtu`/`speed` 
 The `== clock ==` section prints a `skew_s (remote-local): ...` line as a quick clock sanity check.
 The `== clock (summary, remote-local) ==` section consolidates `epoch` + `skew_s` per host and prints a `skew span_s: ...` line to make multi-node clock skew obvious.
 The storage section uses a short `timeout` around `df -h` when available to avoid hanging on stale network mounts.
+When SSH cannot connect, the ring probe emits `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`) to make bring-up blockers easier to spot in committed snapshots.
+On GB10-class hosts, the GPU/toolchain section includes `== nvidia-smi -q fabric/c2c (summary) ==` (`Product Architecture`, `Peer Type`, `GPU C2C Mode`) to help interpret misleading PCIe link fields.
 
 If you want each host to ping **all** peers instead of only ring neighbors:
 
@@ -101,6 +105,19 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 
 This is purely a sanity check (ssh + crypto overhead included). Avoid running it in tight loops; keep `BW_MB` small.
 
+## 2d) SSH latency probe snapshot (optional; Mac<->host, no ICMP required)
+
+When ICMP ping is blocked/flaky but SSH key auth works, use an SSH wall-time measurement as a best-effort latency signal:
+
+```bash
+stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+(LAT_ITERS=3 SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_latency.sh aitopatom-9ab9.local spark1.local spark2.local || true) > "docs/spark-ring-latency-probe-${stamp}.md"
+```
+
+Notes:
+- This includes TCP + SSH handshake overhead; it is not an ICMP RTT.
+- Keep `LAT_ITERS` small (e.g. `3` or `5`) to avoid generating noise.
+
 ## 3) Deep single-node hardware/toolchain probe (optional; Spark0 recommended)
 
 When you need CUDA compute capability cross-checks and PCIe link detail, record a full per-host probe:
@@ -115,6 +132,8 @@ To keep output compact for a flaky new node:
 ```bash
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
 ```
+
+When SSH cannot connect, `scripts/spark_probe.sh` emits `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`, `hostkey_changed`, `hostkey_verification_failed`) to make bring-up blockers obvious in committed snapshots.
 
 ## 4) Spark ring readiness status (what “good” looks like)
 

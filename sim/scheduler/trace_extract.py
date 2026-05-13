@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -10,6 +12,29 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 def _as_dict(obj: object) -> Optional[Dict[str, object]]:
     if isinstance(obj, dict):
         return(obj)  # type: ignore[return-value]
+    return(None)
+
+_INT_RE = re.compile(r"^[+-]?[0-9]+$")
+_INTLIKE_FLOAT_RE = re.compile(r"^[+-]?[0-9]+(?:\.0+)?$")
+
+
+def _coerce_float(value: object) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        v = float(value)
+        if math.isfinite(v) is False:
+            return(None)
+        return(float(v))
+    if isinstance(value, str):
+        s = value.strip()
+        if s == "":
+            return(None)
+        try:
+            v = float(s)
+        except ValueError:
+            return(None)
+        if math.isfinite(v) is False:
+            return(None)
+        return(float(v))
     return(None)
 
 def _coerce_int(value: object) -> Optional[int]:
@@ -20,6 +45,25 @@ def _coerce_int(value: object) -> Optional[int]:
         if float(int(v)) == v:
             return(int(v))
         return(None)
+    if isinstance(value, str):
+        s = value.strip()
+        if s == "":
+            return(None)
+        if _INT_RE.match(s) is not None:
+            try:
+                return(int(s))
+            except ValueError:
+                return(None)
+        if _INTLIKE_FLOAT_RE.match(s) is not None:
+            try:
+                v = float(s)
+            except ValueError:
+                return(None)
+            if math.isfinite(v) is False:
+                return(None)
+            if float(int(v)) == v:
+                return(int(v))
+            return(None)
     return(None)
 
 def _coerce_nonneg_int(value: object) -> Optional[int]:
@@ -109,61 +153,68 @@ def _iter_json_values_from_line(line: str, allow_substrings: bool) -> Iterable[o
 def _extract_time(obj: Dict[str, object]) -> Tuple[Optional[float], Optional[float]]:
     t_raw = _get_any(obj, ("t_ms", "ts_ms", "timestamp_ms", "time_ms"))
     if t_raw is not None:
-        if not isinstance(t_raw, (int, float)):
+        t_ms = _coerce_float(t_raw)
+        if t_ms is None:
             raise ValueError("time field must be a number")
-        return(float(t_raw), None)
+        return(float(t_ms), None)
 
     t_us_raw = _get_any(obj, ("t_us", "ts_us", "timestamp_us", "time_us"))
     if t_us_raw is not None:
-        if not isinstance(t_us_raw, (int, float)):
+        t_us = _coerce_float(t_us_raw)
+        if t_us is None:
             raise ValueError("time_us field must be a number")
-        return(float(t_us_raw) / 1000.0, None)
+        return(float(t_us) / 1000.0, None)
 
     t_ns_raw = _get_any(obj, ("t_ns", "ts_ns", "timestamp_ns", "time_ns"))
     if t_ns_raw is not None:
-        if not isinstance(t_ns_raw, (int, float)):
+        t_ns = _coerce_float(t_ns_raw)
+        if t_ns is None:
             raise ValueError("time_ns field must be a number")
-        return(float(t_ns_raw) / 1_000_000.0, None)
+        return(float(t_ns) / 1_000_000.0, None)
 
     dt_raw = _get_any(obj, ("dt_ms", "delta_ms"))
     if dt_raw is not None:
-        if not isinstance(dt_raw, (int, float)):
+        dt_ms = _coerce_float(dt_raw)
+        if dt_ms is None:
             raise ValueError("dt_ms field must be a number")
-        return(None, float(dt_raw))
+        return(None, float(dt_ms))
 
     dt_us_raw = _get_any(obj, ("dt_us", "delta_us"))
     if dt_us_raw is not None:
-        if not isinstance(dt_us_raw, (int, float)):
+        dt_us = _coerce_float(dt_us_raw)
+        if dt_us is None:
             raise ValueError("dt_us field must be a number")
-        return(None, float(dt_us_raw) / 1000.0)
+        return(None, float(dt_us) / 1000.0)
 
     dt_ns_raw = _get_any(obj, ("dt_ns", "delta_ns"))
     if dt_ns_raw is not None:
-        if not isinstance(dt_ns_raw, (int, float)):
+        dt_ns = _coerce_float(dt_ns_raw)
+        if dt_ns is None:
             raise ValueError("dt_ns field must be a number")
-        return(None, float(dt_ns_raw) / 1_000_000.0)
+        return(None, float(dt_ns) / 1_000_000.0)
 
     return(None, None)
 
 
 def _extract_cls(obj: Dict[str, object]) -> Optional[str]:
-    cls_raw = _get_any(obj, ("cls", "latency_class", "lat_class", "cls_id", "latency_class_id", "lat_class_id"))
+    cls_raw = _get_any(obj, ("cls", "latency_class", "lat_class", "cls_id", "latency_class_id", "lat_class_id", "qos", "priority"))
     if isinstance(cls_raw, str):
         v = cls_raw.strip().lower()
-        if v in ("interactive", "hi"):
+        if v in ("interactive", "hi", "high"):
             return("interactive")
-        if v in ("batch", "lo"):
+        if v in ("batch", "lo", "low"):
+            return("batch")
+        if v in ("0", "+0"):
+            return("interactive")
+        if v in ("1", "+1"):
             return("batch")
         return(None)
 
-    if isinstance(cls_raw, (int, float)):
-        v = float(cls_raw)
-        if float(int(v)) != v:
-            return(None)
-        vi = int(v)
-        if vi == 0:
+    vi = _coerce_int(cls_raw)
+    if vi is not None:
+        if int(vi) == 0:
             return("interactive")
-        if vi == 1:
+        if int(vi) == 1:
             return("batch")
         return(None)
 
@@ -221,8 +272,9 @@ def _extract_candidates(container: Dict[str, object]) -> Optional[List[int]]:
         return(candidates)
 
     expert_raw = _get_any(container, ("expert", "expert_id", "chosen_expert", "selected_expert", "top_expert"))
-    if isinstance(expert_raw, int) and expert_raw >= 0:
-        return([int(expert_raw)])
+    ei = _coerce_nonneg_int(expert_raw)
+    if ei is not None:
+        return([int(ei)])
     return(None)
 
 
@@ -249,8 +301,9 @@ def _extract_layer_record(obj_in: object) -> Optional[Dict[str, object]]:
     if ki is not None:
         out["k"] = int(ki)
 
-    cost_scale = _get_any(container, ("cost_scale", "cost", "work_scale"))
-    if isinstance(cost_scale, (int, float)) and float(cost_scale) > 0.0:
+    cost_scale_raw = _get_any(container, ("cost_scale", "cost", "work_scale"))
+    cost_scale = _coerce_float(cost_scale_raw)
+    if cost_scale is not None and float(cost_scale) > 0.0:
         out["cost_scale"] = float(cost_scale)
 
     return(out)
@@ -287,6 +340,11 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     ti = _coerce_nonneg_int(token_index)
     if ti is not None:
         out["token_index"] = int(ti)
+
+    layer_index = _get_any(obj, ("layer_index", "layer_idx", "moe_layer", "moe_layer_index", "layer", "layer_id"))
+    li = _coerce_nonneg_int(layer_index)
+    if li is not None:
+        out["layer_index"] = int(li)
 
     t_ms, dt_ms = _extract_time(obj)
     if t_ms is not None:
@@ -430,12 +488,14 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     if rd is not None:
         out["rejected_dflash"] = int(rd)
 
-    cost_scale = _get_any(obj, ("cost_scale", "cost", "work_scale"))
-    if isinstance(cost_scale, (int, float)) and float(cost_scale) > 0.0:
+    cost_scale_raw = _get_any(obj, ("cost_scale", "cost", "work_scale"))
+    cost_scale = _coerce_float(cost_scale_raw)
+    if cost_scale is not None and float(cost_scale) > 0.0:
         out["cost_scale"] = float(cost_scale)
 
-    decode_ms = _get_any(obj, ("decode_ms", "latency_ms", "dt_decode_ms"))
-    if isinstance(decode_ms, (int, float)) and float(decode_ms) >= 0.0:
+    decode_ms_raw = _get_any(obj, ("decode_ms", "latency_ms", "dt_decode_ms"))
+    decode_ms = _coerce_float(decode_ms_raw)
+    if decode_ms is not None and float(decode_ms) >= 0.0:
         out["decode_ms"] = float(decode_ms)
 
     kv_tokens = _get_any(obj, ("kv_tokens", "kv_len", "kv_cache_tokens"))
@@ -447,6 +507,222 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
     bs = _coerce_nonneg_int(expert_batch_size)
     if bs is not None:
         out["expert_batch_size"] = int(bs)
+
+    return(out)
+
+
+def pack_layers_by_token_index(
+    routes: Sequence[Dict[str, object]],
+    require_layer_index: bool = False,
+    time_policy: str = "strict",
+    time_tol_ms: float = 0.0,
+    strict: bool = True,
+) -> List[Dict[str, object]]:
+    out: List[Dict[str, object]] = []
+    by_token: Dict[int, List[Dict[str, object]]] = {}
+    order: List[int] = []
+
+    policy = str(time_policy).strip().lower()
+    if policy == "":
+        policy = "strict"
+    if policy not in ("strict", "first", "min", "max"):
+        raise ValueError("time_policy must be one of: strict, first, min, max")
+    tol_ms = float(time_tol_ms)
+    if tol_ms < 0.0:
+        raise ValueError("time_tol_ms must be >= 0")
+
+    for r in routes:
+        ti_raw = r.get("token_index")
+        if not isinstance(ti_raw, int) or ti_raw < 0:
+            if strict:
+                raise ValueError("pack_layers_by_token_index requires integer token_index on every route record")
+            continue
+        ti = int(ti_raw)
+        if ti not in by_token:
+            by_token[ti] = []
+            order.append(ti)
+        by_token[ti].append(r)
+
+    for ti in order:
+        group = by_token.get(ti, [])
+        if len(group) == 0:
+            continue
+
+        first = group[0]
+        cls = first.get("cls")
+        if not isinstance(cls, str):
+            if strict:
+                raise ValueError(f"token_index={ti}: missing cls")
+            continue
+
+        have_t_ms = "t_ms" in first and first.get("t_ms") is not None
+        have_dt_ms = "dt_ms" in first and first.get("dt_ms") is not None
+        if have_t_ms and have_dt_ms:
+            if strict:
+                raise ValueError(f"token_index={ti}: record has both t_ms and dt_ms")
+            have_dt_ms = False
+        if have_t_ms is False and have_dt_ms is False:
+            if strict:
+                raise ValueError(f"token_index={ti}: missing t_ms/dt_ms")
+            continue
+
+        t_ms_vals: List[float] = [float(first.get("t_ms", 0.0))] if have_t_ms else []
+        dt_ms_vals: List[float] = [float(first.get("dt_ms", 0.0))] if have_dt_ms else []
+
+        cost_scale = first.get("cost_scale")
+        decode_ms = first.get("decode_ms")
+        kv_tokens = first.get("kv_tokens")
+        expert_batch_size = first.get("expert_batch_size")
+
+        mtp_accept_len = first.get("mtp_accept_len")
+        accepted_mtp = first.get("accepted_mtp")
+        rejected_mtp = first.get("rejected_mtp")
+
+        dflash_accept_len = first.get("dflash_accept_len")
+        accepted_dflash = first.get("accepted_dflash")
+        rejected_dflash = first.get("rejected_dflash")
+
+        for r in group[1:]:
+            if r.get("cls") != cls:
+                if strict:
+                    raise ValueError(f"token_index={ti}: cls mismatch within pack group")
+                continue
+
+            if have_t_ms:
+                if "t_ms" not in r or r.get("t_ms") is None:
+                    if strict:
+                        raise ValueError(f"token_index={ti}: mixed t_ms/dt_ms within pack group")
+                    continue
+                tv = float(r.get("t_ms"))
+                if abs(tv - float(t_ms_vals[0])) > tol_ms:
+                    if policy == "strict":
+                        if strict:
+                            raise ValueError(f"token_index={ti}: t_ms mismatch within pack group")
+                        continue
+                t_ms_vals.append(float(tv))
+            else:
+                if "dt_ms" not in r or r.get("dt_ms") is None:
+                    if strict:
+                        raise ValueError(f"token_index={ti}: mixed t_ms/dt_ms within pack group")
+                    continue
+                dv = float(r.get("dt_ms"))
+                if abs(dv - float(dt_ms_vals[0])) > tol_ms:
+                    if policy == "strict":
+                        if strict:
+                            raise ValueError(f"token_index={ti}: dt_ms mismatch within pack group")
+                        continue
+                dt_ms_vals.append(float(dv))
+
+            # Only allow metadata fields to differ if they are consistently absent.
+            for k, first_val in (
+                ("cost_scale", cost_scale),
+                ("decode_ms", decode_ms),
+                ("kv_tokens", kv_tokens),
+                ("expert_batch_size", expert_batch_size),
+                ("mtp_accept_len", mtp_accept_len),
+                ("accepted_mtp", accepted_mtp),
+                ("rejected_mtp", rejected_mtp),
+                ("dflash_accept_len", dflash_accept_len),
+                ("accepted_dflash", accepted_dflash),
+                ("rejected_dflash", rejected_dflash),
+            ):
+                if first_val is None:
+                    continue
+                if k in r and r.get(k) is not None and r.get(k) != first_val:
+                    if strict:
+                        raise ValueError(f"token_index={ti}: {k} mismatch within pack group")
+                    continue
+
+        layer_recs: List[Tuple[Optional[int], int, Dict[str, object]]] = []
+        for idx, r in enumerate(group):
+            if "layers" in r:
+                if strict:
+                    raise ValueError(f"token_index={ti}: per-layer pack expects one-layer records, found layers[]")
+                continue
+            cands = r.get("candidates")
+            if not isinstance(cands, list) or len(cands) == 0:
+                if strict:
+                    raise ValueError(f"token_index={ti}: missing candidates")
+                continue
+            layer: Dict[str, object] = {"candidates": cands}
+            if "scores" in r and r.get("scores") is not None:
+                layer["scores"] = r.get("scores")
+            if "k" in r and r.get("k") is not None:
+                layer["k"] = r.get("k")
+            if "cost_scale" in r and r.get("cost_scale") is not None:
+                layer["cost_scale"] = r.get("cost_scale")
+
+            li_raw = r.get("layer_index")
+            li = int(li_raw) if isinstance(li_raw, int) and li_raw >= 0 else None
+            if require_layer_index and li is None:
+                if strict:
+                    raise ValueError(f"token_index={ti}: missing layer_index for per-layer pack")
+                continue
+            if li is not None:
+                layer["layer_index"] = int(li)
+            layer_recs.append((li, idx, layer))
+
+        if len(layer_recs) == 0:
+            continue
+
+        if any(li is not None for li, _, _ in layer_recs):
+            if require_layer_index is False:
+                # If some records have layer_index but others don't, fail fast in strict mode.
+                if strict and any(li is None for li, _, _ in layer_recs):
+                    raise ValueError(f"token_index={ti}: mixed presence of layer_index within pack group")
+            layer_recs.sort(key=lambda t: (t[0] if t[0] is not None else 1 << 30, t[1]))
+        else:
+            layer_recs.sort(key=lambda t: t[1])
+
+        layers: List[Dict[str, object]] = [lr for _, _, lr in layer_recs]
+
+        union_seen = set()
+        union: List[int] = []
+        for layer in layers:
+            lc = layer.get("candidates")
+            if not isinstance(lc, list):
+                continue
+            for e in lc:
+                if not isinstance(e, int) or int(e) < 0:
+                    continue
+                ei = int(e)
+                if ei in union_seen:
+                    continue
+                union_seen.add(ei)
+                union.append(ei)
+
+        rec_out: Dict[str, object] = {"token_index": int(ti), "cls": cls, "candidates": union, "layers": layers}
+        if have_t_ms:
+            if policy == "min":
+                rec_out["t_ms"] = float(min(t_ms_vals))
+            elif policy == "max":
+                rec_out["t_ms"] = float(max(t_ms_vals))
+            else:
+                rec_out["t_ms"] = float(t_ms_vals[0])
+        else:
+            if policy == "min":
+                rec_out["dt_ms"] = float(min(dt_ms_vals))
+            elif policy == "max":
+                rec_out["dt_ms"] = float(max(dt_ms_vals))
+            else:
+                rec_out["dt_ms"] = float(dt_ms_vals[0])
+
+        for k, v in (
+            ("cost_scale", cost_scale),
+            ("decode_ms", decode_ms),
+            ("kv_tokens", kv_tokens),
+            ("expert_batch_size", expert_batch_size),
+            ("mtp_accept_len", mtp_accept_len),
+            ("accepted_mtp", accepted_mtp),
+            ("rejected_mtp", rejected_mtp),
+            ("dflash_accept_len", dflash_accept_len),
+            ("accepted_dflash", accepted_dflash),
+            ("rejected_dflash", rejected_dflash),
+        ):
+            if v is not None:
+                rec_out[k] = v
+
+        out.append(rec_out)
 
     return(out)
 
@@ -529,6 +805,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--non-route", type=str, default="skip", help="What to do for non-route input: skip (default; also skips non-JSON lines) or error.")
     p.add_argument("--default-cls", type=str, default="", help="Optional: when records omit cls/latency class, force all extracted records to this value (interactive or batch).")
     p.add_argument("--extract-substrings", type=int, default=1, help="When set, scan non-JSON log lines for embedded JSON objects and try extracting route records from them (default: 1).")
+    p.add_argument("--pack-layers-by-token-index", type=int, default=0, help="When set, pack per-layer route records sharing token_index into a single multi-layer trace record with layers[]. Requires token_index on every record; prefers layer_index ordering when present.")
+    p.add_argument("--pack-require-layer-index", type=int, default=0, help="When used with --pack-layers-by-token-index, require every record to include layer_index so layer ordering is explicit (default: 0).")
+    p.add_argument("--pack-time-policy", type=str, default="strict", help="When used with --pack-layers-by-token-index, how to handle mismatched t_ms/dt_ms within a token group: strict (default), first, min, max.")
+    p.add_argument("--pack-time-tol-ms", type=float, default=0.0, help="When used with --pack-layers-by-token-index, treat abs(t_ms mismatch) <= tol as equal (default: 0).")
     args = p.parse_args(argv)
 
     f_in = sys.stdin if args.in_jsonl == "-" else open(args.in_jsonl, "r", encoding="utf-8")
@@ -554,10 +834,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                 meta[k] = v
         meta["inferred"] = inferred
 
+    packed: Optional[List[Dict[str, object]]] = None
+    if int(args.pack_layers_by_token_index) != 0:
+        packed = pack_layers_by_token_index(
+            recs,
+            require_layer_index=(int(args.pack_require_layer_index) != 0),
+            time_policy=args.pack_time_policy,
+            time_tol_ms=float(args.pack_time_tol_ms),
+            strict=True,
+        )
+        meta["packed_layers_by_token_index"] = True
+        meta["packed_routes"] = len(packed)
+
     f_out = sys.stdout if args.out_jsonl == "-" else open(args.out_jsonl, "w", encoding="utf-8")
     try:
         f_out.write(json.dumps({"type": "meta", "meta": meta}, separators=(",", ":")) + "\n")
-        for rec in recs:
+        for rec in (packed if packed is not None else recs):
             f_out.write(json.dumps(rec, separators=(",", ":")) + "\n")
     finally:
         if f_out is not sys.stdout:

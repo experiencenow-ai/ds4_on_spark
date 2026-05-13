@@ -163,6 +163,20 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
+remote_need_cmd()
+{
+	target="$1"
+	cmd="$2"
+	if ssh_run "$target" "command -v \"$cmd\" >/dev/null 2>&1"; then
+		echo "preflight: $cmd ok: $target"
+		return 0
+	fi
+	echo "preflight: missing $cmd on remote host: $target" >&2
+	echo "hint: ring-rsync requires rsync on Spark0 + all ring nodes." >&2
+	echo "hint: if you cannot install rsync per host policy, use the Spark0-local ring sim runbook instead." >&2
+	return 1
+}
+
 rsync_pull()
 {
 	target="$1"
@@ -251,6 +265,12 @@ echo "== pip freeze (sanitized) =="
 "$py" -m pip freeze | sed -E 's@file://[^ ]+@file://REDACTED@g'
 
 echo "== ensure remote dirs =="
+i=1
+while [ "$i" -lt "$node_count" ]; do
+	remote_need_cmd "$(value_at remote_target "$i")" rsync || exit 24
+	i=$((i + 1))
+done
+
 i=1
 while [ "$i" -lt "$node_count" ]; do
 	ssh_run "$(value_at remote_target "$i")" "mkdir -p $(value_at remote_root "$i")"

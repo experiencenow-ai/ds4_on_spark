@@ -231,6 +231,7 @@ print_head_report()
 	print_ref "DeepSeek-V4-Flash GGUF (setar007, HF)" "https://huggingface.co/setar007/DeepSeek-V4-Flash-Q8xQ5-GGUF"
 	print_ref "vLLM" "https://github.com/vllm-project/vllm.git"
 	print_ref "Transformers" "https://github.com/huggingface/transformers.git"
+	print_ref "FlashInfer" "https://github.com/flashinfer-ai/flashinfer.git"
 	print_ref "DeepSeek-V4-Flash W4A16-FP8 quant recipe (reference)" "https://github.com/pasta-paul/dsv4-flash-w4a16-fp8.git"
 	print_ref "DeepSeek-V4-Flash vLLM Ampere patch (reference)" "https://github.com/Lasimeri/vllm-dsv4-ampere.git"
 	print_ref "DFlash (code)" "https://github.com/z-lab/dflash.git"

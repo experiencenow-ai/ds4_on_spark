@@ -5,104 +5,34 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import random
 import re
-import statistics
-from array import array
+import sys
 from pathlib import Path
-from typing import Iterable
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from sim.scheduler import ds4_topk_dump
+from sim.scheduler import expert_queue_probe
 
 
-DUMP_RE = re.compile(r"ffn_moe_topk-(\d+)_pos(\d+)\.i32$")
+_DUMP_RE = re.compile(r"ffn_moe_topk-(\d+)_pos(\d+)\.i32$")
 
 
-def percentile(values: list[float], q: float) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    return ordered[int(q * (len(ordered) - 1))]
+def _available_positions(dump_dir: Path) -> list[int]:
+    positions: set[int] = set()
+    for path in dump_dir.glob("*ffn_moe_topk-*_pos*.i32"):
+        m = _DUMP_RE.search(path.name)
+        if m is None:
+            continue
+        positions.add(int(m.group(2)))
+    return(sorted(positions))
 
 
-def summary(values: Iterable[float]) -> dict[str, float]:
-    vals = list(values)
-    return {
-        "min": min(vals),
-        "median": statistics.median(vals),
-        "max": max(vals),
-    }
-
-
-def load_rows(path: Path, topk: int) -> list[list[int]]:
-    data = array("i")
-    data.frombytes(path.read_bytes())
-    if len(data) % topk != 0:
-        raise ValueError(f"{path} contains {len(data)} ints, not divisible by topk={topk}")
-    return [list(data[i * topk : (i + 1) * topk]) for i in range(len(data) // topk)]
-
-
-def layer_key(path: Path) -> tuple[int, int]:
-    match = DUMP_RE.search(path.name)
-    if match is None:
-        raise ValueError(f"cannot parse DS4 topk dump name: {path}")
-    return int(match.group(1)), int(match.group(2))
-
-
-def analyze_layer(
-    rows: list[list[int]],
-    experts: int,
-    topk: int,
-    batches: list[int],
-    trials: int,
-    rng: random.Random,
-) -> dict[str, object]:
-    layer = {"tokens": len(rows), "batches": {}}
-    for batch in batches:
-        active_vals = []
-        max_vals = []
-        mean_active_vals = []
-        p90_vals = []
-        p99_vals = []
-        tiles6_vals = []
-        speed6_vals = []
-        overflow6_vals = []
-        for _ in range(trials):
-            if batch <= len(rows):
-                idxs = rng.sample(range(len(rows)), batch)
-            else:
-                idxs = [rng.randrange(len(rows)) for _ in range(batch)]
-            counts = [0] * experts
-            for idx in idxs:
-                for expert in rows[idx]:
-                    if 0 <= expert < experts:
-                        counts[expert] += 1
-            nonzero = [count for count in counts if count > 0]
-            tiles6 = sum(math.ceil(count / 6) for count in nonzero)
-            active = len(nonzero)
-            total_pairs = batch * topk
-            active_vals.append(active)
-            max_vals.append(max(nonzero) if nonzero else 0)
-            mean_active_vals.append(total_pairs / active if active > 0 else 0)
-            p90_vals.append(percentile(nonzero, 0.90))
-            p99_vals.append(percentile(nonzero, 0.99))
-            tiles6_vals.append(tiles6)
-            speed6_vals.append(total_pairs / tiles6 if tiles6 > 0 else 0)
-            overflow6_vals.append(sum(max(0, count - 6) for count in nonzero))
-        layer["batches"][str(batch)] = {
-            "active": summary(active_vals),
-            "max_depth": summary(max_vals),
-            "mean_active_depth": summary(mean_active_vals),
-            "p90_depth": summary(p90_vals),
-            "p99_depth": summary(p99_vals),
-            "tiles6": summary(tiles6_vals),
-            "pair_speedup_cap6": summary(speed6_vals),
-            "overflow_pairs_over6": summary(overflow6_vals),
-        }
-    return layer
-
-
-def print_table(result: dict[str, object], batches: list[int]) -> None:
-    print(f"layers={result['layers']} tokens_per_layer={result['tokens_per_layer']} topk={result['topk']} experts={result['experts']} trials={result['trials']}")
+def _print_table(result: dict[str, object], batches: list[int]) -> None:
+    print(
+        f"layers={result['layers']} tokens_per_layer={result['tokens_per_layer']} "
+        f"topk={result['topk']} experts={result['experts']} trials={result['trials']}"
+    )
     print("batch active_med max_depth_med mean_active_depth_med p90_depth_med speedup_cap6_med")
     batch_summary = result["batches"]
     assert isinstance(batch_summary, dict)
@@ -121,55 +51,56 @@ def print_table(result: dict[str, object], batches: list[int]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dump-dir", required=True)
+    parser.add_argument("--pos", type=int, default=-1, help="Dump position index to analyze (-1 = infer, requires a single pos in dump-dir).")
     parser.add_argument("--experts", type=int, default=256)
     parser.add_argument("--topk", type=int, default=6)
     parser.add_argument("--batches", default="16,32,64,100,128,256,512")
     parser.add_argument("--trials", type=int, default=250)
     parser.add_argument("--seed", type=int, default=20260512)
+    parser.add_argument("--strict-expert-ids", type=int, default=1, help="If 1 (default), fail fast on out-of-range expert ids.")
     parser.add_argument("--json-out")
     args = parser.parse_args()
     batches = [int(item) for item in args.batches.split(",") if item]
     dump_dir = Path(args.dump_dir)
-    files = sorted(dump_dir.glob("*ffn_moe_topk-*_pos*.i32"), key=layer_key)
-    if not files:
-        raise SystemExit(f"no ffn_moe_topk dumps found in {dump_dir}")
-    rng = random.Random(args.seed)
-    layers = []
-    for path in files:
-        layer, pos = layer_key(path)
-        layer_result = analyze_layer(load_rows(path, args.topk), args.experts, args.topk, batches, args.trials, rng)
-        layer_result["layer"] = layer
-        layer_result["pos"] = pos
-        layers.append(layer_result)
-    result = {
+    if not dump_dir.exists():
+        raise SystemExit(f"dump-dir does not exist: {dump_dir}")
+
+    pos = int(args.pos)
+    if pos < 0:
+        positions = _available_positions(dump_dir)
+        if len(positions) == 0:
+            raise SystemExit(f"no ffn_moe_topk dumps found in {dump_dir}")
+        if len(positions) != 1:
+            raise SystemExit(f"dump-dir contains multiple pos values {positions}; pass --pos to select one")
+        pos = int(positions[0])
+
+    meta, layers = ds4_topk_dump.load_ds4_ffn_moe_topk_dump_layers(str(dump_dir), pos=int(pos), topk=int(args.topk))
+    cfg = expert_queue_probe.ExpertQueueProbeConfig(
+        experts=int(args.experts),
+        topk=int(args.topk),
+        batches=tuple(int(b) for b in batches),
+        trials=int(args.trials),
+        seed=int(args.seed),
+        strict_expert_ids=bool(int(args.strict_expert_ids) != 0),
+    )
+    probe = expert_queue_probe.analyze_ds4_ffn_moe_topk_layers(layers, cfg)
+
+    summary = {
         "dump_dir": str(dump_dir),
-        "layers": len(layers),
-        "tokens_per_layer": layers[0]["tokens"],
-        "topk": args.topk,
-        "experts": args.experts,
-        "trials": args.trials,
-        "batches": {},
+        "pos": int(meta.pos),
+        "layers": int(probe.num_layers),
+        "tokens_per_layer": int(probe.tokens_per_layer),
+        "topk": int(probe.topk),
+        "experts": int(probe.experts),
+        "trials": int(probe.trials),
+        "invalid_expert_ids": int(probe.invalid_expert_ids),
+        "batches": probe.batches,
     }
-    for batch in batches:
-        key = str(batch)
-        result["batches"][key] = {}
-        for metric in [
-            "active",
-            "max_depth",
-            "mean_active_depth",
-            "p90_depth",
-            "p99_depth",
-            "tiles6",
-            "pair_speedup_cap6",
-            "overflow_pairs_over6",
-        ]:
-            result["batches"][key][metric] = summary(
-                layer["batches"][key][metric]["median"] for layer in layers
-            )
-    output = {"summary": result, "layers": layers}
+
+    output = {"summary": summary}
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(output, indent=2), encoding="utf-8")
-    print_table(result, batches)
+    _print_table(summary, batches)
     return 0
 
 

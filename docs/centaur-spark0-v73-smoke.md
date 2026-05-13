@@ -17,6 +17,7 @@ This is **human-run**. No `sudo`, no service changes, no secrets, and no model w
 - Centaur package zip (Mac-local): `/Users/mac/Downloads/centaur_spec_impl_v73.zip`
   - Zip contains `centaur_spec_impl_v73/` with `centaur.py`, `requirements.txt`, and tests.
   - Do **not** commit the zip or venvs into this repo.
+  - Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
   - Optional (Mac-side): capture zip facts without extracting (useful for bug reports):
 
     ```bash
@@ -29,12 +30,8 @@ The smoke prints “package facts” early in the run so bug reports can include
 
 - `zip_mtime/size`: from `ls -la "$CENTAUR_ZIP"`
 - `zip_sha256`: computed from the zip bytes
-- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (observed in `/Users/mac/Downloads/centaur_spec_impl_v73.zip` mtime `2026-05-11 02:08` local: `centaur-impl-0.68`)
-- `zip_sha256` (observed in the same zip): `3d61b1258aac815d294b3c8fdb4e72ac7851e1b47d02a0daff55117f2885af5a`
-- `requirements.txt` (observed in the same zip):
-  - `numpy>=1.26`
-  - `scipy>=1.11`
-  - `scikit-learn>=1.4`
+- `decomposer_version`: extracted from `centaur.py` `DECOMPOSER_VERSION` (see `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`)
+- `requirements.txt`: extracted from the zip (see `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`)
 
 If `pip install` falls back to building these from source (missing wheels for your Python/OS), treat that as a **DS4 runtime/host compatibility** issue for the purposes of triage (not a Centaur logic bug).
 
@@ -58,6 +55,12 @@ Preflight: `scripts/centaur_spark0_v73_stage.sh` checks SSH reachability by defa
 export STAGE_SKIP_PREFLIGHT=1
 ```
 
+By default, `scripts/centaur_spark0_v73_stage.sh` also runs a safe remote prereq check (`python3`, `python3 -m venv`, `unzip`) via `scripts/centaur_spark_v73_prereqs_check.sh`. To bypass (not recommended), set:
+
+```bash
+export STAGE_SKIP_PREREQS=1
+```
+
 ### One-command run from your Mac (recommended)
 
 This runs the full evidence loop (stage → smoke → validate → fetch):
@@ -68,6 +71,12 @@ sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 This writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/` and fetches a small sanitized bundle back to your Mac under `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`).
+
+For exact command capture in `smoke.log` (recommended for bug reports), add:
+
+```bash
+export CENTAUR_TRACE=1
+```
 
 If you only want to stage + run the smoke (no validate/fetch), use:
 
@@ -124,12 +133,20 @@ Or to skip install entirely (when re-running in the same venv):
 
 - `CENTAUR_SKIP_PIP=1`
 
+If you re-run without changing `CENTAUR_RUN_ID` (so the same workdir/venv is reused), you can force a clean venv install with:
+
+- `CENTAUR_CLEAR_VENV=1`
+
+If you want `smoke.log` to include the exact shell command lines (useful for bug reports), enable tracing:
+
+- `CENTAUR_TRACE=1`
+
 ## What the smoke actually runs
 
 See `scripts/centaur_spark0_v73_smoke.sh` for the fully reproducible command sequence.
 Highlights:
 
-- `python3 -m venv "$CENTAUR_WORKDIR/venv"`
+- `python3 -m venv [--clear] "$CENTAUR_WORKDIR/venv"`
 - `pip install -r "$CENTAUR_WORKDIR/centaur_spec_impl_v73/requirements.txt"` (numpy/scipy/scikit-learn)
 - `python3 -m py_compile centaur.py tests/test_centaur.py`
 - `python3 -u centaur.py selftest --json`
@@ -173,6 +190,24 @@ If you ran with `CENTAUR_RUN_ID` (recommended), you can fetch a small artifact b
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
+
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"; fi
+sh ./scripts/centaur_spark0_v73_bundle_validate.sh "$CENTAUR_RUN_ID" "$bundle_dir"
+```
+
+Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+```bash
+bundle_dir="/private/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"; fi
+sh ./scripts/centaur_spark0_v73_smoke_report.sh "$CENTAUR_RUN_ID" "$bundle_dir" "$bundle_dir/smoke_report.md"
+```
+
+Note: when you run via `scripts/centaur_spark0_v73_evidence_run.sh`, the local bundle directory also includes `smoke.local.log` (the Mac-side wrapper log) which contains the exact `ssh ...` command used to run the smoke. The report helper will include that line when present.
 
 To pack a fetched bundle into a commit-ready fixtures directory (after review/redaction), run:
 
@@ -219,7 +254,7 @@ For Centaur bugs, always include:
 
 - `zip_sha256` + zip mtime
 - exact Centaur command line
-- the affected Centaur root directory (e.g. `~/centaur-smoke/v73/run/hyor/controller`)
+- the affected Centaur root directory (e.g. `"$CENTAUR_WORKDIR/hyor/controller"` or `~/centaur-smoke/v73/run/<run_id>/hyor/controller`)
 - `pip freeze` excerpt for `numpy`, `scipy`, and `scikit-learn`
 
 ## Smoke report template (copy/paste)

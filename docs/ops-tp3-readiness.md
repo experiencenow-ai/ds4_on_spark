@@ -20,6 +20,36 @@ Notes:
 - `DS4_RING_HOSTS` must have exactly 3 comma-separated entries (no trailing commas). In strict mode, invalid or duplicate entries fail non-zero.
 - When using `--topology full`, the script uses `DS4_RANK` + `DS4_RING_HOSTS` to skip self and probe only peers.
 
+## Commands (Mac Side, Staged Assets)
+
+If you staged deploy assets first (so each Spark has `/tmp/ds4-scripts/` and `/tmp/ds4-config/`), you can run TP readiness checks **before installing** anything under `/etc` or systemd (safe; no sudo):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Or run staged readiness directly after staging:
+
+```bash
+./scripts/ops_spark_ring_staged_readiness.sh --preflight tp3 --strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional (recommended during TP=2 → TP=3 transition): run TP=2 readiness checks *and* TP=3 readiness checks (safe):
+
+```bash
+./scripts/ops_spark_ring_staged_readiness.sh --preflight tp23 --strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+For the Spark-side combined script and optional systemd preflight units, see: `docs/ops-tp23-readiness.md`.
+
+The staged helper runs `/tmp/ds4-scripts/ops_tp3_readiness.sh` on each Spark with:
+
+- `--env -/tmp/ds4-config/ds4.env.example`
+- `--env /tmp/ds4-config/ds4-<instance>.env.example`
+
 ## Commands (Spark Side)
 
 Ad-hoc run (no systemd required):
@@ -43,6 +73,7 @@ sudo -u ds4 /opt/ds4/scripts/ops_tp3_readiness.sh --strict --self spark2 --topol
 What the script checks (best-effort, safe):
 
 - `DS4_WORLD_SIZE==3` and `DS4_RANK in 0..2` (strict mode)
+- `DS4_MASTER_ADDR` consistency with the ring rank0 host (strict mode; best-effort via IPv4 resolution)
 - host resolution + `ip route get` hints for master + selected peers
 - optional expected route interface checks via `DS4_EXPECT_IFACE`
 - best-effort peer ping checks (ring neighbors by default)

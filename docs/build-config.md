@@ -35,6 +35,8 @@ Supported keys:
 
 For programmatic introspection, `ds4_config_known_key_count`, `ds4_config_known_key`, and `ds4_config_known_key_help` expose the supported key list and a one-line value hint (no allocation). The CLI also supports `ds4_cli --dump-config-keys` and `ds4_cli --dump-config-help`.
 
+For a commented starter config file, the CLI also supports `ds4_cli --dump-config-template`.
+
 ## Validation helper
 
 For callers that populate a `ds4_config_t` directly (not via the parser), `ds4_config_validate` checks basic range/shape constraints (log level range, booleans are `0/1`, non-negative sizes).

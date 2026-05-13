@@ -54,6 +54,16 @@ To debug which options are actually taking effect:
 ssh -G $SSH_OPTS spark0@<spark0-host> 2>/dev/null | grep -E '^(userknownhostsfile|stricthostkeychecking|identityfile|batchmode) ' || true
 ```
 
+### Readiness Script Default `known_hosts` (Spark Side)
+
+If you do not set `SSH_OPTS`, the TP readiness scripts (`ops_tp2_readiness.sh`, `ops_tp3_readiness.sh`, `ops_tp4_readiness.sh`) pick a default `UserKnownHostsFile`:
+
+- System units (when `/var/lib/ds4/ssh/` exists): `/var/lib/ds4/ssh/known_hosts`
+- User/dev runs (fallback): `${XDG_CACHE_HOME:-$HOME/.cache}/ds4/ssh/known_hosts` when writable
+- Last resort: `/var/tmp/ds4_known_hosts`
+
+For the most repeatable ops flows, prefer setting `SSH_OPTS` explicitly (identity + known-hosts path) so snapshots and staged readiness runs use the same storage.
+
 ## Mac-Side Mesh Check (Optional)
 
 To quickly sanity-check both Sparks plus basic peer ping reachability:
@@ -93,6 +103,21 @@ Legacy fixed-name wrappers remain for older docs/scripts, but they delegate to
 the inventory-driven helpers above.
 
 Note: `scripts/ops_stage_spark_ring.sh` also runs a staged env audit at the end (safe) to verify ring env consistency across hosts: `scripts/ops_spark_ring_staged_env_audit.sh`.
+
+Optional: you can also run staged TP readiness checks (safe; runs the readiness scripts on each Spark using `/tmp/ds4-*` paths):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional: you can also add staged readiness to the one-shot ops snapshot (safe; combines mesh + status + staged readiness):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
 
 ## Mac-Side Systemd Status Snapshot (Optional)
 

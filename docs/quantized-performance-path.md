@@ -24,6 +24,12 @@ before the native FP4/FP8 loader and dual-Spark TP path are complete.
 
 If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven MTP path), add an explicit correctness gate *before* any acceptance/perf claims:
 
+- If your reference runtime is `antirez/ds4` on Spark/Linux CUDA, note that the DS4-tuned sidecar uses `Q4_K` routed experts and requires a CUDA fallback path (otherwise MTP draft fails before it can be compared). This repo tracks the minimal patch + a host-side math verifier:
+  - `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`
+  - `docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch`
+  - `docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch` (prevents trunk/sidecar cache key collisions under CUDA weight caching)
+  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py` (fixture provenance/regeneration: `docs/mtp-q4k-dot-validation.md`)
+
 - Validate the staged MTP sidecar **contract** (Spark-safe; header + tensor table only; no trunk load):
 
 ```bash
@@ -31,7 +37,7 @@ REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
 scripts/run_mtp_sidecar_contract_probe_spark.sh spark0@<spark-host>
 ```
 
-- Recommended stronger gate (still no trunk load): run the combined **contract + loader** probe. This validates the 32 `mtp.0.*` tensors twice (Python contract probe + llama.cpp-side probe binary) and cross-checks the JSON inventories. The output directory includes a machine-readable `summary.json`.
+- Recommended stronger gate (still no trunk load): run the combined **contract + loader** probe. This validates the 32 `mtp.0.*` tensors twice (Python contract probe + llama.cpp-side probe binary), can optionally `--load-weights` the sidecar tensor blob into RAM to ensure all payloads are readable, and cross-checks the JSON inventories. The output directory includes a machine-readable `summary.json`.
 
 ```bash
 REMOTE_MTP_SIDECAR_ENV='ALLOW_RUN=1' \
@@ -45,7 +51,27 @@ scripts/run_mtp_sidecar_loader_probe_spark.sh spark0@<spark-host>
 scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh spark0@<spark-host>
 ```
 
+- Before any acceptance or speedup claims, capture an **oracle** one-token probe JSON (for example from `antirez/ds4`, patched as needed) and diff it against the candidate probe JSON:
+
+```bash
+python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
+Recommended stronger guardrail (before acceptance sweeps): require both probes to emit the full set of intermediate fingerprints so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/candidate_probe.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
 Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
+
+When you *do* start acceptance work, record a machine-readable acceptance summary (per prompt set / run) using:
+
+```bash
+python3 scripts/summarize_mtp_acceptance_trace.py --in-jsonl /path/to/runtime.log.jsonl --draft-len <gamma>
+```
 
 ## Gate 1: Real Quantized Generation
 
@@ -73,10 +99,23 @@ scheduling behavior:
 - per-layer MoE dispatch counts
 - selected expert IDs and top-k scores when available
 - expert GEMM batch sizes
+- quantized-kernel routing/dispatch for MoE (`MUL_MAT_ID`): MMQ vs MMVQ counts plus a small shape histogram (for example `dst_ne[2]`, active tokens, and batch dimensions)
 - GPU memory and KV cache growth
+- CUDA fallback nodes and graph placement (for example `__fattn__` / `__op__` scheduling lines when present)
 - MTP draft tokens, accepted tokens, and rejected tokens when available
 
+For a resident decode baseline that does not require custom routing hooks yet,
+run `scripts/codex_task.py spark-resident-batched-decode --run`. That wrapper
+starts one Spark-side `llama-server`, issues concurrent completion waves, and
+records aggregate decode throughput plus reservation/fallback signals. See
+`docs/resident-batched-decode.md`.
+
 Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
+
+### Current Spark0 clues (May 2026)
+
+- Single-Spark llama.cpp DeepSeek V4 Flash IQ2XXS aggregate decode plateaus around ~13.5–14.2 tok/s; see `docs/baseline-batching-throughput.md` for the pinned command-line shapes and gating notes.
+- A `MUL_MAT_ID` sampler has observed MoE routed shapes up to `dst_ne[2]=38`, with larger routed shapes hitting `mmq` while smaller shapes hit `mmvq`; treat this as a clue that some grouping exists, but require per-shape histograms and per-op timing before making any “expert queue” claims.
 
 ## Phase 0: Simulator-Only
 
@@ -107,7 +146,7 @@ Tip: when `cost_scale` is meaningful (synthetic or replayed), consider `--backpr
 Synthetic recommendations (reservation + MTP breakeven) are tracked in:
 
 - `docs/scheduler-simulator-recommendations.md`
-- `docs/scheduler-simulator-recommendations-2026-05-11.json`
+- `docs/scheduler-simulator-recommendations-2026-05-12.json`
 
 ## Phase 1: Real Router Trace Replay
 
@@ -204,6 +243,27 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --nu
 If the runtime mixes JSON objects into plain-text log lines (for example `INFO route={...}`), keep `--extract-substrings 1` (default) so `trace_extract.py` scans each line for embedded JSON objects.
 
 `trace_extract.py` preserves multi-layer routing when present (`layers[]` / `moe_layers[]`) and derives top-level `candidates` as the union of `layers[].candidates` so the simulator can replay the trace without additional massaging.
+
+Some runtimes emit **one route record per MoE layer per token** (repeated `token_index`, optional `layer_index`) instead of a single `layers[]` object. Pack those per-layer records into `layers[]` first:
+
+```bash
+python3 sim/scheduler/trace_extract.py \
+  --in-jsonl /path/to/runtime.log \
+  --out-jsonl /tmp/routes_packed.jsonl \
+  --non-route skip \
+  --pack-layers-by-token-index 1
+```
+
+If the runtime provides a stable `layer_index`, require it so layer ordering is explicit:
+
+```bash
+python3 sim/scheduler/trace_extract.py \
+  --in-jsonl /path/to/runtime.log \
+  --out-jsonl /tmp/routes_packed.jsonl \
+  --non-route skip \
+  --pack-layers-by-token-index 1 \
+  --pack-require-layer-index 1
+```
 
 If the runtime trace includes per-token chosen `K`, replay it directly:
 

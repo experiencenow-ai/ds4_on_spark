@@ -360,15 +360,32 @@ def main(argv: Optional[list[str]] = None) -> int:
         wks = inspect.get("weight_keys_sha256")
         if isinstance(wks, str) and wks.strip():
             lines.append(f"- weight_keys_sha256={wks.strip()}")
+        mks = inspect.get("mtp_keys_sha256")
+        if isinstance(mks, str) and mks.strip():
+            lines.append(f"- mtp_keys_sha256={mks.strip()}")
         tns = inspect.get("tensor_key_namespace_guess")
         if isinstance(tns, str) and tns.strip():
             lines.append(f"- tensor_key_namespace_guess={tns.strip()}")
+        ttop = inspect.get("topology_contract")
+        if isinstance(ttop, dict):
+            checked = ttop.get("checked")
+            mismatches = ttop.get("mismatches")
+            mismatch_count = len(mismatches) if isinstance(mismatches, list) else 0
+            if checked is not None:
+                lines.append(f"- topology_contract: checked={checked} mismatch_count={mismatch_count}")
+                if mismatch_count and isinstance(mismatches[0], str) and mismatches[0].strip():
+                    lines.append(f"- topology_contract_first_mismatch={mismatches[0].strip()}")
         tc = inspect.get("trunk_contract")
         if isinstance(tc, dict):
             kind = tc.get("kind")
             complete = tc.get("complete")
             if kind is not None or complete is not None:
                 lines.append(f"- trunk_contract: kind={kind} complete={complete}")
+            ne_used = tc.get("nonexpert_key_lists_used")
+            ne_expected = tc.get("nonexpert_required_expected_count")
+            ne_missing = tc.get("nonexpert_required_missing_count")
+            if ne_expected is not None or ne_missing is not None or ne_used is not None:
+                lines.append(f"- trunk_contract_nonexpert: used={ne_used} missing={ne_missing}/{ne_expected}")
         mc = inspect.get("mtp_contract")
         if isinstance(mc, dict):
             checked = mc.get("checked")
@@ -378,6 +395,47 @@ def main(argv: Optional[list[str]] = None) -> int:
                 if isinstance(reason, str) and reason.strip():
                     extra = f" reason={reason.strip()}"
                 lines.append(f"- mtp_contract: checked={checked}{extra}")
+            ne_used = mc.get("nonexpert_key_lists_used")
+            ne_expected = mc.get("nonexpert_required_expected_count")
+            ne_missing = mc.get("nonexpert_required_missing_count")
+            if ne_expected is not None or ne_missing is not None or ne_used is not None:
+                lines.append(f"- mtp_contract_nonexpert: used={ne_used} missing={ne_missing}/{ne_expected}")
+        mns = inspect.get("mtp_namespace")
+        if isinstance(mns, dict):
+            has_mtp0 = mns.get("has_mtp0")
+            expected_complete = mns.get("expected_complete")
+            present_prefixes = mns.get("present_prefixes")
+            if present_prefixes is None:
+                present_prefixes = []
+            if has_mtp0 is not None or expected_complete is not None or present_prefixes:
+                prefixes = ",".join([str(p) for p in present_prefixes]) if isinstance(present_prefixes, list) else ""
+                lines.append(
+                    f"- mtp_namespace: has_mtp0={has_mtp0} expected_complete={expected_complete} present_prefixes=[{prefixes}]"
+                )
+        mp = inspect.get("mtp_preservation")
+        if isinstance(mp, dict):
+            status = mp.get("status")
+            match_official = mp.get("mtp_keys_sha256_match_official")
+            preserves = mp.get("preserves")
+            if status is not None or match_official is not None or preserves is not None:
+                lines.append(f"- mtp_preservation: status={status} preserves={preserves} mtp_keys_sha256_match_official={match_official}")
+        mt = inspect.get("mtp_trust")
+        if isinstance(mt, dict):
+            status = mt.get("status")
+            trusted = mt.get("trusted")
+            match_official = mt.get("mtp_keys_sha256_match_official")
+            expected = mt.get("expected_mtp_keys_sha256")
+            reasons = mt.get("reasons")
+            if status is not None or trusted is not None or match_official is not None:
+                lines.append(
+                    f"- mtp_trust: status={status} trusted={trusted} mtp_keys_sha256_match_official={match_official}"
+                )
+            if isinstance(expected, str) and expected.strip():
+                lines.append(f"- mtp_trust_expected_mtp_keys_sha256={expected.strip()}")
+            if isinstance(reasons, list) and reasons:
+                r0 = reasons[0]
+                if isinstance(r0, str) and r0.strip():
+                    lines.append(f"- mtp_trust_reason_first={r0.strip().replace(chr(10), ' ')}")
         qc = inspect.get("quantization_contract")
         if isinstance(qc, dict) and qc.get("checked") is not None:
             obs = qc.get("observed", {})
@@ -388,6 +446,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             df8 = qc.get("dense_fp8_like")
             ef4 = qc.get("expert_fp4_like")
             lines.append(f"- quantization_contract: checked={qc.get('checked')} dense={dense} expert={expert} dense_fp8_like={df8} expert_fp4_like={ef4}")
+        ec = inspect.get("execution_contract")
+        if isinstance(ec, dict) and ec.get("checked") is True:
+            fps = ec.get("contract_fingerprints", {})
+            if not isinstance(fps, dict):
+                fps = {}
+            up = ec.get("upstream", {})
+            if not isinstance(up, dict):
+                up = {}
+            exec_sha = fps.get("execution_contract_sha256")
+            x_repo_commit = up.get("x_repo_commit")
+            if isinstance(exec_sha, str) and exec_sha.strip():
+                lines.append(f"- execution_contract_sha256={exec_sha.strip()}")
+            if isinstance(x_repo_commit, str) and x_repo_commit.strip():
+                lines.append(f"- upstream_x_repo_commit={x_repo_commit.strip()}")
     if arch is not None or file_type is not None or block_count is not None or mtp_present is not None:
         parts = []
         if arch is not None:
@@ -448,10 +520,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     for k in extra_fattn_keys:
         if k in summary_kv:
             lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
+    reserve_keys = (
+        "sched_reserve_line_count",
+        "sched_reserve_graph_nodes",
+        "sched_reserve_graph_splits",
+        "sched_reserve_took_ms",
+        "sched_reserve_fallback_line_count",
+        "sched_reserve_failure_line_count",
+    )
+    for k in reserve_keys:
+        if k in summary_kv:
+            lines.append(f"- {k}: `{summary_kv.get(k) or 'NA'}`")
     if summary_kv.get("fattn_seen_disabled", ""):
         lines.append("- fattn_seen_disabled: `true`")
     if summary_kv.get("fattn_seen_sched_reserve_cpu", ""):
         lines.append("- fattn_seen_sched_reserve_cpu: `true`")
+    if summary_kv.get("sched_reserve_seen_fallback", ""):
+        lines.append("- sched_reserve_seen_fallback: `true`")
+    if summary_kv.get("sched_reserve_seen_failure", ""):
+        lines.append("- sched_reserve_seen_failure: `true`")
     lines.append("")
     lines.append("Patch probes (read-only):")
     lines.append("")

@@ -19,6 +19,13 @@ Use the wrapper that validates once, then stages to Spark0/Spark1/Spark2:
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional (recommended): also run staged TP readiness checks (safe; no sudo):
+
+```bash
+./scripts/ops_stage_spark0_spark1_spark2.sh --mesh-check --staged-readiness --staged-readiness-strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 Optional: keep the ordered inventory in a file and use the inventory-driven helper directly:
 
 ```bash
@@ -33,6 +40,7 @@ As part of staging, the helper also runs a **staged env audit** (safe) to catch 
 On each Spark, you should now have:
 
 - `/tmp/ds4-systemd/` and `/tmp/ds4-systemd-user/`
+- `/tmp/ds4-systemd-dropins/` and `/tmp/ds4-systemd-user-dropins/` (optional unit override examples)
 - `/tmp/ds4-config/`
 - `/tmp/ds4-sysusers/` and `/tmp/ds4-tmpfiles/`
 - `/tmp/ds4-scripts/`
@@ -42,7 +50,7 @@ On each Spark, you should now have:
 If you are using system units under `/etc/systemd/system/` and `/etc/ds4/`:
 
 ```bash
-sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight
+sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight --preflight tp3
 sudo /tmp/ds4-scripts/ops_validate_installed_assets.sh --instance spark0 --strict
 ```
 
@@ -53,7 +61,7 @@ Repeat for `spark1` and `spark2`.
 If you are doing a non-root bring-up (developer path), use the staged installer:
 
 ```bash
-/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight --preflight tp3
 /tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance spark0 --strict
 systemctl --user enable --now ds4@spark0.service
 ```

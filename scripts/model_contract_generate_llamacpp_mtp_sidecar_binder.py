@@ -78,7 +78,7 @@ def sanitize_ident(s: str) -> str:
 
 
 def cxx_dims_check(var: str, dims: list[int]) -> str:
-	parts = [f"{var}->n_dims == {len(dims)}"]
+	parts = [f"ggml_n_dims({var}) == {len(dims)}"]
 	for i, d in enumerate(dims):
 		parts.append(f"{var}->ne[{i}] == {int(d)}")
 	return " && ".join(parts)
@@ -195,4 +195,3 @@ def main() -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-

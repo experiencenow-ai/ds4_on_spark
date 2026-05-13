@@ -142,6 +142,7 @@ fi
 	run_best_effort cuda_sm121_kernel_launch_tiny \"$REMOTE_DIR\"/bin/cuda_sm121_kernel_launch_tiny
 	run_best_effort cuda_sm121_arch_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_report
 	run_best_effort cuda_sm121_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121_arch_list_report
+	run_best_effort cuda_sm121_compile_report_tiny \"$REMOTE_DIR\"/bin/cuda_sm121_compile_report_tiny
 	run_best_effort cuda_sm121a_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121a_arch_list_report
 	run_best_effort cuda_sm121f_arch_list_report \"$REMOTE_DIR\"/bin/cuda_sm121f_arch_list_report
 "

@@ -4,6 +4,20 @@ Goal: prepare repeatable Spark1/Spark2 ring steps **without needing a shared fil
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
+## Topology (3-node ring)
+
+This runbook targets a **3-node ring**:
+
+- `spark0`: orchestrator/controller host (runs the ring-step and holds controller state)
+- `spark1`: ring node
+- `spark2`: ring node
+
+Naming note: this file uses “Spark12” because Spark1+Spark2 are the first ring nodes beyond Spark0, but the workflow always includes Spark0 as the orchestrator.
+
+Current status snapshot:
+
+- `docs/centaur-smoke-status-20260513.md`
+
 ## Quickstart (recommended order)
 
 From your Mac (repo root), in order:
@@ -14,6 +28,26 @@ When a hostname does not resolve (common before Spark1/2 exist), use an explicit
 
 ```bash
 REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
+```
+
+Note: the staging scripts also run a safe remote prereq check (`python3`, `python3 -m venv`, `unzip`; and `rsync` where required) via `scripts/centaur_spark_v73_prereqs_check.sh` unless you set `STAGE_SKIP_PREREQS=1`.
+
+Optional (recommended before node setup / smoke): confirm the Centaur v73 node prerequisites exist (non-destructive; no sudo):
+
+```bash
+./scripts/centaur_spark_v73_prereqs_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional (recommended before attempting the rsync-staged “real ring”): verify the **SSH mesh** and basic peer reachability from each Spark (still safe; no sudo/service changes):
+
+```bash
+./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional (recommended before attempting the rsync-staged “real ring”): verify `rsync` is installed on Spark0 + ring nodes (required for the ring-rsync workflow):
+
+```bash
+./scripts/ops_spark_rsync_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
 1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
@@ -34,8 +68,11 @@ If you want a known-good reference bundle for what “PASS” looks like, see:
 
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	export RING_TRACE=1
 	sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 	```
+
+	This writes a local Mac-side wrapper log (`ring_sim.local.log`) in the fetched bundle directory; it includes the exact `ssh ...` command used to run the ring sim (review/redact before posting).
 
 	If you prefer running the pieces manually:
 
@@ -62,14 +99,25 @@ sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<
 sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
 
+The fetch helper pulls per-node artifacts (when present):
+
+- `node_setup.log`
+- `pip_freeze.txt` (sanitized)
+- `node_setup_facts.json` (zip/python/requirements + freeze)
+
 4) Run the “real ring” rsync-staged ring-step (orchestrated from Spark0; no shared filesystem required):
 
 	Recommended: one-command evidence loop (node setup → ring rsync → validate → fetch):
 
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	export RING_TRACE=1
 	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 	```
+
+	This writes a local Mac-side wrapper log (`ring_rsync.local.log`) in the fetched bundle directory; it includes the exact `ssh ...` command used to orchestrate the ring step (review/redact before posting).
+
+	Note: the ring rsync step runs on Spark0 and uses Spark0→Spark1/2 SSH for staging. If you haven’t set up the Spark SSH mesh yet, run `scripts/ops_spark_ring_mesh_check.sh` first.
 
 	To also verify that Spark1/2 can run `hyor-sync-status` locally against the pushed node roots (recommended), set:
 
@@ -98,7 +146,21 @@ sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> s
 	sh ./scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh "$RING_RUN_ID"
 	```
 
-	Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
+		Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+		```bash
+		bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+		if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+		sh ./scripts/centaur_spark12_v73_ring_rsync_report.sh "$RING_RUN_ID" "$bundle_dir" "$bundle_dir/ring_rsync_report.md"
+		```
+
+		If you are using the one-command evidence runner, you can have it write the report automatically:
+
+		```bash
+		export RING_GEN_REPORT=1
+		```
+
+		Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
 
 ## Spark1/Spark2 bring-up checklist (when hardware exists)
 
@@ -122,6 +184,8 @@ export NODE_SETUP_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark12_v73_node_setup_run.sh spark1@<spark1-host> spark2@<spark2-host> "~/centaur-smoke/v73" "$NODE_SETUP_RUN_ID"
 sh ./scripts/centaur_spark12_v73_node_setup_fetch_logs.sh spark1@<spark1-host> spark2@<spark2-host> "$NODE_SETUP_RUN_ID" "~/centaur-smoke/v73"
 ```
+
+The fetched per-node directories include `node_setup_facts.json` + `pip_freeze.txt` so you can attach version context to ring failures without rerunning setup.
 
 Optional: faster/offline dependency install on Spark1/2 (wheelhouse/cached wheels):
 
@@ -227,6 +291,14 @@ To fetch a small sanitized ring-sim bundle (log + effective manifests + effectiv
 sh ./scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-ring-sim/spark12-v73/$RING_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring-sim/spark12-v73/$RING_RUN_ID"; fi
+sh ./scripts/centaur_spark12_v73_ring_bundle_validate.sh "$RING_RUN_ID" "$bundle_dir" sim
+```
+
 ## Next step (when Spark1/2 hardware exists)
 
 Decide one of:
@@ -285,6 +357,14 @@ After a wrapper run, you can fetch a small artifact bundle (log + manifests) bac
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Optional: validate the fetched bundle contents on your Mac:
+
+```bash
+bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+sh ./scripts/centaur_spark12_v73_ring_bundle_validate.sh "$RING_RUN_ID" "$bundle_dir" rsync
 ```
 
 To validate expected ring artifacts exist on the orchestrator host (Spark0):
@@ -347,7 +427,14 @@ If these ports are not reachable between Sparks, stop and fix network access bef
 1) On the controller host (typically Spark0), run the controller HTTP endpoint (human-run, no system service):
 
 ```bash
-"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-controller-http ~/centaur-smoke/v73/run/hyor/controller --host 0.0.0.0 --port 8765
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+controller_root="$RING_WORKDIR/run/$RING_RUN_ID/controller"
+
+# Recommended: initialize runtime state for the controller root before serving HTTP.
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-runtime-init "$controller_root" --force
+
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-controller-http "$controller_root" --host 0.0.0.0 --port 8765
 ```
 
 2) On each node, write an HTTP-configured agent config into the node root and start the node agent HTTP endpoint:
@@ -366,7 +453,11 @@ export CONTROLLER_URL="http://<spark0-host>:8765"
 3) On the controller, discover the nodes via their agent HTTP endpoints (this registers them in controller state):
 
 ```bash
-"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-node-discover ~/centaur-smoke/v73/run/hyor/controller --seed-url http://<spark1-host>:8766 --seed-url http://<spark2-host>:8767
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+controller_root="$RING_WORKDIR/run/$RING_RUN_ID/controller"
+
+"$CENTAUR_VENV/bin/python3" -u "$CENTAUR_ROOT/centaur.py" hyor-node-discover "$controller_root" --seed-url http://<spark1-host>:8766 --seed-url http://<spark2-host>:8767
 ```
 
 4) Then run one agent step on each node (it reads the local config and uses `controller_url`):
@@ -385,7 +476,9 @@ You will need **three terminals** (or `tmux`) because the HTTP servers run until
 Terminal 1 (Mac): controller HTTP on Spark0:
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller 0.0.0.0 8765 0" < ./scripts/centaur_spark_hyor_controller_http_v73.sh
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export RING_WORKDIR=\"$RING_WORKDIR\"; export RING_RUN_ID=\"$RING_RUN_ID\"; export HYOR_RUNTIME_INIT=1; sh -s -- '' 0.0.0.0 8765 0" < ./scripts/centaur_spark_hyor_controller_http_v73.sh
 ```
 
 Terminal 2 (Mac): agent HTTP on Spark1:
@@ -405,7 +498,9 @@ ssh $SSH_OPTS spark2@<spark2-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/
 Once all three are running, from a **fourth** terminal (or after stopping the controller with `ctrl-c` and restarting it later), discover the nodes on Spark0:
 
 ```bash
-ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; sh -s -- ~/centaur-smoke/v73/run/hyor/controller http://<spark1-host>:8766 http://<spark2-host>:8767" < ./scripts/centaur_spark_hyor_node_discover_v73.sh
+export RING_WORKDIR=~/centaur-smoke/v73/ring_rsync_spark12
+export RING_RUN_ID="<ring_run_id>"
+ssh $SSH_OPTS spark0@<spark0-host> "export CENTAUR_ROOT=~/centaur-smoke/v73/run/centaur_spec_impl_v73; export CENTAUR_VENV=~/centaur-smoke/v73/run/venv; export RING_WORKDIR=\"$RING_WORKDIR\"; export RING_RUN_ID=\"$RING_RUN_ID\"; sh -s -- http://<spark1-host>:8766 http://<spark2-host>:8767" < ./scripts/centaur_spark_hyor_node_discover_v73.sh
 ```
 
 Then, on each node (Spark1 and Spark2), run one agent step:
@@ -428,6 +523,7 @@ If you can provide a shared writable filesystem path visible on Spark0/1/2 (NFS,
 When the ring sim/rsync run fails, capture:
 
 - Centaur zip facts: `ls -la` and `sha256` of `centaur_spec_impl_v73.zip`
+- Canonical zip facts (commit-safe): `fixtures/centaur-smoke/centaur_spec_impl_v73_zip_facts.json`
 - Mac-side helper: `sh ./scripts/centaur_v73_zip_facts.sh /Users/mac/Downloads/centaur_spec_impl_v73.zip`
 - `python3 -V` and `pip freeze` (at least numpy/scipy/scikit-learn)
 - Exact Centaur command lines that failed (copy/paste)

@@ -130,6 +130,38 @@ int32_t ds4_cuda_status_format(ds4_cuda_status_t st,char *out,int32_t cap)
 	return(n);
 }
 
+int32_t ds4_cuda_error_format_i32(int32_t cuda_err,const char *expr,const char *file,int32_t line,char *out,int32_t cap)
+{
+	ds4_cuda_status_t st;
+	const char *s;
+	int32_t n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	if ( expr == 0 )
+		expr = "?";
+	if ( file == 0 )
+		file = "?";
+	if ( cuda_err == 0 )
+		st = ds4_cuda_ok();
+	else
+		st = ds4_cuda_fail(cuda_err);
+	s = ds4_cuda_errstr(st);
+	if ( s == 0 )
+		s = "?";
+	n = (int32_t)snprintf(out,(size_t)cap,"%s:%d %s => code=%d err=%s",file,line,expr,cuda_err,s);
+	if ( n < 0 )
+	{
+		out[0] = 0;
+		return(-3);
+	}
+	out[cap - 1] = 0;
+	if ( n >= cap )
+		return(-4);
+	return(n);
+}
+
 ds4_cuda_status_t ds4_cuda_last_error(void)
 {
 	cudaError_t err;
@@ -160,6 +192,7 @@ ds4_cuda_status_t ds4_cuda_device_synchronize(void)
 ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const char *file,int32_t line)
 {
 	cudaError_t err;
+	char msg[256];
 	if ( cuda_err == 0 )
 		return(ds4_cuda_ok());
 	if ( cuda_err < 0 )
@@ -169,7 +202,11 @@ ds4_cuda_status_t ds4_cuda_check_i32(int32_t cuda_err,const char *expr,const cha
 		expr = "?";
 	if ( file == 0 )
 		file = "?";
-	DS4_LOGE("cuda: %s:%d %s failed: %s",file,line,expr,cudaGetErrorString(err));
+	msg[0] = 0;
+	if ( ds4_cuda_error_format_i32((int32_t)err,expr,file,line,msg,(int32_t)sizeof(msg)) > 0 && msg[0] != 0 )
+		DS4_LOGE("cuda: %s",msg);
+	else
+		DS4_LOGE("cuda: %s:%d %s failed: %s",file,line,expr,cudaGetErrorString(err));
 	return(ds4_cuda_fail(cuda_err));
 }
 

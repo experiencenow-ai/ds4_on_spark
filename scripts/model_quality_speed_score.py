@@ -8,6 +8,7 @@ import csv
 import json
 import math
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -37,6 +38,14 @@ class ScoreRow:
     quality_adjusted_prefill_tps: Optional[float]
     tokens_per_success: Optional[float]
     wall_s_per_success: Optional[float]
+    speculative_method: str
+    speculative_draft_model: str
+    speculative_num_speculative_tokens: Optional[float]
+    spec_decode_num_drafts: Optional[float]
+    spec_decode_num_draft_tokens: Optional[float]
+    spec_decode_num_accepted_tokens: Optional[float]
+    spec_decode_mean_accept_len: Optional[float]
+    spec_decode_accept_rate: Optional[float]
     dominated_by: str = ""
 
 
@@ -93,7 +102,11 @@ def _quality(row: Dict[str, str]) -> tuple[Optional[float], str, Optional[float]
     return(None, "missing", public_prior, local_score)
 
 
-def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") -> List[ScoreRow]:
+def score_rows(
+    rows: Iterable[Dict[str, str]],
+    speed_field: str = "decode_tps",
+    pareto_group: str = "scope",
+) -> List[ScoreRow]:
     scored: List[ScoreRow] = []
     for idx, row in enumerate(rows):
         model = _get(row, "model", "model_id", "target")
@@ -118,6 +131,14 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
         qap = None if qfrac is None or prefill_tps is None else (qfrac * prefill_tps)
         tokens_per_success = _ratio(output_tokens, passed_tasks)
         wall_s_per_success = _ratio(total_wall_s, passed_tasks)
+        speculative_method = _get(row, "speculative_method")
+        speculative_draft_model = _get(row, "speculative_draft_model")
+        speculative_num_speculative_tokens = _float(row, "speculative_num_speculative_tokens")
+        spec_decode_num_drafts = _float(row, "spec_decode_num_drafts")
+        spec_decode_num_draft_tokens = _float(row, "spec_decode_num_draft_tokens")
+        spec_decode_num_accepted_tokens = _float(row, "spec_decode_num_accepted_tokens")
+        spec_decode_mean_accept_len = _float(row, "spec_decode_mean_accept_len")
+        spec_decode_accept_rate = _float(row, "spec_decode_accept_rate")
         scored.append(ScoreRow(
             raw=dict(row),
             model=model,
@@ -142,8 +163,16 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
             quality_adjusted_prefill_tps=qap,
             tokens_per_success=tokens_per_success,
             wall_s_per_success=wall_s_per_success,
+            speculative_method=speculative_method,
+            speculative_draft_model=speculative_draft_model,
+            speculative_num_speculative_tokens=speculative_num_speculative_tokens,
+            spec_decode_num_drafts=spec_decode_num_drafts,
+            spec_decode_num_draft_tokens=spec_decode_num_draft_tokens,
+            spec_decode_num_accepted_tokens=spec_decode_num_accepted_tokens,
+            spec_decode_mean_accept_len=spec_decode_mean_accept_len,
+            spec_decode_accept_rate=spec_decode_accept_rate,
         ))
-    mark_pareto(scored, speed_field)
+    mark_pareto(scored, speed_field, pareto_group)
     return(scored)
 
 
@@ -156,7 +185,9 @@ def _value(row: ScoreRow, field: str) -> Optional[float]:
     return(float(v))
 
 
-def mark_pareto(rows: Sequence[ScoreRow], speed_field: str) -> None:
+def _mark_pareto_group(rows: Sequence[ScoreRow], speed_field: str) -> None:
+    for row in rows:
+        row.dominated_by = ""
     for i, row in enumerate(rows):
         q = row.quality_score
         s = _value(row, speed_field)
@@ -172,6 +203,20 @@ def mark_pareto(rows: Sequence[ScoreRow], speed_field: str) -> None:
             if oq >= q and os >= s and (oq > q or os > s):
                 row.dominated_by = other.model if other.run_id == "" else f"{other.model}/{other.run_id}"
                 break
+
+
+def mark_pareto(rows: Sequence[ScoreRow], speed_field: str, pareto_group: str = "scope") -> None:
+    if pareto_group not in ("all", "scope"):
+        raise ValueError(f"invalid pareto_group: {pareto_group}")
+    if pareto_group == "all":
+        _mark_pareto_group(rows, speed_field)
+        return
+    groups: Dict[str, List[ScoreRow]] = defaultdict(list)
+    for row in rows:
+        key = row.scope.strip() if row.scope is not None else ""
+        groups[key].append(row)
+    for _, g in groups.items():
+        _mark_pareto_group(g, speed_field)
 
 
 def _fmt(v: Optional[float]) -> str:
@@ -210,6 +255,14 @@ def rows_to_dicts(rows: Sequence[ScoreRow]) -> List[Dict[str, Any]]:
             "quality_adjusted_prefill_tps": row.quality_adjusted_prefill_tps,
             "tokens_per_success": row.tokens_per_success,
             "wall_s_per_success": row.wall_s_per_success,
+            "speculative_method": row.speculative_method,
+            "speculative_draft_model": row.speculative_draft_model,
+            "speculative_num_speculative_tokens": row.speculative_num_speculative_tokens,
+            "spec_decode_num_drafts": row.spec_decode_num_drafts,
+            "spec_decode_num_draft_tokens": row.spec_decode_num_draft_tokens,
+            "spec_decode_num_accepted_tokens": row.spec_decode_num_accepted_tokens,
+            "spec_decode_mean_accept_len": row.spec_decode_mean_accept_len,
+            "spec_decode_accept_rate": row.spec_decode_accept_rate,
             "dominated_by": row.dominated_by,
         }
         out.append(d)
@@ -254,9 +307,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Score model quality/speed tradeoffs from a baseline CSV.")
     p.add_argument("csv_path", help="CSV path, or '-' for stdin")
     p.add_argument("--speed-field", default="decode_tps", choices=("decode_tps", "prefill_tps", "correct_task_rate", "correct_tasks_per_s", "quality_adjusted_decode_tps", "quality_adjusted_prefill_tps"))
+    p.add_argument("--pareto-group", default="scope", choices=("scope", "all"), help="Compute Pareto frontier within scope groups (default) or globally across all rows.")
     p.add_argument("--json", action="store_true", help="Emit JSON instead of markdown")
     args = p.parse_args(argv)
-    rows = score_rows(read_csv(args.csv_path), args.speed_field)
+    rows = score_rows(read_csv(args.csv_path), args.speed_field, pareto_group=args.pareto_group)
     if args.json:
         print(json.dumps(rows_to_dicts(rows), indent=2, sort_keys=True))
     else:

@@ -22,6 +22,7 @@ Bundle contents (when present):
   - effective/
 
 Notes:
+  - Requires `rsync` (preferred) or `scp` (fallback) on your Mac.
   - Does not fetch venvs, Centaur sources, or full node roots.
 USAGE
 }
@@ -60,8 +61,22 @@ need_cmd()
 	exit 2
 }
 
+need_copy_tool()
+{
+	if command -v rsync >/dev/null 2>&1; then
+		echo "copy_tool: rsync"
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		echo "copy_tool: scp"
+		return 0
+	fi
+	echo "missing required command: rsync or scp" >&2
+	exit 2
+}
+
 need_cmd ssh
-need_cmd rsync
+need_copy_tool
 
 if [ "$remote_workdir" = "" ]; then
 	remote_workdir="~/centaur-smoke/v73/ring_sim_spark12"
@@ -85,23 +100,38 @@ echo "local_out: $local_out"
 mkdir -p "$local_out"
 
 if ssh $SSH_OPTS "$target" "test -f $remote_run/ring_sim.log"; then
-	rsync -av -e "ssh $SSH_OPTS" "$target:$remote_run/ring_sim.log" "$local_out/"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$target:$remote_run/ring_sim.log" "$local_out/"
+	else
+		scp $SSH_OPTS "$target:$remote_run/ring_sim.log" "$local_out/"
+	fi
 else
 	echo "missing remote log: $remote_run/ring_sim.log" >&2
 fi
 
 if ssh $SSH_OPTS "$target" "test -d $remote_run/effective_manifests"; then
-	rsync -av -e "ssh $SSH_OPTS" "$target:$remote_run/effective_manifests/" "$local_out/effective_manifests/"
+	rm -rf "$local_out/effective_manifests"
+	if command -v rsync >/dev/null 2>&1; then
+		mkdir -p "$local_out/effective_manifests"
+		rsync -av -e "ssh $SSH_OPTS" "$target:$remote_run/effective_manifests/" "$local_out/effective_manifests/"
+	else
+		scp -r $SSH_OPTS "$target:$remote_run/effective_manifests" "$local_out/"
+	fi
 else
 	echo "missing remote effective_manifests/: $remote_run/effective_manifests" >&2
 fi
 
 if ssh $SSH_OPTS "$target" "test -d $remote_run/effective"; then
-	rsync -av -e "ssh $SSH_OPTS" "$target:$remote_run/effective/" "$local_out/effective/"
+	rm -rf "$local_out/effective"
+	if command -v rsync >/dev/null 2>&1; then
+		mkdir -p "$local_out/effective"
+		rsync -av -e "ssh $SSH_OPTS" "$target:$remote_run/effective/" "$local_out/effective/"
+	else
+		scp -r $SSH_OPTS "$target:$remote_run/effective" "$local_out/"
+	fi
 else
 	echo "missing remote effective/: $remote_run/effective" >&2
 fi
 
 echo "== done =="
 ls -la "$local_out" | sed -n '1,40p'
-

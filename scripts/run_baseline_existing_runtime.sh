@@ -5,6 +5,7 @@ target="${1:-spark0@aitopatom-9ab9.local}"
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_baseline}"
+OUT_DIR_OVERRIDE="${OUT_DIR_OVERRIDE:-}"
 REMOTE_BENCH_ENV="${REMOTE_BENCH_ENV:-}"
 REMOTE_LLAMA_ENV="${REMOTE_LLAMA_ENV:-$REMOTE_BENCH_ENV}"
 REMOTE_VLLM_ENV="${REMOTE_VLLM_ENV:-$REMOTE_BENCH_ENV}"
@@ -30,6 +31,7 @@ SKIP_LLAMA="${SKIP_LLAMA:-0}"
 SKIP_MTP_SIDECAR="${SKIP_MTP_SIDECAR:-0}"
 SKIP_VLLM="${SKIP_VLLM:-0}"
 SKIP_OPENAI_STREAM="${SKIP_OPENAI_STREAM:-1}"
+REQUIRE_GGUF_TRUNK_COMPLETE="${REQUIRE_GGUF_TRUNK_COMPLETE:-0}"
 PUBLIC_QUALITY_PRIOR="${PUBLIC_QUALITY_PRIOR:-}"
 PUBLIC_QUALITY_BASIS="${PUBLIC_QUALITY_BASIS:-}"
 PUBLIC_QUALITY_SOURCE="${PUBLIC_QUALITY_SOURCE:-}"
@@ -42,11 +44,19 @@ OUT_DIR="$OUT_ROOT/$ts"
 if [ "$RUN_LABEL" != "" ]; then
     OUT_DIR="$OUT_ROOT/$ts-$RUN_LABEL"
 fi
+if [ "$OUT_DIR_OVERRIDE" != "" ]; then
+    OUT_DIR="$OUT_DIR_OVERRIDE"
+fi
 
 mkdir -p "$OUT_DIR"
 RUN_IDS_TSV="$OUT_DIR/model_run_ids.tsv"
 
 echo "writing report to: $OUT_DIR"
+
+if [ "$REQUIRE_GGUF_TRUNK_COMPLETE" = "1" ] && [ "$SKIP_GGUF_INSPECT" = "1" ]; then
+    echo "error: REQUIRE_GGUF_TRUNK_COMPLETE=1 requires SKIP_GGUF_INSPECT=0" >&2
+    exit 6
+fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 repo_rev="unknown"
@@ -90,6 +100,12 @@ extract_baseline_summary()
     ' "$in" 2>/dev/null || true
 }
 
+sh_quote()
+{
+    v="${1:-}"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
+}
+
 fetch_remote_dir_tar()
 {
     remote_dir="${1:-}"
@@ -97,14 +113,7 @@ fetch_remote_dir_tar()
     if [ "$remote_dir" = "" ] || [ "$local_tgz" = "" ]; then
         return 0
     fi
-    remote_name="${remote_dir##*/}"
-    ssh $SSH_OPTS "$target" "if [ -d $remote_dir ]; then tar -C /tmp -czf - $remote_name; fi" >"$local_tgz" 2>"$local_tgz.stderr" || true
-}
-
-sh_quote()
-{
-    v="${1:-}"
-    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
+    ssh $SSH_OPTS "$target" "sh -lc 'set -eu; dir=\"\\$1\"; if [ ! -d \"\\$dir\" ]; then exit 0; fi; base=\"\\${dir##*/}\"; parent=\"\\${dir%/*}\"; if [ \"\\$parent\" = \"\\$dir\" ]; then parent=\".\"; fi; tar -C \"\\$parent\" -czf - \"\\$base\"' sh $(sh_quote "$remote_dir")" >"$local_tgz" 2>"$local_tgz.stderr" || true
 }
 
 remote_env_prefix()
@@ -253,6 +262,11 @@ output_tokens = _get("output_tokens", "generated_tokens", "token_trace_events", 
 speculative_method = _get("speculative_method")
 speculative_draft_model = _get("speculative_draft_model")
 speculative_num_speculative_tokens = _get("speculative_num_speculative_tokens")
+spec_decode_num_drafts = _get("spec_decode_num_drafts")
+spec_decode_num_draft_tokens = _get("spec_decode_num_draft_tokens")
+spec_decode_num_accepted_tokens = _get("spec_decode_num_accepted_tokens")
+spec_decode_mean_accept_len = _get("spec_decode_mean_accept_len")
+spec_decode_accept_rate = _get("spec_decode_accept_rate")
 
 if not any([
     public_quality_prior,
@@ -270,6 +284,11 @@ if not any([
     speculative_method,
     speculative_draft_model,
     speculative_num_speculative_tokens,
+    spec_decode_num_drafts,
+    spec_decode_num_draft_tokens,
+    spec_decode_num_accepted_tokens,
+    spec_decode_mean_accept_len,
+    spec_decode_accept_rate,
 ]):
     raise SystemExit(0)
 
@@ -292,6 +311,11 @@ row = {
     "speculative_method": speculative_method,
     "speculative_draft_model": speculative_draft_model,
     "speculative_num_speculative_tokens": speculative_num_speculative_tokens,
+    "spec_decode_num_drafts": spec_decode_num_drafts,
+    "spec_decode_num_draft_tokens": spec_decode_num_draft_tokens,
+    "spec_decode_num_accepted_tokens": spec_decode_num_accepted_tokens,
+    "spec_decode_mean_accept_len": spec_decode_mean_accept_len,
+    "spec_decode_accept_rate": spec_decode_accept_rate,
 }
 
 header = [
@@ -313,6 +337,11 @@ header = [
     "speculative_method",
     "speculative_draft_model",
     "speculative_num_speculative_tokens",
+    "spec_decode_num_drafts",
+    "spec_decode_num_draft_tokens",
+    "spec_decode_num_accepted_tokens",
+    "spec_decode_mean_accept_len",
+    "spec_decode_accept_rate",
 ]
 
 need_header = True
@@ -323,11 +352,31 @@ if os.path.exists(csv_path):
         need_header = True
 
 os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+effective_header = list(header)
+if not need_header:
+    try:
+        with open(csv_path, "r", encoding="utf-8", newline="") as rf:
+            r = csv.DictReader(rf)
+            existing_header = list(r.fieldnames or [])
+            if existing_header:
+                effective_header = existing_header + [h for h in header if h not in existing_header]
+                if effective_header != existing_header:
+                    rows_existing = list(r)
+                    tmp_path = csv_path + ".tmp"
+                    with open(tmp_path, "w", encoding="utf-8", newline="") as wf:
+                        w2 = csv.DictWriter(wf, fieldnames=effective_header)
+                        w2.writeheader()
+                        for erow in rows_existing:
+                            w2.writerow({k: (erow.get(k, "") if erow is not None else "") for k in effective_header})
+                    os.replace(tmp_path, csv_path)
+    except Exception:
+        pass
+
 with open(csv_path, "a", encoding="utf-8", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=header)
+    w = csv.DictWriter(f, fieldnames=effective_header)
     if need_header:
         w.writeheader()
-    w.writerow({k: row.get(k, "") for k in header})
+    w.writerow({k: row.get(k, "") for k in effective_header})
 PY
 }
 
@@ -398,12 +447,24 @@ for raw_line in open(run_ids_path, "r", encoding="utf-8").read().splitlines():
         "local_quality_score",
         "quality_score",
         "decode_tps",
+        "prefill_tps",
+        "ttft_s",
         "total_wall_s",
         "output_tokens",
+        "speculative_method",
+        "speculative_draft_model",
+        "speculative_num_speculative_tokens",
+        "spec_decode_num_drafts",
+        "spec_decode_num_draft_tokens",
+        "spec_decode_num_accepted_tokens",
+        "spec_decode_mean_accept_len",
+        "spec_decode_accept_rate",
         "quality_adjusted_decode_tps",
+        "quality_adjusted_prefill_tps",
         "correct_task_rate",
         "correct_tasks_per_s",
         "tokens_per_success",
+        "wall_s_per_success",
         "dominated_by",
     ]:
         v = r.get(k, "")
@@ -566,11 +627,48 @@ python3 /tmp/model_contract_inspect_quantized_artifact.py --path \"\${MODEL_GGUF
     echo "- stderr: $OUT_DIR/remote_gguf_inspect_stderr.txt"
     echo
 } >>"$REPORT_MD"
+
+if [ "$REQUIRE_GGUF_TRUNK_COMPLETE" = "1" ]; then
+    python3 - "$OUT_DIR/remote_gguf_inspect_stdout.txt" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    text = open(path, "r", encoding="utf-8").read()
+except OSError as e:
+    print(f"gguf contract required but could not read inspector output: {e}", file=sys.stderr)
+    raise SystemExit(2)
+
+start = text.find("{")
+if start < 0:
+    print("gguf contract required but inspector emitted no JSON (did it get skipped?)", file=sys.stderr)
+    raise SystemExit(3)
+
+try:
+    data = json.loads(text[start:])
+except json.JSONDecodeError as e:
+    print(f"gguf contract required but inspector JSON parse failed: {e}", file=sys.stderr)
+    raise SystemExit(4)
+
+trunk = data.get("trunk_contract") or {}
+checked = trunk.get("checked")
+complete = trunk.get("complete")
+kind = trunk.get("kind")
+
+if checked is not True:
+    print(f"gguf contract required but trunk_contract.checked != true (checked={checked!r})", file=sys.stderr)
+    raise SystemExit(5)
+if complete is not True:
+    print(f"gguf contract required but trunk_contract.complete != true (complete={complete!r}, kind={kind!r})", file=sys.stderr)
+    raise SystemExit(6)
+PY
+fi
 fi
 
 REMOTE_PROBE_ENV="$(remote_env_prefix)"
 
-if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
+if [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
     echo "== running llama.cpp fattn patch source probe on spark (read-only) =="
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_fattn_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_fattn_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_fattn_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_fattn_patch_probe.py" \
         >"$OUT_DIR/remote_fattn_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_fattn_patch_probe_stderr.txt" || true
@@ -588,10 +686,10 @@ if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_FATTN_PATCH_PROBE" = "1" ]; then
         echo "- stdout: $OUT_DIR/remote_fattn_patch_probe_stdout.txt"
         echo "- stderr: $OUT_DIR/remote_fattn_patch_probe_stderr.txt"
         echo
-    } >>"$REPORT_MD"
+} >>"$REPORT_MD"
 fi
 
-if [ "$SKIP_LLAMA" != "1" ] && [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
+if [ "$LLAMA_MULTISLOT_PATCH_PROBE" = "1" ]; then
     echo "== running llama.cpp multislot patch source probe on spark (read-only) =="
     ssh $SSH_OPTS "$target" "cat > /tmp/benchmark_llamacpp_multislot_patch_probe.py && chmod +x /tmp/benchmark_llamacpp_multislot_patch_probe.py && $REMOTE_LLAMA_ENV $REMOTE_PROBE_ENV python3 /tmp/benchmark_llamacpp_multislot_patch_probe.py" <"$repo_root/scripts/benchmark_llamacpp_multislot_patch_probe.py" \
         >"$OUT_DIR/remote_multislot_patch_probe_stdout.txt" 2>"$OUT_DIR/remote_multislot_patch_probe_stderr.txt" || true

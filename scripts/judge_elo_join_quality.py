@@ -40,6 +40,32 @@ def _read_quality_map(path: str) -> Tuple[Dict[str, float], str]:
         out[k] = fv
     return out, "judge_elo_quality_map_v1"
 
+def _read_bundle_quality_map(path: str) -> Tuple[Dict[str, float], str]:
+    with open(path, "r", encoding="utf-8") as f:
+        obj = json.load(f)
+    if not isinstance(obj, dict):
+        raise ValueError("bundle must be a JSON object")
+    qmap_obj = obj.get("quality_map")
+    if not isinstance(qmap_obj, dict):
+        raise ValueError("bundle.quality_map must be a JSON object mapping model->score")
+    out: Dict[str, float] = {}
+    for k, v in qmap_obj.items():
+        if not isinstance(k, str) or k.strip() == "":
+            continue
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            continue
+        fv = float(v)
+        if not _is_finite(fv) or fv < 0.0 or fv > 100.0:
+            continue
+        out[k] = fv
+    qsrc = "judge_elo_quality_map_v1"
+    meta = obj.get("meta")
+    if isinstance(meta, dict):
+        msrc = meta.get("quality_source")
+        if isinstance(msrc, str) and msrc.strip() != "":
+            qsrc = msrc.strip()
+    return out, qsrc
+
 
 def _read_meta_quality_source(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -70,6 +96,8 @@ def join_quality_rows(
     model_field: str,
     overwrite: bool,
     require_all: bool,
+    missing_default: Optional[float] = None,
+    missing_quality_source: str = "judge_elo_default_v1",
 ) -> Tuple[List[Dict[str, str]], int]:
     out: List[Dict[str, str]] = []
     missing = 0
@@ -79,7 +107,17 @@ def join_quality_rows(
         existing = row.get("quality_score", "").strip()
         if score is None:
             missing += 1
-            out.append(dict(row))
+            if existing != "" and not overwrite:
+                out.append(dict(row))
+                continue
+            if missing_default is None:
+                out.append(dict(row))
+                continue
+            r_missing = dict(row)
+            r_missing["quality_score"] = f"{float(missing_default):.3f}"
+            if "quality_source" not in r_missing or overwrite:
+                r_missing["quality_source"] = str(missing_quality_source)
+            out.append(r_missing)
             continue
         if existing != "" and not overwrite:
             out.append(dict(row))
@@ -118,22 +156,40 @@ def _write_csv(path: str, rows: Sequence[Dict[str, str]], fieldnames: Sequence[s
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="input_csv", required=True, help="baseline CSV input")
-    ap.add_argument("--quality-map", required=True, help="quality_map.json from scripts/judge_elo_update.py")
-    ap.add_argument("--meta", default="", help="meta.json from scripts/judge_elo_update.py (optional; provides quality_source)")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--quality-map", help="quality_map.json from scripts/judge_elo_update.py")
+    src.add_argument("--bundle", help="bundle.json from scripts/judge_elo_update.py (reads quality_map + meta.quality_source)")
+    ap.add_argument("--meta", default="", help="meta.json from scripts/judge_elo_update.py (optional; provides quality_source; ignored with --bundle)")
     ap.add_argument("--out", required=True, help="output CSV with quality_score attached")
     ap.add_argument("--model-field", default="", help="CSV column name for model id (default: auto-detect)")
     ap.add_argument("--overwrite", action="store_true", help="overwrite existing quality_score/quality_source if present")
     ap.add_argument("--require-all", action="store_true", help="fail if any input rows are missing from quality_map")
     ap.add_argument("--quality-source", default="", help="override quality_source value written to CSV")
+    ap.add_argument("--missing-default", default="", help="fill missing models with this quality_score (0..100); default: leave blank")
+    ap.add_argument("--missing-quality-source", default="judge_elo_default_v1", help="quality_source label used when --missing-default is applied")
     args = ap.parse_args()
 
-    qmap, qsrc = _read_quality_map(str(args.quality_map))
-    if str(args.meta).strip() != "":
-        meta_src = _read_meta_quality_source(str(args.meta))
-        if meta_src != "":
-            qsrc = meta_src
+    if str(getattr(args, "bundle", "") or "").strip() != "":
+        qmap, qsrc = _read_bundle_quality_map(str(args.bundle))
+    else:
+        qmap, qsrc = _read_quality_map(str(args.quality_map))
+        if str(args.meta).strip() != "":
+            meta_src = _read_meta_quality_source(str(args.meta))
+            if meta_src != "":
+                qsrc = meta_src
     if str(args.quality_source).strip() != "":
         qsrc = str(args.quality_source).strip()
+
+    missing_default: Optional[float] = None
+    if str(args.missing_default).strip() != "":
+        try:
+            v = float(str(args.missing_default).strip())
+        except ValueError as e:
+            raise ValueError("--missing-default must be a float in [0,100]") from e
+        if not _is_finite(float(v)) or float(v) < 0.0 or float(v) > 100.0:
+            raise ValueError("--missing-default must be in [0,100]")
+        missing_default = float(v)
+
     rows, fieldnames = _read_csv(str(args.input_csv))
     model_field = _pick_model_field(fieldnames, str(args.model_field).strip())
     joined, missing = join_quality_rows(
@@ -143,6 +199,8 @@ def main() -> None:
         model_field=model_field,
         overwrite=bool(args.overwrite),
         require_all=bool(args.require_all),
+        missing_default=missing_default,
+        missing_quality_source=str(args.missing_quality_source).strip() or "judge_elo_default_v1",
     )
     _write_csv(str(args.out), joined, fieldnames)
     if missing != 0:

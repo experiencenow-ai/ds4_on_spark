@@ -255,3 +255,23 @@ This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
 - Commit generated probe outputs only after redacting secrets, usernames that
   should not be public, tokens, and private LAN details if needed.
 - Prefer narrow, measurable milestones over broad framework work.
+
+## Codex Autonomy and Permissions
+
+- Keep active repo work inside the checked-out repo and approved scratch space
+  such as `/private/tmp`. Do not edit files under `$HOME`, downloads, or
+  private tool state unless the user explicitly asks for that path.
+- Minimize approval prompts by batching related edits into one patch or one
+  repo-owned script change. Avoid many tiny edit operations.
+- Prefer `scripts/codex_task.py` and other repo-owned runners for repeatable
+  Spark, validation, PR, and status tasks. Add a small parameter to an existing
+  runner before creating several one-off shell commands.
+- Prefer simple command argv forms that match approved prefixes. Avoid heredocs,
+  redirection-heavy commands, pipes, shell substitutions, and wildcard tricks
+  when the same task can be done by an existing script or a simple command.
+- Files created by Codex are still normal repo files; update them in the active
+  branch and PR without asking the user again unless the sandbox actually blocks
+  the write.
+- Put large run artifacts under `/private/tmp/ds4_*` and summarize their paths
+  in docs or PR text instead of committing the artifacts.
+- Use PRs for repo changes. Do not push directly to `main`.
