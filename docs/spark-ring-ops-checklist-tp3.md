@@ -21,22 +21,26 @@ For run log conventions and snapshot redaction guidance, see:
 
 ## Bring-up (Once)
 
+- Initialize a private run directory for notes + snapshots (recommended): `RUN_DIR="$(./scripts/ops_run_dir_init.sh --tp tp3 --tag "<tag>")"`
 - Pick stable hostnames for Spark0/Spark1/Spark2 and decide whether you rely on mDNS (`*.local`) or pin `/etc/hosts` (see `deploy/config/hosts.ds4.spark012.example`).
 - Recommended: keep the ordered inventory in a file so rank order is explicit and repeatable (format example: `deploy/config/inventory.ds4.spark012.example`).
 - Optional: take a read-only systemd status snapshot from the Mac (useful for run notes):
   - `./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Optional: capture a single combined snapshot (mesh + status; safe):
-  - `./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp3 --strict spark0@... spark1@... spark2@...`
+  - `./scripts/ops_spark_ring_ops_check.sh --out "${RUN_DIR:-/private/tmp}/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Stage deploy assets + scripts from the Mac:
-  - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory)
-  - Confirm the staged env audit passes (safe; catches DS4 ring config mismatches before install): `scripts/ops_spark_ring_staged_env_audit.sh`
+  - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory; includes a staged env audit)
   - Optional (recommended): run staged TP readiness checks before any install/system changes (safe; uses staged `/tmp/ds4-*` assets):
     - `./scripts/ops_spark_ring_staged_readiness.sh --topology ring --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Install staged templates on each Spark:
+  - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight --preflight tp3`
+  - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark1 --start-preflight --preflight tp3`
   - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight --preflight tp3`
 - Confirm systemd templates and scripts are present:
   - `/etc/systemd/system/ds4*.service`
   - `/opt/ds4/scripts/ops_tp3_readiness.sh`
+- Optional: validate installed assets (safe; fails non-zero on missing files):
+  - `sudo /opt/ds4/scripts/ops_validate_installed_assets.sh --instance spark2 --strict`
 
 ## Developer Path (`systemd --user`) (Optional)
 

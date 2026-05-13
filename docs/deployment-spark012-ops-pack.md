@@ -21,10 +21,16 @@ Goal: one entrypoint that links the deployment layout, systemd templates, config
 
 These are read-only checks intended for run notes; they do not modify systemd, networking, or GPU settings.
 
+Optional: initialize a private run directory first (recommended):
+
+```bash
+RUN_DIR="$(./scripts/ops_run_dir_init.sh --tp tp3 --tag "<tag>")"
+```
+
 TP=2 (two hosts):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+./scripts/ops_spark_ring_ops_check.sh --out "${RUN_DIR:-/private/tmp}/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" \
   --preflight tp2 --strict --journal --lines 120 \
   --inventory-file deploy/config/inventory.ds4.spark01.example
 ```
@@ -32,7 +38,7 @@ TP=2 (two hosts):
 TP=3 (three hosts):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+./scripts/ops_spark_ring_ops_check.sh --out "${RUN_DIR:-/private/tmp}/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
   --preflight tp3 --strict --journal --lines 120 \
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
@@ -107,4 +113,3 @@ Non-destructive bundle collector + redaction guidance:
 
 - Runbook: `docs/ops-support-bundle.md`
 - Redaction/run-notes: `docs/ops-run-notes.md`
-
