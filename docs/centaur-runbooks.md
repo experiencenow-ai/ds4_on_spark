@@ -21,6 +21,12 @@ export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
+Optional: have the evidence runner write `smoke_report.md` into the fetched bundle directory:
+
+```bash
+export CENTAUR_GEN_REPORT=1
+```
+
 Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or `scp` (fallback).
 
 The evidence helper runs:
@@ -104,6 +110,7 @@ If you also have Spark3, use:
   - `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh` (Mac-side one-command evidence helper)
   - `scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh` (Mac-side Spark1/2 `hyor-sync-status` verifier)
   - `scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_ring_rsync_report.sh` (generates a PR/issue-ready Markdown summary from a fetched bundle)
   - `scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark12_v73_validate_ring_artifacts.sh` (runs on orchestrator host)
   - `scripts/centaur_spark_v73_node_setup_run.sh` (single-node wrapper; Spark1/Spark2/etc)
