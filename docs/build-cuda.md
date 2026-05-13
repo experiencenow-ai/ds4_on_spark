@@ -23,6 +23,10 @@ For allocation-free error reporting in CLI/tests, format a status into a caller-
 
 - `ds4_cuda_status_format(st,buf,cap)`
 
+For callsite-aware formatting (file/line/expr + decoded error string), use:
+
+- `ds4_cuda_error_format_i32(cuda_err,expr,file,line,buf,cap)`
+
 For kernel launches (or any void-returning CUDA statements compiled by NVCC), use:
 
 - `DS4_CUDA_KERNEL_LAUNCH(kernel<<<grid,block,shared,stream>>>(...))`
