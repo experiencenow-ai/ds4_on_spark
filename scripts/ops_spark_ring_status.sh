@@ -13,17 +13,17 @@ Usage:
 Environment:
   SSH_OPTS   Optional ssh options override.
 
-Notes:
-  - Non-destructive; intended to run from the Mac.
-  - Host order defines rank/order: arg0=spark0, arg1=spark1, etc (unless overridden via --instanceN).
-  - Default preflight is inferred from host count:
-      2 hosts => tp2, 3 hosts => tp3, 4 hosts => tp4
-  - With --strict, the script snapshots topology-specific strict units:
-      tp2 => ds4-strict@.service + ds4-preflight-strict@.service
-      tp3 => ds4-tp3-strict@.service + ds4-preflight-tp3-strict@.service
-      tp4 => ds4-tp4-strict@.service + ds4-preflight-tp4-strict@.service
-  - With `--preflight tp23` (3 nodes only), the script snapshots both tp2 and tp3 units for each instance.
-  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
+	Notes:
+	  - Non-destructive; intended to run from the Mac.
+	  - Host order defines rank/order: arg0=spark0, arg1=spark1, etc (unless overridden via --instanceN).
+	  - Default preflight is inferred from host count:
+	      2 hosts => tp2, 3 hosts => tp3, 4 hosts => tp4
+	  - With --strict, the script snapshots topology-specific strict units:
+	      tp2 => ds4-tp2-strict@.service + ds4-preflight-strict@.service (legacy alias: ds4-strict@.service)
+	      tp3 => ds4-tp3-strict@.service + ds4-preflight-tp3-strict@.service
+	      tp4 => ds4-tp4-strict@.service + ds4-preflight-tp4-strict@.service
+	  - With `--preflight tp23` (3 nodes only), the script snapshots both tp2 and tp3 units for each instance.
+	  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
 EOF
 }
 
@@ -177,37 +177,43 @@ infer_preflight()
 	esac
 }
 
-units_for_one()
-{
-	topo="$1"
-	instance="$2"
+	units_for_one()
+	{
+		topo="$1"
+		instance="$2"
 
-	ds4_unit="ds4@${instance}.service"
-	preflight_unit="ds4-preflight@${instance}.service"
+		ds4_unit="ds4@${instance}.service"
+		preflight_unit="ds4-preflight@${instance}.service"
+		legacy_ds4_unit=""
 
-	if [ "$topo" = "tp3" ]; then
-		preflight_unit="ds4-preflight-tp3@${instance}.service"
-	fi
-	if [ "$topo" = "tp4" ]; then
-		preflight_unit="ds4-preflight-tp4@${instance}.service"
-	fi
-	if [ "$strict" -ne 0 ]; then
-		if [ "$topo" = "tp2" ]; then
-			ds4_unit="ds4-strict@${instance}.service"
-			preflight_unit="ds4-preflight-strict@${instance}.service"
-		fi
 		if [ "$topo" = "tp3" ]; then
-			ds4_unit="ds4-tp3-strict@${instance}.service"
-			preflight_unit="ds4-preflight-tp3-strict@${instance}.service"
+			preflight_unit="ds4-preflight-tp3@${instance}.service"
+		fi
+		if [ "$topo" = "tp4" ]; then
+		preflight_unit="ds4-preflight-tp4@${instance}.service"
+		fi
+		if [ "$strict" -ne 0 ]; then
+			if [ "$topo" = "tp2" ]; then
+				ds4_unit="ds4-tp2-strict@${instance}.service"
+				legacy_ds4_unit="ds4-strict@${instance}.service"
+				preflight_unit="ds4-preflight-strict@${instance}.service"
+			fi
+			if [ "$topo" = "tp3" ]; then
+				ds4_unit="ds4-tp3-strict@${instance}.service"
+				preflight_unit="ds4-preflight-tp3-strict@${instance}.service"
 		fi
 		if [ "$topo" = "tp4" ]; then
 			ds4_unit="ds4-tp4-strict@${instance}.service"
 			preflight_unit="ds4-preflight-tp4-strict@${instance}.service"
+			fi
 		fi
-	fi
 
-	printf '%s\n' "$ds4_unit" "$preflight_unit"
-}
+		if [ "$legacy_ds4_unit" != "" ]; then
+			printf '%s\n' "$ds4_unit" "$legacy_ds4_unit" "$preflight_unit"
+			return 0
+		fi
+		printf '%s\n' "$ds4_unit" "$preflight_unit"
+	}
 
 units_for()
 {
