@@ -15,7 +15,7 @@ SPARK_SSH_USER=spark0 REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 D
 
 Quick validation targets (paste-friendly stanzas):
 - `docs/spark-ring-mac-discovery-<stamp>.md`: `== known target checks ==`, `== ping (mac->targets, compact) ==`
-- `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==`, `== network (iface matrix, compact) ==`, `== cuda/toolchain facts (summary) ==`
+- `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==`, `== network (iface matrix, compact) ==`, `== cuda/toolchain facts (summary) ==`, `== nvidia-smi -q fabric/c2c (summary) ==`
 - `docs/spark-ring-latency-probe-<stamp>.md`: `ssh_latency_ms_p50` (SSH wall-time, no ICMP required)
 - `docs/spark-ring-mtu-probe-<stamp>.md`: MTU DF-ping payload pass/fail matrix
 - `docs/spark-ring-bw-probe-<stamp>.md`: `bw up/down` smoke numbers (best-effort)
