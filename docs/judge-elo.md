@@ -18,14 +18,14 @@ DSv4 should emit **exactly one JSON object** (minified; no prose) with:
 - `reason`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
 - `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
 - `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
-- `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
+- `tags`: array of short strings (0..3); e.g. `["format","factuality"]`
 - No extra keys: the decision validator rejects unknown fields.
 - Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
   - diff=1 ⇒ margin ∈ {0,1}
   - diff=2 ⇒ margin ∈ {1,2}
   - diff=3 ⇒ margin = 2
   - diff≥4 ⇒ margin = 3
-  - strict mode also enforces compact tags: `len(tags) <= 3`
+  - strict mode also enforces that non-tie winners use `score_a!=score_b`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 

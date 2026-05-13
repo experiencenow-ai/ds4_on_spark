@@ -238,8 +238,8 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
     if not isinstance(tags_v, list):
         errs.append("tags must be an array")
     else:
-        if len(tags_v) > 8:
-            errs.append("tags must have at most 8 entries")
+        if len(tags_v) > 3:
+            errs.append("tags must have at most 3 entries")
         for i, tag in enumerate(tags_v):
             if not isinstance(tag, str):
                 errs.append(f"tags[{i}] must be a string")
