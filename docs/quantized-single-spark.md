@@ -10,6 +10,15 @@ tokenizer/chat format, and memory envelope are real.
 
 Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-13T003043Z-smallest.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-13.md`).
 
+Quick start (Spark0 smallest staged trunk + external llama.cpp runtime path, no downloads/builds):
+
+```sh
+OUT_ROOT=/private/tmp/ds4_on_spark_baseline \
+RUN_LABEL=quantized-single-spark0-smallest \
+ALLOW_RUN=1 \
+scripts/run_quantized_single_spark0_smallest_v4flash_external.sh spark0@aitopatom-9ab9.local
+```
+
 To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
 
 ```sh

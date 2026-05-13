@@ -105,6 +105,59 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIsNotNone(r.scores)
             self.assertEqual(len(r.scores or ()), 4)
 
+    def test_runtime_trace_ablation_markdown_renders_topk_dump_probe(self) -> None:
+        meta = ds4_topk_dump.Ds4TopkDumpMeta(dump_dir="/tmp/fake", pos=0, topk=2, num_layers=2, tokens_per_layer=4)
+        layers = [
+            [[0, 1], [0, 1], [2, 3], [4, 5]],
+            [[0, 2], [1, 3], [2, 4], [3, 5]],
+        ]
+        probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
+            layers,
+            experts=8,
+            topk=2,
+            batches=(4, 100),
+            trials=4,
+            seed=123,
+            strict_expert_ids=True,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            trace_path = os.path.join(td, "routes.jsonl")
+            ds4_topk_dump.build_scheduler_trace_jsonl_from_ds4_topk_dump(
+                meta,
+                layers,
+                out_path=trace_path,
+                seed=123,
+                sample_mode="sequential",
+                time_mode="dt_ms",
+                arrival_rate_tps=1000.0,
+                batch_size=1,
+                interactive_prob=0.0,
+            )
+            trace_meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(
+                trace_path,
+                time_mode="dt_ms",
+                meta_out=trace_meta,
+                non_route_policy="error",
+                input_format="strict",
+            )
+
+        report = recommendations.run_runtime_trace_mtp_ablation(
+            name="ds4_topk_dump_route_only_ablation",
+            trace=trace,
+            trace_meta=trace_meta,
+            expert_queue_max=16,
+            expert_parallelism=1,
+            service_ms=1.0,
+            starvation_ms=10.0,
+            trace_speedup=1.0,
+            mtp_draft_len=-1,
+        )
+        report["topk_dump_probe"] = {"present": True, "note": "route-only", "summary": probe}
+        md = recommendations.format_runtime_trace_ablation_markdown(report)
+        self.assertIn("topk_dump_probe: present", md)
+        self.assertTrue(("b4 " in md) or ("b100 " in md))
+
     def test_synthetic_trace_multi_layer_score_mode_emits_layer_scores_only(self) -> None:
         cfg = scheduler_sim.TraceConfig(
             num_tokens=5,
@@ -287,6 +340,8 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIn("- mtp: present", md)
             self.assertIn("## Results (arrival_units=steps)", md)
             self.assertIn("pending_p95", md)
+            self.assertIn("starv_frac", md)
+            self.assertIn("starv_p95_ms", md)
             self.assertIn("pending_lo_p95", md)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
