@@ -5,6 +5,8 @@ TP=2 here means dual-Spark distributed execution (Spark0 + Spark1).
 These checks are designed to be **non-destructive** and safe to run repeatedly.
 They do not change networking, system services, or GPU settings.
 
+If you are in a TP=2 -> TP=3 transition period and want a single “run both” gate, see: `docs/ops-tp23-readiness.md`.
+
 ## Preflight Checklist
 
 On both Sparks:

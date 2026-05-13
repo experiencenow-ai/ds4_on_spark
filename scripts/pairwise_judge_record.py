@@ -42,6 +42,34 @@ def _as_int_opt(v: Optional[str], field: str) -> Optional[int]:
     return out
 
 
+def _parse_int_list_arg(v: str, field: str, n: int) -> Optional[list[int]]:
+    s = str(v or "").strip()
+    if s == "":
+        return None
+    try:
+        if s.startswith("["):
+            obj = json.loads(s)
+            if not isinstance(obj, list):
+                raise ValueError("must be a JSON list")
+            parts = obj
+        else:
+            parts = [p.strip() for p in s.split(",") if p.strip() != ""]
+    except Exception as e:
+        raise SystemExit(f"{field} must be a JSON list or comma-separated integers: {e}") from e
+    if len(parts) != int(n):
+        raise SystemExit(f"{field} must have length {int(n)}")
+    out: list[int] = []
+    for i, raw in enumerate(parts):
+        try:
+            iv = int(raw)
+        except Exception as e:
+            raise SystemExit(f"{field}[{i}] must be an integer") from e
+        if iv < 0:
+            raise SystemExit(f"{field}[{i}] must be >= 0")
+        out.append(int(iv))
+    return out
+
+
 def build_record(
     record_schema: str,
     pair_id: str,
@@ -242,6 +270,8 @@ def main() -> None:
     ap.add_argument("--judge-model", required=True)
     ap.add_argument("--decision", required=True, help="path to raw judge decision text (possibly with extra text)")
     ap.add_argument("--strict", action="store_true", help="enforce strict margin/score and compact tag constraints (implied by record schema v3)")
+    ap.add_argument("--tk", default="", help="compact token counts: JSON list or comma list [a_out,b_out,judge_in,judge_out]")
+    ap.add_argument("--lt", default="", help="compact latency ms: JSON list or comma list [a_ms,b_ms,judge_ms]")
     ap.add_argument("--tokens-a-out")
     ap.add_argument("--tokens-b-out")
     ap.add_argument("--tokens-judge-in")
@@ -257,10 +287,44 @@ def main() -> None:
     latency_ms: Optional[Dict[str, int]] = None
 
     tokens_obj: Dict[str, int] = {}
-    t_a = _as_int_opt(args.tokens_a_out, "tokens_a_out")
-    t_b = _as_int_opt(args.tokens_b_out, "tokens_b_out")
-    t_ji = _as_int_opt(args.tokens_judge_in, "tokens_judge_in")
-    t_jo = _as_int_opt(args.tokens_judge_out, "tokens_judge_out")
+    latency_obj: Dict[str, int] = {}
+
+    tok_args_present = any(
+        v is not None
+        and str(v).strip() != ""
+        for v in (args.tokens_a_out, args.tokens_b_out, args.tokens_judge_in, args.tokens_judge_out)
+    )
+    lat_args_present = any(
+        v is not None and str(v).strip() != "" for v in (args.latency_a_ms, args.latency_b_ms, args.latency_judge_ms)
+    )
+    if str(args.tk).strip() != "" and tok_args_present:
+        raise SystemExit("do not mix --tk with --tokens-* flags")
+    if str(args.lt).strip() != "" and lat_args_present:
+        raise SystemExit("do not mix --lt with --latency-* flags")
+
+    tk = _parse_int_list_arg(str(args.tk), "tk", 4)
+    lt = _parse_int_list_arg(str(args.lt), "lt", 3)
+    t_a = None
+    t_b = None
+    t_ji = None
+    t_jo = None
+    l_a = None
+    l_b = None
+    l_j = None
+    if tk is not None:
+        t_a, t_b, t_ji, t_jo = int(tk[0]), int(tk[1]), int(tk[2]), int(tk[3])
+    else:
+        t_a = _as_int_opt(args.tokens_a_out, "tokens_a_out")
+        t_b = _as_int_opt(args.tokens_b_out, "tokens_b_out")
+        t_ji = _as_int_opt(args.tokens_judge_in, "tokens_judge_in")
+        t_jo = _as_int_opt(args.tokens_judge_out, "tokens_judge_out")
+    if lt is not None:
+        l_a, l_b, l_j = int(lt[0]), int(lt[1]), int(lt[2])
+    else:
+        l_a = _as_int_opt(args.latency_a_ms, "latency_a_ms")
+        l_b = _as_int_opt(args.latency_b_ms, "latency_b_ms")
+        l_j = _as_int_opt(args.latency_judge_ms, "latency_judge_ms")
+
     if t_a is not None:
         tokens_obj["a_out"] = int(t_a)
     if t_b is not None:
@@ -272,10 +336,6 @@ def main() -> None:
     if len(tokens_obj) != 0:
         tokens = tokens_obj
 
-    latency_obj: Dict[str, int] = {}
-    l_a = _as_int_opt(args.latency_a_ms, "latency_a_ms")
-    l_b = _as_int_opt(args.latency_b_ms, "latency_b_ms")
-    l_j = _as_int_opt(args.latency_judge_ms, "latency_judge_ms")
     if l_a is not None:
         latency_obj["a"] = int(l_a)
     if l_b is not None:
@@ -296,16 +356,13 @@ def main() -> None:
     else:
         record_schema = schema.SCHEMA_RECORD_V1
     if record_schema in (schema.SCHEMA_RECORD_V2, schema.SCHEMA_RECORD_V3, schema.SCHEMA_RECORD_V4, schema.SCHEMA_RECORD_V5):
-        required = (
-            ("tokens_a_out", t_a),
-            ("tokens_b_out", t_b),
-            ("tokens_judge_in", t_ji),
-            ("tokens_judge_out", t_jo),
-            ("latency_a_ms", l_a),
-            ("latency_b_ms", l_b),
-            ("latency_judge_ms", l_j),
-        )
-        missing_fields = [name for name, val in required if val is None]
+        missing_fields: list[str] = []
+        for k in ("a_out", "b_out", "judge_in", "judge_out"):
+            if k not in tokens_obj:
+                missing_fields.append(f"tokens_{k}")
+        for k in ("a", "b", "judge"):
+            if k not in latency_obj:
+                missing_fields.append(f"latency_{k}_ms")
         if len(missing_fields) != 0:
             raise SystemExit("record_schema v2/v3/v4/v5 requires: " + ", ".join(missing_fields))
 

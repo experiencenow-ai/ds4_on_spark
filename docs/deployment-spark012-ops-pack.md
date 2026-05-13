@@ -16,6 +16,7 @@ Goal: one entrypoint that links the deployment layout, systemd templates, config
   - Quickstart: `docs/spark-ring-ops-quickstart-tp3.md`
   - Readiness rubric: `docs/spark-ring-ops-readiness-tp3.md`
   - Operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
+  - Transition runbook (TP=2 → TP=3): `docs/spark-ring-ops-transition-tp2-to-tp3.md`
 
 ## Safe One-Command Snapshot (Mac Side)
 
@@ -110,10 +111,12 @@ sudo /opt/ds4/scripts/ops_validate_installed_assets.sh --instance spark0 --stric
 - Config examples (env/config, hosts pinning, ssh_config, journald, logrotate, Prometheus): `deploy/config/`
 - Logging + metrics conventions: `docs/ops-logging-metrics.md`
 - SSH + network runbook (ordered inventory): `docs/ops-ssh-network-runbook.md`
+- TP=2 -> TP=3 transition readiness (safe): `docs/ops-tp23-readiness.md`
 - Ports:
   - TP=2: `docs/ops-spark0-spark1-network-ports.md`
   - TP=3: `docs/ops-spark012-network-ports.md`
 - Firewall allowlist guidance (human-run): `docs/ops-firewall-allowlist.md`
+- Centaur operational hooks (ops-only guidance; no feature smoke tests): `docs/ops-centaur-operational-hooks.md`
 
 ## Support Bundles (If Something Looks Wrong)
 

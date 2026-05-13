@@ -27,7 +27,8 @@ ls -la "$HOME/ds4/bin/ds4_server"
 Pick the instance name for the host (typically `spark0`, `spark1`, or `spark2`) and run:
 
 ```bash
-/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight --preflight tp2
+# for a 3-node ring (Spark0/Spark1/Spark2): use --preflight tp3 (or tp23 during transition)
 ```
 
 This installs:
@@ -64,4 +65,3 @@ sudo loginctl enable-linger <your-username>
 ```
 
 Do not enable lingering without explicit approval and a retention plan for user logs/state.
-
