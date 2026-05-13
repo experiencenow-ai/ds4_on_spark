@@ -209,23 +209,26 @@ def main() -> int:
 					if cfg_summary != want_cfg_summary:
 						failures.append(Failure(31, f"contract summary config_summary mismatch (expected pinned fixtures/config.json semantics): {contract_summary}"))
 
-				up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
-				fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
-				if not isinstance(fixture_sha, dict):
-					fixture_sha = {}
-				expected_sha_keys = [
-					"DeepSeek_V4.pdf",
-					"encoding/tests/test_input_1.json",
-					"encoding/tests/test_output_1.txt",
-					"encoding/tests/test_input_4.json",
-					"encoding/tests/test_output_4.txt",
-					"oracle/prompts.json",
-					"upstream_commit.txt",
-				]
-				for k in expected_sha_keys:
-					if fixture_sha.get(k) is None:
-						failures.append(Failure(32, f"contract summary missing upstream.fixtures_sha256 entry for {k}: {contract_summary}"))
-						break
+					up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
+					fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
+					if not isinstance(fixture_sha, dict):
+						fixture_sha = {}
+
+					expected_sha_keys = [
+						"DeepSeek_V4.pdf",
+						"checkpoint_keys.txt",
+						"encoding/tests/test_input_1.json",
+						"encoding/tests/test_output_1.txt",
+						"encoding/tests/test_input_4.json",
+						"encoding/tests/test_output_4.txt",
+						"mtp_checkpoint_keys.txt",
+						"oracle/prompts.json",
+						"upstream_commit.txt",
+					]
+					for k in expected_sha_keys:
+						if fixture_sha.get(k) is None:
+							failures.append(Failure(32, f"contract summary missing upstream.fixtures_sha256 entry for {k}: {contract_summary}"))
+							break
 				enc_test_keys = [k for k in fixture_sha.keys() if isinstance(k, str) and k.startswith("encoding/tests/")]
 				if len(enc_test_keys) < 8:
 					failures.append(Failure(33, f"contract summary must record sha256 for encoding oracle vectors under encoding/tests/* (expected >=8, got {len(enc_test_keys)}): {contract_summary}"))
@@ -509,6 +512,25 @@ def main() -> int:
 							failures.append(Failure(149, f"contract summary mtp_sidecar.reference_payload_samples.payload_samples_count mismatch (expected {len(ref_lines)}): {contract_summary}"))
 						if ref.get("payload_samples_sha256") != sha256_lines(ref_lines):
 							failures.append(Failure(150, f"contract summary mtp_sidecar.reference_payload_samples.payload_samples_sha256 mismatch: {contract_summary}"))
+
+				mtp_keys_path = FIX / "mtp_checkpoint_keys.txt"
+				if not mtp_keys_path.exists():
+					failures.append(Failure(153, f"missing derived fixture listing official mtp.* tensor keys: {mtp_keys_path}"))
+				else:
+					want_mtp_keys = sorted([k for k in weight_keys if k.startswith("mtp.")])
+					got_mtp_keys = mtp_keys_path.read_text(encoding="utf-8").splitlines()
+					if got_mtp_keys != want_mtp_keys:
+						failures.append(Failure(154, f"mtp checkpoint key fixture is stale vs model.safetensors.index.json (expected_len={len(want_mtp_keys)} got_len={len(got_mtp_keys)}): {mtp_keys_path}"))
+					else:
+						want_sha = sha256_lines(want_mtp_keys)
+						got_sha = sha256_file(mtp_keys_path)
+						if got_sha != want_sha:
+							failures.append(Failure(155, f"mtp checkpoint key fixture sha256 mismatch (got={got_sha} expected={want_sha}): {mtp_keys_path}"))
+						mtp_obj = summary.get("mtp", {}) if isinstance(summary, dict) else {}
+						ck = (mtp_obj.get("checkpoint_key_fingerprint", {}) if isinstance(mtp_obj, dict) else {}) if isinstance(mtp_obj, dict) else {}
+						expected_mtp_sha = ck.get("keys_sha256", None) if isinstance(ck, dict) else None
+						if expected_mtp_sha is not None and expected_mtp_sha != want_sha:
+							failures.append(Failure(156, f"contract summary mtp.checkpoint_key_fingerprint.keys_sha256 mismatch vs fixtures (got={expected_mtp_sha} expected={want_sha}): {contract_summary}"))
 
 				cache_update = summary.get("cache", {}).get("update_semantics", {})
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")

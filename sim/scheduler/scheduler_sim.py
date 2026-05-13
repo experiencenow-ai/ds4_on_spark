@@ -2619,6 +2619,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     layer_counts: List[float] = []
     layer_cand_lens: List[float] = []
     k_vals: List[float] = []
+    layer_k_vals: List[float] = []
     accept_lens: List[float] = []
     dflash_accept_lens: List[float] = []
     decode_ms: List[float] = []
@@ -2633,6 +2634,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     present_layers = 0
     present_layer_scores = 0
     present_layer_cost_scale = 0
+    present_layer_k = 0
     present_accept_len = 0
     present_accepted_mtp = 0
     present_rejected_mtp = 0
@@ -2670,6 +2672,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
                 present_layer_scores += 1
             if lr.cost_scale is not None:
                 present_layer_cost_scale += 1
+            if lr.k is not None:
+                present_layer_k += 1
+                layer_k_vals.append(float(lr.k))
         if len(r.candidates) != 0:
             lo = min(r.candidates)
             hi = max(r.candidates)
@@ -2728,6 +2733,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             "layers": present_layers,
             "layer_scores": present_layer_scores,
             "layer_cost_scale": present_layer_cost_scale,
+            "layer_k": present_layer_k,
             "mtp_accept_len": present_accept_len,
             "accepted_mtp": present_accepted_mtp,
             "rejected_mtp": present_rejected_mtp,
@@ -2746,6 +2752,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["expert_id_range"] = {"min": int(min_expert), "max": int(max_expert)}
     if len(k_vals) != 0:
         out["k"] = summarize(k_vals)
+    if len(layer_k_vals) != 0:
+        out["layer_k"] = summarize(layer_k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
         hist = accept_len_histogram(accept_lens, int(mtp_draft_len))

@@ -1470,7 +1470,7 @@
   "contract_fingerprints": {
     "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
     "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
-    "execution_contract_sha256": "bad6d30a8463a77d4e25980afebe123122b061473dea1b74b5b8cd0d890c7e44",
+    "execution_contract_sha256": "c380b82b59751d01abf047d58084f364a6abcf37393df9710ecb75877a8ee24d",
     "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
     "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
     "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
@@ -1788,6 +1788,7 @@
       ]
     },
     "checkpoint_key_fingerprint": {
+      "keys_fixture": "fixtures/model_contract/deepseek_v4_flash/mtp_checkpoint_keys.txt",
       "keys_sha256": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
       "note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
       "tensor_key_count": 1575
@@ -6404,11 +6405,13 @@
   },
   "upstream": {
     "fixtures": {
+      "checkpoint_keys_txt": "checkpoint_keys.txt",
       "config_json": "config.json",
       "encoding_oracle": "encoding/tests/*",
       "inference_config_json": "inference/config.json",
       "inference_kernel_py": "inference/kernel.py",
       "inference_model_py": "inference/model.py",
+      "mtp_checkpoint_keys_txt": "mtp_checkpoint_keys.txt",
       "oracle_prompts_json": "oracle/prompts.json",
       "technical_report_pdf": "DeepSeek_V4.pdf",
       "tokenizer_config_json": "tokenizer_config.json",
@@ -6418,6 +6421,7 @@
     },
     "fixtures_sha256": {
       "DeepSeek_V4.pdf": "8a03dadae71894de1515da33e296f0df1dbeed3e7f4bf0badd087f9af77f29e9",
+      "checkpoint_keys.txt": "f010f0041b4630a335fcf2368134154c4e7c1e17a04e750baa62a1ffe0a4f87a",
       "config.json": "b628e63398a645abc711d92207f8737dd8140f7a4ef1e0a5b3616019e0ddd818",
       "encoding/encoding_dsv4.py": "bdbd57c132a1b3725042323d02b98b9d1df28e5f388f134399555d041f5055e0",
       "encoding/tests/test_input_1.json": "10e0c074c977c3a80daab758af28219c6b1c2bd7f3f5cf2890c84b361cc32897",
@@ -6433,6 +6437,7 @@
       "inference/kernel.py": "c4dc859a2208f9182ae00f6267cf8655deba51dcd92dfd14d0e65401658593e4",
       "inference/model.py": "ce962f1face79d4f633d36436576214057a7e11443c9789935e1deb5c6cd1d71",
       "model.safetensors.index.json": "7e975ba3bef8947a94e7da0abd60888375b232b4dfad883d59653e65c6ba522a",
+      "mtp_checkpoint_keys.txt": "be420166c79f123c4722e8dd96affe8f6a8e89da47eb31b1fa6496ad0e55cd62",
       "oracle/prompts.json": "214a1db0e1f301afc2df0a89db99d755db383dcd43b917710a5241555b8f4c4c",
       "tokenizer.json": "8f9f37ca37fdc4f5fd36d5cf4d3b0e8392edb4e894fd10cc0d70b4957c8633cf",
       "tokenizer_config.json": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",

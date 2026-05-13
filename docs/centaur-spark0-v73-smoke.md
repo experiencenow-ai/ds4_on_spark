@@ -55,6 +55,12 @@ Preflight: `scripts/centaur_spark0_v73_stage.sh` checks SSH reachability by defa
 export STAGE_SKIP_PREFLIGHT=1
 ```
 
+By default, `scripts/centaur_spark0_v73_stage.sh` also runs a safe remote prereq check (`python3`, `python3 -m venv`, `unzip`) via `scripts/centaur_spark_v73_prereqs_check.sh`. To bypass (not recommended), set:
+
+```bash
+export STAGE_SKIP_PREREQS=1
+```
+
 ### One-command run from your Mac (recommended)
 
 This runs the full evidence loop (stage → smoke → validate → fetch):

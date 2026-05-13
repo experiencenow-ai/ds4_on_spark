@@ -12,6 +12,8 @@ from typing import Any, Optional
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
 DEFAULT_OUT = FIX / "contract_summary.json"
+CHECKPOINT_KEYS_TXT = FIX / "checkpoint_keys.txt"
+MTP_CHECKPOINT_KEYS_TXT = FIX / "mtp_checkpoint_keys.txt"
 INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
 MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
@@ -36,6 +38,29 @@ def dump_json(path: Path, obj) -> None:
 		json.dump(obj, f, indent=2, sort_keys=True)
 		f.write("\n")
 	tmp.replace(path)
+
+def dump_lines(path: Path, lines: list[str]) -> None:
+	path.parent.mkdir(parents=True, exist_ok=True)
+	tmp = path.with_suffix(path.suffix + ".tmp")
+	with tmp.open("w", encoding="utf-8") as f:
+		for line in lines:
+			f.write(line)
+			f.write("\n")
+	tmp.replace(path)
+
+def build_mtp_checkpoint_keys() -> list[str]:
+	idx = load_json(FIX / "model.safetensors.index.json")
+	weight_map = idx.get("weight_map", {}) if isinstance(idx, dict) else {}
+	if not isinstance(weight_map, dict):
+		return []
+	return sorted([k for k in weight_map.keys() if isinstance(k, str) and k.startswith("mtp.")])
+
+def build_checkpoint_keys() -> list[str]:
+	idx = load_json(FIX / "model.safetensors.index.json")
+	weight_map = idx.get("weight_map", {}) if isinstance(idx, dict) else {}
+	if not isinstance(weight_map, dict):
+		return []
+	return sorted([k for k in weight_map.keys() if isinstance(k, str)])
 
 def sha256_file(path: Path) -> str:
 	h = sha256()
@@ -1737,6 +1762,7 @@ def build_contract() -> dict:
 	mtp_layer_ids_expected = list(range(int(n_mtp_layers)))
 	mtp_prefixes_expected = [f"mtp.{i}." for i in mtp_layer_ids_expected]
 	mtp_official_namespace_complete = (mtp_layer_ids_present == mtp_layer_ids_expected and mtp_prefixes_present == mtp_prefixes_expected)
+	mtp_checkpoint_keys_sha256 = sha256_lines(mtp_weight_keys)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1787,6 +1813,8 @@ def build_contract() -> dict:
 		p = FIX / rel
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
+	fixture_sha["checkpoint_keys.txt"] = weight_map_keys_sha256
+	fixture_sha["mtp_checkpoint_keys.txt"] = mtp_checkpoint_keys_sha256
 
 	mtp_sidecar = build_ds4_mtp_sidecar_contract()
 	sparse_attn_mask = build_sparse_attn_mask_contract(FIX / "inference" / "kernel.py")
@@ -1814,9 +1842,11 @@ def build_contract() -> dict:
 				"tokenizer_json": "tokenizer.json",
 				"tokenizer_config_json": "tokenizer_config.json",
 				"weight_index_json": "model.safetensors.index.json",
+				"checkpoint_keys_txt": "checkpoint_keys.txt",
 				"encoding_oracle": "encoding/tests/*",
 				"oracle_prompts_json": "oracle/prompts.json",
 				"upstream_commit_txt": "upstream_commit.txt",
+				"mtp_checkpoint_keys_txt": "mtp_checkpoint_keys.txt",
 			},
 		},
 		"mtp_sidecar": mtp_sidecar,
@@ -1989,6 +2019,7 @@ def build_contract() -> dict:
 					"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
 					"tensor_key_count": mtp_prefix_fp.get("count", None),
 					"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					"keys_fixture": "fixtures/model_contract/deepseek_v4_flash/mtp_checkpoint_keys.txt",
 				},
 					"checkpoint_key_examples": {
 						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
@@ -2102,20 +2133,41 @@ def main() -> int:
 	args = ap.parse_args()
 
 	contract = build_contract()
+	checkpoint_keys = build_checkpoint_keys()
+	mtp_checkpoint_keys = build_mtp_checkpoint_keys()
 	out_path: Path = args.out
 	if not out_path.is_absolute():
 		out_path = (ROOT / out_path).resolve()
 	else:
 		out_path = out_path.resolve()
 
+	expected_mtp_path = MTP_CHECKPOINT_KEYS_TXT.resolve()
+	expected_checkpoint_path = CHECKPOINT_KEYS_TXT.resolve()
+
 	if args.check and out_path.exists():
 		prev = json.loads(out_path.read_text(encoding="utf-8"))
 		if prev != contract:
 			print(f"ERROR: {out_path} is stale; re-run without --check to regenerate")
 			return 1
+		if not expected_checkpoint_path.exists():
+			print(f"ERROR: missing {expected_checkpoint_path}; re-run without --check to regenerate derived fixtures")
+			return 1
+		got_checkpoint_keys = expected_checkpoint_path.read_text(encoding="utf-8").splitlines()
+		if got_checkpoint_keys != checkpoint_keys:
+			print(f"ERROR: {expected_checkpoint_path} is stale; re-run without --check to regenerate derived fixtures")
+			return 1
+		if not expected_mtp_path.exists():
+			print(f"ERROR: missing {expected_mtp_path}; re-run without --check to regenerate derived fixtures")
+			return 1
+		got_keys = expected_mtp_path.read_text(encoding="utf-8").splitlines()
+		if got_keys != mtp_checkpoint_keys:
+			print(f"ERROR: {expected_mtp_path} is stale; re-run without --check to regenerate derived fixtures")
+			return 1
 		print(f"OK: {out_path} up to date")
 		return 0
 
+	dump_lines(expected_checkpoint_path, checkpoint_keys)
+	dump_lines(expected_mtp_path, mtp_checkpoint_keys)
 	dump_json(out_path, contract)
 	try:
 		display = str(out_path.relative_to(ROOT))

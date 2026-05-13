@@ -64,6 +64,16 @@ class MtpOneTokenProbeDiffTest(unittest.TestCase):
 		res = diff.diff_one_token_mtp_probes(a, b, sample_tol=0.11)
 		self.assertTrue(bool(res.get("ok", False)))
 
+	def test_diff_ignores_hc_major_layout_diagnostics_as_capture_prefixes(self) -> None:
+		a = _base_probe()
+		b = _base_probe()
+		b["trunk_pre_hc_head_hc_major_fnv64"] = "0000000000000001"
+		b["trunk_pre_hc_head_hc_major_shape"] = [4, 4096]
+		res = diff.diff_one_token_mtp_probes(a, b)
+		self.assertTrue(bool(res.get("ok", False)))
+		keys = [m.get("key") for m in (res.get("mismatches") or [])]
+		self.assertNotIn("trunk_pre_hc_head_hc_major_nbytes", keys)
+
 	def test_diff_rejects_bad_fnv_hex(self) -> None:
 		a = _base_probe()
 		b = _base_probe()

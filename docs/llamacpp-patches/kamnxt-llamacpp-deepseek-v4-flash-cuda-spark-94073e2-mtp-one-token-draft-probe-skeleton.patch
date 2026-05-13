@@ -535,10 +535,10 @@ index 0000000..a65998b
 +} // namespace ds4
 diff --git a/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
 new file mode 100644
-index 0000000..0a22c7a
+index 0000000..61eaee3
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,1089 @@
+@@ -0,0 +1,1172 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -738,6 +738,84 @@ index 0000000..0a22c7a
 +    char buf[17];
 +    std::snprintf(buf, sizeof(buf), "%016llx", (unsigned long long) v);
 +    return std::string(buf);
++}
++
++struct tensor_f32_stats {
++    bool ok = false;
++    int64_t count = 0;
++    double sum = 0.0;
++    double l2 = 0.0;
++    float min = 0.0f;
++    float max = 0.0f;
++    float absmax = 0.0f;
++};
++
++static uint64_t fnv1a64_update(uint64_t h, const uint8_t * p, size_t n) {
++    for (size_t i = 0; i < n; i++) {
++        h ^= (uint64_t) p[i];
++        h *= 1099511628211ull;
++    }
++    return h;
++}
++
++static bool tensor_is_f32_bytes(const tensor_capture & cap) {
++    return cap.got && cap.type == GGML_TYPE_F32 && (cap.bytes.size() % sizeof(float)) == 0;
++}
++
++static tensor_f32_stats tensor_stats_f32(const tensor_capture & cap) {
++    tensor_f32_stats st;
++    if (!tensor_is_f32_bytes(cap)) {
++        return st;
++    }
++    st.count = (int64_t) (cap.bytes.size() / sizeof(float));
++    if (st.count <= 0) {
++        return st;
++    }
++    for (int64_t i = 0; i < st.count; i++) {
++        float fv = 0.0f;
++        std::memcpy(&fv, cap.bytes.data() + ((size_t) i * sizeof(float)), sizeof(float));
++        const double v = (double) fv;
++        const float av = std::fabs(fv);
++        if (i == 0 || fv < st.min) st.min = fv;
++        if (i == 0 || fv > st.max) st.max = fv;
++        if (i == 0 || av > st.absmax) st.absmax = av;
++        st.sum += v;
++        st.l2 += v * v;
++    }
++    st.ok = true;
++    return st;
++}
++
++static bool tensor_hc_shape_4096x4(const tensor_capture & cap) {
++    return tensor_is_f32_bytes(cap) && cap.ne0 == 4096 && cap.ne1 == 4 && cap.ne2 == 1 && cap.bytes.size() == (4096u * 4u * sizeof(float));
++}
++
++static uint64_t fnv1a64_hc_major_4096x4(const tensor_capture & cap) {
++    uint64_t h = 14695981039346656037ull;
++    const uint8_t * p = cap.bytes.data();
++    for (int64_t embd = 0; embd < 4096; embd++) {
++        for (int64_t hc = 0; hc < 4; hc++) {
++            const size_t off = (size_t) ((hc * 4096) + embd) * sizeof(float);
++            h = fnv1a64_update(h, p + off, sizeof(float));
++        }
++    }
++    return h;
++}
++
++static void print_tensor_diagnostics_json(const char * prefix, const tensor_capture & cap, bool hc_major) {
++    if (cap.got && hc_major && tensor_hc_shape_4096x4(cap)) {
++        std::printf("  \"%s_hc_major_fnv64\": \"%s\",\n", prefix, hex_u64(fnv1a64_hc_major_4096x4(cap)).c_str());
++        std::printf("  \"%s_hc_major_shape\": [4, 4096],\n", prefix);
++    }
++    const tensor_f32_stats st = tensor_stats_f32(cap);
++    if (st.ok) {
++        std::printf("  \"%s_f32_count\": %lld,\n", prefix, (long long) st.count);
++        std::printf("  \"%s_f32_sum\": %.17g,\n", prefix, st.sum);
++        std::printf("  \"%s_f32_l2\": %.17g,\n", prefix, st.l2);
++        std::printf("  \"%s_f32_absmax\": %.9g,\n", prefix, (double) st.absmax);
++        std::printf("  \"%s_f32_min\": %.9g,\n", prefix, (double) st.min);
++        std::printf("  \"%s_f32_max\": %.9g,\n", prefix, (double) st.max);
++    }
 +}
 +
 +static ggml_tensor * dsv4_view_scale(ggml_context * ctx, ggml_tensor * scale, int64_t idx) {
@@ -1319,6 +1397,7 @@ index 0000000..0a22c7a
 +                (long long) trunk_token_embd.ne0,
 +                (long long) trunk_token_embd.ne1,
 +                (long long) trunk_token_embd.ne2);
++        print_tensor_diagnostics_json("trunk_token_embd", trunk_token_embd, false);
 +    } else {
 +        std::printf("  \"trunk_token_embd_fnv64\": null,\n");
 +        std::printf("  \"trunk_token_embd_nbytes\": null,\n");
@@ -1333,6 +1412,7 @@ index 0000000..0a22c7a
 +                (long long) trunk_pre_hc_head.ne0,
 +                (long long) trunk_pre_hc_head.ne1,
 +                (long long) trunk_pre_hc_head.ne2);
++        print_tensor_diagnostics_json("trunk_pre_hc_head", trunk_pre_hc_head, true);
 +    } else {
 +        std::printf("  \"trunk_pre_hc_head_fnv64\": null,\n");
 +        std::printf("  \"trunk_pre_hc_head_nbytes\": null,\n");
@@ -1347,6 +1427,7 @@ index 0000000..0a22c7a
 +                (long long) mtp_input_hc.ne0,
 +                (long long) mtp_input_hc.ne1,
 +                (long long) mtp_input_hc.ne2);
++        print_tensor_diagnostics_json("mtp_input_hc", mtp_input_hc, true);
 +    } else {
 +        std::printf("  \"mtp_input_hc_fnv64\": null,\n");
 +        std::printf("  \"mtp_input_hc_nbytes\": null,\n");
@@ -1361,6 +1442,7 @@ index 0000000..0a22c7a
 +                (long long) mtp_block_out_hc.ne0,
 +                (long long) mtp_block_out_hc.ne1,
 +                (long long) mtp_block_out_hc.ne2);
++        print_tensor_diagnostics_json("mtp_block_out_hc", mtp_block_out_hc, true);
 +    } else {
 +        std::printf("  \"mtp_block_out_hc_fnv64\": null,\n");
 +        std::printf("  \"mtp_block_out_hc_nbytes\": null,\n");
@@ -1375,6 +1457,7 @@ index 0000000..0a22c7a
 +                (long long) mtp_head_norm.ne0,
 +                (long long) mtp_head_norm.ne1,
 +                (long long) mtp_head_norm.ne2);
++        print_tensor_diagnostics_json("mtp_head_norm", mtp_head_norm, false);
 +    } else {
 +        std::printf("  \"mtp_head_norm_fnv64\": null,\n");
 +        std::printf("  \"mtp_head_norm_nbytes\": null,\n");

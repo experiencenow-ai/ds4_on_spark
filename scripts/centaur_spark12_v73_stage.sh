@@ -74,9 +74,9 @@ else
 fi
 
 if [ "$remote_dir" = "" ]; then
-	"$stage" "$spark1"
-	"$stage" "$spark2"
+	STAGE_SKIP_PREFLIGHT=1 "$stage" "$spark1"
+	STAGE_SKIP_PREFLIGHT=1 "$stage" "$spark2"
 else
-	"$stage" "$spark1" "$remote_dir"
-	"$stage" "$spark2" "$remote_dir"
+	STAGE_SKIP_PREFLIGHT=1 "$stage" "$spark1" "$remote_dir"
+	STAGE_SKIP_PREFLIGHT=1 "$stage" "$spark2" "$remote_dir"
 fi

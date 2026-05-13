@@ -7,8 +7,8 @@ usage()
 ops_spark_ring_staged_readiness.sh -- Mac-side readiness checks using staged env (safe)
 
 Usage:
-  ops_spark_ring_staged_readiness.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--preflight auto|tp2|tp3|tp4] [--strict] [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_spark_ring_staged_readiness.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--preflight auto|tp2|tp3|tp4] [--strict] [--instance<N> <name>]... --inventory-file <path>
+  ops_spark_ring_staged_readiness.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--preflight auto|tp2|tp3|tp4|tp23] [--strict] [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_staged_readiness.sh [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--preflight auto|tp2|tp3|tp4|tp23] [--strict] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -83,10 +83,10 @@ case "$topology" in
 esac
 
 case "$preflight" in
-	auto|tp2|tp3|tp4)
+	auto|tp2|tp3|tp4|tp23)
 		;;
 	*)
-		echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4)" >&2
+		echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4|tp23)" >&2
 		exit 2
 		;;
 esac
@@ -176,6 +176,12 @@ case "$picked_preflight" in
 			exit 2
 		fi
 		;;
+	tp23)
+		if [ "$node_count" -ne 3 ]; then
+			echo "tp23 readiness requires exactly 3 nodes; node_count=$node_count" >&2
+			exit 2
+		fi
+		;;
 esac
 
 echo "== staged DS4 readiness (Mac-side) =="
@@ -198,14 +204,18 @@ while [ "$i" -lt "$node_count" ]; do
 	instance="$(instance_for_index "$i")"
 	env_shared="-/tmp/ds4-config/ds4.env.example"
 	env_instance="/tmp/ds4-config/ds4-${instance}.env.example"
-	remote_script="/tmp/ds4-scripts/ops_${picked_preflight}_readiness.sh"
 
-	echo "== spark$i ($target) staged $picked_preflight readiness =="
-	echo "env=$env_shared $env_instance"
-	echo
+	run_one()
+	{
+		remote_script="$1"
+		label="$2"
 
-	set --
-	set -- sh -c '
+		echo "== spark$i ($target) staged $label readiness =="
+		echo "env=$env_shared $env_instance"
+		echo
+
+		set --
+		set -- sh -c '
 set -eu
 script="${1:-}"
 self="${2:-}"
@@ -244,14 +254,22 @@ case "$script" in
 		echo "unexpected readiness script path: $script" >&2
 		exit 2
 		;;
-esac
+	esac
 ' sh "$remote_script" "$instance" "$topology" "$strict" "$env_shared" "$env_instance" "$tcp_ports"
 
-	if ! ssh_run "$target" "$@" ; then
-		echo "readiness failed: spark$i ($target, instance=$instance)" >&2
-		err=1
+		if ! ssh_run "$target" "$@" ; then
+			echo "readiness failed: spark$i ($target, instance=$instance, preflight=$label)" >&2
+			err=1
+		fi
+		echo
+	}
+
+	if [ "$picked_preflight" = "tp23" ]; then
+		run_one "/tmp/ds4-scripts/ops_tp2_readiness.sh" "tp2"
+		run_one "/tmp/ds4-scripts/ops_tp3_readiness.sh" "tp3"
+	else
+		run_one "/tmp/ds4-scripts/ops_${picked_preflight}_readiness.sh" "$picked_preflight"
 	fi
-	echo
 
 	i=$((i + 1))
 done
@@ -260,4 +278,3 @@ if [ "$err" -ne 0 ]; then
 	exit 1
 fi
 exit 0
-

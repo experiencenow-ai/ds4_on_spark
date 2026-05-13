@@ -1,8 +1,13 @@
 # Ops: Firewall + Routing Inspection (Read-only)
 
-This is a **human-run** reference for inspecting routing and firewall state on Spark0/Spark1.
+This is a **human-run** reference for inspecting routing and firewall state on an
+ordered Spark inventory (Spark0/Spark1[/Spark2...]).
 
 Do not change firewall rules, routing tables, or system networking as part of automation loops; document proposed changes for human approval.
+
+If you need a starting point for drafting an allowlist (human-run), see:
+
+- `docs/ops-firewall-allowlist.md`
 
 ## Routing + Interface (Spark Side)
 
@@ -80,4 +85,3 @@ When debugging TP=2 reachability, record:
 If you want a one-shot snapshot (systemd + journald + routing + selected DS4 env keys), use:
 
 - `docs/ops-support-bundle.md`
-

@@ -163,6 +163,7 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
 - Draft compute: enqueue draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
   - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
   - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
+  - `--mtp-draft-attempt-policy trace` uses `accepted_mtp + rejected_mtp` (when present and `<= mtp_draft_len`) as the attempted draft length per step; otherwise it falls back to `full`.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
   - To model draft work as lower priority (so it can be backpressured without blocking verify work), set `--mtp-draft-queue-cls batch` (default is `inherit`; `lo`/`hi` are accepted aliases for `batch`/`interactive`).
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
@@ -621,7 +622,25 @@ python3 sim/scheduler/recommendations.py \
   --format md
 ```
 
+The markdown tables include time-weighted expert pending-depth p95 (`pending_p95`, plus `pending_hi_p95`/`pending_lo_p95` when both latency classes are present), plus a starvation summary (`starv_frac`, `starv_p95_ms`) so queue-reservation and backpressure changes are visible without opening the full JSON payload.
+
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
+
+To enable expert-side batching in the runtime-trace ablation harness, pass the batching knobs through `sim/scheduler/recommendations.py`:
+
+```bash
+python3 sim/scheduler/recommendations.py \
+  --trace-jsonl /path/to/route.jsonl \
+  --trace-input-format runtime \
+  --trace-non-route skip \
+  --batch-max-batch 4 \
+  --batch-wait-batch-ms 0.5 \
+  --service-base-ms 0.10 \
+  --service-per-task-ms 0.90 \
+  --format md
+```
+
+When `--service-per-task-ms < 0` (default), the simulator uses `--service-ms` as a fixed per-task service time and still tracks batch sizes. When `--service-per-task-ms >= 0`, the simulator uses `service_base_ms + service_per_task_ms * batch_size` for each expert batch to model per-batch overhead.
 
 ## MTP Simulation
 

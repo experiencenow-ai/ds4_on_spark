@@ -7,8 +7,8 @@ usage()
 ops_stage_spark_ring.sh -- stage DS4 deploy assets to an ordered Spark ring (Mac-side)
 
 Usage:
-  ops_stage_spark_ring.sh [--mesh-check] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_stage_spark_ring.sh [--mesh-check] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... --inventory-file <path>
+  ops_stage_spark_ring.sh [--mesh-check] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4|tp23] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_stage_spark_ring.sh [--mesh-check] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4|tp23] [--topology ring|full] [--tcp <port>]... [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -96,10 +96,10 @@ case "$topology" in
 esac
 
 case "$staged_readiness_preflight" in
-	auto|tp2|tp3|tp4)
+	auto|tp2|tp3|tp4|tp23)
 		;;
 	*)
-		echo "invalid --staged-readiness-preflight: $staged_readiness_preflight (expected auto|tp2|tp3|tp4)" >&2
+		echo "invalid --staged-readiness-preflight: $staged_readiness_preflight (expected auto|tp2|tp3|tp4|tp23)" >&2
 		exit 2
 		;;
 esac

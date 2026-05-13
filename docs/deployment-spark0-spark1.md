@@ -4,6 +4,13 @@ This repo does not apply changes to Sparks automatically. Everything below is **
 
 Goal: make it easy to stand up a repeatable Spark0/Spark1 layout with systemd templates, consistent logs/metrics, and safe preflight checks.
 
+Ops docs (recommended starting point):
+
+- Index: `docs/deployment-spark012-ops-pack.md`
+- Quickstart: `docs/spark-ring-ops-quickstart-tp2.md`
+- Readiness rubric: `docs/spark-ring-ops-readiness-tp2.md`
+- Operating checklist: `docs/spark-ring-ops-checklist-tp2.md`
+
 ## Roles + Naming
 
 - Spark0: initial single-box development + eventual TP=2 rank 0 (`ds4@spark0`)

@@ -47,6 +47,7 @@ Optional debug keys (non-normative; used by the skeleton patch to stage wiring w
 - `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
 - `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
 - `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
+- Optional numeric diagnostics for each captured F32 tensor: `*_f32_count`, `*_f32_sum`, `*_f32_l2`, `*_f32_absmax`, `*_f32_min`, `*_f32_max`.
 - Optional numeric debugging aid (keep small): for any capture prefix, emit `{prefix}_sample_f32` as a short float32 list (for example the first 16 elements). When present in both probes, `scripts/diff_mtp_one_token_draft_probe.py` compares samples within an absolute tolerance (default `1e-5`; override with `--sample-tol`).
 - Optional HC-layout normalization aid (for HC-shaped captures like `*_pre_hc_head`, `*_input_hc`, `*_block_out_hc`): the candidate may also emit `{prefix}_hc_major_{fnv64,shape}` where the HC bytes are re-ordered into the oracle’s expected major layout before hashing. Use `python3 scripts/compare_mtp_one_token_hc_layout.py --a oracle.json --b candidate.json --json` to check whether a raw mismatch is explained by layout.
 
@@ -125,6 +126,8 @@ Notes:
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
 - As of 2026-05-13, the `94073e2` patch implements the first real `gamma=1` MTP block path and emits `mtp_block_out_hc_*` plus `mtp_head_norm_*` fingerprints. Spark0 run `20260513T005746Z` validated with `ok=true`; it renders the same DS4 chat prompt shape as antirez and matches the oracle base token `2581` (`"We"`) plus MTP draft token `1309` (`" need"`).
 - Correctness against the antirez oracle is not fully proven yet: `trunk_token_embd_fnv64` now matches, but HC/pre-head and MTP debug fingerprints still differ, so the next parity task is capture-point/layout/numerics alignment before acceptance sweeps.
+- Spark0 run `20260513T013346Z` added HC-major layout-normalized hashes plus F32 stats to the llama.cpp candidate. `trunk_token_embd` still matches the antirez oracle, but the HC-major hashes do not (`trunk_pre_hc_head`: candidate `fc6e0810c4b909aa` vs oracle raw `c1214dfabd8ab5f0`; `mtp_input_hc`: `eb01fddce3552bc3` vs `a42bc106f8ea8b6a`; `mtp_block_out_hc`: `b56e3646102f8590` vs `af8a8ecc3efbaf40`). That rules out a simple `[4096,4]` vs `[4,4096]` transpose as the whole mismatch.
+- The antirez oracle patch now emits the same F32 stats keys so the next run can distinguish numeric drift from a semantically different capture point.
 
 ## Spark runner (antirez/ds4 oracle; build + one-token JSON)
 

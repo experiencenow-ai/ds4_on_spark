@@ -33,6 +33,8 @@ def _capture_prefixes(obj: dict[str, Any]) -> set[str]:
 			continue
 		if not k.endswith("_fnv64"):
 			continue
+		if k.endswith("_hc_major_fnv64"):
+			continue
 		prefix = k[: -len("_fnv64")]
 		if prefix:
 			out.add(prefix)
