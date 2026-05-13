@@ -20,6 +20,8 @@ When a hostname does not resolve (common before Spark1/2 exist), use an explicit
 REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
 ```
 
+Note: the staging scripts also run a safe remote prereq check (`python3`, `python3 -m venv`, `unzip`; and `rsync` where required) via `scripts/centaur_spark_v73_prereqs_check.sh` unless you set `STAGE_SKIP_PREREQS=1`.
+
 Optional (recommended before node setup / smoke): confirm the Centaur v73 node prerequisites exist (non-destructive; no sudo):
 
 ```bash
