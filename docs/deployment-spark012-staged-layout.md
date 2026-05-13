@@ -40,6 +40,7 @@ As part of staging, the helper also runs a **staged env audit** (safe) to catch 
 On each Spark, you should now have:
 
 - `/tmp/ds4-systemd/` and `/tmp/ds4-systemd-user/`
+- `/tmp/ds4-systemd-dropins/` and `/tmp/ds4-systemd-user-dropins/` (optional unit override examples)
 - `/tmp/ds4-config/`
 - `/tmp/ds4-sysusers/` and `/tmp/ds4-tmpfiles/`
 - `/tmp/ds4-scripts/`

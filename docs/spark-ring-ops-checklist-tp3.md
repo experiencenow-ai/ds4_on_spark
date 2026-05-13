@@ -6,9 +6,18 @@ If you are setting up a fresh 3-node ring, start with:
 
 - `docs/spark-ring-ops-quickstart-tp3.md`
 
+If Spark0/Spark1 TP=2 baseline readiness is not yet stable, start there first:
+
+- `docs/spark-ring-ops-quickstart-tp2.md`
+- `docs/spark-ring-ops-readiness-tp2.md`
+
 For a one-page readiness rubric (what “ready” means, and what blocks a run), see:
 
 - `docs/spark-ring-ops-readiness-tp3.md`
+
+For run log conventions and snapshot redaction guidance, see:
+
+- `docs/ops-run-notes.md`
 
 ## Bring-up (Once)
 

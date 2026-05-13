@@ -4,6 +4,15 @@ This repo does not apply changes to Sparks automatically. Everything below is **
 
 Goal: prepare a repeatable Spark0/Spark1/Spark2 layout with staging helpers, systemd templates, consistent logs/metrics, and safe preflight checks for future TP=3 runs.
 
+Recommended progression:
+
+- First validate Spark0/Spark1 TP=2 baseline:
+  - `docs/spark-ring-ops-quickstart-tp2.md`
+  - `docs/spark-ring-ops-readiness-tp2.md`
+- Then expand to Spark0/Spark1/Spark2 TP=3:
+  - `docs/spark-ring-ops-quickstart-tp3.md`
+  - `docs/spark-ring-ops-readiness-tp3.md`
+
 ## Roles + Naming
 
 Recommended convention (matches the templates in `deploy/systemd/`):
@@ -97,6 +106,7 @@ Notes:
 - If you stage hosts manually, set `DS4_ENV_VARIANT=tp3` to swap `ds4-<instance>.tp3.env.example` into `ds4-<instance>.env.example` on the Spark (see `deploy/README.md`).
 - For TP=3, prefer a rank-ordered host list in the env file (example):
   `DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local`
+- For TP=3, prefer `DS4_MASTER_ADDR` to resolve to the same host as `DS4_RING_HOSTS` entry 0 (Spark0).
 
 If you want strict TP=3 gating on start (recommended for early bring-up), enable the topology-specific strict unit:
 
@@ -120,9 +130,24 @@ See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layo
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`
+- Optional systemd overrides (drop-ins): `deploy/systemd-dropins/README.md`
 - Logging + metrics: `docs/ops-logging-metrics.md`
+- Run notes + snapshot hygiene: `docs/ops-run-notes.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=3 network + ports: `docs/ops-spark012-network-ports.md`
 - TP=3 readiness checks: `docs/ops-tp3-readiness.md`
 - Three-node operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - Optional Centaur ops hooks: `docs/ops-centaur-operational-hooks.md`
+@@
+ Goal: prepare a repeatable Spark0/Spark1/Spark2 layout with staging helpers, systemd templates, consistent logs/metrics, and safe preflight checks for future TP=3 runs.
++
++Recommended progression:
++
++- First validate Spark0/Spark1 TP=2 baseline:
++  - `docs/spark-ring-ops-quickstart-tp2.md`
++  - `docs/spark-ring-ops-readiness-tp2.md`
++- Then expand to Spark0/Spark1/Spark2 TP=3:
++  - `docs/spark-ring-ops-quickstart-tp3.md`
++  - `docs/spark-ring-ops-readiness-tp3.md`
+ 
+ ## Roles + Naming

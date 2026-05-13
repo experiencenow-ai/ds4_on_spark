@@ -650,6 +650,9 @@ fi
 
 echo "== ds4 env (optional) =="
 print_if_set DS4_INSTANCE
+if [ "${DS4_INSTANCE:-}" != "" ] && [ "$self" != "$DS4_INSTANCE" ]; then
+    echo "warning: DS4_INSTANCE mismatch: DS4_INSTANCE=$DS4_INSTANCE --self=$self" >&2
+fi
 print_if_set DS4_WORLD_SIZE
 print_if_set DS4_RANK
 print_if_set DS4_MASTER_ADDR

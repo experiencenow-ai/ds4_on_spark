@@ -5,6 +5,7 @@ This repo primarily targets **system** systemd units under `/etc/systemd/system/
 For developer bring-up or non-root runs, `deploy/systemd-user/` includes **optional** templates intended for `systemd --user`.
 
 These templates are staged by `scripts/ops_stage_deploy_assets.sh` under `/tmp/ds4-systemd-user/` on the Spark (reference only; user units are installed manually).
+Optional user drop-in examples are staged under `/tmp/ds4-systemd-user-dropins/` and tracked in-repo under `deploy/systemd-user-dropins/`.
 
 Spark standalone user-service templates are also available (optional): see `docs/deployment-spark-standalone-systemd-user.md`.
 
@@ -75,6 +76,24 @@ Logs:
 journalctl --user -u ds4@spark0.service -n 200 --no-pager
 journalctl --user -t ds4-user-spark0 -n 200 --no-pager
 ```
+
+## Unit Overrides (Drop-Ins) (Optional)
+
+Prefer `systemctl --user edit` for overrides instead of editing the base unit files in `deploy/systemd-user/`:
+
+```bash
+# Instance-specific:
+systemctl --user edit ds4@spark0.service
+
+# Template-wide:
+systemctl --user edit ds4@.service
+```
+
+Example snippets (copy/paste starting points):
+
+- `deploy/systemd-user-dropins/README.md`
+- `deploy/systemd-user-dropins/ds4@.service.d/20-timeouts.conf.example`
+- `deploy/systemd-user-dropins/ds4@.service.d/40-execstart-override.conf.example`
 
 ## Run Without Login Sessions (Optional)
 
