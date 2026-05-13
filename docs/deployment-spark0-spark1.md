@@ -6,6 +6,7 @@ Goal: make it easy to stand up a repeatable Spark0/Spark1 layout with systemd te
 
 Ops docs (recommended starting point):
 
+- Index: `docs/deployment-spark012-ops-pack.md`
 - Quickstart: `docs/spark-ring-ops-quickstart-tp2.md`
 - Readiness rubric: `docs/spark-ring-ops-readiness-tp2.md`
 - Operating checklist: `docs/spark-ring-ops-checklist-tp2.md`

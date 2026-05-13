@@ -281,7 +281,8 @@ do_work()
 	echo "== next =="
 	case "$picked_preflight" in
 		tp2)
-			echo "readiness rubric: docs/ops-tp2-readiness.md"
+			echo "readiness rubric: docs/spark-ring-ops-readiness-tp2.md"
+			echo "operating checklist: docs/spark-ring-ops-checklist-tp2.md"
 			echo "deployment guide: docs/deployment-spark0-spark1.md"
 			;;
 		tp3)
