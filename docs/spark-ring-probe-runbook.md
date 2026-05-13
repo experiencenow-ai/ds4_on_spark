@@ -133,6 +133,8 @@ To keep output compact for a flaky new node:
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_PROBE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_probe.sh spark1.local || true
 ```
 
+When SSH cannot connect, `scripts/spark_probe.sh` emits `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`, `hostkey_changed`, `hostkey_verification_failed`) to make bring-up blockers obvious in committed snapshots.
+
 ## 4) Spark ring readiness status (what “good” looks like)
 
 Minimum “ready for multi-node bring-up” bar:
