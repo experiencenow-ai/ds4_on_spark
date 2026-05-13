@@ -450,6 +450,7 @@ smi_cuda_ver=""
 cuda_ver=""
 cuda_h_version=""
 nvcc_release=""
+nvcc_arch=""
 	if command -v nvidia-smi >/dev/null 2>&1; then
 		(nvidia-smi --version 2>/dev/null || nvidia-smi -V 2>/dev/null || true) | sed -E "/^ERROR:/d" | head -n 20 || true
 		echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
@@ -502,6 +503,13 @@ echo "nvcc path: $nvcc_path"
 [ "$nvcc_path" != "" ] && "$nvcc_path" --version 2>/dev/null | head -n 5 || true
 if [ "$nvcc_path" != "" ]; then
 	nvcc_release="$("$nvcc_path" --version 2>/dev/null | tr -d "\r" | sed -nE "s/.* release ([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
+fi
+if [ "$compute_cap" != "" ]; then
+	cc_major="$(printf "%s" "$compute_cap" | awk -F. '{ print $1 }' 2>/dev/null || true)"
+	cc_minor="$(printf "%s" "$compute_cap" | awk -F. '{ print $2 }' 2>/dev/null || true)"
+	if [ "$cc_major" != "" ] && [ "$cc_minor" != "" ]; then
+		nvcc_arch="sm_${cc_major}${cc_minor}"
+	fi
 fi
 if [ -r /usr/local/cuda/version.json ]; then
 	cuda_ver=""
@@ -564,6 +572,7 @@ echo "== cuda/toolchain facts (summary) =="
 [ "$cuda_ver" != "" ] && echo "cuda version.json: $cuda_ver"
 [ "$cuda_h_version" != "" ] && echo "cuda.h CUDA_VERSION: $cuda_h_version"
 [ "$compute_cap" != "" ] && echo "compute_cap: $compute_cap" || echo "compute_cap: (unknown)"
+[ "$nvcc_arch" != "" ] && echo "nvcc arch: $nvcc_arch"
 echo
 	if [ "$ring_ping" = "1" ]; then
 		echo "== peer ping (best effort, rtt) =="
