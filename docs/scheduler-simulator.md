@@ -217,6 +217,15 @@ For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sw
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
 ```
 
+Note: DS4 `ffn_moe_topk` dump-derived traces (see `scripts/ds4_topk_dump_to_trace_jsonl.py`) include the **selected experts** per token/layer but do not include `k` by default. To match real DS4 compute, set `K=topk` explicitly when replaying them:
+
+```bash
+python3 sim/scheduler/scheduler_sim.py \
+  --trace-jsonl /path/to/routes_pos0.jsonl --trace-time-mode dt_ms \
+  --k-min-batch 6 --k-max-batch 6 --k-min-interactive 6 --k-max-interactive 6 \
+  --q-low 0 --q-high 0
+```
+
 To hold output-token demand roughly constant when comparing MTP variants on a replay trace, set `--trace-arrival-units output_tokens`:
 
 ```bash
