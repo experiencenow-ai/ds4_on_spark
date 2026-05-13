@@ -14,6 +14,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Target: `antirez/ds4@3630e64`
   - Purpose:
     - fix CUDA weight-cache keying so cached ranges are keyed by `(model_map, fd, offset)` (not just `offset`)
+    - add `ds4_gpu_set_model_fd_for_map(model_map, fd)` so the MTP sidecar can register its fd without clobbering the trunk fd state
     - avoids trunk/sidecar cache collisions when `DS4_CUDA_WEIGHT_CACHE=1` (or when fd-caching is enabled)
     - keeps the largest cached mapping per key to avoid cache thrash on repeated partial range requests
 
