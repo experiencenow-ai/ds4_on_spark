@@ -144,6 +144,14 @@ The fetch helper pulls per-node artifacts (when present):
 	sh ./scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh "$RING_RUN_ID"
 	```
 
+	Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+	```bash
+	bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+	if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+	sh ./scripts/centaur_spark12_v73_ring_rsync_report.sh "$RING_RUN_ID" "$bundle_dir" "$bundle_dir/ring_rsync_report.md"
+	```
+
 	Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
 
 ## Spark1/Spark2 bring-up checklist (when hardware exists)

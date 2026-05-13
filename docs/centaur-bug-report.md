@@ -51,6 +51,14 @@ If you already ran the ring rsync and only want to fetch:
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
 ```
 
+Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+```bash
+bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+sh ./scripts/centaur_spark12_v73_ring_rsync_report.sh "$RING_RUN_ID" "$bundle_dir" "$bundle_dir/ring_rsync_report.md"
+```
+
 Default local output directory:
 
 - `/private/tmp/centaur-ring/spark12-v73/<ring_run_id>/` (or `/tmp/...` if `/private/tmp` is unavailable)
