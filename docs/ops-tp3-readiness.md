@@ -64,6 +64,7 @@ sudo -u ds4 /opt/ds4/scripts/ops_tp3_readiness.sh --strict --self spark2 --topol
 What the script checks (best-effort, safe):
 
 - `DS4_WORLD_SIZE==3` and `DS4_RANK in 0..2` (strict mode)
+- `DS4_MASTER_ADDR` consistency with the ring rank0 host (strict mode; best-effort via IPv4 resolution)
 - host resolution + `ip route get` hints for master + selected peers
 - optional expected route interface checks via `DS4_EXPECT_IFACE`
 - best-effort peer ping checks (ring neighbors by default)
