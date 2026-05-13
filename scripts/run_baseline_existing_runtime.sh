@@ -100,6 +100,12 @@ extract_baseline_summary()
     ' "$in" 2>/dev/null || true
 }
 
+sh_quote()
+{
+    v="${1:-}"
+    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
+}
+
 fetch_remote_dir_tar()
 {
     remote_dir="${1:-}"
@@ -107,14 +113,7 @@ fetch_remote_dir_tar()
     if [ "$remote_dir" = "" ] || [ "$local_tgz" = "" ]; then
         return 0
     fi
-    remote_name="${remote_dir##*/}"
-    ssh $SSH_OPTS "$target" "if [ -d $remote_dir ]; then tar -C /tmp -czf - $remote_name; fi" >"$local_tgz" 2>"$local_tgz.stderr" || true
-}
-
-sh_quote()
-{
-    v="${1:-}"
-    printf "'%s'" "$(printf %s "$v" | sed "s/'/'\\\\\\\\''/g")"
+    ssh $SSH_OPTS "$target" "sh -lc 'set -eu; dir=\"\\$1\"; if [ ! -d \"\\$dir\" ]; then exit 0; fi; base=\"\\${dir##*/}\"; parent=\"\\${dir%/*}\"; if [ \"\\$parent\" = \"\\$dir\" ]; then parent=\".\"; fi; tar -C \"\\$parent\" -czf - \"\\$base\"' sh $(sh_quote "$remote_dir")" >"$local_tgz" 2>"$local_tgz.stderr" || true
 }
 
 remote_env_prefix()
