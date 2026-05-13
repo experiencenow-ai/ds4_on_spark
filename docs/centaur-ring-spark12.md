@@ -4,6 +4,16 @@ Goal: prepare repeatable Spark1/Spark2 ring steps **without needing a shared fil
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
+## Topology (3-node ring)
+
+This runbook targets a **3-node ring**:
+
+- `spark0`: orchestrator/controller host (runs the ring-step and holds controller state)
+- `spark1`: ring node
+- `spark2`: ring node
+
+Naming note: this file uses “Spark12” because Spark1+Spark2 are the first ring nodes beyond Spark0, but the workflow always includes Spark0 as the orchestrator.
+
 Current status snapshot:
 
 - `docs/centaur-smoke-status-20260513.md`
