@@ -163,6 +163,7 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
 - Draft compute: enqueue draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
   - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
   - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
+  - `--mtp-draft-attempt-policy trace` uses `accepted_mtp + rejected_mtp` (when present and `<= mtp_draft_len`) as the attempted draft length per step; otherwise it falls back to `full`.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
   - To model draft work as lower priority (so it can be backpressured without blocking verify work), set `--mtp-draft-queue-cls batch` (default is `inherit`; `lo`/`hi` are accepted aliases for `batch`/`interactive`).
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).

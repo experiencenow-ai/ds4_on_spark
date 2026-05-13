@@ -4862,6 +4862,8 @@ class SchedulerSimTest(unittest.TestCase):
         )
         out = trace_sweep.run_trace_sweeps(trace, base_cfg)
         self.assertIn("mtp_attempt_policy", out.get("scenarios", {}))
+        variants = out["scenarios"]["mtp_attempt_policy"]["results"]["variants"]
+        self.assertIn("mtp_trace", variants)
 
     def test_trace_sweep_includes_mtp_accept_prob_sweep_when_trace_omits_accept_len(self) -> None:
         from sim.scheduler import scheduler_sim
