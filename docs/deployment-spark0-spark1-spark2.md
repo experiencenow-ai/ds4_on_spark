@@ -10,6 +10,8 @@ Recommended progression:
 - First validate Spark0/Spark1 TP=2 baseline:
   - `docs/spark-ring-ops-quickstart-tp2.md`
   - `docs/spark-ring-ops-readiness-tp2.md`
+- TP=2 → TP=3 transition runbook:
+  - `docs/spark-ring-ops-transition-tp2-to-tp3.md`
 - Then expand to Spark0/Spark1/Spark2 TP=3:
   - `docs/spark-ring-ops-quickstart-tp3.md`
   - `docs/spark-ring-ops-readiness-tp3.md`

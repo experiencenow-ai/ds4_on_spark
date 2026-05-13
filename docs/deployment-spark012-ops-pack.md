@@ -16,6 +16,7 @@ Goal: one entrypoint that links the deployment layout, systemd templates, config
   - Quickstart: `docs/spark-ring-ops-quickstart-tp3.md`
   - Readiness rubric: `docs/spark-ring-ops-readiness-tp3.md`
   - Operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
+  - Transition runbook (TP=2 → TP=3): `docs/spark-ring-ops-transition-tp2-to-tp3.md`
 
 ## Safe One-Command Snapshot (Mac Side)
 

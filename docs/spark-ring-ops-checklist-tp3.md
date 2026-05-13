@@ -11,6 +11,10 @@ If Spark0/Spark1 TP=2 baseline readiness is not yet stable, start there first:
 - `docs/spark-ring-ops-quickstart-tp2.md`
 - `docs/spark-ring-ops-readiness-tp2.md`
 
+If you are expanding a stable TP=2 baseline to TP=3, use the transition runbook:
+
+- `docs/spark-ring-ops-transition-tp2-to-tp3.md`
+
 For a one-page readiness rubric (what “ready” means, and what blocks a run), see:
 
 - `docs/spark-ring-ops-readiness-tp3.md`
