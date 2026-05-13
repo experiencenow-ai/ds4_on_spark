@@ -43,6 +43,8 @@ Optional (recommended during TP=2 → TP=3 transition): run TP=2 readiness check
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+For the Spark-side combined script and optional systemd preflight units, see: `docs/ops-tp23-readiness.md`.
+
 The staged helper runs `/tmp/ds4-scripts/ops_tp3_readiness.sh` on each Spark with:
 
 - `--env -/tmp/ds4-config/ds4.env.example`
