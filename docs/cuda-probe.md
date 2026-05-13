@@ -258,6 +258,20 @@ To capture a full log file on the Mac (without relying on `tee` + shell `pipefai
 LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 ```
 
+## Spark0: Tiny Device-Props + `sm_121` Compile Probes
+
+When you only need the “one-line `schema=4` device summary” plus the no-transfer `sm_121` compile-only flag-spelling gates (and want to skip the larger kernel bring-up suite), run:
+
+```bash
+./scripts/cuda_probe_tinyprops_sm121_compile_spark0.sh
+```
+
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_tinyprops_sm121_compile_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_tinyprops_sm121_compile_spark0.sh
+```
+
 This also performs best-effort toolchain-only checks when supported:
 
 - Always attempt best-effort compile-only builds for `sm_121a` / `sm_121f`, and report whether each target was advertised by `nvcc --list-gpu-code` (informational; the hard failure remains missing `sm_121` support).
