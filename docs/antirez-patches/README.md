@@ -41,6 +41,10 @@ Host-side math sanity check (no CUDA required):
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_q4k_dot_math.py
 ```
 
+Fixture provenance and regeneration (optional; no CUDA required):
+
+- `docs/mtp-q4k-dot-validation.md`
+
 Patch verifiers (no CUDA required):
 
 ```bash
