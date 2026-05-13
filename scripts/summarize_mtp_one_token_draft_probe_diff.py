@@ -41,6 +41,56 @@ def _capture_tuple(obj: dict[str, Any], prefix: str) -> tuple[Any, Any, Any]:
 	)
 
 
+def _as_float_list(val: Any) -> Optional[list[float]]:
+	if val is None:
+		return None
+	if not isinstance(val, list):
+		return None
+	out: list[float] = []
+	for v in val[:1024]:
+		if isinstance(v, bool):
+			return None
+		if not isinstance(v, (int, float)):
+			return None
+		out.append(float(v))
+	return out
+
+
+def _sample_stats(a: Any, b: Any) -> Optional[dict[str, Any]]:
+	a_list = _as_float_list(a)
+	b_list = _as_float_list(b)
+	if a_list is None or b_list is None:
+		return None
+	n = min(len(a_list), len(b_list))
+	if n == 0:
+		return None
+	sum_abs = 0.0
+	max_abs = 0.0
+	max_i = -1
+	max_a = 0.0
+	max_b = 0.0
+	for i in range(n):
+		va = a_list[i]
+		vb = b_list[i]
+		d = abs(va - vb)
+		sum_abs += d
+		if d > max_abs:
+			max_abs = d
+			max_i = i
+			max_a = va
+			max_b = vb
+	return {
+		"len_a": len(a_list),
+		"len_b": len(b_list),
+		"len_cmp": n,
+		"mean_abs_diff": (sum_abs / float(n)),
+		"max_abs_diff": max_abs,
+		"max_idx": max_i,
+		"a_at_max": max_a,
+		"b_at_max": max_b,
+	}
+
+
 def summarize_one_token_mtp_probe_diff(
 	a: dict[str, Any],
 	b: dict[str, Any],
@@ -75,6 +125,17 @@ def summarize_one_token_mtp_probe_diff(
 			out["ok"] = False
 			return out
 
+	# Next: optional sample arrays, when present and mismatching.
+	for prefix in stage_order:
+		sample_key = f"{prefix}_sample_f32"
+		if any(isinstance(m, dict) and m.get("key") == sample_key for m in mismatches):
+			out["first_mismatch"] = {"kind": "sample", "prefix": prefix, "key": sample_key}
+			stats = _sample_stats(a.get(sample_key, None), b.get(sample_key, None))
+			if stats is not None:
+				out["first_mismatch"]["sample_stats"] = stats
+			out["ok"] = False
+			return out
+
 	# Otherwise, walk the capture stages in order and find the first divergence.
 	for prefix in stage_order:
 		a_fnv, a_nbytes, a_shape = _capture_tuple(a, prefix)
@@ -90,6 +151,10 @@ def summarize_one_token_mtp_probe_diff(
 				"a": {"fnv64": a_fnv, "nbytes": a_nbytes, "shape": a_shape},
 				"b": {"fnv64": b_fnv, "nbytes": b_nbytes, "shape": b_shape},
 			}
+			sample_key = f"{prefix}_sample_f32"
+			stats = _sample_stats(a.get(sample_key, None), b.get(sample_key, None))
+			if stats is not None:
+				out["first_mismatch"]["sample_stats"] = stats
 			out["ok"] = False
 			return out
 
@@ -141,4 +206,3 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-

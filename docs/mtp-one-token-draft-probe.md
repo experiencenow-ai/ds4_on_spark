@@ -47,6 +47,7 @@ Optional debug keys (non-normative; used by the skeleton patch to stage wiring w
 - `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
 - `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
 - `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
+- Optional numeric debugging aid (keep small): for any capture prefix, emit `{prefix}_sample_f32` as a short float32 list (for example the first 16 elements). When present in both probes, `scripts/diff_mtp_one_token_draft_probe.py` compares samples within an absolute tolerance (default `1e-5`; override with `--sample-tol`).
 
 Notes:
 

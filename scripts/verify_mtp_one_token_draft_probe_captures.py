@@ -61,6 +61,19 @@ def _expect_shape(key: str, val: Any, errors: list[str]) -> None:
 			return
 
 
+def _expect_sample_f32(key: str, val: Any, errors: list[str]) -> None:
+	if not isinstance(val, list):
+		errors.append(f"key {key} has type {type(val).__name__}, expected list")
+		return
+	if len(val) == 0:
+		errors.append(f"key {key} is empty, expected at least 1 element")
+		return
+	for i, v in enumerate(val[:256]):
+		if isinstance(v, bool) or not isinstance(v, (int, float)):
+			errors.append(f"key {key}[{i}] has type {type(v).__name__}, expected number")
+			return
+
+
 def verify_required_captures(
 	probe: dict[str, Any],
 	*,
@@ -84,10 +97,12 @@ def verify_required_captures(
 		fnv_key = f"{prefix}_fnv64"
 		nbytes_key = f"{prefix}_nbytes"
 		shape_key = f"{prefix}_shape"
+		sample_key = f"{prefix}_sample_f32"
 
 		fnv = probe.get(fnv_key, None)
 		nbytes = probe.get(nbytes_key, None)
 		shape = probe.get(shape_key, None)
+		sample = probe.get(sample_key, None)
 
 		if fnv is None and nbytes is None and shape is None:
 			errors.append(f"missing capture prefix: {prefix} (expected {fnv_key}/{nbytes_key}/{shape_key})")
@@ -111,6 +126,9 @@ def verify_required_captures(
 
 		if shape is not None:
 			_expect_shape(shape_key, shape, errors)
+
+		if sample is not None:
+			_expect_sample_f32(sample_key, sample, errors)
 
 		if isinstance(nbytes, int) and isinstance(shape, list) and len(shape) == 0:
 			warnings.append(f"key {shape_key} is empty (unexpected for {prefix})")
@@ -151,4 +169,3 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-
