@@ -1,8 +1,63 @@
 diff --git a/ds4.c b/ds4.c
-index dee4ce5..6f897b7 100644
+index dee4ce5..f5f4eec 100644
 --- a/ds4.c
 +++ b/ds4.c
-@@ -16597,6 +16597,7 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
+@@ -1372,7 +1372,7 @@ static uint64_t accelerator_cuda_preload_span_bytes(void) {
+     return mb * 1048576ull;
+ }
+
+-static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *cached_out) {
++static bool accelerator_cache_model_tensor_spans(const ds4_model *m, bool best_effort, uint64_t *cached_out) {
+     accelerator_tensor_span *spans = xmalloc((size_t)m->n_tensors * sizeof(spans[0]));
+     uint64_t nspan = 0;
+     for (uint64_t i = 0; i < m->n_tensors; i++) {
+@@ -1406,6 +1406,15 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
+             char label[96];
+             snprintf(label, sizeof(label), "tensor-span:%" PRIu64, merged);
+             if (ds4_gpu_cache_model_range(m->map, m->size, off, chunk_end - off, label) == 0) {
++                if (best_effort) {
++                    fprintf(stderr,
++                            "ds4: accelerator stopped startup model cache after %.2f GiB at tensor span %" PRIu64 "\n",
++                            (double)cached / 1073741824.0,
++                            merged);
++                    free(spans);
++                    if (cached_out) *cached_out = cached;
++                    return true;
++                }
+                 fprintf(stderr,
+                         "ds4: accelerator failed to cache model tensor span %" PRIu64
+                         " at offset %" PRIu64 "\n",
+@@ -1423,7 +1432,7 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
+     return true;
+ }
+
+-static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model *m) {
++static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model *m, bool best_effort) {
+     if (backend != DS4_BACKEND_CUDA) return true;
+     if (!m || !m->map || m->size == 0) return false;
+     if (getenv("DS4_CUDA_DIRECT_MODEL") != NULL) {
+@@ -1432,7 +1441,7 @@ static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model
+
+     const double t0 = now_sec();
+     uint64_t cached = 0;
+-    if (!accelerator_cache_model_tensor_spans(m, &cached)) return false;
++    if (!accelerator_cache_model_tensor_spans(m, best_effort, &cached)) return false;
+     if (getenv("DS4_CUDA_Q8_F16_PRELOAD") != NULL ||
+         getenv("DS4_CUDA_Q8_F32_PRELOAD") != NULL) {
+         for (uint64_t i = 0; i < m->n_tensors; i++) {
+@@ -1460,9 +1469,10 @@ static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model
+     return true;
+ }
+ #else
+-static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model *m) {
++static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model *m, bool best_effort) {
+     (void)backend;
+     (void)m;
++    (void)best_effort;
+     return true;
+ }
+ #endif
+@@ -16597,6 +16607,7 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
          }
          ds4_gpu_set_quality(e->quality);
          (void)ds4_gpu_set_model_fd(e->model.fd);
@@ -10,8 +65,28 @@ index dee4ce5..6f897b7 100644
          if (!ds4_gpu_set_model_map_range(e->model.map,
                                             e->model.size,
                                             e->model.tensor_data_pos,
+@@ -16624,7 +16635,18 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
+             *out = NULL;
+             return 1;
+         }
+-        if (!e->mtp_ready && !accelerator_cache_model_tensors(e->backend, &e->model)) {
++        if (e->backend == DS4_BACKEND_CUDA && e->mtp_ready &&
++            getenv("DS4_CUDA_WEIGHT_CACHE_LIMIT_GB") == NULL &&
++            getenv("DS4_CUDA_MTP_CACHE_AUTO_LIMIT") == NULL) {
++            setenv("DS4_CUDA_MTP_CACHE_AUTO_LIMIT", "1", 0);
++        }
++        if (e->backend == DS4_BACKEND_CUDA && e->mtp_ready &&
++            getenv("DS4_CUDA_WEIGHT_ARENA_CHUNK_MB") == NULL) {
++            setenv("DS4_CUDA_WEIGHT_ARENA_CHUNK_MB", "512", 0);
++        }
++        const bool cache_best_effort =
++            e->mtp_ready || getenv("DS4_CUDA_WEIGHT_CACHE_BEST_EFFORT") != NULL;
++        if (!accelerator_cache_model_tensors(e->backend, &e->model, cache_best_effort)) {
+             fprintf(stderr, "ds4: %s failed to prepare startup model cache\n",
+                     ds4_backend_name(e->backend));
+             ds4_engine_close(e);
 diff --git a/ds4_cuda.cu b/ds4_cuda.cu
-index b3b2a2c..6061156 100644
+index b3b2a2c..9916b8e 100644
 --- a/ds4_cuda.cu
 +++ b/ds4_cuda.cu
 @@ -74,10 +74,16 @@ static int g_model_registered;
@@ -295,7 +370,21 @@ index b3b2a2c..6061156 100644
  }
 
  static uint64_t cuda_model_cache_limit_bytes(void) {
-@@ -857,7 +922,7 @@ static const char *cuda_model_range_ptr_from_fd(
+@@ -789,6 +854,13 @@ static uint64_t cuda_model_cache_limit_bytes(void) {
+         unsigned long long v = strtoull(env, &end, 10);
+         if (end != env) gb = (uint64_t)v;
+     }
++    if (gb == 0 && getenv("DS4_CUDA_MTP_CACHE_AUTO_LIMIT") != NULL) {
++        size_t free_b = 0, total_b = 0;
++        cudaError_t err = cudaMemGetInfo(&free_b, &total_b);
++        (void)free_b;
++        if (err == cudaSuccess && total_b > 0) return (uint64_t)total_b / 2u;
++        (void)cudaGetLastError();
++    }
+     if (gb == 0) return UINT64_MAX;
+     return gb * 1073741824ull;
+ }
+@@ -857,7 +929,7 @@ static const char *cuda_model_range_ptr_from_fd(
          uint64_t offset,
          uint64_t bytes,
          const char *what) {
@@ -304,7 +393,7 @@ index b3b2a2c..6061156 100644
      const uint64_t limit = cuda_model_cache_limit_bytes();
      if (g_model_range_bytes > limit || bytes > limit - g_model_range_bytes) {
          if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
-@@ -877,8 +942,9 @@ static const char *cuda_model_range_ptr_from_fd(
+@@ -877,8 +949,9 @@ static const char *cuda_model_range_ptr_from_fd(
      cudaError_t err = cudaSuccess;
 
      const uint64_t chunk = cuda_model_copy_chunk_bytes();
@@ -316,7 +405,7 @@ index b3b2a2c..6061156 100644
 
      uint64_t copied = 0;
      uint64_t chunk_idx = 0;
-@@ -895,7 +961,7 @@ static const char *cuda_model_range_ptr_from_fd(
+@@ -895,7 +968,7 @@ static const char *cuda_model_range_ptr_from_fd(
              }
          }
          const char *payload = NULL;
@@ -325,7 +414,7 @@ index b3b2a2c..6061156 100644
                                     offset + copied, n, &payload)) {
              fprintf(stderr, "ds4: CUDA model range read failed for %s at %.2f MiB: %s\n",
                      what ? what : "weights",
-@@ -920,7 +986,7 @@ static const char *cuda_model_range_ptr_from_fd(
+@@ -920,7 +993,7 @@ static const char *cuda_model_range_ptr_from_fd(
              (void)cudaGetLastError();
              return NULL;
          }
@@ -334,7 +423,7 @@ index b3b2a2c..6061156 100644
          cuda_model_discard_source_pages(model_map, g_model_registered_size, offset + copied, n);
          copied += n;
          cuda_model_load_progress_note(g_model_range_bytes + copied);
-@@ -935,7 +1001,13 @@ static const char *cuda_model_range_ptr_from_fd(
+@@ -935,7 +1008,13 @@ static const char *cuda_model_range_ptr_from_fd(
      }
 
      g_model_ranges.push_back({model_map, offset, bytes, dev, NULL, NULL, 0, 0, 1});
@@ -349,7 +438,7 @@ index b3b2a2c..6061156 100644
      g_model_range_bytes += bytes;
      cuda_model_load_progress_note(g_model_range_bytes);
      if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
-@@ -1047,7 +1119,7 @@ static void cuda_model_range_release_all(void) {
+@@ -1047,7 +1126,7 @@ static void cuda_model_range_release_all(void) {
      }
      g_model_arenas.clear();
      g_model_ranges.clear();
@@ -358,7 +447,7 @@ index b3b2a2c..6061156 100644
      g_model_range_bytes = 0;
      cuda_model_load_progress_reset();
  }
-@@ -1090,13 +1162,13 @@ extern "C" void ds4_gpu_cleanup(void) {
+@@ -1090,13 +1169,13 @@ extern "C" void ds4_gpu_cleanup(void) {
          (void)cudaFree(r.device_ptr);
      }
      g_q8_f16_ranges.clear();
@@ -374,7 +463,7 @@ index b3b2a2c..6061156 100644
      g_q8_f32_bytes = 0;
      if (g_cuda_tmp) {
          (void)cudaFree(g_cuda_tmp);
-@@ -1133,12 +1205,11 @@ extern "C" void ds4_gpu_cleanup(void) {
+@@ -1133,12 +1212,11 @@ extern "C" void ds4_gpu_cleanup(void) {
      g_model_range_mapping_supported = 1;
      g_model_hmm_direct = 0;
      g_model_fd = -1;
@@ -391,7 +480,7 @@ index b3b2a2c..6061156 100644
      g_model_cache_full = 0;
      if (g_model_prefetch_stream) {
          (void)cudaStreamDestroy(g_model_prefetch_stream);
-@@ -1223,13 +1294,13 @@ extern "C" int ds4_gpu_set_model_map(const void *model_map, uint64_t model_size)
+@@ -1223,13 +1301,13 @@ extern "C" int ds4_gpu_set_model_map(const void *model_map, uint64_t model_size)
          (void)cudaFree(r.device_ptr);
      }
      g_q8_f16_ranges.clear();
@@ -407,7 +496,7 @@ index b3b2a2c..6061156 100644
      g_q8_f32_bytes = 0;
      if (g_model_device_owned && g_model_device_base) {
          (void)cudaFree((void *)g_model_device_base);
-@@ -1301,19 +1372,20 @@ extern "C" int ds4_gpu_set_model_map_range(const void *model_map, uint64_t model
+@@ -1301,19 +1379,20 @@ extern "C" int ds4_gpu_set_model_map_range(const void *model_map, uint64_t model
      return 1;
  }
 
@@ -437,7 +526,7 @@ index b3b2a2c..6061156 100644
          }
  #if defined(__linux__) && defined(O_DIRECT)
          if (getenv("DS4_CUDA_NO_DIRECT_IO") == NULL) {
-@@ -1321,11 +1393,11 @@ extern "C" int ds4_gpu_set_model_fd(int fd) {
+@@ -1321,11 +1400,11 @@ extern "C" int ds4_gpu_set_model_fd(int fd) {
              snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", fd);
              int direct_fd = open(proc_path, O_RDONLY | O_DIRECT);
              if (direct_fd >= 0) {
@@ -452,7 +541,7 @@ index b3b2a2c..6061156 100644
                  }
              } else if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
                  fprintf(stderr, "ds4: CUDA model direct I/O unavailable: %s\n", strerror(errno));
-@@ -1336,6 +1408,18 @@ extern "C" int ds4_gpu_set_model_fd(int fd) {
+@@ -1336,6 +1415,18 @@ extern "C" int ds4_gpu_set_model_fd(int fd) {
      return 1;
  }
 

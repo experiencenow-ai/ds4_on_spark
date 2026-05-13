@@ -3,7 +3,8 @@
 
 This verifier is intentionally lightweight: it does not require cloning/building
 `antirez/ds4`. It just checks that the patch file includes the critical cache
-keying changes needed to avoid trunk/sidecar aliasing under CUDA weight caching.
+keying changes needed to avoid trunk/sidecar aliasing under CUDA weight caching,
+and that MTP no longer disables the trunk startup cache preparation.
 """
 
 from __future__ import annotations
@@ -64,6 +65,13 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"g_model_ranges[it->second].bytes < bytes",
 		"diff --git a/ds4.c b/ds4.c",
 		"ds4_gpu_set_model_fd_for_map(e->mtp_model.map, e->mtp_model.fd)",
+		"-        if (!e->mtp_ready && !accelerator_cache_model_tensors(e->backend, &e->model)) {",
+		"DS4_CUDA_MTP_CACHE_AUTO_LIMIT",
+		"DS4_CUDA_WEIGHT_ARENA_CHUNK_MB",
+		"setenv(\"DS4_CUDA_WEIGHT_ARENA_CHUNK_MB\", \"512\", 0)",
+		"ds4: accelerator stopped startup model cache after %.2f GiB at tensor span",
+		"const bool cache_best_effort =",
+		"+        if (!accelerator_cache_model_tensors(e->backend, &e->model, cache_best_effort)) {",
 		"diff --git a/ds4_gpu.h b/ds4_gpu.h",
 		"int ds4_gpu_set_model_fd_for_map(const void *model_map, int fd);",
 		"if (getenv(\"DS4_CUDA_NO_FD_CACHE\") == NULL) {",
@@ -90,6 +98,10 @@ def validate_patch_text(patch_text: str) -> list[str]:
 	for s in legacy_markers:
 		if any(s in line for line in added_lines):
 			errors.append(f"found legacy offset-only cache symbol on an added line: {s!r}")
+
+	legacy_mtp_cache_skip = "if (!e->mtp_ready && !accelerator_cache_model_tensors(e->backend, &e->model)) {"
+	if any(legacy_mtp_cache_skip in line for line in added_lines):
+		errors.append("found legacy MTP startup-cache skip on an added line")
 
 	return errors
 
