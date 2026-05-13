@@ -78,7 +78,7 @@ When you want the one-line `schema=4` device summary without shipping `tools/cud
 
 This compiles a single tiny `.cu` file directly on Spark0 with `nvcc -arch=native` and prints the same `cuda drv=... schema=4` line as `tools/cuda_probe/bin/cuda_device_props_tiny`.
 
-It also includes compile-only `-arch=sm_121`, `nvcc --gpu-architecture=sm_121`, and `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
+It also includes compile-only `-arch=sm_121`, `nvcc --gpu-architecture=sm_121`, and `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`. When `nvcc --list-gpu-arch` advertises `compute_121`, the script also runs a best-effort compile-only `nvcc --gpu-architecture=compute_121` probe to validate the long-form “PTX-only” spelling.
 
 To make the “end-to-end link+run via `sm_121`” path explicit (not just compile-only), run:
 

@@ -326,7 +326,31 @@ set -e
 		head -n 60 \"$REMOTE_DIR\"/cuda_sm121_gpuarch_code_compile_only.err || true
 		exit 6
 	fi
-	
+
+	echo
+	echo \"== build: compute_121 compile-only gate (nvcc --gpu-architecture=compute_121; best-effort) ==\"
+	do_build_compute121_gpuarch=1
+	if [ \"\${list_gpu_arch}\" != \"\" ]; then
+		if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+			:
+		else
+			echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\" >&2
+			do_build_compute121_gpuarch=0
+		fi
+	fi
+	if [ \"\${do_build_compute121_gpuarch}\" = \"1\" ]; then
+		set +e
+		\$NVCC -O2 -std=c++17 --gpu-architecture=compute_121 -c -o \"$REMOTE_DIR\"/cuda_compute121_gpuarch_compile_only.o \"$REMOTE_DIR\"/cuda_sm121_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_compute121_gpuarch_compile_only.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"compute_121_gpuarch_compile_only: OK\"
+		else
+			echo \"compute_121_gpuarch_compile_only: FAILED rc=\$rc\" >&2
+			head -n 60 \"$REMOTE_DIR\"/cuda_compute121_gpuarch_compile_only.err || true
+		fi
+	fi
+
 	echo
 	echo \"== run: cuda_device_props_minimal ==\"
 	\"$REMOTE_DIR\"/cuda_device_props_minimal
