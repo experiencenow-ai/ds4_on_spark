@@ -35,8 +35,8 @@ For a one-page readiness rubric (what “ready” means, and what blocks a run),
 If you are doing a non-root bring-up (developer path), follow `docs/deployment-staged-systemd-user.md` and prefer strict gating:
 
 - Preflight (safe gating): `systemctl --user start ds4-preflight-strict@spark0.service`
-- Start DS4 (gated on strict preflight): `systemctl --user enable --now ds4-strict@spark0.service`
-- Logs: `journalctl --user -u ds4-strict@spark0.service -n 200 --no-pager`
+- Start DS4 (gated on strict preflight): `systemctl --user enable --now ds4-tp2-strict@spark0.service`
+- Logs: `journalctl --user -u ds4-tp2-strict@spark0.service -n 200 --no-pager`
 
 ## Before A TP=2 Attempt (Repeatable)
 

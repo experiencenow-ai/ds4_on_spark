@@ -4,7 +4,7 @@ Pinned upstream references for this Spark local-inference performance lab (repo 
 
 Scope hygiene: treat DeepSeek V4 Flash, Qwen/Ling comparator targets (target-only), and DFlash speculative decoding as separate tracks in reports (see `docs/model-quality-speed.md`).
 
-- Pinned-at: 2026-05-12 (UTC)
+- Pinned-at: 2026-05-13 (UTC)
 - Policy: do **not** vendor large third-party trees or model weights; fetch on-demand and pin exact commits.
 
 ## Canonical Upstreams (Pinned)

@@ -28,7 +28,8 @@ edit host-specific values, then enable services with `systemctl`.
   - a config file at `/etc/ds4/ds4-%i.conf` (key=value; see `src/ds4_config.c`)
   - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
   - `ExecStartPre` validates `ds4.env` (when present) and `ds4-%i.env`
-- Optional: `ds4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails).
+- Optional: `ds4-tp2-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict TP=2 preflight fails).
+- Legacy name: `ds4-strict@.service` (same behavior).
 - Optional: `ds4-tp3-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp3-strict@%i.service` before start (strict TP=3 gating).
 - Optional: `ds4-tp4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp4-strict@%i.service` before start (strict TP=4 gating).
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.

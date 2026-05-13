@@ -2,6 +2,8 @@
 
 This track defines a compact pairwise judge contract intended for slow/high-quality DSv4 runs, plus an offline deterministic ELO updater that produces leaderboards consumable by the baseline runtime loop.
 
+If you only need the **schema contract** (decision + record v5 + outputs), start with `docs/judge-elo-schema.md`.
+
 Goals:
 - DSv4 is used as a **verifier** (compact, structured output), not a verbose author.
 - Judge quality (pairwise preference) is tracked separately from model speed (tok/s).
@@ -166,6 +168,18 @@ To enforce strict margin/score consistency + compact tags while wrapping for sch
 
 ```bash
 python3 scripts/pairwise_judge_record.py --strict --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
+```
+
+To compact existing judge record JSONL into the strict compact record schema v5 (decision keys `w/m/sa/sb/r/h/t` and budget arrays `tk/lt`), use:
+
+```bash
+python3 scripts/judge_elo_compact_records.py --in <records.jsonl> --out <records_v5.jsonl>
+```
+
+If you need best-effort compaction (skip invalid/uncompactable lines), add `--skip-invalid` and monitor stderr for `records_skipped`:
+
+```bash
+python3 scripts/judge_elo_compact_records.py --skip-invalid --in <records.jsonl> --out <records_v5.jsonl>
 ```
 
 ## Offline ELO
