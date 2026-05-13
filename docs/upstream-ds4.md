@@ -4,13 +4,18 @@
 
 - Repo: `https://github.com/antirez/ds4`
 - Ref: `refs/heads/main`
-- Commit: `d57ae3fd85d2c6bf1833295b257a6b0ed6d3ba60`
+- Commit: `023089100a1d56555b7b8024364e580a1b80fca0`
 - License: MIT (see upstream `LICENSE`)
 
 ## Notable upstream delta (since previous pin)
 
-- Previous pin: `f8b4ed635d559b3a5b44bf2df6a77e21b3e9178f`
-- New HEAD note: upstream `main` advanced by 1 commit (`d57ae3f`, “Add contributing regression guide”); documentation-only change (no runtime/semantics expected).
+- Previous pin: `d57ae3fd85d2c6bf1833295b257a6b0ed6d3ba60`
+- New HEAD notes: upstream `main` advanced by 5 commits to `0230891`, focused on the CUDA/Spark path:
+	- Build targets: `make cuda-spark` (DGX Spark / GB10) and `make cuda-generic` are now explicit, rather than silently selected by `make` on Linux.
+	- CUDA graph/session tensors move from managed memory to device memory (`cudaMalloc`), plus a backend `fill_f32` hook to keep Metal behavior intact.
+	- CUDA housekeeping tweaks (`cudaMemsetAsync` for compressor state) and MoE down-path cleanup: upstream removed an alternate “block16” routed-down diagnostic path after noting prior top-logit instability when forced.
+
+Treat any throughput numbers mentioned in upstream commit messages as upstream claims until reproduced locally with fixed fixtures and recorded command lines.
 
 ## What it is
 
