@@ -123,6 +123,36 @@ class JudgeEloTest(unittest.TestCase):
                 td,
             ])
 
+    def test_update_outputs_match_expected_v5_fixture(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_rel = os.path.join("fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        expected_bundle = os.path.join(root, "fixtures", "judge-elo", "expected_bundle_v5.json")
+        expected_summary = os.path.join(root, "fixtures", "judge-elo", "expected_summary_v5.md")
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.check_call([
+                "python3",
+                "scripts/judge_elo_update.py",
+                "--in",
+                in_rel,
+                "--out-dir",
+                td,
+                "--strict",
+                "--judge-out-target",
+                "64",
+                "--quality-mode",
+                "logistic",
+            ], cwd=root)
+            with open(os.path.join(td, "bundle.json"), "r", encoding="utf-8") as f:
+                got_bundle = json.load(f)
+            with open(expected_bundle, "r", encoding="utf-8") as f:
+                want_bundle = json.load(f)
+            self.assertEqual(got_bundle, want_bundle)
+            with open(os.path.join(td, "summary.md"), "r", encoding="utf-8") as f:
+                got_summary = f.read()
+            with open(expected_summary, "r", encoding="utf-8") as f:
+                want_summary = f.read()
+            self.assertEqual(got_summary, want_summary)
+
     def test_compact_records_cli_emits_record_v5(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         in_path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v2.jsonl")
