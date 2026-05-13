@@ -20,6 +20,13 @@ scored summary, use:
 scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
 ```
 
+For the pinned Spark0 ladder order (Ling 2.6 INT4 target-only, then Qwen +
+DFlash pairs), use the convenience wrapper:
+
+```sh
+scripts/run_baseline_vllm_ling_qwen_dflash_ladder_spark0.sh spark0@aitopatom-9ab9.local
+```
+
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
 It also writes a self-contained bundle report (`baseline_vllm_matrix_bundle.md`)
