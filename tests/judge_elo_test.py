@@ -203,6 +203,27 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(joined[1].get("quality_score"), "55.500")
         self.assertEqual(joined[2].get("quality_score", ""), "")
 
+    def test_join_quality_rows_missing_default_fills(self) -> None:
+        rows = [
+            {"model": "missing_model", "decode_tps": "50.0"},
+            {"model": "missing_keep", "decode_tps": "60.0", "quality_score": "12.000"},
+        ]
+        qmap: dict[str, float] = {}
+        joined, missing = joiner.join_quality_rows(
+            rows=rows,
+            quality_map=qmap,
+            quality_source="ignored",
+            model_field="model",
+            overwrite=False,
+            require_all=False,
+            missing_default=50.0,
+            missing_quality_source="default50",
+        )
+        self.assertEqual(missing, 2)
+        self.assertEqual(joined[0].get("quality_score"), "50.000")
+        self.assertEqual(joined[0].get("quality_source"), "default50")
+        self.assertEqual(joined[1].get("quality_score"), "12.000")
+
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
         rec = record_wrap.build_record(
