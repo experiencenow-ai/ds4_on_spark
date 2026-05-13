@@ -50,6 +50,8 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"g_model_range_by_key.clear();",
 		"g_q8_f16_by_key.clear();",
 		"g_q8_f32_by_key.clear();",
+		"Keep the largest cached range per (map,fd,offset) to avoid thrashing.",
+		"g_model_ranges[it->second].bytes < bytes",
 	]
 
 	for s in required_substrings:
