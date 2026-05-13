@@ -24,6 +24,22 @@ Runbook + scripts:
 - `docs/centaur-spark0-v73-smoke.md`
 - `scripts/centaur_spark0_v73_evidence_run.sh`
 
+Quickstart (from your Mac repo root):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export CENTAUR_TRACE=1
+export CENTAUR_GEN_REPORT=1
+sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
+```
+
+After reviewing/redacting the fetched bundle, promote it into a commit-safe fixtures directory:
+
+```bash
+sh ./scripts/centaur_spark0_v73_fixture_pack.sh "$CENTAUR_RUN_ID"
+```
+
 ## Spark12 ring sim (Spark0-local, PASS)
 
 Commit-safe evidence bundles:
@@ -35,6 +51,21 @@ Runbook + scripts:
 
 - `docs/centaur-ring-spark12.md`
 - `scripts/centaur_spark12_v73_ring_sim_evidence_run.sh`
+
+Quickstart (from your Mac repo root; requires Spark0 v73 smoke footprint):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_TRACE=1
+sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
+```
+
+After reviewing/redacting the fetched bundle, promote it into a commit-safe fixtures directory:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_sim_fixture_pack.sh "$RING_RUN_ID"
+```
 
 ## Spark12 ring rsync (Spark0 orchestrated, NOT RUN)
 
