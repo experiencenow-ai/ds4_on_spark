@@ -48,6 +48,8 @@ Optional debug keys (non-normative; used by the skeleton patch to stage wiring w
 - `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
 - `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
 - Optional numeric diagnostics for each captured F32 tensor: `*_f32_count`, `*_f32_sum`, `*_f32_l2`, `*_f32_absmax`, `*_f32_min`, `*_f32_max`.
+- Optional numeric debugging aid (keep small): for any capture prefix, emit `{prefix}_sample_f32` as a short float32 list (for example the first 16 elements). When present in both probes, `scripts/diff_mtp_one_token_draft_probe.py` compares samples within an absolute tolerance (default `1e-5`; override with `--sample-tol`).
+- Optional HC-layout normalization aid (for HC-shaped captures like `*_pre_hc_head`, `*_input_hc`, `*_block_out_hc`): the candidate may also emit `{prefix}_hc_major_{fnv64,shape}` where the HC bytes are re-ordered into the oracle’s expected major layout before hashing. Use `python3 scripts/compare_mtp_one_token_hc_layout.py --a oracle.json --b candidate.json --json` to check whether a raw mismatch is explained by layout.
 
 Notes:
 
@@ -71,10 +73,28 @@ Once you have **two** probe JSON blobs (oracle + candidate), diff them before ru
 python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
+Recommended stronger guardrail (before acceptance sweeps): require both probes to emit the full set of intermediate fingerprints so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/candidate_probe.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
 Convenience wrapper (runs the gated oracle runner + a gated candidate command, then diffs locally):
 
 ```bash
 scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
+```
+
+Notes:
+
+- The wrapper writes a machine-readable `summary.json` alongside the Markdown report and exits non-zero when the capture gate or diff fails.
+- The wrapper also writes `hc_layout_compare.json` and includes `layout_ok` in `summary.json` (triage aid: HC-layout-normalized fingerprints match even if raw HC hashes differ).
+- To relax `*_sample_f32` comparisons (when both probes emit samples), set `MTP_SAMPLE_TOL`:
+
+```bash
+MTP_SAMPLE_TOL=1e-4 scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
 ```
 
 By default this requires:
