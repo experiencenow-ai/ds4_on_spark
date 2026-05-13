@@ -2605,6 +2605,61 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         accept_rate = mean_accepted_tokens / float(dl)
         reject_frac = float(counts[0]) / float(total) if len(counts) >= 1 else 0.0
         bonus_frac = float(counts[dl]) / float(total) if len(counts) >= (dl + 1) else 0.0
+
+        pos_cond_accept_prob: List[float] = []
+        surv: List[float] = [0.0 for _ in range(dl + 2)]  # 1-indexed: surv[k] = P(accept_len >= k)
+        surv[1] = 1.0
+        tail = 0.0
+        for k in range(dl + 1, 1, -1):
+            tail += (float(int(counts[k - 1])) / float(total))
+            surv[k] = float(tail)
+        for i in range(dl):
+            denom = float(surv[i + 1])
+            num = float(surv[i + 2])
+            if denom <= 0.0:
+                pos_cond_accept_prob.append(0.0)
+            else:
+                pos_cond_accept_prob.append(float(num / denom))
+
+        fit_geom: Optional[Dict[str, float]] = None
+        xs: List[float] = []
+        ys: List[float] = []
+        for i, p in enumerate(pos_cond_accept_prob):
+            if p <= 0.0:
+                continue
+            if p > 1.0:
+                p = 1.0
+            xs.append(float(i))
+            ys.append(float(math.log(float(p))))
+        if len(xs) != 0:
+            slope = 0.0
+            intercept = float(ys[0])
+            if len(xs) >= 2:
+                x_mean = (sum(xs) / float(len(xs)))
+                y_mean = (sum(ys) / float(len(ys)))
+                num = 0.0
+                den = 0.0
+                for x, y in zip(xs, ys):
+                    dx = (float(x) - float(x_mean))
+                    num += (dx * (float(y) - float(y_mean)))
+                    den += (dx * dx)
+                if den > 0.0:
+                    slope = (num / den)
+                    intercept = (y_mean - (slope * x_mean))
+            accept_prob_fit = float(math.exp(intercept))
+            accept_decay_fit = float(math.exp(slope))
+            if accept_prob_fit < 0.0:
+                accept_prob_fit = 0.0
+            if accept_prob_fit > 1.0:
+                accept_prob_fit = 1.0
+            if accept_decay_fit < 0.0:
+                accept_decay_fit = 0.0
+            pred_mean = expected_mtp_accept_len(dl, accept_prob_fit, accept_decay_fit)
+            fit_geom = {
+                "accept_prob": float(accept_prob_fit),
+                "accept_decay": float(accept_decay_fit),
+                "pred_mean_accept_len": float(pred_mean),
+            }
         return(
             {
                 "draft_len": int(dl),
@@ -2614,6 +2669,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
                 "accept_rate": float(accept_rate),
                 "reject_frac": float(reject_frac),
                 "bonus_frac": float(bonus_frac),
+                "pos_cond_accept_prob": [float(x) for x in pos_cond_accept_prob],
+                "fit_geom": fit_geom if fit_geom is not None else {},
             }
         )
 

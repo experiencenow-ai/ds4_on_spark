@@ -125,6 +125,13 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
             lines.append(f"- mtp_draft_len source: `{src}`")
             if src == "accept_len_all_rejects_default1":
                 lines.append("  - note: trace only shows mtp_accept_len=1 (all rejects), so draft length is underdetermined; set meta.mtp_draft_len or log accepted_mtp+rejected_mtp for a reliable gamma.")
+        mtp_accept_derived = _as_dict(trace_summary.get("mtp_accept_derived"))
+        fit_geom = _as_dict(mtp_accept_derived.get("fit_geom"))
+        if bool(fit_geom):
+            ap = _as_float(fit_geom, "accept_prob", 0.0)
+            ad = _as_float(fit_geom, "accept_decay", 0.0)
+            pm = _as_float(fit_geom, "pred_mean_accept_len", 0.0)
+            lines.append(f"- mtp_accept_fit_geom: accept_prob={ap:.4f} accept_decay={ad:.4f} pred_mean_accept_len={pm:.3f}")
     dflash_draft_len = _as_int(inferred, "dflash_draft_len", 0)
     if dflash_draft_len > 0:
         lines.append(f"- inferred dflash_draft_len: {int(dflash_draft_len)}")
