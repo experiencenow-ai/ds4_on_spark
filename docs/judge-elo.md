@@ -9,6 +9,29 @@ Goals:
 - Judge quality (pairwise preference) is tracked separately from model speed (tok/s).
 - Outputs are JSONL-first, with stable parsing/validation and deterministic ELO updates.
 
+## Quickstart (offline; no APIs)
+
+All examples below run fully offline using repo fixtures.
+
+Build a compact judge prompt (v2 prompt + v2 decision keys):
+
+```bash
+python3 scripts/pairwise_judge_prompt.py --schema-version v2 --decision-version v2 --format json --judge-out-target 64 --prompt fixtures/judge-elo/sample_prompt.txt --a fixtures/judge-elo/sample_a.txt --b fixtures/judge-elo/sample_b.txt
+```
+
+Validate a DSv4 decision output (v2 keys):
+
+```bash
+python3 scripts/pairwise_judge_validate_decision.py --in fixtures/judge-elo/sample_decision_v2.txt --strict
+```
+
+Run offline Elo update + validate outputs (v5 records):
+
+```bash
+python3 scripts/judge_elo_update.py --in fixtures/judge-elo/sample_judge_records_v5.jsonl --out-dir /private/tmp/ds4_judge_elo_quickstart --strict
+python3 scripts/judge_elo_validate_outputs.py --out-dir /private/tmp/ds4_judge_elo_quickstart
+```
+
 ## Compact Pairwise Judge Output (decision object)
 
 DSv4 should emit **exactly one minified JSON object on one line** (no prose/markdown).
