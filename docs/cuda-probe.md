@@ -6,7 +6,7 @@ All `scripts/cuda_probe*_spark0.sh` default to unique `REMOTE_DIR` paths on Spar
 
 ## Spark0: `sm_121` Gate (Fastest)
 
-When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate`, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
+When you want the smallest “device-props + `sm_121` compile-only gates” set (ships `tools/cuda_probe/` to Spark0, but builds only `make sm121_gate` including `compute_121` compile-only gates via both `-arch=compute_121` and `--gpu-architecture=compute_121` spellings, plus a tiny `sm_121a` / `sm_121f` alias acceptance check via `cuda_sm121{a,f}_arch_list_report`):
 
 ```bash
 ./scripts/cuda_probe_sm121_gate_spark0.sh
@@ -78,7 +78,7 @@ When you want the one-line `schema=4` device summary without shipping `tools/cud
 
 This compiles a single tiny `.cu` file directly on Spark0 with `nvcc -arch=native` and prints the same `cuda drv=... schema=4` line as `tools/cuda_probe/bin/cuda_device_props_tiny`.
 
-It also includes compile-only `-arch=sm_121`, `nvcc --gpu-architecture=sm_121`, and `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`.
+It also includes compile-only `-arch=sm_121`, `nvcc --gpu-architecture=sm_121`, and `nvcc --gpu-architecture=compute_121 --gpu-code=sm_121` gates so logs capture a direct “nvcc can target `sm_121`” signal even when you are not shipping `tools/cuda_probe/`. When `nvcc --list-gpu-arch` advertises `compute_121`, the script also runs a best-effort compile-only `nvcc --gpu-architecture=compute_121` probe to validate the long-form “PTX-only” spelling.
 
 To make the “end-to-end link+run via `sm_121`” path explicit (not just compile-only), run:
 
