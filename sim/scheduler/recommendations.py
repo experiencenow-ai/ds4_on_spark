@@ -427,12 +427,40 @@ def run_runtime_trace_mtp_ablation(
     mtp_draft_len_out = int(mtp_draft_len_inferred)
 
     k_mode = "trace" if _trace_has_full_k(trace) else "controller"
+    fixed_k_from_meta = 0
+    if k_mode == "controller":
+        sf = str(meta.get("source_format", "")).strip().lower()
+        if sf == "ds4_ffn_moe_topk_i32":
+            topk_raw = meta.get("topk")
+            if isinstance(topk_raw, int):
+                fixed_k_from_meta = int(topk_raw)
+            elif isinstance(topk_raw, float):
+                if float(int(topk_raw)) == float(topk_raw):
+                    fixed_k_from_meta = int(topk_raw)
+            if fixed_k_from_meta < 1:
+                fixed_k_from_meta = 0
+            elif fixed_k_from_meta > 0:
+                meta["k_fixed_from_meta"] = int(fixed_k_from_meta)
     dflash_cost_scale = 0.0
     if any_dflash:
         if isinstance(meta.get("dflash_draft_cost_scale"), (int, float)):
             dflash_cost_scale = float(meta["dflash_draft_cost_scale"])
         if dflash_cost_scale < 0.0:
             raise ValueError("meta.dflash_draft_cost_scale must be >= 0")
+
+    k_min_interactive = 1
+    k_max_interactive = 1
+    k_min_batch = 1
+    k_max_batch = 1
+    q_low = 0
+    q_high = 0
+    if fixed_k_from_meta > 0:
+        # DS4 ffn_moe_topk dumps contain *selected* experts per token/layer. When replaying these
+        # route-only traces, treat topk as the fixed K so service and queue depth scale correctly.
+        k_min_interactive = int(fixed_k_from_meta)
+        k_max_interactive = int(fixed_k_from_meta)
+        k_min_batch = int(fixed_k_from_meta)
+        k_max_batch = int(fixed_k_from_meta)
 
     base_cfg = scheduler_sim.SimConfig(
         num_experts=int(inferred_num_experts),
@@ -449,12 +477,12 @@ def run_runtime_trace_mtp_ablation(
         hi_burst=0,
         promote_ms=0.0,
         adaptive_k=scheduler_sim.AdaptiveKConfig(
-            k_min_interactive=1,
-            k_max_interactive=1,
-            k_min_batch=1,
-            k_max_batch=1,
-            q_low=0,
-            q_high=0,
+            k_min_interactive=int(k_min_interactive),
+            k_max_interactive=int(k_max_interactive),
+            k_min_batch=int(k_min_batch),
+            k_max_batch=int(k_max_batch),
+            q_low=int(q_low),
+            q_high=int(q_high),
         ),
         k_mode=str(k_mode),
         k_signal="global",

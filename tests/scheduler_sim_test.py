@@ -153,6 +153,12 @@ class SchedulerSimTest(unittest.TestCase):
             trace_speedup=1.0,
             mtp_draft_len=-1,
         )
+        base_cfg = report.get("base_cfg", {})
+        adaptive_k = base_cfg.get("adaptive_k", {})
+        self.assertEqual(adaptive_k.get("k_min_interactive"), 2)
+        self.assertEqual(adaptive_k.get("k_max_interactive"), 2)
+        self.assertEqual(adaptive_k.get("k_min_batch"), 2)
+        self.assertEqual(adaptive_k.get("k_max_batch"), 2)
         report["topk_dump_probe"] = {"present": True, "note": "route-only", "summary": probe}
         md = recommendations.format_runtime_trace_ablation_markdown(report)
         self.assertIn("topk_dump_probe: present", md)
