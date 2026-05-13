@@ -43,10 +43,10 @@ REPORT_MD="$OUT_DIR/mtp_oracle_vs_candidate_diff_spark.md"
 	echo
 	echo "This wrapper runs two gated runners:"
 	echo
-	echo "- Oracle: `scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh`"
-	echo "- Candidate: `scripts/run_mtp_one_token_draft_probe_spark.sh`"
+	echo '- Oracle: `scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh`'
+	echo '- Candidate: `scripts/run_mtp_one_token_draft_probe_spark.sh`'
 	echo
-	echo "Neither does anything on Spark unless the corresponding `ALLOW_*` env vars are set there."
+	echo 'Neither does anything on Spark unless the corresponding `ALLOW_*` env vars are set there.'
 	echo
 	echo "Remote env (recorded):"
 	echo
@@ -234,7 +234,7 @@ fi
 	echo "- hc layout JSON: $HC_LAYOUT_JSON"
 	echo "- hc layout stderr: $HC_LAYOUT_STDERR"
 	echo
-	echo "Next step: if the diff fails early, add more `*_fnv64` captures to the candidate probe before attempting acceptance sweeps."
+	echo 'Next step: if the diff fails early, add more `*_fnv64` captures to the candidate probe before attempting acceptance sweeps.'
 	echo
 } >>"$REPORT_MD"
 
