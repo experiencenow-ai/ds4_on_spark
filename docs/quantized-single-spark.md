@@ -8,7 +8,7 @@ in `docs/quantized-performance-path.md`. A slow or low-quality first token
 stream is useful if it proves the model artifact, runtime, CUDA path,
 tokenizer/chat format, and memory envelope are real.
 
-Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-12T141651Z-smallest.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-12.md`).
+Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-13T003043Z-smallest.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-13.md`).
 
 To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
 
