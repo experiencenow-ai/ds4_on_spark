@@ -95,6 +95,7 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     expert_queueing = _as_dict(evidence.get("expert_queueing"))
     mtp_draft_queue_cls = _as_dict(evidence.get("mtp_draft_queue_cls"))
     dflash = _as_dict(out.get("dflash_comparator"))
+    topk_dump_probe = _as_dict(out.get("topk_dump_probe"))
     results = _as_dict(out.get("results"))
 
     lines: List[str] = []
@@ -168,6 +169,52 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
         ratio = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only", 0.0)
         ratio_adj = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0)
         lines.append(f"- dflash_comparator: present ratio_vs_target_only={ratio:.4f} adjusted={ratio_adj:.4f}")
+
+    if bool(topk_dump_probe.get("present")):
+        tnote = _as_str(topk_dump_probe, "note", "")
+        summary = _as_dict(topk_dump_probe.get("summary"))
+        invalid = _as_int(summary, "invalid_expert_ids", 0)
+        lines.append(f"- topk_dump_probe: present invalid_expert_ids={int(invalid)}")
+        if tnote != "":
+            lines.append(f"  - note: {tnote}")
+        batches = _as_dict(summary.get("batches"))
+        if batches is not None:
+            batch_keys: List[int] = []
+            for k in batches.keys():
+                if isinstance(k, str) and k.strip().isdigit():
+                    batch_keys.append(int(k.strip()))
+            batch_keys = sorted(set(batch_keys))
+            if len(batch_keys) != 0:
+                picks: List[int] = []
+                if 100 in batch_keys:
+                    picks.append(100)
+                if 256 in batch_keys and 256 not in picks:
+                    picks.append(256)
+                for k in (batch_keys[0], batch_keys[-1]):
+                    if k not in picks:
+                        picks.append(int(k))
+                picks = picks[:4]
+
+                def _metric_median(batch: int, metric: str) -> float:
+                    b = batches.get(str(int(batch)))
+                    if not isinstance(b, dict):
+                        return(0.0)
+                    block = b.get(metric)
+                    if not isinstance(block, dict):
+                        return(0.0)
+                    v = block.get("median", 0.0)
+                    if isinstance(v, (int, float)):
+                        return(float(v))
+                    return(0.0)
+
+                parts = []
+                for batch in picks:
+                    active = _metric_median(batch, "active")
+                    p90 = _metric_median(batch, "p90_depth")
+                    sp6 = _metric_median(batch, "pair_speedup_cap6")
+                    parts.append(f"b{int(batch)} active={active:.2f} p90_depth={p90:.2f} speedup_cap6={sp6:.2f}x")
+                if len(parts) != 0:
+                    lines.append("  - " + "; ".join(parts))
 
 
 
