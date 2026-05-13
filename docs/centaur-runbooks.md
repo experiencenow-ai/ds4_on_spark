@@ -64,6 +64,7 @@ If you only have Spark1/Spark2 (3 nodes total including Spark0), use:
 That runbook includes:
 
 - an end-to-end “Quickstart” (Spark0 smoke → Spark1/2 setup → ring rsync → artifact fetch)
+- a safe Centaur prereq check (python3/venv/unzip) using `scripts/centaur_spark_v73_prereqs_check.sh` (recommended before node setup)
 - a safe SSH mesh preflight (Spark0↔Spark1↔Spark2) using `scripts/ops_spark_ring_mesh_check.sh` (recommended before rsync ring-step)
 - an rsync availability preflight using `scripts/ops_spark_rsync_check.sh` (ring-rsync requires rsync on Spark0 + ring nodes)
 - staging `centaur_spec_impl_v73.zip` to Spark1/2

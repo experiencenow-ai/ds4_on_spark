@@ -20,6 +20,12 @@ When a hostname does not resolve (common before Spark1/2 exist), use an explicit
 REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
 ```
 
+Optional (recommended before node setup / smoke): confirm the Centaur v73 node prerequisites exist (non-destructive; no sudo):
+
+```bash
+./scripts/centaur_spark_v73_prereqs_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 Optional (recommended before attempting the rsync-staged “real ring”): verify the **SSH mesh** and basic peer reachability from each Spark (still safe; no sudo/service changes):
 
 ```bash
