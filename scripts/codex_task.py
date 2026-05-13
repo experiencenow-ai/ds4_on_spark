@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TARGET = "spark0@aitopatom-9ab9.local"
 DEFAULT_TRUNK_GGUF = "/home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf"
 DEFAULT_MTP_SIDECAR_GGUF = "/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
+DEFAULT_LLAMA_DIR = "/home/spark0/src/llama-mtp-probe-94073e2-fixed"
 
 
 def run(cmd: list[str], *, env_extra: dict[str, str] | None = None) -> None:
@@ -45,6 +46,30 @@ def build_antirez_remote_env(args: argparse.Namespace) -> str:
 		("CTX", str(args.ctx)),
 		("SEED", str(args.seed)),
 	]
+	if args.fetch or args.fresh:
+		parts.append(("ALLOW_FETCH", "1"))
+	if args.patch or args.fresh:
+		parts.append(("ALLOW_PATCH", "1"))
+	if args.build or args.fresh:
+		parts.append(("ALLOW_BUILD", "1"))
+	if args.run or args.fresh:
+		parts.append(("ALLOW_RUN", "1"))
+	if not any(k == "ALLOW_RUN" for k, _ in parts):
+		parts.append(("ALLOW_RUN", "1"))
+	return " ".join(f"{k}={shlex.quote(v)}" for k, v in parts)
+
+
+def build_llamacpp_remote_env(args: argparse.Namespace) -> str:
+	parts: list[tuple[str, str]] = [
+		("LLAMA_DIR", args.llama_dir),
+		("LLAMA_COMMIT", args.llama_commit),
+		("TRUNK_GGUF", args.trunk_gguf),
+		("MTP_SIDECAR_GGUF", args.mtp_sidecar_gguf),
+		("PROMPT", args.prompt),
+		("SEED", str(args.seed)),
+	]
+	if args.load_sidecar_weights:
+		parts.append(("LOAD_SIDECAR_WEIGHTS", "1"))
 	if args.fetch or args.fresh:
 		parts.append(("ALLOW_FETCH", "1"))
 	if args.patch or args.fresh:
@@ -90,6 +115,15 @@ def task_spark_antirez_oracle(args: argparse.Namespace) -> None:
 		"REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV": build_antirez_remote_env(args),
 	}
 	run(["scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh", args.target], env_extra=env_extra)
+
+
+def task_spark_llamacpp_mtp_probe(args: argparse.Namespace) -> None:
+	env_extra = {
+		"OUT_ROOT": args.out_root,
+		"LLAMA_COMMIT": args.llama_commit,
+		"REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV": build_llamacpp_remote_env(args),
+	}
+	run(["scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh", args.target], env_extra=env_extra)
 
 
 def task_pr_status(args: argparse.Namespace) -> None:
@@ -164,6 +198,23 @@ def build_parser() -> argparse.ArgumentParser:
 	p.add_argument("--run", action="store_true")
 	p.add_argument("--fresh", action="store_true", help="Set fetch+patch+build+run gates.")
 	p.set_defaults(func=task_spark_antirez_oracle)
+
+	p = sub.add_parser("spark-llamacpp-mtp-probe", help="Run the gated llama.cpp one-token MTP candidate probe on Spark.")
+	p.add_argument("--target", default=DEFAULT_TARGET)
+	p.add_argument("--out-root", default="/private/tmp/ds4_on_spark_llamacpp_mtp_one_token_probe")
+	p.add_argument("--llama-dir", default=DEFAULT_LLAMA_DIR)
+	p.add_argument("--llama-commit", default="94073e2")
+	p.add_argument("--trunk-gguf", default=DEFAULT_TRUNK_GGUF)
+	p.add_argument("--mtp-sidecar-gguf", default=DEFAULT_MTP_SIDECAR_GGUF)
+	p.add_argument("--prompt", default="Explain Redis streams in one paragraph.")
+	p.add_argument("--seed", type=int, default=1234)
+	p.add_argument("--load-sidecar-weights", action="store_true")
+	p.add_argument("--fetch", action="store_true")
+	p.add_argument("--patch", action="store_true")
+	p.add_argument("--build", action="store_true")
+	p.add_argument("--run", action="store_true")
+	p.add_argument("--fresh", action="store_true", help="Set fetch+patch+build+run gates.")
+	p.set_defaults(func=task_spark_llamacpp_mtp_probe)
 
 	p = sub.add_parser("pr-status", help="List GitHub PRs with merge-state fields.")
 	p.add_argument("--state", choices=["open", "closed", "merged", "all"], default="open")

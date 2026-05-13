@@ -15,6 +15,7 @@ class CodexTaskTest(unittest.TestCase):
 				"pr-status",
 				"repo-status",
 				"spark-antirez-oracle",
+				"spark-llamacpp-mtp-probe",
 				"spark-ring-status",
 			},
 		)
@@ -36,6 +37,23 @@ class CodexTaskTest(unittest.TestCase):
 		self.assertIn("SEED=7", env)
 		self.assertIn("ALLOW_RUN=1", env)
 		self.assertNotIn("ALLOW_FETCH=1", env)
+
+	def test_llamacpp_remote_env_quotes_prompt_and_weight_gate(self) -> None:
+		parser = codex_task.build_parser()
+		args = parser.parse_args([
+			"spark-llamacpp-mtp-probe",
+			"--prompt",
+			"hello there",
+			"--load-sidecar-weights",
+			"--fresh",
+		])
+		env = codex_task.build_llamacpp_remote_env(args)
+		self.assertIn("PROMPT='hello there'", env)
+		self.assertIn("LOAD_SIDECAR_WEIGHTS=1", env)
+		self.assertIn("ALLOW_FETCH=1", env)
+		self.assertIn("ALLOW_PATCH=1", env)
+		self.assertIn("ALLOW_BUILD=1", env)
+		self.assertIn("ALLOW_RUN=1", env)
 
 
 if __name__ == "__main__":

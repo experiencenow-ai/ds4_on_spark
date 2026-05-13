@@ -32,6 +32,12 @@ Fresh Spark-side clone/patch/build/run:
 ./scripts/codex_task.py spark-antirez-oracle --fresh
 ```
 
+Run the llama.cpp one-token MTP candidate probe on Spark0:
+
+```bash
+./scripts/codex_task.py spark-llamacpp-mtp-probe --fresh --load-sidecar-weights
+```
+
 Open PR status:
 
 ```bash
