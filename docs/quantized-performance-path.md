@@ -98,6 +98,12 @@ scheduling behavior:
 - CUDA fallback nodes and graph placement (for example `__fattn__` / `__op__` scheduling lines when present)
 - MTP draft tokens, accepted tokens, and rejected tokens when available
 
+For a resident decode baseline that does not require custom routing hooks yet,
+run `scripts/codex_task.py spark-resident-batched-decode --run`. That wrapper
+starts one Spark-side `llama-server`, issues concurrent completion waves, and
+records aggregate decode throughput plus reservation/fallback signals. See
+`docs/resident-batched-decode.md`.
+
 Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
 
 ### Current Spark0 clues (May 2026)
