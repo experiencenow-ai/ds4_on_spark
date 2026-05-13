@@ -54,6 +54,7 @@ Safety gate: `scripts/run_quantized_single_spark.sh` no longer forces `ALLOW_RUN
   - When the repo-default `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available, this output also includes:
     - `execution_contract` (contract provenance + `contract_fingerprints.execution_contract_sha256` pulled from the repo’s pinned DeepSeek V4 Flash contract fixture)
     - `tensor_key_namespace_guess` + `first_tensor_keys` (quick signal for whether the artifact appears to preserve upstream tensor key namespaces; many GGUF conversions are `llama.cpp`)
+      - DS4-tuned GGUF MTP sidecars may be tagged as `ds4-mtp-sidecar` (keys like `mtp.0.attn_q_a.weight`), which is **not** the upstream DeepSeek safetensors key schema.
     - `trunk_contract` (structural trunk tensor-key completeness; interpret via `trunk_contract.kind`):
       - `kind="deepseek-upstream"` checks `layers.{i}.*` (only applies if the artifact preserves upstream tensor names)
       - `kind="llama.cpp"` checks `blk.{i}.*` (compat-only structural signal for DeepSeek4 GGUFs)

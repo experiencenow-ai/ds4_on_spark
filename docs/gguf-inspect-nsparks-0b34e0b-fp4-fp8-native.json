@@ -6,6 +6,24 @@
     "expected_general_architecture": "deepseek4_mtp_support",
     "reason": "artifact does not look like a DS4-tuned MTP sidecar (no arch match and no expected tensor names present)"
   },
+  "execution_contract": {
+    "checked": true,
+    "contract_fingerprints": {
+      "attention_schedule_sha256": "6135e62692fe8a1bb049d8137ff1a1d2ada5c4091b3b39ce8ca8b6e45829166d",
+      "cache_semantics_sha256": "2d3d0f4072f28403231781dec8cb58b2b444f34d488c2ca2ef80e68c7bb36d23",
+      "execution_contract_sha256": "bad6d30a8463a77d4e25980afebe123122b061473dea1b74b5b8cd0d890c7e44",
+      "tensor_key_invariants_sha256": "0e5cf469447fd52696a66324f63ef2684958ad9f8da11b90a83bd1ab69ff76ca",
+      "tokenizer_encoding_sha256": "5ecf5e99a1417796bddec18c83d989c9bccf039111faf60fe84de7a240742831",
+      "topology_sha256": "a9c1b3c180046781288084b1cb85d51d6fc65aa4c68204cd415855ad91de3d66"
+    },
+    "contract_summary_path": "/Users/mac/.codex/worktrees/923f/New project 4/fixtures/model_contract/deepseek_v4_flash/contract_summary.json",
+    "format_version": 1,
+    "upstream": {
+      "hf_repo_id": "deepseek-ai/DeepSeek-V4-Flash",
+      "hf_revision_pinned": "6976c7ff1b30a1b2cb7805021b8ba4684041f136",
+      "x_repo_commit": "6976c7ff1b30a1b2cb7805021b8ba4684041f136"
+    }
+  },
   "first_mtp_keys": [],
   "first_tensor_keys": [
     "token_embd.weight",
