@@ -142,9 +142,12 @@ sudo systemctl start ds4-preflight-strict@${instance}.service
 
 == optional (strict DS4 start, human-run) ==
 # Starts DS4 only after strict preflight succeeds.
-# NOTE: `ds4-strict@.service` is a separate unit template (installed by the `ds4*.service` glob above).
-sudo systemctl enable ds4-strict@${instance}.service
-sudo systemctl start  ds4-strict@${instance}.service
+# Prefer the explicit TP=2 strict-start unit:
+sudo systemctl enable ds4-tp2-strict@${instance}.service
+sudo systemctl start  ds4-tp2-strict@${instance}.service
+# Legacy alias (same behavior):
+# sudo systemctl enable ds4-strict@${instance}.service
+# sudo systemctl start  ds4-strict@${instance}.service
 
 == optional (periodic preflight timer, human-run) ==
 # Runs non-destructive preflight on boot and periodically after.
