@@ -107,6 +107,16 @@ ALLOW_RUN=1 \
 scripts/run_quantized_single_spark0_smallest_v4flash_external.sh spark0@aitopatom-9ab9.local
 ```
 
+Smallest-credible V4 Flash GGUF wrapper (Spark0; same auto-selection, but also
+defaults an include filter to avoid selecting `IQ1_*` tiers):
+
+```sh
+ALLOW_RUN=1 \
+scripts/run_quantized_single_spark0_smallest_credible_v4flash_external.sh spark0@aitopatom-9ab9.local
+```
+
+Set `MODEL_GGUF_INCLUDE_EGREP=""` to disable the include filter.
+
 Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 `REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime. See
 `docs/quantized-single-spark.md` for the milestone definition and failure
