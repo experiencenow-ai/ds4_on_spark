@@ -123,6 +123,7 @@ need_file "deploy/config/ssh_config.ds4.spark01.example"
 need_file "deploy/config/ssh_config.ds4.spark012.example"
 need_file "deploy/config/ssh_config.ds4.spark_ring.example"
 need_file "deploy/config/sysctl.ds4.conf.example"
+need_file "deploy/config/nftables.ds4.spark012.nft.example"
 
 need_file "scripts/ops_stage_deploy_assets.sh"
 need_file "scripts/ops_stage_spark0_spark1.sh"
