@@ -15,6 +15,7 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
 - `upstream_commit.txt` (pinned upstream git commit hash)
 - `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
+- `checkpoint_keys.txt` (derived from `model.safetensors.index.json`; exact sorted list of all official tensor keys for debugging/diffing upstream snapshots)
 - `mtp_checkpoint_keys.txt` (derived from `model.safetensors.index.json`; exact sorted list of official `mtp.*` tensor keys used for MTP namespace preservation/debugging)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
