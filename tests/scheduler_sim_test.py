@@ -286,6 +286,8 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIn("# Scheduler Simulator Runtime Trace Report", md)
             self.assertIn("- mtp: present", md)
             self.assertIn("## Results (arrival_units=steps)", md)
+            self.assertIn("pending_p95", md)
+            self.assertIn("pending_lo_p95", md)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
