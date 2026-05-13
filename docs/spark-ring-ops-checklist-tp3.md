@@ -91,7 +91,7 @@ Until DS4 documents a safe rolling restart for TP=3, treat restarts as a coordin
   - `sudo systemctl start ds4-preflight-tp3-strict@spark2.service`
 - Start DS4 again (example):
   - `sudo systemctl start ds4@spark0.service ds4@spark1.service ds4@spark2.service`
-- If you use the strict-start template, prefer `ds4-tp3-strict@%i.service` (TP=3-gated) rather than `ds4-strict@%i.service` (TP=2-gated):
+- If you use the strict-start template, prefer `ds4-tp3-strict@%i.service` (TP=3-gated) rather than `ds4-tp2-strict@%i.service` (TP=2-gated):
   - `sudo systemctl start ds4-tp3-strict@spark0.service`
 
 ## After A TP=3 Attempt (Repeatable)
