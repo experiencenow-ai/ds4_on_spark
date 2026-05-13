@@ -181,6 +181,10 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
     - `mtp_input_hc` (MTP block input after `(e_proj_hc + h_proj_hc)` sum)
     - `mtp_block_out_hc` (MTP block output stream before the MTP output head)
     - `mtp_head_norm` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection)
+  - Optional deeper capture prefixes (useful when `mtp_input_hc` mismatches and you need more localization):
+    - `mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`
+  - `scripts/verify_mtp_one_token_draft_probe_captures.py` supports `--profile minimal` (stub-stage), `--profile default` (full one-token gate), and `--profile extended` (deeper localization before acceptance sweeps).
+  - Optional HC layout debug (when only the HC-major ordering differs): `python3 scripts/compare_mtp_one_token_hc_layout.py --a oracle.json --b candidate.json --json`.
   - Avoid dumping full logits: instead fingerprint the normalized head stream and rely on exact `mtp_draft_token_id` equality.
   - Optional stronger guardrail (recommended before acceptance sweeps): require both probes to emit the full capture set so diffs localize the first divergence:
 
@@ -193,6 +197,11 @@ python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a oracle.json --b 
 Implementation note (Spark/Linux CUDA):
 
 - The DS4-tuned MTP sidecar uses routed experts that may be `Q4_K` (not `Q2_K`). If using `antirez/ds4` as the executable reference on CUDA, ensure the routed-MoE path supports `Q4_K` and the sidecar does not clobber the trunk CUDA model-map/fd-cache state; see `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`.
+- For a pinned, independent `Q4_K` dequantize+dot fixture (generated from `ggml-org/llama.cpp`), see `docs/mtp-q4k-dot-validation.md` and `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`.
+
+Machine-readable MTP *acceptance* reporting (when ready to sweep):
+
+- Once the one-token diff is `ok=true`, record acceptance rates from multi-prompt runs via `docs/mtp-acceptance-sweep.md` and summarize runtime JSONL logs with `python3 scripts/summarize_mtp_acceptance_trace.py --in-jsonl ... --draft-len <gamma>`.
 
 ## Comparator models (Ling / Qwen / DFlash pairs)
 

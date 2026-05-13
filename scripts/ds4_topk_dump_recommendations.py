@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sim.scheduler import ds4_topk_dump
 from sim.scheduler import recommendations
 from sim.scheduler import scheduler_sim
+from sim.scheduler import topk_dump_report
 
 
 def main() -> int:
@@ -20,6 +21,8 @@ def main() -> int:
         description="Run scheduler-simulator sweeps on DS4 antirez ffn_moe_topk i32 dumps (route-only replay with synthetic timing)."
     )
     p.add_argument("--dump-dir", required=True, help="Directory containing ffn_moe_topk-<layer>_pos<pos>.i32 dumps.")
+    p.add_argument("--bundle-dir", default="", help="Optional: write a bundle directory (trace.strict.jsonl + report.{json,md} + bundle_meta.json).")
+    p.add_argument("--bundle-overwrite", action="store_true", help="Allow overwriting an existing --bundle-dir.")
     p.add_argument("--out-json", default="-", help="Output JSON report path ('-' for stdout).")
     p.add_argument("--format", type=str, default="json", choices=("json", "md"), help="Output format: json (default) or md.")
     p.add_argument("--pos", type=int, default=0, help="Dump position index to extract (default: 0).")
@@ -52,6 +55,50 @@ def main() -> int:
     p.add_argument("--probe-batches", type=str, default="16,32,64,100,128,256,512", help="Comma-separated batch sizes for expert-queue probe.")
     p.add_argument("--probe-trials", type=int, default=250, help="Trials per layer per batch size for expert-queue probe.")
     args = p.parse_args()
+
+    if str(args.bundle_dir).strip() != "":
+        batches = tuple(int(x) for x in str(args.probe_batches).split(",") if str(x).strip() != "")
+        out = topk_dump_report.build_ds4_topk_dump_trace_report_bundle(
+            str(args.dump_dir),
+            out_dir=str(args.bundle_dir),
+            pos=int(args.pos),
+            topk=int(args.topk),
+            num_tokens=int(args.num_tokens),
+            seed=int(args.seed),
+            sample_mode=str(args.sample_mode),
+            time_mode=str(args.time_mode),
+            arrival_rate_tps=float(args.arrival_rate_tps),
+            batch_size=int(args.batch_size),
+            interactive_prob=float(args.interactive_prob),
+            trace_speedup=float(args.trace_speedup),
+            expert_queue_max=int(args.expert_queue_max),
+            expert_parallelism=int(args.expert_parallelism),
+            service_ms=float(args.service_ms),
+            starvation_ms=float(args.starvation_ms),
+            mtp_draft_len=int(args.mtp_draft_len),
+            mtp_accept_prob=float(args.mtp_accept_prob),
+            mtp_accept_decay=float(args.mtp_accept_decay),
+            mtp_draft_cost_scale=float(args.mtp_draft_cost_scale),
+            probe_expert_queueing=bool(args.probe_expert_queueing),
+            probe_experts=int(args.probe_experts),
+            probe_batches=batches,
+            probe_trials=int(args.probe_trials),
+            overwrite=bool(args.bundle_overwrite),
+        )
+        print(
+            json.dumps(
+                {
+                    "out_dir": out.get("out_dir"),
+                    "trace_path": out.get("trace_path"),
+                    "report_json_path": out.get("report_json_path"),
+                    "report_md_path": out.get("report_md_path"),
+                    "bundle_meta_path": out.get("bundle_meta_path"),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
 
     meta, layers = ds4_topk_dump.load_ds4_ffn_moe_topk_dump_layers(
         str(args.dump_dir),

@@ -1,0 +1,10 @@
+prefix=${pcfiledir}/../../..
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: ds4
+Description: DS4-on-Spark build-skeleton C/CUDA library
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lds4
+Cflags: -I${includedir}

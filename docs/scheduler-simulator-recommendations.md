@@ -1,6 +1,6 @@
 # Scheduler Simulator Recommendations (Synthetic)
 
-Date: 2026-05-12
+Date: 2026-05-13
 
 This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
@@ -12,12 +12,12 @@ This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
 All numbers below come from the committed JSON report:
 
-- `docs/scheduler-simulator-recommendations-2026-05-12.json`
+- `docs/scheduler-simulator-recommendations-2026-05-13.json`
 
 Regenerate it with:
 
 ```bash
-python3 sim/scheduler/recommendations.py --json > docs/scheduler-simulator-recommendations-2026-05-12.json
+python3 sim/scheduler/recommendations.py --json > docs/scheduler-simulator-recommendations-2026-05-13.json
 ```
 
 ## Expert Queue Reservation
@@ -161,6 +161,23 @@ Key signals to inspect (from the report JSON, per histogram):
 
 Recommendation (synthetic): treat MTP accept-length *shape* as a first-class input once real traces exist. Mean-only fits (for example a single accept rate) can miss heavy tails of short accepts that amplify queue pressure. Prefer replaying empirical `accept_len` histograms from quantized-runtime traces before enabling MTP.
 
+## MTP (Draft Queue Class)
+
+Scenario: the same two-stream overload regime as the congestion sweep, but holding MTP acceptance fixed (`draft_len=2`, `accept_prob=0.6`, `accept_decay=0.8`, `draft_attempt_policy=stop_at_reject`) and comparing where *draft micro-tokens* are enqueued:
+
+- `mtp_draft_queue_cls=inherit` (draft work inherits the token’s latency class; default)
+- `mtp_draft_queue_cls=batch` (draft work is demoted to batch/low priority)
+- `mtp_draft_queue_cls=interactive` (draft work is promoted to interactive/high priority)
+
+Key signals to inspect (from the report JSON):
+
+- `task_queue_wait_ms_p95_mtp_verify` (verify queue pressure)
+- `task_queue_wait_ms_p95_mtp_draft` (draft delay)
+- `output_token_p95_interactive_ms` / `sla_violation_frac_tokens_interactive` (interactive safety)
+- `drop_frac_tokens_interactive` / `drop_frac_tokens_batch` (backpressure impact)
+
+Recommendation (synthetic): keep `mtp_draft_queue_cls=inherit` as the default. Treat `batch` demotion as an experimental knob to reduce verify pressure for batch traffic, but expect it can delay interactive output because draft stages must complete before verify. Validate on real quantized-runtime traces before using it as a default.
+
 ## Adaptive K (Batch Throttling Under Congestion)
 
 Scenario: two-stream arrivals (interactive + batch) with sustained overload, small per-expert queue (`expert_queue_max=128`), and `service_ms=1.0`. Compare:
@@ -263,6 +280,22 @@ Key signals to inspect (from the report JSON):
 - `token_p95_interactive_ms` (interactive tail cost)
 
 Recommendation (synthetic): keep **`hi_burst`** as a default anti-starvation safety valve; treat `promote_ms` as an opt-in knob that can reduce starvation further but may inflate interactive tail latency.
+
+## Multi-Layer K Scope (Token vs Layer)
+
+Scenario: multi-layer routes (`num_layers=12`) under two-stream overload, with an adaptive-K controller driven by `k_signal=candidates_mean`. Compare:
+
+- `k_scope=token` (one congestion signal per token, applied to every layer stage)
+- `k_scope=layer` (per-layer congestion signals, allowing different K decisions per layer)
+
+Key signals (from the report JSON):
+
+- `token_p95_interactive_ms`: `200.225` → `187.058`
+- `service_slot_ms_per_output_token`: `8.494` → `8.217`
+- `drop_frac_tokens_batch`: `0.609635` → `0.602604`
+- `partial_admit_frac_tokens`: `0.414406` → `0.363582`
+
+Recommendation (synthetic): keep `k_scope=layer` available for multi-layer traces; it can reduce partial-admit/drop pressure and improve interactive p95 in this synthetic regime. Treat the magnitude as non-authoritative until replay on real quantized-runtime traces.
 
 ## Next Step (Real Traces)
 

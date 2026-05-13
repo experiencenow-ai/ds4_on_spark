@@ -36,7 +36,7 @@ Observed on Spark0 (2026-05-13): CUDA 13.0 `V13.0.88`; `sm_121a` / `sm_121f` ali
 
 When you want a single command that:
 
-- runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior)
+- runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior, including a shared-library boundary probe for `-device-entity-has-hidden-visibility`)
 - runs `scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh` (no repo transfer; compile-only `sm_121` / `compute_121` flag spelling gates)
 - runs `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile/run gates)
 - runs `scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh` (no repo transfer; minimal “launch a kernel and sync” smoke without `cudaMalloc`)
@@ -258,6 +258,20 @@ To capture a full log file on the Mac (without relying on `tee` + shell `pipefai
 LOG_PATH=/private/tmp/ds4_cuda_probe_compile_only_tiny_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_compile_only_tiny_spark0.sh
 ```
 
+## Spark0: Tiny Device-Props + `sm_121` Compile Probes
+
+When you only need the “one-line `schema=4` device summary” plus the no-transfer `sm_121` compile-only flag-spelling gates (and want to skip the larger kernel bring-up suite), run:
+
+```bash
+./scripts/cuda_probe_tinyprops_sm121_compile_spark0.sh
+```
+
+To capture a full log file on the Mac (without relying on `tee` + shell `pipefail`), set `LOG_PATH`:
+
+```bash
+LOG_PATH=/private/tmp/ds4_cuda_probe_tinyprops_sm121_compile_$(date -u +%Y%m%d-%H%M%S).log ./scripts/cuda_probe_tinyprops_sm121_compile_spark0.sh
+```
+
 This also performs best-effort toolchain-only checks when supported:
 
 - Always attempt best-effort compile-only builds for `sm_121a` / `sm_121f`, and report whether each target was advertised by `nvcc --list-gpu-code` (informational; the hard failure remains missing `sm_121` support).
@@ -309,7 +323,7 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
 - Runs best-effort compile-only probes for `-arch=sm_121` plus `sm_121a` / `sm_121f` (variant targets) and `compute_121` (when advertised) (fast toolchain signal; no kernel run required; prints first error lines on failure)
-- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted)
+- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted; note the probe includes a dummy `__global__` so the macros are emitted in the device compile pass)
 - Prints a best-effort `__CUDA_ARCH_LIST__` snapshot for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` to make NVCC’s implicit “virtual arch list” observable in logs
 - Runs a best-effort compile-only probe using `nvcc --gpu-architecture=sm_121` (long-form flag used by some build systems)
 - Runs a best-effort compile-only probe with `-std=c++20 --extended-lambda --expt-relaxed-constexpr` for `-arch=sm_121` (and `compute_121` when advertised) as a CUTLASS/DeepGEMM-style toolchain gate (no repo transfer)

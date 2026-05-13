@@ -71,6 +71,23 @@ class SchedulerTraceExtractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             trace_extract.pack_layers_by_token_index(routes, require_layer_index=True, strict=True)
 
+    def test_pack_layers_by_token_index_time_policy_min_allows_mismatch(self) -> None:
+        routes = [
+            {"token_index": 0, "layer_index": 0, "t_ms": 1.0, "cls": "batch", "candidates": [1]},
+            {"token_index": 0, "layer_index": 1, "t_ms": 0.25, "cls": "batch", "candidates": [2]},
+        ]
+        packed = trace_extract.pack_layers_by_token_index(routes, require_layer_index=True, time_policy="min", strict=True)
+        self.assertEqual(len(packed), 1)
+        self.assertEqual(packed[0].get("t_ms"), 0.25)
+
+    def test_pack_layers_by_token_index_time_tolerance_accepts_float_jitter(self) -> None:
+        routes = [
+            {"token_index": 0, "layer_index": 0, "t_ms": 1.0, "cls": "batch", "candidates": [1]},
+            {"token_index": 0, "layer_index": 1, "t_ms": 1.0 + 1e-9, "cls": "batch", "candidates": [2]},
+        ]
+        packed = trace_extract.pack_layers_by_token_index(routes, require_layer_index=True, time_policy="strict", time_tol_ms=1e-6, strict=True)
+        self.assertEqual(len(packed), 1)
+
     def test_pack_layers_by_token_index_requires_token_index(self) -> None:
         routes = [{"t_ms": 0.0, "cls": "batch", "candidates": [1]}]
         with self.assertRaises(ValueError):

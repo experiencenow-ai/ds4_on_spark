@@ -543,7 +543,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     lines.append("Patch probes (read-only):")
     lines.append("")
     if fattn_probe and isinstance(fattn_probe, dict):
+        lines.append(f"- fattn_patch_probe.llama_rev: `{fattn_probe.get('llama_rev', 'NA') or 'NA'}`")
         lines.append(f"- fattn_patch_probe.pad256_found={str(bool(fattn_probe.get('pad256_found', False))).lower()}")
+        if fattn_probe.get("pad256_confidence"):
+            lines.append(f"- fattn_patch_probe.pad256_confidence: `{fattn_probe.get('pad256_confidence')}`")
     else:
         lines.append("- fattn_patch_probe: NA")
     if multislot_probe and isinstance(multislot_probe, dict):

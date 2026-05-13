@@ -49,6 +49,14 @@ This installs:
 systemctl --user enable --now ds4@spark0.service
 ```
 
+## Optional: Periodic Preflight Timers (Safe)
+
+The staged user installer also installs `ds4-preflight*.timer` templates under `~/.config/systemd/user/`. To run periodic strict preflight checks:
+
+```bash
+systemctl --user enable --now ds4-preflight-tp23-strict@spark0.timer
+```
+
 ## Logs (Human Run)
 
 ```bash

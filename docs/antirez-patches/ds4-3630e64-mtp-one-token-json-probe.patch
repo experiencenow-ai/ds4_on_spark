@@ -1,8 +1,8 @@
 diff --git a/ds4.c b/ds4.c
-index f0f8cc1..12bbf08 100644
+index f0f8cc1..f9e3f55 100644
 --- a/ds4.c
 +++ b/ds4.c
-@@ -16338,6 +16338,149 @@ int ds4_engine_generate_argmax(
+@@ -16338,6 +16338,131 @@ int ds4_engine_generate_argmax(
                                  emit, done, emit_ud, progress, progress_ud);
  }
  
@@ -15,28 +15,6 @@ index f0f8cc1..12bbf08 100644
 +        h *= 1099511628211ull;
 +    }
 +    return h;
-+}
-+
-+static void mtp_probe_fill_f32_stats(ds4_tensor_fingerprint *out, const uint8_t *buf, uint64_t nbytes) {
-+    uint64_t count = nbytes / sizeof(float);
-+    out->f32_count = count;
-+    out->f32_sum = 0.0;
-+    out->f32_l2 = 0.0;
-+    out->f32_absmax = 0.0f;
-+    out->f32_min = 0.0f;
-+    out->f32_max = 0.0f;
-+    if (count == 0 || (nbytes % sizeof(float)) != 0) return;
-+    for (uint64_t i = 0; i < count; i++) {
-+        float fv = 0.0f;
-+        memcpy(&fv, buf + (i * sizeof(float)), sizeof(float));
-+        double dv = (double)fv;
-+        float av = fv < 0.0f ? -fv : fv;
-+        if (i == 0 || fv < out->f32_min) out->f32_min = fv;
-+        if (i == 0 || fv > out->f32_max) out->f32_max = fv;
-+        if (i == 0 || av > out->f32_absmax) out->f32_absmax = av;
-+        out->f32_sum += dv;
-+        out->f32_l2 += dv * dv;
-+    }
 +}
 +
 +static int mtp_probe_capture_tensor(
@@ -67,7 +45,6 @@ index f0f8cc1..12bbf08 100644
 +    out->ndim = ndim;
 +    out->shape[0] = s0;
 +    out->shape[1] = s1;
-+    mtp_probe_fill_f32_stats(out, buf, nbytes);
 +    free(buf);
 +    return 0;
 +}
@@ -140,6 +117,11 @@ index f0f8cc1..12bbf08 100644
 +    int cap_err = 0;
 +    cap_err |= mtp_probe_capture_tensor(&out->trunk_token_embd, session->graph.mtp_embed, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->trunk_pre_hc_head, session->graph.cur_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_enorm, session->graph.mtp_enorm, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_eproj, session->graph.mtp_eproj, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_eproj_hc, session->graph.mtp_eproj_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_hnorm_hc, session->graph.mtp_hnorm_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_hproj_hc, session->graph.mtp_hproj_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->mtp_input_hc, session->graph.mtp_input_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->mtp_block_out_hc, session->graph.mtp_state_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->mtp_head_norm, session->graph.output_norm, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
@@ -153,10 +135,10 @@ index f0f8cc1..12bbf08 100644
  #ifndef DS4_NO_GPU
      if (!e->metal_ready) {
 diff --git a/ds4.h b/ds4.h
-index 9613b0d..e059d3d 100644
+index 9613b0d..b803e00 100644
 --- a/ds4.h
 +++ b/ds4.h
-@@ -175,6 +175,41 @@ bool ds4_engine_has_mtp(ds4_engine *e);
+@@ -175,6 +175,40 @@ bool ds4_engine_has_mtp(ds4_engine *e);
  int ds4_engine_mtp_draft_tokens(ds4_engine *e);
  const ds4_tokens *ds4_session_tokens(ds4_session *s);
  
@@ -165,12 +147,6 @@ index 9613b0d..e059d3d 100644
 +    uint64_t nbytes;
 +    uint32_t ndim;
 +    uint32_t shape[2];
-+    uint64_t f32_count;
-+    double f32_sum;
-+    double f32_l2;
-+    float f32_absmax;
-+    float f32_min;
-+    float f32_max;
 +} ds4_tensor_fingerprint;
 +
 +typedef struct {
@@ -178,6 +154,11 @@ index 9613b0d..e059d3d 100644
 +    int mtp_draft_token_id;
 +    ds4_tensor_fingerprint trunk_token_embd;
 +    ds4_tensor_fingerprint trunk_pre_hc_head;
++    ds4_tensor_fingerprint mtp_enorm;
++    ds4_tensor_fingerprint mtp_eproj;
++    ds4_tensor_fingerprint mtp_eproj_hc;
++    ds4_tensor_fingerprint mtp_hnorm_hc;
++    ds4_tensor_fingerprint mtp_hproj_hc;
 +    ds4_tensor_fingerprint mtp_input_hc;
 +    ds4_tensor_fingerprint mtp_block_out_hc;
 +    ds4_tensor_fingerprint mtp_head_norm;
@@ -199,7 +180,7 @@ index 9613b0d..e059d3d 100644
   * policy; the engine owns the DS4-specific serialized graph state. */
  uint64_t ds4_session_payload_bytes(ds4_session *s);
 diff --git a/ds4_cli.c b/ds4_cli.c
-index 838a394..4ae1b1d 100644
+index 838a394..bf2ff9f 100644
 --- a/ds4_cli.c
 +++ b/ds4_cli.c
 @@ -34,6 +34,7 @@ typedef struct {
@@ -219,7 +200,7 @@ index 838a394..4ae1b1d 100644
          "  --think\n"
          "      Use normal thinking mode. This is the default.\n"
          "  --think-max\n"
-@@ -698,6 +701,119 @@ static int run_logprob_dump(ds4_engine *engine, const cli_config *cfg, const ds4
+@@ -698,6 +701,130 @@ static int run_logprob_dump(ds4_engine *engine, const cli_config *cfg, const ds4
      return 0;
  }
  
@@ -234,15 +215,6 @@ index 838a394..4ae1b1d 100644
 +        if (t->ndim >= 2) fprintf(fp, ",%u", t->shape[1]);
 +    }
 +    fputc(']', fp);
-+}
-+
-+static void json_write_tensor_stats(FILE *fp, const char *prefix, const ds4_tensor_fingerprint *t) {
-+    fprintf(fp, ",\n  \"%s_f32_count\":%llu", prefix, (unsigned long long)t->f32_count);
-+    fprintf(fp, ",\n  \"%s_f32_sum\":%.17g", prefix, t->f32_sum);
-+    fprintf(fp, ",\n  \"%s_f32_l2\":%.17g", prefix, t->f32_l2);
-+    fprintf(fp, ",\n  \"%s_f32_absmax\":%.9g", prefix, (double)t->f32_absmax);
-+    fprintf(fp, ",\n  \"%s_f32_min\":%.9g", prefix, (double)t->f32_min);
-+    fprintf(fp, ",\n  \"%s_f32_max\":%.9g", prefix, (double)t->f32_max);
 +}
 +
 +static int run_mtp_one_token_json_dump(ds4_engine *engine, const cli_config *cfg, const ds4_tokens *prompt) {
@@ -289,31 +261,51 @@ index 838a394..4ae1b1d 100644
 +    json_write_u64_hex(fp, probe.trunk_token_embd.fnv64);
 +    fprintf(fp, ",\n  \"trunk_token_embd_nbytes\":%llu,\n  \"trunk_token_embd_shape\":", (unsigned long long)probe.trunk_token_embd.nbytes);
 +    json_write_shape(fp, &probe.trunk_token_embd);
-+    json_write_tensor_stats(fp, "trunk_token_embd", &probe.trunk_token_embd);
 +    fprintf(fp, ",\n");
 +    fprintf(fp, "  \"trunk_pre_hc_head_fnv64\":");
 +    json_write_u64_hex(fp, probe.trunk_pre_hc_head.fnv64);
 +    fprintf(fp, ",\n  \"trunk_pre_hc_head_nbytes\":%llu,\n  \"trunk_pre_hc_head_shape\":", (unsigned long long)probe.trunk_pre_hc_head.nbytes);
 +    json_write_shape(fp, &probe.trunk_pre_hc_head);
-+    json_write_tensor_stats(fp, "trunk_pre_hc_head", &probe.trunk_pre_hc_head);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_enorm_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_enorm.fnv64);
++    fprintf(fp, ",\n  \"mtp_enorm_nbytes\":%llu,\n  \"mtp_enorm_shape\":", (unsigned long long)probe.mtp_enorm.nbytes);
++    json_write_shape(fp, &probe.mtp_enorm);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_eproj_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_eproj.fnv64);
++    fprintf(fp, ",\n  \"mtp_eproj_nbytes\":%llu,\n  \"mtp_eproj_shape\":", (unsigned long long)probe.mtp_eproj.nbytes);
++    json_write_shape(fp, &probe.mtp_eproj);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_eproj_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_eproj_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_eproj_hc_nbytes\":%llu,\n  \"mtp_eproj_hc_shape\":", (unsigned long long)probe.mtp_eproj_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_eproj_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_hnorm_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_hnorm_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_hnorm_hc_nbytes\":%llu,\n  \"mtp_hnorm_hc_shape\":", (unsigned long long)probe.mtp_hnorm_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_hnorm_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_hproj_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_hproj_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_hproj_hc_nbytes\":%llu,\n  \"mtp_hproj_hc_shape\":", (unsigned long long)probe.mtp_hproj_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_hproj_hc);
 +    fprintf(fp, ",\n");
 +    fprintf(fp, "  \"mtp_input_hc_fnv64\":");
 +    json_write_u64_hex(fp, probe.mtp_input_hc.fnv64);
 +    fprintf(fp, ",\n  \"mtp_input_hc_nbytes\":%llu,\n  \"mtp_input_hc_shape\":", (unsigned long long)probe.mtp_input_hc.nbytes);
 +    json_write_shape(fp, &probe.mtp_input_hc);
-+    json_write_tensor_stats(fp, "mtp_input_hc", &probe.mtp_input_hc);
 +    fprintf(fp, ",\n");
 +    fprintf(fp, "  \"mtp_block_out_hc_fnv64\":");
 +    json_write_u64_hex(fp, probe.mtp_block_out_hc.fnv64);
 +    fprintf(fp, ",\n  \"mtp_block_out_hc_nbytes\":%llu,\n  \"mtp_block_out_hc_shape\":", (unsigned long long)probe.mtp_block_out_hc.nbytes);
 +    json_write_shape(fp, &probe.mtp_block_out_hc);
-+    json_write_tensor_stats(fp, "mtp_block_out_hc", &probe.mtp_block_out_hc);
 +    fprintf(fp, ",\n");
 +    fprintf(fp, "  \"mtp_head_norm_fnv64\":");
 +    json_write_u64_hex(fp, probe.mtp_head_norm.fnv64);
 +    fprintf(fp, ",\n  \"mtp_head_norm_nbytes\":%llu,\n  \"mtp_head_norm_shape\":", (unsigned long long)probe.mtp_head_norm.nbytes);
 +    json_write_shape(fp, &probe.mtp_head_norm);
-+    json_write_tensor_stats(fp, "mtp_head_norm", &probe.mtp_head_norm);
 +    fprintf(fp, ",\n");
 +    fprintf(fp, "  \"mtp_params\":{\n");
 +    fprintf(fp, "    \"n_embd\":4096,\n");
@@ -339,7 +331,7 @@ index 838a394..4ae1b1d 100644
  static int run_generation(ds4_engine *engine, const cli_config *cfg) {
      ds4_tokens prompt = {0};
      build_prompt(engine, &cfg->gen, &prompt);
-@@ -723,6 +839,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
+@@ -723,6 +850,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
          ds4_tokens_free(&prompt);
          return rc;
      }
@@ -351,7 +343,7 @@ index 838a394..4ae1b1d 100644
  
      const bool diagnostic = cfg->gen.dump_tokens ||
                              cfg->gen.head_test ||
-@@ -1230,6 +1351,11 @@ static cli_config parse_options(int argc, char **argv) {
+@@ -1230,6 +1362,11 @@ static cli_config parse_options(int argc, char **argv) {
              c.gen.top_p = parse_float_range(need_arg(&i, argc, argv, arg), arg, 0.0f, 1.0f);
          } else if (!strcmp(arg, "--seed")) {
              c.gen.seed = parse_u64(need_arg(&i, argc, argv, arg), arg);

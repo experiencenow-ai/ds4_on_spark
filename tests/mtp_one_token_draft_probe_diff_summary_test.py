@@ -1,6 +1,6 @@
 import unittest
 
-from scripts import summarize_mtp_one_token_draft_probe_diff as summary
+from scripts import summarize_mtp_one_token_draft_probe_diff as summ
 
 
 def _base_probe() -> dict:
@@ -15,24 +15,34 @@ def _base_probe() -> dict:
 		"trunk_token_embd_fnv64": "0000000000000000",
 		"trunk_token_embd_nbytes": 16,
 		"trunk_token_embd_shape": [4, 1, 1],
-		"trunk_token_embd_sample_f32": [0.0, 1.0, 2.0, 3.0],
+		"trunk_pre_hc_head_fnv64": "0000000000000000",
+		"trunk_pre_hc_head_nbytes": 16,
+		"trunk_pre_hc_head_shape": [4, 1, 1],
+		"mtp_input_hc_fnv64": "0000000000000000",
+		"mtp_input_hc_nbytes": 16,
+		"mtp_input_hc_shape": [4, 1, 1],
+		"mtp_block_out_hc_fnv64": "0000000000000000",
+		"mtp_block_out_hc_nbytes": 16,
+		"mtp_block_out_hc_shape": [4, 1, 1],
+		"mtp_head_norm_fnv64": "0000000000000000",
+		"mtp_head_norm_nbytes": 16,
+		"mtp_head_norm_shape": [4, 1, 1],
 	}
 
 
 class MtpOneTokenProbeDiffSummaryTest(unittest.TestCase):
-	def test_summary_marks_sample_mismatch_by_default(self) -> None:
+	def test_first_diverge_null_when_equal(self) -> None:
 		a = _base_probe()
 		b = _base_probe()
-		b["trunk_token_embd_sample_f32"] = [0.0, 1.0, 2.0, 3.1]
-		res = summary.summarize_one_token_mtp_probe_diff(a, b, stage_order=["trunk_token_embd"])
-		self.assertFalse(bool(res.get("ok", True)))
-		first = res.get("first_mismatch") or {}
-		self.assertEqual(first.get("kind"), "sample")
-		self.assertEqual(first.get("prefix"), "trunk_token_embd")
+		out = summ.summarize_one_token_diff(a, b, sample_tol=1.0e-5)
+		self.assertTrue(bool(out.get("ok", False)))
+		self.assertIsNone(out.get("first_diverge", None))
 
-	def test_summary_respects_relaxed_sample_tol(self) -> None:
+	def test_first_diverge_reports_mismatch_prefix(self) -> None:
 		a = _base_probe()
 		b = _base_probe()
-		b["trunk_token_embd_sample_f32"] = [0.0, 1.0, 2.0, 3.1]
-		res = summary.summarize_one_token_mtp_probe_diff(a, b, stage_order=["trunk_token_embd"], sample_tol=0.11)
-		self.assertTrue(bool(res.get("ok", False)))
+		b["mtp_input_hc_fnv64"] = "0000000000000001"
+		out = summ.summarize_one_token_diff(a, b, sample_tol=1.0e-5)
+		self.assertFalse(bool(out.get("ok", True)))
+		self.assertEqual(out.get("first_diverge", None), "mtp_input_hc")
+

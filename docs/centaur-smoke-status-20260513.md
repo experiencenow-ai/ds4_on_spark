@@ -50,6 +50,23 @@ Runbook + scripts:
 - `docs/centaur-ring-spark12.md`
 - `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh`
 
+Quickstart (once Spark1/Spark2 hardware is reachable; from your Mac repo root):
+
+```bash
+export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
+export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_TRACE=1
+export RING_REMOTE_VERIFY=1
+export RING_GEN_REPORT=1
+sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+After reviewing/redacting the fetched bundle, promote it into a commit-safe fixtures directory:
+
+```bash
+sh ./scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh "$RING_RUN_ID"
+```
+
 Expected commit-safe evidence bundle shape (once run):
 
 - `fixtures/centaur-smoke/spark12-v73/ring_rsync/<RING_RUN_ID>/`
@@ -61,4 +78,3 @@ Expected commit-safe evidence bundle shape (once run):
 
 - Centaur bugs observed: none (based on committed PASS bundles listed above).
 - DS4 runtime/host issues observed: none in the committed bundles; ring-rsync remains untested on real Spark1/2 hardware.
-

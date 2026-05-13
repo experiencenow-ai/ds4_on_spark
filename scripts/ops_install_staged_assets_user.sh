@@ -181,6 +181,11 @@ need_file "$staged_systemd_user_dir/ds4-preflight-tp4-strict@.service"
 
 run install -d -m 0755 "$user_systemd_dir"
 run install -m 0644 "$staged_systemd_user_dir"/ds4*.service "$user_systemd_dir"/
+if ls "$staged_systemd_user_dir"/ds4*.timer >/dev/null 2>&1; then
+	run install -m 0644 "$staged_systemd_user_dir"/ds4*.timer "$user_systemd_dir"/
+else
+	echo "skip timers (none staged)"
+fi
 echo
 
 if [ "$install_spark_units" -ne 0 ]; then
