@@ -16,6 +16,7 @@ class CodexTaskTest(unittest.TestCase):
 				"repo-status",
 				"spark-antirez-oracle",
 				"spark-llamacpp-mtp-probe",
+				"spark-resident-batched-decode",
 				"spark-ring-status",
 			},
 		)
@@ -54,6 +55,15 @@ class CodexTaskTest(unittest.TestCase):
 		self.assertIn("ALLOW_PATCH=1", env)
 		self.assertIn("ALLOW_BUILD=1", env)
 		self.assertIn("ALLOW_RUN=1", env)
+
+	def test_resident_batched_decode_task_defaults_to_gated_run(self) -> None:
+		parser = codex_task.build_parser()
+		args = parser.parse_args(["spark-resident-batched-decode"])
+		self.assertFalse(args.run)
+		self.assertEqual(args.parallel_values, "8")
+		self.assertEqual(args.batch_values, "2048")
+		self.assertEqual(args.ubatch_values, "512")
+		self.assertEqual(args.concurrency, "1 2 4 8")
 
 
 if __name__ == "__main__":
