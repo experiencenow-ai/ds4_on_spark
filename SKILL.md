@@ -275,3 +275,4 @@ This repository targets Tockchain/Valis-style C/CUDA firmware-quality work.
 - Put large run artifacts under `/private/tmp/ds4_*` and summarize their paths
   in docs or PR text instead of committing the artifacts.
 - Use PRs for repo changes. Do not push directly to `main`.
+
