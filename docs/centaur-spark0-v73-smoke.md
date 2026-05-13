@@ -131,6 +131,10 @@ If you re-run without changing `CENTAUR_RUN_ID` (so the same workdir/venv is reu
 
 - `CENTAUR_CLEAR_VENV=1`
 
+If you want `smoke.log` to include the exact shell command lines (useful for bug reports), enable tracing:
+
+- `CENTAUR_TRACE=1`
+
 ## What the smoke actually runs
 
 See `scripts/centaur_spark0_v73_smoke.sh` for the fully reproducible command sequence.
