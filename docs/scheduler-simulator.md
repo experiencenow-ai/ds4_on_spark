@@ -621,6 +621,8 @@ python3 sim/scheduler/recommendations.py \
   --format md
 ```
 
+The markdown tables include time-weighted expert pending-depth p95 (`pending_p95`, plus `pending_hi_p95`/`pending_lo_p95` when both latency classes are present) so queue-reservation and backpressure changes are visible without opening the full JSON payload.
+
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
 
 ## MTP Simulation
