@@ -8,6 +8,7 @@ import csv
 import json
 import math
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -101,7 +102,11 @@ def _quality(row: Dict[str, str]) -> tuple[Optional[float], str, Optional[float]
     return(None, "missing", public_prior, local_score)
 
 
-def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") -> List[ScoreRow]:
+def score_rows(
+    rows: Iterable[Dict[str, str]],
+    speed_field: str = "decode_tps",
+    pareto_group: str = "scope",
+) -> List[ScoreRow]:
     scored: List[ScoreRow] = []
     for idx, row in enumerate(rows):
         model = _get(row, "model", "model_id", "target")
@@ -167,7 +172,7 @@ def score_rows(rows: Iterable[Dict[str, str]], speed_field: str = "decode_tps") 
             spec_decode_mean_accept_len=spec_decode_mean_accept_len,
             spec_decode_accept_rate=spec_decode_accept_rate,
         ))
-    mark_pareto(scored, speed_field)
+    mark_pareto(scored, speed_field, pareto_group)
     return(scored)
 
 
@@ -180,7 +185,9 @@ def _value(row: ScoreRow, field: str) -> Optional[float]:
     return(float(v))
 
 
-def mark_pareto(rows: Sequence[ScoreRow], speed_field: str) -> None:
+def _mark_pareto_group(rows: Sequence[ScoreRow], speed_field: str) -> None:
+    for row in rows:
+        row.dominated_by = ""
     for i, row in enumerate(rows):
         q = row.quality_score
         s = _value(row, speed_field)
@@ -196,6 +203,20 @@ def mark_pareto(rows: Sequence[ScoreRow], speed_field: str) -> None:
             if oq >= q and os >= s and (oq > q or os > s):
                 row.dominated_by = other.model if other.run_id == "" else f"{other.model}/{other.run_id}"
                 break
+
+
+def mark_pareto(rows: Sequence[ScoreRow], speed_field: str, pareto_group: str = "scope") -> None:
+    if pareto_group not in ("all", "scope"):
+        raise ValueError(f"invalid pareto_group: {pareto_group}")
+    if pareto_group == "all":
+        _mark_pareto_group(rows, speed_field)
+        return
+    groups: Dict[str, List[ScoreRow]] = defaultdict(list)
+    for row in rows:
+        key = row.scope.strip() if row.scope is not None else ""
+        groups[key].append(row)
+    for _, g in groups.items():
+        _mark_pareto_group(g, speed_field)
 
 
 def _fmt(v: Optional[float]) -> str:
@@ -286,9 +307,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Score model quality/speed tradeoffs from a baseline CSV.")
     p.add_argument("csv_path", help="CSV path, or '-' for stdin")
     p.add_argument("--speed-field", default="decode_tps", choices=("decode_tps", "prefill_tps", "correct_task_rate", "correct_tasks_per_s", "quality_adjusted_decode_tps", "quality_adjusted_prefill_tps"))
+    p.add_argument("--pareto-group", default="scope", choices=("scope", "all"), help="Compute Pareto frontier within scope groups (default) or globally across all rows.")
     p.add_argument("--json", action="store_true", help="Emit JSON instead of markdown")
     args = p.parse_args(argv)
-    rows = score_rows(read_csv(args.csv_path), args.speed_field)
+    rows = score_rows(read_csv(args.csv_path), args.speed_field, pareto_group=args.pareto_group)
     if args.json:
         print(json.dumps(rows_to_dicts(rows), indent=2, sort_keys=True))
     else:
