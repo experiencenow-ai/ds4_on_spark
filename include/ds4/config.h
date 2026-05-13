@@ -62,4 +62,5 @@ int32_t ds4_config_load_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32
 int32_t ds4_config_load_auto_ex(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len,int32_t flags,int32_t *out_unknown);
 int32_t ds4_config_load_auto_ex_diag(ds4_config_t *cfg,const char *path,uint8_t *buf,int32_t cap,int32_t *out_len,int32_t flags,int32_t *out_unknown,ds4_config_diag_t *diag);
 int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap);
+int32_t ds4_config_template_format(char *out,int32_t cap);
 DS4_EXTERN_C_END

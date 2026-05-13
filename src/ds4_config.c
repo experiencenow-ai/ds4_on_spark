@@ -2,6 +2,7 @@
 #include "ds4/log.h"
 #include "ds4/str.h"
 
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -1287,4 +1288,122 @@ int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
 	if ( n >= cap )
 		return(-5);
 	return(n);
+}
+
+static int32_t ds4_config_buf_append_span(char *out,int32_t cap,int32_t *io_used,const char *s,int32_t slen)
+{
+	int32_t used,avail,copy,i;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	if ( io_used == 0 )
+		return(-3);
+	if ( s == 0 )
+		return(-4);
+	if ( slen <= 0 )
+		return(0);
+	used = *io_used;
+	if ( used < 0 )
+		used = 0;
+	if ( used >= cap )
+	{
+		out[cap - 1] = 0;
+		*io_used = (cap - 1);
+		return(-5);
+	}
+	avail = (cap - used - 1);
+	if ( avail <= 0 )
+	{
+		out[cap - 1] = 0;
+		*io_used = (cap - 1);
+		return(-6);
+	}
+	copy = slen;
+	if ( copy > avail )
+		copy = avail;
+	for (i=0; i<copy; i++)
+		out[used + i] = s[i];
+	used += copy;
+	out[used] = 0;
+	*io_used = used;
+	if ( copy != slen )
+		return(-7);
+	return(0);
+}
+
+static int32_t ds4_config_buf_appendf(char *out,int32_t cap,int32_t *io_used,const char *fmt,...)
+{
+	va_list ap;
+	int32_t used,avail,n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	if ( io_used == 0 )
+		return(-3);
+	if ( fmt == 0 )
+		return(-4);
+	used = *io_used;
+	if ( used < 0 )
+		used = 0;
+	if ( used >= cap )
+	{
+		out[cap - 1] = 0;
+		*io_used = (cap - 1);
+		return(-5);
+	}
+	avail = (cap - used);
+	va_start(ap,fmt);
+	n = (int32_t)vsnprintf(out + used,(size_t)avail,fmt,ap);
+	va_end(ap);
+	if ( n < 0 )
+		return(-6);
+	out[cap - 1] = 0;
+	if ( n >= avail )
+	{
+		*io_used = (cap - 1);
+		return(-7);
+	}
+	*io_used = (used + n);
+	return(0);
+}
+
+int32_t ds4_config_template_format(char *out,int32_t cap)
+{
+	ds4_config_t cfg;
+	char cfg_text[256];
+	const char *k,*h;
+	int32_t used,i,count,n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	out[0] = 0;
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-3);
+	if ( ds4_config_known_key_count(&count) < 0 )
+		return(-4);
+	used = 0;
+	if ( ds4_config_buf_append_span(out,cap,&used,"# ds4 config template\n",ds4_cstr_len_i32("# ds4 config template\n")) < 0 )
+		return(-5);
+	for (i=0; i<count; i++)
+	{
+		k = ds4_config_known_key(i);
+		if ( k == 0 )
+			return(-6);
+		h = ds4_config_known_key_help(i);
+		if ( h == 0 )
+			return(-7);
+		if ( ds4_config_buf_appendf(out,cap,&used,"# %s: %s\n",k,h) < 0 )
+			return(-8);
+	}
+	if ( ds4_config_buf_append_span(out,cap,&used,"\n",1) < 0 )
+		return(-9);
+	n = ds4_config_format(&cfg,cfg_text,(int32_t)sizeof(cfg_text));
+	if ( n < 0 )
+		return(-10);
+	if ( ds4_config_buf_append_span(out,cap,&used,cfg_text,n) < 0 )
+		return(-11);
+	return(used);
 }

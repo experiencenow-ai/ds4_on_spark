@@ -35,7 +35,7 @@ Supported keys:
 
 For programmatic introspection, `ds4_config_known_key_count`, `ds4_config_known_key`, and `ds4_config_known_key_help` expose the supported key list and a one-line value hint (no allocation). The CLI also supports `ds4_cli --dump-config-keys` and `ds4_cli --dump-config-help`.
 
-For a commented starter config file, the CLI also supports `ds4_cli --dump-config-template`.
+For a commented starter config file, the CLI supports `ds4_cli --dump-config-template`. For callers that want the same output without shelling out to the CLI, use `ds4_config_template_format(out,cap)` to format the template into a caller-provided buffer (no allocation).
 
 ## Validation helper
 

@@ -358,29 +358,13 @@ static int32_t ds4_cli_dump_config_help(void)
 
 static int32_t ds4_cli_dump_config_template(void)
 {
-	ds4_config_t cfg;
-	char out[128];
-	const char *k,*h;
-	int32_t i,count,n;
-	if ( ds4_config_defaults(&cfg) < 0 )
-		return(-1);
-	if ( ds4_config_known_key_count(&count) < 0 )
-		return(-2);
-	printf("# ds4 config template\n");
-	for (i=0; i<count; i++)
-	{
-		k = ds4_config_known_key(i);
-		if ( k == 0 )
-			return(-3);
-		h = ds4_config_known_key_help(i);
-		if ( h == 0 )
-			return(-4);
-		printf("# %s: %s\n",k,h);
-	}
-	printf("\n");
-	n = ds4_config_format(&cfg,out,(int32_t)sizeof(out));
+	char out[1024];
+	int32_t n;
+	n = ds4_config_template_format(out,(int32_t)sizeof(out));
 	if ( n < 0 )
-		return(-5);
+		return(-1);
+	if ( out[0] == 0 )
+		return(-2);
 	fputs(out,stdout);
 	return(0);
 }
