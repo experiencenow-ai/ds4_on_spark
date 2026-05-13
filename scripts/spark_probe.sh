@@ -1090,7 +1090,7 @@ fi
 	echo "== storage =="
 		if [ "$spark_probe_facts" != "1" ]; then
 			if command -v timeout >/dev/null 2>&1; then
-				timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\\$1]++ {print}" || true
+				timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\$1]++ {print}" || true
 			else
 				df -h / 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || true
 			fi
