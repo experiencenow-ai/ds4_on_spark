@@ -259,7 +259,7 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
         has_i = bool(int(num_interactive) > 0)
         has_b = bool(int(num_batch) > 0)
 
-        headers = ["variant", "svc_ms/out", "out_tps", "pending_p95"]
+        headers = ["variant", "svc_ms/out", "out_tps", "pending_p95", "starv_frac", "starv_p95_ms"]
         if has_i:
             headers += ["pending_hi_p95"]
         if has_b:
@@ -291,6 +291,8 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
             cells.append(_fmt_float(float(s.get("service_slot_ms_per_output_token", 0.0)), digits=4))
             cells.append(_fmt_float(float(s.get("output_token_throughput_tps", 0.0)), digits=3))
             cells.append(_fmt_float(float(s.get("pending_depth_time_weighted_p95", 0.0)), digits=3))
+            cells.append(_fmt_pct(float(s.get("starved_task_frac", 0.0)), digits=3))
+            cells.append(_fmt_float(float(s.get("starved_task_queue_wait_ms_p95", 0.0)), digits=3))
             if has_i:
                 cells.append(_fmt_float(float(s.get("pending_hi_depth_time_weighted_p95", 0.0)), digits=3))
             if has_b:
