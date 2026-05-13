@@ -11,31 +11,35 @@ Goals:
 
 ## Compact Pairwise Judge Output (decision object)
 
-DSv4 should emit **exactly one JSON object** (minified; no prose) with:
+DSv4 should emit **exactly one minified JSON object on one line** (no prose/markdown).
 
-- `winner`: `"A" | "B" | "tie"`
-- `margin`: integer `0..3` (strength of preference; `0` == near-tie)
-- `score_a`: integer `0..10`
-- `score_b`: integer `0..10`
-- `reason`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
-- `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
-- `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
-- `tags`: array of short strings (0..3); e.g. `["format","factuality"]`
+Preferred (compact keys; smallest judge_out):
+
+```json
+{"w":"A|B|tie","m":0,"sa":0,"sb":0,"r":"...","h":"","t":[]}
+```
+
+Fields:
+- `w`: `"A" | "B" | "tie"`
+- `m`: integer `0..3` (strength of preference; `0` == near-tie; tie ⇒ `m=0`)
+- `sa`, `sb`: integers `0..10` (numeric scores for A/B)
+- `r`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
+- `h`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
+- `t`: array of short strings (0..3); e.g. `["format","factuality"]`
 - No extra keys: the decision validator rejects unknown fields.
-- Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
-  - diff=1 ⇒ margin ∈ {0,1}
-  - diff=2 ⇒ margin ∈ {1,2}
-  - diff=3 ⇒ margin = 2
-  - diff≥4 ⇒ margin = 3
-  - strict mode also enforces that non-tie winners use `score_a!=score_b`
+- Strict-mode consistency rule: keep `m` consistent with `abs(sa-sb)`:
+  - diff=1 ⇒ `m` ∈ {0,1}
+  - diff=2 ⇒ `m` ∈ {1,2}
+  - diff=3 ⇒ `m` = 2
+  - diff≥4 ⇒ `m` = 3
+  - strict mode also enforces that non-tie winners use `sa!=sb`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
 Machine-readable schema:
-- `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v1.schema.json`
-- Optional compact-key variant (to shave judge_out tokens):
-  - `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v2.schema.json` with keys `w,m,sa,sb,r,h,t`
-  - `scripts/pairwise_judge_validate_decision.py` and `scripts/pairwise_judge_record.py` accept v2 and canonicalize to v1 keys in outputs
+- Preferred: `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v2.schema.json` with keys `w,m,sa,sb,r,h,t`
+- Legacy (more verbose keys): `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v1.schema.json`
+- `scripts/pairwise_judge_validate_decision.py` and `scripts/pairwise_judge_record.py` accept both and canonicalize to v1 keys internally
 
 ## Judge Record JSONL (envelope)
 
@@ -52,15 +56,17 @@ If `parse_valid` is `true`, these must also be present:
 - For record schemas v1/v2/v3: `winner`, `margin`, `score_a`, `score_b`, `reason`, `train_hint`, `tags`
 - For record schemas v4/v5 (compact decision keys): `w`, `m`, `sa`, `sb`, `r`, `h`, `t`
 
-Optional but recommended (for speed/quality separation and budgeting):
+Preferred schema (smallest JSONL; strict-by-schema):
+- `schema="ds4_pairwise_judge_record_v5"`: compact decision keys `w/m/sa/sb/r/h/t` plus compact budget arrays:
+  - `tk`: `[a_out, b_out, judge_in, judge_out]` (all required; ints >= 0)
+  - `lt`: `[a_ms, b_ms, judge_ms]` (all required; ints >= 0)
+
+Optional but recommended in legacy schemas (for speed/quality separation and budgeting):
 - `tokens`: `{ "a_out": int, "b_out": int, "judge_in": int, "judge_out": int }`
 - `latency_ms`: `{ "a": int, "b": int, "judge": int }`
 - In `schema="ds4_pairwise_judge_record_v1"`, these may be omitted or partially populated; strict validation requires all keys.
 - In `schema="ds4_pairwise_judge_record_v2"` and `schema="ds4_pairwise_judge_record_v3"`, these are required (all keys required).
 - In `schema="ds4_pairwise_judge_record_v4"`, these are required (all keys required).
-- In `schema="ds4_pairwise_judge_record_v5"`, use compact budget arrays instead of objects:
-  - `tk`: `[a_out, b_out, judge_in, judge_out]` (all required; ints >= 0)
-  - `lt`: `[a_ms, b_ms, judge_ms]` (all required; ints >= 0)
 - `schema="ds4_pairwise_judge_record_v3"` is strict-by-schema: it also enforces strict decision consistency (margin/score mapping + `tags<=3`) via `scripts/judge_elo_schema.py`.
 - `schema="ds4_pairwise_judge_record_v4"` is strict-by-schema and stores **compact decision keys** (`w,m,sa,sb,r,h,t`) to reduce JSONL size; offline tools accept v4 and canonicalize it internally.
 - `schema="ds4_pairwise_judge_record_v5"` is strict-by-schema and stores **compact decision keys** plus compact budget arrays (`tk`/`lt`) to further reduce JSONL size.
