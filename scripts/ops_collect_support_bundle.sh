@@ -311,22 +311,32 @@ fi
 			)
 		fi
 
-		if [ -x "$local_scripts_dir/ops_tp2_readiness.sh" ]; then
-			(
-				set -- "$local_scripts_dir/ops_tp2_readiness.sh" --self "$instance"
-				for raw in $env_paths; do
+			if [ -x "$local_scripts_dir/ops_tp2_readiness.sh" ]; then
+				(
+					set -- "$local_scripts_dir/ops_tp2_readiness.sh" --self "$instance"
+					for raw in $env_paths; do
 					set -- "$@" --env "$raw"
 				done
 				if [ "$DS4_PEER_HOST" != "" ]; then
 					set -- "$@" --peer "$DS4_PEER_HOST"
 				fi
-				run_cmd "ds4/tp2_readiness.txt" "$@"
-			)
-		fi
+					run_cmd "ds4/tp2_readiness.txt" "$@"
+				)
+			fi
+	
+			if [ -x "$local_scripts_dir/ops_tp3_readiness.sh" ]; then
+				(
+					set -- "$local_scripts_dir/ops_tp3_readiness.sh" --self "$instance" --topology ring --strict
+					for raw in $env_paths; do
+						set -- "$@" --env "$raw"
+					done
+					run_cmd "ds4/tp3_readiness.txt" "$@"
+				)
+			fi
 
-		if [ -x "$local_scripts_dir/ops_tp4_readiness.sh" ]; then
-			(
-				set -- "$local_scripts_dir/ops_tp4_readiness.sh" --self "$instance" --topology ring --strict
+			if [ -x "$local_scripts_dir/ops_tp4_readiness.sh" ]; then
+				(
+					set -- "$local_scripts_dir/ops_tp4_readiness.sh" --self "$instance" --topology ring --strict
 				for raw in $env_paths; do
 					set -- "$@" --env "$raw"
 				done
@@ -337,27 +347,38 @@ fi
 
 	if have_cmd systemctl; then
 		run_cmd "systemd/systemctl_status_ds4.txt" systemctl --no-pager status "ds4@${instance}.service"
-	run_cmd "systemd/systemctl_status_ds4_strict.txt" systemctl --no-pager status "ds4-strict@${instance}.service"
-	run_cmd "systemd/systemctl_status_preflight.txt" systemctl --no-pager status "ds4-preflight@${instance}.service"
-	run_cmd "systemd/systemctl_status_preflight_strict.txt" systemctl --no-pager status "ds4-preflight-strict@${instance}.service"
-	run_cmd "systemd/systemctl_status_preflight_tp4.txt" systemctl --no-pager status "ds4-preflight-tp4@${instance}.service"
-	run_cmd "systemd/systemctl_status_preflight_tp4_strict.txt" systemctl --no-pager status "ds4-preflight-tp4-strict@${instance}.service"
-	run_cmd "systemd/systemctl_status_spark_master.txt" systemctl --no-pager status "spark-master@${instance}.service"
-	run_cmd "systemd/systemctl_status_spark_worker.txt" systemctl --no-pager status "spark-worker@${instance}.service"
-	run_cmd "systemd/systemctl_show_ds4.txt" systemctl show "ds4@${instance}.service"
-	run_cmd "systemd/systemctl_list_units_ds4.txt" sh -c "systemctl list-units --no-pager | grep -E '^ds4' || true"
-	run_cmd "systemd/systemctl_list_units_spark.txt" sh -c "systemctl list-units --no-pager | grep -E '^(spark-master|spark-worker)' || true"
-fi
+		run_cmd "systemd/systemctl_status_ds4_tp2_strict.txt" systemctl --no-pager status "ds4-tp2-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_ds4_strict_legacy.txt" systemctl --no-pager status "ds4-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_ds4_tp3_strict.txt" systemctl --no-pager status "ds4-tp3-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_ds4_tp4_strict.txt" systemctl --no-pager status "ds4-tp4-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_preflight.txt" systemctl --no-pager status "ds4-preflight@${instance}.service"
+		run_cmd "systemd/systemctl_status_preflight_strict.txt" systemctl --no-pager status "ds4-preflight-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_preflight_tp3.txt" systemctl --no-pager status "ds4-preflight-tp3@${instance}.service"
+		run_cmd "systemd/systemctl_status_preflight_tp3_strict.txt" systemctl --no-pager status "ds4-preflight-tp3-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_preflight_tp4.txt" systemctl --no-pager status "ds4-preflight-tp4@${instance}.service"
+		run_cmd "systemd/systemctl_status_preflight_tp4_strict.txt" systemctl --no-pager status "ds4-preflight-tp4-strict@${instance}.service"
+		run_cmd "systemd/systemctl_status_spark_master.txt" systemctl --no-pager status "spark-master@${instance}.service"
+		run_cmd "systemd/systemctl_status_spark_worker.txt" systemctl --no-pager status "spark-worker@${instance}.service"
+		run_cmd "systemd/systemctl_show_ds4.txt" systemctl show "ds4@${instance}.service"
+		run_cmd "systemd/systemctl_list_units_ds4.txt" sh -c "systemctl list-units --no-pager | grep -E '^ds4' || true"
+		run_cmd "systemd/systemctl_list_units_spark.txt" sh -c "systemctl list-units --no-pager | grep -E '^(spark-master|spark-worker)' || true"
+	fi
 
-if have_cmd journalctl; then
-	run_cmd "journald/journal_ds4.txt" journalctl --no-pager -u "ds4@${instance}.service" --since "$since"
-	run_cmd "journald/journal_preflight.txt" journalctl --no-pager -u "ds4-preflight@${instance}.service" --since "$since"
-	run_cmd "journald/journal_preflight_strict.txt" journalctl --no-pager -u "ds4-preflight-strict@${instance}.service" --since "$since"
-	run_cmd "journald/journal_preflight_tp4.txt" journalctl --no-pager -u "ds4-preflight-tp4@${instance}.service" --since "$since"
-	run_cmd "journald/journal_preflight_tp4_strict.txt" journalctl --no-pager -u "ds4-preflight-tp4-strict@${instance}.service" --since "$since"
-	run_cmd "journald/journal_spark_master.txt" journalctl --no-pager -u "spark-master@${instance}.service" --since "$since"
-	run_cmd "journald/journal_spark_worker.txt" journalctl --no-pager -u "spark-worker@${instance}.service" --since "$since"
-fi
+	if have_cmd journalctl; then
+		run_cmd "journald/journal_ds4.txt" journalctl --no-pager -u "ds4@${instance}.service" --since "$since"
+		run_cmd "journald/journal_ds4_tp2_strict.txt" journalctl --no-pager -u "ds4-tp2-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_ds4_strict_legacy.txt" journalctl --no-pager -u "ds4-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_ds4_tp3_strict.txt" journalctl --no-pager -u "ds4-tp3-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_ds4_tp4_strict.txt" journalctl --no-pager -u "ds4-tp4-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_preflight.txt" journalctl --no-pager -u "ds4-preflight@${instance}.service" --since "$since"
+		run_cmd "journald/journal_preflight_strict.txt" journalctl --no-pager -u "ds4-preflight-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_preflight_tp3.txt" journalctl --no-pager -u "ds4-preflight-tp3@${instance}.service" --since "$since"
+		run_cmd "journald/journal_preflight_tp3_strict.txt" journalctl --no-pager -u "ds4-preflight-tp3-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_preflight_tp4.txt" journalctl --no-pager -u "ds4-preflight-tp4@${instance}.service" --since "$since"
+		run_cmd "journald/journal_preflight_tp4_strict.txt" journalctl --no-pager -u "ds4-preflight-tp4-strict@${instance}.service" --since "$since"
+		run_cmd "journald/journal_spark_master.txt" journalctl --no-pager -u "spark-master@${instance}.service" --since "$since"
+		run_cmd "journald/journal_spark_worker.txt" journalctl --no-pager -u "spark-worker@${instance}.service" --since "$since"
+	fi
 
 if have_cmd getent; then
 	if [ "$DS4_MASTER_ADDR" != "" ]; then
