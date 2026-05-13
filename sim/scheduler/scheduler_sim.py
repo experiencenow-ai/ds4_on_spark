@@ -1348,6 +1348,8 @@ def load_trace_jsonl(
     default_cls: str = "",
     pack_layers_by_token_index: bool = False,
     pack_require_layer_index: bool = False,
+    pack_time_policy: str = "strict",
+    pack_time_tol_ms: float = 0.0,
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
@@ -1472,6 +1474,8 @@ def load_trace_jsonl(
         packed = trace_extract.pack_layers_by_token_index(
             extracted,
             require_layer_index=bool(pack_require_layer_index),
+            time_policy=str(pack_time_policy),
+            time_tol_ms=float(pack_time_tol_ms),
             strict=True,
         )
 
@@ -1495,6 +1499,8 @@ def load_trace_jsonl(
                 default_cls="",
                 pack_layers_by_token_index=False,
                 pack_require_layer_index=False,
+                pack_time_policy="strict",
+                pack_time_tol_ms=0.0,
             )
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
@@ -5196,6 +5202,18 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=0,
         help="When used with --trace-pack-layers-by-token-index, require every record to include layer_index so layer ordering is explicit (default: 0).",
     )
+    p.add_argument(
+        "--trace-pack-time-policy",
+        type=str,
+        default="strict",
+        help="When used with --trace-pack-layers-by-token-index, how to handle mismatched t_ms/dt_ms within a token group: strict (default), first, min, max.",
+    )
+    p.add_argument(
+        "--trace-pack-time-tol-ms",
+        type=float,
+        default=0.0,
+        help="When used with --trace-pack-layers-by-token-index, treat abs(t_ms/dt_ms mismatch) <= tol as equal (default: 0).",
+    )
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -5437,6 +5455,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 default_cls=args.trace_default_cls,
                 pack_layers_by_token_index=(int(args.trace_pack_layers_by_token_index) != 0),
                 pack_require_layer_index=(int(args.trace_pack_require_layer_index) != 0),
+                pack_time_policy=args.trace_pack_time_policy,
+                pack_time_tol_ms=float(args.trace_pack_time_tol_ms),
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())

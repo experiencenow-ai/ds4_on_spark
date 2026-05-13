@@ -411,6 +411,13 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+By default, per-layer packing is strict about timestamps: every route record in the token group must agree on `t_ms`/`dt_ms`. If your runtime emits per-layer timestamps that differ (common when routes are logged at dispatch time rather than at token submit time), use a pack-time policy to collapse them:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-pack-layers-by-token-index 1 --trace-pack-time-policy min --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
 Or, use the lightweight extractor explicitly to map common aliases into the strict simulator contract:
 
 ```bash
