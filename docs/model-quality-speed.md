@@ -112,7 +112,12 @@ reports:
 scripts/model_quality_speed_score.py results/model_runs.csv
 scripts/model_quality_speed_score.py results/model_runs.csv --json
 scripts/model_quality_speed_score.py results/model_runs.csv --speed-field correct_tasks_per_s
+scripts/model_quality_speed_score.py results/model_runs.csv --pareto-group all
 ```
+
+By default, Pareto `dominated_by` is computed **within each `scope` group** (so
+Ling/Qwen/DFlash/DeepSeek rows do not accidentally dominate each other). Use
+`--pareto-group all` only when you intentionally want one global frontier.
 
 Example CSV:
 
