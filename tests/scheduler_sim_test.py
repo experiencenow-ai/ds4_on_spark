@@ -20,6 +20,22 @@ class SchedulerSimTest(unittest.TestCase):
         if SchedulerSimTest._recommendations_quick_cache is None:
             SchedulerSimTest._recommendations_quick_cache = recommendations.run_recommendations(quick=True)
         return SchedulerSimTest._recommendations_quick_cache
+
+    def test_admit_policy_least_oldest_prefers_younger_queue(self) -> None:
+        eq0 = scheduler_sim.ExpertQueue()
+        eq1 = scheduler_sim.ExpertQueue()
+        eq0.lo.append(scheduler_sim.Task(token_id=0, cls=scheduler_sim.LatencyClass.BATCH, enqueue_ms=0.0))
+        experts = [eq0, eq1]
+        candidates = (0, 1)
+        ordered = scheduler_sim._candidate_order_for_layer(
+            "least_oldest",
+            experts,
+            candidates,
+            scores=None,
+            now_ms=100.0,
+            queue_cls=scheduler_sim.LatencyClass.BATCH,
+        )
+        self.assertEqual(list(ordered), [1, 0])
     def test_synthetic_trace_deterministic(self) -> None:
         cfg = scheduler_sim.TraceConfig(
             num_tokens=10,

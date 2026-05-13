@@ -74,6 +74,7 @@ Policies supported:
 - `--admit-policy ordered` (default): admit in router-provided order
 - `--admit-policy least_pending`: admit the least-pending experts among the candidates (ties broken by router order)
 - `--admit-policy least_pending_work`: admit the least-pending experts by `pending_work` (queued+in-flight sum of `cost_scale`; ties broken by router order)
+- `--admit-policy least_oldest`: admit experts whose chosen queue (interactive/batch) has the youngest outstanding work (oldest-queued age, then pending, then router order)
 - `--admit-policy score_desc`: order candidates by descending `scores` from trace replay (ties broken by router order). Requires `scores` for every trace entry.
 
 ### Per-Expert Service Discipline
