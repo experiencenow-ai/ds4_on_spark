@@ -162,6 +162,7 @@ class SimConfig:
     pending_units: str = "tasks"
     backpressure_units: str = "tasks"
     backpressure_zero_admit_policy: str = "skip"
+    stall_retry_policy: str = "fifo"
     k_scope: str = "token"
     admit_policy: str = "ordered"
     pending_hist_max_depth: int = 2048
@@ -3533,6 +3534,10 @@ def run_simulation(
     if backpressure_zero_admit_policy not in ("skip", "stall"):
         raise ValueError("backpressure_zero_admit_policy must be 'skip' or 'stall'")
 
+    stall_retry_policy = cfg.stall_retry_policy.strip().lower()
+    if stall_retry_policy not in ("fifo", "interactive_first", "oldest_first"):
+        raise ValueError("stall_retry_policy must be 'fifo', 'interactive_first', or 'oldest_first'")
+
     k_scope = cfg.k_scope.strip().lower()
     if k_scope not in ("token", "layer"):
         raise ValueError("k_scope must be 'token' or 'layer'")
@@ -4067,15 +4072,36 @@ def run_simulation(
         max_retry = max(32, int(cfg.num_experts) * max(1, int(cfg.expert_parallelism)))
         if retry_budget > max_retry:
             retry_budget = max_retry
+        batch: List[int] = []
         for _ in range(retry_budget):
             tid = stalled_tokens.popleft()
             stalled_set.discard(tid)
+            batch.append(tid)
+
+        if stall_retry_policy == "interactive_first":
+            ordered = [tid for tid in batch if tokens.get(tid) is not None and tokens[tid].cls == LatencyClass.INTERACTIVE]
+            ordered.extend([tid for tid in batch if tokens.get(tid) is not None and tokens[tid].cls != LatencyClass.INTERACTIVE])
+            ordered.extend([tid for tid in batch if tokens.get(tid) is None])
+        elif stall_retry_policy == "oldest_first":
+            def _key(tid: int) -> Tuple[float, int]:
+                ts = tokens.get(tid)
+                if ts is None:
+                    return((float("inf")), 1)
+                cls_rank = 0 if ts.cls == LatencyClass.INTERACTIVE else 1
+                return((float(ts.submit_ms), cls_rank))
+            ordered = list(batch)
+            ordered.sort(key=_key)
+        else:
+            ordered = batch
+
+        for tid in ordered:
             ts = tokens.get(tid)
             if ts is None:
                 continue
             if ts.done_ms is not None:
                 continue
             if ts.remaining != 0:
+                _stall_token(tid)
                 continue
             _advance_token(now_ms, tid)
 
@@ -5402,6 +5428,13 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         choices=("skip", "stall"),
         help="When a stage cannot admit any tasks because all candidates are at the pending limit: skip (default; counts as a backpressure stage-skip and can drop tokens if all stages skip) or stall (retry the same stage later, modeling upstream queueing; can increase latency/makespan).",
     )
+    p.add_argument(
+        "--stall-retry-policy",
+        type=str,
+        default="fifo",
+        choices=("fifo", "interactive_first", "oldest_first"),
+        help="When --backpressure-zero-admit-policy=stall accumulates blocked tokens, choose which stalled tokens to retry first on each TASK_DONE event: fifo (default) preserves arrival order, interactive_first prioritizes interactive class, oldest_first prioritizes earliest submit_ms (ties: interactive first).",
+    )
     p.add_argument("--k-scope", type=str, default="token", help="Adaptive-K controller scope: token (default) chooses one K per trace entry; layer chooses K independently for each MoE layer using that layer's candidates (requires layers[] in the trace).")
     p.add_argument(
         "--admit-policy",
@@ -5729,6 +5762,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         pending_units=args.pending_units,
         backpressure_units=args.backpressure_units,
         backpressure_zero_admit_policy=args.backpressure_zero_admit_policy,
+        stall_retry_policy=args.stall_retry_policy,
         k_scope=args.k_scope,
         admit_policy=args.admit_policy,
         pending_hist_max_depth=args.pending_hist_max_depth,

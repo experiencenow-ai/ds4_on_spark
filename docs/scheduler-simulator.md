@@ -38,7 +38,7 @@ Starvation is counted when a task waits in an expert queue for at least
 Backpressure (`--expert-queue-max`) is applied to **total outstanding tasks per expert**:
 queued tasks plus tasks currently in service (in-flight).
 
-By default, when a stage cannot admit any tasks because all candidates are at the pending limit, the simulator treats it as a **stage skip** (and a token can be dropped if every stage skips). To model upstream queueing instead, set `--backpressure-zero-admit-policy stall` to retry the same stage at later times (higher latency/makespan, fewer drops).
+By default, when a stage cannot admit any tasks because all candidates are at the pending limit, the simulator treats it as a **stage skip** (and a token can be dropped if every stage skips). To model upstream queueing instead, set `--backpressure-zero-admit-policy stall` to retry the same stage at later times (higher latency/makespan, fewer drops). When `stall` accumulates many blocked tokens under sustained overload, use `--stall-retry-policy interactive_first` (or `oldest_first`) to prioritize which stalled tokens get retried first on each capacity release.
 
 By default, backpressure is enforced in *task* units (each admitted expert task counts as `1`). When traces include a meaningful `cost_scale` (or `layers[].cost_scale`), you can instead enforce backpressure in *work* units via:
 

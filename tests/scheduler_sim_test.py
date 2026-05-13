@@ -36,6 +36,54 @@ class SchedulerSimTest(unittest.TestCase):
             queue_cls=scheduler_sim.LatencyClass.BATCH,
         )
         self.assertEqual(list(ordered), [1, 0])
+
+    def test_stall_retry_policy_interactive_first_prioritizes_interactive(self) -> None:
+        trace: list[scheduler_sim.TokenRoute] = []
+        for _i in range(5):
+            trace.append(
+                scheduler_sim.TokenRoute(
+                    t_ms=0.0,
+                    cls=scheduler_sim.LatencyClass.BATCH,
+                    candidates=(0,),
+                )
+            )
+        trace.append(
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.INTERACTIVE,
+                candidates=(0,),
+            )
+        )
+
+        adapt = scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=1,
+            k_min_batch=1,
+            k_max_batch=1,
+            q_low=0,
+            q_high=0,
+        )
+        base_cfg = scheduler_sim.SimConfig(
+            num_experts=1,
+            expert_parallelism=1,
+            expert_queue_max=1,
+            service_ms=10.0,
+            starvation_ms=1000.0,
+            hi_burst=0,
+            promote_ms=0.0,
+            adaptive_k=adapt,
+            backpressure_zero_admit_policy="stall",
+            stall_retry_policy="fifo",
+        )
+        metrics_fifo = scheduler_sim.run_simulation(base_cfg, trace)
+        cfg_interactive_first = dataclasses.replace(base_cfg, stall_retry_policy="interactive_first")
+        metrics_interactive_first = scheduler_sim.run_simulation(cfg_interactive_first, trace)
+
+        self.assertEqual(len(metrics_fifo.token_lat_ms_interactive), 1)
+        self.assertEqual(len(metrics_interactive_first.token_lat_ms_interactive), 1)
+        self.assertGreater(metrics_fifo.token_lat_ms_interactive[0], metrics_interactive_first.token_lat_ms_interactive[0])
+        self.assertAlmostEqual(metrics_fifo.token_lat_ms_interactive[0], 60.0, places=6)
+        self.assertAlmostEqual(metrics_interactive_first.token_lat_ms_interactive[0], 20.0, places=6)
     def test_synthetic_trace_deterministic(self) -> None:
         cfg = scheduler_sim.TraceConfig(
             num_tokens=10,
