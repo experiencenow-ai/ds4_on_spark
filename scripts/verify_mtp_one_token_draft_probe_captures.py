@@ -27,6 +27,12 @@ DEFAULT_PREFIXES = [
 	"mtp_head_norm",
 ]
 
+MINIMAL_PREFIXES = [
+	"trunk_token_embd",
+	"trunk_pre_hc_head",
+	"mtp_input_hc",
+]
+
 EXTENDED_PREFIXES = DEFAULT_PREFIXES + [
 	"mtp_enorm",
 	"mtp_eproj",
@@ -36,6 +42,7 @@ EXTENDED_PREFIXES = DEFAULT_PREFIXES + [
 ]
 
 PROFILE_PREFIXES = {
+	"minimal": MINIMAL_PREFIXES,
 	"default": DEFAULT_PREFIXES,
 	"extended": EXTENDED_PREFIXES,
 }
@@ -214,4 +221,3 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
 	sys.exit(main())
-

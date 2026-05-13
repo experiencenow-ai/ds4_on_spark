@@ -9,6 +9,7 @@ REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV="${REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV:-}"
 REMOTE_MTP_ONE_TOKEN_ENV="${REMOTE_MTP_ONE_TOKEN_ENV:-}"
 REMOTE_MTP_ONE_TOKEN_CMD="${REMOTE_MTP_ONE_TOKEN_CMD:-}"
 REMOTE_SIDE_CAR_PROBE_JSON="${REMOTE_SIDE_CAR_PROBE_JSON:-}"
+CAPTURE_PROFILE="${CAPTURE_PROFILE:-default}"
 
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
@@ -75,6 +76,12 @@ REPORT_MD="$OUT_DIR/mtp_oracle_vs_candidate_diff_spark.md"
 	echo "$REMOTE_SIDE_CAR_PROBE_JSON"
 	echo '```'
 	echo
+	echo "Capture profile gate (CAPTURE_PROFILE):"
+	echo
+	echo '```'
+	echo "$CAPTURE_PROFILE"
+	echo '```'
+	echo
 	echo "## Spark Host Info"
 	echo
 	echo '```'
@@ -139,14 +146,14 @@ ORACLE_CAP_STDERR="$OUT_DIR/oracle_capture_gate_stderr.txt"
 CAND_CAP_JSON="$OUT_DIR/candidate_capture_gate.json"
 CAND_CAP_STDERR="$OUT_DIR/candidate_capture_gate_stderr.txt"
 if [ "$ORACLE_JSON" != "" ]; then
-	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$ORACLE_JSON" --profile default --json \
+	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$ORACLE_JSON" --profile "$CAPTURE_PROFILE" --json \
 		>"$ORACLE_CAP_JSON" 2>"$ORACLE_CAP_STDERR" || true
 else
 	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle probe JSON\"}" >"$ORACLE_CAP_JSON"
 	printf '%s\n' "" >"$ORACLE_CAP_STDERR"
 fi
 if [ "$CAND_JSON" != "" ]; then
-	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$CAND_JSON" --profile default --json \
+	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$CAND_JSON" --profile "$CAPTURE_PROFILE" --json \
 		>"$CAND_CAP_JSON" 2>"$CAND_CAP_STDERR" || true
 else
 	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing candidate probe JSON\"}" >"$CAND_CAP_JSON"

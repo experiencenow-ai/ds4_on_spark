@@ -102,6 +102,15 @@ python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/
 python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
+If you are still in the stub stage (for example, you only have trunk captures + `mtp_input_hc`), use the minimal capture profile:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile minimal --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile minimal --probe-json /path/to/candidate_probe.json --json
+```
+
+The Spark wrapper also supports this via `CAPTURE_PROFILE=minimal`.
+
 Optional diagnosis: if you suspect the only issue is the HC-major ordering of an intermediate (same values, different layout), compare the `*_hc_major_fnv64` alternatives:
 
 ```bash

@@ -29,6 +29,12 @@ def _probe_with(prefixes: list[str]) -> dict:
 
 
 class MtpOneTokenProbeCapturesTest(unittest.TestCase):
+	def test_minimal_profile_allows_stub_stage(self) -> None:
+		probe = _probe_with(cap.MINIMAL_PREFIXES)
+		res = cap.verify_probe_captures(probe, profile="minimal")
+		self.assertTrue(bool(res.get("ok", False)))
+		self.assertEqual(res.get("missing_prefixes"), [])
+
 	def test_default_profile_requires_prefixes(self) -> None:
 		probe = _probe_with(["trunk_token_embd"])
 		res = cap.verify_probe_captures(probe, profile="default")
@@ -48,4 +54,3 @@ class MtpOneTokenProbeCapturesTest(unittest.TestCase):
 		res = cap.verify_probe_captures(probe, profile="default")
 		self.assertTrue(bool(res.get("ok", False)))
 		self.assertEqual(res.get("missing_prefixes"), [])
-
