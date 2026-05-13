@@ -332,7 +332,7 @@ fetch_one()
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
 			;;
 		flashinfer)
-			upstream="flashinfer-ai/flashinfer"; ref="refs/tags/v0.6.11"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			upstream="flashinfer-ai/flashinfer"; ref="refs/tags/v0.6.11.post1"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "flashinfer" "https://github.com/flashinfer-ai/flashinfer.git" "${ref}" "${expected}"
 			;;
 		dflash_code)
