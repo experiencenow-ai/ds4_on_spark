@@ -159,6 +159,14 @@ else
 	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$DIFF_SUMMARY_JSON"
 fi
 
+echo "== HC layout compare (local; best-effort) =="
+HC_LAYOUT_JSON="$OUT_DIR/hc_layout_compare.json"
+if [ "$ORACLE_JSON" != "" ] && [ "$CAND_JSON" != "" ]; then
+	python3 "$repo_root/scripts/compare_mtp_one_token_hc_layout.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json >"$HC_LAYOUT_JSON" 2>/dev/null || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$HC_LAYOUT_JSON"
+fi
+
 {
 	echo "## Results"
 	echo
@@ -198,6 +206,12 @@ fi
 	sed -n '1,120p' "$DIFF_SUMMARY_JSON" 2>/dev/null || true
 	echo '```'
 	echo
+	echo "Local HC layout compare (layout-normalized fingerprints):"
+	echo
+	echo '```'
+	sed -n '1,120p' "$HC_LAYOUT_JSON" 2>/dev/null || true
+	echo '```'
+	echo
 	echo "Artifacts:"
 	echo
 	echo "- report: $REPORT_MD"
@@ -210,6 +224,7 @@ fi
 	echo "- oracle capture gate JSON: $ORACLE_CAP_JSON"
 	echo "- candidate capture gate JSON: $CAND_CAP_JSON"
 	echo "- diff summary JSON: $DIFF_SUMMARY_JSON"
+	echo "- HC layout compare JSON: $HC_LAYOUT_JSON"
 	echo
 	echo "Next step: if the diff fails early, add more `*_fnv64` captures to the candidate probe before attempting acceptance sweeps."
 	echo
@@ -234,10 +249,12 @@ ok = bool(diff.get("ok", False)) if isinstance(diff, dict) else False
 oracle_gate = read_json(out_dir / "oracle_capture_gate.json")
 cand_gate = read_json(out_dir / "candidate_capture_gate.json")
 diff_summary = read_json(out_dir / "oracle_vs_candidate_diff_summary.json")
+hc_layout = read_json(out_dir / "hc_layout_compare.json")
 
 oracle_gate_ok = bool(oracle_gate.get("ok", False)) if isinstance(oracle_gate, dict) else False
 cand_gate_ok = bool(cand_gate.get("ok", False)) if isinstance(cand_gate, dict) else False
 diff_summary_ok = bool(diff_summary.get("ok", False)) if isinstance(diff_summary, dict) else False
+hc_layout_ok = bool(hc_layout.get("ok", False)) if isinstance(hc_layout, dict) else False
 
 all_ok = bool(ok and oracle_gate_ok and cand_gate_ok and diff_summary_ok)
 
@@ -249,6 +266,8 @@ summary = {
 	},
 	"diff": diff if isinstance(diff, dict) else None,
 	"diff_summary": diff_summary if isinstance(diff_summary, dict) else None,
+	"layout_ok": hc_layout_ok,
+	"hc_layout_compare": hc_layout if isinstance(hc_layout, dict) else None,
 	"capture_gate": {
 		"oracle_ok": oracle_gate_ok,
 		"candidate_ok": cand_gate_ok,
