@@ -161,6 +161,23 @@ Key signals to inspect (from the report JSON, per histogram):
 
 Recommendation (synthetic): treat MTP accept-length *shape* as a first-class input once real traces exist. Mean-only fits (for example a single accept rate) can miss heavy tails of short accepts that amplify queue pressure. Prefer replaying empirical `accept_len` histograms from quantized-runtime traces before enabling MTP.
 
+## MTP (Draft Queue Class)
+
+Scenario: the same two-stream overload regime as the congestion sweep, but holding MTP acceptance fixed (`draft_len=2`, `accept_prob=0.6`, `accept_decay=0.8`, `draft_attempt_policy=stop_at_reject`) and comparing where *draft micro-tokens* are enqueued:
+
+- `mtp_draft_queue_cls=inherit` (draft work inherits the token’s latency class; default)
+- `mtp_draft_queue_cls=batch` (draft work is demoted to batch/low priority)
+- `mtp_draft_queue_cls=interactive` (draft work is promoted to interactive/high priority)
+
+Key signals to inspect (from the report JSON):
+
+- `task_queue_wait_ms_p95_mtp_verify` (verify queue pressure)
+- `task_queue_wait_ms_p95_mtp_draft` (draft delay)
+- `output_token_p95_interactive_ms` / `sla_violation_frac_tokens_interactive` (interactive safety)
+- `drop_frac_tokens_interactive` / `drop_frac_tokens_batch` (backpressure impact)
+
+Recommendation (synthetic): keep `mtp_draft_queue_cls=inherit` as the default. Treat `batch` demotion as an experimental knob to reduce verify pressure for batch traffic, but expect it can delay interactive output because draft stages must complete before verify. Validate on real quantized-runtime traces before using it as a default.
+
 ## Adaptive K (Batch Throttling Under Congestion)
 
 Scenario: two-stream arrivals (interactive + batch) with sustained overload, small per-expert queue (`expert_queue_max=128`), and `service_ms=1.0`. Compare:

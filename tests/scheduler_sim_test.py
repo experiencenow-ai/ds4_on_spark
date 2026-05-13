@@ -4557,6 +4557,18 @@ class SchedulerSimTest(unittest.TestCase):
         stop = row0["mtp_stop_at_reject"]
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
 
+    def test_recommendations_quick_mtp_draft_queue_cls_emits_variants(self) -> None:
+        out = self._recommendations_quick()
+        scenario = out["scenarios"]["mtp_draft_queue_cls"]
+        self.assertGreater(float(scenario.get("expected_accept_len", 0.0)), 0.0)
+        variants = scenario["results"]["variants"]
+        self.assertIn("draft_queue_inherit", variants)
+        self.assertIn("draft_queue_batch", variants)
+        self.assertIn("draft_queue_interactive", variants)
+        inherit_sum = variants["draft_queue_inherit"]["summary"]
+        self.assertIn("task_queue_wait_ms_p95_mtp_verify", inherit_sum)
+        self.assertIn("task_queue_wait_ms_p95_mtp_draft", inherit_sum)
+
     def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
         out = self._recommendations_quick()
         scenario = out["scenarios"]["backpressure_zero_admit_policy"]
