@@ -85,6 +85,8 @@ sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark1 --start-pre
 sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark2 --start-preflight --preflight tp3
 ```
 
+Optional: if you plan to enable periodic preflight timers (including `tp23`), add `--install-timers` during install.
+
 Then validate installed assets (safe; recommended before enabling DS4):
 
 ```bash
@@ -108,6 +110,16 @@ Run strict TP=3 preflight on all three (safe oneshot):
 sudo systemctl start ds4-preflight-tp3-strict@spark0.service
 sudo systemctl start ds4-preflight-tp3-strict@spark1.service
 sudo systemctl start ds4-preflight-tp3-strict@spark2.service
+```
+
+## 3b) Optional: Periodic TP=2+TP=3 Preflight Timers (Safe)
+
+During transition windows, you can enable periodic `tp23` strict preflight on each host (requires installing the timer templates first):
+
+```bash
+sudo systemctl enable --now ds4-preflight-tp23-strict@spark0.timer
+sudo systemctl enable --now ds4-preflight-tp23-strict@spark1.timer
+sudo systemctl enable --now ds4-preflight-tp23-strict@spark2.timer
 ```
 
 ## 4) Start DS4 With TP=3 Gating (Spark Side, Human Approval)
@@ -139,4 +151,3 @@ After install/start changes, capture a fresh `tp23` snapshot for run notes (safe
 - Firewall allowlist guidance (human-run): `docs/ops-firewall-allowlist.md`
 - Operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - Run notes + redaction checklist: `docs/ops-run-notes.md`
-
