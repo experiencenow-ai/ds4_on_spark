@@ -216,6 +216,7 @@ def main() -> int:
 
 					expected_sha_keys = [
 						"DeepSeek_V4.pdf",
+						"checkpoint_keys.txt",
 						"encoding/tests/test_input_1.json",
 						"encoding/tests/test_output_1.txt",
 						"encoding/tests/test_input_4.json",
