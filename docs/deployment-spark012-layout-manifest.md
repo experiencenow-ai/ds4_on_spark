@@ -38,6 +38,14 @@ Use the manifests when you need one of the following:
 - a packaging conversation (future) without changing the staging scripts
 - a host audit checklist (“are we missing anything obvious?”)
 
+## Validation (Safe)
+
+To sanity-check that the manifest entries still point at real repo files (and that the TSV format is well-formed), run:
+
+```bash
+./scripts/ops_validate_layout_manifests.sh
+```
+
 ## Safety Notes
 
 - Treat `.env`/`.conf` files as local host state; do not commit secrets.
