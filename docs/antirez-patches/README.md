@@ -14,6 +14,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Target: `antirez/ds4@3630e64`
   - Purpose:
     - fix CUDA weight-cache keying so cached ranges are keyed by `(model_map, fd, offset)` (not just `offset`)
+    - add `ds4_gpu_set_model_fd_for_map(model_map, fd)` so the MTP sidecar can register its fd without clobbering the trunk fd state
     - avoids trunk/sidecar cache collisions when `DS4_CUDA_WEIGHT_CACHE=1` (or when fd-caching is enabled)
     - keeps the largest cached mapping per key to avoid cache thrash on repeated partial range requests
 
@@ -22,6 +23,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Purpose:
     - adds a `--dump-mtp-one-token-json` CLI mode that emits a single JSON object to stdout
     - captures `base_next_token_id`, `mtp_draft_token_id`, plus intermediate tensor `*_fnv64` fingerprints (`trunk_token_embd`, `trunk_pre_hc_head`, `mtp_input_hc`, `mtp_block_out_hc`, `mtp_head_norm`)
+    - also captures pre-`mtp_input_hc` intermediates (`mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`) to localize oracle-vs-candidate mismatches
     - intended for oracle-vs-candidate diffs via `python3 scripts/diff_mtp_one_token_draft_probe.py`
 
 Apply (example):

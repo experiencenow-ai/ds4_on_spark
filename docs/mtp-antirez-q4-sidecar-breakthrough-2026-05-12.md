@@ -109,6 +109,8 @@ mtp_block_out_hc_fnv64=af8a8ecc3efbaf40
 mtp_head_norm_fnv64=e95d14bfa2882d8d
 ```
 
+Newer oracle captures also include pre-`mtp_input_hc` intermediates (`mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`) so oracle-vs-candidate diffs can localize whether the mismatch happens before the MTP block.
+
 This means the patched `antirez/ds4` CUDA path can now serve as the one-token oracle for candidate runtime work. The first observed draft does not need to match the base token; it is the MTP token proposed after committing that base token.
 
 Diff oracle vs candidate:

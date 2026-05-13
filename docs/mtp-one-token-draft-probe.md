@@ -44,12 +44,14 @@ Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`
 
 Optional debug keys (non-normative; used by the skeleton patch to stage wiring work and by the oracle for diffs):
 
+- `mtp_enorm_{fnv64,nbytes,shape}` (post-`mtp.0.enorm.weight` RMSNorm on the trunk token embedding; `docs/mtp-ds4-reference.md` step 2)
+- `mtp_eproj_{fnv64,nbytes,shape}` (post-`mtp.0.e_proj.weight` projection; step 2)
+- `mtp_eproj_hc_{fnv64,nbytes,shape}` (HC-broadcast of `mtp_eproj`; step 3)
+- `mtp_hnorm_hc_{fnv64,nbytes,shape}` (post-`mtp.0.hnorm.weight` row RMSNorm on `trunk_pre_hc_head`; step 4)
+- `mtp_hproj_hc_{fnv64,nbytes,shape}` (post-`mtp.0.h_proj.weight` projection; step 4)
 - `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
 - `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
 - `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
-- Optional numeric diagnostics for each captured F32 tensor: `*_f32_count`, `*_f32_sum`, `*_f32_l2`, `*_f32_absmax`, `*_f32_min`, `*_f32_max`.
-- Optional numeric debugging aid (keep small): for any capture prefix, emit `{prefix}_sample_f32` as a short float32 list (for example the first 16 elements). When present in both probes, `scripts/diff_mtp_one_token_draft_probe.py` compares samples within an absolute tolerance (default `1e-5`; override with `--sample-tol`).
-- Optional HC-layout normalization aid (for HC-shaped captures like `*_pre_hc_head`, `*_input_hc`, `*_block_out_hc`): the candidate may also emit `{prefix}_hc_major_{fnv64,shape}` where the HC bytes are re-ordered into the oracle’s expected major layout before hashing. Use `python3 scripts/compare_mtp_one_token_hc_layout.py --a oracle.json --b candidate.json --json` to check whether a raw mismatch is explained by layout.
 
 Notes:
 
@@ -73,28 +75,10 @@ Once you have **two** probe JSON blobs (oracle + candidate), diff them before ru
 python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
-Recommended stronger guardrail (before acceptance sweeps): require both probes to emit the full set of intermediate fingerprints so diffs localize the first divergence:
-
-```bash
-python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/oracle_probe.json --json
-python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/candidate_probe.json --json
-python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
-```
-
 Convenience wrapper (runs the gated oracle runner + a gated candidate command, then diffs locally):
 
 ```bash
 scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
-```
-
-Notes:
-
-- The wrapper writes a machine-readable `summary.json` alongside the Markdown report and exits non-zero when the capture gate or diff fails.
-- The wrapper also writes `hc_layout_compare.json` and includes `layout_ok` in `summary.json` (triage aid: HC-layout-normalized fingerprints match even if raw HC hashes differ).
-- To relax `*_sample_f32` comparisons (when both probes emit samples), set `MTP_SAMPLE_TOL`:
-
-```bash
-MTP_SAMPLE_TOL=1e-4 scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
 ```
 
 By default this requires:
@@ -110,9 +94,41 @@ By default this requires:
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
 The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.
 
-## Spark runner (llama.cpp gamma=1 patch; available now)
+Optional stronger guardrail (recommended before acceptance sweeps): require the capture set explicitly so diffs localize the first divergence:
 
-This repo ships a **gated** Spark runner that can clone/patch/build/run the current llama.cpp one-token probe patch (default-pinned to `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@94073e2`) and then validate the emitted JSON locally:
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/candidate_probe.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
+If you are still in the stub stage (for example, you only have trunk captures + `mtp_input_hc`), use the minimal capture profile:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile minimal --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile minimal --probe-json /path/to/candidate_probe.json --json
+```
+
+The Spark wrapper also supports this via `CAPTURE_PROFILE=minimal`.
+
+Note: `scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh` defaults `CAPTURE_PROFILE=extended` so oracle-vs-candidate diffs localize the first divergence before acceptance sweeps. Override it to `default` or `minimal` when you are still in an earlier stub stage.
+
+Optional diagnosis: if you suspect the only issue is the HC-major ordering of an intermediate (same values, different layout), compare the `*_hc_major_fnv64` alternatives:
+
+```bash
+python3 scripts/compare_mtp_one_token_hc_layout.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
+If you need more localization (pre-`mtp_input_hc` intermediates), require the extended capture set:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile extended --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile extended --probe-json /path/to/candidate_probe.json --json
+```
+
+## Spark runner (llama.cpp skeleton patch; available now)
+
+This repo ships a **gated** Spark runner that can clone/patch/build/run the current llama.cpp *skeleton* one-token probe patch (pinned to `kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark@9222e55`) and then validate the emitted JSON locally:
 
 ```bash
 REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALLOW_RUN=1 JSON_ONLY=1' \
@@ -123,12 +139,8 @@ Notes:
 
 - This runner **loads the trunk GGUF** when `ALLOW_RUN=1` is set. Keep it gated and coordinate with the baseline runtime loop.
 - The output directory includes a machine-readable `summary.json` (probe parse + local validator status).
-- For resident multi-prompt evidence, set `PROMPT_FILE_LOCAL=fixtures/mtp/one_token_prompts_smoke.txt` (or `PROMPT_FILE=/remote/path`) with this runner. The patched probe loads the model once and emits a batch JSON wrapper with one result per non-empty line.
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
-- As of 2026-05-13, the `94073e2` patch implements the first real `gamma=1` MTP block path and emits `mtp_block_out_hc_*` plus `mtp_head_norm_*` fingerprints. Spark0 run `20260513T005746Z` validated with `ok=true`; it renders the same DS4 chat prompt shape as antirez and matches the oracle base token `2581` (`"We"`) plus MTP draft token `1309` (`" need"`).
-- Correctness against the antirez oracle is not fully proven yet: `trunk_token_embd_fnv64` now matches, but HC/pre-head and MTP debug fingerprints still differ, so the next parity task is capture-point/layout/numerics alignment before acceptance sweeps.
-- Spark0 run `20260513T013346Z` added HC-major layout-normalized hashes plus F32 stats to the llama.cpp candidate. `trunk_token_embd` still matches the antirez oracle, but the HC-major hashes do not (`trunk_pre_hc_head`: candidate `fc6e0810c4b909aa` vs oracle raw `c1214dfabd8ab5f0`; `mtp_input_hc`: `eb01fddce3552bc3` vs `a42bc106f8ea8b6a`; `mtp_block_out_hc`: `b56e3646102f8590` vs `af8a8ecc3efbaf40`). That rules out a simple `[4096,4]` vs `[4,4096]` transpose as the whole mismatch.
-- The antirez oracle patch now emits the same F32 stats keys so the next run can distinguish numeric drift from a semantically different capture point.
+- As of 2026-05-12, the patch is still a **skeleton**: it validates sidecar binding and can compute a debug-only stub output-head tensor when `LOAD_SIDECAR_WEIGHTS=1`, but it emits `ok=false` with a TODO until the real `gamma=1` draft compute is implemented.
 
 ## Spark runner (antirez/ds4 oracle; build + one-token JSON)
 
@@ -139,7 +151,7 @@ REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV='ALLOW_FETCH=1 ALLOW_PATCH=1 ALLOW_BUILD=1 ALL
 scripts/run_antirez_ds4_mtp_one_token_oracle_probe_spark.sh spark0@<spark-host>
 ```
 
-As of 2026-05-12 this runner emits `ok=true` on Spark0 with the staged antirez trunk + `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` sidecar. The helper sets `DS4_MTP_PROBE=1` by default because upstream `antirez/ds4` only drafts in the normal `draft=1` eval path when probe logging is enabled or `--mtp-draft` is greater than one. The local parser is tolerant of build/log prefixes before the final JSON object.
+As of 2026-05-12 this runner emits `ok=true` on Spark0 with the staged antirez trunk + `DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf` sidecar. The helper sets `DS4_MTP_PROBE=1` by default because upstream `antirez/ds4` only drafts in the normal `draft=1` eval path when probe logging is enabled or `--mtp-draft` is greater than one.
 
 ## Spark runner (when the fork has a real one-token command)
 
