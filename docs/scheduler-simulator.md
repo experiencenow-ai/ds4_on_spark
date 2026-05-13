@@ -388,6 +388,18 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+To bundle **canonicalization + the standard runtime-trace ablation report** (JSON + Markdown) into one command, use:
+
+```bash
+python3 scripts/scheduler_trace_report.py --in-jsonl /path/to/runtime.log.jsonl --out-dir /tmp/scheduler_trace_report --time-mode dt_ms --input-format runtime --non-route skip
+```
+
+The bundle writes:
+
+- `scheduler_trace.canon.jsonl` (canonical strict trace with a meta header)
+- `scheduler_trace_report.json` (machine-readable ablation report)
+- `scheduler_trace_report.md` (human-readable summary)
+
 If the runtime emits a *mixed* JSONL log stream (multiple record types), canonicalization and replay can ignore non-route records that have a non-meta `type` field via `--trace-non-route skip`:
 
 ```bash
