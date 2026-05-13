@@ -2786,12 +2786,16 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     inferred_num_experts = infer_num_experts_from_trace(trace, meta)
     if inferred_num_experts is not None:
         inferred["num_experts"] = int(inferred_num_experts)
-    inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+    inferred_mtp_draft_len, inferred_mtp_source = infer_mtp_draft_len_with_source(trace, meta)
     if inferred_mtp_draft_len is not None:
         inferred["mtp_draft_len"] = int(inferred_mtp_draft_len)
-    inferred_dflash_draft_len = infer_dflash_draft_len_from_trace(trace, meta)
+        if inferred_mtp_source != "":
+            inferred["mtp_draft_len_source"] = str(inferred_mtp_source)
+    inferred_dflash_draft_len, inferred_dflash_source = infer_dflash_draft_len_with_source(trace, meta)
     if inferred_dflash_draft_len is not None:
         inferred["dflash_draft_len"] = int(inferred_dflash_draft_len)
+        if inferred_dflash_source != "":
+            inferred["dflash_draft_len_source"] = str(inferred_dflash_source)
     if len(inferred) != 0:
         out["inferred"] = inferred
     return(out)
@@ -2814,10 +2818,15 @@ def infer_num_experts_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dic
 
 
 def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    inferred, _source = infer_mtp_draft_len_with_source(trace, meta)
+    return(inferred)
+
+
+def infer_mtp_draft_len_with_source(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Tuple[Optional[int], str]:
     if meta is not None:
         v = meta.get("mtp_draft_len")
         if isinstance(v, int) and v >= 0:
-            return(int(v))
+            return(int(v), "meta")
 
     gamma: Optional[int] = None
     for r in trace:
@@ -2827,9 +2836,9 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
         if gamma is None:
             gamma = g
         elif gamma != g:
-            return(None)
+            return(None, "")
     if gamma is not None:
-        return(gamma)
+        return(int(gamma), "accepted_rejected")
 
     max_accept_len = 0
     for r in trace:
@@ -2837,20 +2846,27 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
             continue
         max_accept_len = max(max_accept_len, int(r.mtp_accept_len))
     if max_accept_len <= 0:
-        return(None)
+        return(None, "")
 
     # mtp_accept_len is the output-token count per verify step (>=1). A draft length of gamma implies:
     #   1 <= accept_len <= (gamma + 1)
     # If a trace only includes accept_len=1 (all rejects), gamma is underdetermined; pick gamma=1 so we can
     # still run an MTP-on replay without violating bounds.
-    return(max(1, int(max_accept_len) - 1))
+    if int(max_accept_len) <= 1:
+        return(1, "accept_len_all_rejects_default1")
+    return(max(1, int(max_accept_len) - 1), "accept_len_max")
 
 
 def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    inferred, _source = infer_dflash_draft_len_with_source(trace, meta)
+    return(inferred)
+
+
+def infer_dflash_draft_len_with_source(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Tuple[Optional[int], str]:
     if meta is not None:
         v = meta.get("dflash_draft_len")
         if isinstance(v, int) and v >= 0:
-            return(int(v))
+            return(int(v), "meta")
 
     gamma: Optional[int] = None
     for r in trace:
@@ -2860,9 +2876,9 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
         if gamma is None:
             gamma = g
         elif gamma != g:
-            return(None)
+            return(None, "")
     if gamma is not None:
-        return(gamma)
+        return(int(gamma), "accepted_rejected")
 
     max_accept_len = 0
     for r in trace:
@@ -2870,8 +2886,10 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
             continue
         max_accept_len = max(max_accept_len, int(r.dflash_accept_len))
     if max_accept_len <= 0:
-        return(None)
-    return(max(1, int(max_accept_len) - 1))
+        return(None, "")
+    if int(max_accept_len) <= 1:
+        return(1, "accept_len_all_rejects_default1")
+    return(max(1, int(max_accept_len) - 1), "accept_len_max")
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:

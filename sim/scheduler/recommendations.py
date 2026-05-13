@@ -120,9 +120,19 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     mtp_draft_len = _as_int(inferred, "mtp_draft_len", 0)
     if mtp_draft_len > 0:
         lines.append(f"- inferred mtp_draft_len: {int(mtp_draft_len)}")
+        src = _as_str(inferred, "mtp_draft_len_source", "")
+        if src != "":
+            lines.append(f"- mtp_draft_len source: `{src}`")
+            if src == "accept_len_all_rejects_default1":
+                lines.append("  - note: trace only shows mtp_accept_len=1 (all rejects), so draft length is underdetermined; set meta.mtp_draft_len or log accepted_mtp+rejected_mtp for a reliable gamma.")
     dflash_draft_len = _as_int(inferred, "dflash_draft_len", 0)
     if dflash_draft_len > 0:
         lines.append(f"- inferred dflash_draft_len: {int(dflash_draft_len)}")
+        src = _as_str(inferred, "dflash_draft_len_source", "")
+        if src != "":
+            lines.append(f"- dflash_draft_len source: `{src}`")
+            if src == "accept_len_all_rejects_default1":
+                lines.append("  - note: trace only shows dflash_accept_len=1 (all rejects), so draft length is underdetermined; set meta.dflash_draft_len or log accepted_dflash+rejected_dflash for a reliable gamma.")
     if bool(out.get("trace_assumptions")):
         ta = _as_dict(out.get("trace_assumptions"))
         if bool(ta.get("time_synthetic")):
@@ -413,15 +423,17 @@ def run_runtime_trace_mtp_ablation(
 
     mtp_draft_len_req = int(mtp_draft_len)
     mtp_draft_len_inferred = 0
+    mtp_draft_len_source = ""
     mtp_mode = "none"
     if any_mtp:
-        inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
+        inferred_mtp_draft_len, mtp_draft_len_source = scheduler_sim.infer_mtp_draft_len_with_source(trace, meta)
         if inferred_mtp_draft_len is None or int(inferred_mtp_draft_len) <= 0:
             raise ValueError("runtime trace ablation requires meta.mtp_draft_len, accepted_mtp+rejected_mtp, or mtp_accept_len in the trace")
         mtp_draft_len_inferred = int(inferred_mtp_draft_len)
         mtp_mode = "trace"
     elif mtp_draft_len_req > 0:
         mtp_draft_len_inferred = int(mtp_draft_len_req)
+        mtp_draft_len_source = "synthetic"
         mtp_mode = "synthetic"
 
     mtp_draft_len_out = int(mtp_draft_len_inferred)
