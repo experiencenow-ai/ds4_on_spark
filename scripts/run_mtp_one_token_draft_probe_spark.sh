@@ -104,22 +104,22 @@ fi
 out_json=\"/tmp/mtp_one_token_probe.json\"
 v1_json=\"/tmp/mtp_one_token_probe_validate.json\"
 v2_json=\"/tmp/mtp_one_token_probe_validate_sidecar.json\"
-rm -f \"$out_json\"
-rm -f \"$v1_json\" \"$v2_json\"
-sh -lc \"$MTP_ONE_TOKEN_CMD\" >\"$out_json\"
-python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --json >\"$v1_json\" || true
-if [ \"${SIDE_CAR_PROBE_JSON:-}\" != \"\" ] && [ -r \"${SIDE_CAR_PROBE_JSON}\" ]; then
-  python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --sidecar-probe-json \"${SIDE_CAR_PROBE_JSON}\" --json >\"$v2_json\" || true
+rm -f \"\\\$out_json\"
+rm -f \"\\\$v1_json\" \"\\\$v2_json\"
+sh -lc \"\\\$MTP_ONE_TOKEN_CMD\" >\"\\\$out_json\"
+python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"\\\$out_json\" --json >\"\\\$v1_json\" || true
+if [ \"\\\${SIDE_CAR_PROBE_JSON:-}\" != \"\" ] && [ -r \"\\\${SIDE_CAR_PROBE_JSON}\" ]; then
+  python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"\\\$out_json\" --sidecar-probe-json \"\\\${SIDE_CAR_PROBE_JSON}\" --json >\"\\\$v2_json\" || true
 fi
-if [ -r \"$v1_json\" ]; then
+if [ -r \"\\\$v1_json\" ]; then
   echo \"== validation (no sidecar) ==\" 1>&2
-  cat \"$v1_json\" 1>&2
+  cat \"\\\$v1_json\" 1>&2
 fi
-if [ -r \"$v2_json\" ]; then
+if [ -r \"\\\$v2_json\" ]; then
   echo \"== validation (sidecar cross-check) ==\" 1>&2
-  cat \"$v2_json\" 1>&2
+  cat \"\\\$v2_json\" 1>&2
 fi
-cat \"$out_json\"
+cat \"\\\$out_json\"
 ' " <"$repo_root/scripts/model_contract_validate_mtp_one_token_draft_probe.py" \
 	>"$OUT_DIR/remote_mtp_one_token_stdout.txt" 2>"$OUT_DIR/remote_mtp_one_token_stderr.txt" || true
 

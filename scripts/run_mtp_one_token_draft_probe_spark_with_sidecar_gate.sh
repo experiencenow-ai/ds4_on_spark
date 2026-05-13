@@ -104,99 +104,99 @@ ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_probe_mtp_sidecar.py && chmod
 
 echo "== running one-token MTP draft probe on spark (with sidecar gate; may be gated) =="
 ssh $SSH_OPTS "$target" "cat > /tmp/model_contract_validate_mtp_one_token_draft_probe.py && chmod +x /tmp/model_contract_validate_mtp_one_token_draft_probe.py && $remote_env $REMOTE_MTP_SIDECAR_ENV sh -lc '
-set -eu
-if [ \"${ALLOW_RUN:-0}\" != \"1\" ]; then
-  echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
-  exit 0
-fi
-if [ \"${MTP_ONE_TOKEN_CMD:-}\" = \"\" ]; then
-  echo \"run skipped: set MTP_ONE_TOKEN_CMD=\\\"...\\\" on Spark (full command line)\"
-  exit 0
-fi
-
-sidecar_out_json=\"/tmp/mtp_sidecar_probe.json\"
-sidecar_err_txt=\"/tmp/mtp_sidecar_probe.stderr.txt\"
-rm -f \"$sidecar_out_json\" \"$sidecar_err_txt\"
-
-sidecar_ok=0
-if [ \"${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
-  for p in \
-    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
-    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
-  do
-    if [ -r \"$p\" ]; then
-      MTP_SIDECAR_GGUF=\"$p\"
-      export MTP_SIDECAR_GGUF
-      echo \"defaulted MTP_SIDECAR_GGUF=$p\" 1>&2
-      break
-    fi
-  done
-fi
-
-if [ \"${MTP_SIDECAR_GGUF:-}\" != \"\" ]; then
-  case \"${MTP_SIDECAR_GGUF}\" in
-    http://*|https://*)
-      if [ \"${ALLOW_URL:-0}\" != \"1\" ]; then
-        echo \"sidecar gate skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-read probe\" 1>&2
-      else
-        python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"' >\"$sidecar_out_json\" 2>\"$sidecar_err_txt\" || true
-      fi
-      ;;
-    *)
-      if [ ! -r \"${MTP_SIDECAR_GGUF}\" ]; then
-        echo \"sidecar gate skipped: MTP_SIDECAR_GGUF not readable: ${MTP_SIDECAR_GGUF}\" 1>&2
-      else
-        python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"' >\"$sidecar_out_json\" 2>\"$sidecar_err_txt\" || true
-      fi
-      ;;
-  esac
-fi
-
-if [ -r \"$sidecar_out_json\" ]; then
-  python3 - \"$sidecar_out_json\" 2>/dev/null <<\"PY\" && sidecar_ok=1 || true
-import json
-import sys
-from pathlib import Path
-p = Path(sys.argv[1])
-doc = json.loads(p.read_text(encoding=\"utf-8\"))
-raise SystemExit(0 if isinstance(doc, dict) and bool(doc.get(\"ok\", False)) else 1)
-PY
-fi
-
-out_json=\"/tmp/mtp_one_token_probe.json\"
-v1_json=\"/tmp/mtp_one_token_probe_validate.json\"
-v2_json=\"/tmp/mtp_one_token_probe_validate_sidecar.json\"
-rm -f \"$out_json\" \"$v1_json\" \"$v2_json\"
-
-sh -lc \"$MTP_ONE_TOKEN_CMD\" >\"$out_json\"
-python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --json >\"$v1_json\" || true
-
-if [ $sidecar_ok -eq 1 ]; then
-  python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"$out_json\" --sidecar-probe-json \"$sidecar_out_json\" --json >\"$v2_json\" || true
-fi
-
-if [ -r \"$sidecar_out_json\" ]; then
-  echo \"== sidecar gate (probe JSON prefix) ==\" 1>&2
-  sed -n \"1,120p\" \"$sidecar_out_json\" 1>&2 || true
-fi
-if [ -r \"$sidecar_err_txt\" ]; then
-  echo \"== sidecar gate (stderr prefix) ==\" 1>&2
-  sed -n \"1,120p\" \"$sidecar_err_txt\" 1>&2 || true
-fi
-if [ -r \"$v1_json\" ]; then
-  echo \"== validation (no sidecar) ==\" 1>&2
-  cat \"$v1_json\" 1>&2
-fi
-if [ -r \"$v2_json\" ]; then
-  echo \"== validation (sidecar cross-check) ==\" 1>&2
-  cat \"$v2_json\" 1>&2
-fi
-cat \"$out_json\"
-' " <"$repo_root/scripts/model_contract_validate_mtp_one_token_draft_probe.py" \
-	>"$OUT_DIR/remote_mtp_one_token_stdout.txt" 2>"$OUT_DIR/remote_mtp_one_token_stderr.txt" || true
+	set -eu
+	if [ \"\\\${ALLOW_RUN:-0}\" != \"1\" ]; then
+	  echo \"run skipped: set ALLOW_RUN=1 on Spark to enable\"
+	  exit 0
+	fi
+	if [ \"\\\${MTP_ONE_TOKEN_CMD:-}\" = \"\" ]; then
+	  echo \"run skipped: set MTP_ONE_TOKEN_CMD=\\\"...\\\" on Spark (full command line)\"
+	  exit 0
+	fi
+	
+	sidecar_out_json=\"/tmp/mtp_sidecar_probe.json\"
+	sidecar_err_txt=\"/tmp/mtp_sidecar_probe.stderr.txt\"
+	rm -f \"\\\$sidecar_out_json\" \"\\\$sidecar_err_txt\"
+	
+	sidecar_ok=0
+	if [ \"\\\${MTP_SIDECAR_GGUF:-}\" = \"\" ]; then
+	  for p in \
+	    /home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+	    /home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+	    /home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+	    /mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+	    /models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
+	  do
+	    if [ -r \"\\\$p\" ]; then
+	      MTP_SIDECAR_GGUF=\"\\\$p\"
+	      export MTP_SIDECAR_GGUF
+	      echo \"defaulted MTP_SIDECAR_GGUF=\\\$p\" 1>&2
+	      break
+	    fi
+	  done
+	fi
+	
+	if [ \"\\\${MTP_SIDECAR_GGUF:-}\" != \"\" ]; then
+	  case \"\\\${MTP_SIDECAR_GGUF}\" in
+	    http://*|https://*)
+	      if [ \"\\\${ALLOW_URL:-0}\" != \"1\" ]; then
+	        echo \"sidecar gate skipped: MTP_SIDECAR_GGUF is a URL; set ALLOW_URL=1 on Spark to enable URL range-read probe\" 1>&2
+	      else
+	        python3 /tmp/model_contract_probe_mtp_sidecar.py --url \"\\\${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"' >\"\\\$sidecar_out_json\" 2>\"\\\$sidecar_err_txt\" || true
+	      fi
+	      ;;
+	    *)
+	      if [ ! -r \"\\\${MTP_SIDECAR_GGUF}\" ]; then
+	        echo \"sidecar gate skipped: MTP_SIDECAR_GGUF not readable: \\\${MTP_SIDECAR_GGUF}\" 1>&2
+	      else
+	        python3 /tmp/model_contract_probe_mtp_sidecar.py --path \"\\\${MTP_SIDECAR_GGUF}\" '"$REMOTE_MTP_SIDECAR_ARGS"' >\"\\\$sidecar_out_json\" 2>\"\\\$sidecar_err_txt\" || true
+	      fi
+	      ;;
+	  esac
+	fi
+	
+	if [ -r \"\\\$sidecar_out_json\" ]; then
+	  python3 - \"\\\$sidecar_out_json\" 2>/dev/null <<\"PY\" && sidecar_ok=1 || true
+	import json
+	import sys
+	from pathlib import Path
+	p = Path(sys.argv[1])
+	doc = json.loads(p.read_text(encoding=\"utf-8\"))
+	raise SystemExit(0 if isinstance(doc, dict) and bool(doc.get(\"ok\", False)) else 1)
+	PY
+	fi
+	
+	out_json=\"/tmp/mtp_one_token_probe.json\"
+	v1_json=\"/tmp/mtp_one_token_probe_validate.json\"
+	v2_json=\"/tmp/mtp_one_token_probe_validate_sidecar.json\"
+	rm -f \"\\\$out_json\" \"\\\$v1_json\" \"\\\$v2_json\"
+	
+	sh -lc \"\\\$MTP_ONE_TOKEN_CMD\" >\"\\\$out_json\"
+	python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"\\\$out_json\" --json >\"\\\$v1_json\" || true
+	
+	if [ \\$sidecar_ok -eq 1 ]; then
+	  python3 /tmp/model_contract_validate_mtp_one_token_draft_probe.py --probe-json \"\\\$out_json\" --sidecar-probe-json \"\\\$sidecar_out_json\" --json >\"\\\$v2_json\" || true
+	fi
+	
+	if [ -r \"\\\$sidecar_out_json\" ]; then
+	  echo \"== sidecar gate (probe JSON prefix) ==\" 1>&2
+	  sed -n \"1,120p\" \"\\\$sidecar_out_json\" 1>&2 || true
+	fi
+	if [ -r \"\\\$sidecar_err_txt\" ]; then
+	  echo \"== sidecar gate (stderr prefix) ==\" 1>&2
+	  sed -n \"1,120p\" \"\\\$sidecar_err_txt\" 1>&2 || true
+	fi
+	if [ -r \"\\\$v1_json\" ]; then
+	  echo \"== validation (no sidecar) ==\" 1>&2
+	  cat \"\\\$v1_json\" 1>&2
+	fi
+	if [ -r \"\\\$v2_json\" ]; then
+	  echo \"== validation (sidecar cross-check) ==\" 1>&2
+	  cat \"\\\$v2_json\" 1>&2
+	fi
+	cat \"\\\$out_json\"
+	' " <"$repo_root/scripts/model_contract_validate_mtp_one_token_draft_probe.py" \
+		>"$OUT_DIR/remote_mtp_one_token_stdout.txt" 2>"$OUT_DIR/remote_mtp_one_token_stderr.txt" || true
 
 echo "== fetching sidecar probe JSON from spark (best-effort) =="
 ssh $SSH_OPTS "$target" "cat /tmp/mtp_sidecar_probe.json" \
