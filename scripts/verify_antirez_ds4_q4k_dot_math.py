@@ -231,6 +231,8 @@ def run_llamacpp_fixture(path: str) -> None:
 
     max_abs_err = 0.0
     max_abs_weight_diff = 0.0
+    max_abs_dot_ref_err = 0.0
+    max_abs_dot_patch_err = 0.0
     for i, v in enumerate(vectors):
         block_hex = v.get("block_hex")
         seed_x = v.get("seed_x")
@@ -250,6 +252,27 @@ def run_llamacpp_fixture(path: str) -> None:
             max_abs_err = err
         if err > 1.0e-5:
             raise SystemExit(f"fixture mismatch i={i} want={want_dot} got={got} abs_err={err}")
+
+        # For validating the CUDA dot-product path, compare against the dequantized
+        # row but force float32 rounding per multiply (the CUDA kernel runs in
+        # float32, while the fixture's dot value may be computed in wider precision).
+        dot_ref_f32 = sum(f32(float(w[j]) * float(x[j])) for j in range(QK_K))
+        dot_simple = cuda_style_dot_q4_k(scales, qs, d_bits, dmin_bits, x)
+        dot_patch = cuda_patch_style_dot_q4_k(scales, qs, d_bits, dmin_bits, x)
+        dot_ref_err = abs(dot_ref_f32 - dot_simple)
+        dot_patch_err = abs(dot_ref_f32 - dot_patch)
+        if dot_ref_err > max_abs_dot_ref_err:
+            max_abs_dot_ref_err = dot_ref_err
+        if dot_patch_err > max_abs_dot_patch_err:
+            max_abs_dot_patch_err = dot_patch_err
+        if dot_ref_err > 1.0e-5:
+            raise SystemExit(
+                f"fixture dot mismatch i={i} ref_f32={dot_ref_f32} got_simple={dot_simple} abs_err={dot_ref_err}"
+            )
+        if dot_patch_err > 1.0e-5:
+            raise SystemExit(
+                f"fixture dot mismatch i={i} ref_f32={dot_ref_f32} got_patch={dot_patch} abs_err={dot_patch_err}"
+            )
 
         # Patch-style unpacking should reproduce the same 256-element float row.
         d_scales, m_scales = patch_unpack_scales_mins_k4(scales)
@@ -274,7 +297,9 @@ def run_llamacpp_fixture(path: str) -> None:
                 )
 
     print(
-        f"ok: llama.cpp fixture vectors={len(vectors)} max_abs_err={max_abs_err:.3e} max_abs_weight_diff={max_abs_weight_diff:.3e}"
+        f"ok: llama.cpp fixture vectors={len(vectors)} max_abs_err={max_abs_err:.3e} "
+        f"max_abs_weight_diff={max_abs_weight_diff:.3e} max_abs_dot_ref_err={max_abs_dot_ref_err:.3e} "
+        f"max_abs_dot_patch_err={max_abs_dot_patch_err:.3e}"
     )
 
 
