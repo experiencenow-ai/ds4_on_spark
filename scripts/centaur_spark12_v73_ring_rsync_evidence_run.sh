@@ -36,6 +36,9 @@ Pass-through env (see underlying scripts):
 Notes:
   - The ring step itself runs on Spark0; Spark1/2 are accessed over SSH for
     rsync staging. No sudo/service changes; no secrets.
+  - Before attempting the rsync-staged ring, ensure the Spark SSH mesh works
+    (Spark0 can SSH to Spark1/2). Safe Mac-side helper:
+      ./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
   - Node setup is recommended when you want to later run Centaur HTTP agents on
     Spark1/2 (it installs numpy/scipy/scikit-learn and runs selftest).
 USAGE

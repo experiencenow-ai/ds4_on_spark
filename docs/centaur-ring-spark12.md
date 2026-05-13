@@ -16,6 +16,12 @@ When a hostname does not resolve (common before Spark1/2 exist), use an explicit
 REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
 ```
 
+Optional (recommended before attempting the rsync-staged “real ring”): verify the **SSH mesh** and basic peer reachability from each Spark (still safe; no sudo/service changes):
+
+```bash
+./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
 
 ```bash
@@ -80,6 +86,8 @@ The fetch helper pulls per-node artifacts (when present):
 	```
 
 	This writes a local Mac-side wrapper log (`ring_rsync.local.log`) in the fetched bundle directory; it includes the exact `ssh ...` command used to orchestrate the ring step (review/redact before posting).
+
+	Note: the ring rsync step runs on Spark0 and uses Spark0→Spark1/2 SSH for staging. If you haven’t set up the Spark SSH mesh yet, run `scripts/ops_spark_ring_mesh_check.sh` first.
 
 	To also verify that Spark1/2 can run `hyor-sync-status` locally against the pushed node roots (recommended), set:
 
