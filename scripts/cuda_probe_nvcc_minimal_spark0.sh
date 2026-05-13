@@ -857,6 +857,98 @@ EOF
 	try_template_stub_build_run rdc \"-rdc=true\"
 
 	echo
+	echo \"== nvcc: CUDA 13 device-entity hidden visibility across .so (best-effort) ==\"
+	cat > \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_foo.cu <<'EOF'
+#include <cstdio>
+
+__global__ void foo(void)
+{
+	printf(\"\\n hi!\");
+}
+EOF
+
+	cat > \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_main.cu <<'EOF'
+#include <cstdio>
+
+#include <cuda_runtime.h>
+
+extern __global__ void foo(void);
+
+int main(int argc,char **argv)
+{
+	cudaError_t err;
+	(void)argc;
+	(void)argv;
+	foo<<<1,1>>>();
+	(void)cudaDeviceSynchronize();
+	err = cudaGetLastError();
+	printf(\"\\n cudaGetLastError() = %s\\n\",cudaGetErrorString(err));
+	return(0);
+}
+EOF
+
+	try_sharedlib_boundary_build_run() {
+		tag=\"\$1\"
+		extra_flags=\"\$2\"
+		expect_build_fail=\"\${3:-0}\"
+		expect_hi=\"\${4:-0}\"
+		out_so=\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib.so\"
+		out_bin=\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main\"
+		echo \"-- sharedlib_boundary: \${tag} (expect_build_fail=\${expect_build_fail}; expect_hi=\${expect_hi}; flags=\${extra_flags})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -shared -Xcompiler -fPIC -rdc=true \${extra_flags} -o \"\${out_so}\" \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_foo.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_lib.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_lib.err\"
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"sharedlib_\${tag}_lib: BUILD FAILED rc=\${rc}\"
+			head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_lib.err\" || true
+			return 0
+		fi
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -rdc=true \${extra_flags} -o \"\${out_bin}\" \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_main.cu \"\${out_so}\" >\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main.err\"
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			if [ \"\${expect_build_fail}\" = \"1\" ]; then
+				echo \"sharedlib_\${tag}: EXPECTED BUILD FAIL rc=\${rc}\"
+			else
+				echo \"sharedlib_\${tag}: BUILD FAILED rc=\${rc}\"
+			fi
+			head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main.err\" || true
+			return 0
+		fi
+		set +e
+		out=\$(LD_LIBRARY_PATH=\"$REMOTE_DIR\"\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH} \"\${out_bin}\" 2>&1)
+		rc=\$?
+		set -e
+		printf \"%s\\n\" \"\${out}\"
+		if [ \"\${expect_build_fail}\" = \"1\" ]; then
+			echo \"sharedlib_\${tag}: UNEXPECTED BUILD OK\" >&2
+		else
+			echo \"sharedlib_\${tag}: BUILD OK\"
+		fi
+		if [ \$rc -eq 0 ]; then
+			if [ \"\${expect_hi}\" = \"1\" ]; then
+				if printf \"%s\\n\" \"\${out}\" | grep -q \"hi!\"; then
+					echo \"sharedlib_\${tag}: RUN OK\"
+				else
+					echo \"sharedlib_\${tag}: RUN FAILED (missing hi!)\" >&2
+				fi
+			else
+				echo \"sharedlib_\${tag}: RUN OK\"
+			fi
+		elif [ \$rc -eq 252 ] || [ \$rc -eq 254 ] || [ \$rc -eq 255 ]; then
+			echo \"sharedlib_\${tag}: SKIP rc=\${rc} (GPU OOM/busy)\"
+		else
+			echo \"sharedlib_\${tag}: RUN FAILED rc=\${rc}\"
+		fi
+		return 0
+	}
+
+	try_sharedlib_boundary_build_run default \"\" 1 0
+	try_sharedlib_boundary_build_run optout \"-cudart=shared -device-entity-has-hidden-visibility=false\" 0 1
+
+	echo
 	echo \"== cuobjdump: embedded PTX (best-effort) ==\"
 	CUOBJDUMP=\"\"
 if [ -x /usr/local/cuda/bin/cuobjdump ]; then

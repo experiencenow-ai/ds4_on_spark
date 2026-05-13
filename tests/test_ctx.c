@@ -12,6 +12,7 @@ int32_t test_ctx(void)
 	ds4_cuda_status_t st;
 	_Alignas(16) uint8_t mem[4096];
 	ds4_log_entry_t e;
+	char fmtbuf[512];
 	int32_t c;
 	int32_t bytes;
 	int32_t err;
@@ -23,6 +24,12 @@ int32_t test_ctx(void)
 		return(-3);
 	if ( ctx.arena.base != mem )
 		return(-4);
+	if ( ds4_ctx_format(&ctx,fmtbuf,(int32_t)sizeof(fmtbuf)) < 0 )
+		return(-31);
+	if ( strstr(fmtbuf,"log_level=") == 0 )
+		return(-32);
+	if ( strstr(fmtbuf,"arena_used=") == 0 )
+		return(-33);
 	cfg.log_ring_entries = 4;
 	bytes = -1;
 	if ( ds4_ctx_auto_arena_bytes(&cfg,&bytes) < 0 )

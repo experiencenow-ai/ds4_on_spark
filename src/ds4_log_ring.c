@@ -58,6 +58,83 @@ int32_t ds4_log_entry_format(const ds4_log_entry_t *e,char *out,int32_t cap)
 	return(n);
 }
 
+static int32_t ds4_log_ring_append_span(char *out,int32_t cap,int32_t *used,const char *s,int32_t slen)
+{
+	int32_t i,avail,copy;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	if ( used == 0 )
+		return(-3);
+	if ( s == 0 )
+		return(-4);
+	if ( slen <= 0 )
+		return(0);
+	if ( *used < 0 )
+		*used = 0;
+	if ( *used >= cap )
+	{
+		out[cap - 1] = 0;
+		return(-5);
+	}
+	avail = (cap - *used - 1);
+	if ( avail <= 0 )
+	{
+		out[cap - 1] = 0;
+		return(-6);
+	}
+	copy = slen;
+	if ( copy > avail )
+		copy = avail;
+	for (i=0; i<copy; i++)
+		out[*used + i] = s[i];
+	*used += copy;
+	out[*used] = 0;
+	if ( copy != slen )
+		return(-7);
+	return(0);
+}
+
+int32_t ds4_log_ring_drain_format(ds4_log_ring_t *lr,char *out,int32_t cap,int32_t *out_truncated)
+{
+	ds4_log_entry_t e;
+	char line[320];
+	int32_t used,rv,n,trunc;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	out[0] = 0;
+	if ( lr == 0 )
+		return(-3);
+	trunc = 0;
+	if ( out_truncated != 0 )
+		*out_truncated = 0;
+	used = 0;
+	for (;;)
+	{
+		rv = ds4_log_ring_pop(lr,&e);
+		if ( rv == -3 )
+			break;
+		if ( rv < 0 )
+			return(-4);
+		n = ds4_log_entry_format(&e,line,(int32_t)sizeof(line));
+		if ( n < 0 )
+			return(-5);
+		if ( trunc == 0 )
+		{
+			if ( ds4_log_ring_append_span(out,cap,&used,line,n) < 0 )
+				trunc = 1;
+			else if ( ds4_log_ring_append_span(out,cap,&used,"\n",1) < 0 )
+				trunc = 1;
+		}
+	}
+	if ( out_truncated != 0 )
+		*out_truncated = trunc;
+	return(used);
+}
+
 int32_t ds4_log_ring_init(ds4_log_ring_t *lr,ds4_log_entry_t *entries,int32_t entry_count)
 {
 	if ( lr == 0 )

@@ -82,6 +82,73 @@ if(DS4_MODE STREQUAL "dump_config_help")
 	return()
 endif()
 
+if(DS4_MODE STREQUAL "dump_config_template")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --dump-config-template
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "# log_level:" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing '# log_level:'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "log_level=" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'log_level='\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "enable_cuda=" _ds4_idx3)
+	if(_ds4_idx3 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'enable_cuda='\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "dump_config_env")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --dump-config-env
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "DS4_LOG_LEVEL" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'DS4_LOG_LEVEL'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "DS4_CONFIG_PATH" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'DS4_CONFIG_PATH'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
+if(DS4_MODE STREQUAL "dump_config_env_help")
+	execute_process(
+		COMMAND "${DS4_CLI_PATH}" --dump-config-env-help
+		OUTPUT_VARIABLE _ds4_out
+		ERROR_VARIABLE _ds4_err
+		RESULT_VARIABLE _ds4_rv
+	)
+	if(NOT _ds4_rv EQUAL 0)
+		message(FATAL_ERROR "ds4_cli failed: rv=${_ds4_rv}\nstderr:\n${_ds4_err}\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "DS4_LOG_LEVEL:" _ds4_idx1)
+	if(_ds4_idx1 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'DS4_LOG_LEVEL:'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "DS4_CONFIG_PATH:" _ds4_idx2)
+	if(_ds4_idx2 EQUAL -1)
+		message(FATAL_ERROR "ds4_cli output missing 'DS4_CONFIG_PATH:'\nstdout:\n${_ds4_out}")
+	endif()
+	return()
+endif()
+
 if(DS4_MODE STREQUAL "help")
 	execute_process(
 		COMMAND "${DS4_CLI_PATH}" --help
@@ -99,6 +166,10 @@ if(DS4_MODE STREQUAL "help")
 	string(FIND "${_ds4_out}" "--dump-config-help" _ds4_idx2)
 	if(_ds4_idx2 EQUAL -1)
 		message(FATAL_ERROR "ds4_cli --help output missing '--dump-config-help'\nstdout:\n${_ds4_out}")
+	endif()
+	string(FIND "${_ds4_out}" "--dump-config-env" _ds4_idx2b)
+	if(_ds4_idx2b EQUAL -1)
+		message(FATAL_ERROR "ds4_cli --help output missing '--dump-config-env'\nstdout:\n${_ds4_out}")
 	endif()
 	string(FIND "${_ds4_out}" "--strict-config" _ds4_idx3)
 	if(_ds4_idx3 EQUAL -1)

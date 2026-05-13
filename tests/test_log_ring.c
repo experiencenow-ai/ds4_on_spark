@@ -27,7 +27,7 @@ int32_t test_log_ring(void)
 	char expected[512];
 	char fmt[512];
 	char longmsg[300];
-	int32_t err,c,d,i,expected_n;
+	int32_t err,c,d,i,expected_n,trunc,n;
 	err = 0;
 	if ( ds4_log_ring_init(&lr,entries,(int32_t)(sizeof(entries) / sizeof(entries[0]))) < 0 )
 		err = -1;
@@ -104,6 +104,51 @@ int32_t test_log_ring(void)
 		}
 		if ( err == 0 && ds4_cstr_eq(fmt,expected) == 0 )
 			err = -28;
+	}
+	if ( err == 0 )
+	{
+		if ( ds4_log_ring_reset(&lr) < 0 )
+			err = -40;
+		if ( DS4_LOGI("x") < 0 )
+			err = -41;
+		if ( err == 0 && DS4_LOGI("y") < 0 )
+			err = -42;
+		trunc = 1;
+		n = ds4_log_ring_drain_format(&lr,fmt,(int32_t)sizeof(fmt),&trunc);
+		if ( n < 0 )
+			err = -43;
+		if ( err == 0 && trunc != 0 )
+			err = -44;
+		if ( err == 0 )
+		{
+			expected_n = (int32_t)snprintf(expected,sizeof(expected),"info: x\ninfo: y\n");
+			if ( expected_n < 0 )
+				err = -45;
+		}
+		if ( err == 0 && ds4_cstr_eq(fmt,expected) == 0 )
+			err = -46;
+		c = -1;
+		if ( err == 0 && ds4_log_ring_count(&lr,&c) < 0 )
+			err = -47;
+		if ( err == 0 && c != 0 )
+			err = -48;
+		if ( err == 0 && ds4_log_ring_reset(&lr) < 0 )
+			err = -49;
+		if ( err == 0 && DS4_LOGI("one") < 0 )
+			err = -50;
+		if ( err == 0 && DS4_LOGI("two") < 0 )
+			err = -51;
+		trunc = 0;
+		n = ds4_log_ring_drain_format(&lr,fmt,12,&trunc);
+		if ( err == 0 && n < 0 )
+			err = -52;
+		if ( err == 0 && trunc == 0 )
+			err = -53;
+		c = -1;
+		if ( err == 0 && ds4_log_ring_count(&lr,&c) < 0 )
+			err = -54;
+		if ( err == 0 && c != 0 )
+			err = -55;
 	}
 	ds4_log_set_sink(0,0);
 	return(err);
