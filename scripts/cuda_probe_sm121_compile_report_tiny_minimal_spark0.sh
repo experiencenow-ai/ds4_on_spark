@@ -46,16 +46,6 @@ __device__ __constant__ uint32_t ds4_cuda_arch_const =
 	0U;
 #endif
 
-static int32_t ck(cudaError_t err,int32_t code,const char *what)
-{
-	if ( err != cudaSuccess )
-	{
-		fprintf(stderr,\"%s: %s\\n\",what,cudaGetErrorString(err));
-		return(code);
-	}
-	return(0);
-}
-
 static const char *macro_arch_list(void)
 {
 #if defined(__CUDA_ARCH_LIST__)
@@ -117,8 +107,13 @@ int main(int argc,char **argv)
 		printf(\"cuda_drv=%d cuda_rt=%d count=%d __CUDA_ARCH__=%u __CUDA_ARCH_LIST__=%s __CUDA_ARCH_SPECIFIC__=%s __CUDA_ARCH_FAMILY_SPECIFIC__=%s\\n\",driver_v,runtime_v,count,cuda_arch,macro_arch_list(),macro_arch_specific(),macro_arch_family_specific());
 		return(0);
 	}
-	if ( ck(cudaGetDeviceProperties(&prop,0),-1,\"cudaGetDeviceProperties(0)\") != 0 )
-		return(-1);
+	if ( cudaGetDeviceProperties(&prop,0) != cudaSuccess )
+	{
+		(void)cudaGetLastError();
+		print_versions();
+		printf(\"cuda_drv=%d cuda_rt=%d count=%d __CUDA_ARCH__=%u __CUDA_ARCH_LIST__=%s __CUDA_ARCH_SPECIFIC__=%s __CUDA_ARCH_FAMILY_SPECIFIC__=%s\\n\",driver_v,runtime_v,count,cuda_arch,macro_arch_list(),macro_arch_specific(),macro_arch_family_specific());
+		return(0);
+	}
 	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
 		(void)cudaGetLastError();
@@ -154,4 +149,3 @@ cat "$tmp_out"
 cat "$tmp_out" >> "$log_path"
 rm -f "$tmp_out"
 exit $rc
-
