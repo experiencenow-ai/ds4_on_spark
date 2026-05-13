@@ -93,12 +93,14 @@ Use two fixture classes:
      python3 scripts/ds4_topk_dump_recommendations.py \
        --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
        --out-json /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_report.json \
-       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
+       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+       --probe-expert-queueing
      ```
 
      Notes:
      - The `t_ms`/`dt_ms` fields are synthetic (dumps have no timestamps). Keep the report explicit about this.
      - `--batch-size B` groups `B` tokens at the same timestamp (decode-like batch step). This is useful for stress-testing queue depth and backpressure logic; it is not a full decode replay.
+     - `--probe-expert-queueing` attaches a route-only resampling probe that summarizes per-layer expert queue depth and cap-6 pair-work speedups across batch sizes (still not a full decode replay).
 
 2. **Hidden-state replay fixture**
    - Input: real `ffn_norm`, `ffn_moe_topk`, and `ffn_moe_weights_scaled`

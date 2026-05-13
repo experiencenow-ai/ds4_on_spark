@@ -46,6 +46,10 @@ def main() -> int:
     p.add_argument("--mtp-accept-decay", type=float, default=1.0, help="Synthetic MTP: accept prob decay per position.")
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25, help="Synthetic MTP: draft compute cost vs verify.")
     p.add_argument("--trace-jsonl-out", default="", help="Optional: also write the intermediate scheduler-trace JSONL to this path.")
+    p.add_argument("--probe-expert-queueing", action="store_true", help="Attach a route-only expert-queue probe summary (synthetic resampling).")
+    p.add_argument("--probe-experts", type=int, default=256, help="Expert count for expert-queue probe (default: 256).")
+    p.add_argument("--probe-batches", type=str, default="16,32,64,100,128,256,512", help="Comma-separated batch sizes for expert-queue probe.")
+    p.add_argument("--probe-trials", type=int, default=250, help="Trials per layer per batch size for expert-queue probe.")
     args = p.parse_args()
 
     meta, layers = ds4_topk_dump.load_ds4_ffn_moe_topk_dump_layers(
@@ -55,6 +59,19 @@ def main() -> int:
     )
 
     trace_meta: dict[str, object] = {}
+    topk_dump_probe: dict[str, object] = {}
+    if bool(args.probe_expert_queueing):
+        batches = tuple(int(x) for x in str(args.probe_batches).split(",") if str(x).strip() != "")
+        topk_dump_probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
+            layers,
+            experts=int(args.probe_experts),
+            topk=int(args.topk),
+            batches=batches,
+            trials=int(args.probe_trials),
+            seed=int(args.seed),
+            strict_expert_ids=True,
+        )
+
     with tempfile.TemporaryDirectory() as td:
         tmp_trace = os.path.join(td, "routes.jsonl")
         trace_path = str(args.trace_jsonl_out) if str(args.trace_jsonl_out).strip() != "" else tmp_trace
@@ -93,6 +110,12 @@ def main() -> int:
         mtp_accept_decay=float(args.mtp_accept_decay),
         mtp_draft_cost_scale=float(args.mtp_draft_cost_scale),
     )
+    if len(topk_dump_probe) != 0:
+        report["topk_dump_probe"] = {
+            "present": True,
+            "note": "Probe uses real routes from the topk dumps but resamples rows and assumes synthetic batch sizes; this is not a full decode replay.",
+            "summary": topk_dump_probe,
+        }
 
     out_json = json.dumps(report, indent=2, sort_keys=True)
     if str(args.out_json) == "-":
