@@ -22,6 +22,12 @@ Optional: have the evidence runner write `smoke_report.md` into the fetched bund
 export CENTAUR_GEN_REPORT=1
 ```
 
+Optional (recommended for failures): have the Spark0 smoke enable shell tracing so `smoke.log` captures exact command lines:
+
+```bash
+export CENTAUR_TRACE=1
+```
+
 If you already ran the smoke and only want to fetch:
 
 ```bash
@@ -57,6 +63,12 @@ Optional: have the evidence runner write `ring_rsync_report.md` into the fetched
 export RING_GEN_REPORT=1
 ```
 
+Optional (recommended for failures): enable remote shell tracing so `ring_rsync.log` captures exact command lines:
+
+```bash
+export RING_TRACE=1
+```
+
 If you already ran the ring rsync and only want to fetch:
 
 ```bash
@@ -81,6 +93,7 @@ Recommended: run the one-command evidence loop (run → validate → fetch):
 
 ```bash
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_TRACE=1
 sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 ```
 

@@ -68,6 +68,7 @@ If you want a known-good reference bundle for what “PASS” looks like, see:
 
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	export RING_TRACE=1
 	sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 	```
 
@@ -110,6 +111,7 @@ The fetch helper pulls per-node artifacts (when present):
 
 	```bash
 	export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+	export RING_TRACE=1
 	sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 	```
 
