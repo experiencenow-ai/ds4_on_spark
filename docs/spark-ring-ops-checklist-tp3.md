@@ -28,10 +28,12 @@ For run log conventions and snapshot redaction guidance, see:
   - `./scripts/ops_spark_ring_status.sh --preflight tp3 --strict spark0@... spark1@... spark2@...`
 - Optional: capture a single combined snapshot (mesh + status; safe):
   - `./scripts/ops_spark_ring_ops_check.sh --out "${RUN_DIR:-/private/tmp}/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" --preflight tp3 --strict spark0@... spark1@... spark2@...`
+  - Optional (TP=2 → TP=3 transition): `--preflight tp23` to snapshot both TP=2 and TP=3 unit status
 - Stage deploy assets + scripts from the Mac:
   - `./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring spark0@... spark1@... spark2@...` (defaults to TP=3 env variants for a three-host inventory; includes a staged env audit)
   - Optional (recommended): run staged TP readiness checks before any install/system changes (safe; uses staged `/tmp/ds4-*` assets):
     - `./scripts/ops_spark_ring_staged_readiness.sh --topology ring --preflight tp3 --strict spark0@... spark1@... spark2@...`
+    - Optional (TP=2 → TP=3 transition): `./scripts/ops_spark_ring_staged_readiness.sh --topology ring --preflight tp23 --strict spark0@... spark1@... spark2@...`
 - Install staged templates on each Spark:
   - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark0 --start-preflight --preflight tp3`
   - `sudo /tmp/ds4-scripts/ops_install_staged_assets.sh --instance spark1 --start-preflight --preflight tp3`

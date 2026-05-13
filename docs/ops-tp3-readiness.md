@@ -36,6 +36,13 @@ Or run staged readiness directly after staging:
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional (recommended during TP=2 → TP=3 transition): run TP=2 readiness checks *and* TP=3 readiness checks (safe):
+
+```bash
+./scripts/ops_spark_ring_staged_readiness.sh --preflight tp23 --strict --topology ring \
+  spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 The staged helper runs `/tmp/ds4-scripts/ops_tp3_readiness.sh` on each Spark with:
 
 - `--env -/tmp/ds4-config/ds4.env.example`
