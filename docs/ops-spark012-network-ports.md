@@ -4,6 +4,11 @@ This is a **human-run** reference for the expected network shape and the ports D
 
 Do not change Spark firewall rules, routing, or system networking as part of automation loops; document proposed changes for human approval.
 
+If you need a starting point for drafting an allowlist (human-run), see:
+
+- `docs/ops-firewall-allowlist.md`
+- `deploy/config/nftables.ds4.spark012.nft.example`
+
 ## Hostnames + Paths
 
 Decide which path is authoritative for distributed runs:
@@ -51,4 +56,3 @@ curl -fsS "http://127.0.0.1:${DS4_METRICS_PORT}/metrics" | head
 For read-only routing + firewall inspection commands (some require `sudo`), see:
 
 - `docs/ops-firewall-routing-inspection.md`
-

@@ -1,0 +1,18 @@
+--- a/ds4.c
++++ b/ds4.c
+@@ -16610,11 +16610,11 @@
+             *out = NULL;
+             return 1;
+         }
+-        if (e->mtp_ready &&
++        if (e->mtp_ready && getenv("DS4_MTP_SET_MODEL_MAP") != NULL &&
+             !ds4_gpu_set_model_map_range(e->mtp_model.map,
+-                                           e->mtp_model.size,
+-                                           e->mtp_model.tensor_data_pos,
+-                                           e->mtp_model.size - e->mtp_model.tensor_data_pos))
++                                          e->mtp_model.size,
++                                          e->mtp_model.tensor_data_pos,
++                                          e->mtp_model.size - e->mtp_model.tensor_data_pos))
+         {
+             fprintf(stderr,
+                     "ds4: %s failed to map MTP model views; aborting startup. "

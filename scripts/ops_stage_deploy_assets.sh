@@ -57,13 +57,17 @@ rsync_run()
 
 ssh_run "$target" "mkdir -p /tmp/ds4-systemd /tmp/ds4-config /tmp/ds4-sysusers /tmp/ds4-tmpfiles /tmp/ds4-scripts"
 ssh_run "$target" "mkdir -p /tmp/ds4-systemd-user"
+ssh_run "$target" "mkdir -p /tmp/ds4-systemd-dropins /tmp/ds4-systemd-user-dropins"
 
 rsync_run "$root/deploy/systemd/" "$target:/tmp/ds4-systemd/"
 rsync_run "$root/deploy/systemd-user/" "$target:/tmp/ds4-systemd-user/"
+rsync_run "$root/deploy/systemd-dropins/" "$target:/tmp/ds4-systemd-dropins/"
+rsync_run "$root/deploy/systemd-user-dropins/" "$target:/tmp/ds4-systemd-user-dropins/"
 rsync_run "$root/deploy/config/" "$target:/tmp/ds4-config/"
 rsync_run "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
 rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
 rsync_run "$root/scripts/ops_tp2_readiness.sh" "$target:/tmp/ds4-scripts/"
+rsync_run "$root/scripts/ops_tp23_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_tp3_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_tp4_readiness.sh" "$target:/tmp/ds4-scripts/"
 rsync_run "$root/scripts/ops_ds4_env_check.sh" "$target:/tmp/ds4-scripts/"
@@ -113,6 +117,7 @@ sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-${instance}.env.example /etc/ds4
 sudo install -g ds4 -m 0640 /tmp/ds4-config/ds4-${instance}.conf.example /etc/ds4/ds4-${instance}.conf
 sudo install -d -m 0755 /opt/ds4/scripts
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp2_readiness.sh /opt/ds4/scripts/ops_tp2_readiness.sh
+sudo install -m 0755 /tmp/ds4-scripts/ops_tp23_readiness.sh /opt/ds4/scripts/ops_tp23_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp3_readiness.sh /opt/ds4/scripts/ops_tp3_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_tp4_readiness.sh /opt/ds4/scripts/ops_tp4_readiness.sh
 sudo install -m 0755 /tmp/ds4-scripts/ops_ds4_env_check.sh /opt/ds4/scripts/ops_ds4_env_check.sh
@@ -139,9 +144,12 @@ sudo systemctl start ds4-preflight-strict@${instance}.service
 
 == optional (strict DS4 start, human-run) ==
 # Starts DS4 only after strict preflight succeeds.
-# NOTE: `ds4-strict@.service` is a separate unit template (installed by the `ds4*.service` glob above).
-sudo systemctl enable ds4-strict@${instance}.service
-sudo systemctl start  ds4-strict@${instance}.service
+# Prefer the explicit TP=2 strict-start unit:
+sudo systemctl enable ds4-tp2-strict@${instance}.service
+sudo systemctl start  ds4-tp2-strict@${instance}.service
+# Legacy alias (same behavior):
+# sudo systemctl enable ds4-strict@${instance}.service
+# sudo systemctl start  ds4-strict@${instance}.service
 
 == optional (periodic preflight timer, human-run) ==
 # Runs non-destructive preflight on boot and periodically after.
@@ -183,6 +191,14 @@ sudo install -d -m 0755 /etc/systemd/journald.conf.d
 sudo install -m 0644 /tmp/ds4-config/journald.ds4.conf.example /etc/systemd/journald.conf.d/ds4.conf
 sudo systemctl restart systemd-journald
 
+== optional (systemd drop-ins, human-run) ==
+# Drop-ins let you override/tune the unit templates without editing the base unit files.
+# Prefer `systemctl edit` when possible; see:
+#   deploy/systemd-dropins/README.md
+sudo install -d -m 0755 /etc/systemd/system/ds4@.service.d
+sudo install -m 0644 /tmp/ds4-systemd-dropins/ds4@.service.d/20-timeouts.conf.example /etc/systemd/system/ds4@.service.d/20-timeouts.conf
+sudo systemctl daemon-reload
+
 == optional (logrotate for file logs, human-run) ==
 # Skip if DS4 logs exclusively to journald.
 sudo install -m 0644 /tmp/ds4-config/logrotate.ds4.conf.example /etc/logrotate.d/ds4
@@ -216,6 +232,9 @@ cat <<'EOF'
 == optional (systemd --user templates, human-run) ==
 # Staged for reference under:
 #   /tmp/ds4-systemd-user/
+#   /tmp/ds4-systemd-user-dropins/
+# Also staged for system units under:
+#   /tmp/ds4-systemd-dropins/
 #
 # Optional (non-root) installer wrapper:
 #   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance <instance> --start-preflight
@@ -227,6 +246,11 @@ cat <<'EOF'
 #   systemctl --user start ds4-support-bundle@<instance>.service
 # Optional weekly timer:
 #   systemctl --user enable --now ds4-support-bundle@<instance>.timer
+#
+# Optional unit drop-ins (`systemd --user`):
+#   install -d -m 0755 ~/.config/systemd/user/ds4@.service.d
+#   install -m 0644 /tmp/ds4-systemd-user-dropins/ds4@.service.d/20-timeouts.conf.example ~/.config/systemd/user/ds4@.service.d/20-timeouts.conf
+#   systemctl --user daemon-reload
 #
 # If you are doing a non-root bring-up with a user-space DS4 checkout, see:
 #   docs/deployment-systemd-user.md

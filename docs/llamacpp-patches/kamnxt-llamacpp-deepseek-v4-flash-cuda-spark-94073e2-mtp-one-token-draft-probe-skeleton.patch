@@ -537,7 +537,7 @@ new file mode 100644
 index 0000000..680d9af
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,765 @@
+@@ -0,0 +1,877 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -710,6 +710,15 @@ index 0000000..680d9af
 +    tensor_capture pre_hc_head;
 +};
 +
++struct mtp_stub_input_hc_captures {
++    tensor_capture mtp_enorm;
++    tensor_capture mtp_eproj;
++    tensor_capture mtp_eproj_hc;
++    tensor_capture mtp_hnorm_hc;
++    tensor_capture mtp_hproj_hc;
++    tensor_capture mtp_input_hc;
++};
++
 +static uint64_t fnv1a64(const uint8_t *p, size_t n) {
 +    uint64_t h = 14695981039346656037ull;
 +    for (size_t i = 0; i < n; i++) {
@@ -723,6 +732,23 @@ index 0000000..680d9af
 +    char buf[17];
 +    std::snprintf(buf, sizeof(buf), "%016llx", (unsigned long long) v);
 +    return std::string(buf);
++}
++
++static bool capture_tensor_host_bytes(struct ggml_tensor * t, tensor_capture * cap) {
++    if (t == nullptr || cap == nullptr || t->data == nullptr) {
++        return false;
++    }
++
++    const size_t n_bytes = ggml_nbytes(t);
++    cap->bytes.resize(n_bytes);
++    std::memcpy(cap->bytes.data(), t->data, n_bytes);
++    cap->type = t->type;
++    cap->ne0 = t->ne[0];
++    cap->ne1 = t->ne[1];
++    cap->ne2 = t->ne[2];
++    cap->ne3 = t->ne[3];
++    cap->got = true;
++    return true;
 +}
 +
 +static ggml_tensor * dsv4_view_scale(ggml_context * ctx, ggml_tensor * scale, int64_t idx) {
@@ -770,13 +796,13 @@ index 0000000..680d9af
 +        const tensor_capture & trunk_pre_hc_head,
 +        const ds4::deepseek4_mtp_sidecar & sidecar,
 +        const llama_hparams & hparams,
-+        tensor_capture * out,
++        mtp_stub_input_hc_captures * out,
 +        std::string * err) {
 +    if (out == nullptr) {
 +        if (err != nullptr) *err = "null out";
 +        return false;
 +    }
-+    *out = tensor_capture();
++    *out = mtp_stub_input_hc_captures();
 +
 +    if (!trunk_token_embd.got) {
 +        if (err != nullptr) *err = "missing trunk token_embd capture";
@@ -840,32 +866,41 @@ index 0000000..680d9af
 +    }
 +    std::memcpy(prev->data, trunk_pre_hc_head.bytes.data(), trunk_pre_hc_head.bytes.size());
 +
-+    ggml_tensor * e = ggml_rms_norm(ctx, tok, hparams.f_norm_rms_eps);
-+    e = ggml_mul(ctx, e, sidecar.enorm);
-+    e = ggml_mul_mat(ctx, sidecar.e_proj, e); // [n_embd, 1]
++    ggml_tensor * mtp_enorm = ggml_rms_norm(ctx, tok, hparams.f_norm_rms_eps);
++    mtp_enorm = ggml_mul(ctx, mtp_enorm, sidecar.enorm);
++    mtp_enorm = ggml_cont(ctx, mtp_enorm);
 +
-+    ggml_tensor * e_hc = ggml_repeat(ctx, e, prev); // [n_embd, n_hc]
++    ggml_tensor * mtp_eproj = ggml_mul_mat(ctx, sidecar.e_proj, mtp_enorm); // [n_embd, 1]
++    mtp_eproj = ggml_cont(ctx, mtp_eproj);
 +
-+    ggml_tensor * h = ggml_rms_norm(ctx, prev, hparams.f_norm_rms_eps);
-+    h = ggml_mul(ctx, h, sidecar.hnorm);
-+    h = ggml_mul_mat(ctx, sidecar.h_proj, h); // [n_embd, n_hc]
++    ggml_tensor * mtp_eproj_hc = ggml_repeat(ctx, mtp_eproj, prev); // [n_embd, n_hc]
++    mtp_eproj_hc = ggml_cont(ctx, mtp_eproj_hc);
 +
-+    ggml_tensor * cur = ggml_add(ctx, e_hc, h);
-+    cur = ggml_reshape_3d(ctx, cur, 4096, 4, 1);
++    ggml_tensor * mtp_hnorm_hc = ggml_rms_norm(ctx, prev, hparams.f_norm_rms_eps);
++    mtp_hnorm_hc = ggml_mul(ctx, mtp_hnorm_hc, sidecar.hnorm);
++    mtp_hnorm_hc = ggml_cont(ctx, mtp_hnorm_hc);
++
++    ggml_tensor * mtp_hproj_hc = ggml_mul_mat(ctx, sidecar.h_proj, mtp_hnorm_hc); // [n_embd, n_hc]
++    mtp_hproj_hc = ggml_cont(ctx, mtp_hproj_hc);
++
++    ggml_tensor * mtp_input_hc = ggml_add(ctx, mtp_eproj_hc, mtp_hproj_hc);
++    mtp_input_hc = ggml_cont(ctx, mtp_input_hc);
++    mtp_input_hc = ggml_reshape_3d(ctx, mtp_input_hc, 4096, 4, 1);
 +
 +    ggml_cgraph * gf = ggml_new_graph(ctx);
-+    ggml_build_forward_expand(gf, cur);
++    ggml_build_forward_expand(gf, mtp_input_hc);
 +    ggml_graph_compute_with_ctx(ctx, gf, 1);
 +
-+    const size_t n_bytes = ggml_nbytes(cur);
-+    out->bytes.resize(n_bytes);
-+    std::memcpy(out->bytes.data(), cur->data, n_bytes);
-+    out->type = cur->type;
-+    out->ne0 = cur->ne[0];
-+    out->ne1 = cur->ne[1];
-+    out->ne2 = cur->ne[2];
-+    out->ne3 = cur->ne[3];
-+    out->got = true;
++    if (!capture_tensor_host_bytes(mtp_enorm, &out->mtp_enorm)
++            || !capture_tensor_host_bytes(mtp_eproj, &out->mtp_eproj)
++            || !capture_tensor_host_bytes(mtp_eproj_hc, &out->mtp_eproj_hc)
++            || !capture_tensor_host_bytes(mtp_hnorm_hc, &out->mtp_hnorm_hc)
++            || !capture_tensor_host_bytes(mtp_hproj_hc, &out->mtp_hproj_hc)
++            || !capture_tensor_host_bytes(mtp_input_hc, &out->mtp_input_hc)) {
++        if (err != nullptr) *err = "failed to capture stub mtp_input_hc intermediates";
++        ggml_free(ctx);
++        return false;
++    }
 +
 +    ggml_free(ctx);
 +    return true;
@@ -989,8 +1024,8 @@ index 0000000..680d9af
 +        const std::string & mtp_draft_token,
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
-+        const tensor_capture & mtp_stub_input_hc,
-+        const tensor_capture & mtp_stub_head_norm,
++        const mtp_stub_input_hc_captures & mtp_stub_input_hc,
++        const tensor_capture & mtp_head_norm,
 +        bool ok,
 +        const std::vector<std::string> & errors) {
 +    std::printf("{\n");
@@ -1028,32 +1063,109 @@ index 0000000..680d9af
 +        std::printf("  \"trunk_pre_hc_head_shape\": null,\n");
 +    }
 +
-+    if (mtp_stub_input_hc.got) {
-+        std::printf("  \"mtp_stub_input_hc_fnv64\": \"%s\",\n",
-+                hex_u64(fnv1a64(mtp_stub_input_hc.bytes.data(), mtp_stub_input_hc.bytes.size())).c_str());
-+        std::printf("  \"mtp_stub_input_hc_nbytes\": %zu,\n", mtp_stub_input_hc.bytes.size());
-+        std::printf("  \"mtp_stub_input_hc_shape\": [%lld, %lld, %lld],\n",
-+                (long long) mtp_stub_input_hc.ne0,
-+                (long long) mtp_stub_input_hc.ne1,
-+                (long long) mtp_stub_input_hc.ne2);
++    const tensor_capture & mtp_enorm = mtp_stub_input_hc.mtp_enorm;
++    const tensor_capture & mtp_eproj = mtp_stub_input_hc.mtp_eproj;
++    const tensor_capture & mtp_eproj_hc = mtp_stub_input_hc.mtp_eproj_hc;
++    const tensor_capture & mtp_hnorm_hc = mtp_stub_input_hc.mtp_hnorm_hc;
++    const tensor_capture & mtp_hproj_hc = mtp_stub_input_hc.mtp_hproj_hc;
++    const tensor_capture & mtp_input_hc = mtp_stub_input_hc.mtp_input_hc;
++
++    if (mtp_enorm.got) {
++        std::printf("  \"mtp_enorm_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_enorm.bytes.data(), mtp_enorm.bytes.size())).c_str());
++        std::printf("  \"mtp_enorm_nbytes\": %zu,\n", mtp_enorm.bytes.size());
++        std::printf("  \"mtp_enorm_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_enorm.ne0,
++                (long long) mtp_enorm.ne1,
++                (long long) mtp_enorm.ne2);
 +    } else {
-+        std::printf("  \"mtp_stub_input_hc_fnv64\": null,\n");
-+        std::printf("  \"mtp_stub_input_hc_nbytes\": null,\n");
-+        std::printf("  \"mtp_stub_input_hc_shape\": null,\n");
++        std::printf("  \"mtp_enorm_fnv64\": null,\n");
++        std::printf("  \"mtp_enorm_nbytes\": null,\n");
++        std::printf("  \"mtp_enorm_shape\": null,\n");
 +    }
 +
-+    if (mtp_stub_head_norm.got) {
-+        std::printf("  \"mtp_stub_head_norm_fnv64\": \"%s\",\n",
-+                hex_u64(fnv1a64(mtp_stub_head_norm.bytes.data(), mtp_stub_head_norm.bytes.size())).c_str());
-+        std::printf("  \"mtp_stub_head_norm_nbytes\": %zu,\n", mtp_stub_head_norm.bytes.size());
-+        std::printf("  \"mtp_stub_head_norm_shape\": [%lld, %lld, %lld],\n",
-+                (long long) mtp_stub_head_norm.ne0,
-+                (long long) mtp_stub_head_norm.ne1,
-+                (long long) mtp_stub_head_norm.ne2);
++    if (mtp_eproj.got) {
++        std::printf("  \"mtp_eproj_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_eproj.bytes.data(), mtp_eproj.bytes.size())).c_str());
++        std::printf("  \"mtp_eproj_nbytes\": %zu,\n", mtp_eproj.bytes.size());
++        std::printf("  \"mtp_eproj_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_eproj.ne0,
++                (long long) mtp_eproj.ne1,
++                (long long) mtp_eproj.ne2);
 +    } else {
-+        std::printf("  \"mtp_stub_head_norm_fnv64\": null,\n");
-+        std::printf("  \"mtp_stub_head_norm_nbytes\": null,\n");
-+        std::printf("  \"mtp_stub_head_norm_shape\": null,\n");
++        std::printf("  \"mtp_eproj_fnv64\": null,\n");
++        std::printf("  \"mtp_eproj_nbytes\": null,\n");
++        std::printf("  \"mtp_eproj_shape\": null,\n");
++    }
++
++    if (mtp_eproj_hc.got) {
++        std::printf("  \"mtp_eproj_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_eproj_hc.bytes.data(), mtp_eproj_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_eproj_hc_nbytes\": %zu,\n", mtp_eproj_hc.bytes.size());
++        std::printf("  \"mtp_eproj_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_eproj_hc.ne0,
++                (long long) mtp_eproj_hc.ne1,
++                (long long) mtp_eproj_hc.ne2);
++    } else {
++        std::printf("  \"mtp_eproj_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_eproj_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_eproj_hc_shape\": null,\n");
++    }
++
++    if (mtp_hnorm_hc.got) {
++        std::printf("  \"mtp_hnorm_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_hnorm_hc.bytes.data(), mtp_hnorm_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_hnorm_hc_nbytes\": %zu,\n", mtp_hnorm_hc.bytes.size());
++        std::printf("  \"mtp_hnorm_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_hnorm_hc.ne0,
++                (long long) mtp_hnorm_hc.ne1,
++                (long long) mtp_hnorm_hc.ne2);
++    } else {
++        std::printf("  \"mtp_hnorm_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_hnorm_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_hnorm_hc_shape\": null,\n");
++    }
++
++    if (mtp_hproj_hc.got) {
++        std::printf("  \"mtp_hproj_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_hproj_hc.bytes.data(), mtp_hproj_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_hproj_hc_nbytes\": %zu,\n", mtp_hproj_hc.bytes.size());
++        std::printf("  \"mtp_hproj_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_hproj_hc.ne0,
++                (long long) mtp_hproj_hc.ne1,
++                (long long) mtp_hproj_hc.ne2);
++    } else {
++        std::printf("  \"mtp_hproj_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_hproj_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_hproj_hc_shape\": null,\n");
++    }
++
++    if (mtp_input_hc.got) {
++        std::printf("  \"mtp_input_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_input_hc.bytes.data(), mtp_input_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_input_hc_nbytes\": %zu,\n", mtp_input_hc.bytes.size());
++        std::printf("  \"mtp_input_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_input_hc.ne0,
++                (long long) mtp_input_hc.ne1,
++                (long long) mtp_input_hc.ne2);
++    } else {
++        std::printf("  \"mtp_input_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_input_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_input_hc_shape\": null,\n");
++    }
++
++    if (mtp_head_norm.got) {
++        std::printf("  \"mtp_head_norm_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_head_norm.bytes.data(), mtp_head_norm.bytes.size())).c_str());
++        std::printf("  \"mtp_head_norm_nbytes\": %zu,\n", mtp_head_norm.bytes.size());
++        std::printf("  \"mtp_head_norm_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_head_norm.ne0,
++                (long long) mtp_head_norm.ne1,
++                (long long) mtp_head_norm.ne2);
++    } else {
++        std::printf("  \"mtp_head_norm_fnv64\": null,\n");
++        std::printf("  \"mtp_head_norm_nbytes\": null,\n");
++        std::printf("  \"mtp_head_norm_shape\": null,\n");
 +    }
 +
 +    std::printf("  \"seed\": %d,\n", (int) seed);
@@ -1139,7 +1251,7 @@ index 0000000..680d9af
 +    std::vector<std::string> errors;
 +
 +    probe_captures caps;
-+    tensor_capture stub_input_hc;
++    mtp_stub_input_hc_captures stub_input_hc;
 +    tensor_capture stub_head_norm;
 +
 +    ggml_backend_load_all();

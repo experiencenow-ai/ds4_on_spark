@@ -4,6 +4,18 @@ This repo does not apply changes to Sparks automatically. Everything below is **
 
 Goal: prepare a repeatable Spark0/Spark1/Spark2 layout with staging helpers, systemd templates, consistent logs/metrics, and safe preflight checks for future TP=3 runs.
 
+Recommended progression:
+
+- Ops index: `docs/deployment-spark012-ops-pack.md`
+- First validate Spark0/Spark1 TP=2 baseline:
+  - `docs/spark-ring-ops-quickstart-tp2.md`
+  - `docs/spark-ring-ops-readiness-tp2.md`
+- TP=2 → TP=3 transition runbook:
+  - `docs/spark-ring-ops-transition-tp2-to-tp3.md`
+- Then expand to Spark0/Spark1/Spark2 TP=3:
+  - `docs/spark-ring-ops-quickstart-tp3.md`
+  - `docs/spark-ring-ops-readiness-tp3.md`
+
 ## Roles + Naming
 
 Recommended convention (matches the templates in `deploy/systemd/`):
@@ -54,6 +66,22 @@ At the end of staging, the helper runs a safe staged env audit to catch common r
 
 - `scripts/ops_spark_ring_staged_env_audit.sh` (reads `/tmp/ds4-config/ds4-<instance>.env.example` on each Spark)
 
+Optional (recommended): run staged TP readiness checks after staging (safe; no sudo; uses staged `/tmp/ds4-*` assets):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
+Or run staged readiness via the snapshot helper (safe; adds readiness to the Mac-side mesh+status snapshot):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 Or stage each host individually:
 
 ```bash
@@ -81,6 +109,7 @@ Notes:
 - If you stage hosts manually, set `DS4_ENV_VARIANT=tp3` to swap `ds4-<instance>.tp3.env.example` into `ds4-<instance>.env.example` on the Spark (see `deploy/README.md`).
 - For TP=3, prefer a rank-ordered host list in the env file (example):
   `DS4_RING_HOSTS=spark0.local,spark1.local,spark2.local`
+- For TP=3, prefer `DS4_MASTER_ADDR` to resolve to the same host as `DS4_RING_HOSTS` entry 0 (Spark0).
 
 If you want strict TP=3 gating on start (recommended for early bring-up), enable the topology-specific strict unit:
 
@@ -89,11 +118,26 @@ sudo systemctl enable ds4-tp3-strict@spark0.service
 sudo systemctl start  ds4-tp3-strict@spark0.service
 ```
 
+## Optional: Developer Path (`systemd --user`, No Sudo)
+
+If you are doing a non-root bring-up (developer path), install and run the user units (staged under `/tmp/ds4-systemd-user/`) and keep per-instance config under `~/.config/ds4/`:
+
+```bash
+/tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance spark0 --start-preflight --preflight tp3
+/tmp/ds4-scripts/ops_validate_user_installed_assets.sh --instance spark0 --strict
+systemctl --user enable --now ds4-tp3-strict@spark0.service
+```
+
+See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layout.md`.
+
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`
+- Optional systemd overrides (drop-ins): `deploy/systemd-dropins/README.md`
 - Logging + metrics: `docs/ops-logging-metrics.md`
+- Run notes + snapshot hygiene: `docs/ops-run-notes.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=3 network + ports: `docs/ops-spark012-network-ports.md`
 - TP=3 readiness checks: `docs/ops-tp3-readiness.md`
 - Three-node operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
+- Optional Centaur ops hooks: `docs/ops-centaur-operational-hooks.md`

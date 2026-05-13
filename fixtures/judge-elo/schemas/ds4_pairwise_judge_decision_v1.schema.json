@@ -49,7 +49,7 @@
     },
     "tags": {
       "type": "array",
-      "maxItems": 8,
+      "maxItems": 3,
       "items": {
         "type": "string",
         "minLength": 1,

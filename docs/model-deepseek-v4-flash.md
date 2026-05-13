@@ -15,6 +15,8 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
 - `upstream_commit.txt` (pinned upstream git commit hash)
 - `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
+- `checkpoint_keys.txt` (derived from `model.safetensors.index.json`; exact sorted list of all official tensor keys for debugging/diffing upstream snapshots)
+- `mtp_checkpoint_keys.txt` (derived from `model.safetensors.index.json`; exact sorted list of official `mtp.*` tensor keys used for MTP namespace preservation/debugging)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
 - `oracle/prompts.json` (prompt cases used by the logit-oracle generator)
@@ -37,6 +39,13 @@ Topology:
 - `head_dim=512` (MLA: `rope_head_dim=64`, `nope_head_dim=448`)
 - `sliding_window=128`
 - `vocab_size=129280`
+- `max_position_embeddings=1048576` (Transformers config context cap; separate from the reference runtime defaults in `contract_summary.json` `runtime.reference_defaults`)
+
+Config semantics (from pinned `config.json`, also recorded in `contract_summary.json` `config_summary.*`):
+
+- `rms_norm_eps=1e-6`, `hidden_act="silu"`
+- `attention_bias=false`, `attention_dropout=0.0`
+- `torch_dtype="bfloat16"`, `transformers_version="4.57.1"`
 
 Tokenizer / encoding (special-token IDs are derived from `tokenizer.json` and recorded machine-readably under `contract_summary.json` `tokenizer.encoding_token_ids`):
 
@@ -137,7 +146,7 @@ Key JSON paths by concern:
 - Cache semantics (allocation + update + sparse-attn masking): `cache.kv_cache_sizes_at_reference_defaults`, `cache.layer_cache_kind_by_layer_id`, `cache.layer_compress_ratio_by_layer_id`, `cache.update_semantics.*`, `cache.topk_mask_value`, `cache.sparse_attn_mask` (and the human summary in `cache.sparse_attn_mask_rule`; MTP cache expectations under `cache.mtp_*`)
 - MLA positional split + RoPE: `mla.*`, `yarn_rope.*`
 - MoE routing (hash vs score): `moe.*` (including `moe.hash_routing.*` and `moe.semantics.*`)
-- MTP artifacts + trust gates: `mtp.*` (including `mtp.semantics.*` and `mtp.trust_gates.*`)
+- MTP artifacts + trust gates: `mtp.*` (including `mtp.namespace.*`, `mtp.semantics.*`, and `mtp.trust_gates.*`)
 - Checkpoint tensor-key invariants + counts: `tensor_keys.*` and `checkpoint_index.*` (including `checkpoint_index.weight_map_prefix_fingerprints.mtp.*` to fingerprint the upstream `mtp.0.*` namespace)
 - Quantization / scale-tensor expectations: `quantization.*` (notably `quantization.inference_config.*` and `quantization.linear_tensor_contract.*`)
 - Tokenizer + encoding invariants: `tokenizer.*` and `encoding_constants.*` (encoding oracle vectors are pinned via `upstream.fixtures_sha256.*`)
@@ -167,6 +176,8 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
 - Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
 - Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
 - MTP gate: treat MTP as **disabled/untrusted** unless the artifact preserves the upstream `mtp.0.*` namespace and satisfies `mtp.trust_gates.*` (including `mtp_contract.complete == true`) **and** a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`).
+  - Quantized MTP sidecar note: several community GGUF “MTP sidecar” artifacts declare `general.architecture=deepseek4_mtp_support` and use DS4-sidecar-style tensor keys like `mtp.0.attn_q_a.weight` / `mtp.0.attn_kv.weight`. These **do not** match the official DeepSeek safetensors key schema (e.g. `mtp.0.attn.wq_a.weight` / `mtp.0.attn.wkv.weight`) and will not satisfy the upstream `mtp_contract` or match the official `mtp_keys_sha256` fingerprint.
+    - Contract meaning: treat DS4-sidecar-style GGUF MTP as a *non-preserving* artifact (useful for bring-up experiments), and require the MTP logits oracle + acceptance checks before enabling MTP in any baseline reports.
 
 ## Topology constants (from `config.json` + `inference/config.json`)
 
@@ -789,6 +800,7 @@ MoE gate conditional keys:
 Per-layer helper views (exact tensor-name + count contract):
 
 - `tensor_keys.layer_required_nonexpert_suffixes_by_layer_id` records the full non-expert suffix list for each trunk layer ID (base + CSA/HCA conditionals + correct gate suffix).
+- `tensor_keys.layer_required_nonexpert_keys_by_layer_id` expands the suffix list into exact checkpoint tensor names (`layers.{i}.*`) so external-runtime tooling can check “missing keys” without re-deriving templates.
 - `tensor_keys.layer_expected_tensor_key_count_by_layer_id` records the expected **total** per-layer tensor-key count (experts + non-expert suffixes).
 - `tensor_keys.layer_tensor_key_count_by_layer_id` records the observed official checkpoint per-layer tensor-key counts.
 - `tensor_keys.layer_expected_tensor_key_count_by_layer_id_ok` is `true` for all trunk layers in the pinned official checkpoint (sanity check that the derived count formulas match reality).
@@ -800,6 +812,7 @@ MTP block (`mtp.0.*`):
   - `mtp.0.enorm.weight`, `mtp.0.hnorm.weight`, `mtp.0.norm.weight`
   - `mtp.0.hc_head_{fn,base,scale}`
 - The full non-expert MTP suffix set (required layer suffixes + MTP-only suffixes + score gate bias) is recorded as `tensor_keys.mtp_required_nonexpert_suffixes` for quick contract checks.
+- The expanded “exact tensor names” view is recorded as `tensor_keys.mtp_required_nonexpert_keys_by_layer_id` (and duplicated for convenience under `tensor_keys.mtp0.required_nonexpert_keys`).
 - Official checkpoints share the top-level `embed.*`/`head.*` weights with MTP; `mtp.0.embed.*` and `mtp.0.head.*` are not present. This is machine-recorded in `contract_summary.json` via `tensor_keys.mtp_embed_present=false` / `tensor_keys.mtp_head_present=false`, and the additional MTP-only suffixes are listed under `tensor_keys.required_mtp_additional_suffixes`.
 - `contract_summary.json` also records the expected per-MTP-layer tensor-key count (`tensor_keys.mtp_expected_tensor_key_count_per_layer`) and the observed counts in the official safetensors index (`tensor_keys.mtp_tensor_key_count_by_layer_id`) so tooling can sanity-check “full upstream `mtp.0.*` preserved?” quickly.
 
@@ -823,15 +836,16 @@ For each quantized artifact tested, record:
 - captured quantization metadata from `scripts/model_contract_inspect_quantized_artifact.py`:
   - `tensor_type_counts` (overall GGUF tensor types present)
   - `tensor_type_profile` (expert vs dense type split when keys match known DeepSeek-V4 GGUF naming)
-  - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`; includes `status ∈ {"native_like","mismatch","unknown"}` plus `dense_fp8_like` / `expert_fp4_like` and `notes_sample`)
+  - `quantization_contract` (when `fixtures/model_contract/deepseek_v4_flash/contract_summary.json` is available: contract-aware “Flash native FP8/FP4-like?” hint derived from `tensor_type_profile` vs `quantization.inference_config`, using the contract’s `quantization.gguf_compat.*` type-prefix + evidence-category rules; includes `status ∈ {"native_like","mismatch","unknown"}` plus `dense_fp8_like` / `expert_fp4_like` and `notes_sample`)
   - contract-aware key completeness outputs (emitted when run from this repo or with `--contract-summary`):
     - `mtp_namespace` (`has_mtp0`, `expected_layer_ids`, `expected_complete`)
-    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`)
+    - `mtp_contract` (`checked`, `complete`, `missing_required_count`, `forbidden_present`; plus `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when the expanded `tensor_keys.mtp_required_nonexpert_keys_by_layer_id` contract is available)
     - `mtp_preservation` (`status`; structural “preserves upstream `mtp.0.*`?” signal derived from `mtp_namespace` + `mtp_contract`, and (when `contract_summary.json` is available) the official `mtp_keys_sha256` fingerprint gate)
     - `mtp_trust` (`status`; always untrusted until an oracle includes MTP)
     - `trunk_contract` (`checked`, `complete`) with `trunk_contract.kind`:
       - `kind="deepseek-upstream"`: upstream-style `layers.{i}.*` keys preserved
       - `kind="llama.cpp"`: DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only structural signal)
+      - For upstream-preserving artifacts, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when expanded per-layer key lists are available (quick “exact `layers.{i}.*` non-expert namespace preserved?” signal).
     - `topology_contract.mismatches` when GGUF header metadata is present
 
 Any successful external-runtime output must still be followed by a contract
@@ -858,13 +872,18 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 
 Pinned GGUF MTP status snapshot (derived from `fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` `generated_at_utc` field; built from the JSON probe outputs above):
 
-| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_contract.complete` | `mtp_trust.status` |
-|---|---|---:|---:|---:|---|
-| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
-| nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
-| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | false | false | — | absent |
-| antirez trunk + MTP sidecar (artifact set; DS4-tuned sidecar is complete) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | true | true | false | incomplete |
-| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | true | true | false | incomplete |
+| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_preservation.status` | `mtp_preservation.mtp_keys_sha256_match_official` | DS4 sidecar complete? |
+|---|---|---:|---:|---|---:|---:|
+| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | absent | — | — |
+| nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | absent | — | — |
+| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | false | false | absent | — | — |
+| antirez trunk + MTP sidecar (artifact set) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | true | true | incomplete | false | true |
+| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | true | true | incomplete | false | true |
+
+Notes:
+
+- `mtp_namespace.has_mtp0=true` is required but not sufficient: in the pinned snapshot above, the only MTP-capable candidates are DS4-tuned GGUF sidecars (`DS4 sidecar complete? == true`), and they do **not** preserve the official upstream MTP tensor-key schema (`mtp_keys_sha256_match_official=false` and `mtp_preservation.status=incomplete`).
+- Treat MTP as disabled/untrusted until an artifact both preserves the official MTP key subset (fingerprint gate) and passes an MTP oracle (semantic gate).
 
 For external/quantized artifacts:
 

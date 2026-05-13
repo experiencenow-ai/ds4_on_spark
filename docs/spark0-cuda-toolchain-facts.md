@@ -2,19 +2,19 @@
 
 This is a compact, non-secret reference for Spark0 (`aitopatom-9ab9.local`). It is derived from the commit-safe probe snapshots in `docs/`.
 
-## Current Facts (observed 2026-05-12)
+## Current Facts (observed 2026-05-13)
 
 - Host: `aitopatom-9ab9.local` (user: `spark0`)
 - GPU: `NVIDIA GB10` (Blackwell)
 - Compute capability: `12.1`
 - Driver (`nvidia-smi --version`): `580.142`
 - `nvidia-smi` reported CUDA: `13.0`
-- `nvcc` (toolkit): `13.0.88` (release `13.0`)
+- `nvcc` (toolkit): `13.0.88` (release `13.0`; installed at `/usr/local/cuda/bin/nvcc`, not on `$PATH`)
 - `/usr/local/cuda/version.json` `cuda`: `13.0.3`
 - `/usr/local/cuda/include/cuda.h` `CUDA_VERSION`: `13000`
 
 Source snapshot (commit-safe):
-- `docs/spark0-probe-facts-2026-05-12T1934Z.md`
+- `docs/spark0-probe-facts-2026-05-13T0902Z.md`
 
 ## How To Re-Verify (Commit-Safe)
 

@@ -86,6 +86,7 @@ def main():
         "probe_ok": False,
         "files_checked": [],
         "pad256_found": False,
+        "pad256_confidence": "absent",
         "pad256_matches": [],
         "cuda_reject_debug_found": None,
         "cuda_reject_debug_matches": [],
@@ -105,30 +106,52 @@ def main():
         ("ggml_pad_256", re.compile(r"GGML_PAD\(\s*n_tokens\s*,\s*256\s*\)")),
         ("head_dim_512", re.compile(r"n_embd_head_k\s*==\s*512")),
         ("is_prefill", re.compile(r"\bis_prefill\b")),
-        ("n_comp_eq_0", re.compile(r"\bn_comp\s*==\s*0\b")),
         ("flash_attn", re.compile(r"\bflash_attn\b")),
+        ("ggml_pad_call", re.compile(r"\bggml_pad\s*\(")),
+        ("attn_mask_concat", re.compile(r"\battn_mask\s*=\s*ggml_concat\s*\(")),
+        ("infinity", re.compile(r"-INFINITY")),
     ]
 
-    want = {"deepseek4.cpp", "ggml-cuda.cu"}
+    # Prefer the canonical path of the DSv4 model builder; fall back to walking.
     candidates = []
-    candidates.extend(walk_candidates(llama_dir, ["src/models", "src", "ggml/src/ggml-cuda"], want))
-    # Fallback: if the file layout differs, scan a small bounded set of likely roots.
-    if not candidates:
-        candidates.extend(walk_candidates(llama_dir, ["src", "ggml/src"], want))
+    canonical = os.path.join(llama_dir, "src", "models", "deepseek4.cpp")
+    if os.path.exists(canonical):
+        candidates.append(canonical)
+    else:
+        want = {"deepseek4.cpp", "ggml-cuda.cu"}
+        candidates.extend(walk_candidates(llama_dir, ["src/models", "src", "ggml/src/ggml-cuda"], want))
+        # Fallback: if the file layout differs, scan a small bounded set of likely roots.
+        if not candidates:
+            candidates.extend(walk_candidates(llama_dir, ["src", "ggml/src"], want))
 
     candidates = sorted(set(candidates))
     for path in candidates:
         rel = os.path.relpath(path, llama_dir)
         result["files_checked"].append(rel)
-        ms = scan_file(path, pad_patterns, max_matches=100)
-        if ms:
-            # Heuristic: require GGML_PAD(...,256) + head_dim=512 in the same file.
-            has_pad = any(m["pattern"] == "ggml_pad_256" for m in ms)
-            has_hd = any(m["pattern"] == "head_dim_512" for m in ms)
-            if has_pad and has_hd:
-                result["pad256_found"] = True
-            if has_pad:
-                result["pad256_matches"].append({"file": rel, "matches": ms})
+        ms = scan_file(path, pad_patterns, max_matches=120)
+        if not ms:
+            continue
+
+        hits = {m["pattern"] for m in ms}
+
+        # Heuristic (high confidence): match the DSv4-specific prefill pad-to-256 fix:
+        #   if (is_prefill && cparams.flash_attn && n_embd_head_k == 512) { ... GGML_PAD(n_tokens,256) ... ggml_pad ... attn_mask=ggml_concat(... -INFINITY) }
+        required = {"ggml_pad_256", "head_dim_512", "is_prefill", "flash_attn"}
+        supporting = {"ggml_pad_call", "attn_mask_concat", "infinity"}
+        if required.issubset(hits):
+            result["pad256_found"] = True
+            support_count = len(hits.intersection(supporting))
+            if support_count >= 2:
+                result["pad256_confidence"] = "high"
+            elif support_count >= 1:
+                result["pad256_confidence"] = "medium"
+            else:
+                result["pad256_confidence"] = "low"
+
+        # Store matches for any file that mentions the pad-to-256 anchor so later
+        # debugging can inspect the exact lines without SSHing again.
+        if "ggml_pad_256" in hits or "head_dim_512" in hits:
+            result["pad256_matches"].append({"file": rel, "matches": ms})
 
     # Debug-print scan (best-effort): informational only.
     #

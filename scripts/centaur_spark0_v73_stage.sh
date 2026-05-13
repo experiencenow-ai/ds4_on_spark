@@ -12,6 +12,7 @@ Environment:
   CENTAUR_ZIP     Local zip path (default: /Users/mac/Downloads/centaur_spec_impl_v73.zip)
   SSH_OPTS        Optional ssh options override (default includes BatchMode + temp known_hosts)
   STAGE_SKIP_PREFLIGHT  Set to 1 to skip SSH preflight checks
+  STAGE_SKIP_PREREQS    Set to 1 to skip remote prereq checks (python3/venv/unzip)
 
 Examples:
   ./scripts/centaur_spark0_v73_stage.sh spark0@aitopatom-9ab9.local
@@ -129,6 +130,18 @@ if [ "${STAGE_SKIP_PREFLIGHT:-0}" != "1" ]; then
 	ssh_preflight "$target" || exit 21
 else
 	echo "== skip preflight (STAGE_SKIP_PREFLIGHT=1) =="
+fi
+
+if [ "${STAGE_SKIP_PREREQS:-0}" != "1" ]; then
+	prereqs="$root/scripts/centaur_spark_v73_prereqs_check.sh"
+	if [ -x "$prereqs" ]; then
+		echo "== stage prereqs =="
+		SSH_OPTS="$SSH_OPTS" sh "$prereqs" "$target" || exit 22
+	else
+		echo "note: prereqs checker missing; skipping: $prereqs" >&2
+	fi
+else
+	echo "== skip prereqs (STAGE_SKIP_PREREQS=1) =="
 fi
 
 ssh_run "$target" "mkdir -p $remote_dir"

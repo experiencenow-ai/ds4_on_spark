@@ -53,12 +53,12 @@ int32_t test_config(void)
 	char path[64];
 	char env_path[96];
 	char out[128];
-	const char *k0,*h0;
+	const char *k0,*h0,*env_name,*env_help;
 	const char *ev;
 	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
-	int32_t unknown,key_count;
+	int32_t unknown,key_count,env_count,env_i,found_log_level,found_cfg_path;
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
 	key_count = -1;
@@ -82,6 +82,38 @@ int32_t test_config(void)
 		return(-1819);
 	if ( ds4_cstr_len_i32(h0) <= 0 )
 		return(-1820);
+	env_count = -1;
+	if ( ds4_config_env_var_count(&env_count) < 0 )
+		return(-18210);
+	if ( env_count < 8 )
+		return(-18211);
+	if ( ds4_config_env_var(-1) != 0 )
+		return(-18212);
+	if ( ds4_config_env_var(env_count) != 0 )
+		return(-18213);
+	if ( ds4_config_env_var_help(-1) != 0 )
+		return(-18214);
+	if ( ds4_config_env_var_help(env_count) != 0 )
+		return(-18215);
+	found_log_level = 0;
+	found_cfg_path = 0;
+	for (env_i=0; env_i<env_count; env_i++)
+	{
+		env_name = ds4_config_env_var(env_i);
+		if ( env_name == 0 )
+			return(-18216);
+		env_help = ds4_config_env_var_help(env_i);
+		if ( env_help == 0 )
+			return(-18217);
+		if ( strcmp(env_name,"DS4_LOG_LEVEL") == 0 )
+			found_log_level = 1;
+		if ( strcmp(env_name,"DS4_CONFIG_PATH") == 0 )
+			found_cfg_path = 1;
+	}
+	if ( found_log_level == 0 )
+		return(-18218);
+	if ( found_cfg_path == 0 )
+		return(-18219);
 	ev = ds4_config_env_err_var(-3);
 	if ( ev == 0 || strcmp(ev,"DS4_LOG_LEVEL") != 0 )
 		return(-1821);

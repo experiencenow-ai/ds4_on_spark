@@ -108,11 +108,21 @@ much lower memory, simpler runtime, or better stability.
 Use `scripts/model_quality_speed_score.py` on a CSV assembled from baseline
 reports:
 
+Baseline wrappers append to `MODEL_RUNS_CSV` in a schema-safe way: if newer runs
+include additional columns (for example speculative-decoding counters), the
+writer will extend the CSV header and backfill older rows with empty fields
+instead of producing misaligned CSV lines.
+
 ```sh
 scripts/model_quality_speed_score.py results/model_runs.csv
 scripts/model_quality_speed_score.py results/model_runs.csv --json
 scripts/model_quality_speed_score.py results/model_runs.csv --speed-field correct_tasks_per_s
+scripts/model_quality_speed_score.py results/model_runs.csv --pareto-group all
 ```
+
+By default, Pareto `dominated_by` is computed **within each `scope` group** (so
+Ling/Qwen/DFlash/DeepSeek rows do not accidentally dominate each other). Use
+`--pareto-group all` only when you intentionally want one global frontier.
 
 Example CSV:
 
@@ -142,6 +152,15 @@ The scorer emits:
 - `correct_tasks_per_s`
 - `tokens_per_success`
 - Pareto `dominated_by` status
+- Speculative decoding fields when present (pass-through):
+  - `speculative_method`
+  - `speculative_draft_model`
+  - `speculative_num_speculative_tokens`
+  - `spec_decode_num_drafts`
+  - `spec_decode_num_draft_tokens`
+  - `spec_decode_num_accepted_tokens`
+  - `spec_decode_mean_accept_len`
+  - `spec_decode_accept_rate`
 
 ## Scope Hygiene
 

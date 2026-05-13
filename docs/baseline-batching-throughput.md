@@ -113,7 +113,24 @@ If you want a quick starting grid without typing `*_BATCH_VALUES` / `*_UBATCH_VA
 - `LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET=quick` (small grid)
 - `LLAMA_SERVER_THROUGHPUT_SWEEP_PRESET=highbatch` (the documented “high batching” grid)
 
-The preset only fills in values you did not explicitly set (so you can still override `*_BATCH_VALUES` / `*_UBATCH_VALUES` by providing them directly).
+Preset details (only fills values you did not explicitly set):
+
+- `quick`:
+  - `PROMPT_WORDS=16`
+  - `CONCURRENCY=8`
+  - `PARALLEL_VALUES=8`
+  - `BATCH_VALUES=2048`
+  - `UBATCH_VALUES=512`
+  - `N_PREDICT=64`
+- `highbatch`:
+  - `PROMPT_WORDS=4096`
+  - `CONCURRENCY=1 2 4 8`
+  - `PARALLEL_VALUES=1 2 8` (includes the current stable `--parallel 8` point)
+  - `BATCH_VALUES=512 1024 2048`
+  - `UBATCH_VALUES=128 256 512`
+  - `N_PREDICT=64`
+
+The sweep writes `preset` and `preset_applied` into `throughput_sweep.md` metadata so commit-ready reports preserve which defaults came from the preset vs explicit env.
 
 ## Interpreting Results
 

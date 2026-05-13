@@ -13,6 +13,7 @@ Environment (recommended):
   CENTAUR_CATALOG_JSON  Optional path to a model-catalog JSON fixture
   CENTAUR_PIP_ARGS      Optional extra args for pip install (e.g. "--no-index --find-links=/path/to/wheels")
   CENTAUR_SKIP_PIP      Set to 1 to skip pip install (assumes venv already has deps)
+  CENTAUR_CLEAR_VENV    Set to 1 to pass `--clear` when creating the venv
   CENTAUR_LOG           Optional log path (duplicates stdout/stderr via tee)
   CENTAUR_TRACE         Set to 1 to enable shell tracing (prints exact commands)
 
@@ -178,7 +179,11 @@ echo "requirements.txt:"
 sed -n '1,40p' "$pkgdir/requirements.txt"
 
 echo "== venv =="
-python3 -m venv "$venvdir"
+if [ "${CENTAUR_CLEAR_VENV:-0}" = "1" ]; then
+	python3 -m venv --clear "$venvdir"
+else
+	python3 -m venv "$venvdir"
+fi
 venv_py="$venvdir/bin/python3"
 if [ ! -x "$venv_py" ]; then
 	echo "expected venv python: $venv_py" >&2

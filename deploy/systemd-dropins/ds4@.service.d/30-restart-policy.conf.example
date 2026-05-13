@@ -1,0 +1,10 @@
+# Example: slightly slower restart loop (reduces log spam during debugging).
+#
+# Install as:
+#   /etc/systemd/system/ds4@.service.d/30-restart-policy.conf
+
+[Service]
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=0
+

@@ -94,6 +94,7 @@ Targets:
   vllm
   vllm_dflash_pr
   transformers
+  flashinfer
   sglang
   sglang_dflash_pr
   llama_cpp
@@ -329,6 +330,10 @@ fetch_one()
 		transformers)
 			upstream="huggingface/transformers"; ref="refs/tags/v5.8.0"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "transformers" "https://github.com/huggingface/transformers.git" "${ref}" "${expected}"
+			;;
+		flashinfer)
+			upstream="flashinfer-ai/flashinfer"; ref="refs/tags/v0.6.11.post1"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+			clone_or_update "flashinfer" "https://github.com/flashinfer-ai/flashinfer.git" "${ref}" "${expected}"
 			;;
 		dflash_code)
 			upstream="z-lab/dflash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
@@ -599,10 +604,10 @@ fetch_one()
 			upstream="sgl-project/sglang"; ref="refs/pull/20547/head"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "sglang_dflash_pr" "https://github.com/sgl-project/sglang.git" "${ref}" "${expected}"
 			;;
-		llama_cpp)
-			upstream="ggml-org/llama.cpp"; ref="refs/tags/b9110"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
-			clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
-			;;
+			llama_cpp)
+				upstream="ggml-org/llama.cpp"; ref="refs/tags/b9127"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
+				clone_or_update "llama_cpp" "https://github.com/ggml-org/llama.cpp.git" "${ref}" "${expected}"
+				;;
 		llama_cpp_deepseek_v4_flash)
 			upstream="antirez/llama.cpp-deepseek-v4-flash"; ref="refs/heads/main"; expected="$(manifest_commit_for "${upstream}" "${ref}")"
 			clone_or_update "llama_cpp_deepseek_v4_flash" "https://github.com/antirez/llama.cpp-deepseek-v4-flash.git" "${ref}" "${expected}"
@@ -682,11 +687,12 @@ main()
 		fetch_one deepseek_v4_gguf_nsparks
 		fetch_one deepseek_v4_gguf_cyberneurova
 		fetch_one deepseek_v4_gguf_teamblobfish
-		fetch_one bati_cpp
-		fetch_one vllm
-		fetch_one transformers
-		fetch_one sglang
-		fetch_one llama_cpp
+			fetch_one bati_cpp
+			fetch_one vllm
+			fetch_one transformers
+			fetch_one flashinfer
+			fetch_one sglang
+			fetch_one llama_cpp
 		fetch_one llama_cpp_deepseek_v4_flash
 		fetch_one llama_cpp_deepseek_v4_support_wip
 		fetch_one llama_cpp_deepseek_v4_port_cchuter

@@ -262,6 +262,10 @@ def scan_fattn_reservation(log_path):
         "log_path": log_path,
         "seen_fattn_disabled": False,
         "seen_sched_reserve_cpu_fattn": False,
+        "seen_sched_reserve_fallback": False,
+        "seen_sched_reserve_failure": False,
+        "sched_reserve_fallback_line_count": 0,
+        "sched_reserve_failure_line_count": 0,
         "fattn_line_count": 0,
         "fattn_node_unique": 0,
         "fattn_id_min": None,
@@ -298,6 +302,9 @@ def scan_fattn_reservation(log_path):
     kind_cpu = {}
     kind_cuda = {}
     match_lines = []
+    rx_fattn_disabled = re.compile(r"flash attention.*disabl", flags=re.IGNORECASE)
+    rx_sched_reserve_fallback = re.compile(r"\bfallback\b|\bfall back\b", flags=re.IGNORECASE)
+    rx_sched_reserve_failure = re.compile(r"\bfail(?:ed|ure)?\b|\berror\b|\bunable\b|\bnot supported\b", flags=re.IGNORECASE)
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -305,6 +312,14 @@ def scan_fattn_reservation(log_path):
                 is_match = False
                 if ln.startswith("sched_reserve:"):
                     out["sched_reserve_line_count"] += 1
+                    if rx_sched_reserve_fallback.search(ln) is not None:
+                        out["seen_sched_reserve_fallback"] = True
+                        out["sched_reserve_fallback_line_count"] += 1
+                        is_match = True
+                    if rx_sched_reserve_failure.search(ln) is not None:
+                        out["seen_sched_reserve_failure"] = True
+                        out["sched_reserve_failure_line_count"] += 1
+                        is_match = True
                     m = re.search(r"graph nodes\\s*=\\s*(\\d+)", ln)
                     if m is not None:
                         try:
@@ -323,13 +338,18 @@ def scan_fattn_reservation(log_path):
                             out["sched_reserve_took_ms"] = float(m.group(1))
                         except ValueError:
                             pass
-                if "Flash Attention was auto, set to disabled" in ln:
+                if rx_fattn_disabled.search(ln) is not None:
                     out["seen_fattn_disabled"] = True
                     is_match = True
                 if "Flash Attention tensor is assigned to device CPU" in ln:
                     out["seen_sched_reserve_cpu_fattn"] = True
                     is_match = True
                 if "__fattn__" in ln:
+                    low = ln.lower()
+                    if "fallback" in low or "fall back" in low:
+                        out["seen_sched_reserve_fallback"] = True
+                        out["sched_reserve_fallback_line_count"] += 1
+                        is_match = True
                     out["fattn_line_count"] += 1
                     for m in re.finditer(r"__fattn__-(\\d+)", ln):
                         nodes.add("__fattn__-" + m.group(1))
@@ -351,7 +371,6 @@ def scan_fattn_reservation(log_path):
                             fattn_cuda_dev[did] = fattn_cuda_dev.get(did, 0) + 1
                         except ValueError:
                             pass
-                    low = ln.lower()
                     if "cpu" in low:
                         out["fattn_cpu_line_count"] += 1
                     if "cuda" in low:
@@ -692,6 +711,61 @@ def main():
     poll_s = env_float("POLL_S", 5.0)
     per_request_timeout_s = env_float("REQUEST_TIMEOUT_S", max(180.0, float(ctx) / 10.0))
 
+    preset = (os.environ.get("PRESET", "") or "").strip()
+    preset_applied = {}
+    if preset:
+        preset_key = preset.strip().lower().replace("-", "_")
+        prompt_words_raw = (os.environ.get("PROMPT_WORDS", "") or "").strip()
+        concurrency_raw = (os.environ.get("CONCURRENCY", "") or "").strip()
+        parallel_values_raw = (os.environ.get("PARALLEL_VALUES", "") or "").strip()
+        batch_values_raw = (os.environ.get("BATCH_VALUES", "") or "").strip()
+        ubatch_values_raw = (os.environ.get("UBATCH_VALUES", "") or "").strip()
+        n_predict_raw = (os.environ.get("N_PREDICT", "") or "").strip()
+
+        presets = {
+            "quick": {
+                "PROMPT_WORDS": "16",
+                "CONCURRENCY": "8",
+                "PARALLEL_VALUES": "8",
+                "BATCH_VALUES": "2048",
+                "UBATCH_VALUES": "512",
+                "N_PREDICT": "64",
+            },
+            "highbatch": {
+                "PROMPT_WORDS": "4096",
+                "CONCURRENCY": "1 2 4 8",
+                "PARALLEL_VALUES": "1 2 8",
+                "BATCH_VALUES": "512 1024 2048",
+                "UBATCH_VALUES": "128 256 512",
+                "N_PREDICT": "64",
+            },
+        }
+
+        if preset_key not in presets:
+            raise SystemExit("unknown PRESET=%r (supported: %s)" % (preset, ", ".join(sorted(presets.keys()))))
+
+        cfg = presets[preset_key]
+        if not prompt_words_raw and cfg.get("PROMPT_WORDS"):
+            os.environ["PROMPT_WORDS"] = cfg["PROMPT_WORDS"]
+            preset_applied["PROMPT_WORDS"] = cfg["PROMPT_WORDS"]
+        if not concurrency_raw and cfg.get("CONCURRENCY"):
+            os.environ["CONCURRENCY"] = cfg["CONCURRENCY"]
+            preset_applied["CONCURRENCY"] = cfg["CONCURRENCY"]
+        if not parallel_values_raw and cfg.get("PARALLEL_VALUES"):
+            os.environ["PARALLEL_VALUES"] = cfg["PARALLEL_VALUES"]
+            preset_applied["PARALLEL_VALUES"] = cfg["PARALLEL_VALUES"]
+        if not batch_values_raw and cfg.get("BATCH_VALUES"):
+            os.environ["BATCH_VALUES"] = cfg["BATCH_VALUES"]
+            preset_applied["BATCH_VALUES"] = cfg["BATCH_VALUES"]
+        if not ubatch_values_raw and cfg.get("UBATCH_VALUES"):
+            os.environ["UBATCH_VALUES"] = cfg["UBATCH_VALUES"]
+            preset_applied["UBATCH_VALUES"] = cfg["UBATCH_VALUES"]
+        if not n_predict_raw and cfg.get("N_PREDICT"):
+            os.environ["N_PREDICT"] = cfg["N_PREDICT"]
+            preset_applied["N_PREDICT"] = cfg["N_PREDICT"]
+
+        n_predict = env_int("N_PREDICT", n_predict)
+
     prompt_sizes = split_ints(os.environ.get("PROMPT_WORDS", "4096"))
     conc_values = split_ints(os.environ.get("CONCURRENCY", "1 2 4 8"))
     parallel_values = split_opt_ints(os.environ.get("PARALLEL_VALUES", "1 2"))
@@ -729,6 +803,8 @@ def main():
         "repeats": repeats,
         "cache_prompt": cache_prompt,
         "scrape_metrics": scrape_metrics,
+        "preset": preset,
+        "preset_applied": json.dumps(preset_applied, sort_keys=True) if preset_applied else "",
         "prompt_words": " ".join(str(x) for x in prompt_sizes),
         "concurrency": " ".join(str(x) for x in conc_values),
         "parallel_values": " ".join(str(x) for x in parallel_values),

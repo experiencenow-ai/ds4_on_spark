@@ -47,6 +47,7 @@ ds4_cuda_status_t ds4_cuda_get_device(int32_t *out_dev);
 ds4_cuda_status_t ds4_cuda_set_device(int32_t dev);
 const char *ds4_cuda_errstr(ds4_cuda_status_t st);
 int32_t ds4_cuda_status_format(ds4_cuda_status_t st,char *out,int32_t cap);
+int32_t ds4_cuda_error_format_i32(int32_t cuda_err,const char *expr,const char *file,int32_t line,char *out,int32_t cap);
 ds4_cuda_status_t ds4_cuda_last_error(void);
 ds4_cuda_status_t ds4_cuda_peek_last_error(void);
 ds4_cuda_status_t ds4_cuda_check_peek_last_error_ex(const char *expr,const char *file,int32_t line);

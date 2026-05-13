@@ -124,6 +124,29 @@ def _apply_match(ratings: Dict[str, float], a: str, b: str, winner: str, margin:
     return delta
 
 
+def _extract_winner_margin(obj: Dict[str, Any]) -> Tuple[str, int]:
+    winner = obj.get("winner")
+    margin = obj.get("margin")
+    if winner is not None and margin is not None:
+        return str(winner), int(margin)
+    winner2 = obj.get("w")
+    margin2 = obj.get("m")
+    if winner2 is not None and margin2 is not None:
+        canon, cerrs = schema.canonicalize_decision_obj({
+            "w": winner2,
+            "m": margin2,
+            "sa": obj.get("sa"),
+            "sb": obj.get("sb"),
+            "r": obj.get("r"),
+            "h": obj.get("h"),
+            "t": obj.get("t"),
+        })
+        if canon is None or len(cerrs) != 0:
+            raise ValueError("failed to canonicalize v4/v5 decision keys: " + "; ".join(cerrs))
+        return str(canon.get("winner")), int(canon.get("margin"))
+    raise ValueError("missing winner/margin fields")
+
+
 def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[Tuple[str, str, str, int]]:
     rows: List[Tuple[str, str, str, str, int]] = []
     for path in paths:
@@ -133,7 +156,8 @@ def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[
             errs = schema.validate_record(obj)
             if len(errs) != 0:
                 continue
-            rows.append((str(obj["pair_id"]), str(obj["model_a"]), str(obj["model_b"]), str(obj["winner"]), int(obj["margin"])))
+            winner, margin = _extract_winner_margin(obj)
+            rows.append((str(obj["pair_id"]), str(obj["model_a"]), str(obj["model_b"]), str(winner), int(margin)))
     if sort_by_pair_id:
         # When multiple inputs are merged, a stable ordering avoids nondeterminism.
         # pair_id is required by the schema and should be stable across runs.
@@ -225,10 +249,20 @@ def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str
                 parse_bad += 1
 
             t = obj.get("tokens")
+            tk = obj.get("tk")
             for k in tokens:
                 v = None
                 if isinstance(t, dict):
                     v = t.get(k)
+                elif isinstance(tk, list):
+                    if k == "a_out" and len(tk) >= 1:
+                        v = tk[0]
+                    elif k == "b_out" and len(tk) >= 2:
+                        v = tk[1]
+                    elif k == "judge_in" and len(tk) >= 3:
+                        v = tk[2]
+                    elif k == "judge_out" and len(tk) >= 4:
+                        v = tk[3]
                 if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
                     tokens[k].append(int(v))
                     if parse_valid and k == "judge_out":
@@ -239,10 +273,18 @@ def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str
                     tokens_missing[k] += 1
 
             l = obj.get("latency_ms")
+            lt = obj.get("lt")
             for k in latency:
                 v = None
                 if isinstance(l, dict):
                     v = l.get(k)
+                elif isinstance(lt, list):
+                    if k == "a" and len(lt) >= 1:
+                        v = lt[0]
+                    elif k == "b" and len(lt) >= 2:
+                        v = lt[1]
+                    elif k == "judge" and len(lt) >= 3:
+                        v = lt[2]
                 if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
                     latency[k].append(int(v))
                 else:

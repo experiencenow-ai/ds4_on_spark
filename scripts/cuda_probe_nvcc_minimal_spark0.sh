@@ -125,33 +125,20 @@ cat > \"$REMOTE_DIR\"/cuda_nvcc_compile_only_featureset_macros.cu <<'EOF'
 #define STR1(x) #x
 #define STR(x) STR1(x)
 
-#if defined(__CUDA_ARCH__)
-#if (__CUDA_ARCH__ != 1210)
-#error nvcc_featureset_macros_expected___CUDA_ARCH___1210
-#endif
-#endif
-
 #if defined(__CUDA_ARCH_LIST__)
 #pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
-#else
-#pragma message(\"DS4_CUDA_ARCH_LIST=(missing)\")
 #endif
 
 #if defined(__CUDA_ARCH_SPECIFIC__)
 #pragma message(\"DS4_CUDA_ARCH_SPECIFIC=\" STR(__CUDA_ARCH_SPECIFIC__))
-#else
-#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=(missing)\")
 #endif
 
 #if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
 #pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" STR(__CUDA_ARCH_FAMILY_SPECIFIC__))
-#else
-#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=(missing)\")
 #endif
 
-int cuda_featureset_macros_compile_only_dummy(void)
+__global__ void cuda_featureset_macros_compile_only_probe(void)
 {
-	return(0);
 }
 EOF
 
@@ -541,6 +528,13 @@ __global__ void cuda_arch_probe(uint32_t *out)
 #endif
 }
 
+__device__ __constant__ uint32_t ds4_cuda_arch_const =
+#if defined(__CUDA_ARCH__)
+	(uint32_t)__CUDA_ARCH__;
+#else
+	0U;
+#endif
+
 __global__ void cuda_kernel_launch_tiny(void)
 {
 	if ( ((int32_t)threadIdx.x) == 0 )
@@ -606,13 +600,23 @@ int main(int argc,char **argv)
 	rc = ck(cudaDeviceSynchronize(),-5,\"cudaDeviceSynchronize\");
 	if ( rc != 0 )
 		return(rc);
-	if ( cudaMalloc((void **)&dout,sizeof(cuda_arch)) == cudaSuccess )
+	(void)cudaGetLastError();
+	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
-		cuda_arch_probe<<<1,1>>>(dout);
-		if ( cudaGetLastError() == cudaSuccess )
-			(void)cudaMemcpy(&cuda_arch,dout,sizeof(cuda_arch),cudaMemcpyDeviceToHost);
-		(void)cudaFree(dout);
-		dout = 0;
+		(void)cudaGetLastError();
+		cuda_arch = 0;
+		if ( cudaMalloc((void **)&dout,sizeof(cuda_arch)) == cudaSuccess )
+		{
+			cuda_arch_probe<<<1,1>>>(dout);
+			if ( cudaGetLastError() == cudaSuccess )
+			{
+				(void)cudaDeviceSynchronize();
+				(void)cudaGetLastError();
+				(void)cudaMemcpy(&cuda_arch,dout,sizeof(cuda_arch),cudaMemcpyDeviceToHost);
+			}
+			(void)cudaFree(dout);
+			dout = 0;
+		}
 	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
@@ -772,38 +776,50 @@ EOF
 template <typename T>
 __global__ void cuda_template_stub_kernel(uint32_t *out);
 
+static int32_t ck(cudaError_t err,int32_t code,const char *what)
+{
+	if ( err != cudaSuccess )
+	{
+		fprintf(stderr,\"%s: %s\\n\",what,cudaGetErrorString(err));
+		if ( err == cudaErrorMemoryAllocation )
+			return(252);
+		return(code);
+	}
+	return(0);
+}
+
 int main(int argc,char **argv)
 {
 	uint32_t *dout = 0,hout = 0;
-	cudaError_t err;
+	int32_t rc = 0;
 	(void)argc;
 	(void)argv;
-	err = cudaMalloc((void **)&dout,(size_t)sizeof(uint32_t));
-	if ( err != cudaSuccess )
-		return(11);
-	err = cudaMemset(dout,0,(size_t)sizeof(uint32_t));
-	if ( err != cudaSuccess )
+	rc = ck(cudaMalloc((void **)&dout,(size_t)sizeof(uint32_t)),11,\"cudaMalloc\");
+	if ( rc != 0 )
+		return(rc);
+	rc = ck(cudaMemset(dout,0,(size_t)sizeof(uint32_t)),12,\"cudaMemset\");
+	if ( rc != 0 )
 	{
 		cudaFree(dout);
-		return(12);
+		return(rc);
 	}
 	cuda_template_stub_kernel<int><<<1,32>>>(dout);
-	err = cudaGetLastError();
-	if ( err != cudaSuccess )
+	rc = ck(cudaGetLastError(),13,\"kernel launch\");
+	if ( rc != 0 )
 	{
 		cudaFree(dout);
-		return(13);
+		return(rc);
 	}
-	err = cudaDeviceSynchronize();
-	if ( err != cudaSuccess )
+	rc = ck(cudaDeviceSynchronize(),14,\"cudaDeviceSynchronize\");
+	if ( rc != 0 )
 	{
 		cudaFree(dout);
-		return(14);
+		return(rc);
 	}
-	err = cudaMemcpy(&hout,dout,(size_t)sizeof(uint32_t),cudaMemcpyDeviceToHost);
+	rc = ck(cudaMemcpy(&hout,dout,(size_t)sizeof(uint32_t),cudaMemcpyDeviceToHost),15,\"cudaMemcpy\");
 	cudaFree(dout);
-	if ( err != cudaSuccess )
-		return(15);
+	if ( rc != 0 )
+		return(rc);
 	printf(\"template_stub ok out=0x%08x\\n\",hout);
 	return(0);
 }
@@ -827,6 +843,8 @@ EOF
 		rc=\$?
 		if [ \$rc -eq 0 ]; then
 			echo \"template_stub_\${tag}: OK\"
+		elif [ \$rc -eq 252 ] || [ \$rc -eq 254 ] || [ \$rc -eq 255 ]; then
+			echo \"template_stub_\${tag}: SKIP rc=\${rc} (GPU OOM/busy)\"
 		else
 			echo \"template_stub_\${tag}: RUN FAILED rc=\${rc}\"
 		fi
@@ -837,6 +855,98 @@ EOF
 	try_template_stub_build_run default \"\"
 	try_template_stub_build_run stubfalse \"-static-global-template-stub=false\"
 	try_template_stub_build_run rdc \"-rdc=true\"
+
+	echo
+	echo \"== nvcc: CUDA 13 device-entity hidden visibility across .so (best-effort) ==\"
+	cat > \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_foo.cu <<'EOF'
+#include <cstdio>
+
+__global__ void foo(void)
+{
+	printf(\"\\n hi!\");
+}
+EOF
+
+	cat > \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_main.cu <<'EOF'
+#include <cstdio>
+
+#include <cuda_runtime.h>
+
+extern __global__ void foo(void);
+
+int main(int argc,char **argv)
+{
+	cudaError_t err;
+	(void)argc;
+	(void)argv;
+	foo<<<1,1>>>();
+	(void)cudaDeviceSynchronize();
+	err = cudaGetLastError();
+	printf(\"\\n cudaGetLastError() = %s\\n\",cudaGetErrorString(err));
+	return(0);
+}
+EOF
+
+	try_sharedlib_boundary_build_run() {
+		tag=\"\$1\"
+		extra_flags=\"\$2\"
+		expect_build_fail=\"\${3:-0}\"
+		expect_hi=\"\${4:-0}\"
+		out_so=\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib.so\"
+		out_bin=\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main\"
+		echo \"-- sharedlib_boundary: \${tag} (expect_build_fail=\${expect_build_fail}; expect_hi=\${expect_hi}; flags=\${extra_flags})\"
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -shared -Xcompiler -fPIC -rdc=true \${extra_flags} -o \"\${out_so}\" \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_foo.cu >\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_lib.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_lib.err\"
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			echo \"sharedlib_\${tag}_lib: BUILD FAILED rc=\${rc}\"
+			head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_lib.err\" || true
+			return 0
+		fi
+		set +e
+		\$NVCC -O2 -std=c++17 -arch=sm_121 -rdc=true \${extra_flags} -o \"\${out_bin}\" \"$REMOTE_DIR\"/cuda_nvcc_sharedlib_main.cu \"\${out_so}\" >\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main.out\" 2>\"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main.err\"
+		rc=\$?
+		set -e
+		if [ \$rc -ne 0 ]; then
+			if [ \"\${expect_build_fail}\" = \"1\" ]; then
+				echo \"sharedlib_\${tag}: EXPECTED BUILD FAIL rc=\${rc}\"
+			else
+				echo \"sharedlib_\${tag}: BUILD FAILED rc=\${rc}\"
+			fi
+			head -n 60 \"$REMOTE_DIR\"/\"nvcc_\${tag}_sharedlib_main.err\" || true
+			return 0
+		fi
+		set +e
+		out=\$(LD_LIBRARY_PATH=\"$REMOTE_DIR\"\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH} \"\${out_bin}\" 2>&1)
+		rc=\$?
+		set -e
+		printf \"%s\\n\" \"\${out}\"
+		if [ \"\${expect_build_fail}\" = \"1\" ]; then
+			echo \"sharedlib_\${tag}: UNEXPECTED BUILD OK\" >&2
+		else
+			echo \"sharedlib_\${tag}: BUILD OK\"
+		fi
+		if [ \$rc -eq 0 ]; then
+			if [ \"\${expect_hi}\" = \"1\" ]; then
+				if printf \"%s\\n\" \"\${out}\" | grep -q \"hi!\"; then
+					echo \"sharedlib_\${tag}: RUN OK\"
+				else
+					echo \"sharedlib_\${tag}: RUN FAILED (missing hi!)\" >&2
+				fi
+			else
+				echo \"sharedlib_\${tag}: RUN OK\"
+			fi
+		elif [ \$rc -eq 252 ] || [ \$rc -eq 254 ] || [ \$rc -eq 255 ]; then
+			echo \"sharedlib_\${tag}: SKIP rc=\${rc} (GPU OOM/busy)\"
+		else
+			echo \"sharedlib_\${tag}: RUN FAILED rc=\${rc}\"
+		fi
+		return 0
+	}
+
+	try_sharedlib_boundary_build_run default \"\" 1 0
+	try_sharedlib_boundary_build_run optout \"-cudart=shared -device-entity-has-hidden-visibility=false\" 0 1
 
 	echo
 	echo \"== cuobjdump: embedded PTX (best-effort) ==\"

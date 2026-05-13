@@ -6,12 +6,14 @@ import json
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "fixtures" / "model_contract" / "deepseek_v4_flash"
 DEFAULT_OUT = FIX / "contract_summary.json"
+CHECKPOINT_KEYS_TXT = FIX / "checkpoint_keys.txt"
+MTP_CHECKPOINT_KEYS_TXT = FIX / "mtp_checkpoint_keys.txt"
 INFERENCE_MODEL_PY = FIX / "inference" / "model.py"
 ENCODING_PY = FIX / "encoding" / "encoding_dsv4.py"
 MTP_SIDECAR_PROBE_PY = ROOT / "scripts" / "model_contract_probe_mtp_sidecar.py"
@@ -36,6 +38,29 @@ def dump_json(path: Path, obj) -> None:
 		json.dump(obj, f, indent=2, sort_keys=True)
 		f.write("\n")
 	tmp.replace(path)
+
+def dump_lines(path: Path, lines: list[str]) -> None:
+	path.parent.mkdir(parents=True, exist_ok=True)
+	tmp = path.with_suffix(path.suffix + ".tmp")
+	with tmp.open("w", encoding="utf-8") as f:
+		for line in lines:
+			f.write(line)
+			f.write("\n")
+	tmp.replace(path)
+
+def build_mtp_checkpoint_keys() -> list[str]:
+	idx = load_json(FIX / "model.safetensors.index.json")
+	weight_map = idx.get("weight_map", {}) if isinstance(idx, dict) else {}
+	if not isinstance(weight_map, dict):
+		return []
+	return sorted([k for k in weight_map.keys() if isinstance(k, str) and k.startswith("mtp.")])
+
+def build_checkpoint_keys() -> list[str]:
+	idx = load_json(FIX / "model.safetensors.index.json")
+	weight_map = idx.get("weight_map", {}) if isinstance(idx, dict) else {}
+	if not isinstance(weight_map, dict):
+		return []
+	return sorted([k for k in weight_map.keys() if isinstance(k, str)])
 
 def sha256_file(path: Path) -> str:
 	h = sha256()
@@ -84,6 +109,7 @@ def build_contract_fingerprints(contract: dict) -> dict:
 
 	exec_subset = {
 		"model": contract.get("model"),
+		"config_summary": contract.get("config_summary", {}),
 		"upstream": {
 			"hf_repo_id": up.get("hf_repo_id"),
 			"hf_revision_pinned": up.get("hf_revision_pinned"),
@@ -1384,11 +1410,13 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 	mtp_expected_tensor_key_count_per_layer = (
 		expected_expert_key_count_per_layer + len(required_layer_suffixes) + len(required_mtp_additional_suffixes) + 1
 	)
+	mtp_required_nonexpert_keys_by_layer_id: dict[str, list[str]] = {}
 	mtp_key_count_by_layer_id: dict[str, int] = {}
 	mtp_expected_key_count_by_layer_id_ok: dict[str, bool] = {}
 	for mtp_id in mtp_layer_ids:
 		prefix = f"mtp.{mtp_id}."
 		c = sum(1 for k in weight_keys if k.startswith(prefix))
+		mtp_required_nonexpert_keys_by_layer_id[str(mtp_id)] = [prefix + str(s) for s in mtp_required_nonexpert_suffixes]
 		mtp_key_count_by_layer_id[str(mtp_id)] = int(c)
 		mtp_expected_key_count_by_layer_id_ok[str(mtp_id)] = (int(c) == int(mtp_expected_tensor_key_count_per_layer))
 
@@ -1433,6 +1461,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		"mtp0": {
 			"present": mtp0_key_count > 0,
 			"tensor_key_count": mtp0_key_count,
+			"required_nonexpert_keys": mtp_required_nonexpert_keys_by_layer_id.get("0", []) if mtp0_key_count > 0 else [],
 		},
 		"mtp_shared_embed_head_rule": "MTP blocks share top-level embed/head; mtp.{j}.embed.* and mtp.{j}.head.* are absent in official checkpoints",
 		"mtp_embed_present": mtp_embed_present,
@@ -1462,6 +1491,7 @@ def build_tensor_key_summary(weight_keys: list[str], n_layers: int, n_routed_exp
 		},
 		"mtp_tensor_key_count_by_layer_id": mtp_key_count_by_layer_id,
 		"mtp_expected_tensor_key_count_by_layer_id_ok": mtp_expected_key_count_by_layer_id_ok,
+		"mtp_required_nonexpert_keys_by_layer_id": mtp_required_nonexpert_keys_by_layer_id,
 		"mtp_forbidden_key_suffixes": mtp_forbidden_key_suffixes,
 		"weight_index_source": "model.safetensors.index.json:weight_map",
 	}
@@ -1524,7 +1554,13 @@ def augment_tensor_key_summary_with_trunk_layer_expectations(
 		key = str(i)
 		ok_by_layer_id[key] = (int(actual_counts[i]) == int(expected_count_by_layer_id[key]))
 
+	required_keys_by_layer_id: dict[str, list[str]] = {}
+	for i in range(n_layers):
+		prefix = f"layers.{i}."
+		required_keys_by_layer_id[str(i)] = [prefix + str(s) for s in required_by_layer_id[str(i)]]
+
 	tensor_keys["layer_required_nonexpert_suffixes_by_layer_id"] = required_by_layer_id
+	tensor_keys["layer_required_nonexpert_keys_by_layer_id"] = required_keys_by_layer_id
 	tensor_keys["layer_expected_tensor_key_count_by_layer_id"] = expected_count_by_layer_id
 	tensor_keys["layer_tensor_key_count_by_layer_id"] = actual_by_layer_id
 	tensor_keys["layer_expected_tensor_key_count_by_layer_id_ok"] = ok_by_layer_id
@@ -1723,6 +1759,10 @@ def build_contract() -> dict:
 					pass
 		mtp_layer_ids_present = sorted(layer_ids)
 		mtp_prefixes_present = sorted(prefixes)
+	mtp_layer_ids_expected = list(range(int(n_mtp_layers)))
+	mtp_prefixes_expected = [f"mtp.{i}." for i in mtp_layer_ids_expected]
+	mtp_official_namespace_complete = (mtp_layer_ids_present == mtp_layer_ids_expected and mtp_prefixes_present == mtp_prefixes_expected)
+	mtp_checkpoint_keys_sha256 = sha256_lines(mtp_weight_keys)
 
 	window_size = int(cfg["sliding_window"])
 	ref_defaults = inf_model.get("reference_defaults", {}) if isinstance(inf_model, dict) else {}
@@ -1773,6 +1813,8 @@ def build_contract() -> dict:
 		p = FIX / rel
 		if p.exists():
 			fixture_sha[rel] = sha256_file(p)
+	fixture_sha["checkpoint_keys.txt"] = weight_map_keys_sha256
+	fixture_sha["mtp_checkpoint_keys.txt"] = mtp_checkpoint_keys_sha256
 
 	mtp_sidecar = build_ds4_mtp_sidecar_contract()
 	sparse_attn_mask = build_sparse_attn_mask_contract(FIX / "inference" / "kernel.py")
@@ -1800,15 +1842,29 @@ def build_contract() -> dict:
 				"tokenizer_json": "tokenizer.json",
 				"tokenizer_config_json": "tokenizer_config.json",
 				"weight_index_json": "model.safetensors.index.json",
+				"checkpoint_keys_txt": "checkpoint_keys.txt",
 				"encoding_oracle": "encoding/tests/*",
 				"oracle_prompts_json": "oracle/prompts.json",
 				"upstream_commit_txt": "upstream_commit.txt",
+				"mtp_checkpoint_keys_txt": "mtp_checkpoint_keys.txt",
 			},
 		},
 		"mtp_sidecar": mtp_sidecar,
 		"compat": build_compat_mappings(),
 		"oracle": build_oracle_contract(),
 		"mla": sem.get("mla", {}) if isinstance(sem, dict) else {},
+		"config_summary": {
+			"attention_bias": bool(cfg.get("attention_bias", False)),
+			"attention_dropout": float(cfg.get("attention_dropout", 0.0)),
+			"hidden_act": str(cfg.get("hidden_act", "")),
+			"initializer_range": float(cfg.get("initializer_range", 0.0)),
+			"max_position_embeddings": int(cfg.get("max_position_embeddings", 0)),
+			"rms_norm_eps": float(cfg.get("rms_norm_eps", 0.0)),
+			"tie_word_embeddings": bool(cfg.get("tie_word_embeddings", False)),
+			"torch_dtype": str(cfg.get("torch_dtype", "")),
+			"transformers_version": str(cfg.get("transformers_version", "")),
+			"use_cache": bool(cfg.get("use_cache", True)),
+		},
 		"topology": {
 			"vocab_size": int(cfg["vocab_size"]),
 			"hidden_size": int(cfg["hidden_size"]),
@@ -1948,14 +2004,23 @@ def build_contract() -> dict:
 					"mtp": {
 						"n_mtp_layers": int(cfg["num_nextn_predict_layers"]),
 						"num_nextn_predict_layers": int(cfg["num_nextn_predict_layers"]),
-						"compress_ratios": [int(r) for r in mtp_ratios],
-						"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
-						"namespace_prefix": "mtp.{j}.",
-						"checkpoint_key_fingerprint": {
-						"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
-						"tensor_key_count": mtp_prefix_fp.get("count", None),
-						"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					"compress_ratios": [int(r) for r in mtp_ratios],
+					"compress_ratio_rule": "compress_ratios[n_layers+mtp_id] == 0",
+					"namespace_prefix": "mtp.{j}.",
+					"namespace": {
+						"expected_layer_ids": mtp_layer_ids_expected,
+						"expected_prefixes": mtp_prefixes_expected,
+						"official_present_layer_ids": mtp_layer_ids_present,
+						"official_present_prefixes": mtp_prefixes_present,
+						"official_complete": bool(mtp_official_namespace_complete),
+						"note": "Expected mtp.* tensor namespace layout derived from config.json num_nextn_predict_layers and validated against the official checkpoint index.",
 					},
+					"checkpoint_key_fingerprint": {
+					"note": "Fingerprint of the official checkpoint key subset under the mtp.* namespace (from model.safetensors.index.json weight_map keys).",
+					"tensor_key_count": mtp_prefix_fp.get("count", None),
+					"keys_sha256": mtp_prefix_fp.get("keys_sha256", None),
+					"keys_fixture": "fixtures/model_contract/deepseek_v4_flash/mtp_checkpoint_keys.txt",
+				},
 					"checkpoint_key_examples": {
 						"note": "Debug-only examples derived from the official safetensors index mtp.* key set; not used for gating (use checkpoint_key_fingerprint + tensor_keys.* instead).",
 						"layer_ids": mtp_layer_ids_present,
@@ -2032,6 +2097,12 @@ def build_contract() -> dict:
 						"fp4_block_size": fp4_block_size,
 					},
 				},
+				"gguf_compat": {
+					"dense_fp8_like_type_prefixes": ["F8_"],
+					"dense_fp8_like_evidence_categories": ["attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"],
+					"expert_fp4_like_types": ["MXFP4"],
+					"note": "Heuristic mapping used by scripts/model_contract_inspect_quantized_artifact.py to interpret GGUF tensor types vs DeepSeek V4 Flash inference_config dtype/expert_dtype expectations.",
+				},
 					**inf_model,
 				},
 				**enc,
@@ -2062,20 +2133,41 @@ def main() -> int:
 	args = ap.parse_args()
 
 	contract = build_contract()
+	checkpoint_keys = build_checkpoint_keys()
+	mtp_checkpoint_keys = build_mtp_checkpoint_keys()
 	out_path: Path = args.out
 	if not out_path.is_absolute():
 		out_path = (ROOT / out_path).resolve()
 	else:
 		out_path = out_path.resolve()
 
+	expected_mtp_path = MTP_CHECKPOINT_KEYS_TXT.resolve()
+	expected_checkpoint_path = CHECKPOINT_KEYS_TXT.resolve()
+
 	if args.check and out_path.exists():
 		prev = json.loads(out_path.read_text(encoding="utf-8"))
 		if prev != contract:
 			print(f"ERROR: {out_path} is stale; re-run without --check to regenerate")
 			return 1
+		if not expected_checkpoint_path.exists():
+			print(f"ERROR: missing {expected_checkpoint_path}; re-run without --check to regenerate derived fixtures")
+			return 1
+		got_checkpoint_keys = expected_checkpoint_path.read_text(encoding="utf-8").splitlines()
+		if got_checkpoint_keys != checkpoint_keys:
+			print(f"ERROR: {expected_checkpoint_path} is stale; re-run without --check to regenerate derived fixtures")
+			return 1
+		if not expected_mtp_path.exists():
+			print(f"ERROR: missing {expected_mtp_path}; re-run without --check to regenerate derived fixtures")
+			return 1
+		got_keys = expected_mtp_path.read_text(encoding="utf-8").splitlines()
+		if got_keys != mtp_checkpoint_keys:
+			print(f"ERROR: {expected_mtp_path} is stale; re-run without --check to regenerate derived fixtures")
+			return 1
 		print(f"OK: {out_path} up to date")
 		return 0
 
+	dump_lines(expected_checkpoint_path, checkpoint_keys)
+	dump_lines(expected_mtp_path, mtp_checkpoint_keys)
 	dump_json(out_path, contract)
 	try:
 		display = str(out_path.relative_to(ROOT))

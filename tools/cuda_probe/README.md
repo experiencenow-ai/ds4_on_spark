@@ -5,7 +5,8 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 ## Run From The Mac (ships to Spark0)
 
 - Fastest `sm_121` gate (device-props + compile-only): `./scripts/cuda_probe_sm121_gate_spark0.sh`
-- Minimal gates (no-transfer toolchain + no-transfer device-props + `sm_121` gate): `./scripts/cuda_probe_minimal_gates_spark0.sh`
+- Micro no-transfer gate (single SSH; compile-only `sm_121` + feature-set macro probe + PTX `.target` probes for `sm_121{,a,f}` / `compute_121{,a,f}` + `-gencode` bracket-list compile + one-line device props including best-effort `-arch=compute_121` JIT run + kernel launch best-effort): `./scripts/cuda_probe_micro_spark0.sh`
+- Minimal gates (no-transfer toolchain + no-transfer device-props + `sm_121` gate): `./scripts/cuda_probe_minimal_gates_spark0.sh` (includes no-transfer `sm_121` compile-probes by default; set `WITH_SM121_COMPILE_PROBES_MINIMAL=0` to skip)
 - Fast path: `./scripts/cuda_probe_tiny_spark0.sh`
 - No-transfer device-props only: `./scripts/cuda_probe_device_props_minimal_spark0.sh`
 - No-transfer `sm_121` compile probes only: `./scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh`
@@ -53,14 +54,14 @@ make
 
 Subset builds:
 
-- `make sm121_gate` builds the smallest “device-props + `sm_121` / `compute_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh`. It also builds `cuda_sm121_kernel_launch_tiny` (a no-`cudaMalloc` kernel-launch smoke) and `cuda_sm121{a,f}_arch_list_report` (CUDA 13 alias acceptance visibility).
+- `make sm121_gate` builds the smallest “device-props + `sm_121` / `compute_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh` (including `-arch=compute_121`, `--gpu-architecture=compute_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121` spellings). It also builds `cuda_sm121_kernel_launch_tiny` (a no-`cudaMalloc` kernel-launch smoke), `cuda_sm121_compile_report_tiny` (single-line NVCC/CUDART macro sanity), and `cuda_sm121{a,f}_arch_list_report` (CUDA 13 alias acceptance visibility).
 - `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh` (the script also builds the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates on top).
 - `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
 
 Expected outputs:
 
 - `tools/cuda_probe/bin/cuda_device_props`: print basic device/runtime info.
-- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); includes `cuda_arch` (`__CUDA_ARCH__` from a tiny runtime kernel compiled with `-arch=native`); ends with `schema=4` for parsing).
+- `tools/cuda_probe/bin/cuda_device_props_tiny`: one-line device/runtime summary (fast log-friendly; prints `-1` for any unavailable `cudaDeviceGetAttribute` / driver-attribute field; includes `bus_width_bits`, `async_engines`, `max_persisting_l2`, `max_apw` plus driver-reserved shared memory per block and memory-pool support flags; includes `tma_map` (`CU_DEVICE_ATTRIBUTE_TENSOR_MAP_ACCESS_SUPPORTED`); includes best-effort `cuda_arch` (symbol-copy first, then fallback `cudaMalloc` + kernel; compiled with `-arch=native`); ends with `schema=4` for parsing).
 - `tools/cuda_probe/bin/cuda_sm121_kernel_launch_tiny`: minimal “launch a `sm_121` kernel and synchronize” smoke test that does not allocate device memory (useful when Spark0 VRAM is fully allocated, but you still want a direct “kernel launch path works” signal).
 - `tools/cuda_probe/bin/cuda_sm121_compile_probe.o`: compile-only object that requires `-arch=sm_121` support (no runtime needed).
 - `tools/cuda_probe/bin/cuda_compute121_compile_probe.o`: compile-only object that requires `-arch=compute_121` support (PTX-only toolchain gate; no runtime needed).
@@ -76,8 +77,9 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_rdc_probe`: compile/run separate-compilation (`-rdc=true`) device-link smoke test for `sm_121`.
 - `tools/cuda_probe/bin/cuda_sm121_fatbin_probe`: compile/run sanity kernel built with explicit `-gencode` (includes `sm_120` + `sm_121` SASS and `compute_121` PTX).
 - `tools/cuda_probe/bin/cuda_sm121_dlto_probe`: compile/run device LTO (`-dlto`) smoke test for `sm_121` (toolchain gate for some CUDA build systems).
-- `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__`.
+- `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__` (best-effort: `cudaMemcpyFromSymbol` first, then fallback `cudaMalloc` + tiny kernel).
 - `tools/cuda_probe/bin/cuda_sm121_arch_list_report`: print compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined (`__CUDA_ARCH_SPECIFIC__`, `__CUDA_ARCH_FAMILY_SPECIFIC__`); this is a convenient “what arch list did nvcc think we built?” sanity check for `sm_121` builds.
+- `tools/cuda_probe/bin/cuda_sm121_compile_report_tiny`: one-line summary that includes NVCC/CUDART macro versions plus device CC and `__CUDA_ARCH__` / `__CUDA_ARCH_LIST__` (useful to pin CUDA 13 “what did this toolkit think it was targeting?” in logs).
 - `tools/cuda_probe/bin/cuda_sm121a_arch_list_report` / `tools/cuda_probe/bin/cuda_sm121f_arch_list_report`: same report, but compiled with `-arch=sm_121a` / `-arch=sm_121f` (build explicitly via `make bin/cuda_sm121a_arch_list_report` / `make bin/cuda_sm121f_arch_list_report`, or run `scripts/cuda_probe_tiny_spark0.sh` on Spark0; best-effort build may succeed even when `nvcc --list-gpu-code` does not advertise those variants).
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.

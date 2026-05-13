@@ -29,6 +29,7 @@ Example (Spark0 smoke, from Mac):
 ```bash
 export SSH_OPTS="..."
 export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export CENTAUR_TRACE=1
 sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
@@ -37,6 +38,7 @@ Example (Spark1/2 ring rsync, from Mac):
 ```bash
 export SSH_OPTS="..."
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_TRACE=1
 export RING_REMOTE_VERIFY=1
 sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
@@ -46,6 +48,7 @@ Example (Spark12 ring sim, from Mac):
 ```bash
 export SSH_OPTS="..."
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_TRACE=1
 sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 ```
 

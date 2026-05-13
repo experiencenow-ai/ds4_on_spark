@@ -7,22 +7,23 @@ usage()
 ops_spark_ring_status.sh -- Mac-side DS4 systemd status snapshot (safe)
 
 Usage:
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_spark_ring_status.sh [--system|--user] [--preflight tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
+  ops_spark_ring_status.sh [--system|--user] [--preflight auto|tp2|tp3|tp4|tp23] [--strict] [--journal [--lines N]] [--instance<N> <name>]... [--inventory-file <path>] <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_status.sh [--system|--user] [--preflight auto|tp2|tp3|tp4|tp23] [--strict] [--journal [--lines N]] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
 
-Notes:
-  - Non-destructive; intended to run from the Mac.
-  - Host order defines rank/order: arg0=spark0, arg1=spark1, etc (unless overridden via --instanceN).
-  - Default preflight is inferred from host count:
-      2 hosts => tp2, 3 hosts => tp3, 4 hosts => tp4
-  - With --strict, the script snapshots topology-specific strict units:
-      tp2 => ds4-strict@.service + ds4-preflight-strict@.service
-      tp3 => ds4-tp3-strict@.service + ds4-preflight-tp3-strict@.service
-      tp4 => ds4-tp4-strict@.service + ds4-preflight-tp4-strict@.service
-  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
+	Notes:
+	  - Non-destructive; intended to run from the Mac.
+	  - Host order defines rank/order: arg0=spark0, arg1=spark1, etc (unless overridden via --instanceN).
+	  - Default preflight is inferred from host count:
+	      2 hosts => tp2, 3 hosts => tp3, 4 hosts => tp4
+	  - With --strict, the script snapshots topology-specific strict units:
+	      tp2 => ds4-tp2-strict@.service + ds4-preflight-strict@.service (legacy alias: ds4-strict@.service)
+	      tp3 => ds4-tp3-strict@.service + ds4-preflight-tp3-strict@.service
+	      tp4 => ds4-tp4-strict@.service + ds4-preflight-tp4-strict@.service
+	  - With `--preflight tp23` (3 nodes only), the script snapshots both tp2 and tp3 units for each instance.
+	  - `--inventory-file` reads targets from a newline-delimited file; blank lines and `#` comments are ignored.
 EOF
 }
 
@@ -94,10 +95,10 @@ case "$systemd_mode" in
 esac
 
 case "$preflight" in
-	auto|tp2|tp3|tp4)
+	auto|tp2|tp3|tp4|tp23)
 		;;
 	*)
-		echo "invalid --preflight: $preflight (expected tp2|tp3|tp4)" >&2
+		echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4|tp23)" >&2
 		exit 2
 		;;
 esac
@@ -169,40 +170,62 @@ infer_preflight()
 		2) echo "tp2" ;;
 		3) echo "tp3" ;;
 		4) echo "tp4" ;;
-		*) echo "tp2" ;;
+		*)
+			echo "cannot infer --preflight from node_count=$node_count; pass --preflight tp2|tp3|tp4" >&2
+			return 2
+			;;
 	esac
 }
+
+	units_for_one()
+	{
+		topo="$1"
+		instance="$2"
+
+		ds4_unit="ds4@${instance}.service"
+		preflight_unit="ds4-preflight@${instance}.service"
+		legacy_ds4_unit=""
+
+		if [ "$topo" = "tp3" ]; then
+			preflight_unit="ds4-preflight-tp3@${instance}.service"
+		fi
+		if [ "$topo" = "tp4" ]; then
+		preflight_unit="ds4-preflight-tp4@${instance}.service"
+		fi
+		if [ "$strict" -ne 0 ]; then
+			if [ "$topo" = "tp2" ]; then
+				ds4_unit="ds4-tp2-strict@${instance}.service"
+				legacy_ds4_unit="ds4-strict@${instance}.service"
+				preflight_unit="ds4-preflight-strict@${instance}.service"
+			fi
+			if [ "$topo" = "tp3" ]; then
+				ds4_unit="ds4-tp3-strict@${instance}.service"
+				preflight_unit="ds4-preflight-tp3-strict@${instance}.service"
+		fi
+		if [ "$topo" = "tp4" ]; then
+			ds4_unit="ds4-tp4-strict@${instance}.service"
+			preflight_unit="ds4-preflight-tp4-strict@${instance}.service"
+			fi
+		fi
+
+		if [ "$legacy_ds4_unit" != "" ]; then
+			printf '%s\n' "$ds4_unit" "$legacy_ds4_unit" "$preflight_unit"
+			return 0
+		fi
+		printf '%s\n' "$ds4_unit" "$preflight_unit"
+	}
 
 units_for()
 {
 	topo="$1"
 	instance="$2"
-
-	ds4_unit="ds4@${instance}.service"
-	preflight_unit="ds4-preflight@${instance}.service"
-
-	if [ "$topo" = "tp3" ]; then
-		preflight_unit="ds4-preflight-tp3@${instance}.service"
+	if [ "$topo" = "tp23" ]; then
+		units_for_one "tp2" "$instance"
+		units_for_one "tp3" "$instance"
+		return 0
 	fi
-	if [ "$topo" = "tp4" ]; then
-		preflight_unit="ds4-preflight-tp4@${instance}.service"
-	fi
-	if [ "$strict" -ne 0 ]; then
-		if [ "$topo" = "tp2" ]; then
-			ds4_unit="ds4-strict@${instance}.service"
-			preflight_unit="ds4-preflight-strict@${instance}.service"
-		fi
-		if [ "$topo" = "tp3" ]; then
-			ds4_unit="ds4-tp3-strict@${instance}.service"
-			preflight_unit="ds4-preflight-tp3-strict@${instance}.service"
-		fi
-		if [ "$topo" = "tp4" ]; then
-			ds4_unit="ds4-tp4-strict@${instance}.service"
-			preflight_unit="ds4-preflight-tp4-strict@${instance}.service"
-		fi
-	fi
-
-	printf '%s\n' "$ds4_unit" "$preflight_unit"
+	units_for_one "$topo" "$instance"
+	return 0
 }
 
 ssh_run()
@@ -212,7 +235,11 @@ ssh_run()
 	ssh $SSH_OPTS "$target" "$@"
 }
 
-topo="$(infer_preflight)"
+topo="$(infer_preflight)" || exit $?
+if [ "$topo" = "tp23" ] && [ "$node_count" -ne 3 ]; then
+	echo "tp23 requires exactly 3 nodes; node_count=$node_count" >&2
+	exit 2
+fi
 
 echo "== spark ring systemd status (Mac-side) =="
 date -Is 2>/dev/null || date || true
@@ -228,18 +255,16 @@ while [ "$i" -lt "$node_count" ]; do
 	target="$(value_at target "$i")"
 	instance="$(instance_for_index "$i")"
 
-	set -- $(units_for "$topo" "$instance")
-	ds4_unit="$1"
-	preflight_unit="$2"
+	units="$(units_for "$topo" "$instance")"
+	set -- $units
 
 	echo "== spark$i ($target) (instance=$instance) =="
 	ssh_run "$target" sh -c '
 set -eu
 mode="${1:-system}"
-ds4_unit="${2:-}"
-preflight_unit="${3:-}"
-with_journal="${4:-0}"
-journal_lines="${5:-80}"
+with_journal="${2:-0}"
+journal_lines="${3:-80}"
+shift 3 || true
 
 if [ "$mode" = "user" ]; then
 	uid="$(id -u 2>/dev/null || echo "")"
@@ -274,9 +299,10 @@ show_unit()
 	fi
 }
 
-show_unit "$ds4_unit"
-show_unit "$preflight_unit"
-' sh "$systemd_mode" "$ds4_unit" "$preflight_unit" "$with_journal" "$journal_lines" || true
+for unit in "$@"; do
+	show_unit "$unit"
+done
+' sh "$systemd_mode" "$with_journal" "$journal_lines" "$@" || true
 	echo
 
 	i=$((i + 1))

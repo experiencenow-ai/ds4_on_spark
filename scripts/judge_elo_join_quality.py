@@ -96,6 +96,8 @@ def join_quality_rows(
     model_field: str,
     overwrite: bool,
     require_all: bool,
+    missing_default: Optional[float] = None,
+    missing_quality_source: str = "judge_elo_default_v1",
 ) -> Tuple[List[Dict[str, str]], int]:
     out: List[Dict[str, str]] = []
     missing = 0
@@ -105,7 +107,17 @@ def join_quality_rows(
         existing = row.get("quality_score", "").strip()
         if score is None:
             missing += 1
-            out.append(dict(row))
+            if existing != "" and not overwrite:
+                out.append(dict(row))
+                continue
+            if missing_default is None:
+                out.append(dict(row))
+                continue
+            r_missing = dict(row)
+            r_missing["quality_score"] = f"{float(missing_default):.3f}"
+            if "quality_source" not in r_missing or overwrite:
+                r_missing["quality_source"] = str(missing_quality_source)
+            out.append(r_missing)
             continue
         if existing != "" and not overwrite:
             out.append(dict(row))
@@ -153,6 +165,8 @@ def main() -> None:
     ap.add_argument("--overwrite", action="store_true", help="overwrite existing quality_score/quality_source if present")
     ap.add_argument("--require-all", action="store_true", help="fail if any input rows are missing from quality_map")
     ap.add_argument("--quality-source", default="", help="override quality_source value written to CSV")
+    ap.add_argument("--missing-default", default="", help="fill missing models with this quality_score (0..100); default: leave blank")
+    ap.add_argument("--missing-quality-source", default="judge_elo_default_v1", help="quality_source label used when --missing-default is applied")
     args = ap.parse_args()
 
     if str(getattr(args, "bundle", "") or "").strip() != "":
@@ -165,6 +179,17 @@ def main() -> None:
                 qsrc = meta_src
     if str(args.quality_source).strip() != "":
         qsrc = str(args.quality_source).strip()
+
+    missing_default: Optional[float] = None
+    if str(args.missing_default).strip() != "":
+        try:
+            v = float(str(args.missing_default).strip())
+        except ValueError as e:
+            raise ValueError("--missing-default must be a float in [0,100]") from e
+        if not _is_finite(float(v)) or float(v) < 0.0 or float(v) > 100.0:
+            raise ValueError("--missing-default must be in [0,100]")
+        missing_default = float(v)
+
     rows, fieldnames = _read_csv(str(args.input_csv))
     model_field = _pick_model_field(fieldnames, str(args.model_field).strip())
     joined, missing = join_quality_rows(
@@ -174,6 +199,8 @@ def main() -> None:
         model_field=model_field,
         overwrite=bool(args.overwrite),
         require_all=bool(args.require_all),
+        missing_default=missing_default,
+        missing_quality_source=str(args.missing_quality_source).strip() or "judge_elo_default_v1",
     )
     _write_csv(str(args.out), joined, fieldnames)
     if missing != 0:

@@ -5,6 +5,8 @@ TP=2 here means dual-Spark distributed execution (Spark0 + Spark1).
 These checks are designed to be **non-destructive** and safe to run repeatedly.
 They do not change networking, system services, or GPU settings.
 
+If you are in a TP=2 -> TP=3 transition period and want a single “run both” gate, see: `docs/ops-tp23-readiness.md`.
+
 ## Preflight Checklist
 
 On both Sparks:
@@ -14,6 +16,34 @@ On both Sparks:
 - Confirm GPU visibility and health via `nvidia-smi`.
 - Confirm the intended network path (wired vs Wi-Fi) and MTU.
 - Confirm time sync is sane (large skew breaks tracing + some collectives).
+
+## One Command Snapshot (Mac Side, Safe)
+
+To capture a single “are we ready?” snapshot (mesh + systemd status + optional journald tail) across an ordered Spark0/Spark1 inventory:
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp2 --strict --journal --lines 120 \
+  spark0@<spark0-host> spark1@<spark1-host>
+```
+
+Or using an inventory file (recommended for repeatable runs):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp2_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp2 --strict --journal --lines 120 \
+  --inventory-file deploy/config/inventory.ds4.spark01.example
+```
+
+Note: snapshots may include hostnames/IPs/routes and journal excerpts; keep the output private and redact before sharing externally.
+
+If you already staged deploy assets to `/tmp/ds4-*` on both Sparks, you can also include staged readiness checks (safe; no sudo):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp2 --strict --journal --lines 120 \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp2 \
+  --inventory-file deploy/config/inventory.ds4.spark01.example
+```
 
 ## Commands (Spark Side)
 
@@ -94,6 +124,20 @@ To gate a TP=2 run on required inputs via systemd, use the strict variant:
 
 ```bash
 sudo systemctl start ds4-preflight-strict@spark0.service
+```
+
+To gate DS4 start itself on strict preflight, use the strict-start unit:
+
+```bash
+sudo systemctl enable ds4-tp2-strict@spark0.service
+sudo systemctl start  ds4-tp2-strict@spark0.service
+```
+
+Legacy alias name retained for compatibility:
+
+```bash
+sudo systemctl enable ds4-strict@spark0.service
+sudo systemctl start  ds4-strict@spark0.service
 ```
 
 If strict preflight fails, it triggers `ds4-support-bundle@%i.service` (when installed) to capture a non-destructive snapshot for debugging. See `docs/ops-support-bundle.md`.
