@@ -23,6 +23,7 @@ fi
 TRUNK_GGUF="${TRUNK_GGUF:-}"
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
 PROMPT="${PROMPT:-Hello.}"
+PROMPT_FILE="${PROMPT_FILE:-}"
 SEED="${SEED:-1234}"
 LOAD_SIDECAR_WEIGHTS="${LOAD_SIDECAR_WEIGHTS:-0}"
 
@@ -219,7 +220,12 @@ if [ ! -x "$PROBE_BIN" ]; then
 	exit 6
 fi
 
-PROBE_ARGS="--json --model \"$TRUNK_GGUF\" --sidecar \"$MTP_SIDECAR_GGUF\" --prompt \"$PROMPT\" --seed $SEED"
+PROBE_ARGS="--json --model \"$TRUNK_GGUF\" --sidecar \"$MTP_SIDECAR_GGUF\" --seed $SEED"
+if [ "$PROMPT_FILE" != "" ]; then
+	PROBE_ARGS="$PROBE_ARGS --prompt-file \"$PROMPT_FILE\""
+else
+	PROBE_ARGS="$PROBE_ARGS --prompt \"$PROMPT\""
+fi
 if [ "$LOAD_SIDECAR_WEIGHTS" = "1" ]; then
 	PROBE_ARGS="$PROBE_ARGS --load-sidecar-weights"
 fi

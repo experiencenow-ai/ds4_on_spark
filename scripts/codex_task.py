@@ -68,6 +68,8 @@ def build_llamacpp_remote_env(args: argparse.Namespace) -> str:
 		("PROMPT", args.prompt),
 		("SEED", str(args.seed)),
 	]
+	if args.prompt_file_remote:
+		parts.append(("PROMPT_FILE", args.prompt_file_remote))
 	if args.load_sidecar_weights:
 		parts.append(("LOAD_SIDECAR_WEIGHTS", "1"))
 	if args.fetch or args.fresh:
@@ -123,6 +125,8 @@ def task_spark_llamacpp_mtp_probe(args: argparse.Namespace) -> None:
 		"LLAMA_COMMIT": args.llama_commit,
 		"REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV": build_llamacpp_remote_env(args),
 	}
+	if args.prompt_file_local:
+		env_extra["PROMPT_FILE_LOCAL"] = args.prompt_file_local
 	run(["scripts/run_llamacpp_mtp_one_token_draft_probe_spark.sh", args.target], env_extra=env_extra)
 
 
@@ -207,6 +211,8 @@ def build_parser() -> argparse.ArgumentParser:
 	p.add_argument("--trunk-gguf", default=DEFAULT_TRUNK_GGUF)
 	p.add_argument("--mtp-sidecar-gguf", default=DEFAULT_MTP_SIDECAR_GGUF)
 	p.add_argument("--prompt", default="Explain Redis streams in one paragraph.")
+	p.add_argument("--prompt-file-local", default="", help="Local prompt file to upload; one non-empty prompt per line.")
+	p.add_argument("--prompt-file-remote", default="", help="Spark-side prompt file path; one non-empty prompt per line.")
 	p.add_argument("--seed", type=int, default=1234)
 	p.add_argument("--load-sidecar-weights", action="store_true")
 	p.add_argument("--fetch", action="store_true")

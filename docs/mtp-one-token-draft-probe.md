@@ -103,6 +103,7 @@ Notes:
 
 - This runner **loads the trunk GGUF** when `ALLOW_RUN=1` is set. Keep it gated and coordinate with the baseline runtime loop.
 - The output directory includes a machine-readable `summary.json` (probe parse + local validator status).
+- For resident multi-prompt evidence, set `PROMPT_FILE_LOCAL=fixtures/mtp/one_token_prompts_smoke.txt` (or `PROMPT_FILE=/remote/path`) with this runner. The patched probe loads the model once and emits a batch JSON wrapper with one result per non-empty line.
 - Default pin is `LLAMA_COMMIT=94073e2` (the runner auto-selects the matching patch). To reproduce the original observed failure commit, set `LLAMA_COMMIT=9222e55` when running the runner.
 - As of 2026-05-13, the `94073e2` patch implements the first real `gamma=1` MTP block path and emits `mtp_block_out_hc_*` plus `mtp_head_norm_*` fingerprints. Spark0 run `20260513T005746Z` validated with `ok=true`; it renders the same DS4 chat prompt shape as antirez and matches the oracle base token `2581` (`"We"`) plus MTP draft token `1309` (`" need"`).
 - Correctness against the antirez oracle is not fully proven yet: `trunk_token_embd_fnv64` now matches, but HC/pre-head and MTP debug fingerprints still differ, so the next parity task is capture-point/layout/numerics alignment before acceptance sweeps.
