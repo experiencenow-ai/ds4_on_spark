@@ -69,7 +69,7 @@ esac
 	echo "- TRUNK_GGUF=/abs/path/to/trunk.gguf (defaults to Spark0-staged antirez IQ2XXS trunk if readable)"
 	echo "- MTP_SIDECAR_GGUF=/abs/path/to/DeepSeek-V4-Flash-MTP-*.gguf (defaults to Spark0-staged sidecar if readable)"
 	echo
-	echo "Recommended preflight (no trunk load): run `scripts/run_mtp_sidecar_loader_probe_spark.sh` first to validate the sidecar contract + (optionally) the llama.cpp-side sidecar probe before enabling `ALLOW_RUN=1` here."
+	echo "Recommended preflight (no trunk load): run scripts/run_mtp_sidecar_loader_probe_spark.sh first to validate the sidecar contract + (optionally) the llama.cpp-side sidecar probe before enabling ALLOW_RUN=1 here."
 	echo
 	echo "Optional Spark-side env vars:"
 	echo
@@ -221,8 +221,8 @@ fi
 {
 	echo "## Results"
 	echo
-	echo "This runner targets the **llama.cpp-side** one-token probe (`llama-ds4-mtp-one-token-draft-probe`)."
-	echo "It can load the trunk GGUF when `ALLOW_RUN=1` is set, so keep it gated and coordinate with the baseline runtime loop."
+	echo "This runner targets the llama.cpp-side one-token probe (llama-ds4-mtp-one-token-draft-probe)."
+	echo "It can load the trunk GGUF when ALLOW_RUN=1 is set, so keep it gated and coordinate with the baseline runtime loop."
 	echo
 	echo "Stdout (prefix):"
 	echo
