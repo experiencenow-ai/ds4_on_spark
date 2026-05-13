@@ -42,6 +42,9 @@ Note: the periodic preflight timers (`ds4-preflight@.timer`, `ds4-preflight-stri
 
 - Required files exist under:
   - `deploy/systemd/`
+  - `deploy/systemd-dropins/` (optional unit override examples)
+  - `deploy/systemd-user/`
+  - `deploy/systemd-user-dropins/` (optional user-unit override examples)
   - `deploy/config/`
   - `deploy/sysusers.d/`, `deploy/tmpfiles.d/`
 - All `scripts/ops*.sh` pass `sh -n` syntax checks

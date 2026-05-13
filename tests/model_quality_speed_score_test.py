@@ -40,6 +40,25 @@ class ModelQualitySpeedScoreTest(unittest.TestCase):
         self.assertAlmostEqual(rows[0].tokens_per_success or 0.0, 100.0)
         self.assertAlmostEqual(rows[0].wall_s_per_success or 0.0, 5.0)
 
+    def test_pareto_groups_by_scope_default(self) -> None:
+        rows = scorer.score_rows(self._rows(
+            "model,run_id,scope,quality_score,decode_tps\n"
+            "A,a,scope1,50,10\n"
+            "B,b,scope2,60,12\n"
+        ))
+        by_model = {r.model: r for r in rows}
+        self.assertEqual(by_model["A"].dominated_by, "")
+        self.assertEqual(by_model["B"].dominated_by, "")
+
+        rows_all = scorer.score_rows(self._rows(
+            "model,run_id,scope,quality_score,decode_tps\n"
+            "A,a,scope1,50,10\n"
+            "B,b,scope2,60,12\n"
+        ), pareto_group="all")
+        by_model_all = {r.model: r for r in rows_all}
+        self.assertEqual(by_model_all["B"].dominated_by, "")
+        self.assertEqual(by_model_all["A"].dominated_by, "B/b")
+
 
 if __name__ == "__main__":
     unittest.main()

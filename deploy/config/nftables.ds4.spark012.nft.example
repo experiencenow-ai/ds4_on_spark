@@ -1,0 +1,63 @@
+# Example nftables allowlist snippet for DS4 TP=3 prep (Spark0/Spark1/Spark2).
+#
+# This repo NEVER applies firewall changes automatically. Treat this file as a
+# starting point only; review and adapt to your distro + baseline firewall.
+#
+# IMPORTANT:
+# - Firewall changes can lock you out. Apply only with console/OOB access.
+# - Do not use `flush ruleset` as part of a snippet; integrate carefully.
+# - The safest pattern is: keep your distro's baseline policy, then add a jump
+#   into a dedicated DS4 chain for the Spark inventory network.
+#
+# Intended ports (defaults from deploy templates; adjust if you change env):
+# - SSH: 22/tcp
+# - DS4 master: DS4_MASTER_PORT (default 29500/tcp) (typically Spark0 only)
+# - DS4 metrics: DS4_METRICS_PORT (default 9090/tcp) (each Spark)
+# - Spark standalone: 7077/tcp + 8080/tcp + 8081/tcp (only if you run Spark via systemd here)
+#
+# Example inventory network (replace with your actual subnet or explicit peers):
+# - Spark0..Spark2 wired subnet: 10.0.0.0/24
+#
+# Quick syntax check (safe; does not apply):
+#   sudo nft -c -f /path/to/this-file
+#
+# Example apply (human-run; VERIFY YOUR DISTRO'S INCLUDE PATHS FIRST):
+#   sudo install -m 0644 /path/to/this-file /etc/nftables.d/ds4_spark012.nft
+#   sudo nft -c -f /etc/nftables.d/ds4_spark012.nft
+#   sudo nft -f /etc/nftables.d/ds4_spark012.nft
+#
+# After applying, confirm:
+#   sudo nft list ruleset | head -n 200
+#   ss -lntp | head
+#   curl -fsS http://127.0.0.1:9090/metrics | head
+
+table inet ds4
+{
+	# Replace with your actual inventory subnet or explicit peer IPs.
+	set spark012_ipv4
+	{
+		type ipv4_addr
+		flags interval
+		elements = { 10.0.0.0/24 }
+	}
+
+	chain ds4_input
+	{
+		# Accept established/related early (safe when used as a jumped-to chain).
+		ct state established,related accept
+
+		# Inventory subnet: allow SSH for operator access.
+		ip saddr @spark012_ipv4 tcp dport 22 accept
+
+		# Inventory subnet: allow DS4 metrics on each Spark.
+		ip saddr @spark012_ipv4 tcp dport 9090 accept
+
+		# Inventory subnet: allow DS4 master port (ONLY if this host is rank0 / Spark0).
+		# Uncomment ONLY on Spark0:
+		# ip saddr @spark012_ipv4 tcp dport 29500 accept
+
+		# Optional: Spark standalone ports (only if you run Spark master/worker here).
+		# ip saddr @spark012_ipv4 tcp dport { 7077, 8080, 8081 } accept
+	}
+}
+
