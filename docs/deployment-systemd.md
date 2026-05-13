@@ -7,8 +7,9 @@ Templates live in `deploy/systemd/` and are meant to be copied to:
 They are **examples**. Adjust flags and sandboxing once the runtime interface is
 stable.
 
-Optional developer path: user-service templates exist under `deploy/systemd-user/` (see `docs/deployment-systemd-user.md`).
-Optional drop-in examples (overrides without editing base unit files) live under `deploy/systemd-dropins/` and `deploy/systemd-user-dropins/`.
+- Optional developer path: user-service templates exist under `deploy/systemd-user/` (see `docs/deployment-systemd-user.md`).
+- Optional drop-in examples (overrides without editing base unit files) live under `deploy/systemd-dropins/` and `deploy/systemd-user-dropins/`.
+- Disable/uninstall runbook (human-run): `docs/deployment-systemd-disable-uninstall.md`.
 
 Optional (recommended): validate deploy assets + ops scripts before staging:
 
@@ -164,3 +165,7 @@ Example snippets (copy/paste starting points):
 - `deploy/systemd-dropins/README.md`
 - `deploy/systemd-dropins/ds4@.service.d/20-timeouts.conf.example`
 - `deploy/systemd-dropins/ds4@.service.d/40-execstart-override.conf.example`
+
+## Disable / Uninstall (Human Runbook)
+
+See: `docs/deployment-systemd-disable-uninstall.md`.
