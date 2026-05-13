@@ -280,6 +280,16 @@ install(EXPORT ds4Targets
 	DESTINATION "${DS4_INSTALL_CMAKEDIR}"
 )
 
+configure_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4.pc.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/ds4.pc"
+	@ONLY
+)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/ds4.pc"
+	DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig"
+)
+
 configure_package_config_file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/ds4Config.cmake.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/ds4Config.cmake"

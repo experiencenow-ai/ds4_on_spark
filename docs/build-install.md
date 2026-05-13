@@ -16,6 +16,7 @@ This installs:
 - headers under `./_install/include/ds4`
 - `ds4_cli` under `./_install/bin` (when built)
 - CMake package files under `./_install/lib/cmake/ds4`
+- `pkg-config` file under `./_install/lib/pkgconfig/ds4.pc`
 
 ## Consume From Another CMake Project
 
@@ -30,6 +31,16 @@ Then in the consumer `CMakeLists.txt`:
 ```cmake
 find_package(ds4 CONFIG REQUIRED)
 target_link_libraries(my_target PRIVATE ds4::ds4)
+```
+
+## Consume With pkg-config (Optional)
+
+If you prefer `pkg-config`, the build installs `ds4.pc` under `lib/pkgconfig`.
+
+Example:
+
+```bash
+PKG_CONFIG_PATH=/path/to/ds4/_install/lib/pkgconfig pkg-config --cflags --libs ds4
 ```
 
 ## Makefile Wrapper
