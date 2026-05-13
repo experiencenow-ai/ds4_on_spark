@@ -15,7 +15,7 @@ from scripts import pairwise_judge_validate_decision as decision_validator
 class JudgeEloTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl", "sample_judge_records_v4.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl", "sample_judge_records_v4.jsonl", "sample_judge_records_v5.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -47,7 +47,7 @@ class JudgeEloTest(unittest.TestCase):
 
     def test_fixture_strict_validates(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
-        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl", "sample_judge_records_v4.jsonl"):
+        for fname in ("sample_judge_records.jsonl", "sample_judge_records_v2.jsonl", "sample_judge_records_v3.jsonl", "sample_judge_records_v4.jsonl", "sample_judge_records_v5.jsonl"):
             path = os.path.join(root, "fixtures", "judge-elo", str(fname))
             bad = 0
             for _, obj in schema.iter_jsonl(path):
@@ -123,6 +123,87 @@ class JudgeEloTest(unittest.TestCase):
                 td,
             ])
 
+    def test_update_outputs_match_expected_v5_fixture(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_rel = os.path.join("fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        expected_bundle = os.path.join(root, "fixtures", "judge-elo", "expected_bundle_v5.json")
+        expected_summary = os.path.join(root, "fixtures", "judge-elo", "expected_summary_v5.md")
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.check_call([
+                "python3",
+                "scripts/judge_elo_update.py",
+                "--in",
+                in_rel,
+                "--out-dir",
+                td,
+                "--strict",
+                "--judge-out-target",
+                "64",
+                "--quality-mode",
+                "logistic",
+            ], cwd=root)
+            with open(os.path.join(td, "bundle.json"), "r", encoding="utf-8") as f:
+                got_bundle = json.load(f)
+            with open(expected_bundle, "r", encoding="utf-8") as f:
+                want_bundle = json.load(f)
+            self.assertEqual(got_bundle, want_bundle)
+            with open(os.path.join(td, "summary.md"), "r", encoding="utf-8") as f:
+                got_summary = f.read()
+            with open(expected_summary, "r", encoding="utf-8") as f:
+                want_summary = f.read()
+            self.assertEqual(got_summary, want_summary)
+
+    def test_compact_records_cli_emits_record_v5(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v2.jsonl")
+        compact_script = os.path.join(root, "scripts", "judge_elo_compact_records.py")
+        with tempfile.TemporaryDirectory() as td:
+            out_path = os.path.join(td, "out_v5.jsonl")
+            subprocess.check_call([
+                "python3",
+                compact_script,
+                "--in",
+                in_path,
+                "--out",
+                out_path,
+                "--quiet",
+            ])
+            for _, obj in schema.iter_jsonl(out_path):
+                self.assertEqual(obj.get("schema"), schema.SCHEMA_RECORD_V5)
+                self.assertEqual(schema.validate_record(obj), [])
+                self.assertIn("tk", obj)
+                self.assertIn("lt", obj)
+                self.assertNotIn("tokens", obj)
+                self.assertNotIn("latency_ms", obj)
+                if obj.get("parse_valid") is True:
+                    self.assertIn("w", obj)
+                    self.assertNotIn("winner", obj)
+
+    def test_compact_records_skip_invalid(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v2.jsonl")
+        with tempfile.TemporaryDirectory() as td:
+            tmp_in = os.path.join(td, "mixed.jsonl")
+            tmp_out = os.path.join(td, "out_v5.jsonl")
+            with open(in_path, "r", encoding="utf-8") as f:
+                first = f.readline().strip()
+            with open(tmp_in, "w", encoding="utf-8") as f:
+                f.write(first + "\n")
+                f.write('{"schema":"ds4_pairwise_judge_record_v2"}\n')
+            subprocess.check_call([
+                "python3",
+                os.path.join(root, "scripts", "judge_elo_compact_records.py"),
+                "--skip-invalid",
+                "--in",
+                tmp_in,
+                "--out",
+                tmp_out,
+                "--quiet",
+            ])
+            out_rows = list(schema.iter_jsonl(tmp_out))
+            self.assertEqual(len(out_rows), 1)
+            self.assertEqual(out_rows[0][1].get("schema"), schema.SCHEMA_RECORD_V5)
+
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
@@ -132,6 +213,16 @@ class JudgeEloTest(unittest.TestCase):
         self.assertIn("tokens", budget)
         self.assertIn("latency_ms", budget)
         self.assertIn("judge_out_budget", budget)
+
+    def test_budget_accepts_record_v5_compact_arrays(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        budget = updater.compute_budget([path])
+        self.assertEqual(int(budget.get("records", 0)), 4)
+        tokens = budget.get("tokens", {})
+        self.assertEqual(float(tokens.get("judge_out", {}).get("count", 0.0)), 4.0)
+        latency = budget.get("latency_ms", {})
+        self.assertEqual(float(latency.get("judge", {}).get("count", 0.0)), 4.0)
 
     def test_budget_target_is_configurable(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -164,6 +255,14 @@ class JudgeEloTest(unittest.TestCase):
         self.assertAlmostEqual(float(ratings.get("model_mid", 0.0)), 999.899, places=3)
         self.assertAlmostEqual(float(ratings.get("model_fast", 0.0)), 991.364, places=3)
 
+    def test_elo_accepts_record_v5_compact_budgets(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        ratings, _stats = updater.compute_elo([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+        self.assertAlmostEqual(float(ratings.get("model_slow", 0.0)), 1008.736, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_mid", 0.0)), 999.899, places=3)
+        self.assertAlmostEqual(float(ratings.get("model_fast", 0.0)), 991.364, places=3)
+
     def test_join_quality_rows(self) -> None:
         rows = [
             {"model": "model_fast", "decode_tps": "100.0"},
@@ -184,6 +283,27 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(joined[0].get("quality_source"), "testsrc")
         self.assertEqual(joined[1].get("quality_score"), "55.500")
         self.assertEqual(joined[2].get("quality_score", ""), "")
+
+    def test_join_quality_rows_missing_default_fills(self) -> None:
+        rows = [
+            {"model": "missing_model", "decode_tps": "50.0"},
+            {"model": "missing_keep", "decode_tps": "60.0", "quality_score": "12.000"},
+        ]
+        qmap: dict[str, float] = {}
+        joined, missing = joiner.join_quality_rows(
+            rows=rows,
+            quality_map=qmap,
+            quality_source="ignored",
+            model_field="model",
+            overwrite=False,
+            require_all=False,
+            missing_default=50.0,
+            missing_quality_source="default50",
+        )
+        self.assertEqual(missing, 2)
+        self.assertEqual(joined[0].get("quality_score"), "50.000")
+        self.assertEqual(joined[0].get("quality_source"), "default50")
+        self.assertEqual(joined[1].get("quality_score"), "12.000")
 
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
@@ -218,6 +338,26 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(rec.get("winner"), "B")
         self.assertEqual(rec.get("margin"), 1)
 
+    def test_wrap_record_accepts_int_like_floats(self) -> None:
+        decision_v2 = {"w": "a", "m": 2.0, "sa": 8.0, "sb": 6.0, "r": "A is more correct.", "h": "Fix the key mistake.", "t": [" factuality "]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V1,
+            pair_id="p0_floaty",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision_v2, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=True,
+        )
+        self.assertTrue(rec.get("parse_valid", False))
+        self.assertEqual(rec.get("winner"), "A")
+        self.assertEqual(rec.get("margin"), 2)
+        self.assertEqual(rec.get("score_a"), 8)
+        self.assertEqual(rec.get("score_b"), 6)
+        self.assertEqual(rec.get("tags"), ["factuality"])
+
     def test_wrap_record_v4_emits_compact_keys(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
         rec = record_wrap.build_record(
@@ -236,6 +376,26 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(rec.get("w"), "A")
         self.assertEqual(rec.get("m"), 2)
         self.assertNotIn("winner", rec)
+
+    def test_wrap_record_v5_emits_compact_budget_arrays(self) -> None:
+        decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V5,
+            pair_id="p0v5",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=False,
+        )
+        self.assertEqual(rec.get("schema"), schema.SCHEMA_RECORD_V5)
+        self.assertTrue(rec.get("parse_valid", False))
+        self.assertEqual(rec.get("tk"), [1, 2, 3, 4])
+        self.assertEqual(rec.get("lt"), [5, 6, 7])
+        self.assertNotIn("tokens", rec)
+        self.assertNotIn("latency_ms", rec)
 
     def test_validate_decision_accepts_compact_decision_v2_keys(self) -> None:
         decision_v2 = {"w": "tie", "m": 0, "sa": 6, "sb": 6, "r": "Both are acceptable.", "h": "", "t": []}
@@ -561,6 +721,40 @@ class JudgeEloTest(unittest.TestCase):
             self.assertTrue(bool(obj.get("parse_valid", False)))
             self.assertEqual(obj.get("tokens"), {"judge_out": 40})
             self.assertEqual(obj.get("latency_ms"), {"judge": 123})
+            self.assertEqual(schema.validate_record(obj), [])
+
+    def test_pairwise_judge_record_cli_v5_accepts_tk_lt(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_record.py")
+        with tempfile.TemporaryDirectory() as td:
+            dec_path = os.path.join(td, "decision.txt")
+            with open(dec_path, "w", encoding="utf-8") as f:
+                f.write("{\"w\":\"B\",\"m\":2,\"sa\":6,\"sb\":8,\"r\":\"B is clearer and correct.\",\"h\":\"Check details before extra words.\",\"t\":[\"factuality\"]}\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--record-schema",
+                "v5",
+                "--pair-id",
+                "p5",
+                "--model-a",
+                "mA",
+                "--model-b",
+                "mB",
+                "--judge-model",
+                "ds4",
+                "--decision",
+                dec_path,
+                "--tk",
+                "[11,22,33,44]",
+                "--lt",
+                "500,600,1700",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertEqual(obj.get("schema"), schema.SCHEMA_RECORD_V5)
+            self.assertTrue(bool(obj.get("parse_valid", False)))
+            self.assertEqual(obj.get("tk"), [11, 22, 33, 44])
+            self.assertEqual(obj.get("lt"), [500, 600, 1700])
             self.assertEqual(schema.validate_record(obj), [])
 
     def test_pairwise_judge_prompt_cli_json_format(self) -> None:

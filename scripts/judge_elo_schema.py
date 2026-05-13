@@ -18,6 +18,7 @@ SCHEMA_RECORD_V1 = "ds4_pairwise_judge_record_v1"
 SCHEMA_RECORD_V2 = "ds4_pairwise_judge_record_v2"
 SCHEMA_RECORD_V3 = "ds4_pairwise_judge_record_v3"
 SCHEMA_RECORD_V4 = "ds4_pairwise_judge_record_v4"
+SCHEMA_RECORD_V5 = "ds4_pairwise_judge_record_v5"
 SCHEMA_PROMPT_V1 = "ds4_pairwise_judge_prompt_v1"
 SCHEMA_PROMPT_V2 = "ds4_pairwise_judge_prompt_v2"
 SCHEMA_META_V1 = "ds4_judge_elo_meta_v1"
@@ -70,11 +71,35 @@ RECORD_FIELDS = (
     "parse_error",
     "tokens",
     "latency_ms",
+    "tk",
+    "lt",
 )
 _RECORD_FIELD_SET = set(RECORD_FIELDS)
 
 PROMPT_FIELDS = ("schema", "judge_out_target", "system", "user", "schema_hint")
 _PROMPT_FIELD_SET = set(PROMPT_FIELDS)
+
+def _finite_num(v: float) -> bool:
+    return not (math.isnan(v) or math.isinf(v))
+
+def _coerce_int_like(v: Any) -> Any:
+    if isinstance(v, float) and not isinstance(v, bool):
+        fv = float(v)
+        if _finite_num(fv) and fv.is_integer():
+            return int(fv)
+    return v
+
+def _canonicalize_winner(v: Any) -> Any:
+    if not isinstance(v, str):
+        return v
+    s = v.strip()
+    if s.lower() == "a":
+        return "A"
+    if s.lower() == "b":
+        return "B"
+    if s.lower() == "tie":
+        return "tie"
+    return v
 
 def canonicalize_decision_obj(obj: Any) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     """Canonicalize a decision object into v1 keys.
@@ -102,8 +127,31 @@ def canonicalize_decision_obj(obj: Any) -> Tuple[Optional[Dict[str, Any]], List[
         for k2, k1 in _DECISION_V2_TO_V1.items():
             if k2 in obj:
                 out[k1] = obj.get(k2)
+        out["winner"] = _canonicalize_winner(out.get("winner"))
+        for k in ("margin", "score_a", "score_b"):
+            if k in out:
+                out[k] = _coerce_int_like(out.get(k))
+        if "reason" in out and isinstance(out.get("reason"), str):
+            out["reason"] = str(out.get("reason")).strip()
+        if "train_hint" in out and isinstance(out.get("train_hint"), str):
+            out["train_hint"] = str(out.get("train_hint")).strip()
+        tags = out.get("tags")
+        if isinstance(tags, list):
+            out["tags"] = [(t.strip() if isinstance(t, str) else t) for t in tags]
         return out, errs
-    return dict(obj), []
+    out1 = dict(obj)
+    out1["winner"] = _canonicalize_winner(out1.get("winner"))
+    for k in ("margin", "score_a", "score_b"):
+        if k in out1:
+            out1[k] = _coerce_int_like(out1.get(k))
+    if "reason" in out1 and isinstance(out1.get("reason"), str):
+        out1["reason"] = str(out1.get("reason")).strip()
+    if "train_hint" in out1 and isinstance(out1.get("train_hint"), str):
+        out1["train_hint"] = str(out1.get("train_hint")).strip()
+    tags1 = out1.get("tags")
+    if isinstance(tags1, list):
+        out1["tags"] = [(t.strip() if isinstance(t, str) else t) for t in tags1]
+    return out1, []
 
 
 def _is_int(v: Any) -> bool:
@@ -235,8 +283,8 @@ def validate_decision(obj: Dict[str, Any]) -> List[str]:
     if not isinstance(tags_v, list):
         errs.append("tags must be an array")
     else:
-        if len(tags_v) > 8:
-            errs.append("tags must have at most 8 entries")
+        if len(tags_v) > 3:
+            errs.append("tags must have at most 3 entries")
         for i, tag in enumerate(tags_v):
             if not isinstance(tag, str):
                 errs.append(f"tags[{i}] must be a string")
@@ -317,9 +365,9 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
         errs.append("schema is required")
     else:
         schema_v = _as_str(obj.get("schema"), "schema", errs)
-        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4):
+        if schema_v != "" and schema_v not in (SCHEMA_RECORD_V1, SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4, SCHEMA_RECORD_V5):
             errs.append(
-                f"schema must be {SCHEMA_RECORD_V1!r}, {SCHEMA_RECORD_V2!r}, {SCHEMA_RECORD_V3!r}, or {SCHEMA_RECORD_V4!r}"
+                f"schema must be {SCHEMA_RECORD_V1!r}, {SCHEMA_RECORD_V2!r}, {SCHEMA_RECORD_V3!r}, {SCHEMA_RECORD_V4!r}, or {SCHEMA_RECORD_V5!r}"
             )
 
     for field in ("pair_id", "model_a", "model_b"):
@@ -333,19 +381,20 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
 
     schema_v3 = obj.get("schema") == SCHEMA_RECORD_V3
     schema_v4 = obj.get("schema") == SCHEMA_RECORD_V4
-    if schema_v4:
-        # v4 is a compact record format: it must not mix v1 and v2 decision keys.
+    schema_v5 = obj.get("schema") == SCHEMA_RECORD_V5
+    if schema_v4 or schema_v5:
+        # v4/v5 are compact record formats: they must not mix v1 and v2 decision keys.
         mixed = [k for k in DECISION_FIELDS if k in obj]
         if len(mixed) != 0:
             for k in mixed:
-                errs.append(f"record_v4 must not include v1 decision key: {k}")
+                errs.append(f"record_v4/v5 must not include v1 decision key: {k}")
     else:
         mixed = [k for k in DECISION_FIELDS_V2 if k in obj]
         if len(mixed) != 0:
             for k in mixed:
                 errs.append(f"record_v1/v2/v3 must not include v2 decision key: {k}")
     if parse_valid:
-        if schema_v4:
+        if schema_v4 or schema_v5:
             canon, cerrs = canonicalize_decision_obj(_decision_view_from_record_v4(obj))
             if canon is None:
                 errs.extend(cerrs)
@@ -394,7 +443,13 @@ def validate_record(obj: Dict[str, Any]) -> List[str]:
             if v is not None and v < 0:
                 errs.append(f"latency_ms.{k} must be >= 0")
 
-    schema_budget_required = obj.get("schema") in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4)
+    if schema_v5:
+        if "tokens" in obj:
+            errs.append("record_v5 must not include tokens (use tk=[a_out,b_out,judge_in,judge_out])")
+        if "latency_ms" in obj:
+            errs.append("record_v5 must not include latency_ms (use lt=[a_ms,b_ms,judge_ms])")
+
+    schema_budget_required = obj.get("schema") in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4, SCHEMA_RECORD_V5)
     if schema_budget_required:
         errs.extend(_validate_record_budget_required(obj))
 
@@ -410,7 +465,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
     """
     errs = validate_record(obj)
 
-    if obj.get("schema") not in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4):
+    if obj.get("schema") not in (SCHEMA_RECORD_V2, SCHEMA_RECORD_V3, SCHEMA_RECORD_V4, SCHEMA_RECORD_V5):
         errs.extend(_validate_record_budget_required(obj))
 
     parse_valid = obj.get("parse_valid")
@@ -424,7 +479,7 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
         if isinstance(parse_error, str) and len(parse_error) > 128:
             errs.append("parse_error must be <= 128 chars")
 
-    if parse_valid is True and obj.get("schema") not in (SCHEMA_RECORD_V3, SCHEMA_RECORD_V4):
+    if parse_valid is True and obj.get("schema") not in (SCHEMA_RECORD_V3, SCHEMA_RECORD_V4, SCHEMA_RECORD_V5):
         errs.extend(validate_decision_strict_extra(obj))
 
     return errs
@@ -432,6 +487,36 @@ def validate_record_strict(obj: Dict[str, Any]) -> List[str]:
 
 def _validate_record_budget_required(obj: Dict[str, Any]) -> List[str]:
     errs: List[str] = []
+
+    if obj.get("schema") == SCHEMA_RECORD_V5:
+        tk = obj.get("tk")
+        if not isinstance(tk, list):
+            errs.append("tk is required and must be an array [a_out,b_out,judge_in,judge_out]")
+        else:
+            if len(tk) != 4:
+                errs.append("tk must have exactly 4 entries [a_out,b_out,judge_in,judge_out]")
+            for i in range(min(len(tk), 4)):
+                v = tk[i]
+                if not _is_int(v):
+                    errs.append(f"tk[{i}] must be an integer")
+                    continue
+                if int(v) < 0:
+                    errs.append(f"tk[{i}] must be >= 0")
+
+        lt = obj.get("lt")
+        if not isinstance(lt, list):
+            errs.append("lt is required and must be an array [a_ms,b_ms,judge_ms]")
+        else:
+            if len(lt) != 3:
+                errs.append("lt must have exactly 3 entries [a_ms,b_ms,judge_ms]")
+            for i in range(min(len(lt), 3)):
+                v = lt[i]
+                if not _is_int(v):
+                    errs.append(f"lt[{i}] must be an integer")
+                    continue
+                if int(v) < 0:
+                    errs.append(f"lt[{i}] must be >= 0")
+        return errs
 
     tokens = obj.get("tokens")
     if not isinstance(tokens, dict):

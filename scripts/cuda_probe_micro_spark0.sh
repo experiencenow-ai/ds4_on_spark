@@ -110,6 +110,18 @@ __global__ void sm121_cxx20_flags_compile_probe(uint32_t *out)
 }
 EOF
 
+cat > \"$REMOTE_DIR\"/cuda_sm121_cluster_dims_attr_compile_probe_micro.cu <<'EOF'
+#include <stdint.h>
+
+#include <cuda_runtime.h>
+
+__global__ void __cluster_dims__(2,1,1) cluster_dims_attr_probe(uint32_t *out)
+{
+	if ( ((int32_t)threadIdx.x) == 0 )
+		out[(int32_t)blockIdx.x] = 0;
+}
+EOF
+
 compile_probe() {
 	tag=\"\$1\"
 	src=\"\$2\"
@@ -131,6 +143,19 @@ compile_probe sm121_arch_sm_121 cuda_sm121_compile_probe_micro.cu -arch=sm_121
 compile_probe sm121_gpuarch_sm_121 cuda_sm121_compile_probe_micro.cu --gpu-architecture=sm_121
 compile_probe sm121_gpuarchcode_sm_121 cuda_sm121_compile_probe_micro.cu --gpu-architecture=compute_121 --gpu-code=sm_121
 compile_probe sm121_cxx20_flags_arch_sm_121 cuda_sm121_cxx20_flags_compile_probe_micro.cu -arch=sm_121 -std=c++20 --extended-lambda --expt-relaxed-constexpr
+
+echo
+echo \"== build: sm_121 variant alias compile probes (best-effort) ==\"
+compile_probe sm121_arch_sm_121a cuda_sm121_compile_probe_micro.cu -arch=sm_121a || true
+compile_probe sm121_arch_sm_121f cuda_sm121_compile_probe_micro.cu -arch=sm_121f || true
+compile_probe sm121_gpuarch_sm_121a cuda_sm121_compile_probe_micro.cu --gpu-architecture=sm_121a || true
+compile_probe sm121_gpuarch_sm_121f cuda_sm121_compile_probe_micro.cu --gpu-architecture=sm_121f || true
+
+echo
+echo \"== build: sm_121 cluster dims attr compile probes (best-effort) ==\"
+compile_probe sm121_cluster_dims_attr_arch_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_micro.cu -arch=sm_121 || true
+compile_probe sm121_cluster_dims_attr_gpuarch_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_micro.cu --gpu-architecture=sm_121 || true
+compile_probe sm121_cluster_dims_attr_gpuarchcode_sm_121 cuda_sm121_cluster_dims_attr_compile_probe_micro.cu --gpu-architecture=compute_121 --gpu-code=sm_121 || true
 
 echo
 echo \"== nvcc: PTX .target probe (best-effort) ==\"
@@ -170,6 +195,67 @@ else
 	head -n 60 \"$REMOTE_DIR\"/bin/gencode_sm121_plus_ptx.err || true
 	exit \"\${rc}\"
 fi
+
+cat > \"$REMOTE_DIR\"/cuda_sm121_arch_list_compile_probe_micro.cu <<'EOF'
+#define STR2(x) #x
+#define STR(x) STR2(x)
+
+#if defined(__CUDA_ARCH_LIST__)
+#pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
+#endif
+
+#if defined(__CUDA_ARCH_SPECIFIC__)
+#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=\" STR(__CUDA_ARCH_SPECIFIC__))
+#endif
+
+#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" STR(__CUDA_ARCH_FAMILY_SPECIFIC__))
+#endif
+
+__global__ void arch_list_compile_probe(void)
+{
+}
+EOF
+
+featureset_macros_probe() {
+	tag=\"\$1\"
+	arch=\"\$2\"
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/bin/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_sm121_arch_list_compile_probe_micro.cu 2>\"$REMOTE_DIR\"/bin/\"\${tag}\".err
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" \"$REMOTE_DIR\"/bin/\"\${tag}\".err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//' | tr -cd '0-9')
+		fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" \"$REMOTE_DIR\"/bin/\"\${tag}\".err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//' | tr -cd '0-9')
+		if [ \"\${spec}\" = \"\" ]; then
+			spec=\"(missing)\"
+		fi
+		if [ \"\${fam}\" = \"\" ]; then
+			fam=\"(missing)\"
+		fi
+		echo \"\${tag}: OK __CUDA_ARCH_SPECIFIC__=\${spec} __CUDA_ARCH_FAMILY_SPECIFIC__=\${fam}\"
+		return 0
+	fi
+	echo \"\${tag}: FAILED rc=\$rc\" >&2
+	head -n 60 \"$REMOTE_DIR\"/bin/\"\${tag}\".err || true
+	return 1
+}
+
+echo
+echo \"== nvcc: feature-set macro probes (best-effort) ==\"
+featureset_macros_probe featureset_sm_121 sm_121 || true
+featureset_macros_probe featureset_sm_121a sm_121a || true
+featureset_macros_probe featureset_sm_121f sm_121f || true
+featureset_macros_probe featureset_compute_121 compute_121 || true
+featureset_macros_probe featureset_compute_121a compute_121a || true
+featureset_macros_probe featureset_compute_121f compute_121f || true
+
+echo
+echo \"== nvcc: PTX .target probe (variants; best-effort) ==\"
+try_ptx_target ptx_target_sm_121a sm_121a || true
+try_ptx_target ptx_target_sm_121f sm_121f || true
+try_ptx_target ptx_target_compute_121a compute_121a || true
+try_ptx_target ptx_target_compute_121f compute_121f || true
 
 echo
 echo \"== build+run: cuda_device_props_tiny (schema=4) ==\"
@@ -299,8 +385,10 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
+	(void)cudaGetLastError();
 	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
+		(void)cudaGetLastError();
 		cuda_arch = 0;
 		if ( cudaMalloc((void **)&d_arch,sizeof(uint32_t)) == cudaSuccess )
 		{
@@ -308,7 +396,11 @@ int main(int argc,char **argv)
 			{
 				write_cuda_arch<<<1,1>>>(d_arch);
 				if ( cudaGetLastError() == cudaSuccess )
+				{
+					(void)cudaDeviceSynchronize();
+					(void)cudaGetLastError();
 					(void)cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost);
+				}
 			}
 			cudaFree(d_arch);
 			d_arch = 0;
@@ -321,8 +413,49 @@ int main(int argc,char **argv)
 }
 EOF
 
+run_best_effort() {
+	name=\"\$1\"
+	shift
+	echo \"== run: \${name} ==\"
+	set +e
+	out=\$(\"\$@\" 2>&1)
+	rc=\$?
+	set -e
+	printf \"%s\\n\" \"\${out}\"
+	if [ \"\${rc}\" -eq 0 ]; then
+		echo
+		return 0
+	fi
+	if printf \"%s\\n\" \"\${out}\" | grep -Eqi \"out of memory|busy or unavailable|device is busy\"; then
+		echo \"(\${name} skipped: GPU OOM/busy rc=\${rc})\" >&2
+		echo
+		return 0
+	fi
+	echo \"(\${name} failed rc=\${rc})\" >&2
+	echo
+	return \"\${rc}\"
+}
+
 \$NVCC -O2 -std=c++17 -arch=native -o \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro \"$REMOTE_DIR\"/cuda_device_props_tiny_micro.cu -lcuda
-\"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro
+run_best_effort cuda_device_props_tiny_micro \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro
+
+echo
+echo \"== build+run: cuda_device_props_tiny (sm_121; best-effort) ==\"
+\$NVCC -O2 -std=c++17 -arch=sm_121 -o \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro_sm121 \"$REMOTE_DIR\"/cuda_device_props_tiny_micro.cu -lcuda
+run_best_effort cuda_device_props_tiny_micro_sm121 \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro_sm121
+
+echo
+echo \"== build+run: cuda_device_props_tiny (compute_121; best-effort) ==\"
+set +e
+\$NVCC -O2 -std=c++17 -arch=compute_121 -o \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro_compute121 \"$REMOTE_DIR\"/cuda_device_props_tiny_micro.cu -lcuda 2>\"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro_compute121.err
+rc=\$?
+set -e
+if [ \"\${rc}\" -eq 0 ]; then
+	run_best_effort cuda_device_props_tiny_micro_compute121 \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro_compute121
+else
+	echo \"cuda_device_props_tiny_micro_compute121: FAILED rc=\${rc}\" >&2
+	head -n 60 \"$REMOTE_DIR\"/bin/cuda_device_props_tiny_micro_compute121.err || true
+fi
 
 echo
 echo \"== build+run: kernel launch tiny minimal (best-effort) ==\"

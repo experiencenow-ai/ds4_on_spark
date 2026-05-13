@@ -231,10 +231,20 @@ def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str
                 parse_bad += 1
 
             t = obj.get("tokens")
+            tk = obj.get("tk")
             for k in tokens:
                 v = None
                 if isinstance(t, dict):
                     v = t.get(k)
+                elif isinstance(tk, list):
+                    if k == "a_out" and len(tk) >= 1:
+                        v = tk[0]
+                    elif k == "b_out" and len(tk) >= 2:
+                        v = tk[1]
+                    elif k == "judge_in" and len(tk) >= 3:
+                        v = tk[2]
+                    elif k == "judge_out" and len(tk) >= 4:
+                        v = tk[3]
                 if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
                     tokens[k].append(int(v))
                     if parse_valid and k == "judge_out":
@@ -245,10 +255,18 @@ def compute_budget(paths: Sequence[str], judge_out_target: int = 64) -> Dict[str
                     tokens_missing[k] += 1
 
             l = obj.get("latency_ms")
+            lt = obj.get("lt")
             for k in latency:
                 v = None
                 if isinstance(l, dict):
                     v = l.get(k)
+                elif isinstance(lt, list):
+                    if k == "a" and len(lt) >= 1:
+                        v = lt[0]
+                    elif k == "b" and len(lt) >= 2:
+                        v = lt[1]
+                    elif k == "judge" and len(lt) >= 3:
+                        v = lt[2]
                 if isinstance(v, int) and not isinstance(v, bool) and int(v) >= 0:
                     latency[k].append(int(v))
                 else:

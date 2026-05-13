@@ -55,6 +55,12 @@ Preflight: `scripts/centaur_spark0_v73_stage.sh` checks SSH reachability by defa
 export STAGE_SKIP_PREFLIGHT=1
 ```
 
+By default, `scripts/centaur_spark0_v73_stage.sh` also runs a safe remote prereq check (`python3`, `python3 -m venv`, `unzip`) via `scripts/centaur_spark_v73_prereqs_check.sh`. To bypass (not recommended), set:
+
+```bash
+export STAGE_SKIP_PREREQS=1
+```
+
 ### One-command run from your Mac (recommended)
 
 This runs the full evidence loop (stage → smoke → validate → fetch):
@@ -65,6 +71,12 @@ sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
 This writes a remote `smoke.log` under `~/centaur-smoke/v73/run/<run_id>/` and fetches a small sanitized bundle back to your Mac under `/private/tmp/centaur-smoke/spark0-v73/<run_id>/` (or `/tmp/...`).
+
+For exact command capture in `smoke.log` (recommended for bug reports), add:
+
+```bash
+export CENTAUR_TRACE=1
+```
 
 If you only want to stage + run the smoke (no validate/fetch), use:
 
@@ -121,12 +133,16 @@ Or to skip install entirely (when re-running in the same venv):
 
 - `CENTAUR_SKIP_PIP=1`
 
+If you re-run without changing `CENTAUR_RUN_ID` (so the same workdir/venv is reused), you can force a clean venv install with:
+
+- `CENTAUR_CLEAR_VENV=1`
+
 ## What the smoke actually runs
 
 See `scripts/centaur_spark0_v73_smoke.sh` for the fully reproducible command sequence.
 Highlights:
 
-- `python3 -m venv "$CENTAUR_WORKDIR/venv"`
+- `python3 -m venv [--clear] "$CENTAUR_WORKDIR/venv"`
 - `pip install -r "$CENTAUR_WORKDIR/centaur_spec_impl_v73/requirements.txt"` (numpy/scipy/scikit-learn)
 - `python3 -m py_compile centaur.py tests/test_centaur.py`
 - `python3 -u centaur.py selftest --json`

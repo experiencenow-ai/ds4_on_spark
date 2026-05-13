@@ -20,6 +20,22 @@ class SchedulerSimTest(unittest.TestCase):
         if SchedulerSimTest._recommendations_quick_cache is None:
             SchedulerSimTest._recommendations_quick_cache = recommendations.run_recommendations(quick=True)
         return SchedulerSimTest._recommendations_quick_cache
+
+    def test_admit_policy_least_oldest_prefers_younger_queue(self) -> None:
+        eq0 = scheduler_sim.ExpertQueue()
+        eq1 = scheduler_sim.ExpertQueue()
+        eq0.lo.append(scheduler_sim.Task(token_id=0, cls=scheduler_sim.LatencyClass.BATCH, enqueue_ms=0.0))
+        experts = [eq0, eq1]
+        candidates = (0, 1)
+        ordered = scheduler_sim._candidate_order_for_layer(
+            "least_oldest",
+            experts,
+            candidates,
+            scores=None,
+            now_ms=100.0,
+            queue_cls=scheduler_sim.LatencyClass.BATCH,
+        )
+        self.assertEqual(list(ordered), [1, 0])
     def test_synthetic_trace_deterministic(self) -> None:
         cfg = scheduler_sim.TraceConfig(
             num_tokens=10,
@@ -88,6 +104,93 @@ class SchedulerSimTest(unittest.TestCase):
         for r in t0:
             self.assertIsNotNone(r.scores)
             self.assertEqual(len(r.scores or ()), 4)
+
+    def test_trace_summary_hints_suggest_cost_scale_and_mtp_meta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                mtp_accept_len=1,
+                kv_tokens=128,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=1.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(1, 0),
+                mtp_accept_len=1,
+                kv_tokens=64,
+            ),
+        ]
+        out = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=0, meta={})
+        hints = out.get("hints")
+        self.assertIsInstance(hints, dict)
+        suggested = hints.get("suggested")
+        self.assertIsInstance(suggested, dict)
+        self.assertEqual(suggested.get("num_experts"), 2)
+        self.assertEqual(suggested.get("trace_derive_cost_scale"), "kv_tokens_p50")
+        notes = hints.get("notes")
+        self.assertIsInstance(notes, list)
+        self.assertTrue(any("MTP draft_len underdetermined" in str(n) for n in notes))
+
+    def test_runtime_trace_ablation_markdown_renders_topk_dump_probe(self) -> None:
+        meta = ds4_topk_dump.Ds4TopkDumpMeta(dump_dir="/tmp/fake", pos=0, topk=2, num_layers=2, tokens_per_layer=4)
+        layers = [
+            [[0, 1], [0, 1], [2, 3], [4, 5]],
+            [[0, 2], [1, 3], [2, 4], [3, 5]],
+        ]
+        probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
+            layers,
+            experts=8,
+            topk=2,
+            batches=(4, 100),
+            trials=4,
+            seed=123,
+            strict_expert_ids=True,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            trace_path = os.path.join(td, "routes.jsonl")
+            ds4_topk_dump.build_scheduler_trace_jsonl_from_ds4_topk_dump(
+                meta,
+                layers,
+                out_path=trace_path,
+                seed=123,
+                sample_mode="sequential",
+                time_mode="dt_ms",
+                arrival_rate_tps=1000.0,
+                batch_size=1,
+                interactive_prob=0.0,
+            )
+            trace_meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(
+                trace_path,
+                time_mode="dt_ms",
+                meta_out=trace_meta,
+                non_route_policy="error",
+                input_format="strict",
+            )
+
+        report = recommendations.run_runtime_trace_mtp_ablation(
+            name="ds4_topk_dump_route_only_ablation",
+            trace=trace,
+            trace_meta=trace_meta,
+            expert_queue_max=16,
+            expert_parallelism=1,
+            service_ms=1.0,
+            starvation_ms=10.0,
+            trace_speedup=1.0,
+            mtp_draft_len=-1,
+        )
+        base_cfg = report.get("base_cfg", {})
+        adaptive_k = base_cfg.get("adaptive_k", {})
+        self.assertEqual(adaptive_k.get("k_min_interactive"), 2)
+        self.assertEqual(adaptive_k.get("k_max_interactive"), 2)
+        self.assertEqual(adaptive_k.get("k_min_batch"), 2)
+        self.assertEqual(adaptive_k.get("k_max_batch"), 2)
+        report["topk_dump_probe"] = {"present": True, "note": "route-only", "summary": probe}
+        md = recommendations.format_runtime_trace_ablation_markdown(report)
+        self.assertIn("topk_dump_probe: present", md)
+        self.assertTrue(("b4 " in md) or ("b100 " in md))
 
     def test_synthetic_trace_multi_layer_score_mode_emits_layer_scores_only(self) -> None:
         cfg = scheduler_sim.TraceConfig(
@@ -270,6 +373,52 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIn("# Scheduler Simulator Runtime Trace Report", md)
             self.assertIn("- mtp: present", md)
             self.assertIn("## Results (arrival_units=steps)", md)
+            self.assertIn("pending_p95", md)
+            self.assertIn("starv_frac", md)
+            self.assertIn("starv_p95_ms", md)
+            self.assertIn("pending_lo_p95", md)
+        finally:
+            if tmp_path != "" and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    def test_runtime_trace_ablation_markdown_includes_trace_decode_and_batchsize_columns(self) -> None:
+        tmp_path = ""
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            tmp_path = f.name
+            f.write(
+                json.dumps(
+                    {
+                        "t_ms": 0.0,
+                        "cls": "batch",
+                        "candidates": [0],
+                        "accepted_mtp": 1,
+                        "rejected_mtp": 0,
+                        "decode_ms": 1.0,
+                        "expert_batch_size": 4,
+                    }
+                )
+            )
+            f.write("\n")
+        try:
+            meta: dict[str, object] = {}
+            trace = scheduler_sim.load_trace_jsonl(tmp_path, meta_out=meta)
+            out = recommendations.run_runtime_trace_mtp_ablation(
+                name="trace_columns_smoke",
+                trace=trace,
+                trace_meta=meta,
+                expert_queue_max=8,
+                expert_parallelism=1,
+                service_ms=1.0,
+                batch_max_batch=4,
+                batch_wait_batch_ms=1.0,
+                starvation_ms=50.0,
+                mtp_draft_len=-1,
+            )
+            md = recommendations.format_runtime_trace_ablation_markdown(out)
+            self.assertIn("trace_dec_p95_b_ms", md)
+            self.assertIn("dec_err_p95_b_ms", md)
+            self.assertIn("svc_bsz_p95_b", md)
+            self.assertIn("trace_bsz_p95_b", md)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
@@ -337,6 +486,61 @@ class SchedulerSimTest(unittest.TestCase):
                 lines = [json.loads(line) for line in f if line.strip() != ""]
             self.assertEqual(lines[1].get("dt_ms"), 0.0)
             self.assertEqual(lines[2].get("dt_ms"), 0.0)
+        finally:
+            tmp_dir.cleanup()
+
+    def test_ds4_topk_dump_expert_queue_probe_summary_smoke(self) -> None:
+        from array import array
+
+        tmp_dir = tempfile.TemporaryDirectory()
+        try:
+            dump_dir = tmp_dir.name
+
+            topk = 2
+            rows_layer0 = [
+                [0, 1],
+                [2, 3],
+                [4, 5],
+            ]
+            rows_layer1 = [
+                [10, 11],
+                [12, 13],
+                [14, 15],
+            ]
+            for layer, rows in [(0, rows_layer0), (1, rows_layer1)]:
+                data = array("i")
+                for row in rows:
+                    data.extend(row)
+                path = os.path.join(dump_dir, f"ffn_moe_topk-{layer}_pos0.i32")
+                with open(path, "wb") as f:
+                    f.write(data.tobytes())
+
+            _meta, layers = ds4_topk_dump.load_ds4_ffn_moe_topk_dump_layers(dump_dir, pos=0, topk=topk)
+            probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
+                layers,
+                experts=16,
+                topk=topk,
+                batches=(3,),
+                trials=1,
+                seed=123,
+                strict_expert_ids=True,
+            )
+            self.assertEqual(probe.get("tokens_per_layer"), 3)
+            self.assertEqual(probe.get("num_layers"), 2)
+            self.assertEqual(probe.get("experts"), 16)
+            self.assertEqual(probe.get("topk"), topk)
+            self.assertEqual(probe.get("trials"), 1)
+            self.assertEqual(probe.get("invalid_expert_ids"), 0)
+
+            batches = probe.get("batches")
+            self.assertIsInstance(batches, dict)
+            b3 = (batches or {}).get("3") if isinstance(batches, dict) else None
+            self.assertIsInstance(b3, dict)
+            active = (b3 or {}).get("active") if isinstance(b3, dict) else None
+            self.assertIsInstance(active, dict)
+            self.assertEqual((active or {}).get("median"), 6.0)
+            self.assertEqual((active or {}).get("min"), 6.0)
+            self.assertEqual((active or {}).get("max"), 6.0)
         finally:
             tmp_dir.cleanup()
 
@@ -4381,6 +4585,18 @@ class SchedulerSimTest(unittest.TestCase):
         stop = row0["mtp_stop_at_reject"]
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
 
+    def test_recommendations_quick_mtp_draft_queue_cls_emits_variants(self) -> None:
+        out = self._recommendations_quick()
+        scenario = out["scenarios"]["mtp_draft_queue_cls"]
+        self.assertGreater(float(scenario.get("expected_accept_len", 0.0)), 0.0)
+        variants = scenario["results"]["variants"]
+        self.assertIn("draft_queue_inherit", variants)
+        self.assertIn("draft_queue_batch", variants)
+        self.assertIn("draft_queue_interactive", variants)
+        inherit_sum = variants["draft_queue_inherit"]["summary"]
+        self.assertIn("task_queue_wait_ms_p95_mtp_verify", inherit_sum)
+        self.assertIn("task_queue_wait_ms_p95_mtp_draft", inherit_sum)
+
     def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
         out = self._recommendations_quick()
         scenario = out["scenarios"]["backpressure_zero_admit_policy"]
@@ -4734,6 +4950,8 @@ class SchedulerSimTest(unittest.TestCase):
         )
         out = trace_sweep.run_trace_sweeps(trace, base_cfg)
         self.assertIn("mtp_attempt_policy", out.get("scenarios", {}))
+        variants = out["scenarios"]["mtp_attempt_policy"]["results"]["variants"]
+        self.assertIn("mtp_trace", variants)
 
     def test_trace_sweep_includes_mtp_accept_prob_sweep_when_trace_omits_accept_len(self) -> None:
         from sim.scheduler import scheduler_sim

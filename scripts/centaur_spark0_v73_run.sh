@@ -15,6 +15,7 @@ Environment:
   SSH_OPTS           Optional ssh options override (default includes BatchMode + temp known_hosts)
   CENTAUR_PIP_ARGS   Optional extra args for remote pip install (e.g. "--no-index --find-links=/path/to/wheels")
   CENTAUR_SKIP_PIP   Set to 1 to skip remote pip install (assumes deps already present in venv)
+  CENTAUR_CLEAR_VENV Set to 1 to pass `--clear` when creating the venv
   CENTAUR_RUN_ID     Optional remote run id (default: generated UTC timestamp)
   CENTAUR_WORKDIR    Optional remote workdir override (default: ~/centaur-smoke/v73/run/$CENTAUR_RUN_ID)
   CENTAUR_TRACE      Set to 1 to enable remote shell tracing (prints exact commands)
@@ -110,6 +111,9 @@ if [ "${CENTAUR_PIP_ARGS:-}" != "" ]; then
 fi
 if [ "${CENTAUR_SKIP_PIP:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_SKIP_PIP=\"${CENTAUR_SKIP_PIP}\""
+fi
+if [ "${CENTAUR_CLEAR_VENV:-}" != "" ]; then
+	ssh_cmd="$ssh_cmd && export CENTAUR_CLEAR_VENV=\"${CENTAUR_CLEAR_VENV}\""
 fi
 if [ "${CENTAUR_WORKDIR:-}" != "" ]; then
 	ssh_cmd="$ssh_cmd && export CENTAUR_WORKDIR=\"${CENTAUR_WORKDIR}\""

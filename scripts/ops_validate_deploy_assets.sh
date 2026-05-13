@@ -48,10 +48,13 @@ need_file "deploy/tmpfiles.d/ds4.conf"
 
 need_file "deploy/systemd/ds4@.service"
 need_file "deploy/systemd/ds4-strict@.service"
+need_file "deploy/systemd/ds4-tp2-strict@.service"
 need_file "deploy/systemd/ds4-tp3-strict@.service"
 need_file "deploy/systemd/ds4-tp4-strict@.service"
 need_file "deploy/systemd/ds4-preflight@.service"
 need_file "deploy/systemd/ds4-preflight-strict@.service"
+need_file "deploy/systemd/ds4-preflight-tp23@.service"
+need_file "deploy/systemd/ds4-preflight-tp23-strict@.service"
 need_file "deploy/systemd/ds4-preflight-tp3@.service"
 need_file "deploy/systemd/ds4-preflight-tp3-strict@.service"
 need_file "deploy/systemd/ds4-preflight-tp4@.service"
@@ -68,12 +71,20 @@ need_file "deploy/systemd/ds4-support-bundle@.timer"
 need_file "deploy/systemd/spark-master@.service"
 need_file "deploy/systemd/spark-worker@.service"
 
+need_file "deploy/systemd-dropins/README.md"
+need_file "deploy/systemd-dropins/ds4@.service.d/20-timeouts.conf.example"
+need_file "deploy/systemd-dropins/ds4@.service.d/30-restart-policy.conf.example"
+need_file "deploy/systemd-dropins/ds4@.service.d/40-execstart-override.conf.example"
+
 need_file "deploy/systemd-user/ds4@.service"
 need_file "deploy/systemd-user/ds4-strict@.service"
+need_file "deploy/systemd-user/ds4-tp2-strict@.service"
 need_file "deploy/systemd-user/ds4-tp3-strict@.service"
 need_file "deploy/systemd-user/ds4-tp4-strict@.service"
 need_file "deploy/systemd-user/ds4-preflight@.service"
 need_file "deploy/systemd-user/ds4-preflight-strict@.service"
+need_file "deploy/systemd-user/ds4-preflight-tp23@.service"
+need_file "deploy/systemd-user/ds4-preflight-tp23-strict@.service"
 need_file "deploy/systemd-user/ds4-preflight-tp3@.service"
 need_file "deploy/systemd-user/ds4-preflight-tp3-strict@.service"
 need_file "deploy/systemd-user/ds4-preflight-tp4@.service"
@@ -89,6 +100,10 @@ need_file "deploy/systemd-user/ds4-support-bundle@.timer"
 
 need_file "deploy/systemd-user/spark-master@.service"
 need_file "deploy/systemd-user/spark-worker@.service"
+
+need_file "deploy/systemd-user-dropins/README.md"
+need_file "deploy/systemd-user-dropins/ds4@.service.d/20-timeouts.conf.example"
+need_file "deploy/systemd-user-dropins/ds4@.service.d/40-execstart-override.conf.example"
 
 need_file "deploy/config/ds4.env.example"
 need_file "deploy/config/ds4-spark0.env.example"
@@ -123,6 +138,7 @@ need_file "deploy/config/ssh_config.ds4.spark01.example"
 need_file "deploy/config/ssh_config.ds4.spark012.example"
 need_file "deploy/config/ssh_config.ds4.spark_ring.example"
 need_file "deploy/config/sysctl.ds4.conf.example"
+need_file "deploy/config/nftables.ds4.spark012.nft.example"
 
 need_file "scripts/ops_stage_deploy_assets.sh"
 need_file "scripts/ops_stage_spark0_spark1.sh"
@@ -131,6 +147,7 @@ need_file "scripts/ops_stage_spark_ring.sh"
 need_file "scripts/ops_ds4_env_check.sh"
 need_file "scripts/ops_ds4_config_check.sh"
 need_file "scripts/ops_tp2_readiness.sh"
+need_file "scripts/ops_tp23_readiness.sh"
 need_file "scripts/ops_tp3_readiness.sh"
 need_file "scripts/ops_tp4_readiness.sh"
 need_file "scripts/ops_spark_standalone_check.sh"
@@ -156,6 +173,7 @@ sh -n scripts/ops_stage_spark_ring.sh
 sh -n scripts/ops_ds4_env_check.sh
 sh -n scripts/ops_ds4_config_check.sh
 sh -n scripts/ops_tp2_readiness.sh
+sh -n scripts/ops_tp23_readiness.sh
 sh -n scripts/ops_tp3_readiness.sh
 sh -n scripts/ops_tp4_readiness.sh
 sh -n scripts/ops_spark_standalone_check.sh

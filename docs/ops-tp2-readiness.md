@@ -5,6 +5,8 @@ TP=2 here means dual-Spark distributed execution (Spark0 + Spark1).
 These checks are designed to be **non-destructive** and safe to run repeatedly.
 They do not change networking, system services, or GPU settings.
 
+If you are in a TP=2 -> TP=3 transition period and want a single “run both” gate, see: `docs/ops-tp23-readiness.md`.
+
 ## Preflight Checklist
 
 On both Sparks:
@@ -122,6 +124,20 @@ To gate a TP=2 run on required inputs via systemd, use the strict variant:
 
 ```bash
 sudo systemctl start ds4-preflight-strict@spark0.service
+```
+
+To gate DS4 start itself on strict preflight, use the strict-start unit:
+
+```bash
+sudo systemctl enable ds4-tp2-strict@spark0.service
+sudo systemctl start  ds4-tp2-strict@spark0.service
+```
+
+Legacy alias name retained for compatibility:
+
+```bash
+sudo systemctl enable ds4-strict@spark0.service
+sudo systemctl start  ds4-strict@spark0.service
 ```
 
 If strict preflight fails, it triggers `ds4-support-bundle@%i.service` (when installed) to capture a non-destructive snapshot for debugging. See `docs/ops-support-bundle.md`.

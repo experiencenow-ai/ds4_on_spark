@@ -159,6 +159,7 @@ def run_trace_sweeps(
         ("admit_ordered", {"admit_policy": "ordered"}),
         ("admit_least_pending", {"admit_policy": "least_pending"}),
         ("admit_least_pending_work", {"admit_policy": "least_pending_work"}),
+        ("admit_least_oldest", {"admit_policy": "least_oldest"}),
     ]
     if _trace_has_full_scores(trace_in):
         variants_admit_policy.append(("admit_score_desc", {"admit_policy": "score_desc"}))
@@ -298,6 +299,7 @@ def run_trace_sweeps(
         variants_mtp: List[Tuple[str, Dict[str, object]]] = [
             ("mtp_full", {"mtp_draft_attempt_policy": "full"}),
             ("mtp_stop_at_reject", {"mtp_draft_attempt_policy": "stop_at_reject"}),
+            ("mtp_trace", {"mtp_draft_attempt_policy": "trace"}),
         ]
         scenarios["mtp_attempt_policy"] = {
             "name": "mtp_attempt_policy",
@@ -363,7 +365,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--k-signal", type=str, default="global", choices=("global", "candidates", "class", "global_mean", "candidates_mean", "class_mean"))
     p.add_argument("--pending-units", type=str, default="tasks", choices=("tasks", "work"))
     p.add_argument("--k-scope", type=str, default="token", choices=("token", "layer"))
-    p.add_argument("--admit-policy", type=str, default="ordered", choices=("ordered", "least_pending", "least_pending_work", "score_desc"))
+    p.add_argument("--admit-policy", type=str, default="ordered", choices=("ordered", "least_pending", "least_pending_work", "least_oldest", "score_desc"))
     p.add_argument("--sla-interactive-ms", type=float, default=0.0)
     p.add_argument("--sla-batch-ms", type=float, default=0.0)
     p.add_argument("--sim-seed", type=int, default=1)
@@ -373,7 +375,13 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--mtp-accept-decay", type=float, default=1.0)
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25)
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0)
-    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", choices=("full", "stop_at_reject"))
+    p.add_argument(
+        "--mtp-draft-attempt-policy",
+        type=str,
+        default="full",
+        choices=("full", "stop_at_reject", "trace"),
+        help="MTP: draft compute policy: full, stop_at_reject, or trace (use accepted_mtp+rejected_mtp when present).",
+    )
 
     p.add_argument("--batch-max-interactive", type=int, default=1)
     p.add_argument("--batch-max-batch", type=int, default=1)

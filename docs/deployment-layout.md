@@ -73,6 +73,8 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 # From your Mac:
 rsync -av deploy/systemd/ <user>@spark0.local:/tmp/ds4-systemd/
 rsync -av deploy/config/  <user>@spark0.local:/tmp/ds4-config/
+rsync -av deploy/systemd-dropins/ <user>@spark0.local:/tmp/ds4-systemd-dropins/
+rsync -av deploy/systemd-user-dropins/ <user>@spark0.local:/tmp/ds4-systemd-user-dropins/
 rsync -av deploy/sysusers.d/ <user>@spark0.local:/tmp/ds4-sysusers/
 rsync -av deploy/tmpfiles.d/ <user>@spark0.local:/tmp/ds4-tmpfiles/
 ```
@@ -121,4 +123,5 @@ The systemd unit in `deploy/systemd/ds4@.service` expects:
 - Optional periodic preflight systemd timers exist:
   - `deploy/systemd/ds4-preflight@.timer` (non-destructive)
   - `deploy/systemd/ds4-preflight-strict@.timer` (fails non-zero on missing/invalid TP=2 inputs)
-- Optional strict start template exists (requires strict preflight before start): `deploy/systemd/ds4-strict@.service`.
+- Optional strict start template exists (requires strict preflight before start): `deploy/systemd/ds4-tp2-strict@.service`.
+- Legacy strict-start name retained for compatibility: `deploy/systemd/ds4-strict@.service`.

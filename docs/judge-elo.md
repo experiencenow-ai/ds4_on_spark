@@ -2,6 +2,8 @@
 
 This track defines a compact pairwise judge contract intended for slow/high-quality DSv4 runs, plus an offline deterministic ELO updater that produces leaderboards consumable by the baseline runtime loop.
 
+If you only need the **schema contract** (decision + record v5 + outputs), start with `docs/judge-elo-schema.md`.
+
 Goals:
 - DSv4 is used as a **verifier** (compact, structured output), not a verbose author.
 - Judge quality (pairwise preference) is tracked separately from model speed (tok/s).
@@ -9,38 +11,42 @@ Goals:
 
 ## Compact Pairwise Judge Output (decision object)
 
-DSv4 should emit **exactly one JSON object** (minified; no prose) with:
+DSv4 should emit **exactly one minified JSON object on one line** (no prose/markdown).
 
-- `winner`: `"A" | "B" | "tie"`
-- `margin`: integer `0..3` (strength of preference; `0` == near-tie)
-- `score_a`: integer `0..10`
-- `score_b`: integer `0..10`
-- `reason`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
-- `train_hint`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
-- `reason`/`train_hint` should also be kept short in characters (schemas cap at 200 chars).
-- `tags`: array of short strings (0..8; prefer ≤ 3); e.g. `["format","factuality"]`
+Preferred (compact keys; smallest judge_out):
+
+```json
+{"w":"A|B|tie","m":0,"sa":0,"sb":0,"r":"...","h":"","t":[]}
+```
+
+Fields:
+- `w`: `"A" | "B" | "tie"`
+- `m`: integer `0..3` (strength of preference; `0` == near-tie; tie ⇒ `m=0`)
+- `sa`, `sb`: integers `0..10` (numeric scores for A/B)
+- `r`: string, **non-empty**, **≤ 18 words** (prefer ≤ 12), **single-line**
+- `h`: string, **≤ 18 words** (prefer ≤ 12; actionable improvement hint for the loser; empty allowed), **single-line**
+- `t`: array of short strings (0..3); e.g. `["format","factuality"]`
 - No extra keys: the decision validator rejects unknown fields.
-- Strict-mode consistency rule: keep `margin` consistent with `abs(score_a-score_b)`:
-  - diff=1 ⇒ margin ∈ {0,1}
-  - diff=2 ⇒ margin ∈ {1,2}
-  - diff=3 ⇒ margin = 2
-  - diff≥4 ⇒ margin = 3
-  - strict mode also enforces compact tags: `len(tags) <= 3`
+- Strict-mode consistency rule: keep `m` consistent with `abs(sa-sb)`:
+  - diff=1 ⇒ `m` ∈ {0,1}
+  - diff=2 ⇒ `m` ∈ {1,2}
+  - diff=3 ⇒ `m` = 2
+  - diff≥4 ⇒ `m` = 3
+  - strict mode also enforces that non-tie winners use `sa!=sb`
 
 This object is what the judge model returns. A harness may then wrap it into a JSONL record by attaching metadata (models, tokens, latency, etc.).
 
 Machine-readable schema:
-- `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v1.schema.json`
-- Optional compact-key variant (to shave judge_out tokens):
-  - `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v2.schema.json` with keys `w,m,sa,sb,r,h,t`
-  - `scripts/pairwise_judge_validate_decision.py` and `scripts/pairwise_judge_record.py` accept v2 and canonicalize to v1 keys in outputs
+- Preferred: `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v2.schema.json` with keys `w,m,sa,sb,r,h,t`
+- Legacy (more verbose keys): `fixtures/judge-elo/schemas/ds4_pairwise_judge_decision_v1.schema.json`
+- `scripts/pairwise_judge_validate_decision.py` and `scripts/pairwise_judge_record.py` accept both and canonicalize to v1 keys internally
 
 ## Judge Record JSONL (envelope)
 
 The offline tools in `scripts/judge_elo_*.py` expect one JSON object per line with:
 
 Required fields:
-- `schema`: `"ds4_pairwise_judge_record_v1" | "ds4_pairwise_judge_record_v2" | "ds4_pairwise_judge_record_v3" | "ds4_pairwise_judge_record_v4"`
+- `schema`: `"ds4_pairwise_judge_record_v1" | "ds4_pairwise_judge_record_v2" | "ds4_pairwise_judge_record_v3" | "ds4_pairwise_judge_record_v4" | "ds4_pairwise_judge_record_v5"`
 - `pair_id`: stable identifier for this comparison
 - `model_a`, `model_b`: model identifiers (strings)
 - `parse_valid`: boolean (whether the judge decision JSON was parsed successfully)
@@ -48,9 +54,14 @@ Required fields:
 
 If `parse_valid` is `true`, these must also be present:
 - For record schemas v1/v2/v3: `winner`, `margin`, `score_a`, `score_b`, `reason`, `train_hint`, `tags`
-- For record schema v4 (compact decision keys): `w`, `m`, `sa`, `sb`, `r`, `h`, `t`
+- For record schemas v4/v5 (compact decision keys): `w`, `m`, `sa`, `sb`, `r`, `h`, `t`
 
-Optional but recommended (for speed/quality separation and budgeting):
+Preferred schema (smallest JSONL; strict-by-schema):
+- `schema="ds4_pairwise_judge_record_v5"`: compact decision keys `w/m/sa/sb/r/h/t` plus compact budget arrays:
+  - `tk`: `[a_out, b_out, judge_in, judge_out]` (all required; ints >= 0)
+  - `lt`: `[a_ms, b_ms, judge_ms]` (all required; ints >= 0)
+
+Optional but recommended in legacy schemas (for speed/quality separation and budgeting):
 - `tokens`: `{ "a_out": int, "b_out": int, "judge_in": int, "judge_out": int }`
 - `latency_ms`: `{ "a": int, "b": int, "judge": int }`
 - In `schema="ds4_pairwise_judge_record_v1"`, these may be omitted or partially populated; strict validation requires all keys.
@@ -58,6 +69,7 @@ Optional but recommended (for speed/quality separation and budgeting):
 - In `schema="ds4_pairwise_judge_record_v4"`, these are required (all keys required).
 - `schema="ds4_pairwise_judge_record_v3"` is strict-by-schema: it also enforces strict decision consistency (margin/score mapping + `tags<=3`) via `scripts/judge_elo_schema.py`.
 - `schema="ds4_pairwise_judge_record_v4"` is strict-by-schema and stores **compact decision keys** (`w,m,sa,sb,r,h,t`) to reduce JSONL size; offline tools accept v4 and canonicalize it internally.
+- `schema="ds4_pairwise_judge_record_v5"` is strict-by-schema and stores **compact decision keys** plus compact budget arrays (`tk`/`lt`) to further reduce JSONL size.
 - `judge_model`: string
 - `task_id`, `sample_id`: strings
 - `raw`: original judge text (when `parse_valid=false`, keep this short)
@@ -76,6 +88,7 @@ Machine-readable schema:
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v2.schema.json` (tokens/latency required)
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v3.schema.json` (tokens/latency required; tags<=3)
 - `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v4.schema.json` (compact decision keys; tokens/latency required; tags<=3)
+- `fixtures/judge-elo/schemas/ds4_pairwise_judge_record_v5.schema.json` (compact decision keys; tk/lt required; tags<=3)
 
 ## Updater Output Schemas
 
@@ -107,7 +120,7 @@ Use a strict system instruction:
 
 The reference prompt builder lives at `scripts/pairwise_judge_prompt.py`.
 It supports `--judge-out-target` (default 64) to keep prompt budgeting aligned with `scripts/judge_elo_update.py --judge-out-target`.
-To reduce judge output tokens further, use `--decision-version v2` to request the compact-key decision object (`w,m,sa,sb,r,h,t`) and let the offline tools canonicalize it.
+By default it uses `--decision-version v2` to request the compact-key decision object (`w,m,sa,sb,r,h,t`) and let the offline tools canonicalize it; use `--decision-version v1` to request verbose keys.
 For lower judge **input** token overhead, use `--schema-version v2` (default; it avoids embedding the JSON shape in the user message).
 Prompt schema v2 also includes the strict margin/score consistency + `tags<=3` constraints in the system message to reduce `parse_valid=false` rates under strict validation.
 For harnesses, use `--format json` to emit a single JSON object with `{system,user}` fields.
@@ -151,10 +164,34 @@ To emit `schema="ds4_pairwise_judge_record_v4"` (compact decision keys; tokens/l
 python3 scripts/pairwise_judge_record.py --record-schema v4 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
 ```
 
+To emit `schema="ds4_pairwise_judge_record_v5"` (compact decision keys; compact budget arrays `tk`/`lt`; strict-by-schema), use `--record-schema v5`:
+
+```bash
+python3 scripts/pairwise_judge_record.py --record-schema v5 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
+```
+
+If your harness already tracks compact budget arrays, you can pass them directly:
+
+```bash
+python3 scripts/pairwise_judge_record.py --record-schema v5 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tk "[<a_out>,<b_out>,<judge_in>,<judge_out>]" --lt "[<a_ms>,<b_ms>,<judge_ms>]"
+```
+
 To enforce strict margin/score consistency + compact tags while wrapping for schema v1/v2, add `--strict`:
 
 ```bash
 python3 scripts/pairwise_judge_record.py --strict --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
+```
+
+To compact existing judge record JSONL into the strict compact record schema v5 (decision keys `w/m/sa/sb/r/h/t` and budget arrays `tk/lt`), use:
+
+```bash
+python3 scripts/judge_elo_compact_records.py --in <records.jsonl> --out <records_v5.jsonl>
+```
+
+If you need best-effort compaction (skip invalid/uncompactable lines), add `--skip-invalid` and monitor stderr for `records_skipped`:
+
+```bash
+python3 scripts/judge_elo_compact_records.py --skip-invalid --in <records.jsonl> --out <records_v5.jsonl>
 ```
 
 ## Offline ELO
@@ -187,6 +224,12 @@ For a CSV-first workflow, use `scripts/judge_elo_join_quality.py` to attach `qua
 
 ```bash
 python3 scripts/judge_elo_update.py --in <judge_records.jsonl> --out-dir <elo_out_dir> --strict
-python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
-python3 scripts/model_quality_speed_score.py --in <baseline_with_quality.csv> --out-md <scored.md>
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --bundle <elo_out_dir>/bundle.json --out <baseline_with_quality.csv>
+python3 scripts/model_quality_speed_score.py <baseline_with_quality.csv> > <scored.md>
+```
+
+If the baseline CSV includes models that are not yet present in the judge-ELO quality map, you can optionally fill them with a neutral default (e.g. 50) so downstream scoring has a value:
+
+```bash
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --bundle <elo_out_dir>/bundle.json --missing-default 50 --missing-quality-source judge_elo_default_v1 --out <baseline_with_quality.csv>
 ```

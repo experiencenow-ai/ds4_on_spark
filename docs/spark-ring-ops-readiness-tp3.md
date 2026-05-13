@@ -76,7 +76,7 @@ Ports: `docs/ops-spark012-network-ports.md`.
 
 For each host’s env (`/etc/ds4/ds4-<instance>.env` or user equivalent):
 
-- **READY**: `DS4_WORLD_SIZE=3`, `DS4_RANK=0/1/2`, and a rank-ordered `DS4_RING_HOSTS` list is present and consistent across all hosts.
+- **READY**: `DS4_WORLD_SIZE=3`, `DS4_RANK=0/1/2`, and a rank-ordered `DS4_RING_HOSTS` list is present and consistent across all hosts; `DS4_MASTER_ADDR` resolves to the same host as `DS4_RING_HOSTS` entry 0 (Spark0).
 - **BLOCKED**: any mismatch in `DS4_RING_HOSTS`, duplicate ranks, or world-size mismatch.
 
 If you staged assets, you can audit staged env consistency (safe):

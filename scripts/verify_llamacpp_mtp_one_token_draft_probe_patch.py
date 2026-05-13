@@ -84,18 +84,24 @@ def main() -> None:
 	joined = "\n".join(added) + "\n"
 	if expected_commit is not None:
 		runtime_lines = [ln for ln in added if "runtime_commit" in ln]
-		if len(runtime_lines) != 1:
-			_die(f"expected exactly one runtime_commit printf line, got {len(runtime_lines)}")
-		m = re.search(r',\s*"([0-9a-f]{7,})"\);', runtime_lines[0])
-		if not m:
-			_die(f"failed to parse runtime_commit from line: {runtime_lines[0]!r}")
-		actual_commit = m.group(1)
-		if actual_commit != expected_commit:
-			_die(
-				f"runtime_commit mismatch: expected {expected_commit} (from filename), got {actual_commit}"
-			)
-	if "TODO: implement gamma=1 MTP draft compute" not in joined:
-		_die("one-token probe cpp hunk missing expected TODO marker (patch likely truncated)")
+		if len(runtime_lines) < 1:
+			_die("expected at least one runtime_commit printf line, got 0")
+		for line in runtime_lines:
+			m = re.search(r',\s*"([0-9a-f]{7,})"\);', line)
+			if not m:
+				_die(f"failed to parse runtime_commit from line: {line!r}")
+			actual_commit = m.group(1)
+			if actual_commit != expected_commit:
+				_die(
+					f"runtime_commit mismatch: expected {expected_commit} (from filename), got {actual_commit}"
+				)
+	if (
+		"TODO: implement gamma=1 MTP draft compute" not in joined
+		and "compute_mtp_gamma1_block" not in joined
+	):
+		_die("one-token probe cpp hunk missing expected TODO or gamma1 implementation marker (patch likely truncated)")
+	if "compute_mtp_gamma1_block" in joined and "mtp_block_out_hc_fnv64" not in joined:
+		_die("one-token probe gamma1 implementation missing mtp_block_out_hc fingerprint output")
 
 	required_capture_keys = [
 		"mtp_enorm_fnv64",

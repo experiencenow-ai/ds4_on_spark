@@ -1,0 +1,148 @@
+{
+  "budget": {
+    "judge_out_budget": {
+      "count_le_target": 4,
+      "count_le_target_parse_valid_true": 3,
+      "count_with_tokens": 4,
+      "count_with_tokens_parse_valid_true": 3,
+      "fraction_le_target": 1.0,
+      "fraction_le_target_parse_valid_true": 1.0,
+      "target_tokens": 64
+    },
+    "latency_ms": {
+      "a": {
+        "count": 4.0,
+        "max": 920.0,
+        "mean": 902.5,
+        "min": 880.0,
+        "missing": 0.0,
+        "p50": 900.0,
+        "p90": 910.0,
+        "present_fraction": 1.0
+      },
+      "b": {
+        "count": 4.0,
+        "max": 1300.0,
+        "mean": 1108.75,
+        "min": 915.0,
+        "missing": 0.0,
+        "p50": 1100.0,
+        "p90": 1120.0,
+        "present_fraction": 1.0
+      },
+      "judge": {
+        "count": 4.0,
+        "max": 5400.0,
+        "mean": 5212.5,
+        "min": 5100.0,
+        "missing": 0.0,
+        "p50": 5150.0,
+        "p90": 5200.0,
+        "present_fraction": 1.0
+      }
+    },
+    "parse_valid_false": 1,
+    "parse_valid_true": 3,
+    "records": 4,
+    "schema": "ds4_judge_elo_budget_v1",
+    "tokens": {
+      "a_out": {
+        "count": 4.0,
+        "max": 140.0,
+        "mean": 129.5,
+        "min": 120.0,
+        "missing": 0.0,
+        "p50": 128.0,
+        "p90": 130.0,
+        "present_fraction": 1.0
+      },
+      "b_out": {
+        "count": 4.0,
+        "max": 160.0,
+        "mean": 145.5,
+        "min": 132.0,
+        "missing": 0.0,
+        "p50": 140.0,
+        "p90": 150.0,
+        "present_fraction": 1.0
+      },
+      "judge_in": {
+        "count": 4.0,
+        "max": 920.0,
+        "mean": 901.25,
+        "min": 880.0,
+        "missing": 0.0,
+        "p50": 900.0,
+        "p90": 905.0,
+        "present_fraction": 1.0
+      },
+      "judge_out": {
+        "count": 4.0,
+        "max": 44.0,
+        "mean": 34.25,
+        "min": 12.0,
+        "missing": 0.0,
+        "p50": 40.0,
+        "p90": 41.0,
+        "present_fraction": 1.0
+      }
+    }
+  },
+  "leaderboard": [
+    {
+      "elo": 1008.736306793522,
+      "games": 2,
+      "losses": 1,
+      "model": "model_slow",
+      "quality_score": 51.25699070111322,
+      "quality_source": "judge_elo_logistic_v1",
+      "ties": 0,
+      "wins": 1
+    },
+    {
+      "elo": 999.899440743911,
+      "games": 1,
+      "losses": 0,
+      "model": "model_mid",
+      "quality_score": 49.98552836015203,
+      "quality_source": "judge_elo_logistic_v1",
+      "ties": 1,
+      "wins": 0
+    },
+    {
+      "elo": 991.364252462567,
+      "games": 3,
+      "losses": 1,
+      "model": "model_fast",
+      "quality_score": 48.75747189774406,
+      "quality_source": "judge_elo_logistic_v1",
+      "ties": 1,
+      "wins": 1
+    }
+  ],
+  "meta": {
+    "inputs": [
+      "fixtures/judge-elo/sample_judge_records_v5.jsonl"
+    ],
+    "judge_out_target_tokens": 64,
+    "k": 32.0,
+    "matches_skipped_invalid_schema": 0,
+    "matches_used": 3,
+    "parse_valid_false": 1,
+    "parse_valid_true": 3,
+    "quality_mode": "logistic",
+    "quality_source": "judge_elo_logistic_v1",
+    "records": 4,
+    "scale": 400.0,
+    "schema": "ds4_judge_elo_meta_v1",
+    "sort_by_pair_id": false,
+    "strict": true,
+    "unique_models": 3
+  },
+  "quality_map": {
+    "model_fast": 48.75747189774406,
+    "model_mid": 49.98552836015203,
+    "model_slow": 51.25699070111322
+  },
+  "schema": "ds4_judge_elo_bundle_v1"
+}

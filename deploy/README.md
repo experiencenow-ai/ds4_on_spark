@@ -20,6 +20,7 @@ edit host-specific values, then enable services with `systemctl`.
 `deploy/systemd/` contains systemd templates:
 
 - Quick pointers: `deploy/systemd/README.md` and `deploy/systemd-user/README.md`.
+- Optional drop-in examples (overrides without editing base unit files): `deploy/systemd-dropins/README.md` and `deploy/systemd-user-dropins/README.md`.
 
 - `ds4@.service` expects:
   - an optional shared env file at `/etc/ds4/ds4.env`
@@ -27,11 +28,15 @@ edit host-specific values, then enable services with `systemctl`.
   - a config file at `/etc/ds4/ds4-%i.conf` (key=value; see `src/ds4_config.c`)
   - safe helper scripts at `/opt/ds4/scripts/` (staged by `scripts/ops_stage_deploy_assets.sh`)
   - `ExecStartPre` validates `ds4.env` (when present) and `ds4-%i.env`
-- Optional: `ds4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails).
+- Optional: `ds4-tp2-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict TP=2 preflight fails).
+- Legacy name: `ds4-strict@.service` (same behavior).
 - Optional: `ds4-tp3-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp3-strict@%i.service` before start (strict TP=3 gating).
 - Optional: `ds4-tp4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp4-strict@%i.service` before start (strict TP=4 gating).
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional: `ds4-preflight-strict@.timer` runs strict preflight on boot and periodically after.
+- Optional TP=2 -> TP=3 transition helpers:
+  - `ds4-preflight-tp23@.service`
+  - `ds4-preflight-tp23-strict@.service`
 - Optional TP=3 helpers:
   - `ds4-preflight-tp3@.service`
   - `ds4-preflight-tp3-strict@.service`
@@ -50,6 +55,11 @@ edit host-specific values, then enable services with `systemctl`.
 The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 
 Optional: `deploy/systemd-user/` contains user-service + timer templates for `systemd --user` (developer bring-up). See `docs/deployment-systemd-user.md`.
+
+Optional: drop-in examples (recommended alternative to editing unit templates directly):
+
+- `deploy/systemd-dropins/` → system units (`/etc/systemd/system/...`)
+- `deploy/systemd-user-dropins/` → user units (`~/.config/systemd/user/...`)
 
 Optional: `deploy/compose/` contains Docker Compose examples for manual model
 serving experiments, including the attributed AEON-7 Qwen3.6 27B XS + DFlash

@@ -34,7 +34,7 @@ SYSTEM_V1 = (
 SYSTEM_V2 = (
     "You are a strict pairwise judge.\n"
     "Return exactly one minified JSON object on one line (no prose/markdown, no extra keys).\n"
-    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words, train_hint<=18 words, tags(0..3).\n"
+    "Keys: winner(A|B|tie), margin(0..3), score_a(0..10), score_b(0..10), reason<=18 words, train_hint<=18 words, tags(array 0..3 strings).\n"
     "Tie => margin=0 and score_a==score_b.\n"
     "winner=A => score_a>score_b; winner=B => score_b>score_a.\n"
     "Margin must match |score_a-score_b|: 1->{{0,1}}, 2->{{1,2}}, 3->{{2}}, >=4->{{3}}.\n"
@@ -45,7 +45,7 @@ SYSTEM_V2 = (
 SYSTEM_V2_DECISION_V2 = (
     "You are a strict pairwise judge.\n"
     "Return exactly one minified JSON object on one line (no prose/markdown, no extra keys).\n"
-    "Keys: w(A|B|tie), m(0..3), sa(0..10), sb(0..10), r<=18 words, h<=18 words, t(0..3).\n"
+    "Keys: w(A|B|tie), m(0..3), sa(0..10), sb(0..10), r<=18 words, h<=18 words, t(array 0..3 strings).\n"
     "Tie => m=0 and sa==sb.\n"
     "w=A => sa>sb; w=B => sb>sa.\n"
     "m must match |sa-sb|: 1->{{0,1}}, 2->{{1,2}}, 3->{{2}}, >=4->{{3}}.\n"
@@ -106,7 +106,7 @@ def build_schema_hint(decision_version: DecisionSchemaVersion) -> Dict[str, Any]
             "sb": "0..10",
             "r": "<=18 words, 1 line",
             "h": "<=18 words, 1 line",
-            "t": ["<=3", "short", "strings"],
+            "t": ["format", "factuality"],
         }
     return {
         "winner": "A|B|tie",
@@ -115,7 +115,7 @@ def build_schema_hint(decision_version: DecisionSchemaVersion) -> Dict[str, Any]
         "score_b": "0..10",
         "reason": "<=18 words, 1 line",
         "train_hint": "<=18 words, 1 line",
-        "tags": ["<=3", "short", "strings"],
+        "tags": ["format", "factuality"],
     }
 
 
@@ -143,7 +143,7 @@ def main() -> None:
     ap.add_argument("--b", required=True, help="path to candidate B output text file")
     ap.add_argument("--judge-out-target", type=int, default=64, help="target judge output tokens (budget guidance only)")
     ap.add_argument("--schema-version", choices=["v1", "v2"], default="v2", help="prompt schema version (default v2)")
-    ap.add_argument("--decision-version", choices=["v1", "v2"], default="v1", help="decision schema version (default v1; v2 uses compact keys w/m/sa/sb/r/h/t)")
+    ap.add_argument("--decision-version", choices=["v1", "v2"], default="v2", help="decision schema version (default v2; v2 uses compact keys w/m/sa/sb/r/h/t)")
     ap.add_argument("--format", choices=["blocks", "json"], default="blocks", help="output format (default blocks)")
     args = ap.parse_args()
 

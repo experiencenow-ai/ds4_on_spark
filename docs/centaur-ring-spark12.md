@@ -4,6 +4,20 @@ Goal: prepare repeatable Spark1/Spark2 ring steps **without needing a shared fil
 
 Important limitation: `centaur.py hyor-ring-step` and `hyor-broadcast-step` require the peer roots to be **local writable paths** (they copy manifests/objects directly between roots). Until we have a shared filesystem between Sparks (or a wrapper that stages peer roots via rsync), the ring work is rehearsed as a **multi-root simulation on Spark0**.
 
+## Topology (3-node ring)
+
+This runbook targets a **3-node ring**:
+
+- `spark0`: orchestrator/controller host (runs the ring-step and holds controller state)
+- `spark1`: ring node
+- `spark2`: ring node
+
+Naming note: this file uses “Spark12” because Spark1+Spark2 are the first ring nodes beyond Spark0, but the workflow always includes Spark0 as the orchestrator.
+
+Current status snapshot:
+
+- `docs/centaur-smoke-status-20260513.md`
+
 ## Quickstart (recommended order)
 
 From your Mac (repo root), in order:
@@ -14,6 +28,26 @@ When a hostname does not resolve (common before Spark1/2 exist), use an explicit
 
 ```bash
 REDACT=1 ./scripts/mac_spark_discovery.sh <spark0-host> <spark1-host> <spark2-host>
+```
+
+Note: the staging scripts also run a safe remote prereq check (`python3`, `python3 -m venv`, `unzip`; and `rsync` where required) via `scripts/centaur_spark_v73_prereqs_check.sh` unless you set `STAGE_SKIP_PREREQS=1`.
+
+Optional (recommended before node setup / smoke): confirm the Centaur v73 node prerequisites exist (non-destructive; no sudo):
+
+```bash
+./scripts/centaur_spark_v73_prereqs_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional (recommended before attempting the rsync-staged “real ring”): verify the **SSH mesh** and basic peer reachability from each Spark (still safe; no sudo/service changes):
+
+```bash
+./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional (recommended before attempting the rsync-staged “real ring”): verify `rsync` is installed on Spark0 + ring nodes (required for the ring-rsync workflow):
+
+```bash
+./scripts/ops_spark_rsync_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
 1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
@@ -81,6 +115,8 @@ The fetch helper pulls per-node artifacts (when present):
 
 	This writes a local Mac-side wrapper log (`ring_rsync.local.log`) in the fetched bundle directory; it includes the exact `ssh ...` command used to orchestrate the ring step (review/redact before posting).
 
+	Note: the ring rsync step runs on Spark0 and uses Spark0→Spark1/2 SSH for staging. If you haven’t set up the Spark SSH mesh yet, run `scripts/ops_spark_ring_mesh_check.sh` first.
+
 	To also verify that Spark1/2 can run `hyor-sync-status` locally against the pushed node roots (recommended), set:
 
 	```bash
@@ -108,7 +144,21 @@ The fetch helper pulls per-node artifacts (when present):
 	sh ./scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh "$RING_RUN_ID"
 	```
 
-	Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
+		Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+		```bash
+		bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+		if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+		sh ./scripts/centaur_spark12_v73_ring_rsync_report.sh "$RING_RUN_ID" "$bundle_dir" "$bundle_dir/ring_rsync_report.md"
+		```
+
+		If you are using the one-command evidence runner, you can have it write the report automatically:
+
+		```bash
+		export RING_GEN_REPORT=1
+		```
+
+		Optional next step: enable HTTP transport and run `hyor-agent-step` on Spark1/2 (see “Optional: HTTP transport for agents” below).
 
 ## Spark1/Spark2 bring-up checklist (when hardware exists)
 

@@ -1348,6 +1348,8 @@ def load_trace_jsonl(
     default_cls: str = "",
     pack_layers_by_token_index: bool = False,
     pack_require_layer_index: bool = False,
+    pack_time_policy: str = "strict",
+    pack_time_tol_ms: float = 0.0,
 ) -> List[TokenRoute]:
     if time_mode not in ("t_ms", "dt_ms"):
         raise ValueError("time_mode must be 't_ms' or 'dt_ms'")
@@ -1472,6 +1474,8 @@ def load_trace_jsonl(
         packed = trace_extract.pack_layers_by_token_index(
             extracted,
             require_layer_index=bool(pack_require_layer_index),
+            time_policy=str(pack_time_policy),
+            time_tol_ms=float(pack_time_tol_ms),
             strict=True,
         )
 
@@ -1495,6 +1499,8 @@ def load_trace_jsonl(
                 default_cls="",
                 pack_layers_by_token_index=False,
                 pack_require_layer_index=False,
+                pack_time_policy="strict",
+                pack_time_tol_ms=0.0,
             )
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
@@ -2619,6 +2625,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     layer_counts: List[float] = []
     layer_cand_lens: List[float] = []
     k_vals: List[float] = []
+    layer_k_vals: List[float] = []
     accept_lens: List[float] = []
     dflash_accept_lens: List[float] = []
     decode_ms: List[float] = []
@@ -2633,6 +2640,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     present_layers = 0
     present_layer_scores = 0
     present_layer_cost_scale = 0
+    present_layer_k = 0
     present_accept_len = 0
     present_accepted_mtp = 0
     present_rejected_mtp = 0
@@ -2670,6 +2678,9 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
                 present_layer_scores += 1
             if lr.cost_scale is not None:
                 present_layer_cost_scale += 1
+            if lr.k is not None:
+                present_layer_k += 1
+                layer_k_vals.append(float(lr.k))
         if len(r.candidates) != 0:
             lo = min(r.candidates)
             hi = max(r.candidates)
@@ -2728,6 +2739,7 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             "layers": present_layers,
             "layer_scores": present_layer_scores,
             "layer_cost_scale": present_layer_cost_scale,
+            "layer_k": present_layer_k,
             "mtp_accept_len": present_accept_len,
             "accepted_mtp": present_accepted_mtp,
             "rejected_mtp": present_rejected_mtp,
@@ -2746,6 +2758,8 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
         out["expert_id_range"] = {"min": int(min_expert), "max": int(max_expert)}
     if len(k_vals) != 0:
         out["k"] = summarize(k_vals)
+    if len(layer_k_vals) != 0:
+        out["layer_k"] = summarize(layer_k_vals)
     if len(accept_lens) != 0:
         out["mtp_accept_len_derived"] = summarize(accept_lens)
         hist = accept_len_histogram(accept_lens, int(mtp_draft_len))
@@ -2778,14 +2792,43 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     inferred_num_experts = infer_num_experts_from_trace(trace, meta)
     if inferred_num_experts is not None:
         inferred["num_experts"] = int(inferred_num_experts)
-    inferred_mtp_draft_len = infer_mtp_draft_len_from_trace(trace, meta)
+    inferred_mtp_draft_len, inferred_mtp_source = infer_mtp_draft_len_with_source(trace, meta)
     if inferred_mtp_draft_len is not None:
         inferred["mtp_draft_len"] = int(inferred_mtp_draft_len)
-    inferred_dflash_draft_len = infer_dflash_draft_len_from_trace(trace, meta)
+        if inferred_mtp_source != "":
+            inferred["mtp_draft_len_source"] = str(inferred_mtp_source)
+    inferred_dflash_draft_len, inferred_dflash_source = infer_dflash_draft_len_with_source(trace, meta)
     if inferred_dflash_draft_len is not None:
         inferred["dflash_draft_len"] = int(inferred_dflash_draft_len)
+        if inferred_dflash_source != "":
+            inferred["dflash_draft_len_source"] = str(inferred_dflash_source)
     if len(inferred) != 0:
         out["inferred"] = inferred
+
+    hints: Dict[str, object] = {}
+    suggested: Dict[str, object] = {}
+    notes: List[str] = []
+
+    if inferred_num_experts is not None:
+        suggested["num_experts"] = int(inferred_num_experts)
+
+    if present_cost_scale != len(trace):
+        if present_kv_tokens == len(trace):
+            suggested["trace_derive_cost_scale"] = "kv_tokens_p50"
+        elif present_decode_ms == len(trace):
+            suggested["trace_derive_cost_scale"] = "decode_ms_p50"
+
+    if inferred_mtp_source == "accept_len_all_rejects_default1":
+        notes.append("MTP draft_len underdetermined: trace only shows accept_len=1; set meta.mtp_draft_len or log accepted_mtp+rejected_mtp.")
+    if inferred_dflash_source == "accept_len_all_rejects_default1":
+        notes.append("DFlash draft_len underdetermined: trace only shows accept_len=1; set meta.dflash_draft_len or log accepted_dflash+rejected_dflash.")
+
+    if len(suggested) != 0:
+        hints["suggested"] = suggested
+    if len(notes) != 0:
+        hints["notes"] = notes
+    if len(hints) != 0:
+        out["hints"] = hints
     return(out)
 
 
@@ -2806,10 +2849,15 @@ def infer_num_experts_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dic
 
 
 def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    inferred, _source = infer_mtp_draft_len_with_source(trace, meta)
+    return(inferred)
+
+
+def infer_mtp_draft_len_with_source(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Tuple[Optional[int], str]:
     if meta is not None:
         v = meta.get("mtp_draft_len")
         if isinstance(v, int) and v >= 0:
-            return(int(v))
+            return(int(v), "meta")
 
     gamma: Optional[int] = None
     for r in trace:
@@ -2819,9 +2867,9 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
         if gamma is None:
             gamma = g
         elif gamma != g:
-            return(None)
+            return(None, "")
     if gamma is not None:
-        return(gamma)
+        return(int(gamma), "accepted_rejected")
 
     max_accept_len = 0
     for r in trace:
@@ -2829,20 +2877,27 @@ def infer_mtp_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[D
             continue
         max_accept_len = max(max_accept_len, int(r.mtp_accept_len))
     if max_accept_len <= 0:
-        return(None)
+        return(None, "")
 
     # mtp_accept_len is the output-token count per verify step (>=1). A draft length of gamma implies:
     #   1 <= accept_len <= (gamma + 1)
     # If a trace only includes accept_len=1 (all rejects), gamma is underdetermined; pick gamma=1 so we can
     # still run an MTP-on replay without violating bounds.
-    return(max(1, int(max_accept_len) - 1))
+    if int(max_accept_len) <= 1:
+        return(1, "accept_len_all_rejects_default1")
+    return(max(1, int(max_accept_len) - 1), "accept_len_max")
 
 
 def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Optional[int]:
+    inferred, _source = infer_dflash_draft_len_with_source(trace, meta)
+    return(inferred)
+
+
+def infer_dflash_draft_len_with_source(trace: Sequence[TokenRoute], meta: Optional[Dict[str, object]] = None) -> Tuple[Optional[int], str]:
     if meta is not None:
         v = meta.get("dflash_draft_len")
         if isinstance(v, int) and v >= 0:
-            return(int(v))
+            return(int(v), "meta")
 
     gamma: Optional[int] = None
     for r in trace:
@@ -2852,9 +2907,9 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
         if gamma is None:
             gamma = g
         elif gamma != g:
-            return(None)
+            return(None, "")
     if gamma is not None:
-        return(gamma)
+        return(int(gamma), "accepted_rejected")
 
     max_accept_len = 0
     for r in trace:
@@ -2862,8 +2917,10 @@ def infer_dflash_draft_len_from_trace(trace: Sequence[TokenRoute], meta: Optiona
             continue
         max_accept_len = max(max_accept_len, int(r.dflash_accept_len))
     if max_accept_len <= 0:
-        return(None)
-    return(max(1, int(max_accept_len) - 1))
+        return(None, "")
+    if int(max_accept_len) <= 1:
+        return(1, "accept_len_all_rejects_default1")
+    return(max(1, int(max_accept_len) - 1), "accept_len_max")
 
 
 def _clamp_i32(v: int, lo: int, hi: int) -> int:
@@ -3072,7 +3129,15 @@ def _expert_queue_pending_limit_units(cfg: SimConfig, cls: LatencyClass, backpre
     return(float(limit))
 
 
-def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
+def _candidate_order_for_layer(
+    admit_policy: str,
+    experts: Sequence[ExpertQueue],
+    candidates: Sequence[int],
+    scores: Optional[Sequence[float]],
+    *,
+    now_ms: Optional[float] = None,
+    queue_cls: Optional[LatencyClass] = None,
+) -> Sequence[int]:
     if admit_policy == "ordered":
         return(candidates)
     if admit_policy == "least_pending":
@@ -3083,13 +3148,29 @@ def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue]
         ranked = [(float(experts[e].pending_work()), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _p, _i, e in ranked])
+    if admit_policy == "least_oldest":
+        if now_ms is None or queue_cls is None:
+            raise ValueError("admit_policy least_oldest requires now_ms and queue_cls")
+        ranked: List[Tuple[float, int, int, int]] = []
+        for i, e in enumerate(candidates):
+            eq = experts[e]
+            q = eq.hi if queue_cls == LatencyClass.INTERACTIVE else eq.lo
+            if len(q) == 0:
+                age_ms = 0.0
+            else:
+                age_ms = float(now_ms) - float(q[0].enqueue_ms)
+                if age_ms < 0.0:
+                    age_ms = 0.0
+            ranked.append((age_ms, int(eq.pending()), i, int(e)))
+        ranked.sort()
+        return([e for _age, _p, _i, e in ranked])
     if admit_policy == "score_desc":
         if scores is None:
             raise ValueError("admit_policy score_desc requires per-candidate scores")
         ranked = [(-float(scores[i]), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _s, _i, e in ranked])
-    raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
+    raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', 'least_oldest', or 'score_desc'")
 
 
 def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
@@ -3452,8 +3533,8 @@ def run_simulation(
         raise ValueError("k_scope must be 'token' or 'layer'")
 
     admit_policy = cfg.admit_policy.strip().lower()
-    if admit_policy not in ("ordered", "least_pending", "least_pending_work", "score_desc"):
-        raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
+    if admit_policy not in ("ordered", "least_pending", "least_pending_work", "least_oldest", "score_desc"):
+        raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', 'least_oldest', or 'score_desc'")
 
     if cfg.pending_hist_max_depth < 0:
         raise ValueError("pending_hist_max_depth must be >= 0")
@@ -3926,7 +4007,7 @@ def run_simulation(
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
         admitted = 0
         pending_limit = _expert_queue_pending_limit_units(cfg, stage.queue_cls, backpressure_units)
-        for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores):
+        for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores, now_ms=now_ms, queue_cls=stage.queue_cls):
             if admitted >= stage.k:
                 break
             eq = experts[expert_id]
@@ -5146,6 +5227,18 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=0,
         help="When used with --trace-pack-layers-by-token-index, require every record to include layer_index so layer ordering is explicit (default: 0).",
     )
+    p.add_argument(
+        "--trace-pack-time-policy",
+        type=str,
+        default="strict",
+        help="When used with --trace-pack-layers-by-token-index, how to handle mismatched t_ms/dt_ms within a token group: strict (default), first, min, max.",
+    )
+    p.add_argument(
+        "--trace-pack-time-tol-ms",
+        type=float,
+        default=0.0,
+        help="When used with --trace-pack-layers-by-token-index, treat abs(t_ms/dt_ms mismatch) <= tol as equal (default: 0).",
+    )
     p.add_argument("--trace-csv", type=str, default="", help="Replay routing trace from CSV file with a header row (t_ms or dt_ms, cls, candidates; same optional fields as --trace-jsonl; list fields can be JSON lists).")
     p.add_argument("--trace-meta-json", type=str, default="", help="Optional JSON file with trace metadata (merged into the trace summary; overridden by any inline JSONL meta records).")
     p.add_argument("--trace-time-mode", type=str, default="t_ms", help="Trace replay time mode (with --trace-jsonl/--trace-csv): t_ms (default) requires per-record t_ms, dt_ms uses per-record dt_ms deltas and cumulative sum.")
@@ -5309,7 +5402,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--admit-policy",
         type=str,
         default="ordered",
-        help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts by task count), least_pending_work (pick least pending experts by pending_work), or score_desc (order candidates by descending trace scores).",
+        help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts by task count), least_pending_work (pick least pending experts by pending_work), least_oldest (avoid experts whose chosen queue has old outstanding work), or score_desc (order candidates by descending trace scores).",
     )
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
 
@@ -5387,6 +5480,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 default_cls=args.trace_default_cls,
                 pack_layers_by_token_index=(int(args.trace_pack_layers_by_token_index) != 0),
                 pack_require_layer_index=(int(args.trace_pack_require_layer_index) != 0),
+                pack_time_policy=args.trace_pack_time_policy,
+                pack_time_tol_ms=float(args.trace_pack_time_tol_ms),
             )
         else:
             trace = load_trace_csv(args.trace_csv, time_mode=args.trace_time_mode.strip().lower())

@@ -39,7 +39,7 @@ The contract is the minimum set of **exact, testable** facts DS4 must implement 
   - MLA section also pins verbatim RoPE / YaRN helper sources (`mla.source_helpers`) so complex-rotary + de-rotation semantics are reproducible without guessing.
   - MoE section also pins verbatim `Gate.forward` and `MoE.forward` helper sources (`moe.semantics.source_helpers`) so expert selection and routing-weight semantics are reproducible without guessing.
   - MTP section also pins verbatim `MTPBlock.forward` helper source lines (`mtp.semantics.source_helpers`) so draft-path semantics are reproducible without guessing.
-  - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key.
+  - Checkpoint section records a stable fingerprint of the `model.safetensors.index.json` key set (`checkpoint_index.weight_map_keys_sha256`) so contract consumers can detect fixture drift without enumerating every key. For debugging/diffing upstream snapshots, the fixtures also include `checkpoint_keys.txt` (exact sorted list of all official tensor keys) and `mtp_checkpoint_keys.txt` (exact sorted list of official `mtp.*` keys for MTP namespace preservation checks).
   - It also records per-prefix fingerprints (`checkpoint_index.weight_map_prefix_fingerprints`, with small `first_keys_sample`/`last_keys_sample` lists) so consumers can independently sanity-check the `layers.*` and `mtp.*` namespaces (useful when evaluating whether an artifact set plausibly preserves upstream `mtp.0.*`).
   - Convenience fields: `checkpoint_index.weight_map_layers_keys_sha256`, `checkpoint_index.weight_map_mtp_keys_sha256`, `checkpoint_index.weight_map_top_level_keys_sha256`, and `mtp.checkpoint_key_fingerprint.*`.
   - Upstream section records sha256 of the pinned upstream commit (`upstream_commit.txt`), encoding oracle vectors (`encoding/tests/*`), and oracle prompt set (`oracle/prompts.json`) to keep drift machine-detectable.
@@ -174,6 +174,7 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
 - The **required** contract keys are validated by `scripts/model_contract_validate_mtp_one_token_draft_probe.py`.
 - The **recommended** correctness guardrail is an *oracle diff* that compares both token IDs and intermediate tensor fingerprints via `python3 scripts/diff_mtp_one_token_draft_probe.py --a oracle.json --b candidate.json --json`.
   - Probes may include optional debug capture keys of the form `*_fnv64` + `*_nbytes` + `*_shape` (all optional unless your runbook requires them).
+  - Optional numeric debugging aid (keep small): for any capture prefix, emit `{prefix}_sample_f32` as a short float32 list (for example the first 16 elements). When present in both probes, the diff tool compares samples within an absolute tolerance (default `1e-5`; override with `--sample-tol`).
   - Recommended capture prefixes (aligned to `docs/mtp-ds4-reference.md`’s `gamma=1` step list):
     - `trunk_token_embd` (trunk token embedding output)
     - `trunk_pre_hc_head` (trunk “target hidden buffer” before trunk `hc_head`; used as `prev_hc` for the MTP draft input build)
@@ -185,10 +186,22 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
   - `scripts/verify_mtp_one_token_draft_probe_captures.py` supports `--profile minimal` (stub-stage), `--profile default` (full one-token gate), and `--profile extended` (deeper localization before acceptance sweeps).
   - Optional HC layout debug (when only the HC-major ordering differs): `python3 scripts/compare_mtp_one_token_hc_layout.py --a oracle.json --b candidate.json --json`.
   - Avoid dumping full logits: instead fingerprint the normalized head stream and rely on exact `mtp_draft_token_id` equality.
+  - Optional stronger guardrail (recommended before acceptance sweeps): require both probes to emit the full capture set so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json oracle.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json candidate.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a oracle.json --b candidate.json --json
+```
 
 Implementation note (Spark/Linux CUDA):
 
 - The DS4-tuned MTP sidecar uses routed experts that may be `Q4_K` (not `Q2_K`). If using `antirez/ds4` as the executable reference on CUDA, ensure the routed-MoE path supports `Q4_K` and the sidecar does not clobber the trunk CUDA model-map/fd-cache state; see `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`.
+- For a pinned, independent `Q4_K` dequantize+dot fixture (generated from `ggml-org/llama.cpp`), see `docs/mtp-q4k-dot-validation.md` and `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`.
+
+Machine-readable MTP *acceptance* reporting (when ready to sweep):
+
+- Once the one-token diff is `ok=true`, record acceptance rates from multi-prompt runs via `docs/mtp-acceptance-sweep.md` and summarize runtime JSONL logs with `python3 scripts/summarize_mtp_acceptance_trace.py --in-jsonl ... --draft-len <gamma>`.
 
 ## Comparator models (Ling / Qwen / DFlash pairs)
 

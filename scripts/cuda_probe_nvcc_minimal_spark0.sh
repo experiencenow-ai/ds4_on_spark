@@ -613,14 +613,20 @@ int main(int argc,char **argv)
 	rc = ck(cudaDeviceSynchronize(),-5,\"cudaDeviceSynchronize\");
 	if ( rc != 0 )
 		return(rc);
+	(void)cudaGetLastError();
 	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
+		(void)cudaGetLastError();
 		cuda_arch = 0;
 		if ( cudaMalloc((void **)&dout,sizeof(cuda_arch)) == cudaSuccess )
 		{
 			cuda_arch_probe<<<1,1>>>(dout);
 			if ( cudaGetLastError() == cudaSuccess )
+			{
+				(void)cudaDeviceSynchronize();
+				(void)cudaGetLastError();
 				(void)cudaMemcpy(&cuda_arch,dout,sizeof(cuda_arch),cudaMemcpyDeviceToHost);
+			}
 			(void)cudaFree(dout);
 			dout = 0;
 		}

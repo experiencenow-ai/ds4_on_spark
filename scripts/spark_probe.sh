@@ -13,7 +13,7 @@ Environment:
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
   DS4_GIT_WORK_TREE    Optional work tree override (defaults to $PWD)
-  REDACT=1             Redact IPv4/IPv6/MAC addresses from output
+  REDACT=1             Redact IPv4/IPv6/MAC/GPU UUID tokens from output
   SPARK_PROBE_FACTS=1  Facts-only mode (stable, compact; implies SPARK_PROBE_SUMMARY=1)
   SPARK_PROBE_SUMMARY=1  Print a smaller, Spark1-friendly subset of sections
   NVIDIA_SMI_FULL=1    Include full `nvidia-smi` output (process list, timestamps)
@@ -32,6 +32,7 @@ Examples:
 
 Notes:
   - When probing multiple targets, the script continues past SSH failures and prints a `== probe summary ==`.
+  - On SSH failure, the script prints `ssh status: ...` (`resolve_failed`, `no_route`, `timeout`, `auth_failed`, `hostkey_changed`, `hostkey_verification_failed`).
   - Exit status is non-zero if any target failed; use `|| true` when saving partial output.
 USAGE
 }
@@ -111,6 +112,35 @@ known_hosts_for_target()
 	return 0
 }
 
+ssh_classify_err()
+{
+	msg="$1"
+	case "$msg" in
+		*"Could not resolve hostname"*|*"Name or service not known"*|*"Temporary failure in name resolution"*|*"nodename nor servname provided"*)
+			echo "resolve_failed"
+			;;
+		*"No route to host"*|*"Network is unreachable"*)
+			echo "no_route"
+			;;
+		*"Connection timed out"*|*"Operation timed out"*|*"Connection timeout"*|*"Connection refused"*)
+			echo "timeout"
+			;;
+		*"Permission denied"*|*"Authentication failed"*)
+			echo "auth_failed"
+			;;
+		*"REMOTE HOST IDENTIFICATION HAS CHANGED"*)
+			echo "hostkey_changed"
+			;;
+		*"Host key verification failed"*)
+			echo "hostkey_verification_failed"
+			;;
+		*)
+			echo "ssh_failed"
+			;;
+	esac
+	return 0
+}
+
 tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
@@ -171,6 +201,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	for target in $targets; do
 		kh="$(known_hosts_for_target "$target")"
 		echo "== target: $target =="
+		ssh_out="$(mktemp /private/tmp/ds4_spark_probe_ssh_out.XXXXXX)"
 		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
@@ -1090,7 +1121,7 @@ fi
 	echo "== storage =="
 		if [ "$spark_probe_facts" != "1" ]; then
 			if command -v timeout >/dev/null 2>&1; then
-				timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\\$1]++ {print}" || true
+				timeout 4s df -h / 2>/dev/null | awk "NR==1 {print; next} !seen[\$1]++ {print}" || true
 			else
 				df -h / 2>/dev/null | awk '"'"'NR==1 {print; next} !seen[$1]++ {print}'"'"' || true
 			fi
@@ -1127,14 +1158,19 @@ fi
 echo
 echo "== /dev nvidia nodes =="
 ls -l /dev/nvidia* 2>/dev/null | head -n 80 || true
-	' 2>&1
+	' >"$ssh_out" 2>&1
 		then
+			cat "$ssh_out"
 			:
 		else
 			rc="$?"
+			cat "$ssh_out"
+			ssh_msg="$(head -n 40 "$ssh_out" 2>/dev/null || true)"
+			echo "ssh status: $(ssh_classify_err "$ssh_msg")"
 			echo "ssh: failed rc=$rc"
 			ssh_fail=$((ssh_fail + 1))
 		fi
+		rm -f "$ssh_out" || true
 		echo
 	done
 	if [ "$ssh_fail" != "0" ]; then

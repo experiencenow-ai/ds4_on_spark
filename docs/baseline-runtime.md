@@ -99,6 +99,24 @@ MODEL_SOURCE=<hf-repo-or-local-note> MODEL_QUANT=Q2_K MODEL_GGUF=/abs/path/to/mo
 scripts/run_quantized_single_spark.sh spark0@aitopatom-9ab9.local
 ```
 
+Smallest-staged V4 Flash GGUF wrapper (Spark0; auto-selects the smallest trunk
+GGUF by file size, excluding MTP/DFlash sidecars):
+
+```sh
+ALLOW_RUN=1 \
+scripts/run_quantized_single_spark0_smallest_v4flash_external.sh spark0@aitopatom-9ab9.local
+```
+
+Smallest-credible V4 Flash GGUF wrapper (Spark0; same auto-selection, but also
+defaults an include filter to avoid selecting `IQ1_*` tiers):
+
+```sh
+ALLOW_RUN=1 \
+scripts/run_quantized_single_spark0_smallest_credible_v4flash_external.sh spark0@aitopatom-9ab9.local
+```
+
+Set `MODEL_GGUF_INCLUDE_EGREP=""` to disable the include filter.
+
 Use `REMOTE_BENCH_ENV` for env vars shared by both remote benchmark scripts, or
 `REMOTE_LLAMA_ENV` / `REMOTE_VLLM_ENV` to target one runtime. See
 `docs/quantized-single-spark.md` for the milestone definition and failure
@@ -138,6 +156,22 @@ optimization. The next useful report should say whether the runtime can expose:
 
 - per-token decode latency
 - routed expert IDs and top-k scores
+
+## Ling/Qwen/DFlash ladder (Spark0; vLLM)
+
+Once vLLM is available on Spark0 (or you are using a pinned container that
+bundles it), use the ladder matrix runner so Ling/Qwen target-only and paired
+DFlash probes share the same prompt/token settings and a single scored summary.
+
+Entry point (recommended; runs an env probe first, then the ladder bundle):
+
+```sh
+ALLOW_RUN=1 ALLOW_FETCH=0 \
+scripts/run_baseline_vllm_ling_qwen_dflash_ladder_spark0.sh spark0@aitopatom-9ab9.local
+```
+
+See `docs/baseline-vllm-matrix.md` and `docs/upstream-qwen-dflash.md` for the
+TSV format, pinned candidate order, and metric separation (`scope` labels).
 - expert batch sizes / queue depth
 - MTP draft, accepted, and rejected token counters
 

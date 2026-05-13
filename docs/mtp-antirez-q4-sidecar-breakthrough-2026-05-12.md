@@ -73,6 +73,7 @@ The Q4_K fallback must be validated before performance work matters. This branch
 - `scripts/verify_antirez_ds4_q4k_dot_math.py`
 - `fixtures/quant/q4k_llamacpp_b9110_rowdot_fixture.json`
 - `tests/q4k_llamacpp_fixture_test.py`
+- Fixture provenance/regeneration: `docs/mtp-q4k-dot-validation.md`
 
 Run:
 

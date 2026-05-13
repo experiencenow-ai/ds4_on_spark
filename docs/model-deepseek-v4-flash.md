@@ -15,6 +15,8 @@ Files used for the contract (snapshotted in `fixtures/model_contract/deepseek_v4
 - `upstream_commit.txt` (pinned upstream git commit hash)
 - `contract_summary.json` (repo-generated, source-derived constants for DS4 consumption: topology, attention schedule, cache rules, runtime indexer/HC params, tensor-key invariants, config-field compatibility mappings, oracle requirements, and machine-readable logical tensor shapes; also includes sha256 fingerprints for pinned encoding oracle vectors and the oracle prompt set)
 - `model.safetensors.index.json` (authoritative tensor key set)
+- `checkpoint_keys.txt` (derived from `model.safetensors.index.json`; exact sorted list of all official tensor keys for debugging/diffing upstream snapshots)
+- `mtp_checkpoint_keys.txt` (derived from `model.safetensors.index.json`; exact sorted list of official `mtp.*` tensor keys used for MTP namespace preservation/debugging)
 - `tokenizer.json`, `tokenizer_config.json` (tokenizer implementation + special tokens)
 - `encoding/encoding_dsv4.py` + `encoding/tests/*` (chat/tool/thinking message rendering + test vectors)
 - `oracle/prompts.json` (prompt cases used by the logit-oracle generator)
@@ -174,6 +176,8 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
 - Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
 - Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
 - MTP gate: treat MTP as **disabled/untrusted** unless the artifact preserves the upstream `mtp.0.*` namespace and satisfies `mtp.trust_gates.*` (including `mtp_contract.complete == true`) **and** a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`).
+  - Quantized MTP sidecar note: several community GGUF “MTP sidecar” artifacts declare `general.architecture=deepseek4_mtp_support` and use DS4-sidecar-style tensor keys like `mtp.0.attn_q_a.weight` / `mtp.0.attn_kv.weight`. These **do not** match the official DeepSeek safetensors key schema (e.g. `mtp.0.attn.wq_a.weight` / `mtp.0.attn.wkv.weight`) and will not satisfy the upstream `mtp_contract` or match the official `mtp_keys_sha256` fingerprint.
+    - Contract meaning: treat DS4-sidecar-style GGUF MTP as a *non-preserving* artifact (useful for bring-up experiments), and require the MTP logits oracle + acceptance checks before enabling MTP in any baseline reports.
 
 ## Topology constants (from `config.json` + `inference/config.json`)
 
@@ -868,13 +872,18 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 
 Pinned GGUF MTP status snapshot (derived from `fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` `generated_at_utc` field; built from the JSON probe outputs above):
 
-| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_contract.complete` | `mtp_trust.status` |
-|---|---|---:|---:|---:|---|
-| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
-| nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
-| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | false | false | — | absent |
-| antirez trunk + MTP sidecar (artifact set; DS4-tuned sidecar is complete) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | true | true | false | incomplete |
-| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | true | true | false | incomplete |
+| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_preservation.status` | `mtp_preservation.mtp_keys_sha256_match_official` | DS4 sidecar complete? |
+|---|---|---:|---:|---|---:|---:|
+| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | absent | — | — |
+| nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | absent | — | — |
+| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | false | false | absent | — | — |
+| antirez trunk + MTP sidecar (artifact set) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | true | true | incomplete | false | true |
+| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | true | true | incomplete | false | true |
+
+Notes:
+
+- `mtp_namespace.has_mtp0=true` is required but not sufficient: in the pinned snapshot above, the only MTP-capable candidates are DS4-tuned GGUF sidecars (`DS4 sidecar complete? == true`), and they do **not** preserve the official upstream MTP tensor-key schema (`mtp_keys_sha256_match_official=false` and `mtp_preservation.status=incomplete`).
+- Treat MTP as disabled/untrusted until an artifact both preserves the official MTP key subset (fingerprint gate) and passes an MTP oracle (semantic gate).
 
 For external/quantized artifacts:
 

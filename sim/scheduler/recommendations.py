@@ -95,6 +95,7 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     expert_queueing = _as_dict(evidence.get("expert_queueing"))
     mtp_draft_queue_cls = _as_dict(evidence.get("mtp_draft_queue_cls"))
     dflash = _as_dict(out.get("dflash_comparator"))
+    topk_dump_probe = _as_dict(out.get("topk_dump_probe"))
     results = _as_dict(out.get("results"))
 
     lines: List[str] = []
@@ -119,9 +120,19 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     mtp_draft_len = _as_int(inferred, "mtp_draft_len", 0)
     if mtp_draft_len > 0:
         lines.append(f"- inferred mtp_draft_len: {int(mtp_draft_len)}")
+        src = _as_str(inferred, "mtp_draft_len_source", "")
+        if src != "":
+            lines.append(f"- mtp_draft_len source: `{src}`")
+            if src == "accept_len_all_rejects_default1":
+                lines.append("  - note: trace only shows mtp_accept_len=1 (all rejects), so draft length is underdetermined; set meta.mtp_draft_len or log accepted_mtp+rejected_mtp for a reliable gamma.")
     dflash_draft_len = _as_int(inferred, "dflash_draft_len", 0)
     if dflash_draft_len > 0:
         lines.append(f"- inferred dflash_draft_len: {int(dflash_draft_len)}")
+        src = _as_str(inferred, "dflash_draft_len_source", "")
+        if src != "":
+            lines.append(f"- dflash_draft_len source: `{src}`")
+            if src == "accept_len_all_rejects_default1":
+                lines.append("  - note: trace only shows dflash_accept_len=1 (all rejects), so draft length is underdetermined; set meta.dflash_draft_len or log accepted_dflash+rejected_dflash for a reliable gamma.")
     if bool(out.get("trace_assumptions")):
         ta = _as_dict(out.get("trace_assumptions"))
         if bool(ta.get("time_synthetic")):
@@ -169,6 +180,52 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
         ratio_adj = _as_float(dflash, "service_slot_ms_per_output_token_ratio_vs_target_only_adjusted", 0.0)
         lines.append(f"- dflash_comparator: present ratio_vs_target_only={ratio:.4f} adjusted={ratio_adj:.4f}")
 
+    if bool(topk_dump_probe.get("present")):
+        tnote = _as_str(topk_dump_probe, "note", "")
+        summary = _as_dict(topk_dump_probe.get("summary"))
+        invalid = _as_int(summary, "invalid_expert_ids", 0)
+        lines.append(f"- topk_dump_probe: present invalid_expert_ids={int(invalid)}")
+        if tnote != "":
+            lines.append(f"  - note: {tnote}")
+        batches = _as_dict(summary.get("batches"))
+        if batches is not None:
+            batch_keys: List[int] = []
+            for k in batches.keys():
+                if isinstance(k, str) and k.strip().isdigit():
+                    batch_keys.append(int(k.strip()))
+            batch_keys = sorted(set(batch_keys))
+            if len(batch_keys) != 0:
+                picks: List[int] = []
+                if 100 in batch_keys:
+                    picks.append(100)
+                if 256 in batch_keys and 256 not in picks:
+                    picks.append(256)
+                for k in (batch_keys[0], batch_keys[-1]):
+                    if k not in picks:
+                        picks.append(int(k))
+                picks = picks[:4]
+
+                def _metric_median(batch: int, metric: str) -> float:
+                    b = batches.get(str(int(batch)))
+                    if not isinstance(b, dict):
+                        return(0.0)
+                    block = b.get(metric)
+                    if not isinstance(block, dict):
+                        return(0.0)
+                    v = block.get("median", 0.0)
+                    if isinstance(v, (int, float)):
+                        return(float(v))
+                    return(0.0)
+
+                parts = []
+                for batch in picks:
+                    active = _metric_median(batch, "active")
+                    p90 = _metric_median(batch, "p90_depth")
+                    sp6 = _metric_median(batch, "pair_speedup_cap6")
+                    parts.append(f"b{int(batch)} active={active:.2f} p90_depth={p90:.2f} speedup_cap6={sp6:.2f}x")
+                if len(parts) != 0:
+                    lines.append("  - " + "; ".join(parts))
+
 
 
     def _as_summary(obj: object) -> Dict[str, float]:
@@ -211,12 +268,28 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
 
         has_i = bool(int(num_interactive) > 0)
         has_b = bool(int(num_batch) > 0)
+        has_trace_decode_i = bool(has_i and float(base_sum.get("trace_decode_ms_p95_interactive", 0.0)) > 0.0)
+        has_trace_decode_b = bool(has_b and float(base_sum.get("trace_decode_ms_p95_batch", 0.0)) > 0.0)
+        has_trace_bsz_i = bool(has_i and float(base_sum.get("trace_expert_batch_size_present_frac_interactive", 0.0)) > 0.0)
+        has_trace_bsz_b = bool(has_b and float(base_sum.get("trace_expert_batch_size_present_frac_batch", 0.0)) > 0.0)
 
-        headers = ["variant", "svc_ms/out", "out_tps"]
+        headers = ["variant", "svc_ms/out", "out_tps", "pending_p95", "starv_frac", "starv_p95_ms"]
+        if has_i:
+            headers += ["pending_hi_p95"]
+        if has_b:
+            headers += ["pending_lo_p95"]
         if has_i:
             headers += ["drop_i", "p95_i_ms"]
         if has_b:
             headers += ["drop_b", "p95_b_ms"]
+        if has_trace_decode_i:
+            headers += ["trace_dec_p95_i_ms", "dec_err_p95_i_ms"]
+        if has_trace_decode_b:
+            headers += ["trace_dec_p95_b_ms", "dec_err_p95_b_ms"]
+        if has_trace_bsz_i:
+            headers += ["svc_bsz_p95_i", "trace_bsz_p95_i"]
+        if has_trace_bsz_b:
+            headers += ["svc_bsz_p95_b", "trace_bsz_p95_b"]
         if bool(mtp.get("present")):
             headers += ["verify_q_p95_ms", "draft_q_p95_ms"]
 
@@ -239,12 +312,31 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
             cells.append(str(label))
             cells.append(_fmt_float(float(s.get("service_slot_ms_per_output_token", 0.0)), digits=4))
             cells.append(_fmt_float(float(s.get("output_token_throughput_tps", 0.0)), digits=3))
+            cells.append(_fmt_float(float(s.get("pending_depth_time_weighted_p95", 0.0)), digits=3))
+            cells.append(_fmt_pct(float(s.get("starved_task_frac", 0.0)), digits=3))
+            cells.append(_fmt_float(float(s.get("starved_task_queue_wait_ms_p95", 0.0)), digits=3))
+            if has_i:
+                cells.append(_fmt_float(float(s.get("pending_hi_depth_time_weighted_p95", 0.0)), digits=3))
+            if has_b:
+                cells.append(_fmt_float(float(s.get("pending_lo_depth_time_weighted_p95", 0.0)), digits=3))
             if has_i:
                 cells.append(_fmt_pct(float(s.get("drop_frac_tokens_interactive", 0.0)), digits=3))
                 cells.append(_fmt_float(float(s.get("output_token_p95_interactive_ms", 0.0)), digits=3))
             if has_b:
                 cells.append(_fmt_pct(float(s.get("drop_frac_tokens_batch", 0.0)), digits=3))
                 cells.append(_fmt_float(float(s.get("output_token_p95_batch_ms", 0.0)), digits=3))
+            if has_trace_decode_i:
+                cells.append(_fmt_float(float(s.get("trace_decode_ms_p95_interactive", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("trace_decode_error_ms_p95_interactive", 0.0)), digits=3))
+            if has_trace_decode_b:
+                cells.append(_fmt_float(float(s.get("trace_decode_ms_p95_batch", 0.0)), digits=3))
+                cells.append(_fmt_float(float(s.get("trace_decode_error_ms_p95_batch", 0.0)), digits=3))
+            if has_trace_bsz_i:
+                cells.append(_fmt_float(float(s.get("service_batch_size_p95_interactive", 0.0)), digits=2))
+                cells.append(_fmt_float(float(s.get("trace_expert_batch_size_p95_interactive", 0.0)), digits=2))
+            if has_trace_bsz_b:
+                cells.append(_fmt_float(float(s.get("service_batch_size_p95_batch", 0.0)), digits=2))
+                cells.append(_fmt_float(float(s.get("trace_expert_batch_size_p95_batch", 0.0)), digits=2))
             if bool(mtp.get("present")):
                 cells.append(_fmt_float(float(s.get("task_queue_wait_ms_p95_mtp_verify", 0.0)), digits=3))
                 cells.append(_fmt_float(float(s.get("task_queue_wait_ms_p95_mtp_draft", 0.0)), digits=3))
@@ -272,6 +364,12 @@ def run_runtime_trace_mtp_ablation(
     expert_queue_max: int = 128,
     expert_parallelism: int = 1,
     service_ms: float = 1.0,
+    batch_max_interactive: int = 1,
+    batch_max_batch: int = 1,
+    batch_wait_interactive_ms: float = 0.0,
+    batch_wait_batch_ms: float = 0.0,
+    service_base_ms: float = 0.0,
+    service_per_task_ms: float = -1.0,
     starvation_ms: float = 50.0,
     trace_derive_cost_scale: str = "none",
     trace_speedup: float = 1.0,
@@ -325,20 +423,36 @@ def run_runtime_trace_mtp_ablation(
 
     mtp_draft_len_req = int(mtp_draft_len)
     mtp_draft_len_inferred = 0
+    mtp_draft_len_source = ""
     mtp_mode = "none"
     if any_mtp:
-        inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
+        inferred_mtp_draft_len, mtp_draft_len_source = scheduler_sim.infer_mtp_draft_len_with_source(trace, meta)
         if inferred_mtp_draft_len is None or int(inferred_mtp_draft_len) <= 0:
             raise ValueError("runtime trace ablation requires meta.mtp_draft_len, accepted_mtp+rejected_mtp, or mtp_accept_len in the trace")
         mtp_draft_len_inferred = int(inferred_mtp_draft_len)
         mtp_mode = "trace"
     elif mtp_draft_len_req > 0:
         mtp_draft_len_inferred = int(mtp_draft_len_req)
+        mtp_draft_len_source = "synthetic"
         mtp_mode = "synthetic"
 
     mtp_draft_len_out = int(mtp_draft_len_inferred)
 
     k_mode = "trace" if _trace_has_full_k(trace) else "controller"
+    fixed_k_from_meta = 0
+    if k_mode == "controller":
+        sf = str(meta.get("source_format", "")).strip().lower()
+        if sf == "ds4_ffn_moe_topk_i32":
+            topk_raw = meta.get("topk")
+            if isinstance(topk_raw, int):
+                fixed_k_from_meta = int(topk_raw)
+            elif isinstance(topk_raw, float):
+                if float(int(topk_raw)) == float(topk_raw):
+                    fixed_k_from_meta = int(topk_raw)
+            if fixed_k_from_meta < 1:
+                fixed_k_from_meta = 0
+            elif fixed_k_from_meta > 0:
+                meta["k_fixed_from_meta"] = int(fixed_k_from_meta)
     dflash_cost_scale = 0.0
     if any_dflash:
         if isinstance(meta.get("dflash_draft_cost_scale"), (int, float)):
@@ -346,21 +460,41 @@ def run_runtime_trace_mtp_ablation(
         if dflash_cost_scale < 0.0:
             raise ValueError("meta.dflash_draft_cost_scale must be >= 0")
 
+    k_min_interactive = 1
+    k_max_interactive = 1
+    k_min_batch = 1
+    k_max_batch = 1
+    q_low = 0
+    q_high = 0
+    if fixed_k_from_meta > 0:
+        # DS4 ffn_moe_topk dumps contain *selected* experts per token/layer. When replaying these
+        # route-only traces, treat topk as the fixed K so service and queue depth scale correctly.
+        k_min_interactive = int(fixed_k_from_meta)
+        k_max_interactive = int(fixed_k_from_meta)
+        k_min_batch = int(fixed_k_from_meta)
+        k_max_batch = int(fixed_k_from_meta)
+
     base_cfg = scheduler_sim.SimConfig(
         num_experts=int(inferred_num_experts),
         expert_parallelism=int(expert_parallelism),
         expert_queue_max=int(expert_queue_max),
         service_ms=float(service_ms),
+        batch_max_interactive=int(batch_max_interactive),
+        batch_max_batch=int(batch_max_batch),
+        batch_wait_interactive_ms=float(batch_wait_interactive_ms),
+        batch_wait_batch_ms=float(batch_wait_batch_ms),
+        service_base_ms=float(service_base_ms),
+        service_per_task_ms=float(service_per_task_ms),
         starvation_ms=float(starvation_ms),
         hi_burst=0,
         promote_ms=0.0,
         adaptive_k=scheduler_sim.AdaptiveKConfig(
-            k_min_interactive=1,
-            k_max_interactive=1,
-            k_min_batch=1,
-            k_max_batch=1,
-            q_low=0,
-            q_high=0,
+            k_min_interactive=int(k_min_interactive),
+            k_max_interactive=int(k_max_interactive),
+            k_min_batch=int(k_min_batch),
+            k_max_batch=int(k_max_batch),
+            q_low=int(q_low),
+            q_high=int(q_high),
         ),
         k_mode=str(k_mode),
         k_signal="global",
@@ -1197,6 +1331,97 @@ def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _mtp_draft_queue_cls_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 2000 if quick else 40000
+    interactive_output_tps = 500.0
+    batch_output_tps = 20000.0
+
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=float(interactive_output_tps),
+        batch_arrival_rate_tps=float(batch_output_tps),
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    base_trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="class",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    draft_len = 2
+    accept_prob = 0.6
+    accept_decay = 0.8
+
+    exp_len = scheduler_sim.expected_mtp_accept_len(draft_len, float(accept_prob), float(accept_decay))
+    if exp_len <= 0.0:
+        exp_len = 1.0
+
+    trace_scaled = [dataclasses.replace(r, t_ms=(float(r.t_ms) * float(exp_len))) for r in base_trace]
+
+    cfg_mtp = dataclasses.replace(
+        base_cfg,
+        mtp_draft_len=int(draft_len),
+        mtp_accept_prob=float(accept_prob),
+        mtp_accept_decay=float(accept_decay),
+        mtp_draft_cost_scale=0.25,
+        mtp_draft_attempt_policy="stop_at_reject",
+        mtp_draft_queue_cls="inherit",
+    )
+
+    no_mtp_metrics = scheduler_sim.run_simulation(dataclasses.replace(cfg_mtp, mtp_draft_len=0), trace_scaled)
+    no_mtp_summary = scheduler_sim.compare_summary_jsonable(no_mtp_metrics)
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("draft_queue_inherit", {"mtp_draft_queue_cls": "inherit"}),
+        ("draft_queue_batch", {"mtp_draft_queue_cls": "batch"}),
+        ("draft_queue_interactive", {"mtp_draft_queue_cls": "interactive"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(cfg_mtp, trace_scaled, variants)
+    return(
+        {
+            "name": "mtp_draft_queue_cls",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(cfg_mtp),
+            "expected_accept_len": float(exp_len),
+            "trace_time_scale": float(exp_len),
+            "no_mtp": no_mtp_summary,
+            "results": out,
+            "recommendation": {
+                "default_mtp_draft_queue_cls": "inherit",
+                "experimental_mtp_draft_queue_cls": "batch",
+                "reason": "Synthetic overload: demoting draft micro-tokens can reduce verify queue pressure for batch traffic, but can also delay interactive work because draft stages must complete before verify. Treat as an experimental knob and validate on real runtime traces before enabling.",
+            },
+        }
+    )
+
+
 def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
     num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
@@ -1506,6 +1731,69 @@ def _backpressure_zero_admit_policy_scenario(quick: bool) -> Dict[str, Any]:
         }
     )
 
+def _multilayer_k_scope_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 1500 if quick else 8000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=16,
+        num_candidates=6,
+        interactive_arrival_rate_tps=500.0,
+        batch_arrival_rate_tps=12000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.2,
+        seed=123,
+        num_layers=12,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="candidates_mean",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+        backpressure_zero_admit_policy="skip",
+        k_scope="token",
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("k_scope_layer", {"k_scope": "layer"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "multilayer_k_scope",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "support_k_scope_layer": True,
+                "default_k_scope": "token",
+                "experimental_k_scope": "layer",
+                "reason": "Synthetic multi-layer routes: per-layer K decisions can respond to stage-local congestion, reducing skipped-stage/backpressure pathologies vs a single K choice applied to every layer. Keep k_scope=layer available and calibrate on real quantized-runtime traces before adopting defaults.",
+            },
+        }
+    )
+
 
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
@@ -1516,10 +1804,12 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "admit_policy_skew": _admit_policy_skew_scenario(quick),
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
         "mtp_accept_hist_shape": _mtp_accept_hist_shape_scenario(quick),
+        "mtp_draft_queue_cls": _mtp_draft_queue_cls_scenario(quick),
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
         "backpressure_units": _backpressure_units_scenario(quick),
         "backpressure_zero_admit_policy": _backpressure_zero_admit_policy_scenario(quick),
+        "multilayer_k_scope": _multilayer_k_scope_scenario(quick),
         "k_controller_smoothing": _k_controller_smoothing_scenario(quick),
     }
     return({"scenarios": scenarios})
@@ -1554,6 +1844,12 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--expert-queue-max", type=int, default=128)
     p.add_argument("--expert-parallelism", type=int, default=1)
     p.add_argument("--service-ms", type=float, default=1.0)
+    p.add_argument("--service-base-ms", type=float, default=0.0, help="Batching service model: base cost per batch (ms).")
+    p.add_argument("--service-per-task-ms", type=float, default=-1.0, help="Batching service model: per-task cost (ms); when <0 uses service_ms per task instead.")
+    p.add_argument("--batch-max-interactive", type=int, default=1, help="Max tasks per interactive batch per expert worker.")
+    p.add_argument("--batch-max-batch", type=int, default=1, help="Max tasks per batch batch per expert worker.")
+    p.add_argument("--batch-wait-interactive-ms", type=float, default=0.0, help="Batching window: wait up to this long to fill interactive batches.")
+    p.add_argument("--batch-wait-batch-ms", type=float, default=0.0, help="Batching window: wait up to this long to fill batch batches.")
     p.add_argument("--starvation-ms", type=float, default=50.0)
     p.add_argument("--mtp-draft-len", type=int, default=-1, help="Optional: enable synthetic MTP ablation when the trace has no MTP counters (>=1), or override inferred draft length (-1 = infer when present, else disabled).")
     p.add_argument("--mtp-accept-model", type=str, default="geom", choices=("geom", "hist"))
@@ -1562,7 +1858,13 @@ def _parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--mtp-accept-decay", type=float, default=1.0)
     p.add_argument("--mtp-draft-cost-scale", type=float, default=0.25)
     p.add_argument("--mtp-verify-per-draft-cost-scale", type=float, default=0.0)
-    p.add_argument("--mtp-draft-attempt-policy", type=str, default="full", choices=("full", "stop_at_reject"))
+    p.add_argument(
+        "--mtp-draft-attempt-policy",
+        type=str,
+        default="full",
+        choices=("full", "stop_at_reject", "trace"),
+        help="MTP: draft compute policy: full, stop_at_reject, or trace (use accepted_mtp+rejected_mtp when present).",
+    )
     p.add_argument("--dflash-draft-len", type=int, default=-1, help="Optional: override/inject meta.dflash_draft_len for runtime-trace comparator accounting (-1 = keep/infer).")
     p.add_argument("--dflash-draft-cost-scale", type=float, default=-1.0, help="Optional: draft-cost multiplier for the speculative-decoding comparator (-1 = use meta if present, 0 = disable overhead adjustment).")
     return(p.parse_args(argv))
@@ -1601,6 +1903,12 @@ def main(argv: List[str] | None = None) -> int:
             expert_queue_max=int(args.expert_queue_max),
             expert_parallelism=int(args.expert_parallelism),
             service_ms=float(args.service_ms),
+            service_base_ms=float(args.service_base_ms),
+            service_per_task_ms=float(args.service_per_task_ms),
+            batch_max_interactive=int(args.batch_max_interactive),
+            batch_max_batch=int(args.batch_max_batch),
+            batch_wait_interactive_ms=float(args.batch_wait_interactive_ms),
+            batch_wait_batch_ms=float(args.batch_wait_batch_ms),
             starvation_ms=float(args.starvation_ms),
             trace_derive_cost_scale=str(args.trace_derive_cost_scale),
             trace_speedup=float(args.trace_speedup),

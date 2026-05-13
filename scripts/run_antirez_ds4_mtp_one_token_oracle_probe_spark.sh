@@ -128,20 +128,37 @@ from pathlib import Path
 src = Path(sys.argv[1])
 dst = Path(sys.argv[2])
 
-out = {"ok": False, "errors": [], "probe_ok": None}
-try:
-    doc = json.loads(src.read_text(encoding="utf-8"))
-    if isinstance(doc, dict):
-        dst.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        out["probe_ok"] = bool(doc.get("ok", False))
-        out["ok"] = out["probe_ok"]
-        errs = doc.get("errors", [])
-        if isinstance(errs, list):
-            out["errors"] = [str(x) for x in errs[:64]]
-    else:
-        out["errors"].append("stdout JSON top-level is not an object")
-except Exception as e:
-    out["errors"].append(f"failed to parse stdout as JSON: {e}")
+out = {"ok": False, "errors": [], "probe_ok": None, "json_start": None, "json_end": None}
+text = src.read_text(encoding="utf-8")
+decoder = json.JSONDecoder()
+best = None
+for idx, ch in enumerate(text):
+    if ch != "{":
+        continue
+    try:
+        doc, end = decoder.raw_decode(text[idx:])
+    except json.JSONDecodeError:
+        continue
+    if not isinstance(doc, dict):
+        continue
+    if "ok" not in doc or "errors" not in doc:
+        continue
+    abs_end = idx + end
+    score = (1 if "runtime_commit" in doc else 0, abs_end, end)
+    if best is None or score > best[0]:
+        best = (score, doc, idx, abs_end)
+if best is None:
+    out["errors"].append("failed to find probe JSON object in stdout")
+else:
+    _, doc, start, end = best
+    dst.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    out["json_start"] = int(start)
+    out["json_end"] = int(end)
+    out["probe_ok"] = bool(doc.get("ok", False))
+    out["ok"] = out["probe_ok"]
+    errs = doc.get("errors", [])
+    if isinstance(errs, list):
+        out["errors"] = [str(x) for x in errs[:64]]
 print(json.dumps(out, indent=2, sort_keys=True))
 PY
 
