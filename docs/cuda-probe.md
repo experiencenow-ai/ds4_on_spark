@@ -36,7 +36,7 @@ Observed on Spark0 (2026-05-13): CUDA 13.0 `V13.0.88`; `sm_121a` / `sm_121f` ali
 
 When you want a single command that:
 
-- runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior)
+- runs `scripts/cuda_probe_nvcc_minimal_spark0.sh` (no repo transfer; toolchain + CUDA 13 linkage/visibility behavior, including a shared-library boundary probe for `-device-entity-has-hidden-visibility`)
 - runs `scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh` (no repo transfer; compile-only `sm_121` / `compute_121` flag spelling gates)
 - runs `scripts/cuda_probe_device_props_minimal_spark0.sh` (no repo transfer; one-line `schema=4` device summary + `sm_121` compile/run gates)
 - runs `scripts/cuda_probe_kernel_launch_tiny_minimal_spark0.sh` (no repo transfer; minimal “launch a kernel and sync” smoke without `cudaMalloc`)
