@@ -96,6 +96,7 @@ def summarize_one_token_mtp_probe_diff(
 	b: dict[str, Any],
 	*,
 	stage_order: list[str],
+	sample_tol: float = 1.0e-5,
 ) -> dict[str, Any]:
 	out: dict[str, Any] = {
 		"ok": False,
@@ -105,7 +106,7 @@ def summarize_one_token_mtp_probe_diff(
 		"diff": None,
 	}
 
-	d = diff.diff_one_token_mtp_probes(a, b)
+	d = diff.diff_one_token_mtp_probes(a, b, sample_tol=float(sample_tol))
 	out["diff"] = d
 
 	if d.get("ok", False):
@@ -175,6 +176,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 		help="Capture prefix order (repeatable). Defaults to a recommended set when omitted.",
 	)
 	ap.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+	ap.add_argument(
+		"--sample-tol",
+		type=float,
+		default=1.0e-5,
+		help="Max abs diff allowed for *_sample_f32 arrays (must match diff tool if overridden).",
+	)
 	args = ap.parse_args(argv)
 
 	a = _load_json(Path(args.a))
@@ -184,6 +191,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 		a if isinstance(a, dict) else {},
 		b if isinstance(b, dict) else {},
 		stage_order=stage_order,
+		sample_tol=float(args.sample_tol),
 	)
 
 	if args.json:

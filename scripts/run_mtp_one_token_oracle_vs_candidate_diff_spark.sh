@@ -9,6 +9,7 @@ REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV="${REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV:-}"
 REMOTE_MTP_ONE_TOKEN_ENV="${REMOTE_MTP_ONE_TOKEN_ENV:-}"
 REMOTE_MTP_ONE_TOKEN_CMD="${REMOTE_MTP_ONE_TOKEN_CMD:-}"
 REMOTE_SIDE_CAR_PROBE_JSON="${REMOTE_SIDE_CAR_PROBE_JSON:-}"
+MTP_SAMPLE_TOL="${MTP_SAMPLE_TOL:-}"
 
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT_DIR="$OUT_ROOT/$ts"
@@ -75,6 +76,12 @@ REPORT_MD="$OUT_DIR/mtp_oracle_vs_candidate_diff_spark.md"
 	echo "$REMOTE_SIDE_CAR_PROBE_JSON"
 	echo '```'
 	echo
+	echo "Sample tolerance override (MTP_SAMPLE_TOL):"
+	echo
+	echo '```'
+	echo "$MTP_SAMPLE_TOL"
+	echo '```'
+	echo
 	echo "## Spark Host Info"
 	echo
 	echo '```'
@@ -115,7 +122,11 @@ echo "== diffing oracle vs candidate (local; best-effort) =="
 DIFF_JSON="$OUT_DIR/oracle_vs_candidate_diff.json"
 DIFF_STDERR="$OUT_DIR/oracle_vs_candidate_diff_stderr.txt"
 if [ "$ORACLE_JSON" != "" ] && [ "$CAND_JSON" != "" ]; then
-	python3 "$repo_root/scripts/diff_mtp_one_token_draft_probe.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json \
+	diff_sample_args=""
+	if [ "$MTP_SAMPLE_TOL" != "" ]; then
+		diff_sample_args="--sample-tol $MTP_SAMPLE_TOL"
+	fi
+	python3 "$repo_root/scripts/diff_mtp_one_token_draft_probe.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json $diff_sample_args \
 		>"$DIFF_JSON" 2>"$DIFF_STDERR" || true
 else
 	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$DIFF_JSON"
@@ -139,7 +150,11 @@ fi
 echo "== summarizing diff (local; best-effort) =="
 DIFF_SUMMARY_JSON="$OUT_DIR/oracle_vs_candidate_diff_summary.json"
 if [ "$ORACLE_JSON" != "" ] && [ "$CAND_JSON" != "" ]; then
-	python3 "$repo_root/scripts/summarize_mtp_one_token_draft_probe_diff.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json >"$DIFF_SUMMARY_JSON" 2>/dev/null || true
+	sum_sample_args=""
+	if [ "$MTP_SAMPLE_TOL" != "" ]; then
+		sum_sample_args="--sample-tol $MTP_SAMPLE_TOL"
+	fi
+	python3 "$repo_root/scripts/summarize_mtp_one_token_draft_probe_diff.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json $sum_sample_args >"$DIFF_SUMMARY_JSON" 2>/dev/null || true
 else
 	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$DIFF_SUMMARY_JSON"
 fi
@@ -216,17 +231,50 @@ def read_json(p: Path):
 
 diff = read_json(out_dir / "oracle_vs_candidate_diff.json")
 ok = bool(diff.get("ok", False)) if isinstance(diff, dict) else False
+oracle_gate = read_json(out_dir / "oracle_capture_gate.json")
+cand_gate = read_json(out_dir / "candidate_capture_gate.json")
+diff_summary = read_json(out_dir / "oracle_vs_candidate_diff_summary.json")
+
+oracle_gate_ok = bool(oracle_gate.get("ok", False)) if isinstance(oracle_gate, dict) else False
+cand_gate_ok = bool(cand_gate.get("ok", False)) if isinstance(cand_gate, dict) else False
+diff_summary_ok = bool(diff_summary.get("ok", False)) if isinstance(diff_summary, dict) else False
+
+all_ok = bool(ok and oracle_gate_ok and cand_gate_ok and diff_summary_ok)
 
 summary = {
-	"ok": ok,
+	"ok": all_ok,
 	"artifacts": {
 		"report_md": str(report_md),
 		"diff_json": str(out_dir / "oracle_vs_candidate_diff.json"),
 	},
 	"diff": diff if isinstance(diff, dict) else None,
+	"diff_summary": diff_summary if isinstance(diff_summary, dict) else None,
+	"capture_gate": {
+		"oracle_ok": oracle_gate_ok,
+		"candidate_ok": cand_gate_ok,
+		"oracle": oracle_gate if isinstance(oracle_gate, dict) else None,
+		"candidate": cand_gate if isinstance(cand_gate, dict) else None,
+	},
 }
 
 (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
+rc=0
+if [ -r "$OUT_DIR/summary.json" ]; then
+	rc="$(python3 - "$OUT_DIR/summary.json" 2>/dev/null <<'PY' || printf '%s' 1
+import json
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+try:
+    obj = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+sys.stdout.write("0" if obj.get("ok", False) else "1")
+PY
+)"
+fi
+
 echo "done: $REPORT_MD"
+exit "$rc"

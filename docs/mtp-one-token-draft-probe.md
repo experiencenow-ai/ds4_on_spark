@@ -85,6 +85,15 @@ Convenience wrapper (runs the gated oracle runner + a gated candidate command, t
 scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
 ```
 
+Notes:
+
+- The wrapper writes a machine-readable `summary.json` alongside the Markdown report and exits non-zero when the capture gate or diff fails.
+- To relax `*_sample_f32` comparisons (when both probes emit samples), set `MTP_SAMPLE_TOL`:
+
+```bash
+MTP_SAMPLE_TOL=1e-4 scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh spark0@<spark-host>
+```
+
 By default this requires:
 
 - `base_next_token_id` match
