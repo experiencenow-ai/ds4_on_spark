@@ -7,10 +7,10 @@ usage()
 usage: centaur_spark12_v73_ring_rsync_evidence_run.sh <spark0_user@host> <spark1_user@host> <spark2_user@host> [remote_base_dir] [remote_dir] [local_ring_out_dir]
 
 Runs a full Spark1/Spark2 rsync-staged ring evidence loop from your Mac:
-  0) (optional) stage + node-setup Spark1/2 (creates Centaur v73 venv + runs selftest)
-  1) run the rsync-staged ring-step on Spark0
-  2) validate expected ring artifacts on Spark0
-  3) fetch a small sanitized artifact bundle back to your Mac
+  1) (optional) stage + node-setup Spark1/2 (creates Centaur v73 venv + runs selftest)
+  2) run the rsync-staged ring-step on Spark0
+  3) validate expected ring artifacts on Spark0
+  4) fetch a small sanitized artifact bundle back to your Mac
 
 Arguments:
   spark0_user@host     Orchestrator host; must have completed the Spark0 v73 smoke already
@@ -27,6 +27,7 @@ Environment:
   NODE_SETUP_RUN_ID    Optional node setup run id (default: $RING_RUN_ID)
   RING_SKIP_NODE_SETUP Set to 1 to skip Spark1/2 node setup (still stages zip by default)
   RING_REMOTE_VERIFY   Set to 1 to run post-ring remote `hyor-sync-status` on Spark1/2
+  RING_WORKDIR         Optional Spark0 ring workdir override (passed through to the runner; also used for fetch)
   SSH_OPTS             Optional ssh options override (default includes BatchMode + temp known_hosts)
 
 Pass-through env (see underlying scripts):
@@ -155,30 +156,31 @@ echo "remote_dir: $remote_dir"
 echo "ring_run_id: $run_id"
 echo "node_setup_run_id: $node_setup_run_id"
 echo "local_ring_out: $local_out"
+echo "remote_ring_workdir: ${RING_WORKDIR:-"(default)"}"
 
 if [ "${RING_SKIP_NODE_SETUP:-0}" != "1" ]; then
-	echo "== step 0/3: node setup (spark1/2) =="
+	echo "== step 1/4: node setup (spark1/2) =="
 	sh "$node_setup" "$spark1" "$spark2" "$remote_dir" "$node_setup_run_id" "$local_out/node_setup"
 	sh "$node_setup_fetch" "$spark1" "$spark2" "$node_setup_run_id" "$remote_dir" "$local_out/node_setup_fetched"
 else
 	echo "== skip node setup (RING_SKIP_NODE_SETUP=1) =="
 fi
 
-echo "== step 1/3: run ring rsync (Mac wrapper) =="
+echo "== step 2/4: run ring rsync (Mac wrapper) =="
 RING_RUN_ID="$run_id" sh "$run" "$spark0" "$spark1" "$spark2" "$remote_base" "$local_log"
 
-echo "== step 2/3: validate ring artifacts (Spark0) =="
+echo "== step 3/4: validate ring artifacts (Spark0) =="
 ssh $SSH_OPTS "$spark0" "export RING_RUN_ID=\"$run_id\"; sh -s -- --mode rsync" < "$validate"
 
 if [ "${RING_REMOTE_VERIFY:-0}" = "1" ]; then
-	echo "== step 3/4: remote verify (spark1/2) =="
+	echo "== optional: remote verify (spark1/2) =="
 	sh "$remote_verify" "$spark1" "$spark2" "$remote_base" "$remote_dir" "$local_out/remote_verify"
 else
 	echo "== skip remote verify (RING_REMOTE_VERIFY!=1) =="
 fi
 
 echo "== step 4/4: fetch ring artifacts (Mac) =="
-sh "$fetch" "$spark0" "$run_id" "" "$local_out"
+sh "$fetch" "$spark0" "$run_id" "${RING_WORKDIR:-}" "$local_out"
 
 echo "== done =="
 echo "ring_run_id: $run_id"

@@ -10,7 +10,18 @@ tokenizer/chat format, and memory envelope are real.
 
 Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-13T003043Z-smallest.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-13.md`).
 
-Quick start (Spark0 smallest staged trunk + external llama.cpp runtime path, no downloads/builds):
+Quick start (Spark0 “smallest credible” staged trunk + external llama.cpp runtime path, no downloads/builds):
+
+```sh
+OUT_ROOT=/private/tmp/ds4_on_spark_baseline \
+RUN_LABEL=quantized-single-spark0-smallest-credible \
+ALLOW_RUN=1 \
+scripts/run_quantized_single_spark0_smallest_credible_v4flash_external.sh spark0@aitopatom-9ab9.local
+```
+
+The “credible” wrapper defaults `MODEL_GGUF_INCLUDE_EGREP='IQ2|Q2_K|IQ3|Q3_K'` to avoid accidentally selecting an `IQ1_*`-tier artifact. Set `MODEL_GGUF_INCLUDE_EGREP=""` to disable the include filter.
+
+Quick start (Spark0 absolute smallest staged trunk + external llama.cpp runtime path, no downloads/builds):
 
 ```sh
 OUT_ROOT=/private/tmp/ds4_on_spark_baseline \
@@ -20,6 +31,8 @@ scripts/run_quantized_single_spark0_smallest_v4flash_external.sh spark0@aitopato
 ```
 
 Note: `scripts/run_quantized_single_spark0_smallest_v4flash_external.sh` defaults `FETCH_LLAMA_OUT_DIR=1` when `ALLOW_RUN=1`, so the local run directory includes `llamacpp_out_dir/` (useful for preserving `fattn_cli_probe.json` and raw runner logs). Set `FETCH_LLAMA_OUT_DIR=0` to skip the fetch.
+
+Note: `scripts/run_quantized_single_spark0_smallest_credible_v4flash_external.sh` uses the same `FETCH_LLAMA_OUT_DIR=1` default when `ALLOW_RUN=1`.
 
 To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
 
