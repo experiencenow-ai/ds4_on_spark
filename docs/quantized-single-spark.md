@@ -8,7 +8,7 @@ in `docs/quantized-performance-path.md`. A slow or low-quality first token
 stream is useful if it proves the model artifact, runtime, CUDA path,
 tokenizer/chat format, and memory envelope are real.
 
-Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-13T003043Z-smallest.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-13.md`).
+Latest successful Spark0 run (tokens produced): `docs/baseline-quantized-single-spark0-2026-05-13T080107Z-quantized-single-spark0-smallest-credible.md` (see also: `docs/baseline-quantized-single-spark0-2026-05-13T003043Z-smallest.md`).
 
 Quick start (Spark0 “smallest credible” staged trunk + external llama.cpp runtime path, no downloads/builds):
 
