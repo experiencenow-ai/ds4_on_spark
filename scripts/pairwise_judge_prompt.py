@@ -143,7 +143,7 @@ def main() -> None:
     ap.add_argument("--b", required=True, help="path to candidate B output text file")
     ap.add_argument("--judge-out-target", type=int, default=64, help="target judge output tokens (budget guidance only)")
     ap.add_argument("--schema-version", choices=["v1", "v2"], default="v2", help="prompt schema version (default v2)")
-    ap.add_argument("--decision-version", choices=["v1", "v2"], default="v1", help="decision schema version (default v1; v2 uses compact keys w/m/sa/sb/r/h/t)")
+    ap.add_argument("--decision-version", choices=["v1", "v2"], default="v2", help="decision schema version (default v2; v2 uses compact keys w/m/sa/sb/r/h/t)")
     ap.add_argument("--format", choices=["blocks", "json"], default="blocks", help="output format (default blocks)")
     args = ap.parse_args()
 
