@@ -19,6 +19,8 @@ For convenience on single-GPU bring-up:
 
 The probe `tools/cuda_probe/bin/cuda_sm121_arch_list_report` prints `__CUDA_ARCH_LIST__` (and CUDA 13 feature-set macros when present) at runtime for a normal `-arch=sm_121` build, which is handy when diagnosing “what arch list did `nvcc` think we built?” issues.
 
+The probe `tools/cuda_probe/bin/cuda_sm121_compile_report_tiny` prints a single line with NVCC/CUDART macro versions plus device CC and `__CUDA_ARCH__` / `__CUDA_ARCH_LIST__` (useful for log capture in automation runs).
+
 ### CUDA 13 NVCC Linkage / Visibility Defaults
 
 CUDA 13 changes `nvcc` defaults that can matter for CUTLASS/DeepGEMM-style builds:

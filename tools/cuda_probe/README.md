@@ -54,7 +54,7 @@ make
 
 Subset builds:
 
-- `make sm121_gate` builds the smallest “device-props + `sm_121` / `compute_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh` (including `-arch=compute_121`, `--gpu-architecture=compute_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121` spellings). It also builds `cuda_sm121_kernel_launch_tiny` (a no-`cudaMalloc` kernel-launch smoke) and `cuda_sm121{a,f}_arch_list_report` (CUDA 13 alias acceptance visibility).
+- `make sm121_gate` builds the smallest “device-props + `sm_121` / `compute_121` compile-only gates” set used by `scripts/cuda_probe_sm121_gate_spark0.sh` (including `-arch=compute_121`, `--gpu-architecture=compute_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121` spellings). It also builds `cuda_sm121_kernel_launch_tiny` (a no-`cudaMalloc` kernel-launch smoke), `cuda_sm121_compile_report_tiny` (single-line NVCC/CUDART macro sanity), and `cuda_sm121{a,f}_arch_list_report` (CUDA 13 alias acceptance visibility).
 - `make tiny` builds the fast-path set used by `scripts/cuda_probe_tiny_spark0.sh` (the script also builds the `cuda_sm121_rdc_probe` / `cuda_sm121_dlto_probe` link gates on top).
 - `make kernel_tiny` builds the bring-up set used by `scripts/cuda_probe_kernel_tiny_spark0.sh`.
 
@@ -79,6 +79,7 @@ Expected outputs:
 - `tools/cuda_probe/bin/cuda_sm121_dlto_probe`: compile/run device LTO (`-dlto`) smoke test for `sm_121` (toolchain gate for some CUDA build systems).
 - `tools/cuda_probe/bin/cuda_sm121_arch_report`: print runtime CC + compiled `__CUDA_ARCH__` (best-effort: `cudaMemcpyFromSymbol` first, then fallback `cudaMalloc` + tiny kernel).
 - `tools/cuda_probe/bin/cuda_sm121_arch_list_report`: print compile-time `__CUDA_ARCH_LIST__` plus CUDA 13 feature-set macros when defined (`__CUDA_ARCH_SPECIFIC__`, `__CUDA_ARCH_FAMILY_SPECIFIC__`); this is a convenient “what arch list did nvcc think we built?” sanity check for `sm_121` builds.
+- `tools/cuda_probe/bin/cuda_sm121_compile_report_tiny`: one-line summary that includes NVCC/CUDART macro versions plus device CC and `__CUDA_ARCH__` / `__CUDA_ARCH_LIST__` (useful to pin CUDA 13 “what did this toolkit think it was targeting?” in logs).
 - `tools/cuda_probe/bin/cuda_sm121a_arch_list_report` / `tools/cuda_probe/bin/cuda_sm121f_arch_list_report`: same report, but compiled with `-arch=sm_121a` / `-arch=sm_121f` (build explicitly via `make bin/cuda_sm121a_arch_list_report` / `make bin/cuda_sm121f_arch_list_report`, or run `scripts/cuda_probe_tiny_spark0.sh` on Spark0; best-effort build may succeed even when `nvcc --list-gpu-code` does not advertise those variants).
 - `tools/cuda_probe/bin/cuda_sm120_compat_probe`: compile for `sm_120` and run on the device; tests `sm_120`→`sm_121` compatibility.
 - `tools/cuda_probe/bin/cuda_cublaslt_smoke`: link/run tiny cuBLASLt matmul for `sm_121`.
