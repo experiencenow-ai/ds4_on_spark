@@ -20,6 +20,7 @@ Defaults:
 Environment:
   SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS              Extra ssh options (default includes BatchMode + temp known_hosts)
+  SSH_WALL_TIMEOUT       Wall-clock timeout for each SSH attempt (seconds; default: 45). Requires `timeout` on the Mac.
   SPARK_KNOWN_HOSTS     SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR           Optional git dir override for printing `git: <hash>`
@@ -45,6 +46,7 @@ SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 BW_MB="${BW_MB:-64}"
 BW_DIR="${BW_DIR:-both}"
+SSH_WALL_TIMEOUT="${SSH_WALL_TIMEOUT:-45}"
 
 case "$BW_DIR" in
 	both|down|up)
@@ -106,6 +108,18 @@ known_hosts_for_target()
 		echo "/private/tmp/ds4_spark_known_hosts"
 	fi
 	return 0
+}
+
+run_ssh()
+{
+	kh="$1"
+	shift 1
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	else
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	fi
+	return $?
 }
 
 ssh_classify_err()
@@ -215,6 +229,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "bw mb: $BW_MB"
 	echo "bw dir: $BW_DIR"
 	echo "ssh opts: $SSH_OPTS"
+	echo "ssh wall timeout_s: $SSH_WALL_TIMEOUT"
 	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
@@ -229,10 +244,10 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 			printf "down (remote->mac) %s MiB: " "$BW_MB"
 			ssh_err="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.ssherr.XXXXXX)"
 			dd_line_tmp="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.ddline.XXXXXX)"
-			ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$BW_MB" 2>"$ssh_err" <<-'REMOTE' | dd of=/dev/null bs=1M 2>&1 | tail -n 1 >"$dd_line_tmp" || true
-				set -eu
-				mb="${1:-64}"
-				dd if=/dev/zero bs=1M count="$mb" 2>/dev/null
+				run_ssh "$kh" "$target" sh -s -- "$BW_MB" 2>"$ssh_err" <<-'REMOTE' | dd of=/dev/null bs=1M 2>&1 | tail -n 1 >"$dd_line_tmp" || true
+					set -eu
+					mb="${1:-64}"
+					dd if=/dev/zero bs=1M count="$mb" 2>/dev/null
 REMOTE
 			dd_line="$(cat "$dd_line_tmp" 2>/dev/null || true)"
 			bytes="$(printf "%s\n" "$dd_line" | awk '{ print $1 }' || true)"
@@ -258,7 +273,7 @@ REMOTE
 		if [ "$BW_DIR" = "both" ] || [ "$BW_DIR" = "up" ]; then
 			printf "up (mac->remote) %s MiB: " "$BW_MB"
 			ssh_err_up="$(mktemp /private/tmp/ds4_spark_ring_probe_bw.ssherrup.XXXXXX)"
-			up_line="$(dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>"$ssh_err_up" || true)"
+				up_line="$(dd if=/dev/zero bs=1M count="$BW_MB" 2>/dev/null | run_ssh "$kh" "$target" 'dd of=/dev/null bs=1M 2>&1 | tail -n 1' 2>"$ssh_err_up" || true)"
 			if [ "$up_line" != "" ]; then
 				bw_annotate_dd_line "$up_line"
 				echo

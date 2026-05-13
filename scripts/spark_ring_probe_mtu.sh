@@ -19,6 +19,7 @@ Defaults:
 Environment:
   SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
+  SSH_WALL_TIMEOUT     Wall-clock timeout for each SSH probe (seconds; default: 45). Requires `timeout` on the Mac.
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
@@ -61,6 +62,7 @@ esac
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 MTU_PAYLOADS="${MTU_PAYLOADS:-1472,8972}"
+SSH_WALL_TIMEOUT="${SSH_WALL_TIMEOUT:-45}"
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -126,6 +128,18 @@ known_hosts_for_target()
 		echo "/private/tmp/ds4_spark_known_hosts"
 	fi
 	return 0
+}
+
+run_ssh()
+{
+	kh="$1"
+	shift 1
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	else
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	fi
+	return $?
 }
 
 count_targets()
@@ -238,6 +252,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "topology: $topology"
 	echo "mtu payloads: $MTU_PAYLOADS"
 	echo "ssh opts: $SSH_OPTS"
+	echo "ssh wall timeout_s: $SSH_WALL_TIMEOUT"
 	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
@@ -251,11 +266,11 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		peers="$(peer_hosts_for_index "$i")"
 		payloads_arg="$(printf "%s" "$MTU_PAYLOADS" | tr ' ' ',' | tr -s ',' | sed -E 's/^,+//; s/,+$//')"
 		echo "== target: $target =="
-		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$payloads_arg" $peers 2>&1 <<'REMOTE'
-set -eu
-export LANG=C LC_ALL=C
-export TERM=dumb
-payloads_csv="${1:-}"
+			if run_ssh "$kh" "$target" sh -s -- "$payloads_arg" $peers 2>&1 <<'REMOTE'
+	set -eu
+	export LANG=C LC_ALL=C
+	export TERM=dumb
+	payloads_csv="${1:-}"
 shift || true
 echo "== probe meta =="
 date -u

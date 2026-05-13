@@ -15,6 +15,7 @@ Defaults:
 Environment:
   SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
+  SSH_WALL_TIMEOUT     Wall-clock timeout for each SSH probe (seconds; default: 45). Requires `timeout` on the Mac.
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
@@ -57,6 +58,7 @@ esac
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 RING_PING="${RING_PING:-1}"
+SSH_WALL_TIMEOUT="${SSH_WALL_TIMEOUT:-45}"
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -216,6 +218,18 @@ peer_hosts_for_index()
 	return 0
 }
 
+run_ssh()
+{
+	kh="$1"
+	shift 1
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	else
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	fi
+	return $?
+}
+
 tmp="$(mktemp /private/tmp/ds4_spark_ring_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
@@ -269,6 +283,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "resolved targets: $targets"
 	echo "topology: $topology"
 	echo "ssh opts: $SSH_OPTS"
+	echo "ssh wall timeout_s: $SSH_WALL_TIMEOUT"
 	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
@@ -283,15 +298,15 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 		peers="$(peer_hosts_for_index "$i")"
 		local_epoch="$(date -u +%s 2>/dev/null || date +%s)"
 		host="$(host_only "$target")"
-		echo "== target: $target =="
-		set +e
-		out_file="$(mktemp /private/tmp/ds4_spark_ring_probe_target.XXXXXX)"
-		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers >"$out_file" 2>&1 <<'REMOTE'
-set -eu
-export LANG=C LC_ALL=C
-export TERM=dumb
-ring_ping="${1:-0}"
-local_epoch="${2:-0}"
+			echo "== target: $target =="
+			set +e
+			out_file="$(mktemp /private/tmp/ds4_spark_ring_probe_target.XXXXXX)"
+			run_ssh "$kh" "$target" sh -s -- "$RING_PING" "$local_epoch" $peers >"$out_file" 2>&1 <<'REMOTE'
+	set -eu
+	export LANG=C LC_ALL=C
+	export TERM=dumb
+	ring_ping="${1:-0}"
+	local_epoch="${2:-0}"
 shift 2 || true
 echo "== probe meta =="
 date -u
@@ -587,13 +602,19 @@ REMOTE
 		[ "$skew_s" = "" ] && skew_s="?"
 			clock_rows="${clock_rows}${clock_rows:+
 }${host} epoch=${epoch} skew_s=${skew_s}"
-			if [ "$rc" -ne 0 ]; then
-				echo "ssh status: $(ssh_classify_err "$out")"
-				echo "ssh: failed rc=$rc"
-				ssh_fail=$((ssh_fail + 1))
-			fi
-			echo
-		done
+				if [ "$rc" -ne 0 ]; then
+					status=""
+					if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+						status="timeout"
+					else
+						status="$(ssh_classify_err "$out")"
+					fi
+					echo "ssh status: $status"
+					echo "ssh: failed rc=$rc"
+					ssh_fail=$((ssh_fail + 1))
+				fi
+				echo
+			done
 		if [ "$clock_rows" != "" ]; then
 		echo "== clock (summary, remote-local) =="
 		printf "%s\n" "$clock_rows"

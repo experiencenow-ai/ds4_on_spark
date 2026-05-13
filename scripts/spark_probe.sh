@@ -9,6 +9,7 @@ usage: spark_probe.sh [user@host ...]
 Environment:
   SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
+  SSH_WALL_TIMEOUT     Wall-clock timeout for each SSH probe (seconds; default: 45). Requires `timeout` on the Mac.
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
@@ -51,6 +52,7 @@ NVIDIA_SMI_FULL="${NVIDIA_SMI_FULL:-0}"
 PYTORCH_PROBE="${PYTORCH_PROBE:-0}"
 CUDA_RUNTIME_PROBE="${CUDA_RUNTIME_PROBE:-1}"
 NVCC_ARCH_OVERRIDE="${NVCC_ARCH:-}"
+SSH_WALL_TIMEOUT="${SSH_WALL_TIMEOUT:-45}"
 
 if [ "$SPARK_PROBE_FACTS" = "1" ]; then
 	SPARK_PROBE_SUMMARY="1"
@@ -111,6 +113,18 @@ known_hosts_for_target()
 	return 0
 }
 
+run_ssh()
+{
+	kh="$1"
+	shift 1
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	else
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	fi
+	return $?
+}
+
 tmp="$(mktemp /private/tmp/ds4_spark_probe.XXXXXX)"
 trap 'rm -f "$tmp"' EXIT INT HUP TERM
 
@@ -163,6 +177,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	echo "probe args: $probe_args"
 	echo "resolved targets: $targets"
 	echo "ssh opts: $SSH_OPTS"
+	echo "ssh wall timeout_s: $SSH_WALL_TIMEOUT"
 	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
 	done
@@ -171,7 +186,7 @@ trap 'rm -f "$tmp"' EXIT INT HUP TERM
 	for target in $targets; do
 		kh="$(known_hosts_for_target "$target")"
 		echo "== target: $target =="
-		if ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'set -eu
+		if run_ssh "$kh" "$target" 'set -eu
 export LANG=C LC_ALL=C
 export TERM=dumb
 nvidia_smi_full='"$NVIDIA_SMI_FULL"'

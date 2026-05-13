@@ -13,6 +13,9 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 SPARK_SSH_USER=spark0 REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full aitopatom-9ab9.local spark1.local spark2.local
 ```
 
+If `*.local` name resolution is flaky (SSH appears to “hang” before it can print `resolve_failed`), cap per-target attempts with:
+- `SSH_WALL_TIMEOUT=20` (seconds; requires `timeout` on the Mac)
+
 Quick validation targets (paste-friendly stanzas):
 - `docs/spark-ring-mac-discovery-<stamp>.md`: `== known target checks ==`, `== ping (mac->targets, compact) ==`
 - `docs/spark-ring-probe-<stamp>.md`: `== clock (summary, remote-local) ==`, `== network (iface matrix, compact) ==`, `== cuda/toolchain facts (summary) ==`, `== nvidia-smi -q fabric/c2c (summary) ==`

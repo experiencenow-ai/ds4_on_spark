@@ -23,6 +23,7 @@ Defaults:
 Environment:
   SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS              Extra ssh options (default includes BatchMode + temp known_hosts)
+  SSH_WALL_TIMEOUT       Wall-clock timeout for each SSH attempt (seconds; default: 45). Requires `timeout` on the Mac.
   SPARK_KNOWN_HOSTS     SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR           Optional git dir override for printing `git: <hash>`
@@ -47,6 +48,7 @@ SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 LAT_ITERS="${LAT_ITERS:-3}"
 LAT_WARMUP="${LAT_WARMUP:-1}"
+SSH_WALL_TIMEOUT="${SSH_WALL_TIMEOUT:-45}"
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -124,6 +126,18 @@ ssh_classify_err()
 	return 0
 }
 
+run_ssh()
+{
+	kh="$1"
+	shift 1
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	else
+		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	fi
+	return $?
+}
+
 tmpdir="$(mktemp -d /private/tmp/ds4_spark_ring_probe_lat.XXXXXX)"
 trap 'rm -rf "$tmpdir"' EXIT INT HUP TERM
 
@@ -136,10 +150,14 @@ measure_target()
 	rm -f "$out_samples"
 	if [ "$LAT_WARMUP" = "1" ]; then
 		set +e
-		warm_out="$(ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'true' 2>&1 >/dev/null)"
+		warm_out="$(run_ssh "$kh" "$target" 'true' 2>&1 >/dev/null)"
 		warm_rc="$?"
 		if [ "$warm_rc" -ne 0 ]; then
-			echo "warmup: failed ($(ssh_classify_err "$warm_out"))"
+			class="$(ssh_classify_err "$warm_out")"
+			if [ "$warm_rc" -eq 124 ] || [ "$warm_rc" -eq 137 ]; then
+				class="timeout"
+			fi
+			echo "warmup: failed ($class)"
 			printf "%s\n" "$warm_out" | sed -n '1,8p' | sed -E 's/^[[:space:]]+//'
 			return 1
 		fi
@@ -148,11 +166,19 @@ measure_target()
 	while [ "$i" -lt "$LAT_ITERS" ]; do
 		i=$((i + 1))
 		set +e
-		out="$( { /usr/bin/time -p ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'true' >/dev/null; } 2>&1 )"
+		if command -v timeout >/dev/null 2>&1; then
+			out="$( { /usr/bin/time -p timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'true' >/dev/null; } 2>&1 )"
+		else
+			out="$( { /usr/bin/time -p ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'true' >/dev/null; } 2>&1 )"
+		fi
 		rc="$?"
 		set -e
 		if [ "$rc" -ne 0 ]; then
-			echo "sample $i: failed ($(ssh_classify_err "$out"))"
+			class="$(ssh_classify_err "$out")"
+			if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+				class="timeout"
+			fi
+			echo "sample $i: failed ($class)"
 			printf "%s\n" "$out" | grep -v -E '^(real|user|sys)[[:space:]]' | sed -n '1,8p' | sed -E 's/^[[:space:]]+//'
 			return 1
 		fi
@@ -234,12 +260,13 @@ summarize_samples()
 	fi
 	echo "probe args: $probe_args"
 	echo "resolved targets: $targets"
-	echo "lat iters: $LAT_ITERS"
-	echo "lat warmup: $LAT_WARMUP"
-	echo "ssh opts: $SSH_OPTS"
-	for t in $targets; do
-		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
-	done
+		echo "lat iters: $LAT_ITERS"
+		echo "lat warmup: $LAT_WARMUP"
+		echo "ssh opts: $SSH_OPTS"
+		echo "ssh wall timeout_s: $SSH_WALL_TIMEOUT"
+		for t in $targets; do
+			echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
+		done
 	echo
 	for target in $targets; do
 		kh="$(known_hosts_for_target "$target")"
