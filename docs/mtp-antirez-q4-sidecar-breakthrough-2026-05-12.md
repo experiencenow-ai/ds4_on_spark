@@ -73,6 +73,7 @@ The Q4_K fallback must be validated before performance work matters. This branch
 - `scripts/verify_antirez_ds4_q4k_dot_math.py`
 - `fixtures/quant/q4k_llamacpp_b9110_rowdot_fixture.json`
 - `tests/q4k_llamacpp_fixture_test.py`
+- Fixture provenance/regeneration: `docs/mtp-q4k-dot-validation.md`
 
 Run:
 
@@ -107,6 +108,8 @@ mtp_input_hc_fnv64=a42bc106f8ea8b6a
 mtp_block_out_hc_fnv64=af8a8ecc3efbaf40
 mtp_head_norm_fnv64=e95d14bfa2882d8d
 ```
+
+Newer oracle captures also include pre-`mtp_input_hc` intermediates (`mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`) so oracle-vs-candidate diffs can localize whether the mismatch happens before the MTP block.
 
 This means the patched `antirez/ds4` CUDA path can now serve as the one-token oracle for candidate runtime work. The first observed draft does not need to match the base token; it is the MTP token proposed after committing that base token.
 

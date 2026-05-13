@@ -28,7 +28,9 @@ When you want a minimal “toolchain + compile-only `sm_121` gates + one-line de
 
 This runs in a single SSH session and is intended as the quickest preflight before attempting DeepGEMM/CUTLASS/cuBLASLt builds on Spark0. It also includes a tiny PTX `.target` probe (`-ptx -arch=sm_121` and `-ptx -arch=compute_121`) plus a compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` gate so logs capture CUDA 13 “PTX target naming” and bracket-list `-gencode` behavior. The micro gate also runs best-effort alias compile probes for `sm_121a` / `sm_121f` plus a best-effort `__cluster_dims__(2,1,1)` annotation compile check (informational; helps spot CUTLASS-style cluster launch blockers early).
 
-Observed on Spark0 (2026-05-13): CUDA 13.0 `V13.0.88`; `sm_121a` / `sm_121f` alias compile probes report `OK`; the `__cluster_dims__(2,1,1)` compile checks report `OK`; `-ptx -arch=compute_121` still emits PTX whose first `.target` line is `.target sm_121`.
+It also records best-effort “feature-set macro” probes for `sm_121{,a,f}` and `compute_121{,a,f}` (captures `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` when defined), runs best-effort PTX `.target` probes for `sm_121{,a,f}` and `compute_121{,a,f}`, and performs best-effort build+run of the one-line `schema=4` device-props probe under `-arch=native`, `-arch=sm_121`, and `-arch=compute_121` (so a single micro run can confirm both “PTX compiles” and “PTX runs via driver JIT” on Spark0).
+
+Observed on Spark0 (2026-05-13): CUDA 13.0 `V13.0.88`; `sm_121a` / `sm_121f` alias compile probes report `OK`; the `__cluster_dims__(2,1,1)` compile checks report `OK`; PTX `.target` probes report `sm_121` for `-arch=sm_121` and `-arch=compute_121`, and `sm_121a` / `sm_121f` for `-arch=sm_121a` / `sm_121f` and `-arch=compute_121a` / `compute_121f`; the feature-set macro probes report `sm_121` / `compute_121` missing both `__CUDA_ARCH_SPECIFIC__` and `__CUDA_ARCH_FAMILY_SPECIFIC__`, `sm_121a` / `compute_121a` defining both, and `sm_121f` / `compute_121f` defining only `__CUDA_ARCH_FAMILY_SPECIFIC__`; and the `-arch=compute_121` device-props run succeeds (driver JIT path works).
 
 ## Spark0: Minimal Gates (nvcc + Device Props + `sm_121` Gate)
 
@@ -307,7 +309,7 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
 - Runs best-effort compile-only probes for `-arch=sm_121` plus `sm_121a` / `sm_121f` (variant targets) and `compute_121` (when advertised) (fast toolchain signal; no kernel run required; prints first error lines on failure)
-- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted)
+- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted; note the probe includes a dummy `__global__` so the macros are emitted in the device compile pass)
 - Prints a best-effort `__CUDA_ARCH_LIST__` snapshot for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` to make NVCC’s implicit “virtual arch list” observable in logs
 - Runs a best-effort compile-only probe using `nvcc --gpu-architecture=sm_121` (long-form flag used by some build systems)
 - Runs a best-effort compile-only probe with `-std=c++20 --extended-lambda --expt-relaxed-constexpr` for `-arch=sm_121` (and `compute_121` when advertised) as a CUTLASS/DeepGEMM-style toolchain gate (no repo transfer)

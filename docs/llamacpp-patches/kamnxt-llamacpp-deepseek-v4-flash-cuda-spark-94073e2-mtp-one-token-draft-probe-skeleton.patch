@@ -15,12 +15,11 @@ new file mode 100644
 index 0000000..bd44d62
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/CMakeLists.txt
-@@ -0,0 +1,6 @@
+@@ -0,0 +1,5 @@
 +set(TARGET llama-ds4-mtp-one-token-draft-probe)
 +add_executable(${TARGET} ds4-mtp-one-token-draft-probe.cpp)
 +install(TARGETS ${TARGET} RUNTIME)
 +target_link_libraries(${TARGET} PRIVATE llama ${CMAKE_THREAD_LIBS_INIT})
-+target_include_directories(${TARGET} PRIVATE ../../src)
 +target_compile_features(${TARGET} PRIVATE cxx_std_17)
 diff --git a/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp b/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp
 new file mode 100644
@@ -90,7 +89,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_head_base.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_head_base) == 1 && s->hc_head_base->ne[0] == 4)) {
++	if (!(s->hc_head_base->n_dims == 1 && s->hc_head_base->ne[0] == 4)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_head_base.weight";
 +		return false;
 +	}
@@ -104,7 +103,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_head_fn.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_head_fn) == 2 && s->hc_head_fn->ne[0] == 16384 && s->hc_head_fn->ne[1] == 4)) {
++	if (!(s->hc_head_fn->n_dims == 2 && s->hc_head_fn->ne[0] == 16384 && s->hc_head_fn->ne[1] == 4)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_head_fn.weight";
 +		return false;
 +	}
@@ -118,7 +117,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_head_scale.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_head_scale) == 1 && s->hc_head_scale->ne[0] == 1)) {
++	if (!(s->hc_head_scale->n_dims == 1 && s->hc_head_scale->ne[0] == 1)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_head_scale.weight";
 +		return false;
 +	}
@@ -132,7 +131,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.e_proj.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->e_proj) == 2 && s->e_proj->ne[0] == 4096 && s->e_proj->ne[1] == 4096)) {
++	if (!(s->e_proj->n_dims == 2 && s->e_proj->ne[0] == 4096 && s->e_proj->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.e_proj.weight";
 +		return false;
 +	}
@@ -146,7 +145,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.h_proj.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->h_proj) == 2 && s->h_proj->ne[0] == 4096 && s->h_proj->ne[1] == 4096)) {
++	if (!(s->h_proj->n_dims == 2 && s->h_proj->ne[0] == 4096 && s->h_proj->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.h_proj.weight";
 +		return false;
 +	}
@@ -160,7 +159,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.enorm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->enorm) == 1 && s->enorm->ne[0] == 4096)) {
++	if (!(s->enorm->n_dims == 1 && s->enorm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.enorm.weight";
 +		return false;
 +	}
@@ -174,7 +173,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hnorm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hnorm) == 1 && s->hnorm->ne[0] == 4096)) {
++	if (!(s->hnorm->n_dims == 1 && s->hnorm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hnorm.weight";
 +		return false;
 +	}
@@ -188,7 +187,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.norm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->norm) == 1 && s->norm->ne[0] == 4096)) {
++	if (!(s->norm->n_dims == 1 && s->norm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.norm.weight";
 +		return false;
 +	}
@@ -202,7 +201,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_attn_fn.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_attn_fn) == 2 && s->hc_attn_fn->ne[0] == 16384 && s->hc_attn_fn->ne[1] == 24)) {
++	if (!(s->hc_attn_fn->n_dims == 2 && s->hc_attn_fn->ne[0] == 16384 && s->hc_attn_fn->ne[1] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_attn_fn.weight";
 +		return false;
 +	}
@@ -216,7 +215,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_attn_scale.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_attn_scale) == 1 && s->hc_attn_scale->ne[0] == 3)) {
++	if (!(s->hc_attn_scale->n_dims == 1 && s->hc_attn_scale->ne[0] == 3)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_attn_scale.weight";
 +		return false;
 +	}
@@ -230,7 +229,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_attn_base.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_attn_base) == 1 && s->hc_attn_base->ne[0] == 24)) {
++	if (!(s->hc_attn_base->n_dims == 1 && s->hc_attn_base->ne[0] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_attn_base.weight";
 +		return false;
 +	}
@@ -244,7 +243,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_norm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_norm) == 1 && s->attn_norm->ne[0] == 4096)) {
++	if (!(s->attn_norm->n_dims == 1 && s->attn_norm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_norm.weight";
 +		return false;
 +	}
@@ -258,7 +257,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_q_a.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_q_a) == 2 && s->attn_q_a->ne[0] == 4096 && s->attn_q_a->ne[1] == 1024)) {
++	if (!(s->attn_q_a->n_dims == 2 && s->attn_q_a->ne[0] == 4096 && s->attn_q_a->ne[1] == 1024)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_q_a.weight";
 +		return false;
 +	}
@@ -272,7 +271,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_q_a_norm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_q_a_norm) == 1 && s->attn_q_a_norm->ne[0] == 1024)) {
++	if (!(s->attn_q_a_norm->n_dims == 1 && s->attn_q_a_norm->ne[0] == 1024)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_q_a_norm.weight";
 +		return false;
 +	}
@@ -286,7 +285,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_q_b.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_q_b) == 2 && s->attn_q_b->ne[0] == 1024 && s->attn_q_b->ne[1] == 32768)) {
++	if (!(s->attn_q_b->n_dims == 2 && s->attn_q_b->ne[0] == 1024 && s->attn_q_b->ne[1] == 32768)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_q_b.weight";
 +		return false;
 +	}
@@ -300,7 +299,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_kv.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_kv) == 2 && s->attn_kv->ne[0] == 4096 && s->attn_kv->ne[1] == 512)) {
++	if (!(s->attn_kv->n_dims == 2 && s->attn_kv->ne[0] == 4096 && s->attn_kv->ne[1] == 512)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_kv.weight";
 +		return false;
 +	}
@@ -314,7 +313,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_kv_a_norm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_kv_a_norm) == 1 && s->attn_kv_a_norm->ne[0] == 512)) {
++	if (!(s->attn_kv_a_norm->n_dims == 1 && s->attn_kv_a_norm->ne[0] == 512)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_kv_a_norm.weight";
 +		return false;
 +	}
@@ -328,7 +327,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_sinks.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_sinks) == 1 && s->attn_sinks->ne[0] == 64)) {
++	if (!(s->attn_sinks->n_dims == 1 && s->attn_sinks->ne[0] == 64)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_sinks.weight";
 +		return false;
 +	}
@@ -342,7 +341,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_output_a.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_output_a) == 2 && s->attn_output_a->ne[0] == 4096 && s->attn_output_a->ne[1] == 8192)) {
++	if (!(s->attn_output_a->n_dims == 2 && s->attn_output_a->ne[0] == 4096 && s->attn_output_a->ne[1] == 8192)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_output_a.weight";
 +		return false;
 +	}
@@ -356,7 +355,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_output_b.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->attn_output_b) == 2 && s->attn_output_b->ne[0] == 8192 && s->attn_output_b->ne[1] == 4096)) {
++	if (!(s->attn_output_b->n_dims == 2 && s->attn_output_b->ne[0] == 8192 && s->attn_output_b->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_output_b.weight";
 +		return false;
 +	}
@@ -370,7 +369,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_ffn_fn.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_ffn_fn) == 2 && s->hc_ffn_fn->ne[0] == 16384 && s->hc_ffn_fn->ne[1] == 24)) {
++	if (!(s->hc_ffn_fn->n_dims == 2 && s->hc_ffn_fn->ne[0] == 16384 && s->hc_ffn_fn->ne[1] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_ffn_fn.weight";
 +		return false;
 +	}
@@ -384,7 +383,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_ffn_scale.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_ffn_scale) == 1 && s->hc_ffn_scale->ne[0] == 3)) {
++	if (!(s->hc_ffn_scale->n_dims == 1 && s->hc_ffn_scale->ne[0] == 3)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_ffn_scale.weight";
 +		return false;
 +	}
@@ -398,7 +397,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_ffn_base.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->hc_ffn_base) == 1 && s->hc_ffn_base->ne[0] == 24)) {
++	if (!(s->hc_ffn_base->n_dims == 1 && s->hc_ffn_base->ne[0] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_ffn_base.weight";
 +		return false;
 +	}
@@ -412,7 +411,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_norm.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_norm) == 1 && s->ffn_norm->ne[0] == 4096)) {
++	if (!(s->ffn_norm->n_dims == 1 && s->ffn_norm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_norm.weight";
 +		return false;
 +	}
@@ -426,7 +425,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_gate_inp.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_gate_inp) == 2 && s->ffn_gate_inp->ne[0] == 4096 && s->ffn_gate_inp->ne[1] == 256)) {
++	if (!(s->ffn_gate_inp->n_dims == 2 && s->ffn_gate_inp->ne[0] == 4096 && s->ffn_gate_inp->ne[1] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_gate_inp.weight";
 +		return false;
 +	}
@@ -440,7 +439,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.exp_probs_b.bias";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->exp_probs_b_bias) == 1 && s->exp_probs_b_bias->ne[0] == 256)) {
++	if (!(s->exp_probs_b_bias->n_dims == 1 && s->exp_probs_b_bias->ne[0] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.exp_probs_b.bias";
 +		return false;
 +	}
@@ -454,7 +453,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_gate_exps.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_gate_exps) == 3 && s->ffn_gate_exps->ne[0] == 4096 && s->ffn_gate_exps->ne[1] == 2048 && s->ffn_gate_exps->ne[2] == 256)) {
++	if (!(s->ffn_gate_exps->n_dims == 3 && s->ffn_gate_exps->ne[0] == 4096 && s->ffn_gate_exps->ne[1] == 2048 && s->ffn_gate_exps->ne[2] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_gate_exps.weight";
 +		return false;
 +	}
@@ -468,7 +467,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_up_exps.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_up_exps) == 3 && s->ffn_up_exps->ne[0] == 4096 && s->ffn_up_exps->ne[1] == 2048 && s->ffn_up_exps->ne[2] == 256)) {
++	if (!(s->ffn_up_exps->n_dims == 3 && s->ffn_up_exps->ne[0] == 4096 && s->ffn_up_exps->ne[1] == 2048 && s->ffn_up_exps->ne[2] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_up_exps.weight";
 +		return false;
 +	}
@@ -482,7 +481,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_down_exps.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_down_exps) == 3 && s->ffn_down_exps->ne[0] == 2048 && s->ffn_down_exps->ne[1] == 4096 && s->ffn_down_exps->ne[2] == 256)) {
++	if (!(s->ffn_down_exps->n_dims == 3 && s->ffn_down_exps->ne[0] == 2048 && s->ffn_down_exps->ne[1] == 4096 && s->ffn_down_exps->ne[2] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_down_exps.weight";
 +		return false;
 +	}
@@ -496,7 +495,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_gate_shexp.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_gate_shexp) == 2 && s->ffn_gate_shexp->ne[0] == 4096 && s->ffn_gate_shexp->ne[1] == 2048)) {
++	if (!(s->ffn_gate_shexp->n_dims == 2 && s->ffn_gate_shexp->ne[0] == 4096 && s->ffn_gate_shexp->ne[1] == 2048)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_gate_shexp.weight";
 +		return false;
 +	}
@@ -510,7 +509,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_up_shexp.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_up_shexp) == 2 && s->ffn_up_shexp->ne[0] == 4096 && s->ffn_up_shexp->ne[1] == 2048)) {
++	if (!(s->ffn_up_shexp->n_dims == 2 && s->ffn_up_shexp->ne[0] == 4096 && s->ffn_up_shexp->ne[1] == 2048)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_up_shexp.weight";
 +		return false;
 +	}
@@ -524,7 +523,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_down_shexp.weight";
 +		return false;
 +	}
-+	if (!(ggml_n_dims(s->ffn_down_shexp) == 2 && s->ffn_down_shexp->ne[0] == 2048 && s->ffn_down_shexp->ne[1] == 4096)) {
++	if (!(s->ffn_down_shexp->n_dims == 2 && s->ffn_down_shexp->ne[0] == 2048 && s->ffn_down_shexp->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_down_shexp.weight";
 +		return false;
 +	}
@@ -535,10 +534,10 @@ index 0000000..a65998b
 +} // namespace ds4
 diff --git a/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
 new file mode 100644
-index 0000000..b7a5c31
+index 0000000..680d9af
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,1277 @@
+@@ -0,0 +1,877 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -548,17 +547,15 @@ index 0000000..b7a5c31
 +
 +#include <algorithm>
 +#include <clocale>
-+#include <cmath>
 +#include <cstdint>
 +#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
-+#include <fstream>
 +#include <string>
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --model <trunk.gguf> --sidecar <mtp_sidecar.gguf> [--prompt <text> | --prompt-file <path>] [--seed N] [--json] [--load-sidecar-weights]\n", prog);
++    std::fprintf(stderr, "usage: %s --model <trunk.gguf> --sidecar <mtp_sidecar.gguf> [--prompt <text>] [--seed N] [--json] [--load-sidecar-weights]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -607,30 +604,7 @@ index 0000000..b7a5c31
 +    return std::string(buf, (size_t) n);
 +}
 +
-+static std::string ds4_render_chat_prompt(const std::string & prompt) {
-+    static const char * bos = "<｜begin▁of▁sentence｜>";
-+    if (prompt.rfind(bos, 0) == 0) {
-+        return prompt;
-+    }
-+    std::string rendered;
-+    rendered.reserve(prompt.size() + 96);
-+    rendered += bos;
-+    rendered += "You are a helpful assistant";
-+    rendered += "<｜User｜>";
-+    rendered += prompt;
-+    rendered += "<｜Assistant｜><think>";
-+    return rendered;
-+}
-+
-+struct tensor_capture {
-+    bool got = false;
-+    ggml_type type = GGML_TYPE_F32;
-+    int64_t ne0 = 0;
-+    int64_t ne1 = 0;
-+    int64_t ne2 = 0;
-+    int64_t ne3 = 0;
-+    std::vector<uint8_t> bytes;
-+};
++struct tensor_capture;
 +
 +static bool compute_argmax_logits_from_output(
 +        const tensor_capture & embd,
@@ -720,10 +694,29 @@ index 0000000..b7a5c31
 +    return (*out_token_id >= 0);
 +}
 +
++struct tensor_capture {
++    bool got = false;
++    ggml_type type = GGML_TYPE_F32;
++    int64_t ne0 = 0;
++    int64_t ne1 = 0;
++    int64_t ne2 = 0;
++    int64_t ne3 = 0;
++    std::vector<uint8_t> bytes;
++};
++
 +struct probe_captures {
 +    bool enable = false;
 +    tensor_capture token_embd;
 +    tensor_capture pre_hc_head;
++};
++
++struct mtp_stub_input_hc_captures {
++    tensor_capture mtp_enorm;
++    tensor_capture mtp_eproj;
++    tensor_capture mtp_eproj_hc;
++    tensor_capture mtp_hnorm_hc;
++    tensor_capture mtp_hproj_hc;
++    tensor_capture mtp_input_hc;
 +};
 +
 +static uint64_t fnv1a64(const uint8_t *p, size_t n) {
@@ -741,82 +734,21 @@ index 0000000..b7a5c31
 +    return std::string(buf);
 +}
 +
-+struct tensor_f32_stats {
-+    bool ok = false;
-+    int64_t count = 0;
-+    double sum = 0.0;
-+    double l2 = 0.0;
-+    float min = 0.0f;
-+    float max = 0.0f;
-+    float absmax = 0.0f;
-+};
++static bool capture_tensor_host_bytes(struct ggml_tensor * t, tensor_capture * cap) {
++    if (t == nullptr || cap == nullptr || t->data == nullptr) {
++        return false;
++    }
 +
-+static uint64_t fnv1a64_update(uint64_t h, const uint8_t * p, size_t n) {
-+    for (size_t i = 0; i < n; i++) {
-+        h ^= (uint64_t) p[i];
-+        h *= 1099511628211ull;
-+    }
-+    return h;
-+}
-+
-+static bool tensor_is_f32_bytes(const tensor_capture & cap) {
-+    return cap.got && cap.type == GGML_TYPE_F32 && (cap.bytes.size() % sizeof(float)) == 0;
-+}
-+
-+static tensor_f32_stats tensor_stats_f32(const tensor_capture & cap) {
-+    tensor_f32_stats st;
-+    if (!tensor_is_f32_bytes(cap)) {
-+        return st;
-+    }
-+    st.count = (int64_t) (cap.bytes.size() / sizeof(float));
-+    if (st.count <= 0) {
-+        return st;
-+    }
-+    for (int64_t i = 0; i < st.count; i++) {
-+        float fv = 0.0f;
-+        std::memcpy(&fv, cap.bytes.data() + ((size_t) i * sizeof(float)), sizeof(float));
-+        const double v = (double) fv;
-+        const float av = std::fabs(fv);
-+        if (i == 0 || fv < st.min) st.min = fv;
-+        if (i == 0 || fv > st.max) st.max = fv;
-+        if (i == 0 || av > st.absmax) st.absmax = av;
-+        st.sum += v;
-+        st.l2 += v * v;
-+    }
-+    st.ok = true;
-+    return st;
-+}
-+
-+static bool tensor_hc_shape_4096x4(const tensor_capture & cap) {
-+    return tensor_is_f32_bytes(cap) && cap.ne0 == 4096 && cap.ne1 == 4 && cap.ne2 == 1 && cap.bytes.size() == (4096u * 4u * sizeof(float));
-+}
-+
-+static uint64_t fnv1a64_hc_major_4096x4(const tensor_capture & cap) {
-+    uint64_t h = 14695981039346656037ull;
-+    const uint8_t * p = cap.bytes.data();
-+    for (int64_t embd = 0; embd < 4096; embd++) {
-+        for (int64_t hc = 0; hc < 4; hc++) {
-+            const size_t off = (size_t) ((hc * 4096) + embd) * sizeof(float);
-+            h = fnv1a64_update(h, p + off, sizeof(float));
-+        }
-+    }
-+    return h;
-+}
-+
-+static void print_tensor_diagnostics_json(const char * prefix, const tensor_capture & cap, bool hc_major) {
-+    if (cap.got && hc_major && tensor_hc_shape_4096x4(cap)) {
-+        std::printf("  \"%s_hc_major_fnv64\": \"%s\",\n", prefix, hex_u64(fnv1a64_hc_major_4096x4(cap)).c_str());
-+        std::printf("  \"%s_hc_major_shape\": [4, 4096],\n", prefix);
-+    }
-+    const tensor_f32_stats st = tensor_stats_f32(cap);
-+    if (st.ok) {
-+        std::printf("  \"%s_f32_count\": %lld,\n", prefix, (long long) st.count);
-+        std::printf("  \"%s_f32_sum\": %.17g,\n", prefix, st.sum);
-+        std::printf("  \"%s_f32_l2\": %.17g,\n", prefix, st.l2);
-+        std::printf("  \"%s_f32_absmax\": %.9g,\n", prefix, (double) st.absmax);
-+        std::printf("  \"%s_f32_min\": %.9g,\n", prefix, (double) st.min);
-+        std::printf("  \"%s_f32_max\": %.9g,\n", prefix, (double) st.max);
-+    }
++    const size_t n_bytes = ggml_nbytes(t);
++    cap->bytes.resize(n_bytes);
++    std::memcpy(cap->bytes.data(), t->data, n_bytes);
++    cap->type = t->type;
++    cap->ne0 = t->ne[0];
++    cap->ne1 = t->ne[1];
++    cap->ne2 = t->ne[2];
++    cap->ne3 = t->ne[3];
++    cap->got = true;
++    return true;
 +}
 +
 +static ggml_tensor * dsv4_view_scale(ggml_context * ctx, ggml_tensor * scale, int64_t idx) {
@@ -859,313 +791,18 @@ index 0000000..b7a5c31
 +    return ggml_dsv4_hc_weighted_sum(ctx, x, pre);
 +}
 +
-+struct dsv4_hc_mix {
-+    ggml_tensor * x;
-+    ggml_tensor * pre;
-+    ggml_tensor * post;
-+    ggml_tensor * comb;
-+};
-+
-+static bool capture_graph_tensor(ggml_tensor * t, tensor_capture * out, std::string * err) {
-+    if (t == nullptr || out == nullptr) {
-+        if (err != nullptr) *err = "null tensor capture";
-+        return false;
-+    }
-+    const size_t n_bytes = ggml_nbytes(t);
-+    out->bytes.resize(n_bytes);
-+    if (t->data == nullptr) {
-+        if (err != nullptr) *err = "tensor capture has null data";
-+        return false;
-+    }
-+    std::memcpy(out->bytes.data(), t->data, n_bytes);
-+    out->type = t->type;
-+    out->ne0 = t->ne[0];
-+    out->ne1 = t->ne[1];
-+    out->ne2 = t->ne[2];
-+    out->ne3 = t->ne[3];
-+    out->got = true;
-+    return true;
-+}
-+
-+static dsv4_hc_mix dsv4_hc_pre(
-+        ggml_context * ctx,
-+        ggml_tensor  * x,
-+        ggml_tensor  * hc_fn,
-+        ggml_tensor  * hc_scale,
-+        ggml_tensor  * hc_base,
-+        int64_t        n_embd,
-+        int64_t        n_hc,
-+        int64_t        n_tokens,
-+        float          norm_eps,
-+        int            sinkhorn_iters,
-+        float          hc_eps) {
-+    const int64_t hc_dim = n_embd * n_hc;
-+    ggml_tensor * flat = ggml_cont(ctx, ggml_reshape_2d(ctx, x, hc_dim, n_tokens));
-+    flat = ggml_rms_norm(ctx, flat, norm_eps);
-+    ggml_tensor * mixes = ggml_mul_mat(ctx, hc_fn, flat);
-+    ggml_tensor * split = ggml_dsv4_hc_split_sinkhorn(ctx, mixes, hc_scale, hc_base, n_hc, sinkhorn_iters, hc_eps);
-+    ggml_tensor * pre = ggml_view_2d(ctx, split, n_hc, n_tokens, split->nb[1], 0);
-+    ggml_tensor * post = ggml_view_2d(ctx, split, n_hc, n_tokens, split->nb[1], n_hc * split->nb[0]);
-+    ggml_tensor * comb = ggml_view_2d(ctx, split, n_hc * n_hc, n_tokens, split->nb[1], 2 * n_hc * split->nb[0]);
-+    comb = ggml_reshape_3d(ctx, comb, n_hc, n_hc, n_tokens);
-+    ggml_tensor * y = ggml_dsv4_hc_weighted_sum(ctx, x, pre);
-+    return { y, pre, post, comb };
-+}
-+
-+static ggml_tensor * dsv4_hc_post(
-+        ggml_context * ctx,
-+        ggml_tensor  * x,
-+        ggml_tensor  * residual,
-+        ggml_tensor  * post,
-+        ggml_tensor  * comb) {
-+    return ggml_dsv4_hc_expand(ctx, x, residual, post, comb);
-+}
-+
-+static ggml_tensor * dsv4_apply_rope_tail(
-+        ggml_context * ctx,
-+        ggml_tensor  * x,
-+        ggml_tensor  * pos,
-+        int64_t        n_embd_head,
-+        int64_t        n_head,
-+        int64_t        n_tokens,
-+        int64_t        n_rot,
-+        int            rope_type,
-+        float          freq_base,
-+        bool           inverse) {
-+    GGML_ASSERT(x->ne[0] == n_embd_head);
-+    GGML_ASSERT(x->ne[1] == n_head);
-+    GGML_ASSERT(x->ne[2] == n_tokens);
-+    if (n_rot == n_embd_head) {
-+        return inverse
-+            ? ggml_rope_ext_back(ctx, x, pos, nullptr, n_rot, rope_type, 0, freq_base, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f)
-+            : ggml_rope_ext     (ctx, x, pos, nullptr, n_rot, rope_type, 0, freq_base, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
-+    }
-+    return ggml_dsv4_rope_tail(ctx, x, pos, nullptr, n_rot, rope_type, 0, freq_base, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f, inverse);
-+}
-+
-+static ggml_tensor * dsv4_grouped_out(
-+        ggml_context * ctx,
-+        ggml_tensor  * o,
-+        ggml_tensor  * wo_a,
-+        ggml_tensor  * wo_b,
-+        int64_t        n_embd_head,
-+        int64_t        n_head,
-+        int64_t        n_groups,
-+        int64_t        o_lora_rank,
-+        int64_t        n_tokens) {
-+    const int64_t group_heads = n_head / n_groups;
-+    const int64_t group_dim = n_embd_head * group_heads;
-+    o = ggml_cont(ctx, o);
-+    o = ggml_reshape_3d(ctx, o, group_dim, n_groups, n_tokens);
-+    ggml_tensor * wo_a_g = ggml_reshape_3d(ctx, wo_a, group_dim, o_lora_rank, n_groups);
-+    ggml_tensor * ids = ggml_arange(ctx, 0.0f, float(n_groups), 1.0f);
-+    ids = ggml_cast(ctx, ids, GGML_TYPE_I32);
-+    ids = ggml_repeat_4d(ctx, ids, n_groups, n_tokens, 1, 1);
-+    ggml_tensor * low = ggml_mul_mat_id(ctx, wo_a_g, o, ids);
-+    low = ggml_reshape_2d(ctx, low, o_lora_rank * n_groups, n_tokens);
-+    return ggml_mul_mat(ctx, wo_b, low);
-+}
-+
-+static ggml_tensor * dsv4_attn_mha_one(
-+        ggml_context * ctx,
-+        ggml_tensor  * q,
-+        ggml_tensor  * k,
-+        ggml_tensor  * v,
-+        ggml_tensor  * sinks,
-+        const llama_hparams & hparams,
-+        float          kq_scale) {
-+    const bool v_trans = v->nb[1] > v->nb[2];
-+    q = ggml_view_4d(ctx, q, q->ne[0], q->ne[1], q->ne[2], 1, q->nb[1], q->nb[2], q->nb[3], 0);
-+    q = ggml_permute(ctx, q, 0, 2, 1, 3);
-+    k = ggml_permute(ctx, k, 0, 2, 1, 3);
-+    v = ggml_permute(ctx, v, 0, 2, 1, 3);
-+    ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
-+    ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
-+    if (hparams.attn_soft_cap) {
-+        kq = ggml_scale(ctx, kq, 1.0f / hparams.f_attn_logit_softcapping);
-+        kq = ggml_tanh(ctx, kq);
-+        kq = ggml_scale(ctx, kq, hparams.f_attn_logit_softcapping);
-+    }
-+    kq = ggml_soft_max_ext(ctx, kq, nullptr, kq_scale, hparams.f_max_alibi_bias);
-+    ggml_soft_max_add_sinks(kq, sinks);
-+    if (!v_trans) {
-+        v = ggml_cont(ctx, ggml_transpose(ctx, v));
-+    }
-+    ggml_tensor * kqv = ggml_mul_mat(ctx, v, kq);
-+    ggml_tensor * cur = ggml_permute(ctx, kqv, 0, 2, 1, 3);
-+    return ggml_cont_2d(ctx, cur, cur->ne[0] * cur->ne[1], cur->ne[2] * cur->ne[3]);
-+}
-+
-+static float dsv4_swiglu_limit(const llama_hparams & hparams) {
-+    for (float v : hparams.swiglu_clamp_exp) {
-+        if (v > 1.0e-6f) {
-+            return v;
-+        }
-+    }
-+    return 10.0f;
-+}
-+
-+static ggml_tensor * dsv4_moe_ffn_one(
-+        ggml_context * ctx,
-+        ggml_tensor  * cur,
-+        const ds4::deepseek4_mtp_sidecar & sidecar,
-+        const llama_hparams & hparams) {
-+    const int64_t n_embd = 4096;
-+    const int64_t n_tokens = 1;
-+    const int64_t n_expert = hparams.n_expert > 0 ? hparams.n_expert : 256;
-+    const int64_t n_expert_used = hparams.n_expert_used > 0 ? hparams.n_expert_used : 8;
-+    ggml_tensor * logits = ggml_mul_mat(ctx, sidecar.ffn_gate_inp, cur);
-+    ggml_tensor * probs = ggml_sigmoid(ctx, logits);
-+    ggml_tensor * selection_probs = ggml_add(ctx, probs, sidecar.exp_probs_b_bias);
-+    ggml_tensor * selected = ggml_argsort_top_k(ctx, selection_probs, n_expert_used);
-+    ggml_tensor * probs3 = ggml_reshape_3d(ctx, probs, 1, n_expert, n_tokens);
-+    ggml_tensor * weights = ggml_get_rows(ctx, probs3, selected);
-+    weights = ggml_reshape_2d(ctx, weights, n_expert_used, n_tokens);
-+    ggml_tensor * weights_sum = ggml_sum_rows(ctx, weights);
-+    weights_sum = ggml_clamp(ctx, weights_sum, 6.103515625e-5, INFINITY);
-+    weights = ggml_div(ctx, weights, weights_sum);
-+    if (hparams.expert_weights_scale != 0.0f && hparams.expert_weights_scale != 1.0f) {
-+        weights = ggml_scale(ctx, weights, hparams.expert_weights_scale);
-+    }
-+    weights = ggml_reshape_3d(ctx, weights, 1, n_expert_used, n_tokens);
-+    cur = ggml_reshape_3d(ctx, cur, n_embd, 1, n_tokens);
-+    ggml_tensor * up = ggml_mul_mat_id(ctx, sidecar.ffn_up_exps, cur, selected);
-+    ggml_tensor * gate = ggml_mul_mat_id(ctx, sidecar.ffn_gate_exps, cur, selected);
-+    const float limit = dsv4_swiglu_limit(hparams);
-+    gate = ggml_clamp(ctx, gate, -INFINITY, limit);
-+    gate = ggml_silu(ctx, gate);
-+    up = ggml_clamp(ctx, up, -limit, limit);
-+    cur = ggml_mul(ctx, gate, up);
-+    cur = ggml_mul(ctx, cur, weights);
-+    ggml_tensor * experts = ggml_mul_mat_id(ctx, sidecar.ffn_down_exps, cur, selected);
-+    ggml_tensor * out = ggml_view_2d(ctx, experts, n_embd, n_tokens, experts->nb[2], 0);
-+    for (int64_t i = 1; i < n_expert_used; i++) {
-+        ggml_tensor * v = ggml_view_2d(ctx, experts, n_embd, n_tokens, experts->nb[2], i * experts->nb[1]);
-+        out = ggml_add(ctx, out, v);
-+    }
-+    return out;
-+}
-+
-+static ggml_tensor * dsv4_shared_ffn_one(
-+        ggml_context * ctx,
-+        ggml_tensor  * cur,
-+        const ds4::deepseek4_mtp_sidecar & sidecar) {
-+    ggml_tensor * gate = ggml_mul_mat(ctx, sidecar.ffn_gate_shexp, cur);
-+    ggml_tensor * up = ggml_mul_mat(ctx, sidecar.ffn_up_shexp, cur);
-+    cur = ggml_swiglu_split(ctx, gate, up);
-+    return ggml_mul_mat(ctx, sidecar.ffn_down_shexp, cur);
-+}
-+
-+static bool compute_mtp_gamma1_block(
-+        const tensor_capture & mtp_input_hc,
-+        const ds4::deepseek4_mtp_sidecar & sidecar,
-+        const llama_hparams & hparams,
-+        int32_t position,
-+        tensor_capture * block_out_hc,
-+        tensor_capture * head_norm,
-+        std::string * err) {
-+    if (!mtp_input_hc.got) {
-+        if (err != nullptr) *err = "missing mtp input_hc";
-+        return false;
-+    }
-+    if (!(mtp_input_hc.ne0 == 4096 && mtp_input_hc.ne1 == 4 && mtp_input_hc.ne2 == 1)) {
-+        if (err != nullptr) *err = "mtp input_hc has unexpected shape";
-+        return false;
-+    }
-+    ggml_init_params ip = {};
-+    ip.mem_size = 1024ull * 1024ull * 1024ull;
-+    ip.mem_buffer = nullptr;
-+    ip.no_alloc = false;
-+    ggml_context * ctx = ggml_init(ip);
-+    if (ctx == nullptr) {
-+        if (err != nullptr) *err = "ggml_init failed";
-+        return false;
-+    }
-+    ggml_tensor * pos = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, 1);
-+    if (pos == nullptr || pos->data == nullptr) {
-+        if (err != nullptr) *err = "failed to alloc pos";
-+        ggml_free(ctx);
-+        return false;
-+    }
-+    ((int32_t *) pos->data)[0] = position;
-+    ggml_tensor * inp = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, 4096, 4, 1);
-+    if (inp == nullptr || inp->data == nullptr) {
-+        if (err != nullptr) *err = "failed to alloc input_hc";
-+        ggml_free(ctx);
-+        return false;
-+    }
-+    if (mtp_input_hc.bytes.size() != ggml_nbytes(inp)) {
-+        if (err != nullptr) *err = "mtp input_hc nbytes mismatch";
-+        ggml_free(ctx);
-+        return false;
-+    }
-+    std::memcpy(inp->data, mtp_input_hc.bytes.data(), mtp_input_hc.bytes.size());
-+    const int64_t n_embd = 4096;
-+    const int64_t n_hc = 4;
-+    const int64_t n_tokens = 1;
-+    const int64_t n_head = 64;
-+    const int64_t n_embd_head = 512;
-+    const int64_t n_lora_o = 1024;
-+    const int64_t n_out_group = 8;
-+    const int64_t n_rot = hparams.n_rot();
-+    const int rope_type = (int) hparams.rope_type;
-+    const float freq_base = hparams.rope_freq_base_train;
-+    const float kq_scale = 1.0f / std::sqrt((float) n_embd_head);
-+    ggml_tensor * residual = inp;
-+    dsv4_hc_mix mix = dsv4_hc_pre(ctx, inp, sidecar.hc_attn_fn, sidecar.hc_attn_scale, sidecar.hc_attn_base, n_embd, n_hc, n_tokens, hparams.f_norm_rms_eps, hparams.hc_sinkhorn_iters, hparams.hc_eps);
-+    ggml_tensor * cur = ggml_rms_norm(ctx, mix.x, hparams.f_norm_rms_eps);
-+    cur = ggml_mul(ctx, cur, sidecar.attn_norm);
-+    ggml_tensor * qr = ggml_mul_mat(ctx, sidecar.attn_q_a, cur);
-+    qr = ggml_rms_norm(ctx, qr, hparams.f_norm_rms_eps);
-+    qr = ggml_mul(ctx, qr, sidecar.attn_q_a_norm);
-+    ggml_tensor * q = ggml_mul_mat(ctx, sidecar.attn_q_b, qr);
-+    q = ggml_reshape_3d(ctx, q, n_embd_head, n_head, n_tokens);
-+    q = ggml_rms_norm(ctx, q, hparams.f_norm_rms_eps);
-+    q = dsv4_apply_rope_tail(ctx, q, pos, n_embd_head, n_head, n_tokens, n_rot, rope_type, freq_base, false);
-+    ggml_tensor * kv = ggml_mul_mat(ctx, sidecar.attn_kv, cur);
-+    kv = ggml_rms_norm(ctx, kv, hparams.f_norm_rms_eps);
-+    kv = ggml_mul(ctx, kv, sidecar.attn_kv_a_norm);
-+    kv = ggml_reshape_3d(ctx, kv, n_embd_head, 1, n_tokens);
-+    kv = dsv4_apply_rope_tail(ctx, kv, pos, n_embd_head, 1, n_tokens, n_rot, rope_type, freq_base, false);
-+    cur = dsv4_attn_mha_one(ctx, q, kv, kv, sidecar.attn_sinks, hparams, kq_scale);
-+    cur = ggml_reshape_3d(ctx, cur, n_embd_head, n_head, n_tokens);
-+    cur = dsv4_apply_rope_tail(ctx, cur, pos, n_embd_head, n_head, n_tokens, n_rot, rope_type, freq_base, true);
-+    cur = dsv4_grouped_out(ctx, cur, sidecar.attn_output_a, sidecar.attn_output_b, n_embd_head, n_head, n_out_group, n_lora_o, n_tokens);
-+    ggml_tensor * after_attn = dsv4_hc_post(ctx, cur, residual, mix.post, mix.comb);
-+    residual = after_attn;
-+    mix = dsv4_hc_pre(ctx, after_attn, sidecar.hc_ffn_fn, sidecar.hc_ffn_scale, sidecar.hc_ffn_base, n_embd, n_hc, n_tokens, hparams.f_norm_rms_eps, hparams.hc_sinkhorn_iters, hparams.hc_eps);
-+    cur = ggml_rms_norm(ctx, mix.x, hparams.f_norm_rms_eps);
-+    cur = ggml_mul(ctx, cur, sidecar.ffn_norm);
-+    ggml_tensor * moe = dsv4_moe_ffn_one(ctx, cur, sidecar, hparams);
-+    ggml_tensor * shexp = dsv4_shared_ffn_one(ctx, cur, sidecar);
-+    cur = ggml_add(ctx, moe, shexp);
-+    ggml_tensor * block = dsv4_hc_post(ctx, cur, residual, mix.post, mix.comb);
-+    ggml_tensor * head = dsv4_hc_head(ctx, block, sidecar.hc_head_fn, sidecar.hc_head_scale, sidecar.hc_head_base, n_embd, n_hc, n_tokens, hparams.f_norm_rms_eps, hparams.hc_eps);
-+    head = ggml_rms_norm(ctx, head, hparams.f_norm_rms_eps);
-+    head = ggml_mul(ctx, head, sidecar.norm);
-+    ggml_cgraph * gf = ggml_new_graph(ctx);
-+    ggml_build_forward_expand(gf, head);
-+    ggml_graph_compute_with_ctx(ctx, gf, 4);
-+    bool ok = capture_graph_tensor(block, block_out_hc, err);
-+    if (ok) {
-+        ok = capture_graph_tensor(head, head_norm, err);
-+    }
-+    ggml_free(ctx);
-+    return ok;
-+}
-+
 +static bool compute_stub_mtp_input_hc(
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
 +        const ds4::deepseek4_mtp_sidecar & sidecar,
 +        const llama_hparams & hparams,
-+        tensor_capture * out,
++        mtp_stub_input_hc_captures * out,
 +        std::string * err) {
 +    if (out == nullptr) {
 +        if (err != nullptr) *err = "null out";
 +        return false;
 +    }
-+    *out = tensor_capture();
++    *out = mtp_stub_input_hc_captures();
 +
 +    if (!trunk_token_embd.got) {
 +        if (err != nullptr) *err = "missing trunk token_embd capture";
@@ -1229,32 +866,41 @@ index 0000000..b7a5c31
 +    }
 +    std::memcpy(prev->data, trunk_pre_hc_head.bytes.data(), trunk_pre_hc_head.bytes.size());
 +
-+    ggml_tensor * e = ggml_rms_norm(ctx, tok, hparams.f_norm_rms_eps);
-+    e = ggml_mul(ctx, e, sidecar.enorm);
-+    e = ggml_mul_mat(ctx, sidecar.e_proj, e); // [n_embd, 1]
++    ggml_tensor * mtp_enorm = ggml_rms_norm(ctx, tok, hparams.f_norm_rms_eps);
++    mtp_enorm = ggml_mul(ctx, mtp_enorm, sidecar.enorm);
++    mtp_enorm = ggml_cont(ctx, mtp_enorm);
 +
-+    ggml_tensor * e_hc = ggml_repeat(ctx, e, prev); // [n_embd, n_hc]
++    ggml_tensor * mtp_eproj = ggml_mul_mat(ctx, sidecar.e_proj, mtp_enorm); // [n_embd, 1]
++    mtp_eproj = ggml_cont(ctx, mtp_eproj);
 +
-+    ggml_tensor * h = ggml_rms_norm(ctx, prev, hparams.f_norm_rms_eps);
-+    h = ggml_mul(ctx, h, sidecar.hnorm);
-+    h = ggml_mul_mat(ctx, sidecar.h_proj, h); // [n_embd, n_hc]
++    ggml_tensor * mtp_eproj_hc = ggml_repeat(ctx, mtp_eproj, prev); // [n_embd, n_hc]
++    mtp_eproj_hc = ggml_cont(ctx, mtp_eproj_hc);
 +
-+    ggml_tensor * cur = ggml_add(ctx, e_hc, h);
-+    cur = ggml_reshape_3d(ctx, cur, 4096, 4, 1);
++    ggml_tensor * mtp_hnorm_hc = ggml_rms_norm(ctx, prev, hparams.f_norm_rms_eps);
++    mtp_hnorm_hc = ggml_mul(ctx, mtp_hnorm_hc, sidecar.hnorm);
++    mtp_hnorm_hc = ggml_cont(ctx, mtp_hnorm_hc);
++
++    ggml_tensor * mtp_hproj_hc = ggml_mul_mat(ctx, sidecar.h_proj, mtp_hnorm_hc); // [n_embd, n_hc]
++    mtp_hproj_hc = ggml_cont(ctx, mtp_hproj_hc);
++
++    ggml_tensor * mtp_input_hc = ggml_add(ctx, mtp_eproj_hc, mtp_hproj_hc);
++    mtp_input_hc = ggml_cont(ctx, mtp_input_hc);
++    mtp_input_hc = ggml_reshape_3d(ctx, mtp_input_hc, 4096, 4, 1);
 +
 +    ggml_cgraph * gf = ggml_new_graph(ctx);
-+    ggml_build_forward_expand(gf, cur);
++    ggml_build_forward_expand(gf, mtp_input_hc);
 +    ggml_graph_compute_with_ctx(ctx, gf, 1);
 +
-+    const size_t n_bytes = ggml_nbytes(cur);
-+    out->bytes.resize(n_bytes);
-+    std::memcpy(out->bytes.data(), cur->data, n_bytes);
-+    out->type = cur->type;
-+    out->ne0 = cur->ne[0];
-+    out->ne1 = cur->ne[1];
-+    out->ne2 = cur->ne[2];
-+    out->ne3 = cur->ne[3];
-+    out->got = true;
++    if (!capture_tensor_host_bytes(mtp_enorm, &out->mtp_enorm)
++            || !capture_tensor_host_bytes(mtp_eproj, &out->mtp_eproj)
++            || !capture_tensor_host_bytes(mtp_eproj_hc, &out->mtp_eproj_hc)
++            || !capture_tensor_host_bytes(mtp_hnorm_hc, &out->mtp_hnorm_hc)
++            || !capture_tensor_host_bytes(mtp_hproj_hc, &out->mtp_hproj_hc)
++            || !capture_tensor_host_bytes(mtp_input_hc, &out->mtp_input_hc)) {
++        if (err != nullptr) *err = "failed to capture stub mtp_input_hc intermediates";
++        ggml_free(ctx);
++        return false;
++    }
 +
 +    ggml_free(ctx);
 +    return true;
@@ -1378,8 +1024,7 @@ index 0000000..b7a5c31
 +        const std::string & mtp_draft_token,
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
-+        const tensor_capture & mtp_input_hc,
-+        const tensor_capture & mtp_block_out_hc,
++        const mtp_stub_input_hc_captures & mtp_stub_input_hc,
 +        const tensor_capture & mtp_head_norm,
 +        bool ok,
 +        const std::vector<std::string> & errors) {
@@ -1398,7 +1043,6 @@ index 0000000..b7a5c31
 +                (long long) trunk_token_embd.ne0,
 +                (long long) trunk_token_embd.ne1,
 +                (long long) trunk_token_embd.ne2);
-+        print_tensor_diagnostics_json("trunk_token_embd", trunk_token_embd, false);
 +    } else {
 +        std::printf("  \"trunk_token_embd_fnv64\": null,\n");
 +        std::printf("  \"trunk_token_embd_nbytes\": null,\n");
@@ -1413,11 +1057,87 @@ index 0000000..b7a5c31
 +                (long long) trunk_pre_hc_head.ne0,
 +                (long long) trunk_pre_hc_head.ne1,
 +                (long long) trunk_pre_hc_head.ne2);
-+        print_tensor_diagnostics_json("trunk_pre_hc_head", trunk_pre_hc_head, true);
 +    } else {
 +        std::printf("  \"trunk_pre_hc_head_fnv64\": null,\n");
 +        std::printf("  \"trunk_pre_hc_head_nbytes\": null,\n");
 +        std::printf("  \"trunk_pre_hc_head_shape\": null,\n");
++    }
++
++    const tensor_capture & mtp_enorm = mtp_stub_input_hc.mtp_enorm;
++    const tensor_capture & mtp_eproj = mtp_stub_input_hc.mtp_eproj;
++    const tensor_capture & mtp_eproj_hc = mtp_stub_input_hc.mtp_eproj_hc;
++    const tensor_capture & mtp_hnorm_hc = mtp_stub_input_hc.mtp_hnorm_hc;
++    const tensor_capture & mtp_hproj_hc = mtp_stub_input_hc.mtp_hproj_hc;
++    const tensor_capture & mtp_input_hc = mtp_stub_input_hc.mtp_input_hc;
++
++    if (mtp_enorm.got) {
++        std::printf("  \"mtp_enorm_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_enorm.bytes.data(), mtp_enorm.bytes.size())).c_str());
++        std::printf("  \"mtp_enorm_nbytes\": %zu,\n", mtp_enorm.bytes.size());
++        std::printf("  \"mtp_enorm_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_enorm.ne0,
++                (long long) mtp_enorm.ne1,
++                (long long) mtp_enorm.ne2);
++    } else {
++        std::printf("  \"mtp_enorm_fnv64\": null,\n");
++        std::printf("  \"mtp_enorm_nbytes\": null,\n");
++        std::printf("  \"mtp_enorm_shape\": null,\n");
++    }
++
++    if (mtp_eproj.got) {
++        std::printf("  \"mtp_eproj_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_eproj.bytes.data(), mtp_eproj.bytes.size())).c_str());
++        std::printf("  \"mtp_eproj_nbytes\": %zu,\n", mtp_eproj.bytes.size());
++        std::printf("  \"mtp_eproj_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_eproj.ne0,
++                (long long) mtp_eproj.ne1,
++                (long long) mtp_eproj.ne2);
++    } else {
++        std::printf("  \"mtp_eproj_fnv64\": null,\n");
++        std::printf("  \"mtp_eproj_nbytes\": null,\n");
++        std::printf("  \"mtp_eproj_shape\": null,\n");
++    }
++
++    if (mtp_eproj_hc.got) {
++        std::printf("  \"mtp_eproj_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_eproj_hc.bytes.data(), mtp_eproj_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_eproj_hc_nbytes\": %zu,\n", mtp_eproj_hc.bytes.size());
++        std::printf("  \"mtp_eproj_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_eproj_hc.ne0,
++                (long long) mtp_eproj_hc.ne1,
++                (long long) mtp_eproj_hc.ne2);
++    } else {
++        std::printf("  \"mtp_eproj_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_eproj_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_eproj_hc_shape\": null,\n");
++    }
++
++    if (mtp_hnorm_hc.got) {
++        std::printf("  \"mtp_hnorm_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_hnorm_hc.bytes.data(), mtp_hnorm_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_hnorm_hc_nbytes\": %zu,\n", mtp_hnorm_hc.bytes.size());
++        std::printf("  \"mtp_hnorm_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_hnorm_hc.ne0,
++                (long long) mtp_hnorm_hc.ne1,
++                (long long) mtp_hnorm_hc.ne2);
++    } else {
++        std::printf("  \"mtp_hnorm_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_hnorm_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_hnorm_hc_shape\": null,\n");
++    }
++
++    if (mtp_hproj_hc.got) {
++        std::printf("  \"mtp_hproj_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_hproj_hc.bytes.data(), mtp_hproj_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_hproj_hc_nbytes\": %zu,\n", mtp_hproj_hc.bytes.size());
++        std::printf("  \"mtp_hproj_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_hproj_hc.ne0,
++                (long long) mtp_hproj_hc.ne1,
++                (long long) mtp_hproj_hc.ne2);
++    } else {
++        std::printf("  \"mtp_hproj_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_hproj_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_hproj_hc_shape\": null,\n");
 +    }
 +
 +    if (mtp_input_hc.got) {
@@ -1428,26 +1148,10 @@ index 0000000..b7a5c31
 +                (long long) mtp_input_hc.ne0,
 +                (long long) mtp_input_hc.ne1,
 +                (long long) mtp_input_hc.ne2);
-+        print_tensor_diagnostics_json("mtp_input_hc", mtp_input_hc, true);
 +    } else {
 +        std::printf("  \"mtp_input_hc_fnv64\": null,\n");
 +        std::printf("  \"mtp_input_hc_nbytes\": null,\n");
 +        std::printf("  \"mtp_input_hc_shape\": null,\n");
-+    }
-+
-+    if (mtp_block_out_hc.got) {
-+        std::printf("  \"mtp_block_out_hc_fnv64\": \"%s\",\n",
-+                hex_u64(fnv1a64(mtp_block_out_hc.bytes.data(), mtp_block_out_hc.bytes.size())).c_str());
-+        std::printf("  \"mtp_block_out_hc_nbytes\": %zu,\n", mtp_block_out_hc.bytes.size());
-+        std::printf("  \"mtp_block_out_hc_shape\": [%lld, %lld, %lld],\n",
-+                (long long) mtp_block_out_hc.ne0,
-+                (long long) mtp_block_out_hc.ne1,
-+                (long long) mtp_block_out_hc.ne2);
-+        print_tensor_diagnostics_json("mtp_block_out_hc", mtp_block_out_hc, true);
-+    } else {
-+        std::printf("  \"mtp_block_out_hc_fnv64\": null,\n");
-+        std::printf("  \"mtp_block_out_hc_nbytes\": null,\n");
-+        std::printf("  \"mtp_block_out_hc_shape\": null,\n");
 +    }
 +
 +    if (mtp_head_norm.got) {
@@ -1458,7 +1162,6 @@ index 0000000..b7a5c31
 +                (long long) mtp_head_norm.ne0,
 +                (long long) mtp_head_norm.ne1,
 +                (long long) mtp_head_norm.ne2);
-+        print_tensor_diagnostics_json("mtp_head_norm", mtp_head_norm, false);
 +    } else {
 +        std::printf("  \"mtp_head_norm_fnv64\": null,\n");
 +        std::printf("  \"mtp_head_norm_nbytes\": null,\n");
@@ -1495,155 +1198,12 @@ index 0000000..b7a5c31
 +}
 +
 +
-+struct probe_result {
-+    int32_t base_next_token_id = -1;
-+    std::string base_next_token;
-+    int32_t mtp_draft_token_id = -1;
-+    std::string mtp_draft_token;
-+    tensor_capture token_embd;
-+    tensor_capture pre_hc_head;
-+    tensor_capture input_hc;
-+    tensor_capture block_out_hc;
-+    tensor_capture head_norm;
-+    std::vector<std::string> errors;
-+};
-+
-+static bool read_prompt_file(const std::string & path, std::vector<std::string> * prompts, std::string * err) {
-+    if (prompts == nullptr) {
-+        if (err != nullptr) *err = "null prompt output";
-+        return false;
-+    }
-+    std::ifstream f(path);
-+    if (!f) {
-+        if (err != nullptr) *err = "failed to open prompt file";
-+        return false;
-+    }
-+    std::string line;
-+    while (std::getline(f, line)) {
-+        if (!line.empty() && line.back() == '\r') {
-+            line.pop_back();
-+        }
-+        if (!line.empty()) {
-+            prompts->push_back(line);
-+        }
-+    }
-+    if (prompts->empty()) {
-+        if (err != nullptr) *err = "prompt file did not contain any non-empty lines";
-+        return false;
-+    }
-+    return true;
-+}
-+
-+static probe_result run_prompt_probe(
-+        llama_model * model,
-+        const llama_vocab * vocab,
-+        const std::string & prompt,
-+        int32_t seed,
-+        bool load_sidecar_weights,
-+        bool bind_ok,
-+        const std::vector<std::string> & sidecar_errors,
-+        const ds4::deepseek4_mtp_sidecar & sidecar) {
-+    probe_result r;
-+    r.errors.insert(r.errors.end(), sidecar_errors.begin(), sidecar_errors.end());
-+
-+    const std::string tokenized_prompt = ds4_render_chat_prompt(prompt);
-+    const int32_t n_prompt = -llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), nullptr, 0, false, true);
-+    if (n_prompt <= 0) {
-+        r.errors.push_back("failed to tokenize prompt");
-+        return r;
-+    }
-+
-+    std::vector<llama_token> prompt_tokens((size_t) n_prompt);
-+    if (llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), false, true) < 0) {
-+        r.errors.push_back("failed to tokenize prompt (2nd pass)");
-+        return r;
-+    }
-+
-+    probe_captures caps;
-+    llama_context_params ctx_params = llama_context_default_params();
-+    ctx_params.n_ctx = (uint32_t) (prompt_tokens.size() + 8);
-+    ctx_params.n_batch = (uint32_t) prompt_tokens.size();
-+    ctx_params.n_ubatch = ctx_params.n_batch;
-+    ctx_params.no_perf = true;
-+    ctx_params.cb_eval = capture_probe_tensors;
-+    ctx_params.cb_eval_user_data = &caps;
-+
-+    llama_context * ctx = llama_init_from_model(model, ctx_params);
-+    if (ctx == nullptr) {
-+        r.errors.push_back("failed to init llama_context");
-+        return r;
-+    }
-+
-+    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), prompt_tokens.size());
-+    if (llama_decode(ctx, batch) != 0) {
-+        r.errors.push_back("llama_decode failed for prompt");
-+        llama_free(ctx);
-+        return r;
-+    }
-+
-+    const int32_t n_vocab = llama_vocab_n_tokens(vocab);
-+    const float * logits = llama_get_logits_ith(ctx, -1);
-+    r.base_next_token_id = argmax_f32(logits, n_vocab);
-+    r.base_next_token = token_to_piece(vocab, (llama_token) r.base_next_token_id);
-+
-+    caps.enable = true;
-+    caps.token_embd = tensor_capture();
-+    caps.pre_hc_head = tensor_capture();
-+
-+    llama_token base_token = (llama_token) r.base_next_token_id;
-+    llama_batch base_batch = llama_batch_get_one(&base_token, 1);
-+    if (llama_decode(ctx, base_batch) != 0) {
-+        r.errors.push_back("llama_decode failed for base_next_token_id commit");
-+    }
-+
-+    caps.enable = false;
-+    r.token_embd = caps.token_embd;
-+    r.pre_hc_head = caps.pre_hc_head;
-+
-+    if (load_sidecar_weights && bind_ok && sidecar_errors.empty()) {
-+        std::string stub_err;
-+        if (!compute_stub_mtp_input_hc(r.token_embd, r.pre_hc_head, sidecar, model->hparams, &r.input_hc, &stub_err)) {
-+            r.errors.push_back(std::string("stub mtp input_hc compute failed: ") + stub_err);
-+        }
-+        if (!compute_mtp_gamma1_block(r.input_hc, sidecar, model->hparams, (int32_t) prompt_tokens.size(), &r.block_out_hc, &r.head_norm, &stub_err)) {
-+            r.errors.push_back(std::string("gamma1 mtp block compute failed: ") + stub_err);
-+        }
-+        if (r.head_norm.got) {
-+            if (!compute_argmax_logits_from_output(r.head_norm, model, &r.mtp_draft_token_id, &stub_err)) {
-+                r.errors.push_back(std::string("gamma1 draft token failed: ") + stub_err);
-+            } else {
-+                r.mtp_draft_token = token_to_piece(vocab, (llama_token) r.mtp_draft_token_id);
-+            }
-+        }
-+    } else if (sidecar_errors.empty()) {
-+        r.errors.push_back("stub mtp compute skipped (requires --load-sidecar-weights + successful bind)");
-+    }
-+
-+    llama_free(ctx);
-+    (void)seed;
-+    return r;
-+}
-+
-+static void print_probe_result_json(
-+        const std::string & trunk_path,
-+        const std::string & sidecar_path,
-+        const std::string & prompt,
-+        int32_t seed,
-+        const probe_result & r) {
-+    print_probe_json(trunk_path, sidecar_path, prompt, seed,
-+            r.base_next_token_id, r.base_next_token,
-+            r.mtp_draft_token_id, r.mtp_draft_token,
-+            r.token_embd, r.pre_hc_head, r.input_hc, r.block_out_hc, r.head_norm,
-+            r.errors.empty(), r.errors);
-+}
-+
 +int main(int argc, char ** argv) {
 +    std::setlocale(LC_NUMERIC, "C");
 +
 +    std::string trunk_path;
 +    std::string sidecar_path;
 +    std::string prompt = "Hello.";
-+    std::string prompt_file;
 +    int32_t seed = 1234;
 +    bool json = false;
 +    bool load_sidecar_weights = false;
@@ -1667,12 +1227,6 @@ index 0000000..b7a5c31
 +                return 1;
 +            }
 +            prompt = argv[++i];
-+        } else if (std::strcmp(argv[i], "--prompt-file") == 0) {
-+            if (i + 1 >= argc) {
-+                usage(argv[0]);
-+                return 1;
-+            }
-+            prompt_file = argv[++i];
 +        } else if (std::strcmp(argv[i], "--seed") == 0) {
 +            if (i + 1 >= argc) {
 +                usage(argv[0]);
@@ -1694,16 +1248,11 @@ index 0000000..b7a5c31
 +        return 1;
 +    }
 +
-+    std::vector<std::string> prompts;
-+    if (!prompt_file.empty()) {
-+        std::string prompt_err;
-+        if (!read_prompt_file(prompt_file, &prompts, &prompt_err)) {
-+            std::fprintf(stderr, "prompt file error: %s: %s\n", prompt_file.c_str(), prompt_err.c_str());
-+            return 2;
-+        }
-+    } else {
-+        prompts.push_back(prompt);
-+    }
++    std::vector<std::string> errors;
++
++    probe_captures caps;
++    mtp_stub_input_hc_captures stub_input_hc;
++    tensor_capture stub_head_norm;
 +
 +    ggml_backend_load_all();
 +
@@ -1718,30 +1267,80 @@ index 0000000..b7a5c31
 +
 +    llama_model * model = llama_model_load_from_file(trunk_path.c_str(), model_params);
 +    if (model == nullptr) {
-+        std::vector<std::string> errors;
 +        errors.push_back("failed to load trunk model");
-+        if (json && prompt_file.empty()) {
-+            probe_result r;
-+            r.errors = errors;
-+            print_probe_result_json(trunk_path, sidecar_path, prompts[0], seed, r);
-+        } else if (json) {
-+            std::printf("{\n");
-+            std::printf("  \"runtime_repo\": \"%s\",\n", "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark");
-+            std::printf("  \"runtime_commit\": \"%s\",\n", "94073e2");
-+            std::printf("  \"trunk_gguf_path\": \"%s\",\n", json_escape(trunk_path).c_str());
-+            std::printf("  \"mtp_sidecar_path\": \"%s\",\n", json_escape(sidecar_path).c_str());
-+            std::printf("  \"prompt_file_path\": \"%s\",\n", json_escape(prompt_file).c_str());
-+            std::printf("  \"result_count\": 0,\n");
-+            std::printf("  \"results\": [],\n");
-+            std::printf("  \"ok\": false,\n");
-+            std::printf("  \"errors\": [\"failed to load trunk model\"]\n");
-+            std::printf("}\n");
++        if (json) {
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
-+        return 3;
++        return 2;
 +    }
 +
 +    const llama_vocab * vocab = llama_model_get_vocab(model);
-+    std::vector<std::string> sidecar_errors;
++
++    const int32_t n_prompt = -llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), nullptr, 0, true, true);
++    if (n_prompt <= 0) {
++        errors.push_back("failed to tokenize prompt");
++        if (json) {
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++        }
++        llama_model_free(model);
++        return 3;
++    }
++
++    std::vector<llama_token> prompt_tokens((size_t) n_prompt);
++    if (llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), true, true) < 0) {
++        errors.push_back("failed to tokenize prompt (2nd pass)");
++        if (json) {
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++        }
++        llama_model_free(model);
++        return 4;
++    }
++
++    llama_context_params ctx_params = llama_context_default_params();
++    ctx_params.n_ctx = (uint32_t) (prompt_tokens.size() + 8);
++    ctx_params.n_batch = (uint32_t) prompt_tokens.size();
++    ctx_params.n_ubatch = ctx_params.n_batch;
++    ctx_params.no_perf = true;
++    ctx_params.cb_eval = capture_probe_tensors;
++    ctx_params.cb_eval_user_data = &caps;
++
++    llama_context * ctx = llama_init_from_model(model, ctx_params);
++    if (ctx == nullptr) {
++        errors.push_back("failed to init llama_context");
++        if (json) {
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++        }
++        llama_model_free(model);
++        return 5;
++    }
++
++    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), prompt_tokens.size());
++    if (llama_decode(ctx, batch) != 0) {
++        errors.push_back("llama_decode failed for prompt");
++        if (json) {
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++        }
++        llama_free(ctx);
++        llama_model_free(model);
++        return 6;
++    }
++
++    const int32_t n_vocab = llama_vocab_n_tokens(vocab);
++    const float * logits = llama_get_logits_ith(ctx, -1);
++    const int32_t base_next_token_id = argmax_f32(logits, n_vocab);
++    const std::string base_next_token = token_to_piece(vocab, (llama_token) base_next_token_id);
++
++    caps.enable = true;
++    caps.token_embd = tensor_capture();
++    caps.pre_hc_head = tensor_capture();
++
++    llama_token base_token = (llama_token) base_next_token_id;
++    llama_batch base_batch = llama_batch_get_one(&base_token, 1);
++    if (llama_decode(ctx, base_batch) != 0) {
++        errors.push_back("llama_decode failed for base_next_token_id commit");
++    }
++
++    caps.enable = false;
 +
 +    struct ggml_context * sidecar_ctx = nullptr;
 +    struct gguf_init_params params = {
@@ -1751,67 +1350,67 @@ index 0000000..b7a5c31
 +
 +    struct gguf_context * sidecar_gguf = gguf_init_from_file(sidecar_path.c_str(), params);
 +    if (sidecar_gguf == nullptr || sidecar_ctx == nullptr) {
-+        sidecar_errors.push_back("failed to open sidecar GGUF (metadata-only)");
-+    } else {
-+        const int64_t arch_kid = gguf_find_key(sidecar_gguf, "general.architecture");
-+        if (arch_kid < 0) {
-+            sidecar_errors.push_back("sidecar missing key: general.architecture");
-+        } else if (std::strcmp(gguf_get_val_str(sidecar_gguf, arch_kid), "deepseek4_mtp_support") != 0) {
-+            sidecar_errors.push_back("sidecar general.architecture != deepseek4_mtp_support");
++        errors.push_back("failed to open sidecar GGUF (metadata-only)");
++        if (json) {
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +        }
++        if (sidecar_gguf) {
++            gguf_free(sidecar_gguf);
++        }
++        if (sidecar_ctx) {
++            ggml_free(sidecar_ctx);
++        }
++        llama_free(ctx);
++        llama_model_free(model);
++        return 7;
++    }
++
++    const int64_t arch_kid = gguf_find_key(sidecar_gguf, "general.architecture");
++    if (arch_kid < 0) {
++        errors.push_back("sidecar missing key: general.architecture");
++    } else if (std::strcmp(gguf_get_val_str(sidecar_gguf, arch_kid), "deepseek4_mtp_support") != 0) {
++        errors.push_back("sidecar general.architecture != deepseek4_mtp_support");
 +    }
 +
 +    ds4::deepseek4_mtp_sidecar sidecar;
 +    std::string bind_err;
-+    const bool bind_ok = sidecar_ctx != nullptr && ds4::bind_deepseek4_mtp_sidecar(&sidecar, sidecar_ctx, &bind_err);
-+    if (sidecar_ctx != nullptr && !bind_ok) {
-+        sidecar_errors.push_back(std::string("sidecar bind failed: ") + bind_err);
++    const bool bind_ok = ds4::bind_deepseek4_mtp_sidecar(&sidecar, sidecar_ctx, &bind_err);
++    if (!bind_ok) {
++        errors.push_back(std::string("sidecar bind failed: ") + bind_err);
 +    }
 +
-+    if (prompt_file.empty()) {
-+        const probe_result r = run_prompt_probe(model, vocab, prompts[0], seed, load_sidecar_weights, bind_ok, sidecar_errors, sidecar);
-+        if (json) {
-+            print_probe_result_json(trunk_path, sidecar_path, prompts[0], seed, r);
++    int32_t mtp_stub_token_id = -1;
++    std::string mtp_stub_token;
++
++    if (load_sidecar_weights && bind_ok) {
++        std::string stub_err;
++        if (!compute_stub_mtp_input_hc(caps.token_embd, caps.pre_hc_head, sidecar, model->hparams, &stub_input_hc, &stub_err)) {
++            errors.push_back(std::string("stub mtp input_hc compute failed: ") + stub_err);
 +        }
-+        if (sidecar_gguf != nullptr) gguf_free(sidecar_gguf);
-+        if (sidecar_ctx != nullptr) ggml_free(sidecar_ctx);
-+        llama_model_free(model);
-+        return 0;
-+    }
-+
-+    bool all_ok = true;
-+    if (json) {
-+        std::printf("{\n");
-+        std::printf("  \"runtime_repo\": \"%s\",\n", "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark");
-+        std::printf("  \"runtime_commit\": \"%s\",\n", "94073e2");
-+        std::printf("  \"trunk_gguf_path\": \"%s\",\n", json_escape(trunk_path).c_str());
-+        std::printf("  \"mtp_sidecar_path\": \"%s\",\n", json_escape(sidecar_path).c_str());
-+        std::printf("  \"prompt_file_path\": \"%s\",\n", json_escape(prompt_file).c_str());
-+        std::printf("  \"seed\": %d,\n", (int) seed);
-+        std::printf("  \"result_count\": %zu,\n", prompts.size());
-+        std::printf("  \"results\": [\n");
-+    }
-+
-+    for (size_t i = 0; i < prompts.size(); i++) {
-+        const probe_result r = run_prompt_probe(model, vocab, prompts[i], seed, load_sidecar_weights, bind_ok, sidecar_errors, sidecar);
-+        all_ok = all_ok && r.errors.empty();
-+        if (json) {
-+            if (i != 0) {
-+                std::printf(",\n");
++        if (!compute_stub_mtp_output_head_norm(caps.pre_hc_head, sidecar, model->hparams, &stub_head_norm, &stub_err)) {
++            errors.push_back(std::string("stub output head compute failed: ") + stub_err);
++        }
++        if (stub_head_norm.got) {
++            if (!compute_argmax_logits_from_output(stub_head_norm, model, &mtp_stub_token_id, &stub_err)) {
++                errors.push_back(std::string("stub head-only draft token failed: ") + stub_err);
++            } else {
++                mtp_stub_token = token_to_piece(vocab, (llama_token) mtp_stub_token_id);
 +            }
-+            print_probe_result_json(trunk_path, sidecar_path, prompts[i], seed, r);
 +        }
++    } else {
++        errors.push_back("stub mtp compute skipped (requires --load-sidecar-weights + successful bind)");
 +    }
++
++    gguf_free(sidecar_gguf);
++    ggml_free(sidecar_ctx);
++
++    errors.push_back("TODO: implement gamma=1 MTP draft compute using sidecar weights + MTP KV/raw-cache state");
 +
 +    if (json) {
-+        std::printf("\n  ],\n");
-+        std::printf("  \"ok\": %s,\n", all_ok ? "true" : "false");
-+        std::printf("  \"errors\": []\n");
-+        std::printf("}\n");
++        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, mtp_stub_token_id, mtp_stub_token, caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
 +    }
 +
-+    if (sidecar_gguf != nullptr) gguf_free(sidecar_gguf);
-+    if (sidecar_ctx != nullptr) ggml_free(sidecar_ctx);
++    llama_free(ctx);
 +    llama_model_free(model);
 +
 +    return 0;

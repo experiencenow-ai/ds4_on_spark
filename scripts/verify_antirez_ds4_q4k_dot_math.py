@@ -62,6 +62,43 @@ def unpack_scales_mins_k4(scales: bytes) -> tuple[list[int], list[int]]:
     return d, m
 
 
+def _u32le(b: bytes) -> int:
+    if len(b) != 4:
+        raise ValueError("expected 4 bytes")
+    return int.from_bytes(b, "little", signed=False)
+
+
+def patch_unpack_scales_mins_k4(scales: bytes) -> tuple[list[int], list[int]]:
+    """Match the antirez/ds4 CUDA patch's unpacking for scales/mins.
+
+    The patch reads scales with u32 loads + bit masks and expands to 8 scale
+    bytes + 8 min bytes (each 0..63).
+    """
+    if len(scales) != 12:
+        raise ValueError("expected scales[12]")
+
+    u0 = _u32le(scales[0:4])
+    u1 = _u32le(scales[4:8])
+    u2 = _u32le(scales[8:12])
+
+    kmask1 = 0x3F3F3F3F
+    kmask2 = 0x0F0F0F0F
+    kmask3 = 0x03030303
+
+    sc0 = u0 & kmask1
+    sc1 = (u2 & kmask2) | (((u0 >> 6) & kmask3) << 4)
+    mn0 = u1 & kmask1
+    mn1 = ((u2 >> 4) & kmask2) | (((u1 >> 6) & kmask3) << 4)
+
+    sbytes = sc0.to_bytes(4, "little") + sc1.to_bytes(4, "little")
+    mbytes = mn0.to_bytes(4, "little") + mn1.to_bytes(4, "little")
+    d = [int(x) for x in sbytes]
+    m = [int(x) for x in mbytes]
+    if len(d) != 8 or len(m) != 8:
+        raise AssertionError("bad unpack length")
+    return d, m
+
+
 def ggml_dequantize_row_q4_k(scales: bytes, qs: bytes, d_bits: int, dmin_bits: int) -> list[float]:
     if len(scales) != 12:
         raise ValueError("expected scales[12]")
@@ -123,6 +160,34 @@ def cuda_style_dot_q4_k(scales: bytes, qs: bytes, d_bits: int, dmin_bits: int, x
     return acc
 
 
+def cuda_patch_style_dot_q4_k(scales: bytes, qs: bytes, d_bits: int, dmin_bits: int, x: list[float]) -> float:
+    """Match the antirez/ds4 CUDA patch's dot kernel indexing."""
+    if len(x) != QK_K:
+        raise ValueError("expected x[256]")
+    if len(scales) != 12:
+        raise ValueError("expected scales[12]")
+    if len(qs) != QK_K // 2:
+        raise ValueError("expected qs[128]")
+
+    d = f32(f16_to_f32(d_bits))
+    mn = f32(f16_to_f32(dmin_bits))
+
+    d_scales, m_scales = patch_unpack_scales_mins_k4(scales)
+
+    acc = 0.0
+    for g in range(8):
+        base = (g >> 1) * 32
+        scale = f32(d * float(d_scales[g]))
+        minv = f32(mn * float(m_scales[g]))
+        for i in range(32):
+            packed = qs[base + i]
+            q = float((packed >> 4) if (g & 1) else (packed & 0xF))
+            w = f32(f32(scale * q) - minv)
+            acc += f32(w * f32(x[(g * 32) + i]))
+
+    return acc
+
+
 def xorshift32(s: int) -> int:
     x = int(s) & 0xFFFFFFFF
     x ^= (x << 13) & 0xFFFFFFFF
@@ -165,6 +230,9 @@ def run_llamacpp_fixture(path: str) -> None:
         raise ValueError("fixture missing vectors[]")
 
     max_abs_err = 0.0
+    max_abs_weight_diff = 0.0
+    max_abs_dot_ref_err = 0.0
+    max_abs_dot_patch_err = 0.0
     for i, v in enumerate(vectors):
         block_hex = v.get("block_hex")
         seed_x = v.get("seed_x")
@@ -185,7 +253,54 @@ def run_llamacpp_fixture(path: str) -> None:
         if err > 1.0e-5:
             raise SystemExit(f"fixture mismatch i={i} want={want_dot} got={got} abs_err={err}")
 
-    print(f"ok: llama.cpp fixture vectors={len(vectors)} max_abs_err={max_abs_err:.3e}")
+        # For validating the CUDA dot-product path, compare against the dequantized
+        # row but force float32 rounding per multiply (the CUDA kernel runs in
+        # float32, while the fixture's dot value may be computed in wider precision).
+        dot_ref_f32 = sum(f32(float(w[j]) * float(x[j])) for j in range(QK_K))
+        dot_simple = cuda_style_dot_q4_k(scales, qs, d_bits, dmin_bits, x)
+        dot_patch = cuda_patch_style_dot_q4_k(scales, qs, d_bits, dmin_bits, x)
+        dot_ref_err = abs(dot_ref_f32 - dot_simple)
+        dot_patch_err = abs(dot_ref_f32 - dot_patch)
+        if dot_ref_err > max_abs_dot_ref_err:
+            max_abs_dot_ref_err = dot_ref_err
+        if dot_patch_err > max_abs_dot_patch_err:
+            max_abs_dot_patch_err = dot_patch_err
+        if dot_ref_err > 1.0e-5:
+            raise SystemExit(
+                f"fixture dot mismatch i={i} ref_f32={dot_ref_f32} got_simple={dot_simple} abs_err={dot_ref_err}"
+            )
+        if dot_patch_err > 1.0e-5:
+            raise SystemExit(
+                f"fixture dot mismatch i={i} ref_f32={dot_ref_f32} got_patch={dot_patch} abs_err={dot_patch_err}"
+            )
+
+        # Patch-style unpacking should reproduce the same 256-element float row.
+        d_scales, m_scales = patch_unpack_scales_mins_k4(scales)
+        d = f32(f16_to_f32(d_bits))
+        mn = f32(f16_to_f32(dmin_bits))
+        w_patch = [0.0] * QK_K
+        for g in range(8):
+            base = (g >> 1) * 32
+            scale = f32(d * float(d_scales[g]))
+            minv = f32(mn * float(m_scales[g]))
+            for j in range(32):
+                packed = qs[base + j]
+                q = float((packed >> 4) if (g & 1) else (packed & 0xF))
+                w_patch[(g * 32) + j] = f32(f32(scale * q) - minv)
+        for j in range(QK_K):
+            diff = abs(float(w[j]) - float(w_patch[j]))
+            if diff > max_abs_weight_diff:
+                max_abs_weight_diff = diff
+            if diff > 1.0e-6:
+                raise SystemExit(
+                    f"fixture weight mismatch i={i} j={j} want={w[j]} got_patch={w_patch[j]} abs_err={diff}"
+                )
+
+    print(
+        f"ok: llama.cpp fixture vectors={len(vectors)} max_abs_err={max_abs_err:.3e} "
+        f"max_abs_weight_diff={max_abs_weight_diff:.3e} max_abs_dot_ref_err={max_abs_dot_ref_err:.3e} "
+        f"max_abs_dot_patch_err={max_abs_dot_patch_err:.3e}"
+    )
 
 
 def main() -> int:
@@ -221,21 +336,30 @@ def main() -> int:
 
         # Cross-check the two scale/min unpacking paths for every random block.
         d_scales, m_scales = unpack_scales_mins_k4(scales)
+        d_scales_patch, m_scales_patch = patch_unpack_scales_mins_k4(scales)
         for j in range(8):
             gd, gm = get_scale_min_k4(j, scales)
             if (gd != d_scales[j]) or (gm != m_scales[j]):
                 raise SystemExit(
                     f"scale unpack mismatch j={j} get=({gd},{gm}) unpack=({d_scales[j]},{m_scales[j]})"
                 )
+            if (gd != d_scales_patch[j]) or (gm != m_scales_patch[j]):
+                raise SystemExit(
+                    f"scale unpack mismatch j={j} get=({gd},{gm}) patch=({d_scales_patch[j]},{m_scales_patch[j]})"
+                )
 
         w = ggml_dequantize_row_q4_k(scales, qs, d_bits, dmin_bits)
         ref = sum(f32(float(w[i]) * float(x[i])) for i in range(QK_K))
         got = cuda_style_dot_q4_k(scales, qs, d_bits, dmin_bits, x)
+        got_patch = cuda_patch_style_dot_q4_k(scales, qs, d_bits, dmin_bits, x)
         err = abs(ref - got)
+        err_patch = abs(ref - got_patch)
         if err > max_abs_err:
             max_abs_err = err
-        if err > 1.0e-5:
-            raise SystemExit(f"mismatch: ref={ref} got={got} abs_err={err}")
+        if err_patch > max_abs_err:
+            max_abs_err = err_patch
+        if err > 1.0e-5 or err_patch > 1.0e-5:
+            raise SystemExit(f"mismatch: ref={ref} got={got} abs_err={err} got_patch={got_patch} abs_err_patch={err_patch}")
 
     print(f"ok: trials={args.trials} max_abs_err={max_abs_err:.3e}")
     return 0

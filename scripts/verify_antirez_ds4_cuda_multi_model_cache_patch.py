@@ -39,6 +39,12 @@ def validate_patch_text(patch_text: str) -> list[str]:
 
 	required_substrings = [
 		"diff --git a/ds4_cuda.cu b/ds4_cuda.cu",
+		"struct cuda_model_file_state {",
+		"static std::unordered_map<const void *, cuda_model_file_state> g_model_file_state_by_base;",
+		"static cuda_model_file_state *cuda_model_file_state_mut(const void *model_map);",
+		"static int cuda_model_fd_for_map(const void *model_map);",
+		"static uint64_t cuda_model_direct_align_for_map(const void *model_map);",
+		"extern \"C\" int ds4_gpu_set_model_fd_for_map(const void *model_map, int fd) {",
 		"struct cuda_model_offset_key {",
 		"const void *host_base;",
 		"int fd;",
@@ -47,22 +53,33 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"static std::unordered_map<cuda_model_offset_key, size_t, cuda_model_offset_key_hash> g_model_range_by_key;",
 		"static std::unordered_map<cuda_model_offset_key, size_t, cuda_model_offset_key_hash> g_q8_f16_by_key;",
 		"static std::unordered_map<cuda_model_offset_key, size_t, cuda_model_offset_key_hash> g_q8_f32_by_key;",
+		"static void cuda_model_drop_file_pages(const void *model_map, uint64_t offset, uint64_t bytes) {",
+		"static int cuda_model_stage_pool_alloc(uint64_t bytes, uint64_t align) {",
+		"static int cuda_model_stage_read(const void *model_map, void *stage, uint64_t stage_bytes,",
+		"g_model_stage_align",
 		"g_model_range_by_key.clear();",
 		"g_q8_f16_by_key.clear();",
 		"g_q8_f32_by_key.clear();",
+		"Keep the largest cached range per (map,fd,offset) to avoid thrashing.",
+		"g_model_ranges[it->second].bytes < bytes",
+		"diff --git a/ds4.c b/ds4.c",
+		"ds4_gpu_set_model_fd_for_map(e->mtp_model.map, e->mtp_model.fd)",
+		"diff --git a/ds4_gpu.h b/ds4_gpu.h",
+		"int ds4_gpu_set_model_fd_for_map(const void *model_map, int fd);",
+		"if (getenv(\"DS4_CUDA_NO_FD_CACHE\") == NULL) {",
 	]
 
 	for s in required_substrings:
 		if s not in patch_text:
 			errors.append(f"missing expected substring: {s!r}")
 
-	# The patch must show at least one callsite constructing a key with (model_map, fd, offset).
+	# The patch must show at least one callsite constructing a key with (model_map, fd_for_map(model_map), offset).
 	key_ctor_markers = [
-		"cuda_model_offset_key k{model_map, g_model_fd, offset};",
-		"cuda_model_offset_key{model_map, g_model_fd, offset}",
+		"cuda_model_offset_key k{model_map, cuda_model_fd_for_map(model_map), offset};",
+		"cuda_model_offset_key{model_map, cuda_model_fd_for_map(model_map), offset}",
 	]
 	if not any(m in patch_text for m in key_ctor_markers):
-		errors.append("missing expected (model_map, g_model_fd, offset) key construction marker")
+		errors.append("missing expected (model_map, cuda_model_fd_for_map(model_map), offset) key construction marker")
 
 	# Guardrail: the legacy maps should not remain in the patch in the obvious form.
 	legacy_markers = [

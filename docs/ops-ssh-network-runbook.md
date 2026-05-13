@@ -54,6 +54,16 @@ To debug which options are actually taking effect:
 ssh -G $SSH_OPTS spark0@<spark0-host> 2>/dev/null | grep -E '^(userknownhostsfile|stricthostkeychecking|identityfile|batchmode) ' || true
 ```
 
+### Readiness Script Default `known_hosts` (Spark Side)
+
+If you do not set `SSH_OPTS`, the TP readiness scripts (`ops_tp2_readiness.sh`, `ops_tp3_readiness.sh`, `ops_tp4_readiness.sh`) pick a default `UserKnownHostsFile`:
+
+- System units (when `/var/lib/ds4/ssh/` exists): `/var/lib/ds4/ssh/known_hosts`
+- User/dev runs (fallback): `${XDG_CACHE_HOME:-$HOME/.cache}/ds4/ssh/known_hosts` when writable
+- Last resort: `/var/tmp/ds4_known_hosts`
+
+For the most repeatable ops flows, prefer setting `SSH_OPTS` explicitly (identity + known-hosts path) so snapshots and staged readiness runs use the same storage.
+
 ## Mac-Side Mesh Check (Optional)
 
 To quickly sanity-check both Sparks plus basic peer ping reachability:

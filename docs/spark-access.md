@@ -13,13 +13,13 @@ Current observed Spark identity:
 - Spark wired interface: `enP7s7`, MTU 9000
 - Additional wired NICs observed: Mellanox `mlx5_core` ports at `200000Mb/s` (MTU `9000`; see latest ring probe snapshot for ifnames)
 - SSH key authentication from the Mac is now working for `spark0`.
-- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, `2026-05-12T2132Z`, `2026-05-13T0435Z`, and `2026-05-13T0628Z`; 100% loss at `2026-05-12T1830Z`, `2026-05-12T1934Z`, `2026-05-12T2029Z`, `2026-05-12T2058Z`, `2026-05-13T0005Z`, `2026-05-13T0041Z`, `2026-05-13T0527Z`, and `2026-05-13T0602Z`; see latest mac discovery snapshot).
+- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, `2026-05-12T2132Z`, `2026-05-13T0435Z`, and `2026-05-13T0628Z`; 100% loss at `2026-05-12T1830Z`, `2026-05-12T1934Z`, `2026-05-12T2029Z`, `2026-05-12T2058Z`, `2026-05-13T0005Z`, `2026-05-13T0041Z`, `2026-05-13T0527Z`, `2026-05-13T0602Z`, `2026-05-13T0658Z`, and `2026-05-13T0730Z`; see latest mac discovery snapshot).
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
-- CUDA/driver (observed `2026-05-13T0628Z`): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88` (installed at `/usr/local/cuda/bin/nvcc`, not on `$PATH`), `cuda version.json` `13.0.3`
+- CUDA/driver (observed `2026-05-13T0730Z`): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88` (installed at `/usr/local/cuda/bin/nvcc`, not on `$PATH`), `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe ring snapshot set: `2026-05-13T0628Z` (`docs/spark-ring-*-2026-05-13T0628Z.md`)
-- Latest Spark0 facts-only snapshot: `2026-05-13T0628Z` (`docs/spark0-probe-facts-2026-05-13T0628Z.md`)
-- PCIe link note (observed `2026-05-13T0628Z`): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-13T0628Z.md`
+- Latest commit-safe ring snapshot set: `2026-05-13T0730Z` (`docs/spark-ring-*-2026-05-13T0730Z.md`)
+- Latest Spark0 facts-only snapshot: `2026-05-13T0730Z` (`docs/spark0-probe-facts-2026-05-13T0730Z.md`)
+- PCIe link note (observed `2026-05-13T0730Z`): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-13T0730Z.md`
 
 ## Reproducible Probes
 

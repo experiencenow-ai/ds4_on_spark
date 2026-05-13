@@ -514,11 +514,22 @@ def extract_route_record(obj_in: object, route_type: str = "", default_cls: str 
 def pack_layers_by_token_index(
     routes: Sequence[Dict[str, object]],
     require_layer_index: bool = False,
+    time_policy: str = "strict",
+    time_tol_ms: float = 0.0,
     strict: bool = True,
 ) -> List[Dict[str, object]]:
     out: List[Dict[str, object]] = []
     by_token: Dict[int, List[Dict[str, object]]] = {}
     order: List[int] = []
+
+    policy = str(time_policy).strip().lower()
+    if policy == "":
+        policy = "strict"
+    if policy not in ("strict", "first", "min", "max"):
+        raise ValueError("time_policy must be one of: strict, first, min, max")
+    tol_ms = float(time_tol_ms)
+    if tol_ms < 0.0:
+        raise ValueError("time_tol_ms must be >= 0")
 
     for r in routes:
         ti_raw = r.get("token_index")
@@ -555,8 +566,8 @@ def pack_layers_by_token_index(
                 raise ValueError(f"token_index={ti}: missing t_ms/dt_ms")
             continue
 
-        t_ms = float(first.get("t_ms", 0.0)) if have_t_ms else None
-        dt_ms = float(first.get("dt_ms", 0.0)) if have_dt_ms else None
+        t_ms_vals: List[float] = [float(first.get("t_ms", 0.0))] if have_t_ms else []
+        dt_ms_vals: List[float] = [float(first.get("dt_ms", 0.0))] if have_dt_ms else []
 
         cost_scale = first.get("cost_scale")
         decode_ms = first.get("decode_ms")
@@ -582,19 +593,25 @@ def pack_layers_by_token_index(
                     if strict:
                         raise ValueError(f"token_index={ti}: mixed t_ms/dt_ms within pack group")
                     continue
-                if float(r.get("t_ms")) != float(t_ms):
-                    if strict:
-                        raise ValueError(f"token_index={ti}: t_ms mismatch within pack group")
-                    continue
+                tv = float(r.get("t_ms"))
+                if abs(tv - float(t_ms_vals[0])) > tol_ms:
+                    if policy == "strict":
+                        if strict:
+                            raise ValueError(f"token_index={ti}: t_ms mismatch within pack group")
+                        continue
+                t_ms_vals.append(float(tv))
             else:
                 if "dt_ms" not in r or r.get("dt_ms") is None:
                     if strict:
                         raise ValueError(f"token_index={ti}: mixed t_ms/dt_ms within pack group")
                     continue
-                if float(r.get("dt_ms")) != float(dt_ms):
-                    if strict:
-                        raise ValueError(f"token_index={ti}: dt_ms mismatch within pack group")
-                    continue
+                dv = float(r.get("dt_ms"))
+                if abs(dv - float(dt_ms_vals[0])) > tol_ms:
+                    if policy == "strict":
+                        if strict:
+                            raise ValueError(f"token_index={ti}: dt_ms mismatch within pack group")
+                        continue
+                dt_ms_vals.append(float(dv))
 
             # Only allow metadata fields to differ if they are consistently absent.
             for k, first_val in (
@@ -676,9 +693,19 @@ def pack_layers_by_token_index(
 
         rec_out: Dict[str, object] = {"token_index": int(ti), "cls": cls, "candidates": union, "layers": layers}
         if have_t_ms:
-            rec_out["t_ms"] = float(t_ms)
+            if policy == "min":
+                rec_out["t_ms"] = float(min(t_ms_vals))
+            elif policy == "max":
+                rec_out["t_ms"] = float(max(t_ms_vals))
+            else:
+                rec_out["t_ms"] = float(t_ms_vals[0])
         else:
-            rec_out["dt_ms"] = float(dt_ms)
+            if policy == "min":
+                rec_out["dt_ms"] = float(min(dt_ms_vals))
+            elif policy == "max":
+                rec_out["dt_ms"] = float(max(dt_ms_vals))
+            else:
+                rec_out["dt_ms"] = float(dt_ms_vals[0])
 
         for k, v in (
             ("cost_scale", cost_scale),
@@ -780,6 +807,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--extract-substrings", type=int, default=1, help="When set, scan non-JSON log lines for embedded JSON objects and try extracting route records from them (default: 1).")
     p.add_argument("--pack-layers-by-token-index", type=int, default=0, help="When set, pack per-layer route records sharing token_index into a single multi-layer trace record with layers[]. Requires token_index on every record; prefers layer_index ordering when present.")
     p.add_argument("--pack-require-layer-index", type=int, default=0, help="When used with --pack-layers-by-token-index, require every record to include layer_index so layer ordering is explicit (default: 0).")
+    p.add_argument("--pack-time-policy", type=str, default="strict", help="When used with --pack-layers-by-token-index, how to handle mismatched t_ms/dt_ms within a token group: strict (default), first, min, max.")
+    p.add_argument("--pack-time-tol-ms", type=float, default=0.0, help="When used with --pack-layers-by-token-index, treat abs(t_ms mismatch) <= tol as equal (default: 0).")
     args = p.parse_args(argv)
 
     f_in = sys.stdin if args.in_jsonl == "-" else open(args.in_jsonl, "r", encoding="utf-8")
@@ -807,7 +836,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     packed: Optional[List[Dict[str, object]]] = None
     if int(args.pack_layers_by_token_index) != 0:
-        packed = pack_layers_by_token_index(recs, require_layer_index=(int(args.pack_require_layer_index) != 0), strict=True)
+        packed = pack_layers_by_token_index(
+            recs,
+            require_layer_index=(int(args.pack_require_layer_index) != 0),
+            time_policy=args.pack_time_policy,
+            time_tol_ms=float(args.pack_time_tol_ms),
+            strict=True,
+        )
         meta["packed_layers_by_token_index"] = True
         meta["packed_routes"] = len(packed)
 

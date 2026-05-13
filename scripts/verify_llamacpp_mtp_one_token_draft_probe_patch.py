@@ -103,6 +103,18 @@ def main() -> None:
 	if "compute_mtp_gamma1_block" in joined and "mtp_block_out_hc_fnv64" not in joined:
 		_die("one-token probe gamma1 implementation missing mtp_block_out_hc fingerprint output")
 
+	required_capture_keys = [
+		"mtp_enorm_fnv64",
+		"mtp_eproj_fnv64",
+		"mtp_eproj_hc_fnv64",
+		"mtp_hnorm_hc_fnv64",
+		"mtp_hproj_hc_fnv64",
+		"mtp_input_hc_fnv64",
+	]
+	for key in required_capture_keys:
+		if key not in joined:
+			_die(f"one-token probe cpp missing expected capture key: {key}")
+
 	hpp_header = (
 		"diff --git a/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp "
 		"b/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp"
