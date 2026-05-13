@@ -70,6 +70,14 @@ Once you have **two** probe JSON blobs (oracle + candidate), diff them before ru
 python3 scripts/diff_mtp_one_token_draft_probe.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
 ```
 
+Recommended stronger guardrail (before acceptance sweeps): require both probes to emit the full set of intermediate fingerprints so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/candidate_probe.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
 Convenience wrapper (runs the gated oracle runner + a gated candidate command, then diffs locally):
 
 ```bash

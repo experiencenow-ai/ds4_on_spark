@@ -181,6 +181,13 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
     - `mtp_block_out_hc` (MTP block output stream before the MTP output head)
     - `mtp_head_norm` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection)
   - Avoid dumping full logits: instead fingerprint the normalized head stream and rely on exact `mtp_draft_token_id` equality.
+  - Optional stronger guardrail (recommended before acceptance sweeps): require both probes to emit the full capture set so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json oracle.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json candidate.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a oracle.json --b candidate.json --json
+```
 
 Implementation note (Spark/Linux CUDA):
 

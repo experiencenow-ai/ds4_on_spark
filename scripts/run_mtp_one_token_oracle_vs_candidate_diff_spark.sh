@@ -122,6 +122,28 @@ else
 	printf '%s\n' "" >"$DIFF_STDERR"
 fi
 
+echo "== capture gate (local; best-effort) =="
+ORACLE_CAP_JSON="$OUT_DIR/oracle_capture_gate.json"
+CAND_CAP_JSON="$OUT_DIR/candidate_capture_gate.json"
+if [ "$ORACLE_JSON" != "" ]; then
+	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$ORACLE_JSON" --json >"$ORACLE_CAP_JSON" 2>/dev/null || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle probe JSON\"}" >"$ORACLE_CAP_JSON"
+fi
+if [ "$CAND_JSON" != "" ]; then
+	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$CAND_JSON" --json >"$CAND_CAP_JSON" 2>/dev/null || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing candidate probe JSON\"}" >"$CAND_CAP_JSON"
+fi
+
+echo "== summarizing diff (local; best-effort) =="
+DIFF_SUMMARY_JSON="$OUT_DIR/oracle_vs_candidate_diff_summary.json"
+if [ "$ORACLE_JSON" != "" ] && [ "$CAND_JSON" != "" ]; then
+	python3 "$repo_root/scripts/summarize_mtp_one_token_draft_probe_diff.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json >"$DIFF_SUMMARY_JSON" 2>/dev/null || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$DIFF_SUMMARY_JSON"
+fi
+
 {
 	echo "## Results"
 	echo
@@ -143,6 +165,24 @@ fi
 	sed -n '1,200p' "$DIFF_JSON" 2>/dev/null || true
 	echo '```'
 	echo
+	echo "Local capture-gate output (oracle):"
+	echo
+	echo '```'
+	sed -n '1,120p' "$ORACLE_CAP_JSON" 2>/dev/null || true
+	echo '```'
+	echo
+	echo "Local capture-gate output (candidate):"
+	echo
+	echo '```'
+	sed -n '1,120p' "$CAND_CAP_JSON" 2>/dev/null || true
+	echo '```'
+	echo
+	echo "Local diff summary (first mismatch hint):"
+	echo
+	echo '```'
+	sed -n '1,120p' "$DIFF_SUMMARY_JSON" 2>/dev/null || true
+	echo '```'
+	echo
 	echo "Artifacts:"
 	echo
 	echo "- report: $REPORT_MD"
@@ -152,6 +192,9 @@ fi
 	echo "- candidate runner stderr: $OUT_DIR/candidate_runner_stderr.txt"
 	echo "- diff JSON: $DIFF_JSON"
 	echo "- diff stderr: $DIFF_STDERR"
+	echo "- oracle capture gate JSON: $ORACLE_CAP_JSON"
+	echo "- candidate capture gate JSON: $CAND_CAP_JSON"
+	echo "- diff summary JSON: $DIFF_SUMMARY_JSON"
 	echo
 	echo "Next step: if the diff fails early, add more `*_fnv64` captures to the candidate probe before attempting acceptance sweeps."
 	echo
