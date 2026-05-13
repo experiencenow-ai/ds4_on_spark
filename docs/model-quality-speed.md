@@ -108,6 +108,11 @@ much lower memory, simpler runtime, or better stability.
 Use `scripts/model_quality_speed_score.py` on a CSV assembled from baseline
 reports:
 
+Baseline wrappers append to `MODEL_RUNS_CSV` in a schema-safe way: if newer runs
+include additional columns (for example speculative-decoding counters), the
+writer will extend the CSV header and backfill older rows with empty fields
+instead of producing misaligned CSV lines.
+
 ```sh
 scripts/model_quality_speed_score.py results/model_runs.csv
 scripts/model_quality_speed_score.py results/model_runs.csv --json
