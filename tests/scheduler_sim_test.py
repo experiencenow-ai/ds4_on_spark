@@ -340,6 +340,61 @@ class SchedulerSimTest(unittest.TestCase):
         finally:
             tmp_dir.cleanup()
 
+    def test_ds4_topk_dump_expert_queue_probe_summary_smoke(self) -> None:
+        from array import array
+
+        tmp_dir = tempfile.TemporaryDirectory()
+        try:
+            dump_dir = tmp_dir.name
+
+            topk = 2
+            rows_layer0 = [
+                [0, 1],
+                [2, 3],
+                [4, 5],
+            ]
+            rows_layer1 = [
+                [10, 11],
+                [12, 13],
+                [14, 15],
+            ]
+            for layer, rows in [(0, rows_layer0), (1, rows_layer1)]:
+                data = array("i")
+                for row in rows:
+                    data.extend(row)
+                path = os.path.join(dump_dir, f"ffn_moe_topk-{layer}_pos0.i32")
+                with open(path, "wb") as f:
+                    f.write(data.tobytes())
+
+            _meta, layers = ds4_topk_dump.load_ds4_ffn_moe_topk_dump_layers(dump_dir, pos=0, topk=topk)
+            probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
+                layers,
+                experts=16,
+                topk=topk,
+                batches=(3,),
+                trials=1,
+                seed=123,
+                strict_expert_ids=True,
+            )
+            self.assertEqual(probe.get("tokens_per_layer"), 3)
+            self.assertEqual(probe.get("num_layers"), 2)
+            self.assertEqual(probe.get("experts"), 16)
+            self.assertEqual(probe.get("topk"), topk)
+            self.assertEqual(probe.get("trials"), 1)
+            self.assertEqual(probe.get("invalid_expert_ids"), 0)
+
+            batches = probe.get("batches")
+            self.assertIsInstance(batches, dict)
+            b3 = (batches or {}).get("3") if isinstance(batches, dict) else None
+            self.assertIsInstance(b3, dict)
+            active = (b3 or {}).get("active") if isinstance(b3, dict) else None
+            self.assertIsInstance(active, dict)
+            self.assertEqual((active or {}).get("median"), 6.0)
+            self.assertEqual((active or {}).get("min"), 6.0)
+            self.assertEqual((active or {}).get("max"), 6.0)
+        finally:
+            tmp_dir.cleanup()
+
     def test_trace_summary_accept_len_histogram_is_emitted_and_validates_range(self) -> None:
         trace = [
             scheduler_sim.TokenRoute(t_ms=0.0, cls=scheduler_sim.LatencyClass.BATCH, candidates=(0,), mtp_accept_len=1),
