@@ -1,6 +1,6 @@
 # Scheduler Simulator Recommendations (Synthetic)
 
-Date: 2026-05-12
+Date: 2026-05-13
 
 This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
@@ -12,12 +12,12 @@ This note records *synthetic* go/no-go guidance for early scheduler/perf layers:
 
 All numbers below come from the committed JSON report:
 
-- `docs/scheduler-simulator-recommendations-2026-05-12.json`
+- `docs/scheduler-simulator-recommendations-2026-05-13.json`
 
 Regenerate it with:
 
 ```bash
-python3 sim/scheduler/recommendations.py --json > docs/scheduler-simulator-recommendations-2026-05-12.json
+python3 sim/scheduler/recommendations.py --json > docs/scheduler-simulator-recommendations-2026-05-13.json
 ```
 
 ## Expert Queue Reservation
@@ -263,6 +263,22 @@ Key signals to inspect (from the report JSON):
 - `token_p95_interactive_ms` (interactive tail cost)
 
 Recommendation (synthetic): keep **`hi_burst`** as a default anti-starvation safety valve; treat `promote_ms` as an opt-in knob that can reduce starvation further but may inflate interactive tail latency.
+
+## Multi-Layer K Scope (Token vs Layer)
+
+Scenario: multi-layer routes (`num_layers=12`) under two-stream overload, with an adaptive-K controller driven by `k_signal=candidates_mean`. Compare:
+
+- `k_scope=token` (one congestion signal per token, applied to every layer stage)
+- `k_scope=layer` (per-layer congestion signals, allowing different K decisions per layer)
+
+Key signals (from the report JSON):
+
+- `token_p95_interactive_ms`: `200.225` → `187.058`
+- `service_slot_ms_per_output_token`: `8.494` → `8.217`
+- `drop_frac_tokens_batch`: `0.609635` → `0.602604`
+- `partial_admit_frac_tokens`: `0.414406` → `0.363582`
+
+Recommendation (synthetic): keep `k_scope=layer` available for multi-layer traces; it can reduce partial-admit/drop pressure and improve interactive p95 in this synthetic regime. Treat the magnitude as non-authoritative until replay on real quantized-runtime traces.
 
 ## Next Step (Real Traces)
 

@@ -1628,6 +1628,69 @@ def _backpressure_zero_admit_policy_scenario(quick: bool) -> Dict[str, Any]:
         }
     )
 
+def _multilayer_k_scope_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 1500 if quick else 8000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=16,
+        num_candidates=6,
+        interactive_arrival_rate_tps=500.0,
+        batch_arrival_rate_tps=12000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.2,
+        seed=123,
+        num_layers=12,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="candidates_mean",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+        backpressure_zero_admit_policy="skip",
+        k_scope="token",
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("k_scope_layer", {"k_scope": "layer"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "multilayer_k_scope",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "support_k_scope_layer": True,
+                "default_k_scope": "token",
+                "experimental_k_scope": "layer",
+                "reason": "Synthetic multi-layer routes: per-layer K decisions can respond to stage-local congestion, reducing skipped-stage/backpressure pathologies vs a single K choice applied to every layer. Keep k_scope=layer available and calibrate on real quantized-runtime traces before adopting defaults.",
+            },
+        }
+    )
+
 
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
@@ -1642,6 +1705,7 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
         "backpressure_units": _backpressure_units_scenario(quick),
         "backpressure_zero_admit_policy": _backpressure_zero_admit_policy_scenario(quick),
+        "multilayer_k_scope": _multilayer_k_scope_scenario(quick),
         "k_controller_smoothing": _k_controller_smoothing_scenario(quick),
     }
     return({"scenarios": scenarios})
