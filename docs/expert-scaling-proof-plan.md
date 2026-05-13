@@ -101,6 +101,7 @@ Use two fixture classes:
      - The `t_ms`/`dt_ms` fields are synthetic (dumps have no timestamps). Keep the report explicit about this.
      - `--batch-size B` groups `B` tokens at the same timestamp (decode-like batch step). This is useful for stress-testing queue depth and backpressure logic; it is not a full decode replay.
      - `--probe-expert-queueing` attaches a route-only resampling probe that summarizes per-layer expert queue depth and cap-6 pair-work speedups across batch sizes (still not a full decode replay).
+     - For a loop-friendly markdown report, add `--format md` and write to `scheduler_report.md` instead of JSON.
 
 2. **Hidden-state replay fixture**
    - Input: real `ffn_norm`, `ffn_moe_topk`, and `ffn_moe_weights_scaled`

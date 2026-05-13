@@ -21,6 +21,7 @@ def main() -> int:
     )
     p.add_argument("--dump-dir", required=True, help="Directory containing ffn_moe_topk-<layer>_pos<pos>.i32 dumps.")
     p.add_argument("--out-json", default="-", help="Output JSON report path ('-' for stdout).")
+    p.add_argument("--format", type=str, default="json", choices=("json", "md"), help="Output format: json (default) or md.")
     p.add_argument("--pos", type=int, default=0, help="Dump position index to extract (default: 0).")
     p.add_argument("--topk", type=int, default=6, help="Experts per row in each dump (default: 6).")
     p.add_argument("--num-tokens", type=int, default=0, help="Number of output trace records (0 = tokens_per_layer).")
@@ -117,7 +118,11 @@ def main() -> int:
             "summary": topk_dump_probe,
         }
 
-    out_json = json.dumps(report, indent=2, sort_keys=True)
+    fmt = str(args.format).strip().lower()
+    if fmt == "md":
+        out_json = recommendations.format_runtime_trace_ablation_markdown(report)
+    else:
+        out_json = json.dumps(report, indent=2, sort_keys=True)
     if str(args.out_json) == "-":
         print(out_json)
         return 0
