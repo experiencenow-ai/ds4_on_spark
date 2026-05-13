@@ -442,6 +442,8 @@ python3 scripts/ds4_topk_dump_recommendations.py \
   --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
 ```
 
+Note: `ds4_topk_dump_recommendations.py` treats `topk` as the fixed selected-expert `K` when the trace itself does not include `k` fields, so queue depth and service load scale correctly for these route-only fixtures.
+
 Then run the standard trace sweep / recommendations loop:
 
 ```bash
