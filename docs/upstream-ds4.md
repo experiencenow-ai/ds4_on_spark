@@ -4,13 +4,13 @@
 
 - Repo: `https://github.com/antirez/ds4`
 - Ref: `refs/heads/main`
-- Commit: `f8b4ed635d559b3a5b44bf2df6a77e21b3e9178f`
+- Commit: `d57ae3fd85d2c6bf1833295b257a6b0ed6d3ba60`
 - License: MIT (see upstream `LICENSE`)
 
 ## Notable upstream delta (since previous pin)
 
-- Previous pin: `8809b90a1e3247389d7652b565ab6772e036f1ea`
-- New HEAD note: upstream `main` advanced and (per commit messages) includes CUDA q8 fp16 cache behavior changes and recent MTP correctness fixes; treat any performance impact as upstream-only until reproduced locally.
+- Previous pin: `f8b4ed635d559b3a5b44bf2df6a77e21b3e9178f`
+- New HEAD note: upstream `main` advanced by 1 commit (`d57ae3f`, “Add contributing regression guide”); documentation-only change (no runtime/semantics expected).
 
 ## What it is
 
