@@ -25,7 +25,32 @@ static const char *DS4_CONFIG_KEY_HELP[] =
 	"entries (k/m/g or KiB/MiB/GiB suffix ok), advisory (default=0)",
 };
 
+static const char *DS4_CONFIG_ENV_VARS[] =
+{
+	"DS4_CONFIG_PATH",
+	"DS4_CONFIG",
+	"DS4_LOG_LEVEL",
+	"DS4_ENABLE_CUDA",
+	"DS4_CUDA_DEVICE",
+	"DS4_ARENA_SIZE",
+	"DS4_CUDA_ARENA_SIZE",
+	"DS4_LOG_RING_ENTRIES",
+};
+
+static const char *DS4_CONFIG_ENV_VARS_HELP[] =
+{
+	"default config file path (used when no explicit path is provided)",
+	"inline config text (newline-delimited key=value pairs)",
+	"0..3 or error/warn/info/debug (overrides config)",
+	"bool 0/1 true/false yes/no on/off (overrides config)",
+	"-1=auto or >=0 device index (overrides config)",
+	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory (overrides config)",
+	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory; requires enable_cuda=1 (overrides config)",
+	"entries (k/m/g or KiB/MiB/GiB suffix ok), advisory (overrides config)",
+};
+
 _Static_assert((sizeof(DS4_CONFIG_KEYS) / sizeof(DS4_CONFIG_KEYS[0])) == (sizeof(DS4_CONFIG_KEY_HELP) / sizeof(DS4_CONFIG_KEY_HELP[0])),"DS4_CONFIG_KEY_HELP mismatch");
+_Static_assert((sizeof(DS4_CONFIG_ENV_VARS) / sizeof(DS4_CONFIG_ENV_VARS[0])) == (sizeof(DS4_CONFIG_ENV_VARS_HELP) / sizeof(DS4_CONFIG_ENV_VARS_HELP[0])),"DS4_CONFIG_ENV_VARS_HELP mismatch");
 
 int32_t ds4_config_diag_init(ds4_config_diag_t *d)
 {
@@ -128,6 +153,32 @@ const char *ds4_config_known_key_help(int32_t idx)
 	if ( idx < 0 || idx >= count )
 		return(0);
 	return(DS4_CONFIG_KEY_HELP[idx]);
+}
+
+int32_t ds4_config_env_var_count(int32_t *out_count)
+{
+	if ( out_count == 0 )
+		return(-1);
+	*out_count = (int32_t)(sizeof(DS4_CONFIG_ENV_VARS) / sizeof(DS4_CONFIG_ENV_VARS[0]));
+	return(0);
+}
+
+const char *ds4_config_env_var(int32_t idx)
+{
+	int32_t count;
+	count = (int32_t)(sizeof(DS4_CONFIG_ENV_VARS) / sizeof(DS4_CONFIG_ENV_VARS[0]));
+	if ( idx < 0 || idx >= count )
+		return(0);
+	return(DS4_CONFIG_ENV_VARS[idx]);
+}
+
+const char *ds4_config_env_var_help(int32_t idx)
+{
+	int32_t count;
+	count = (int32_t)(sizeof(DS4_CONFIG_ENV_VARS_HELP) / sizeof(DS4_CONFIG_ENV_VARS_HELP[0]));
+	if ( idx < 0 || idx >= count )
+		return(0);
+	return(DS4_CONFIG_ENV_VARS_HELP[idx]);
 }
 
 static void ds4_config_diag_set(ds4_config_diag_t *d,int32_t stage,int32_t line,int32_t err,int32_t unknown)

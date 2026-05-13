@@ -114,7 +114,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 		return;
 	if ( argv0 == 0 )
 		argv0 = "ds4_cli";
-	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--cuda-arena-size BYTES] [--log-ring-entries N] [--dump-config] [--dump-config-template] [--dump-config-keys] [--dump-config-help] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
+	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--cuda-arena-size BYTES] [--log-ring-entries N] [--dump-config] [--dump-config-template] [--dump-config-keys] [--dump-config-help] [--dump-config-env] [--dump-config-env-help] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
 	fprintf(fp,"  --config PATH     Load key=value config file (PATH or '-')\n");
 	fprintf(fp,"                  (or set DS4_CONFIG for inline config text, DS4_CONFIG_PATH for a default config path)\n");
 	fprintf(fp,"  --strict-config   Reject unknown keys in config file\n");
@@ -130,13 +130,15 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --dump-config-template Print a commented default config template\n");
 	fprintf(fp,"  --dump-config-keys Print supported config keys to stdout\n");
 	fprintf(fp,"  --dump-config-help Print supported config keys and value hints\n");
+	fprintf(fp,"  --dump-config-env Print supported config environment variables to stdout\n");
+	fprintf(fp,"  --dump-config-env-help Print supported config environment variables and hints\n");
 	fprintf(fp,"  --version         Print ds4 version\n");
 	fprintf(fp,"  --smoke-ctx       Init a ctx (static arena), log one line, print one log-ring entry\n");
 	fprintf(fp,"  --smoke-cuda      Print CUDA build/config status and (if enabled) probe one device\n");
 	fprintf(fp,"  --help            Show this help\n");
 }
 
-static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **cuda_arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *dump_template,int32_t *dump_keys,int32_t *dump_help,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
+static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **cuda_arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *dump_template,int32_t *dump_keys,int32_t *dump_help,int32_t *dump_env,int32_t *dump_env_help,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
 {
 	int32_t i;
 	const char *a;
@@ -164,12 +166,16 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		return(-11);
 	if ( dump_help == 0 )
 		return(-12);
-	if ( print_ver == 0 )
+	if ( dump_env == 0 )
 		return(-13);
-	if ( smoke_ctx == 0 )
+	if ( dump_env_help == 0 )
 		return(-14);
-	if ( smoke_cuda == 0 )
+	if ( print_ver == 0 )
 		return(-15);
+	if ( smoke_ctx == 0 )
+		return(-16);
+	if ( smoke_cuda == 0 )
+		return(-17);
 	*cfg_path = 0;
 	*strict_cfg = 0;
 	*log_level = 0;
@@ -182,6 +188,8 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 	*dump_template = 0;
 	*dump_keys = 0;
 	*dump_help = 0;
+	*dump_env = 0;
+	*dump_env_help = 0;
 	*print_ver = 0;
 	*smoke_ctx = 0;
 	*smoke_cuda = 0;
@@ -215,6 +223,16 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--dump-config-help") == 0 )
 		{
 			*dump_help = 1;
+			continue;
+		}
+		if ( strcmp(a,"--dump-config-env") == 0 )
+		{
+			*dump_env = 1;
+			continue;
+		}
+		if ( strcmp(a,"--dump-config-env-help") == 0 )
+		{
+			*dump_env_help = 1;
 			continue;
 		}
 		if ( strcmp(a,"--config") == 0 )
@@ -367,6 +385,41 @@ static int32_t ds4_cli_dump_config_template(void)
 	return(0);
 }
 
+static int32_t ds4_cli_dump_config_env(void)
+{
+	const char *k;
+	int32_t i,count;
+	if ( ds4_config_env_var_count(&count) < 0 )
+		return(-1);
+	for (i=0; i<count; i++)
+	{
+		k = ds4_config_env_var(i);
+		if ( k == 0 )
+			return(-2);
+		printf("%s\n",k);
+	}
+	return(0);
+}
+
+static int32_t ds4_cli_dump_config_env_help(void)
+{
+	const char *k,*h;
+	int32_t i,count;
+	if ( ds4_config_env_var_count(&count) < 0 )
+		return(-1);
+	for (i=0; i<count; i++)
+	{
+		k = ds4_config_env_var(i);
+		if ( k == 0 )
+			return(-2);
+		h = ds4_config_env_var_help(i);
+		if ( h == 0 )
+			return(-3);
+		printf("%s: %s\n",k,h);
+	}
+	return(0);
+}
+
 static int32_t ds4_cli_dump_config(const ds4_config_t *cfg)
 {
 	char out[128];
@@ -416,11 +469,13 @@ int main(int argc,char **argv)
 	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*cuda_arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
 	ds4_config_diag_t diag;
-	int32_t dump_cfg,dump_template,dump_keys,dump_help,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
+	int32_t dump_cfg,dump_template,dump_keys,dump_help,dump_env,dump_env_help,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
 	dump_cfg = 0;
 	dump_template = 0;
 	dump_keys = 0;
 	dump_help = 0;
+	dump_env = 0;
+	dump_env_help = 0;
 	print_ver = 0;
 	strict_cfg = 0;
 	smoke_ctx = 0;
@@ -433,7 +488,7 @@ int main(int argc,char **argv)
 	arena_size = 0;
 	cuda_arena_size = 0;
 	log_ring_entries = 0;
-	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&cuda_arena_size,&log_ring_entries,&dump_cfg,&dump_template,&dump_keys,&dump_help,&print_ver,&smoke_ctx,&smoke_cuda);
+	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&cuda_arena_size,&log_ring_entries,&dump_cfg,&dump_template,&dump_keys,&dump_help,&dump_env,&dump_env_help,&print_ver,&smoke_ctx,&smoke_cuda);
 	if ( err != 0 )
 	{
 		if ( err > 0 )
@@ -459,6 +514,18 @@ int main(int argc,char **argv)
 	if ( dump_help != 0 )
 	{
 		if ( ds4_cli_dump_config_help() < 0 )
+			return(1);
+		return(0);
+	}
+	if ( dump_env != 0 )
+	{
+		if ( ds4_cli_dump_config_env() < 0 )
+			return(1);
+		return(0);
+	}
+	if ( dump_env_help != 0 )
+	{
+		if ( ds4_cli_dump_config_env_help() < 0 )
 			return(1);
 		return(0);
 	}
