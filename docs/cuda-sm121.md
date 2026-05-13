@@ -29,6 +29,7 @@ CUDA 13 changes `nvcc` defaults that can matter for CUTLASS/DeepGEMM-style build
 
 - `-static-global-template-stub=true` (default in CUDA 13) can break “explicitly instantiate a `__global__` template in TU A, launch it from TU B” in whole-program compilation mode (`-rdc=false`). Fix options include `-rdc=true` or `-static-global-template-stub=false`. `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints `template_stub_default` / `template_stub_stubfalse` / `template_stub_rdc` as a concrete Spark0 check.
 - `-device-entity-has-hidden-visibility=true` (default in CUDA 13) forces hidden ELF visibility for `__global__` functions and device variables when building shared libraries (can cause link errors across `.so` boundaries unless you opt out and ensure a single shared CUDART).
+- Shared-library boundary probe: `scripts/cuda_probe_nvcc_minimal_spark0.sh` also attempts a tiny “kernel in `.so`, launched from main” build. On CUDA 13 defaults this is expected to fail to link; the opt-out build uses `-cudart=shared -device-entity-has-hidden-visibility=false` and should run (printing `hi!`).
 
 Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `template_stub_default` fails to link (warning `#20280-D` + undefined reference), while `template_stub_stubfalse` (`-static-global-template-stub=false`) and `template_stub_rdc` (`-rdc=true`) both build and run successfully.
 

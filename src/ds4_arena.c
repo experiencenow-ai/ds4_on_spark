@@ -113,6 +113,36 @@ int32_t ds4_arena_release(ds4_arena_t *a,int32_t mark)
 	return(0);
 }
 
+int32_t ds4_arena_validate(const ds4_arena_t *a)
+{
+	if ( a == 0 )
+		return(-1);
+	if ( a->base == 0 )
+		return(-2);
+	if ( a->size <= 0 )
+		return(-3);
+	if ( a->used < 0 )
+		return(-4);
+	if ( a->used > a->size )
+		return(-5);
+	return(0);
+}
+
+int32_t ds4_arena_bytes_left(const ds4_arena_t *a,int32_t *out_bytes)
+{
+	int32_t left;
+	if ( out_bytes == 0 )
+		return(-1);
+	*out_bytes = 0;
+	if ( ds4_arena_validate(a) < 0 )
+		return(-2);
+	left = (a->size - a->used);
+	if ( left < 0 )
+		return(-3);
+	*out_bytes = left;
+	return(0);
+}
+
 int32_t ds4_arena_alloc(ds4_arena_t *a,int32_t size,int32_t align,void **out)
 {
 	int32_t used2,used3;

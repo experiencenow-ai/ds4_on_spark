@@ -22,6 +22,7 @@ DEFAULT_CAPTURE_KEYS = [
 	"trunk_token_embd",
 	"trunk_pre_hc_head",
 	"mtp_input_hc",
+	"mtp_block_out_hc",
 	"mtp_head_norm",
 ]
 
@@ -216,7 +217,7 @@ def diff_one_token_mtp_probes(
 		_cmp_value(out, fnv_key, fnv_a, fnv_b, required=require_capture_match)
 		_cmp_value(out, nbytes_key, _get(a, nbytes_key), _get(b, nbytes_key), required=require_capture_match)
 		_cmp_value(out, shape_key, _get(a, shape_key), _get(b, shape_key), required=require_capture_match)
-		_cmp_sample_f32(out, sample_key, _get(a, sample_key), _get(b, sample_key), tol=sample_tol)
+		_cmp_sample_f32(out, sample_key, _get(a, sample_key), _get(b, sample_key), tol=float(sample_tol))
 
 	out["ok"] = (len(out["errors"]) == 0 and len(out["mismatches"]) == 0)
 	return out

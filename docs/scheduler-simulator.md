@@ -388,6 +388,18 @@ python3 sim/scheduler/scheduler_sim.py --trace-jsonl /path/to/raw.jsonl --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+To bundle **canonicalization + the standard runtime-trace ablation report** (JSON + Markdown) into one command, use:
+
+```bash
+python3 scripts/scheduler_trace_report.py --in-jsonl /path/to/runtime.log.jsonl --out-dir /tmp/scheduler_trace_report --time-mode dt_ms --input-format runtime --non-route skip
+```
+
+The bundle writes:
+
+- `scheduler_trace.canon.jsonl` (canonical strict trace with a meta header)
+- `scheduler_trace_report.json` (machine-readable ablation report)
+- `scheduler_trace_report.md` (human-readable summary)
+
 If the runtime emits a *mixed* JSONL log stream (multiple record types), canonicalization and replay can ignore non-route records that have a non-meta `type` field via `--trace-non-route skip`:
 
 ```bash
@@ -408,6 +420,13 @@ Some runtimes emit **one route record per token per MoE layer** (repeated `token
 
 ```bash
 cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-pack-layers-by-token-index 1 --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+By default, per-layer packing is strict about timestamps: every route record in the token group must agree on `t_ms`/`dt_ms`. If your runtime emits per-layer timestamps that differ (common when routes are logged at dispatch time rather than at token submit time), use a pack-time policy to collapse them:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-pack-layers-by-token-index 1 --trace-pack-time-policy min --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
@@ -439,6 +458,17 @@ python3 scripts/ds4_topk_dump_recommendations.py \
   --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
   --out-json /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_report.json \
   --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+  --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
+```
+
+To create a loop-friendly **on-disk bundle** (strict trace + report files), use `--bundle-dir` (writes `trace.strict.jsonl`, `report.json`, `report.md`, and `bundle_meta.json`):
+
+```bash
+python3 scripts/ds4_topk_dump_recommendations.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --bundle-dir /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_bundle_pos0 \
+  --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+  --probe-expert-queueing --probe-experts 256 --probe-batches 16,32,64,100,128,256,512 --probe-trials 250 \
   --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
 ```
 
@@ -531,6 +561,8 @@ Trace sanity-check (contract summary only):
 ```bash
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
 ```
+
+The trace summary includes `inferred.*` fields (for example `num_experts`, `mtp_draft_len`, `dflash_draft_len`) plus `hints.suggested.*` when the replay is under-specified (for example recommending `--trace-derive-cost-scale kv_tokens_p50` when `cost_scale` is missing but `kv_tokens` is present, or noting when draft length is underdetermined because the trace only logs reject cases).
 
 Per-token simulation dump (debug trace-vs-model mismatches by inspecting per-step latency, drops, stage skips, and MTP accept lengths):
 

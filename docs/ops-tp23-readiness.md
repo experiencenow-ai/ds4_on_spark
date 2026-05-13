@@ -44,6 +44,14 @@ sudo systemctl start ds4-preflight-tp23@spark0.service
 sudo systemctl start ds4-preflight-tp23-strict@spark0.service
 ```
 
+### Periodic Systemd Timer (Optional)
+
+If you installed timer templates (for example by adding `--install-timers` when running `/tmp/ds4-scripts/ops_install_staged_assets.sh`), you can enable periodic `tp23` preflight checks:
+
+```bash
+sudo systemctl enable --now ds4-preflight-tp23-strict@spark0.timer
+```
+
 Logs:
 
 ```bash
@@ -57,5 +65,12 @@ journalctl -t ds4-preflight-tp23-spark0 -n 200 --no-pager
 systemctl --user start ds4-preflight-tp23-strict@spark0.service
 ```
 
-If strict preflight fails and `ds4-support-bundle@.service` is installed, systemd triggers a non-destructive support bundle. See `docs/ops-support-bundle.md`.
+### Periodic `systemd --user` Timer (Optional)
 
+If you installed the user timer templates under `~/.config/systemd/user/`, you can enable periodic checks without sudo:
+
+```bash
+systemctl --user enable --now ds4-preflight-tp23-strict@spark0.timer
+```
+
+If strict preflight fails and `ds4-support-bundle@.service` is installed, systemd triggers a non-destructive support bundle. See `docs/ops-support-bundle.md`.

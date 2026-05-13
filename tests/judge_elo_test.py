@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import subprocess
@@ -65,6 +66,36 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(set(ratings1.keys()), set(ratings2.keys()))
         for k in ratings1:
             self.assertAlmostEqual(ratings1[k], ratings2[k], places=9)
+
+    def test_record_v5_winner_is_canonicalized(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "one.jsonl")
+            # v5 records validate winner case-insensitively for robustness; Elo math must
+            # treat "a"/"b" as A/B, not as a tie.
+            rec = {
+                "schema": schema.SCHEMA_RECORD_V5,
+                "pair_id": "p1",
+                "model_a": "mA",
+                "model_b": "mB",
+                "judge_model": "ds4",
+                "parse_valid": True,
+                "w": "a",
+                "m": 3,
+                "sa": 10,
+                "sb": 5,
+                "r": "A is more correct.",
+                "h": "Fix factual errors.",
+                "t": ["factuality"],
+                "tk": [5, 5, 10, 20],
+                "lt": [1, 1, 2],
+            }
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(rec, separators=(",", ":"), sort_keys=True) + "\n")
+            self.assertEqual(schema.validate_record(rec), [])
+            _ratings, stats = updater.compute_elo([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+            self.assertEqual(int(stats["mA"]["wins"]), 1)
+            self.assertEqual(int(stats["mB"]["losses"]), 1)
+            self.assertEqual(int(stats["mA"]["ties"]), 0)
 
     def test_sort_by_pair_id_is_stable(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
@@ -304,6 +335,110 @@ class JudgeEloTest(unittest.TestCase):
         self.assertEqual(joined[0].get("quality_score"), "50.000")
         self.assertEqual(joined[0].get("quality_source"), "default50")
         self.assertEqual(joined[1].get("quality_score"), "12.000")
+
+    def test_join_quality_cli_bundle_missing_default_fills(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        join_script = os.path.join(root, "scripts", "judge_elo_join_quality.py")
+        in_records = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = os.path.join(td, "elo")
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                in_records,
+                "--out-dir",
+                out_dir,
+                "--strict",
+                "--quality-mode",
+                "logistic",
+            ])
+            bundle_path = os.path.join(out_dir, "bundle.json")
+            with open(bundle_path, "r", encoding="utf-8") as f:
+                bundle = json.load(f)
+            qmap = bundle.get("quality_map", {})
+            meta = bundle.get("meta", {})
+            self.assertIsInstance(qmap, dict)
+            self.assertIsInstance(meta, dict)
+            qsrc = str(meta.get("quality_source", ""))
+            self.assertNotEqual(qsrc, "")
+
+            baseline_csv = os.path.join(td, "baseline.csv")
+            out_csv = os.path.join(td, "baseline_with_quality.csv")
+            with open(baseline_csv, "w", encoding="utf-8", newline="") as f:
+                f.write("model,decode_tps\n")
+                f.write("model_slow,10.0\n")
+                f.write("missing_model,20.0\n")
+
+            p = subprocess.run([
+                "python3",
+                join_script,
+                "--in",
+                baseline_csv,
+                "--bundle",
+                bundle_path,
+                "--missing-default",
+                "50",
+                "--missing-quality-source",
+                "judge_elo_default_v1",
+                "--out",
+                out_csv,
+            ], text=True, capture_output=True, check=True)
+            self.assertIn("missing_models=1", str(p.stderr))
+
+            with open(out_csv, "r", encoding="utf-8", newline="") as f:
+                r = csv.DictReader(f)
+                rows = [dict(row) for row in r]
+            self.assertEqual(len(rows), 2)
+            by_model = {row.get("model", ""): row for row in rows}
+            self.assertIn("model_slow", by_model)
+            self.assertIn("missing_model", by_model)
+
+            slow = by_model["model_slow"]
+            miss = by_model["missing_model"]
+            self.assertEqual(slow.get("quality_source", ""), qsrc)
+            self.assertEqual(miss.get("quality_source", ""), "judge_elo_default_v1")
+            self.assertEqual(miss.get("quality_score", ""), "50.000")
+            self.assertEqual(slow.get("quality_score", ""), f"{float(qmap.get('model_slow', 0.0)):.3f}")
+
+    def test_join_quality_cli_require_all_fails_on_missing(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        update_script = os.path.join(root, "scripts", "judge_elo_update.py")
+        join_script = os.path.join(root, "scripts", "judge_elo_join_quality.py")
+        in_records = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = os.path.join(td, "elo")
+            subprocess.check_call([
+                "python3",
+                update_script,
+                "--in",
+                in_records,
+                "--out-dir",
+                out_dir,
+                "--strict",
+            ])
+            bundle_path = os.path.join(out_dir, "bundle.json")
+
+            baseline_csv = os.path.join(td, "baseline.csv")
+            out_csv = os.path.join(td, "baseline_with_quality.csv")
+            with open(baseline_csv, "w", encoding="utf-8", newline="") as f:
+                f.write("model,decode_tps\n")
+                f.write("missing_model,20.0\n")
+
+            p = subprocess.run([
+                "python3",
+                join_script,
+                "--in",
+                baseline_csv,
+                "--bundle",
+                bundle_path,
+                "--require-all",
+                "--out",
+                out_csv,
+            ], text=True, capture_output=True)
+            self.assertNotEqual(int(p.returncode), 0)
+            self.assertIn("quality_map missing", str(p.stderr) + str(p.stdout))
 
     def test_wrap_record_parse_valid(self) -> None:
         decision = {"winner": "A", "margin": 2, "score_a": 8, "score_b": 6, "reason": "A is more correct.", "train_hint": "Fix the key mistake.", "tags": ["factuality"]}

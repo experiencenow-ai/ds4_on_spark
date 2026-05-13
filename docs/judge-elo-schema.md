@@ -4,6 +4,11 @@ This doc is the **implementation contract** for the judge-ELO loop: a compact pa
 
 DSv4 is treated as a **verifier**: it emits only a minified decision JSON (no prose). A harness (or offline wrapper) attaches token/latency metadata and emits JSONL records for offline Elo updates.
 
+Reference examples (offline fixtures):
+- Decision (v2 keys): `fixtures/judge-elo/sample_decision_v2.txt`
+- Prompt (v2): `fixtures/judge-elo/sample_pairwise_prompt_v2.json`
+- Record JSONL (v5): `fixtures/judge-elo/sample_judge_records_v5.jsonl`
+
 ## Decision object (DSv4 output)
 
 DSv4 should emit **exactly one minified JSON object on one line** with **compact keys**:

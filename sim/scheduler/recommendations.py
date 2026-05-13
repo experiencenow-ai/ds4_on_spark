@@ -120,9 +120,19 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     mtp_draft_len = _as_int(inferred, "mtp_draft_len", 0)
     if mtp_draft_len > 0:
         lines.append(f"- inferred mtp_draft_len: {int(mtp_draft_len)}")
+        src = _as_str(inferred, "mtp_draft_len_source", "")
+        if src != "":
+            lines.append(f"- mtp_draft_len source: `{src}`")
+            if src == "accept_len_all_rejects_default1":
+                lines.append("  - note: trace only shows mtp_accept_len=1 (all rejects), so draft length is underdetermined; set meta.mtp_draft_len or log accepted_mtp+rejected_mtp for a reliable gamma.")
     dflash_draft_len = _as_int(inferred, "dflash_draft_len", 0)
     if dflash_draft_len > 0:
         lines.append(f"- inferred dflash_draft_len: {int(dflash_draft_len)}")
+        src = _as_str(inferred, "dflash_draft_len_source", "")
+        if src != "":
+            lines.append(f"- dflash_draft_len source: `{src}`")
+            if src == "accept_len_all_rejects_default1":
+                lines.append("  - note: trace only shows dflash_accept_len=1 (all rejects), so draft length is underdetermined; set meta.dflash_draft_len or log accepted_dflash+rejected_dflash for a reliable gamma.")
     if bool(out.get("trace_assumptions")):
         ta = _as_dict(out.get("trace_assumptions"))
         if bool(ta.get("time_synthetic")):
@@ -413,15 +423,17 @@ def run_runtime_trace_mtp_ablation(
 
     mtp_draft_len_req = int(mtp_draft_len)
     mtp_draft_len_inferred = 0
+    mtp_draft_len_source = ""
     mtp_mode = "none"
     if any_mtp:
-        inferred_mtp_draft_len = _infer_mtp_draft_len_for_trace(trace, meta)
+        inferred_mtp_draft_len, mtp_draft_len_source = scheduler_sim.infer_mtp_draft_len_with_source(trace, meta)
         if inferred_mtp_draft_len is None or int(inferred_mtp_draft_len) <= 0:
             raise ValueError("runtime trace ablation requires meta.mtp_draft_len, accepted_mtp+rejected_mtp, or mtp_accept_len in the trace")
         mtp_draft_len_inferred = int(inferred_mtp_draft_len)
         mtp_mode = "trace"
     elif mtp_draft_len_req > 0:
         mtp_draft_len_inferred = int(mtp_draft_len_req)
+        mtp_draft_len_source = "synthetic"
         mtp_mode = "synthetic"
 
     mtp_draft_len_out = int(mtp_draft_len_inferred)
@@ -1319,6 +1331,97 @@ def _mtp_accept_hist_shape_scenario(quick: bool) -> Dict[str, Any]:
     )
 
 
+def _mtp_draft_queue_cls_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 2000 if quick else 40000
+    interactive_output_tps = 500.0
+    batch_output_tps = 20000.0
+
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=8,
+        num_candidates=8,
+        interactive_arrival_rate_tps=float(interactive_output_tps),
+        batch_arrival_rate_tps=float(batch_output_tps),
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.1,
+        seed=123,
+    )
+    base_trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=2,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="class",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+    )
+
+    draft_len = 2
+    accept_prob = 0.6
+    accept_decay = 0.8
+
+    exp_len = scheduler_sim.expected_mtp_accept_len(draft_len, float(accept_prob), float(accept_decay))
+    if exp_len <= 0.0:
+        exp_len = 1.0
+
+    trace_scaled = [dataclasses.replace(r, t_ms=(float(r.t_ms) * float(exp_len))) for r in base_trace]
+
+    cfg_mtp = dataclasses.replace(
+        base_cfg,
+        mtp_draft_len=int(draft_len),
+        mtp_accept_prob=float(accept_prob),
+        mtp_accept_decay=float(accept_decay),
+        mtp_draft_cost_scale=0.25,
+        mtp_draft_attempt_policy="stop_at_reject",
+        mtp_draft_queue_cls="inherit",
+    )
+
+    no_mtp_metrics = scheduler_sim.run_simulation(dataclasses.replace(cfg_mtp, mtp_draft_len=0), trace_scaled)
+    no_mtp_summary = scheduler_sim.compare_summary_jsonable(no_mtp_metrics)
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("draft_queue_inherit", {"mtp_draft_queue_cls": "inherit"}),
+        ("draft_queue_batch", {"mtp_draft_queue_cls": "batch"}),
+        ("draft_queue_interactive", {"mtp_draft_queue_cls": "interactive"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(cfg_mtp, trace_scaled, variants)
+    return(
+        {
+            "name": "mtp_draft_queue_cls",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(cfg_mtp),
+            "expected_accept_len": float(exp_len),
+            "trace_time_scale": float(exp_len),
+            "no_mtp": no_mtp_summary,
+            "results": out,
+            "recommendation": {
+                "default_mtp_draft_queue_cls": "inherit",
+                "experimental_mtp_draft_queue_cls": "batch",
+                "reason": "Synthetic overload: demoting draft micro-tokens can reduce verify queue pressure for batch traffic, but can also delay interactive work because draft stages must complete before verify. Treat as an experimental knob and validate on real runtime traces before enabling.",
+            },
+        }
+    )
+
+
 def _k_signal_policy_scenario(quick: bool) -> Dict[str, Any]:
     num_tokens = 2000 if quick else 60000
     trace_cfg = scheduler_sim.TwoStreamTraceConfig(
@@ -1628,6 +1731,69 @@ def _backpressure_zero_admit_policy_scenario(quick: bool) -> Dict[str, Any]:
         }
     )
 
+def _multilayer_k_scope_scenario(quick: bool) -> Dict[str, Any]:
+    num_tokens = 1500 if quick else 8000
+    trace_cfg = scheduler_sim.TwoStreamTraceConfig(
+        num_tokens=num_tokens,
+        num_experts=16,
+        num_candidates=6,
+        interactive_arrival_rate_tps=500.0,
+        batch_arrival_rate_tps=12000.0,
+        interactive_burst_prob=0.0,
+        interactive_burst_scale=1.0,
+        batch_burst_prob=0.0,
+        batch_burst_scale=1.0,
+        zipf_alpha=1.2,
+        seed=123,
+        num_layers=12,
+    )
+    trace = scheduler_sim.generate_twostream_trace(trace_cfg)
+
+    base_cfg = scheduler_sim.SimConfig(
+        num_experts=trace_cfg.num_experts,
+        expert_parallelism=1,
+        expert_queue_max=128,
+        service_ms=1.0,
+        starvation_ms=100.0,
+        hi_burst=0,
+        promote_ms=0.0,
+        adaptive_k=scheduler_sim.AdaptiveKConfig(
+            k_min_interactive=1,
+            k_max_interactive=4,
+            k_min_batch=1,
+            k_max_batch=4,
+            q_low=8,
+            q_high=96,
+        ),
+        expert_queue_reserve_interactive=16,
+        k_signal="candidates_mean",
+        sla_interactive_ms=25.0,
+        sla_batch_ms=250.0,
+        sim_seed=123,
+        backpressure_zero_admit_policy="skip",
+        k_scope="token",
+    )
+
+    variants: List[Tuple[str, Dict[str, object]]] = [
+        ("k_scope_layer", {"k_scope": "layer"}),
+    ]
+
+    out = scheduler_sim.compare_simulation_summaries(base_cfg, trace, variants)
+    return(
+        {
+            "name": "multilayer_k_scope",
+            "trace_cfg": dataclasses.asdict(trace_cfg),
+            "base_cfg": dataclasses.asdict(base_cfg),
+            "results": out,
+            "recommendation": {
+                "support_k_scope_layer": True,
+                "default_k_scope": "token",
+                "experimental_k_scope": "layer",
+                "reason": "Synthetic multi-layer routes: per-layer K decisions can respond to stage-local congestion, reducing skipped-stage/backpressure pathologies vs a single K choice applied to every layer. Keep k_scope=layer available and calibrate on real quantized-runtime traces before adopting defaults.",
+            },
+        }
+    )
+
 
 def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
     scenarios = {
@@ -1638,10 +1804,12 @@ def run_recommendations(*, quick: bool = False) -> Dict[str, Any]:
         "admit_policy_skew": _admit_policy_skew_scenario(quick),
         "mtp_congestion_sweep": _mtp_congestion_sweep(quick),
         "mtp_accept_hist_shape": _mtp_accept_hist_shape_scenario(quick),
+        "mtp_draft_queue_cls": _mtp_draft_queue_cls_scenario(quick),
         "k_signal_policy": _k_signal_policy_scenario(quick),
         "batch_starvation_knobs": _batch_starvation_knobs_scenario(quick),
         "backpressure_units": _backpressure_units_scenario(quick),
         "backpressure_zero_admit_policy": _backpressure_zero_admit_policy_scenario(quick),
+        "multilayer_k_scope": _multilayer_k_scope_scenario(quick),
         "k_controller_smoothing": _k_controller_smoothing_scenario(quick),
     }
     return({"scenarios": scenarios})

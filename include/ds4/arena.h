@@ -14,6 +14,8 @@ int32_t ds4_arena_init_ex(ds4_arena_t *a,uint8_t *mem,int32_t size,int32_t align
 int32_t ds4_arena_reset(ds4_arena_t *a);
 int32_t ds4_arena_mark(ds4_arena_t *a,int32_t *out_mark);
 int32_t ds4_arena_release(ds4_arena_t *a,int32_t mark);
+int32_t ds4_arena_validate(const ds4_arena_t *a);
+int32_t ds4_arena_bytes_left(const ds4_arena_t *a,int32_t *out_bytes);
 int32_t ds4_arena_alloc(ds4_arena_t *a,int32_t size,int32_t align,void **out);
 int32_t ds4_arena_alloc_n(ds4_arena_t *a,int32_t count,int32_t elem_size,int32_t align,void **out);
 int32_t ds4_arena_alloc_zero(ds4_arena_t *a,int32_t size,int32_t align,void **out);

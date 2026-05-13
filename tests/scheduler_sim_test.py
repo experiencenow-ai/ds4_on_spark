@@ -105,6 +105,34 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIsNotNone(r.scores)
             self.assertEqual(len(r.scores or ()), 4)
 
+    def test_trace_summary_hints_suggest_cost_scale_and_mtp_meta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                mtp_accept_len=1,
+                kv_tokens=128,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=1.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(1, 0),
+                mtp_accept_len=1,
+                kv_tokens=64,
+            ),
+        ]
+        out = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=0, meta={})
+        hints = out.get("hints")
+        self.assertIsInstance(hints, dict)
+        suggested = hints.get("suggested")
+        self.assertIsInstance(suggested, dict)
+        self.assertEqual(suggested.get("num_experts"), 2)
+        self.assertEqual(suggested.get("trace_derive_cost_scale"), "kv_tokens_p50")
+        notes = hints.get("notes")
+        self.assertIsInstance(notes, list)
+        self.assertTrue(any("MTP draft_len underdetermined" in str(n) for n in notes))
+
     def test_runtime_trace_ablation_markdown_renders_topk_dump_probe(self) -> None:
         meta = ds4_topk_dump.Ds4TopkDumpMeta(dump_dir="/tmp/fake", pos=0, topk=2, num_layers=2, tokens_per_layer=4)
         layers = [
@@ -4556,6 +4584,18 @@ class SchedulerSimTest(unittest.TestCase):
         full = row0["mtp_full"]
         stop = row0["mtp_stop_at_reject"]
         self.assertLess(float(stop["service_slot_ms_per_output_token"]), float(full["service_slot_ms_per_output_token"]))
+
+    def test_recommendations_quick_mtp_draft_queue_cls_emits_variants(self) -> None:
+        out = self._recommendations_quick()
+        scenario = out["scenarios"]["mtp_draft_queue_cls"]
+        self.assertGreater(float(scenario.get("expected_accept_len", 0.0)), 0.0)
+        variants = scenario["results"]["variants"]
+        self.assertIn("draft_queue_inherit", variants)
+        self.assertIn("draft_queue_batch", variants)
+        self.assertIn("draft_queue_interactive", variants)
+        inherit_sum = variants["draft_queue_inherit"]["summary"]
+        self.assertIn("task_queue_wait_ms_p95_mtp_verify", inherit_sum)
+        self.assertIn("task_queue_wait_ms_p95_mtp_draft", inherit_sum)
 
     def test_recommendations_quick_backpressure_stall_reduces_drops_but_increases_latency(self) -> None:
         out = self._recommendations_quick()

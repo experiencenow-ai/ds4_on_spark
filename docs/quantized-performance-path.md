@@ -28,7 +28,7 @@ If you plan to evaluate DeepSeek V4 Flash MTP (or any DS4-style sidecar-driven M
   - `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`
   - `docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch`
   - `docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch` (prevents trunk/sidecar cache key collisions under CUDA weight caching)
-  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py`
+  - `python3 scripts/verify_antirez_ds4_q4k_dot_math.py` (fixture provenance/regeneration: `docs/mtp-q4k-dot-validation.md`)
 
 - Validate the staged MTP sidecar **contract** (Spark-safe; header + tensor table only; no trunk load):
 
@@ -67,6 +67,12 @@ python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_
 
 Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
 
+When you *do* start acceptance work, record a machine-readable acceptance summary (per prompt set / run) using:
+
+```bash
+python3 scripts/summarize_mtp_acceptance_trace.py --in-jsonl /path/to/runtime.log.jsonl --draft-len <gamma>
+```
+
 ## Gate 1: Real Quantized Generation
 
 Before scheduler or MTP work, capture one successful run from
@@ -97,6 +103,12 @@ scheduling behavior:
 - GPU memory and KV cache growth
 - CUDA fallback nodes and graph placement (for example `__fattn__` / `__op__` scheduling lines when present)
 - MTP draft tokens, accepted tokens, and rejected tokens when available
+
+For a resident decode baseline that does not require custom routing hooks yet,
+run `scripts/codex_task.py spark-resident-batched-decode --run`. That wrapper
+starts one Spark-side `llama-server`, issues concurrent completion waves, and
+records aggregate decode throughput plus reservation/fallback signals. See
+`docs/resident-batched-decode.md`.
 
 Preferred output is JSONL so `sim/scheduler/` can replay real route traces. CSV is also supported (`--trace-csv`) when JSONL logging is awkward; use the same field names and encode list fields like `candidates` / `scores` as JSON lists.
 

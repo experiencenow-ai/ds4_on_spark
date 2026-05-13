@@ -25,6 +25,8 @@ Strict “start gates” are provided as separate templates, mirroring the syste
 - TP=4 strict gate: `ds4-tp4-strict@.service` + `ds4-preflight-tp4-strict@.service`
 - Optional transition helper (TP=2 -> TP=3): `ds4-preflight-tp23@.service` + `ds4-preflight-tp23-strict@.service` (runs both TP=2 and TP=3 checks)
 
+Optional periodic preflight timers are provided for each preflight template (including `tp23`), but are not enabled by default. The staged user installer (`/tmp/ds4-scripts/ops_install_staged_assets_user.sh`) installs the timer templates under `~/.config/systemd/user/` when present.
+
 Readiness docs:
 
 - TP=2: `docs/ops-tp2-readiness.md`

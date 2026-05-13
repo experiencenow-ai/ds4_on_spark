@@ -5,6 +5,7 @@ Tiny CUDA compile/run probes for DGX Spark (GB10) acceptance work.
 ## Run From The Mac (ships to Spark0)
 
 - Fastest `sm_121` gate (device-props + compile-only): `./scripts/cuda_probe_sm121_gate_spark0.sh`
+- Tiny “device-props + `sm_121` compile probes” (no repo transfer; two SSHs): `./scripts/cuda_probe_tinyprops_sm121_compile_spark0.sh`
 - Micro no-transfer gate (single SSH; compile-only `sm_121` + feature-set macro probe + PTX `.target` probes for `sm_121{,a,f}` / `compute_121{,a,f}` + `-gencode` bracket-list compile + one-line device props including best-effort `-arch=compute_121` JIT run + kernel launch best-effort): `./scripts/cuda_probe_micro_spark0.sh`
 - Minimal gates (no-transfer toolchain + no-transfer device-props + `sm_121` gate): `./scripts/cuda_probe_minimal_gates_spark0.sh` (includes no-transfer `sm_121` compile-probes by default; set `WITH_SM121_COMPILE_PROBES_MINIMAL=0` to skip)
 - Fast path: `./scripts/cuda_probe_tiny_spark0.sh`
