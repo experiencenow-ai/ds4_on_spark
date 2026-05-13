@@ -97,6 +97,18 @@ def main() -> None:
 	if "TODO: implement gamma=1 MTP draft compute" not in joined:
 		_die("one-token probe cpp hunk missing expected TODO marker (patch likely truncated)")
 
+	required_capture_keys = [
+		"mtp_enorm_fnv64",
+		"mtp_eproj_fnv64",
+		"mtp_eproj_hc_fnv64",
+		"mtp_hnorm_hc_fnv64",
+		"mtp_hproj_hc_fnv64",
+		"mtp_input_hc_fnv64",
+	]
+	for key in required_capture_keys:
+		if key not in joined:
+			_die(f"one-token probe cpp missing expected capture key: {key}")
+
 	hpp_header = (
 		"diff --git a/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp "
 		"b/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp"
