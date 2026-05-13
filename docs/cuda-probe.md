@@ -268,6 +268,8 @@ When you want a tiny compile-only “does `nvcc` accept and device-compile `sm_1
 
 This script compiles a minimal `sm_121` compile probe with multiple flag spellings (`-arch=sm_121`, `--gpu-architecture=sm_121`, and `--gpu-architecture=compute_121 --gpu-code=sm_121`) and then runs best-effort alias acceptance probes for `sm_121a` / `sm_121f`. It also includes compile-only gates for CUTLASS/DeepGEMM-style `-std=c++20 --extended-lambda --expt-relaxed-constexpr` and a standalone `__cluster_dims__(2,1,1)` annotation compile check (same flag-spelling variants).
 
+It also prints best-effort PTX `.target` lines for `-ptx -arch=sm_121` (and `sm_121a` / `sm_121f` when accepted). If `nvcc --list-gpu-arch` advertises `compute_121`, it additionally runs best-effort PTX `.target` probes for `compute_121` / `compute_121a` / `compute_121f`, best-effort feature-set macro probes for `compute_121a` / `compute_121f`, and a compile-only `-gencode arch=compute_121,code=[sm_121,compute_121]` bracket-list packaging gate (fails the script when that `-gencode` form is rejected).
+
 ## Spark0: Kernel Launch Tiny Minimal (No Repo Transfer)
 
 When you want the smallest possible “compile + run a `sm_121` kernel” smoke test without shipping `tools/cuda_probe/` and without calling `cudaMalloc` (useful when Spark0 VRAM is fully allocated, but you still want a direct “kernel launch path works” signal):
