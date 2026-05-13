@@ -198,6 +198,7 @@ echo
 echo "== systemd unit templates =="
 need_file "$staged_systemd_dir/ds4@.service"
 need_file "$staged_systemd_dir/ds4-strict@.service"
+need_file "$staged_systemd_dir/ds4-tp2-strict@.service"
 need_file "$staged_systemd_dir/ds4-tp3-strict@.service"
 need_file "$staged_systemd_dir/ds4-tp4-strict@.service"
 need_file "$staged_systemd_dir/ds4-preflight@.service"
