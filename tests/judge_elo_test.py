@@ -723,6 +723,40 @@ class JudgeEloTest(unittest.TestCase):
             self.assertEqual(obj.get("latency_ms"), {"judge": 123})
             self.assertEqual(schema.validate_record(obj), [])
 
+    def test_pairwise_judge_record_cli_v5_accepts_tk_lt(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_record.py")
+        with tempfile.TemporaryDirectory() as td:
+            dec_path = os.path.join(td, "decision.txt")
+            with open(dec_path, "w", encoding="utf-8") as f:
+                f.write("{\"w\":\"B\",\"m\":2,\"sa\":6,\"sb\":8,\"r\":\"B is clearer and correct.\",\"h\":\"Check details before extra words.\",\"t\":[\"factuality\"]}\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--record-schema",
+                "v5",
+                "--pair-id",
+                "p5",
+                "--model-a",
+                "mA",
+                "--model-b",
+                "mB",
+                "--judge-model",
+                "ds4",
+                "--decision",
+                dec_path,
+                "--tk",
+                "[11,22,33,44]",
+                "--lt",
+                "500,600,1700",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertEqual(obj.get("schema"), schema.SCHEMA_RECORD_V5)
+            self.assertTrue(bool(obj.get("parse_valid", False)))
+            self.assertEqual(obj.get("tk"), [11, 22, 33, 44])
+            self.assertEqual(obj.get("lt"), [500, 600, 1700])
+            self.assertEqual(schema.validate_record(obj), [])
+
     def test_pairwise_judge_prompt_cli_json_format(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         script = os.path.join(root, "scripts", "pairwise_judge_prompt.py")
