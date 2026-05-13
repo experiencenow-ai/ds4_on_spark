@@ -8,6 +8,14 @@ This repo provides safe Mac-side snapshot helpers (mesh + systemd + optional jou
 
 Snapshots and run logs often include hostnames, IPs/routes, unit names, and journald excerpts. Create a private run directory with restrictive permissions:
 
+Recommended helper (creates the directory + a starter `run.md` and prints the path):
+
+```bash
+RUN_DIR="$(./scripts/ops_run_dir_init.sh --tp tp3 --tag "<tag>")"
+```
+
+Manual equivalent:
+
 ```bash
 umask 077
 RUN_DIR="${HOME}/ds4_run_logs/$(date -u +%Y%m%d-%H%M%SZ)_tp3_<tag>"
@@ -99,4 +107,3 @@ If you are unsure, treat the file as confidential and ask for a redaction review
 - Logging + metrics: `docs/ops-logging-metrics.md`
 - Three-node checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - TP readiness: `docs/ops-tp2-readiness.md`, `docs/ops-tp3-readiness.md`, `docs/ops-tp4-readiness.md`
-
