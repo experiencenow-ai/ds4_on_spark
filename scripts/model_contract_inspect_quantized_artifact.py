@@ -234,6 +234,35 @@ def load_default_contract_summary_path() -> Optional[Path]:
 	return None
 
 
+def build_execution_contract_meta(contract_summary: Optional[dict[str, Any]], contract_path: Optional[Path]) -> Optional[dict[str, Any]]:
+	if not isinstance(contract_summary, dict):
+		return None
+	up = contract_summary.get("upstream", {})
+	if not isinstance(up, dict):
+		up = {}
+	fps = contract_summary.get("contract_fingerprints", {})
+	if not isinstance(fps, dict):
+		fps = {}
+	return {
+		"checked": True,
+		"contract_summary_path": (None if contract_path is None else str(contract_path)),
+		"format_version": contract_summary.get("format_version", None),
+		"contract_fingerprints": {
+			"execution_contract_sha256": fps.get("execution_contract_sha256", None),
+			"topology_sha256": fps.get("topology_sha256", None),
+			"attention_schedule_sha256": fps.get("attention_schedule_sha256", None),
+			"cache_semantics_sha256": fps.get("cache_semantics_sha256", None),
+			"tensor_key_invariants_sha256": fps.get("tensor_key_invariants_sha256", None),
+			"tokenizer_encoding_sha256": fps.get("tokenizer_encoding_sha256", None),
+		},
+		"upstream": {
+			"hf_repo_id": up.get("hf_repo_id", None),
+			"hf_revision_pinned": up.get("hf_revision_pinned", None),
+			"x_repo_commit": up.get("x_repo_commit", None),
+		},
+	}
+
+
 def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int) -> bytes:
 	req = Request(url, headers={"Range": f"bytes=0-{want_bytes - 1}"})
 	with urlopen(req, timeout=timeout_s) as resp:
@@ -1603,6 +1632,7 @@ def main() -> int:
 			contract_summary = load_json(contract_path)
 		except Exception:
 			contract_summary = None
+	execution_contract = build_execution_contract_meta(contract_summary, contract_path)
 
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
@@ -1627,6 +1657,8 @@ def main() -> int:
 			"mtp_namespace": mtp_namespace,
 			"first_mtp_keys": res.first_mtp_keys,
 		}
+		if execution_contract is not None:
+			out["execution_contract"] = execution_contract
 		if res.mtp_present:
 			out["mtp_keys_sha256"] = sha256_lines(sorted(res.mtp_keys_all))
 		if res.tensor_type_profile is not None:
@@ -1746,6 +1778,7 @@ def main() -> int:
 			print(
 				json.dumps(
 					{
+						"execution_contract": execution_contract,
 						"combined": combine(results),
 						"artifacts": [
 							{
