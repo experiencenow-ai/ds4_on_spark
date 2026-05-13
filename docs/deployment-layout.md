@@ -73,6 +73,8 @@ Optional (recommended): validate deploy assets + ops scripts before staging:
 # From your Mac:
 rsync -av deploy/systemd/ <user>@spark0.local:/tmp/ds4-systemd/
 rsync -av deploy/config/  <user>@spark0.local:/tmp/ds4-config/
+rsync -av deploy/systemd-dropins/ <user>@spark0.local:/tmp/ds4-systemd-dropins/
+rsync -av deploy/systemd-user-dropins/ <user>@spark0.local:/tmp/ds4-systemd-user-dropins/
 rsync -av deploy/sysusers.d/ <user>@spark0.local:/tmp/ds4-sysusers/
 rsync -av deploy/tmpfiles.d/ <user>@spark0.local:/tmp/ds4-tmpfiles/
 ```

@@ -57,9 +57,12 @@ rsync_run()
 
 ssh_run "$target" "mkdir -p /tmp/ds4-systemd /tmp/ds4-config /tmp/ds4-sysusers /tmp/ds4-tmpfiles /tmp/ds4-scripts"
 ssh_run "$target" "mkdir -p /tmp/ds4-systemd-user"
+ssh_run "$target" "mkdir -p /tmp/ds4-systemd-dropins /tmp/ds4-systemd-user-dropins"
 
 rsync_run "$root/deploy/systemd/" "$target:/tmp/ds4-systemd/"
 rsync_run "$root/deploy/systemd-user/" "$target:/tmp/ds4-systemd-user/"
+rsync_run "$root/deploy/systemd-dropins/" "$target:/tmp/ds4-systemd-dropins/"
+rsync_run "$root/deploy/systemd-user-dropins/" "$target:/tmp/ds4-systemd-user-dropins/"
 rsync_run "$root/deploy/config/" "$target:/tmp/ds4-config/"
 rsync_run "$root/deploy/sysusers.d/" "$target:/tmp/ds4-sysusers/"
 rsync_run "$root/deploy/tmpfiles.d/" "$target:/tmp/ds4-tmpfiles/"
@@ -183,6 +186,14 @@ sudo install -d -m 0755 /etc/systemd/journald.conf.d
 sudo install -m 0644 /tmp/ds4-config/journald.ds4.conf.example /etc/systemd/journald.conf.d/ds4.conf
 sudo systemctl restart systemd-journald
 
+== optional (systemd drop-ins, human-run) ==
+# Drop-ins let you override/tune the unit templates without editing the base unit files.
+# Prefer `systemctl edit` when possible; see:
+#   deploy/systemd-dropins/README.md
+sudo install -d -m 0755 /etc/systemd/system/ds4@.service.d
+sudo install -m 0644 /tmp/ds4-systemd-dropins/ds4@.service.d/20-timeouts.conf.example /etc/systemd/system/ds4@.service.d/20-timeouts.conf
+sudo systemctl daemon-reload
+
 == optional (logrotate for file logs, human-run) ==
 # Skip if DS4 logs exclusively to journald.
 sudo install -m 0644 /tmp/ds4-config/logrotate.ds4.conf.example /etc/logrotate.d/ds4
@@ -216,6 +227,9 @@ cat <<'EOF'
 == optional (systemd --user templates, human-run) ==
 # Staged for reference under:
 #   /tmp/ds4-systemd-user/
+#   /tmp/ds4-systemd-user-dropins/
+# Also staged for system units under:
+#   /tmp/ds4-systemd-dropins/
 #
 # Optional (non-root) installer wrapper:
 #   /tmp/ds4-scripts/ops_install_staged_assets_user.sh --instance <instance> --start-preflight
@@ -227,6 +241,11 @@ cat <<'EOF'
 #   systemctl --user start ds4-support-bundle@<instance>.service
 # Optional weekly timer:
 #   systemctl --user enable --now ds4-support-bundle@<instance>.timer
+#
+# Optional unit drop-ins (`systemd --user`):
+#   install -d -m 0755 ~/.config/systemd/user/ds4@.service.d
+#   install -m 0644 /tmp/ds4-systemd-user-dropins/ds4@.service.d/20-timeouts.conf.example ~/.config/systemd/user/ds4@.service.d/20-timeouts.conf
+#   systemctl --user daemon-reload
 #
 # If you are doing a non-root bring-up with a user-space DS4 checkout, see:
 #   docs/deployment-systemd-user.md

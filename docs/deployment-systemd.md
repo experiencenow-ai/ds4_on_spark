@@ -8,6 +8,7 @@ They are **examples**. Adjust flags and sandboxing once the runtime interface is
 stable.
 
 Optional developer path: user-service templates exist under `deploy/systemd-user/` (see `docs/deployment-systemd-user.md`).
+Optional drop-in examples (overrides without editing base unit files) live under `deploy/systemd-dropins/` and `deploy/systemd-user-dropins/`.
 
 Optional (recommended): validate deploy assets + ops scripts before staging:
 
@@ -144,3 +145,21 @@ For optional journald persistence, file-log rotation, and Prometheus scrape conv
 
 `deploy/systemd/ds4@.service` includes conservative sandboxing. Avoid enabling
 `MemoryDenyWriteExecute=` until CUDA JIT behavior is fully understood.
+
+## Unit Overrides (Drop-Ins) (Optional)
+
+Prefer `systemctl edit` for overrides instead of editing the base unit files in `deploy/systemd/`:
+
+```bash
+# Instance-specific:
+sudo systemctl edit ds4@spark0.service
+
+# Template-wide:
+sudo systemctl edit ds4@.service
+```
+
+Example snippets (copy/paste starting points):
+
+- `deploy/systemd-dropins/README.md`
+- `deploy/systemd-dropins/ds4@.service.d/20-timeouts.conf.example`
+- `deploy/systemd-dropins/ds4@.service.d/40-execstart-override.conf.example`
