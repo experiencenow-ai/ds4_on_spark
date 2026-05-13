@@ -111,6 +111,8 @@ python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile minimal -
 
 The Spark wrapper also supports this via `CAPTURE_PROFILE=minimal`.
 
+Note: `scripts/run_mtp_one_token_oracle_vs_candidate_diff_spark.sh` defaults `CAPTURE_PROFILE=extended` so oracle-vs-candidate diffs localize the first divergence before acceptance sweeps. Override it to `default` or `minimal` when you are still in an earlier stub stage.
+
 Optional diagnosis: if you suspect the only issue is the HC-major ordering of an intermediate (same values, different layout), compare the `*_hc_major_fnv64` alternatives:
 
 ```bash
