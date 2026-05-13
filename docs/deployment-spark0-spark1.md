@@ -223,14 +223,16 @@ sudo systemctl enable ds4@spark1.service
 sudo systemctl start  ds4@spark1.service
 ```
 
-If you want strict TP=2 gating on start, use `ds4-strict@.service` instead:
+If you want strict TP=2 gating on start, use `ds4-tp2-strict@.service` instead:
 
 ```bash
-sudo systemctl enable ds4-strict@spark0.service
-sudo systemctl start  ds4-strict@spark0.service
+sudo systemctl enable ds4-tp2-strict@spark0.service
+sudo systemctl start  ds4-tp2-strict@spark0.service
 ```
 
-`ds4-strict@.service` requires `ds4-preflight-strict@%i.service`; if strict preflight fails, `ds4-strict@...` will also fail to start.
+`ds4-tp2-strict@.service` requires `ds4-preflight-strict@%i.service`; if strict preflight fails, `ds4-tp2-strict@...` will also fail to start.
+
+Legacy name: `ds4-strict@.service` (same behavior).
 
 Logs:
 

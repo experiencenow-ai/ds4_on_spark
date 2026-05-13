@@ -48,7 +48,8 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 ## Units
 
 - `ds4@.service`: long-running DS4 instance
-- `ds4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails)
+- `ds4-tp2-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict TP=2 preflight fails)
+- Legacy: `ds4-strict@.service` (same behavior as `ds4-tp2-strict@.service`; retained for compatibility)
 - `ds4-tp3-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-tp3-strict@%i.service` before start (fails start if strict TP=3 preflight fails)
 - `ds4-tp4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-tp4-strict@%i.service` before start (fails start if strict TP=4 preflight fails)
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly); triggers `ds4-support-bundle@%i.service` on failure
@@ -116,8 +117,8 @@ sudo systemctl start  ds4@spark0.service
 If you want strict TP=2 gating on start, enable the strict service instead:
 
 ```bash
-sudo systemctl enable ds4-strict@spark0.service
-sudo systemctl start  ds4-strict@spark0.service
+sudo systemctl enable ds4-tp2-strict@spark0.service
+sudo systemctl start  ds4-tp2-strict@spark0.service
 ```
 
 If you want strict gating for TP=3 or TP=4 starts, use the topology-specific strict templates:
