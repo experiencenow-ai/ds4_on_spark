@@ -4,6 +4,15 @@ This repo does not apply changes to Sparks automatically. Everything below is **
 
 Goal: prepare a repeatable Spark0/Spark1/Spark2 layout with staging helpers, systemd templates, consistent logs/metrics, and safe preflight checks for future TP=3 runs.
 
+Recommended progression:
+
+- First validate Spark0/Spark1 TP=2 baseline:
+  - `docs/spark-ring-ops-quickstart-tp2.md`
+  - `docs/spark-ring-ops-readiness-tp2.md`
+- Then expand to Spark0/Spark1/Spark2 TP=3:
+  - `docs/spark-ring-ops-quickstart-tp3.md`
+  - `docs/spark-ring-ops-readiness-tp3.md`
+
 ## Roles + Naming
 
 Recommended convention (matches the templates in `deploy/systemd/`):
@@ -126,3 +135,16 @@ See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layo
 - TP=3 readiness checks: `docs/ops-tp3-readiness.md`
 - Three-node operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - Optional Centaur ops hooks: `docs/ops-centaur-operational-hooks.md`
+@@
+ Goal: prepare a repeatable Spark0/Spark1/Spark2 layout with staging helpers, systemd templates, consistent logs/metrics, and safe preflight checks for future TP=3 runs.
++
++Recommended progression:
++
++- First validate Spark0/Spark1 TP=2 baseline:
++  - `docs/spark-ring-ops-quickstart-tp2.md`
++  - `docs/spark-ring-ops-readiness-tp2.md`
++- Then expand to Spark0/Spark1/Spark2 TP=3:
++  - `docs/spark-ring-ops-quickstart-tp3.md`
++  - `docs/spark-ring-ops-readiness-tp3.md`
+ 
+ ## Roles + Naming
