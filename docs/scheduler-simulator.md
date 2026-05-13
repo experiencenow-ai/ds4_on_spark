@@ -461,6 +461,17 @@ python3 scripts/ds4_topk_dump_recommendations.py \
   --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
 ```
 
+To create a loop-friendly **on-disk bundle** (strict trace + report files), use `--bundle-dir` (writes `trace.strict.jsonl`, `report.json`, `report.md`, and `bundle_meta.json`):
+
+```bash
+python3 scripts/ds4_topk_dump_recommendations.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --bundle-dir /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_bundle_pos0 \
+  --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+  --probe-expert-queueing --probe-experts 256 --probe-batches 16,32,64,100,128,256,512 --probe-trials 250 \
+  --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
+```
+
 Note: `ds4_topk_dump_recommendations.py` treats `topk` as the fixed selected-expert `K` when the trace itself does not include `k` fields, so queue depth and service load scale correctly for these route-only fixtures.
 
 Then run the standard trace sweep / recommendations loop:

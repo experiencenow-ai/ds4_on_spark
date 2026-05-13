@@ -2792,6 +2792,11 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
     inferred_num_experts = infer_num_experts_from_trace(trace, meta)
     if inferred_num_experts is not None:
         inferred["num_experts"] = int(inferred_num_experts)
+    if len(layer_counts) != 0:
+        min_layers = int(min(layer_counts))
+        max_layers = int(max(layer_counts))
+        if min_layers == max_layers and max_layers > 0:
+            inferred["num_layers"] = int(max_layers)
     inferred_mtp_draft_len, inferred_mtp_source = infer_mtp_draft_len_with_source(trace, meta)
     if inferred_mtp_draft_len is not None:
         inferred["mtp_draft_len"] = int(inferred_mtp_draft_len)

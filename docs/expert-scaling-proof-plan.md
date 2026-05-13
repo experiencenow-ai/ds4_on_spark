@@ -109,6 +109,16 @@ Use two fixture classes:
        --probe-expert-queueing
      ```
 
+     For loop-friendly evidence capture, prefer `--bundle-dir` instead of `--out-json` (writes `trace.strict.jsonl`, `report.json`, `report.md`, and `bundle_meta.json`):
+
+     ```bash
+     python3 scripts/ds4_topk_dump_recommendations.py \
+       --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+       --bundle-dir /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_bundle_pos0 \
+       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+       --probe-expert-queueing
+     ```
+
      Notes:
      - The `t_ms`/`dt_ms` fields are synthetic (dumps have no timestamps). Keep the report explicit about this.
      - `--batch-size B` groups `B` tokens at the same timestamp (decode-like batch step). This is useful for stress-testing queue depth and backpressure logic; it is not a full decode replay.
