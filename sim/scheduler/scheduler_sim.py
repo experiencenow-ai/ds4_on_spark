@@ -3072,7 +3072,15 @@ def _expert_queue_pending_limit_units(cfg: SimConfig, cls: LatencyClass, backpre
     return(float(limit))
 
 
-def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue], candidates: Sequence[int], scores: Optional[Sequence[float]]) -> Sequence[int]:
+def _candidate_order_for_layer(
+    admit_policy: str,
+    experts: Sequence[ExpertQueue],
+    candidates: Sequence[int],
+    scores: Optional[Sequence[float]],
+    *,
+    now_ms: Optional[float] = None,
+    queue_cls: Optional[LatencyClass] = None,
+) -> Sequence[int]:
     if admit_policy == "ordered":
         return(candidates)
     if admit_policy == "least_pending":
@@ -3083,13 +3091,29 @@ def _candidate_order_for_layer(admit_policy: str, experts: Sequence[ExpertQueue]
         ranked = [(float(experts[e].pending_work()), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _p, _i, e in ranked])
+    if admit_policy == "least_oldest":
+        if now_ms is None or queue_cls is None:
+            raise ValueError("admit_policy least_oldest requires now_ms and queue_cls")
+        ranked: List[Tuple[float, int, int, int]] = []
+        for i, e in enumerate(candidates):
+            eq = experts[e]
+            q = eq.hi if queue_cls == LatencyClass.INTERACTIVE else eq.lo
+            if len(q) == 0:
+                age_ms = 0.0
+            else:
+                age_ms = float(now_ms) - float(q[0].enqueue_ms)
+                if age_ms < 0.0:
+                    age_ms = 0.0
+            ranked.append((age_ms, int(eq.pending()), i, int(e)))
+        ranked.sort()
+        return([e for _age, _p, _i, e in ranked])
     if admit_policy == "score_desc":
         if scores is None:
             raise ValueError("admit_policy score_desc requires per-candidate scores")
         ranked = [(-float(scores[i]), i, e) for i, e in enumerate(candidates)]
         ranked.sort()
         return([e for _s, _i, e in ranked])
-    raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
+    raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', 'least_oldest', or 'score_desc'")
 
 
 def _candidate_order(admit_policy: str, experts: Sequence[ExpertQueue], route: TokenRoute) -> Sequence[int]:
@@ -3452,8 +3476,8 @@ def run_simulation(
         raise ValueError("k_scope must be 'token' or 'layer'")
 
     admit_policy = cfg.admit_policy.strip().lower()
-    if admit_policy not in ("ordered", "least_pending", "least_pending_work", "score_desc"):
-        raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', or 'score_desc'")
+    if admit_policy not in ("ordered", "least_pending", "least_pending_work", "least_oldest", "score_desc"):
+        raise ValueError("admit_policy must be 'ordered', 'least_pending', 'least_pending_work', 'least_oldest', or 'score_desc'")
 
     if cfg.pending_hist_max_depth < 0:
         raise ValueError("pending_hist_max_depth must be >= 0")
@@ -3926,7 +3950,7 @@ def run_simulation(
     def _enqueue_stage(now_ms: float, tid: int, stage: StagePlan) -> int:
         admitted = 0
         pending_limit = _expert_queue_pending_limit_units(cfg, stage.queue_cls, backpressure_units)
-        for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores):
+        for expert_id in _candidate_order_for_layer(admit_policy, experts, stage.candidates, stage.scores, now_ms=now_ms, queue_cls=stage.queue_cls):
             if admitted >= stage.k:
                 break
             eq = experts[expert_id]
@@ -5309,7 +5333,7 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--admit-policy",
         type=str,
         default="ordered",
-        help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts by task count), least_pending_work (pick least pending experts by pending_work), or score_desc (order candidates by descending trace scores).",
+        help="Candidate admission policy: ordered (router order), least_pending (pick least pending experts by task count), least_pending_work (pick least pending experts by pending_work), least_oldest (avoid experts whose chosen queue has old outstanding work), or score_desc (order candidates by descending trace scores).",
     )
     p.add_argument("--pending-hist-max-depth", type=int, default=2048, help="Time-weighted pending-depth percentiles: cap histogram depth at this value (0 = disable).")
 
