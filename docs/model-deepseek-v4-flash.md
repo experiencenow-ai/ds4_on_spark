@@ -845,6 +845,7 @@ For each quantized artifact tested, record:
     - `trunk_contract` (`checked`, `complete`) with `trunk_contract.kind`:
       - `kind="deepseek-upstream"`: upstream-style `layers.{i}.*` keys preserved
       - `kind="llama.cpp"`: DeepSeek4 GGUF-style `blk.{i}.*` keys (compat-only structural signal)
+        - For `kind="llama.cpp"`, the inspector emits debuggable requirements: `trunk_contract.required_top_level`, `trunk_contract.required_block_suffixes`, and `trunk_contract.missing_block_ids` so run reports can explain *why* a trunk gate failed (e.g. missing a required `blk.{i}.*` suffix or a missing block index).
       - For upstream-preserving artifacts, `trunk_contract` also reports `nonexpert_required_missing_count` / `nonexpert_required_missing_sample` when expanded per-layer key lists are available (quick “exact `layers.{i}.*` non-expert namespace preserved?” signal).
     - `topology_contract.mismatches` when GGUF header metadata is present
 
