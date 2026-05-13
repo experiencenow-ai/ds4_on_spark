@@ -7,7 +7,7 @@ Safety constraints (assumed by all runbooks): no `sudo`, no system services, no 
 ## Start here
 
 - Spark0 v73 smoke (runs the full command sequence): `docs/centaur-spark0-v73-smoke.md`
-- Latest smoke + ring status (evidence bundles + ring-rsync TODO): `docs/centaur-smoke-status-20260512.md`
+- Latest smoke + ring status (evidence bundles + ring-rsync TODO): `docs/centaur-smoke-status-20260513.md`
 - Bug report workflow + sanitization checklist: `docs/centaur-bug-report.md`
 - PR checklist/template (required sections for automation PRs): `docs/centaur-pr-checklist.md`
 
@@ -64,7 +64,9 @@ If you only have Spark1/Spark2 (3 nodes total including Spark0), use:
 That runbook includes:
 
 - an end-to-end “Quickstart” (Spark0 smoke → Spark1/2 setup → ring rsync → artifact fetch)
+- a safe Centaur prereq check (python3/venv/unzip) using `scripts/centaur_spark_v73_prereqs_check.sh` (recommended before node setup)
 - a safe SSH mesh preflight (Spark0↔Spark1↔Spark2) using `scripts/ops_spark_ring_mesh_check.sh` (recommended before rsync ring-step)
+- an rsync availability preflight using `scripts/ops_spark_rsync_check.sh` (ring-rsync requires rsync on Spark0 + ring nodes)
 - staging `centaur_spec_impl_v73.zip` to Spark1/2
 - per-node setup via `scripts/centaur_spark_v73_node_setup.sh`
 - Spark0-local ring sim (`hyor-ring-step` across multiple local roots)

@@ -39,6 +39,8 @@ Notes:
   - Before attempting the rsync-staged ring, ensure the Spark SSH mesh works
     (Spark0 can SSH to Spark1/2). Safe Mac-side helper:
       ./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+  - The ring-rsync workflow requires `rsync` on Spark0 and each ring node. Safe Mac-side helper:
+      ./scripts/ops_spark_rsync_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
   - Node setup is recommended when you want to later run Centaur HTTP agents on
     Spark1/2 (it installs numpy/scipy/scikit-learn and runs selftest).
 USAGE
