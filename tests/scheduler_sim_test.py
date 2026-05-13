@@ -340,6 +340,8 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIn("- mtp: present", md)
             self.assertIn("## Results (arrival_units=steps)", md)
             self.assertIn("pending_p95", md)
+            self.assertIn("starv_frac", md)
+            self.assertIn("starv_p95_ms", md)
             self.assertIn("pending_lo_p95", md)
         finally:
             if tmp_path != "" and os.path.exists(tmp_path):
