@@ -376,7 +376,7 @@ If it loads and generates, rerun with:
 
 - `docs/baseline-quantized-single-spark0-2026-05-12.md` records a Spark0 run that:
   - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
-  - captures the read-only patch probes (including `fattn_patch_probe.pad256_found=true`)
+  - captures the read-only patch probes (including `fattn_patch_probe.pad256_found=true`, ideally with `pad256_confidence=high`)
   - confirms `__fattn__-*` nodes are scheduled (`fattn_unique_nodes=43`)
 - `docs/baseline-quantized-single-spark0-2026-05-11.md` records an earlier Spark0 run that:
   - generates tokens with `antirez/deepseek-v4-gguf` IQ2XXS (chat-v2) under a V4-capable llama.cpp fork
