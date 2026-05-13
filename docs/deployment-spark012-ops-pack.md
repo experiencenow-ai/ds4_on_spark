@@ -43,6 +43,14 @@ TP=3 (three hosts):
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
+Optional (recommended during TP=2 → TP=3 transition): capture both TP=2 and TP=3 unit status + readiness context (safe):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --out "${RUN_DIR:-/private/tmp}/ds4_ops_check_tp23_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp23 --strict --journal --lines 120 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 Snapshots may include hostnames/IPs/routes and journal excerpts; keep outputs private and redact before sharing externally:
 
 - Run-notes conventions + redaction checklist: `docs/ops-run-notes.md`

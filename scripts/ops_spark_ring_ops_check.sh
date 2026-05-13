@@ -7,8 +7,8 @@ usage()
 ops_spark_ring_ops_check.sh -- Mac-side 3-node ops snapshot (safe)
 
 Usage:
-  ops_spark_ring_ops_check.sh [--out <path>] [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--staged-env-audit] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
-  ops_spark_ring_ops_check.sh [--out <path>] [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight auto|tp2|tp3|tp4] [--strict] [--journal [--lines N]] [--staged-env-audit] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4] [--instance<N> <name>]... --inventory-file <path>
+  ops_spark_ring_ops_check.sh [--out <path>] [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight auto|tp2|tp3|tp4|tp23] [--strict] [--journal [--lines N]] [--staged-env-audit] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4|tp23] [--instance<N> <name>]... <spark0_user@host> <spark1_user@host> [spark2_user@host ...]
+  ops_spark_ring_ops_check.sh [--out <path>] [--inventory-file <path>] [--topology ring|full] [--tcp <port>]... [--system|--user] [--preflight auto|tp2|tp3|tp4|tp23] [--strict] [--journal [--lines N]] [--staged-env-audit] [--staged-readiness] [--staged-readiness-strict] [--staged-readiness-preflight auto|tp2|tp3|tp4|tp23] [--instance<N> <name>]... --inventory-file <path>
 
 Environment:
   SSH_OPTS   Optional ssh options override.
@@ -165,19 +165,19 @@ do_work()
 	esac
 
 	case "$preflight" in
-		auto|tp2|tp3|tp4)
+		auto|tp2|tp3|tp4|tp23)
 			;;
 		*)
-			echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4)" >&2
+			echo "invalid --preflight: $preflight (expected auto|tp2|tp3|tp4|tp23)" >&2
 			exit 2
 			;;
 	esac
 
 	case "$staged_readiness_preflight" in
-		auto|tp2|tp3|tp4)
+		auto|tp2|tp3|tp4|tp23)
 			;;
 		*)
-			echo "invalid --staged-readiness-preflight: $staged_readiness_preflight (expected auto|tp2|tp3|tp4)" >&2
+			echo "invalid --staged-readiness-preflight: $staged_readiness_preflight (expected auto|tp2|tp3|tp4|tp23)" >&2
 			exit 2
 			;;
 	esac
@@ -209,6 +209,10 @@ do_work()
 	}
 
 	picked_preflight="$(infer_preflight "$@")" || exit $?
+	if [ "$picked_preflight" = "tp23" ] && [ "$#" -ne 3 ]; then
+		echo "tp23 requires exactly 3 nodes; node_count=$#" >&2
+		exit 2
+	fi
 	picked_staged_preflight="$staged_readiness_preflight"
 	if [ "$picked_staged_preflight" = "auto" ]; then
 		picked_staged_preflight="$picked_preflight"
