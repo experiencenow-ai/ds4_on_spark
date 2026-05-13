@@ -532,6 +532,24 @@ class JudgeEloTest(unittest.TestCase):
         self.assertNotIn("tokens", rec)
         self.assertNotIn("latency_ms", rec)
 
+    def test_wrap_record_includes_task_and_sample_id(self) -> None:
+        decision = {"winner": "tie", "margin": 0, "score_a": 6, "score_b": 6, "reason": "Both are acceptable.", "train_hint": "", "tags": []}
+        rec = record_wrap.build_record(
+            record_schema=schema.SCHEMA_RECORD_V5,
+            pair_id="p_ids",
+            task_id="task_1",
+            sample_id="sample_9",
+            model_a="mA",
+            model_b="mB",
+            judge_model="ds4",
+            decision_text=json.dumps(decision, separators=(",", ":"), ensure_ascii=False),
+            tokens={"a_out": 1, "b_out": 2, "judge_in": 3, "judge_out": 4},
+            latency_ms={"a": 5, "b": 6, "judge": 7},
+            strict=True,
+        )
+        self.assertEqual(rec.get("task_id"), "task_1")
+        self.assertEqual(rec.get("sample_id"), "sample_9")
+
     def test_validate_decision_accepts_compact_decision_v2_keys(self) -> None:
         decision_v2 = {"w": "tie", "m": 0, "sa": 6, "sb": 6, "r": "Both are acceptable.", "h": "", "t": []}
         text = "ok\n" + json.dumps(decision_v2, separators=(",", ":"), ensure_ascii=False) + "\n"

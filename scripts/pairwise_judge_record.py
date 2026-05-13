@@ -80,6 +80,8 @@ def build_record(
     tokens: Optional[Dict[str, int]],
     latency_ms: Optional[Dict[str, int]],
     strict: bool,
+    task_id: str = "",
+    sample_id: str = "",
 ) -> Dict[str, Any]:
     if str(record_schema) not in (schema.SCHEMA_RECORD_V1, schema.SCHEMA_RECORD_V2, schema.SCHEMA_RECORD_V3, schema.SCHEMA_RECORD_V4, schema.SCHEMA_RECORD_V5):
         raise ValueError(
@@ -117,6 +119,10 @@ def build_record(
             "raw": _one_line(decision_text)[:512],
             "parse_error": _one_line(perr)[:128],
         }
+        if task_id != "":
+            rec["task_id"] = str(task_id)
+        if sample_id != "":
+            rec["sample_id"] = str(sample_id)
         if schema_v5:
             if tokens is not None and latency_ms is not None:
                 rec["tk"] = [int(tokens["a_out"]), int(tokens["b_out"]), int(tokens["judge_in"]), int(tokens["judge_out"])]
@@ -205,6 +211,10 @@ def build_record(
             "h": canon.get("train_hint"),
             "t": canon.get("tags"),
         }
+        if task_id != "":
+            rec5["task_id"] = str(task_id)
+        if sample_id != "":
+            rec5["sample_id"] = str(sample_id)
         if tokens is not None:
             rec5["tk"] = [int(tokens["a_out"]), int(tokens["b_out"]), int(tokens["judge_in"]), int(tokens["judge_out"])]
         if latency_ms is not None:
@@ -231,6 +241,10 @@ def build_record(
             "h": canon.get("train_hint"),
             "t": canon.get("tags"),
         }
+        if task_id != "":
+            rec4["task_id"] = str(task_id)
+        if sample_id != "":
+            rec4["sample_id"] = str(sample_id)
         if tokens is not None:
             rec4["tokens"] = tokens
         if latency_ms is not None:
@@ -248,6 +262,10 @@ def build_record(
         "judge_model": judge_model,
         "parse_valid": True,
     }
+    if task_id != "":
+        rec3["task_id"] = str(task_id)
+    if sample_id != "":
+        rec3["sample_id"] = str(sample_id)
     for k in ("winner", "margin", "score_a", "score_b", "reason", "train_hint", "tags"):
         rec3[k] = canon.get(k)
     if tokens is not None:
@@ -265,6 +283,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--record-schema", choices=["v1", "v2", "v3", "v4", "v5"], default="v1", help="record schema version (default v1)")
     ap.add_argument("--pair-id", required=True)
+    ap.add_argument("--task-id", default="", help="optional task identifier (string)")
+    ap.add_argument("--sample-id", default="", help="optional sample identifier (string)")
     ap.add_argument("--model-a", required=True)
     ap.add_argument("--model-b", required=True)
     ap.add_argument("--judge-model", required=True)
@@ -370,6 +390,8 @@ def main() -> None:
         rec = build_record(
             record_schema=record_schema,
             pair_id=str(args.pair_id),
+            task_id=str(args.task_id).strip(),
+            sample_id=str(args.sample_id).strip(),
             model_a=str(args.model_a),
             model_b=str(args.model_b),
             judge_model=str(args.judge_model),

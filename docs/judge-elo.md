@@ -169,6 +169,12 @@ To wrap raw judge text into a JSONL record envelope (and set `parse_valid`), use
 python3 scripts/pairwise_judge_record.py --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
 ```
 
+Optional: attach dataset tracing identifiers:
+
+```bash
+python3 scripts/pairwise_judge_record.py --pair-id <id> --task-id <task_id> --sample-id <sample_id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
+```
+
 To emit `schema="ds4_pairwise_judge_record_v2"` (tokens/latency required), add `--record-schema v2` and provide all budget fields:
 
 ```bash

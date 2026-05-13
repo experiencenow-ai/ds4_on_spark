@@ -41,6 +41,9 @@ Required fields:
 - `tk`: `[a_out, b_out, judge_in, judge_out]` token counts (all ints ≥ 0)
 - `lt`: `[a_ms, b_ms, judge_ms]` latencies in ms (all ints ≥ 0)
 
+Optional fields:
+- `task_id`, `sample_id`: strings (for dataset/task tracing; ignored by Elo math)
+
 If `parse_valid=true`, these are also required:
 - decision keys: `w,m,sa,sb,r,h,t` (as above)
 
