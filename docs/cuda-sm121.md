@@ -21,6 +21,8 @@ The probe `tools/cuda_probe/bin/cuda_sm121_arch_list_report` prints `__CUDA_ARCH
 
 The probe `tools/cuda_probe/bin/cuda_sm121_compile_report_tiny` prints a single line with NVCC/CUDART macro versions plus device CC and `__CUDA_ARCH__` / `__CUDA_ARCH_LIST__` (useful for log capture in automation runs).
 
+For the same single-line report without shipping `tools/cuda_probe/` to Spark0, use `scripts/cuda_probe_sm121_compile_report_tiny_minimal_spark0.sh` (compiles a tiny `.cu` on Spark0 via `nvcc -arch=sm_121` and runs it).
+
 ### CUDA 13 NVCC Linkage / Visibility Defaults
 
 CUDA 13 changes `nvcc` defaults that can matter for CUTLASS/DeepGEMM-style builds:

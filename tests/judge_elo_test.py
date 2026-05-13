@@ -123,6 +123,36 @@ class JudgeEloTest(unittest.TestCase):
                 td,
             ])
 
+    def test_update_outputs_match_expected_v5_fixture(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_rel = os.path.join("fixtures", "judge-elo", "sample_judge_records_v5.jsonl")
+        expected_bundle = os.path.join(root, "fixtures", "judge-elo", "expected_bundle_v5.json")
+        expected_summary = os.path.join(root, "fixtures", "judge-elo", "expected_summary_v5.md")
+        with tempfile.TemporaryDirectory() as td:
+            subprocess.check_call([
+                "python3",
+                "scripts/judge_elo_update.py",
+                "--in",
+                in_rel,
+                "--out-dir",
+                td,
+                "--strict",
+                "--judge-out-target",
+                "64",
+                "--quality-mode",
+                "logistic",
+            ], cwd=root)
+            with open(os.path.join(td, "bundle.json"), "r", encoding="utf-8") as f:
+                got_bundle = json.load(f)
+            with open(expected_bundle, "r", encoding="utf-8") as f:
+                want_bundle = json.load(f)
+            self.assertEqual(got_bundle, want_bundle)
+            with open(os.path.join(td, "summary.md"), "r", encoding="utf-8") as f:
+                got_summary = f.read()
+            with open(expected_summary, "r", encoding="utf-8") as f:
+                want_summary = f.read()
+            self.assertEqual(got_summary, want_summary)
+
     def test_compact_records_cli_emits_record_v5(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         in_path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v2.jsonl")
@@ -691,6 +721,40 @@ class JudgeEloTest(unittest.TestCase):
             self.assertTrue(bool(obj.get("parse_valid", False)))
             self.assertEqual(obj.get("tokens"), {"judge_out": 40})
             self.assertEqual(obj.get("latency_ms"), {"judge": 123})
+            self.assertEqual(schema.validate_record(obj), [])
+
+    def test_pairwise_judge_record_cli_v5_accepts_tk_lt(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        script = os.path.join(root, "scripts", "pairwise_judge_record.py")
+        with tempfile.TemporaryDirectory() as td:
+            dec_path = os.path.join(td, "decision.txt")
+            with open(dec_path, "w", encoding="utf-8") as f:
+                f.write("{\"w\":\"B\",\"m\":2,\"sa\":6,\"sb\":8,\"r\":\"B is clearer and correct.\",\"h\":\"Check details before extra words.\",\"t\":[\"factuality\"]}\n")
+            out = subprocess.check_output([
+                "python3",
+                script,
+                "--record-schema",
+                "v5",
+                "--pair-id",
+                "p5",
+                "--model-a",
+                "mA",
+                "--model-b",
+                "mB",
+                "--judge-model",
+                "ds4",
+                "--decision",
+                dec_path,
+                "--tk",
+                "[11,22,33,44]",
+                "--lt",
+                "500,600,1700",
+            ], text=True)
+            obj = json.loads(out)
+            self.assertEqual(obj.get("schema"), schema.SCHEMA_RECORD_V5)
+            self.assertTrue(bool(obj.get("parse_valid", False)))
+            self.assertEqual(obj.get("tk"), [11, 22, 33, 44])
+            self.assertEqual(obj.get("lt"), [500, 600, 1700])
             self.assertEqual(schema.validate_record(obj), [])
 
     def test_pairwise_judge_prompt_cli_json_format(self) -> None:
