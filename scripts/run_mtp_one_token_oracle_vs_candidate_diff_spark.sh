@@ -122,6 +122,37 @@ else
 	printf '%s\n' "" >"$DIFF_STDERR"
 fi
 
+echo "== summarizing diff (local; best-effort) =="
+DIFF_SUMMARY_JSON="$OUT_DIR/oracle_vs_candidate_diff_summary.json"
+DIFF_SUMMARY_STDERR="$OUT_DIR/oracle_vs_candidate_diff_summary_stderr.txt"
+if [ "$ORACLE_JSON" != "" ] && [ "$CAND_JSON" != "" ]; then
+	python3 "$repo_root/scripts/summarize_mtp_one_token_draft_probe_diff.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json \
+		>"$DIFF_SUMMARY_JSON" 2>"$DIFF_SUMMARY_STDERR" || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$DIFF_SUMMARY_JSON"
+	printf '%s\n' "" >"$DIFF_SUMMARY_STDERR"
+fi
+
+echo "== verifying capture profiles (local; best-effort) =="
+ORACLE_CAP_JSON="$OUT_DIR/oracle_capture_gate.json"
+ORACLE_CAP_STDERR="$OUT_DIR/oracle_capture_gate_stderr.txt"
+CAND_CAP_JSON="$OUT_DIR/candidate_capture_gate.json"
+CAND_CAP_STDERR="$OUT_DIR/candidate_capture_gate_stderr.txt"
+if [ "$ORACLE_JSON" != "" ]; then
+	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$ORACLE_JSON" --profile default --json \
+		>"$ORACLE_CAP_JSON" 2>"$ORACLE_CAP_STDERR" || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle probe JSON\"}" >"$ORACLE_CAP_JSON"
+	printf '%s\n' "" >"$ORACLE_CAP_STDERR"
+fi
+if [ "$CAND_JSON" != "" ]; then
+	python3 "$repo_root/scripts/verify_mtp_one_token_draft_probe_captures.py" --probe-json "$CAND_JSON" --profile default --json \
+		>"$CAND_CAP_JSON" 2>"$CAND_CAP_STDERR" || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing candidate probe JSON\"}" >"$CAND_CAP_JSON"
+	printf '%s\n' "" >"$CAND_CAP_STDERR"
+fi
+
 echo "== comparing HC layout (local; best-effort) =="
 HC_LAYOUT_JSON="$OUT_DIR/hc_layout_compare.json"
 HC_LAYOUT_STDERR="$OUT_DIR/hc_layout_compare_stderr.txt"
@@ -154,6 +185,24 @@ fi
 	sed -n '1,200p' "$DIFF_JSON" 2>/dev/null || true
 	echo '```'
 	echo
+	echo "Diff summary:"
+	echo
+	echo '```'
+	sed -n '1,200p' "$DIFF_SUMMARY_JSON" 2>/dev/null || true
+	echo '```'
+	echo
+	echo "Oracle capture gate:"
+	echo
+	echo '```'
+	sed -n '1,200p' "$ORACLE_CAP_JSON" 2>/dev/null || true
+	echo '```'
+	echo
+	echo "Candidate capture gate:"
+	echo
+	echo '```'
+	sed -n '1,200p' "$CAND_CAP_JSON" 2>/dev/null || true
+	echo '```'
+	echo
 	echo "HC layout compare output:"
 	echo
 	echo '```'
@@ -169,6 +218,12 @@ fi
 	echo "- candidate runner stderr: $OUT_DIR/candidate_runner_stderr.txt"
 	echo "- diff JSON: $DIFF_JSON"
 	echo "- diff stderr: $DIFF_STDERR"
+	echo "- diff summary JSON: $DIFF_SUMMARY_JSON"
+	echo "- diff summary stderr: $DIFF_SUMMARY_STDERR"
+	echo "- oracle capture gate JSON: $ORACLE_CAP_JSON"
+	echo "- oracle capture gate stderr: $ORACLE_CAP_STDERR"
+	echo "- candidate capture gate JSON: $CAND_CAP_JSON"
+	echo "- candidate capture gate stderr: $CAND_CAP_STDERR"
 	echo "- hc layout JSON: $HC_LAYOUT_JSON"
 	echo "- hc layout stderr: $HC_LAYOUT_STDERR"
 	echo
@@ -193,18 +248,36 @@ def read_json(p: Path):
 diff = read_json(out_dir / "oracle_vs_candidate_diff.json")
 ok = bool(diff.get("ok", False)) if isinstance(diff, dict) else False
 
+diff_summary = read_json(out_dir / "oracle_vs_candidate_diff_summary.json")
+summary_ok = bool(diff_summary.get("ok", False)) if isinstance(diff_summary, dict) else False
+
+oracle_cap = read_json(out_dir / "oracle_capture_gate.json")
+oracle_cap_ok = bool(oracle_cap.get("ok", False)) if isinstance(oracle_cap, dict) else False
+
+cand_cap = read_json(out_dir / "candidate_capture_gate.json")
+cand_cap_ok = bool(cand_cap.get("ok", False)) if isinstance(cand_cap, dict) else False
+
 layout = read_json(out_dir / "hc_layout_compare.json")
 layout_ok = bool(layout.get("ok", False)) if isinstance(layout, dict) else False
 
 summary = {
 	"ok": ok,
+	"summary_ok": summary_ok,
+	"oracle_capture_ok": oracle_cap_ok,
+	"candidate_capture_ok": cand_cap_ok,
 	"layout_ok": layout_ok,
 	"artifacts": {
 		"report_md": str(report_md),
 		"diff_json": str(out_dir / "oracle_vs_candidate_diff.json"),
+		"diff_summary_json": str(out_dir / "oracle_vs_candidate_diff_summary.json"),
+		"oracle_capture_gate_json": str(out_dir / "oracle_capture_gate.json"),
+		"candidate_capture_gate_json": str(out_dir / "candidate_capture_gate.json"),
 		"hc_layout_compare_json": str(out_dir / "hc_layout_compare.json"),
 	},
 	"diff": diff if isinstance(diff, dict) else None,
+	"diff_summary": diff_summary if isinstance(diff_summary, dict) else None,
+	"oracle_capture_gate": oracle_cap if isinstance(oracle_cap, dict) else None,
+	"candidate_capture_gate": cand_cap if isinstance(cand_cap, dict) else None,
 	"hc_layout_compare": layout if isinstance(layout, dict) else None,
 }
 

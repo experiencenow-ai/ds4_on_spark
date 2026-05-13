@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 upstreams/
 .git2/
+.git-work/
 .codex_git/
 .codex_git_worktree*/
 .codex_git_wt*/
