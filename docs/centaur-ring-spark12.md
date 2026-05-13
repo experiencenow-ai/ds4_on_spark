@@ -22,6 +22,12 @@ Optional (recommended before attempting the rsync-staged “real ring”): verif
 ./scripts/ops_spark_ring_mesh_check.sh --topology ring spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional (recommended before attempting the rsync-staged “real ring”): verify `rsync` is installed on Spark0 + ring nodes (required for the ring-rsync workflow):
+
+```bash
+./scripts/ops_spark_rsync_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
 1) Run the Spark0 v73 smoke (stages zip + fixture, runs smoke, writes a remote log):
 
 ```bash

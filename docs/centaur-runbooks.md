@@ -65,6 +65,7 @@ That runbook includes:
 
 - an end-to-end “Quickstart” (Spark0 smoke → Spark1/2 setup → ring rsync → artifact fetch)
 - a safe SSH mesh preflight (Spark0↔Spark1↔Spark2) using `scripts/ops_spark_ring_mesh_check.sh` (recommended before rsync ring-step)
+- an rsync availability preflight using `scripts/ops_spark_rsync_check.sh` (ring-rsync requires rsync on Spark0 + ring nodes)
 - staging `centaur_spec_impl_v73.zip` to Spark1/2
 - per-node setup via `scripts/centaur_spark_v73_node_setup.sh`
 - Spark0-local ring sim (`hyor-ring-step` across multiple local roots)

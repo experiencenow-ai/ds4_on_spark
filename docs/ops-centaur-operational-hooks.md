@@ -17,6 +17,9 @@ Centaur v73 helpers live under `scripts/centaur_*.sh`. The primary entrypoints:
 - `scripts/centaur_spark_v73_node_setup_run.sh` (Mac-side): stage (optional) + stream-run the Spark-side setup script.
 - `scripts/centaur_spark_v73_node_setup.sh` (Spark-side): unzip + create venv + install deps + run a small Centaur selftest (JSON).
 - `scripts/centaur_spark_ring_rsync_v73.sh` (Spark0-side/orchestrator): optional ring-step coordinator that rsyncs node roots for workflows that require local writable peer roots.
+- Ops preflights (Mac-side):
+  - `scripts/ops_spark_ring_mesh_check.sh` (SSH mesh + peer reachability)
+  - `scripts/ops_spark_rsync_check.sh` (rsync availability; required for ring-rsync)
 
 ## Safety / Expectations
 
@@ -101,6 +104,12 @@ is already extracted + has a venv on the orchestrator:
 
 ```bash
 ./scripts/centaur_spark_ring_rsync_v73.sh spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Preflight (recommended): ring-rsync requires `rsync` installed on the orchestrator and every ring node:
+
+```bash
+./scripts/ops_spark_rsync_check.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
 See the script header for environment options like `RING_WORKDIR`, `RING_RUN_ID`,
