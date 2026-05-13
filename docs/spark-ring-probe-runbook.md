@@ -25,7 +25,7 @@ If each node uses a different SSH user, pass explicit `user@host` targets (the m
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" --topology full spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local
 ```
 
 If you only have Spark0 online, pass a single target:
@@ -62,7 +62,7 @@ When nodes use different SSH users, prefer explicit per-target users:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-(REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
+(REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local || true) > "docs/spark-ring-probe-${stamp}.md"
 ```
 
 The ring probe includes a compact MTU table (`== network (mtu, compact) ==`) to make jumbo/standard mismatches obvious.

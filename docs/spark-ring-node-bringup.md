@@ -14,7 +14,13 @@ Use `REDACT=1` for any output you plan to commit.
 Example target set:
 
 ```bash
-spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+aitopatom-9ab9.local spark1.local spark2.local
+```
+
+If a node uses a different login user, pass explicit `user@host` targets for just that node:
+
+```bash
+spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local
 ```
 
 ## 1) Mac-side preflight (resolution + port 22 + ping)
@@ -34,7 +40,7 @@ Bring-up blockers:
 Do not store host keys in `~/.ssh/known_hosts`. Prefer probe-scoped files under `/private/tmp`.
 
 ```bash
-SPARK_KNOWN_HOSTS_PER_HOST=1 ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.spark1.local spark1@spark1.local 'hostname'
+SPARK_KNOWN_HOSTS_PER_HOST=1 ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts.spark1.local spark0@spark1.local 'hostname'
 ```
 
 Bring-up blockers:
@@ -46,7 +52,7 @@ Bring-up blockers:
 Once SSH works, capture the clock section using the ring probe (commit-safe when `REDACT=1`):
 
 ```bash
-(REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark1@spark1.local || true) | sed -n '1,120p'
+(SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe.sh spark1.local || true) | sed -n '1,120p'
 ```
 
 Bring-up blocker:
@@ -58,7 +64,7 @@ Facts-only is the most stable output for a fresh node:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" spark1@spark1.local
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" spark1.local
 ```
 
 This writes:
@@ -80,7 +86,7 @@ Optional (best-effort) Mac↔node throughput smoke test (no installs; keep `BW_M
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-(BW_MB=16 SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh spark1@spark1.local || true) > "docs/spark-ring-bw-probe-${stamp}.md"
+(BW_MB=16 SPARK_SSH_USER=spark0 SPARK_KNOWN_HOSTS_PER_HOST=1 REDACT=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_bw.sh spark1.local || true) > "docs/spark-ring-bw-probe-${stamp}.md"
 ```
 
 ## 5) When Spark1 + Spark2 are both reachable: one-shot ring snapshot set
@@ -89,7 +95,7 @@ From repo root on the Mac:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+SPARK_SSH_USER=spark0 REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
 ```
 
 This produces a full commit-safe snapshot set plus per-node facts, which is the easiest way to update:
