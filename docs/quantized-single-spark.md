@@ -34,7 +34,16 @@ Note: `scripts/run_quantized_single_spark0_smallest_v4flash_external.sh` default
 
 Note: `scripts/run_quantized_single_spark0_smallest_credible_v4flash_external.sh` uses the same `FETCH_LLAMA_OUT_DIR=1` default when `ALLOW_RUN=1`.
 
-To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
+To capture a new Spark0 milestone run as a commit-ready doc, the simplest path is the one-shot wrapper (runs the Spark0 baseline and immediately renders a `docs/baseline-quantized-single-spark0-*.md` report):
+
+```sh
+ALLOW_RUN=1 OUT_ROOT=/private/tmp/ds4_on_spark_baseline \
+scripts/run_quantized_single_spark0_capture_doc.sh spark0@aitopatom-9ab9.local
+```
+
+Set `DOC_OUT=docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` if you want an explicit filename.
+
+Manual path (run first, render second):
 
 ```sh
 # After the run, note the printed OUT_DIR (under OUT_ROOT, default: /private/tmp/ds4_on_spark_baseline).
