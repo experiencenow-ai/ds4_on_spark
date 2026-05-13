@@ -104,15 +104,3 @@ Until DS4 documents a safe rolling restart for TP=2, treat restarts as a coordin
   - `DS4_WORLD_SIZE=3`, `DS4_RANK=0/1/2`, `DS4_RING_HOSTS=...`
   - Run: `sudo systemctl start ds4-preflight-tp3-strict@spark0.service`
 
-*** Update File: docs/deployment-spark0-spark1.md
-@@
- Goal: make it easy to stand up a repeatable Spark0/Spark1 layout with systemd templates, consistent logs/metrics, and safe preflight checks.
-+
-+Ops docs (recommended starting point):
-+
-+- Quickstart: `docs/spark-ring-ops-quickstart-tp2.md`
-+- Readiness rubric: `docs/spark-ring-ops-readiness-tp2.md`
-+- Operating checklist: `docs/spark-ring-ops-checklist-tp2.md`
- 
- ## Roles + Naming
-
