@@ -122,6 +122,17 @@ else
 	printf '%s\n' "" >"$DIFF_STDERR"
 fi
 
+echo "== comparing HC layout (local; best-effort) =="
+HC_LAYOUT_JSON="$OUT_DIR/hc_layout_compare.json"
+HC_LAYOUT_STDERR="$OUT_DIR/hc_layout_compare_stderr.txt"
+if [ "$ORACLE_JSON" != "" ] && [ "$CAND_JSON" != "" ]; then
+	python3 "$repo_root/scripts/compare_mtp_one_token_hc_layout.py" --a "$ORACLE_JSON" --b "$CAND_JSON" --json \
+		>"$HC_LAYOUT_JSON" 2>"$HC_LAYOUT_STDERR" || true
+else
+	printf '%s\n' "{\"ok\":false,\"skipped\":true,\"reason\":\"missing oracle or candidate probe JSON\"}" >"$HC_LAYOUT_JSON"
+	printf '%s\n' "" >"$HC_LAYOUT_STDERR"
+fi
+
 {
 	echo "## Results"
 	echo
@@ -143,6 +154,12 @@ fi
 	sed -n '1,200p' "$DIFF_JSON" 2>/dev/null || true
 	echo '```'
 	echo
+	echo "HC layout compare output:"
+	echo
+	echo '```'
+	sed -n '1,200p' "$HC_LAYOUT_JSON" 2>/dev/null || true
+	echo '```'
+	echo
 	echo "Artifacts:"
 	echo
 	echo "- report: $REPORT_MD"
@@ -152,6 +169,8 @@ fi
 	echo "- candidate runner stderr: $OUT_DIR/candidate_runner_stderr.txt"
 	echo "- diff JSON: $DIFF_JSON"
 	echo "- diff stderr: $DIFF_STDERR"
+	echo "- hc layout JSON: $HC_LAYOUT_JSON"
+	echo "- hc layout stderr: $HC_LAYOUT_STDERR"
 	echo
 	echo "Next step: if the diff fails early, add more `*_fnv64` captures to the candidate probe before attempting acceptance sweeps."
 	echo
@@ -174,13 +193,19 @@ def read_json(p: Path):
 diff = read_json(out_dir / "oracle_vs_candidate_diff.json")
 ok = bool(diff.get("ok", False)) if isinstance(diff, dict) else False
 
+layout = read_json(out_dir / "hc_layout_compare.json")
+layout_ok = bool(layout.get("ok", False)) if isinstance(layout, dict) else False
+
 summary = {
 	"ok": ok,
+	"layout_ok": layout_ok,
 	"artifacts": {
 		"report_md": str(report_md),
 		"diff_json": str(out_dir / "oracle_vs_candidate_diff.json"),
+		"hc_layout_compare_json": str(out_dir / "hc_layout_compare.json"),
 	},
 	"diff": diff if isinstance(diff, dict) else None,
+	"hc_layout_compare": layout if isinstance(layout, dict) else None,
 }
 
 (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
