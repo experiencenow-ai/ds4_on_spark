@@ -1,8 +1,8 @@
 diff --git a/ds4.c b/ds4.c
-index f0f8cc1..12bbf08 100644
+index f0f8cc1..f9e3f55 100644
 --- a/ds4.c
 +++ b/ds4.c
-@@ -16338,6 +16338,126 @@ int ds4_engine_generate_argmax(
+@@ -16338,6 +16338,131 @@ int ds4_engine_generate_argmax(
                                  emit, done, emit_ud, progress, progress_ud);
  }
  
@@ -117,6 +117,11 @@ index f0f8cc1..12bbf08 100644
 +    int cap_err = 0;
 +    cap_err |= mtp_probe_capture_tensor(&out->trunk_token_embd, session->graph.mtp_embed, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->trunk_pre_hc_head, session->graph.cur_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_enorm, session->graph.mtp_enorm, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_eproj, session->graph.mtp_eproj, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_eproj_hc, session->graph.mtp_eproj_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_hnorm_hc, session->graph.mtp_hnorm_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_hproj_hc, session->graph.mtp_hproj_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->mtp_input_hc, session->graph.mtp_input_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->mtp_block_out_hc, session->graph.mtp_state_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
 +    cap_err |= mtp_probe_capture_tensor(&out->mtp_head_norm, session->graph.output_norm, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
@@ -130,10 +135,10 @@ index f0f8cc1..12bbf08 100644
  #ifndef DS4_NO_GPU
      if (!e->metal_ready) {
 diff --git a/ds4.h b/ds4.h
-index 9613b0d..e059d3d 100644
+index 9613b0d..b803e00 100644
 --- a/ds4.h
 +++ b/ds4.h
-@@ -175,6 +175,35 @@ bool ds4_engine_has_mtp(ds4_engine *e);
+@@ -175,6 +175,40 @@ bool ds4_engine_has_mtp(ds4_engine *e);
  int ds4_engine_mtp_draft_tokens(ds4_engine *e);
  const ds4_tokens *ds4_session_tokens(ds4_session *s);
  
@@ -149,6 +154,11 @@ index 9613b0d..e059d3d 100644
 +    int mtp_draft_token_id;
 +    ds4_tensor_fingerprint trunk_token_embd;
 +    ds4_tensor_fingerprint trunk_pre_hc_head;
++    ds4_tensor_fingerprint mtp_enorm;
++    ds4_tensor_fingerprint mtp_eproj;
++    ds4_tensor_fingerprint mtp_eproj_hc;
++    ds4_tensor_fingerprint mtp_hnorm_hc;
++    ds4_tensor_fingerprint mtp_hproj_hc;
 +    ds4_tensor_fingerprint mtp_input_hc;
 +    ds4_tensor_fingerprint mtp_block_out_hc;
 +    ds4_tensor_fingerprint mtp_head_norm;
@@ -170,7 +180,7 @@ index 9613b0d..e059d3d 100644
   * policy; the engine owns the DS4-specific serialized graph state. */
  uint64_t ds4_session_payload_bytes(ds4_session *s);
 diff --git a/ds4_cli.c b/ds4_cli.c
-index 838a394..4ae1b1d 100644
+index 838a394..bf2ff9f 100644
 --- a/ds4_cli.c
 +++ b/ds4_cli.c
 @@ -34,6 +34,7 @@ typedef struct {
@@ -190,7 +200,7 @@ index 838a394..4ae1b1d 100644
          "  --think\n"
          "      Use normal thinking mode. This is the default.\n"
          "  --think-max\n"
-@@ -698,6 +701,105 @@ static int run_logprob_dump(ds4_engine *engine, const cli_config *cfg, const ds4
+@@ -698,6 +701,130 @@ static int run_logprob_dump(ds4_engine *engine, const cli_config *cfg, const ds4
      return 0;
  }
  
@@ -257,6 +267,31 @@ index 838a394..4ae1b1d 100644
 +    fprintf(fp, ",\n  \"trunk_pre_hc_head_nbytes\":%llu,\n  \"trunk_pre_hc_head_shape\":", (unsigned long long)probe.trunk_pre_hc_head.nbytes);
 +    json_write_shape(fp, &probe.trunk_pre_hc_head);
 +    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_enorm_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_enorm.fnv64);
++    fprintf(fp, ",\n  \"mtp_enorm_nbytes\":%llu,\n  \"mtp_enorm_shape\":", (unsigned long long)probe.mtp_enorm.nbytes);
++    json_write_shape(fp, &probe.mtp_enorm);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_eproj_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_eproj.fnv64);
++    fprintf(fp, ",\n  \"mtp_eproj_nbytes\":%llu,\n  \"mtp_eproj_shape\":", (unsigned long long)probe.mtp_eproj.nbytes);
++    json_write_shape(fp, &probe.mtp_eproj);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_eproj_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_eproj_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_eproj_hc_nbytes\":%llu,\n  \"mtp_eproj_hc_shape\":", (unsigned long long)probe.mtp_eproj_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_eproj_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_hnorm_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_hnorm_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_hnorm_hc_nbytes\":%llu,\n  \"mtp_hnorm_hc_shape\":", (unsigned long long)probe.mtp_hnorm_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_hnorm_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_hproj_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_hproj_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_hproj_hc_nbytes\":%llu,\n  \"mtp_hproj_hc_shape\":", (unsigned long long)probe.mtp_hproj_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_hproj_hc);
++    fprintf(fp, ",\n");
 +    fprintf(fp, "  \"mtp_input_hc_fnv64\":");
 +    json_write_u64_hex(fp, probe.mtp_input_hc.fnv64);
 +    fprintf(fp, ",\n  \"mtp_input_hc_nbytes\":%llu,\n  \"mtp_input_hc_shape\":", (unsigned long long)probe.mtp_input_hc.nbytes);
@@ -296,7 +331,7 @@ index 838a394..4ae1b1d 100644
  static int run_generation(ds4_engine *engine, const cli_config *cfg) {
      ds4_tokens prompt = {0};
      build_prompt(engine, &cfg->gen, &prompt);
-@@ -723,6 +825,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
+@@ -723,6 +850,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
          ds4_tokens_free(&prompt);
          return rc;
      }
@@ -308,7 +343,7 @@ index 838a394..4ae1b1d 100644
  
      const bool diagnostic = cfg->gen.dump_tokens ||
                              cfg->gen.head_test ||
-@@ -1230,6 +1337,11 @@ static cli_config parse_options(int argc, char **argv) {
+@@ -1230,6 +1362,11 @@ static cli_config parse_options(int argc, char **argv) {
              c.gen.top_p = parse_float_range(need_arg(&i, argc, argv, arg), arg, 0.0f, 1.0f);
          } else if (!strcmp(arg, "--seed")) {
              c.gen.seed = parse_u64(need_arg(&i, argc, argv, arg), arg);

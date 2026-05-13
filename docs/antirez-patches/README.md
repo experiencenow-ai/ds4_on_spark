@@ -22,6 +22,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Purpose:
     - adds a `--dump-mtp-one-token-json` CLI mode that emits a single JSON object to stdout
     - captures `base_next_token_id`, `mtp_draft_token_id`, plus intermediate tensor `*_fnv64` fingerprints (`trunk_token_embd`, `trunk_pre_hc_head`, `mtp_input_hc`, `mtp_block_out_hc`, `mtp_head_norm`)
+    - also captures pre-`mtp_input_hc` intermediates (`mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`) to localize oracle-vs-candidate mismatches
     - intended for oracle-vs-candidate diffs via `python3 scripts/diff_mtp_one_token_draft_probe.py`
 
 Apply (example):

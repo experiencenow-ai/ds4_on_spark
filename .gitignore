@@ -16,3 +16,4 @@ upstreams/
 .codex_git_intake*/
 .git_local/
 .git-codex-*/
+.git-work/

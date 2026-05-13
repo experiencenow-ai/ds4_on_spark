@@ -44,6 +44,11 @@ Template JSON (for implementers): `docs/mtp-one-token-draft-probe-template.json`
 
 Optional debug keys (non-normative; used by the skeleton patch to stage wiring work and by the oracle for diffs):
 
+- `mtp_enorm_{fnv64,nbytes,shape}` (post-`mtp.0.enorm.weight` RMSNorm on the trunk token embedding; `docs/mtp-ds4-reference.md` step 2)
+- `mtp_eproj_{fnv64,nbytes,shape}` (post-`mtp.0.e_proj.weight` projection; step 2)
+- `mtp_eproj_hc_{fnv64,nbytes,shape}` (HC-broadcast of `mtp_eproj`; step 3)
+- `mtp_hnorm_hc_{fnv64,nbytes,shape}` (post-`mtp.0.hnorm.weight` row RMSNorm on `trunk_pre_hc_head`; step 4)
+- `mtp_hproj_hc_{fnv64,nbytes,shape}` (post-`mtp.0.h_proj.weight` projection; step 4)
 - `mtp_input_hc_{fnv64,nbytes,shape}` (MTP block input after `(e_proj_hc + h_proj_hc)`; see `docs/mtp-ds4-reference.md` step 5)
 - `mtp_block_out_hc_{fnv64,nbytes,shape}` (MTP block output stream before the MTP output head; step 6)
 - `mtp_head_norm_{fnv64,nbytes,shape}` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection; step 7)
@@ -88,6 +93,21 @@ By default this requires:
 
 If the candidate probe does not emit the debug capture keys yet, keep the diff tool strict and fix the probe output before acceptance sweeps; otherwise you risk comparing different internal wiring paths without noticing.
 The diff tool is strict by default: if neither probe emits any `*_fnv64` capture keys, it falls back to requiring the default capture set and will fail until you add those debug fingerprints.
+
+Optional stronger guardrail (recommended before acceptance sweeps): require the capture set explicitly so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json /path/to/candidate_probe.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_probe.json --b /path/to/candidate_probe.json --json
+```
+
+If you need more localization (pre-`mtp_input_hc` intermediates), require the extended capture set:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile extended --probe-json /path/to/oracle_probe.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --profile extended --probe-json /path/to/candidate_probe.json --json
+```
 
 ## Spark runner (llama.cpp skeleton patch; available now)
 

@@ -180,6 +180,9 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
     - `mtp_input_hc` (MTP block input after `(e_proj_hc + h_proj_hc)` sum)
     - `mtp_block_out_hc` (MTP block output stream before the MTP output head)
     - `mtp_head_norm` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection)
+  - Optional deeper capture prefixes (useful when `mtp_input_hc` mismatches and you need more localization):
+    - `mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`
+  - `scripts/verify_mtp_one_token_draft_probe_captures.py` supports `--profile extended` to require the deeper capture set before acceptance sweeps.
   - Avoid dumping full logits: instead fingerprint the normalized head stream and rely on exact `mtp_draft_token_id` equality.
 
 Implementation note (Spark/Linux CUDA):
