@@ -1,0 +1,36 @@
+[Unit]
+Description=DS4 user service (%i, TP=2 strict preflight)
+Wants=network-online.target
+After=network-online.target
+Requires=ds4-preflight-strict@%i.service
+After=ds4-preflight-strict@%i.service
+ConditionPathIsExecutable=%h/ds4/bin/ds4_server
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ds4
+SyslogIdentifier=ds4-user-%i
+Environment=DS4_INSTANCE=%i
+Environment=DS4_HOME=%h/ds4
+Environment=DS4_CONFIG_PATH=%h/.config/ds4/ds4-%i.conf
+EnvironmentFile=-%h/.config/ds4/ds4.env
+EnvironmentFile=-%h/.config/ds4/ds4-%i.env
+
+ConditionPathIsExecutable=%h/ds4/scripts/ops_ds4_env_check.sh
+ExecStartPre=%h/ds4/scripts/ops_ds4_env_check.sh -%h/.config/ds4/ds4.env %h/.config/ds4/ds4-%i.env
+
+ExecStart=%h/ds4/bin/ds4_server --config ${DS4_CONFIG_PATH}
+
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

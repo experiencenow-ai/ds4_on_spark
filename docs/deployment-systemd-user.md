@@ -48,6 +48,8 @@ systemctl --user start ds4-preflight@spark0.service
 systemctl --user enable --now ds4@spark0.service
 
 # strict DS4 start (requires ds4-preflight-strict@%i):
+# systemctl --user enable --now ds4-tp2-strict@spark0.service
+# legacy alias name (same behavior):
 # systemctl --user enable --now ds4-strict@spark0.service
 
 # strict DS4 start (TP=3 / TP=4; requires the matching strict topology preflight):

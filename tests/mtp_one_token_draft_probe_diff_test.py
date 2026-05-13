@@ -15,6 +15,7 @@ def _base_probe() -> dict:
 		"trunk_token_embd_fnv64": "0000000000000000",
 		"trunk_token_embd_nbytes": 16,
 		"trunk_token_embd_shape": [4, 1, 1],
+		"trunk_token_embd_sample_f32": [0.0, 1.0, 2.0, 3.0],
 	}
 
 
@@ -46,6 +47,22 @@ class MtpOneTokenProbeDiffTest(unittest.TestCase):
 		mismatches = res.get("mismatches") or []
 		keys = [m.get("key") for m in mismatches]
 		self.assertIn("trunk_token_embd_fnv64", keys)
+
+	def test_diff_detects_sample_mismatch_with_default_tol(self) -> None:
+		a = _base_probe()
+		b = _base_probe()
+		b["trunk_token_embd_sample_f32"] = [0.0, 1.0, 2.0, 3.1]
+		res = diff.diff_one_token_mtp_probes(a, b)
+		self.assertFalse(bool(res.get("ok", True)))
+		mismatches = res.get("mismatches") or []
+		self.assertTrue(any(m.get("key") == "trunk_token_embd_sample_f32" for m in mismatches))
+
+	def test_diff_allows_sample_mismatch_with_relaxed_tol(self) -> None:
+		a = _base_probe()
+		b = _base_probe()
+		b["trunk_token_embd_sample_f32"] = [0.0, 1.0, 2.0, 3.1]
+		res = diff.diff_one_token_mtp_probes(a, b, sample_tol=0.11)
+		self.assertTrue(bool(res.get("ok", False)))
 
 	def test_diff_ignores_hc_major_layout_diagnostics_as_capture_prefixes(self) -> None:
 		a = _base_probe()

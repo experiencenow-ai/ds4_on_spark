@@ -174,6 +174,7 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
 - The **required** contract keys are validated by `scripts/model_contract_validate_mtp_one_token_draft_probe.py`.
 - The **recommended** correctness guardrail is an *oracle diff* that compares both token IDs and intermediate tensor fingerprints via `python3 scripts/diff_mtp_one_token_draft_probe.py --a oracle.json --b candidate.json --json`.
   - Probes may include optional debug capture keys of the form `*_fnv64` + `*_nbytes` + `*_shape` (all optional unless your runbook requires them).
+  - Optional numeric debugging aid (keep small): for any capture prefix, emit `{prefix}_sample_f32` as a short float32 list (for example the first 16 elements). When present in both probes, the diff tool compares samples within an absolute tolerance (default `1e-5`; override with `--sample-tol`).
   - Recommended capture prefixes (aligned to `docs/mtp-ds4-reference.md`’s `gamma=1` step list):
     - `trunk_token_embd` (trunk token embedding output)
     - `trunk_pre_hc_head` (trunk “target hidden buffer” before trunk `hc_head`; used as `prev_hc` for the MTP draft input build)
@@ -181,6 +182,13 @@ Machine-readable MTP *execution* gating (before acceptance sweeps):
     - `mtp_block_out_hc` (MTP block output stream before the MTP output head)
     - `mtp_head_norm` (post-`mtp.0.hc_head_*` mixture + `mtp.0.norm.weight`, before trunk vocab projection)
   - Avoid dumping full logits: instead fingerprint the normalized head stream and rely on exact `mtp_draft_token_id` equality.
+  - Optional stronger guardrail (recommended before acceptance sweeps): require both probes to emit the full capture set so diffs localize the first divergence:
+
+```bash
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json oracle.json --json
+python3 scripts/verify_mtp_one_token_draft_probe_captures.py --probe-json candidate.json --json
+python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a oracle.json --b candidate.json --json
+```
 
 Implementation note (Spark/Linux CUDA):
 

@@ -124,6 +124,20 @@ To gate a TP=2 run on required inputs via systemd, use the strict variant:
 sudo systemctl start ds4-preflight-strict@spark0.service
 ```
 
+To gate DS4 start itself on strict preflight, use the strict-start unit:
+
+```bash
+sudo systemctl enable ds4-tp2-strict@spark0.service
+sudo systemctl start  ds4-tp2-strict@spark0.service
+```
+
+Legacy alias name retained for compatibility:
+
+```bash
+sudo systemctl enable ds4-strict@spark0.service
+sudo systemctl start  ds4-strict@spark0.service
+```
+
 If strict preflight fails, it triggers `ds4-support-bundle@%i.service` (when installed) to capture a non-destructive snapshot for debugging. See `docs/ops-support-bundle.md`.
 
 `ds4-preflight@.service` validates and reads optional peer settings from `/etc/ds4/ds4-%i.env`:

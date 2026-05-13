@@ -61,6 +61,71 @@ def _is_hex_u64(s: Any) -> bool:
 	return True
 
 
+def _as_float_list(val: Any) -> Optional[list[float]]:
+	if val is None:
+		return None
+	if not isinstance(val, list):
+		return None
+	out: list[float] = []
+	for v in val[:1024]:
+		if isinstance(v, bool):
+			return None
+		if not isinstance(v, (int, float)):
+			return None
+		out.append(float(v))
+	return out
+
+
+def _cmp_sample_f32(
+	out: dict[str, Any],
+	key: str,
+	a: Any,
+	b: Any,
+	*,
+	tol: float,
+) -> None:
+	a_list = _as_float_list(a)
+	b_list = _as_float_list(b)
+	if a_list is None and b_list is None:
+		return
+	if a_list is None or b_list is None:
+		out["notes"].append(f"sample differs: {key} present_in_a={a_list is not None} present_in_b={b_list is not None}")
+		return
+	if len(a_list) != len(b_list):
+		out["mismatches"].append(
+			{
+				"key": key,
+				"reason": "sample_len",
+				"a_len": len(a_list),
+				"b_len": len(b_list),
+			}
+		)
+		return
+	max_abs = 0.0
+	max_i = -1
+	max_a = 0.0
+	max_b = 0.0
+	for i, (va, vb) in enumerate(zip(a_list, b_list)):
+		d = abs(va - vb)
+		if d > max_abs:
+			max_abs = d
+			max_i = i
+			max_a = va
+			max_b = vb
+	if max_abs > tol:
+		out["mismatches"].append(
+			{
+				"key": key,
+				"reason": "sample_tol",
+				"tol": tol,
+				"max_abs_diff": max_abs,
+				"max_idx": max_i,
+				"a_at_max": max_a,
+				"b_at_max": max_b,
+			}
+		)
+
+
 def _cmp_value(
 	out: dict[str, Any],
 	key: str,
@@ -86,6 +151,7 @@ def diff_one_token_mtp_probes(
 	*,
 	require_token_match: bool = True,
 	require_capture_match: bool = True,
+	sample_tol: float = 1.0e-5,
 ) -> dict[str, Any]:
 	out: dict[str, Any] = {
 		"ok": False,
@@ -132,6 +198,7 @@ def diff_one_token_mtp_probes(
 		fnv_key = f"{prefix}_fnv64"
 		nbytes_key = f"{prefix}_nbytes"
 		shape_key = f"{prefix}_shape"
+		sample_key = f"{prefix}_sample_f32"
 
 		fnv_a, fnv_b = _get(a, fnv_key), _get(b, fnv_key)
 		if fnv_a is None and fnv_b is None:
@@ -149,6 +216,7 @@ def diff_one_token_mtp_probes(
 		_cmp_value(out, fnv_key, fnv_a, fnv_b, required=require_capture_match)
 		_cmp_value(out, nbytes_key, _get(a, nbytes_key), _get(b, nbytes_key), required=require_capture_match)
 		_cmp_value(out, shape_key, _get(a, shape_key), _get(b, shape_key), required=require_capture_match)
+		_cmp_sample_f32(out, sample_key, _get(a, sample_key), _get(b, sample_key), tol=sample_tol)
 
 	out["ok"] = (len(out["errors"]) == 0 and len(out["mismatches"]) == 0)
 	return out
@@ -175,6 +243,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 	ap.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
 	ap.add_argument("--no-token-match", action="store_true", help="Do not require token ID matches.")
 	ap.add_argument("--no-capture-match", action="store_true", help="Do not require debug capture matches.")
+	ap.add_argument("--sample-tol", type=float, default=1.0e-5, help="Max abs diff allowed for *_sample_f32 arrays.")
 	args = ap.parse_args(argv)
 
 	a = _load_json(Path(args.a))
@@ -184,6 +253,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 		b if isinstance(b, dict) else {},
 		require_token_match=not args.no_token_match,
 		require_capture_match=not args.no_capture_match,
+		sample_tol=float(args.sample_tol),
 	)
 
 	if args.json:

@@ -48,6 +48,7 @@ need_file "deploy/tmpfiles.d/ds4.conf"
 
 need_file "deploy/systemd/ds4@.service"
 need_file "deploy/systemd/ds4-strict@.service"
+need_file "deploy/systemd/ds4-tp2-strict@.service"
 need_file "deploy/systemd/ds4-tp3-strict@.service"
 need_file "deploy/systemd/ds4-tp4-strict@.service"
 need_file "deploy/systemd/ds4-preflight@.service"
@@ -75,6 +76,7 @@ need_file "deploy/systemd-dropins/ds4@.service.d/40-execstart-override.conf.exam
 
 need_file "deploy/systemd-user/ds4@.service"
 need_file "deploy/systemd-user/ds4-strict@.service"
+need_file "deploy/systemd-user/ds4-tp2-strict@.service"
 need_file "deploy/systemd-user/ds4-tp3-strict@.service"
 need_file "deploy/systemd-user/ds4-tp4-strict@.service"
 need_file "deploy/systemd-user/ds4-preflight@.service"

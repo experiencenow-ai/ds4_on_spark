@@ -217,15 +217,6 @@ For trace replay, `sim/scheduler/trace_sweep.py` runs a small set of standard sw
 python3 sim/scheduler/trace_sweep.py --trace-jsonl /path/to/route.jsonl --trace-input-format runtime --trace-non-route skip --num-experts 0 --max-tokens 5000
 ```
 
-Note: DS4 `ffn_moe_topk` dump-derived traces (see `scripts/ds4_topk_dump_to_trace_jsonl.py`) include the **selected experts** per token/layer but do not include `k` by default. To match real DS4 compute, set `K=topk` explicitly when replaying them:
-
-```bash
-python3 sim/scheduler/scheduler_sim.py \
-  --trace-jsonl /path/to/routes_pos0.jsonl --trace-time-mode dt_ms \
-  --k-min-batch 6 --k-max-batch 6 --k-min-interactive 6 --k-max-interactive 6 \
-  --q-low 0 --q-high 0
-```
-
 To hold output-token demand roughly constant when comparing MTP variants on a replay trace, set `--trace-arrival-units output_tokens`:
 
 ```bash
@@ -634,6 +625,22 @@ python3 sim/scheduler/recommendations.py \
 The markdown tables include time-weighted expert pending-depth p95 (`pending_p95`, plus `pending_hi_p95`/`pending_lo_p95` when both latency classes are present), plus a starvation summary (`starv_frac`, `starv_p95_ms`) so queue-reservation and backpressure changes are visible without opening the full JSON payload.
 
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
+
+To enable expert-side batching in the runtime-trace ablation harness, pass the batching knobs through `sim/scheduler/recommendations.py`:
+
+```bash
+python3 sim/scheduler/recommendations.py \
+  --trace-jsonl /path/to/route.jsonl \
+  --trace-input-format runtime \
+  --trace-non-route skip \
+  --batch-max-batch 4 \
+  --batch-wait-batch-ms 0.5 \
+  --service-base-ms 0.10 \
+  --service-per-task-ms 0.90 \
+  --format md
+```
+
+When `--service-per-task-ms < 0` (default), the simulator uses `--service-ms` as a fixed per-task service time and still tracks batch sizes. When `--service-per-task-ms >= 0`, the simulator uses `service_base_ms + service_per_task_ms * batch_size` for each expert batch to model per-batch overhead.
 
 ## MTP Simulation
 

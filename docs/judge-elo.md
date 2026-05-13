@@ -168,6 +168,18 @@ To enforce strict margin/score consistency + compact tags while wrapping for sch
 python3 scripts/pairwise_judge_record.py --strict --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt>
 ```
 
+To compact existing judge record JSONL into the strict compact record schema v5 (decision keys `w/m/sa/sb/r/h/t` and budget arrays `tk/lt`), use:
+
+```bash
+python3 scripts/judge_elo_compact_records.py --in <records.jsonl> --out <records_v5.jsonl>
+```
+
+If you need best-effort compaction (skip invalid/uncompactable lines), add `--skip-invalid` and monitor stderr for `records_skipped`:
+
+```bash
+python3 scripts/judge_elo_compact_records.py --skip-invalid --in <records.jsonl> --out <records_v5.jsonl>
+```
+
 ## Offline ELO
 
 `scripts/judge_elo_update.py`:
@@ -198,6 +210,12 @@ For a CSV-first workflow, use `scripts/judge_elo_join_quality.py` to attach `qua
 
 ```bash
 python3 scripts/judge_elo_update.py --in <judge_records.jsonl> --out-dir <elo_out_dir> --strict
-python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --quality-map <elo_out_dir>/quality_map.json --meta <elo_out_dir>/meta.json --out <baseline_with_quality.csv>
-python3 scripts/model_quality_speed_score.py --in <baseline_with_quality.csv> --out-md <scored.md>
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --bundle <elo_out_dir>/bundle.json --out <baseline_with_quality.csv>
+python3 scripts/model_quality_speed_score.py <baseline_with_quality.csv> > <scored.md>
+```
+
+If the baseline CSV includes models that are not yet present in the judge-ELO quality map, you can optionally fill them with a neutral default (e.g. 50) so downstream scoring has a value:
+
+```bash
+python3 scripts/judge_elo_join_quality.py --in <baseline.csv> --bundle <elo_out_dir>/bundle.json --missing-default 50 --missing-quality-source judge_elo_default_v1 --out <baseline_with_quality.csv>
 ```

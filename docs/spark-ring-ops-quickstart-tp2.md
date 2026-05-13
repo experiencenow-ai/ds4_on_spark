@@ -94,8 +94,8 @@ journalctl -t ds4-preflight-strict-spark0 -n 200 --no-pager
 If you want strict gating on start (recommended for early bring-up), enable the strict-start template:
 
 ```bash
-sudo systemctl enable --now ds4-strict@spark0.service
-sudo systemctl enable --now ds4-strict@spark1.service
+sudo systemctl enable --now ds4-tp2-strict@spark0.service
+sudo systemctl enable --now ds4-tp2-strict@spark1.service
 ```
 
 See: `docs/deployment-systemd.md`.
@@ -107,4 +107,3 @@ Once TP=2 readiness is consistently green on Spark0/Spark1, move to the 3-node r
 - Quickstart: `docs/spark-ring-ops-quickstart-tp3.md`
 - Readiness: `docs/spark-ring-ops-readiness-tp3.md`
 - Checklist: `docs/spark-ring-ops-checklist-tp3.md`
-

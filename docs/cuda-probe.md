@@ -14,6 +14,8 @@ When you want the smallest “device-props + `sm_121` compile-only gates” set 
 
 This gate also includes a compile-only “fatbin packaging” probe using `-gencode arch=compute_121,code=[sm_121,compute_121]` when `nvcc --list-gpu-arch` is supported (quick confirmation that CUDA 13’s multi-code `-gencode` bracket-list spelling works for GB10 bring-up).
 
+It also runs `cuda_sm121_compile_report_tiny`, which prints a single line with NVCC/CUDART macro versions plus device CC and `__CUDA_ARCH__` / `__CUDA_ARCH_LIST__` (useful for pinning CUDA 13 “what did this toolkit think it was targeting?” behavior in logs).
+
 The runtime probes are best-effort: `cuda_sm121_kernel_launch_tiny` (no `cudaMalloc`) and the “arch report” binaries can be skipped if Spark0’s GPU is busy/unavailable or allocations fail with `out of memory`; the gate still reports compile-only results so you can distinguish “toolchain can target `sm_121`” from “device was runnable right now”.
 
 ## Spark0: Micro Gate (No Repo Transfer; Single SSH)
