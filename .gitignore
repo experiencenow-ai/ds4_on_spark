@@ -11,6 +11,7 @@ __pycache__/
 upstreams/
 .git2/
 .codex_git/
+.codex_gitdir/
 .codex_git_worktree*/
 .codex_git_wt*/
 .codex_git_intake*/

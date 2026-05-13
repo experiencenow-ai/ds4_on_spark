@@ -67,6 +67,36 @@ class JudgeEloTest(unittest.TestCase):
         for k in ratings1:
             self.assertAlmostEqual(ratings1[k], ratings2[k], places=9)
 
+    def test_record_v5_winner_is_canonicalized(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "one.jsonl")
+            # v5 records validate winner case-insensitively for robustness; Elo math must
+            # treat "a"/"b" as A/B, not as a tie.
+            rec = {
+                "schema": schema.SCHEMA_RECORD_V5,
+                "pair_id": "p1",
+                "model_a": "mA",
+                "model_b": "mB",
+                "judge_model": "ds4",
+                "parse_valid": True,
+                "w": "a",
+                "m": 3,
+                "sa": 10,
+                "sb": 5,
+                "r": "A is more correct.",
+                "h": "Fix factual errors.",
+                "t": ["factuality"],
+                "tk": [5, 5, 10, 20],
+                "lt": [1, 1, 2],
+            }
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(rec, separators=(",", ":"), sort_keys=True) + "\n")
+            self.assertEqual(schema.validate_record(rec), [])
+            _ratings, stats = updater.compute_elo([path], k=32.0, scale=400.0, sort_by_pair_id=False)
+            self.assertEqual(int(stats["mA"]["wins"]), 1)
+            self.assertEqual(int(stats["mB"]["losses"]), 1)
+            self.assertEqual(int(stats["mA"]["ties"]), 0)
+
     def test_sort_by_pair_id_is_stable(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")

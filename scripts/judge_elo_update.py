@@ -124,6 +124,29 @@ def _apply_match(ratings: Dict[str, float], a: str, b: str, winner: str, margin:
     return delta
 
 
+def _extract_winner_margin(obj: Dict[str, Any]) -> Tuple[str, int]:
+    winner = obj.get("winner")
+    margin = obj.get("margin")
+    if winner is not None and margin is not None:
+        return str(winner), int(margin)
+    winner2 = obj.get("w")
+    margin2 = obj.get("m")
+    if winner2 is not None and margin2 is not None:
+        canon, cerrs = schema.canonicalize_decision_obj({
+            "w": winner2,
+            "m": margin2,
+            "sa": obj.get("sa"),
+            "sb": obj.get("sb"),
+            "r": obj.get("r"),
+            "h": obj.get("h"),
+            "t": obj.get("t"),
+        })
+        if canon is None or len(cerrs) != 0:
+            raise ValueError("failed to canonicalize v4/v5 decision keys: " + "; ".join(cerrs))
+        return str(canon.get("winner")), int(canon.get("margin"))
+    raise ValueError("missing winner/margin fields")
+
+
 def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[Tuple[str, str, str, int]]:
     rows: List[Tuple[str, str, str, str, int]] = []
     for path in paths:
@@ -133,12 +156,7 @@ def iter_valid_matches(paths: Sequence[str], sort_by_pair_id: bool) -> Iterable[
             errs = schema.validate_record(obj)
             if len(errs) != 0:
                 continue
-            winner = obj.get("winner")
-            margin = obj.get("margin")
-            if winner is None:
-                winner = obj.get("w")
-            if margin is None:
-                margin = obj.get("m")
+            winner, margin = _extract_winner_margin(obj)
             rows.append((str(obj["pair_id"]), str(obj["model_a"]), str(obj["model_b"]), str(winner), int(margin)))
     if sort_by_pair_id:
         # When multiple inputs are merged, a stable ordering avoids nondeterminism.
