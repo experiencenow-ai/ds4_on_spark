@@ -186,6 +186,10 @@ Implementation note (Spark/Linux CUDA):
 
 - The DS4-tuned MTP sidecar uses routed experts that may be `Q4_K` (not `Q2_K`). If using `antirez/ds4` as the executable reference on CUDA, ensure the routed-MoE path supports `Q4_K` and the sidecar does not clobber the trunk CUDA model-map/fd-cache state; see `docs/mtp-antirez-q4-sidecar-breakthrough-2026-05-12.md`.
 
+Machine-readable MTP *acceptance* reporting (when ready to sweep):
+
+- Once the one-token diff is `ok=true`, record acceptance rates from multi-prompt runs via `docs/mtp-acceptance-sweep.md` and summarize runtime JSONL logs with `python3 scripts/summarize_mtp_acceptance_trace.py --in-jsonl ... --draft-len <gamma>`.
+
 ## Comparator models (Ling / Qwen / DFlash pairs)
 
 When Ling 2.6 Flash or Qwen-family models are used as baseline comparators, keep their notes **lightweight** and separate from DeepSeek V4 Flash MTP claims:
