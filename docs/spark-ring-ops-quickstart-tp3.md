@@ -11,6 +11,7 @@ Use this alongside:
 - SSH + network runbook: `docs/ops-ssh-network-runbook.md`
 - Logging + metrics conventions: `docs/ops-logging-metrics.md`
 - Run notes + snapshot hygiene: `docs/ops-run-notes.md`
+- TP=2 → TP=3 transition runbook: `docs/spark-ring-ops-transition-tp2-to-tp3.md`
 - Operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - Readiness rubric: `docs/spark-ring-ops-readiness-tp3.md`
 

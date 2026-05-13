@@ -535,10 +535,10 @@ index 0000000..a65998b
 +} // namespace ds4
 diff --git a/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
 new file mode 100644
-index 0000000..61eaee3
+index 0000000..b7a5c31
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,1172 @@
+@@ -0,0 +1,1277 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -553,11 +553,12 @@ index 0000000..61eaee3
 +#include <cstdio>
 +#include <cstdlib>
 +#include <cstring>
++#include <fstream>
 +#include <string>
 +#include <vector>
 +
 +static void usage(const char * prog) {
-+    std::fprintf(stderr, "usage: %s --model <trunk.gguf> --sidecar <mtp_sidecar.gguf> [--prompt <text>] [--seed N] [--json] [--load-sidecar-weights]\n", prog);
++    std::fprintf(stderr, "usage: %s --model <trunk.gguf> --sidecar <mtp_sidecar.gguf> [--prompt <text> | --prompt-file <path>] [--seed N] [--json] [--load-sidecar-weights]\n", prog);
 +}
 +
 +static std::string json_escape(const std::string & s) {
@@ -1494,12 +1495,155 @@ index 0000000..61eaee3
 +}
 +
 +
++struct probe_result {
++    int32_t base_next_token_id = -1;
++    std::string base_next_token;
++    int32_t mtp_draft_token_id = -1;
++    std::string mtp_draft_token;
++    tensor_capture token_embd;
++    tensor_capture pre_hc_head;
++    tensor_capture input_hc;
++    tensor_capture block_out_hc;
++    tensor_capture head_norm;
++    std::vector<std::string> errors;
++};
++
++static bool read_prompt_file(const std::string & path, std::vector<std::string> * prompts, std::string * err) {
++    if (prompts == nullptr) {
++        if (err != nullptr) *err = "null prompt output";
++        return false;
++    }
++    std::ifstream f(path);
++    if (!f) {
++        if (err != nullptr) *err = "failed to open prompt file";
++        return false;
++    }
++    std::string line;
++    while (std::getline(f, line)) {
++        if (!line.empty() && line.back() == '\r') {
++            line.pop_back();
++        }
++        if (!line.empty()) {
++            prompts->push_back(line);
++        }
++    }
++    if (prompts->empty()) {
++        if (err != nullptr) *err = "prompt file did not contain any non-empty lines";
++        return false;
++    }
++    return true;
++}
++
++static probe_result run_prompt_probe(
++        llama_model * model,
++        const llama_vocab * vocab,
++        const std::string & prompt,
++        int32_t seed,
++        bool load_sidecar_weights,
++        bool bind_ok,
++        const std::vector<std::string> & sidecar_errors,
++        const ds4::deepseek4_mtp_sidecar & sidecar) {
++    probe_result r;
++    r.errors.insert(r.errors.end(), sidecar_errors.begin(), sidecar_errors.end());
++
++    const std::string tokenized_prompt = ds4_render_chat_prompt(prompt);
++    const int32_t n_prompt = -llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), nullptr, 0, false, true);
++    if (n_prompt <= 0) {
++        r.errors.push_back("failed to tokenize prompt");
++        return r;
++    }
++
++    std::vector<llama_token> prompt_tokens((size_t) n_prompt);
++    if (llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), false, true) < 0) {
++        r.errors.push_back("failed to tokenize prompt (2nd pass)");
++        return r;
++    }
++
++    probe_captures caps;
++    llama_context_params ctx_params = llama_context_default_params();
++    ctx_params.n_ctx = (uint32_t) (prompt_tokens.size() + 8);
++    ctx_params.n_batch = (uint32_t) prompt_tokens.size();
++    ctx_params.n_ubatch = ctx_params.n_batch;
++    ctx_params.no_perf = true;
++    ctx_params.cb_eval = capture_probe_tensors;
++    ctx_params.cb_eval_user_data = &caps;
++
++    llama_context * ctx = llama_init_from_model(model, ctx_params);
++    if (ctx == nullptr) {
++        r.errors.push_back("failed to init llama_context");
++        return r;
++    }
++
++    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), prompt_tokens.size());
++    if (llama_decode(ctx, batch) != 0) {
++        r.errors.push_back("llama_decode failed for prompt");
++        llama_free(ctx);
++        return r;
++    }
++
++    const int32_t n_vocab = llama_vocab_n_tokens(vocab);
++    const float * logits = llama_get_logits_ith(ctx, -1);
++    r.base_next_token_id = argmax_f32(logits, n_vocab);
++    r.base_next_token = token_to_piece(vocab, (llama_token) r.base_next_token_id);
++
++    caps.enable = true;
++    caps.token_embd = tensor_capture();
++    caps.pre_hc_head = tensor_capture();
++
++    llama_token base_token = (llama_token) r.base_next_token_id;
++    llama_batch base_batch = llama_batch_get_one(&base_token, 1);
++    if (llama_decode(ctx, base_batch) != 0) {
++        r.errors.push_back("llama_decode failed for base_next_token_id commit");
++    }
++
++    caps.enable = false;
++    r.token_embd = caps.token_embd;
++    r.pre_hc_head = caps.pre_hc_head;
++
++    if (load_sidecar_weights && bind_ok && sidecar_errors.empty()) {
++        std::string stub_err;
++        if (!compute_stub_mtp_input_hc(r.token_embd, r.pre_hc_head, sidecar, model->hparams, &r.input_hc, &stub_err)) {
++            r.errors.push_back(std::string("stub mtp input_hc compute failed: ") + stub_err);
++        }
++        if (!compute_mtp_gamma1_block(r.input_hc, sidecar, model->hparams, (int32_t) prompt_tokens.size(), &r.block_out_hc, &r.head_norm, &stub_err)) {
++            r.errors.push_back(std::string("gamma1 mtp block compute failed: ") + stub_err);
++        }
++        if (r.head_norm.got) {
++            if (!compute_argmax_logits_from_output(r.head_norm, model, &r.mtp_draft_token_id, &stub_err)) {
++                r.errors.push_back(std::string("gamma1 draft token failed: ") + stub_err);
++            } else {
++                r.mtp_draft_token = token_to_piece(vocab, (llama_token) r.mtp_draft_token_id);
++            }
++        }
++    } else if (sidecar_errors.empty()) {
++        r.errors.push_back("stub mtp compute skipped (requires --load-sidecar-weights + successful bind)");
++    }
++
++    llama_free(ctx);
++    (void)seed;
++    return r;
++}
++
++static void print_probe_result_json(
++        const std::string & trunk_path,
++        const std::string & sidecar_path,
++        const std::string & prompt,
++        int32_t seed,
++        const probe_result & r) {
++    print_probe_json(trunk_path, sidecar_path, prompt, seed,
++            r.base_next_token_id, r.base_next_token,
++            r.mtp_draft_token_id, r.mtp_draft_token,
++            r.token_embd, r.pre_hc_head, r.input_hc, r.block_out_hc, r.head_norm,
++            r.errors.empty(), r.errors);
++}
++
 +int main(int argc, char ** argv) {
 +    std::setlocale(LC_NUMERIC, "C");
 +
 +    std::string trunk_path;
 +    std::string sidecar_path;
 +    std::string prompt = "Hello.";
++    std::string prompt_file;
 +    int32_t seed = 1234;
 +    bool json = false;
 +    bool load_sidecar_weights = false;
@@ -1523,6 +1667,12 @@ index 0000000..61eaee3
 +                return 1;
 +            }
 +            prompt = argv[++i];
++        } else if (std::strcmp(argv[i], "--prompt-file") == 0) {
++            if (i + 1 >= argc) {
++                usage(argv[0]);
++                return 1;
++            }
++            prompt_file = argv[++i];
 +        } else if (std::strcmp(argv[i], "--seed") == 0) {
 +            if (i + 1 >= argc) {
 +                usage(argv[0]);
@@ -1544,12 +1694,16 @@ index 0000000..61eaee3
 +        return 1;
 +    }
 +
-+    std::vector<std::string> errors;
-+
-+    probe_captures caps;
-+    tensor_capture stub_input_hc;
-+    tensor_capture mtp_block_out_hc;
-+    tensor_capture stub_head_norm;
++    std::vector<std::string> prompts;
++    if (!prompt_file.empty()) {
++        std::string prompt_err;
++        if (!read_prompt_file(prompt_file, &prompts, &prompt_err)) {
++            std::fprintf(stderr, "prompt file error: %s: %s\n", prompt_file.c_str(), prompt_err.c_str());
++            return 2;
++        }
++    } else {
++        prompts.push_back(prompt);
++    }
 +
 +    ggml_backend_load_all();
 +
@@ -1564,81 +1718,30 @@ index 0000000..61eaee3
 +
 +    llama_model * model = llama_model_load_from_file(trunk_path.c_str(), model_params);
 +    if (model == nullptr) {
++        std::vector<std::string> errors;
 +        errors.push_back("failed to load trunk model");
-+        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
++        if (json && prompt_file.empty()) {
++            probe_result r;
++            r.errors = errors;
++            print_probe_result_json(trunk_path, sidecar_path, prompts[0], seed, r);
++        } else if (json) {
++            std::printf("{\n");
++            std::printf("  \"runtime_repo\": \"%s\",\n", "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark");
++            std::printf("  \"runtime_commit\": \"%s\",\n", "94073e2");
++            std::printf("  \"trunk_gguf_path\": \"%s\",\n", json_escape(trunk_path).c_str());
++            std::printf("  \"mtp_sidecar_path\": \"%s\",\n", json_escape(sidecar_path).c_str());
++            std::printf("  \"prompt_file_path\": \"%s\",\n", json_escape(prompt_file).c_str());
++            std::printf("  \"result_count\": 0,\n");
++            std::printf("  \"results\": [],\n");
++            std::printf("  \"ok\": false,\n");
++            std::printf("  \"errors\": [\"failed to load trunk model\"]\n");
++            std::printf("}\n");
 +        }
-+        return 2;
-+    }
-+
-+    const llama_vocab * vocab = llama_model_get_vocab(model);
-+    const std::string tokenized_prompt = ds4_render_chat_prompt(prompt);
-+
-+    const int32_t n_prompt = -llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), nullptr, 0, false, true);
-+    if (n_prompt <= 0) {
-+        errors.push_back("failed to tokenize prompt");
-+        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
-+        }
-+        llama_model_free(model);
 +        return 3;
 +    }
 +
-+    std::vector<llama_token> prompt_tokens((size_t) n_prompt);
-+    if (llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), false, true) < 0) {
-+        errors.push_back("failed to tokenize prompt (2nd pass)");
-+        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
-+        }
-+        llama_model_free(model);
-+        return 4;
-+    }
-+
-+    llama_context_params ctx_params = llama_context_default_params();
-+    ctx_params.n_ctx = (uint32_t) (prompt_tokens.size() + 8);
-+    ctx_params.n_batch = (uint32_t) prompt_tokens.size();
-+    ctx_params.n_ubatch = ctx_params.n_batch;
-+    ctx_params.no_perf = true;
-+    ctx_params.cb_eval = capture_probe_tensors;
-+    ctx_params.cb_eval_user_data = &caps;
-+
-+    llama_context * ctx = llama_init_from_model(model, ctx_params);
-+    if (ctx == nullptr) {
-+        errors.push_back("failed to init llama_context");
-+        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
-+        }
-+        llama_model_free(model);
-+        return 5;
-+    }
-+
-+    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), prompt_tokens.size());
-+    if (llama_decode(ctx, batch) != 0) {
-+        errors.push_back("llama_decode failed for prompt");
-+        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
-+        }
-+        llama_free(ctx);
-+        llama_model_free(model);
-+        return 6;
-+    }
-+
-+    const int32_t n_vocab = llama_vocab_n_tokens(vocab);
-+    const float * logits = llama_get_logits_ith(ctx, -1);
-+    const int32_t base_next_token_id = argmax_f32(logits, n_vocab);
-+    const std::string base_next_token = token_to_piece(vocab, (llama_token) base_next_token_id);
-+
-+    caps.enable = true;
-+    caps.token_embd = tensor_capture();
-+    caps.pre_hc_head = tensor_capture();
-+
-+    llama_token base_token = (llama_token) base_next_token_id;
-+    llama_batch base_batch = llama_batch_get_one(&base_token, 1);
-+    if (llama_decode(ctx, base_batch) != 0) {
-+        errors.push_back("llama_decode failed for base_next_token_id commit");
-+    }
-+
-+    caps.enable = false;
++    const llama_vocab * vocab = llama_model_get_vocab(model);
++    std::vector<std::string> sidecar_errors;
 +
 +    struct ggml_context * sidecar_ctx = nullptr;
 +    struct gguf_init_params params = {
@@ -1648,65 +1751,67 @@ index 0000000..61eaee3
 +
 +    struct gguf_context * sidecar_gguf = gguf_init_from_file(sidecar_path.c_str(), params);
 +    if (sidecar_gguf == nullptr || sidecar_ctx == nullptr) {
-+        errors.push_back("failed to open sidecar GGUF (metadata-only)");
-+        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
++        sidecar_errors.push_back("failed to open sidecar GGUF (metadata-only)");
++    } else {
++        const int64_t arch_kid = gguf_find_key(sidecar_gguf, "general.architecture");
++        if (arch_kid < 0) {
++            sidecar_errors.push_back("sidecar missing key: general.architecture");
++        } else if (std::strcmp(gguf_get_val_str(sidecar_gguf, arch_kid), "deepseek4_mtp_support") != 0) {
++            sidecar_errors.push_back("sidecar general.architecture != deepseek4_mtp_support");
 +        }
-+        if (sidecar_gguf) {
-+            gguf_free(sidecar_gguf);
-+        }
-+        if (sidecar_ctx) {
-+            ggml_free(sidecar_ctx);
-+        }
-+        llama_free(ctx);
-+        llama_model_free(model);
-+        return 7;
-+    }
-+
-+    const int64_t arch_kid = gguf_find_key(sidecar_gguf, "general.architecture");
-+    if (arch_kid < 0) {
-+        errors.push_back("sidecar missing key: general.architecture");
-+    } else if (std::strcmp(gguf_get_val_str(sidecar_gguf, arch_kid), "deepseek4_mtp_support") != 0) {
-+        errors.push_back("sidecar general.architecture != deepseek4_mtp_support");
 +    }
 +
 +    ds4::deepseek4_mtp_sidecar sidecar;
 +    std::string bind_err;
-+    const bool bind_ok = ds4::bind_deepseek4_mtp_sidecar(&sidecar, sidecar_ctx, &bind_err);
-+    if (!bind_ok) {
-+        errors.push_back(std::string("sidecar bind failed: ") + bind_err);
++    const bool bind_ok = sidecar_ctx != nullptr && ds4::bind_deepseek4_mtp_sidecar(&sidecar, sidecar_ctx, &bind_err);
++    if (sidecar_ctx != nullptr && !bind_ok) {
++        sidecar_errors.push_back(std::string("sidecar bind failed: ") + bind_err);
 +    }
 +
-+    int32_t mtp_stub_token_id = -1;
-+    std::string mtp_stub_token;
++    if (prompt_file.empty()) {
++        const probe_result r = run_prompt_probe(model, vocab, prompts[0], seed, load_sidecar_weights, bind_ok, sidecar_errors, sidecar);
++        if (json) {
++            print_probe_result_json(trunk_path, sidecar_path, prompts[0], seed, r);
++        }
++        if (sidecar_gguf != nullptr) gguf_free(sidecar_gguf);
++        if (sidecar_ctx != nullptr) ggml_free(sidecar_ctx);
++        llama_model_free(model);
++        return 0;
++    }
 +
-+    if (load_sidecar_weights && bind_ok) {
-+        std::string stub_err;
-+        if (!compute_stub_mtp_input_hc(caps.token_embd, caps.pre_hc_head, sidecar, model->hparams, &stub_input_hc, &stub_err)) {
-+            errors.push_back(std::string("stub mtp input_hc compute failed: ") + stub_err);
-+        }
-+        if (!compute_mtp_gamma1_block(stub_input_hc, sidecar, model->hparams, (int32_t) prompt_tokens.size(), &mtp_block_out_hc, &stub_head_norm, &stub_err)) {
-+            errors.push_back(std::string("gamma1 mtp block compute failed: ") + stub_err);
-+        }
-+        if (stub_head_norm.got) {
-+            if (!compute_argmax_logits_from_output(stub_head_norm, model, &mtp_stub_token_id, &stub_err)) {
-+                errors.push_back(std::string("gamma1 draft token failed: ") + stub_err);
-+            } else {
-+                mtp_stub_token = token_to_piece(vocab, (llama_token) mtp_stub_token_id);
++    bool all_ok = true;
++    if (json) {
++        std::printf("{\n");
++        std::printf("  \"runtime_repo\": \"%s\",\n", "https://github.com/kamnxt/llama.cpp-deepseek-v4-flash-cuda-spark");
++        std::printf("  \"runtime_commit\": \"%s\",\n", "94073e2");
++        std::printf("  \"trunk_gguf_path\": \"%s\",\n", json_escape(trunk_path).c_str());
++        std::printf("  \"mtp_sidecar_path\": \"%s\",\n", json_escape(sidecar_path).c_str());
++        std::printf("  \"prompt_file_path\": \"%s\",\n", json_escape(prompt_file).c_str());
++        std::printf("  \"seed\": %d,\n", (int) seed);
++        std::printf("  \"result_count\": %zu,\n", prompts.size());
++        std::printf("  \"results\": [\n");
++    }
++
++    for (size_t i = 0; i < prompts.size(); i++) {
++        const probe_result r = run_prompt_probe(model, vocab, prompts[i], seed, load_sidecar_weights, bind_ok, sidecar_errors, sidecar);
++        all_ok = all_ok && r.errors.empty();
++        if (json) {
++            if (i != 0) {
++                std::printf(",\n");
 +            }
++            print_probe_result_json(trunk_path, sidecar_path, prompts[i], seed, r);
 +        }
-+    } else {
-+        errors.push_back("stub mtp compute skipped (requires --load-sidecar-weights + successful bind)");
 +    }
-+
-+    gguf_free(sidecar_gguf);
-+    ggml_free(sidecar_ctx);
 +
 +    if (json) {
-+        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, mtp_stub_token_id, mtp_stub_token, caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, errors.empty(), errors);
++        std::printf("\n  ],\n");
++        std::printf("  \"ok\": %s,\n", all_ok ? "true" : "false");
++        std::printf("  \"errors\": []\n");
++        std::printf("}\n");
 +    }
 +
-+    llama_free(ctx);
++    if (sidecar_gguf != nullptr) gguf_free(sidecar_gguf);
++    if (sidecar_ctx != nullptr) ggml_free(sidecar_ctx);
 +    llama_model_free(model);
 +
 +    return 0;

@@ -170,6 +170,12 @@ To emit `schema="ds4_pairwise_judge_record_v5"` (compact decision keys; compact 
 python3 scripts/pairwise_judge_record.py --record-schema v5 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tokens-a-out <n> --tokens-b-out <n> --tokens-judge-in <n> --tokens-judge-out <n> --latency-a-ms <n> --latency-b-ms <n> --latency-judge-ms <n>
 ```
 
+If your harness already tracks compact budget arrays, you can pass them directly:
+
+```bash
+python3 scripts/pairwise_judge_record.py --record-schema v5 --pair-id <id> --model-a <a> --model-b <b> --judge-model ds4 --decision <judge.txt> --tk "[<a_out>,<b_out>,<judge_in>,<judge_out>]" --lt "[<a_ms>,<b_ms>,<judge_ms>]"
+```
+
 To enforce strict margin/score consistency + compact tags while wrapping for schema v1/v2, add `--strict`:
 
 ```bash
