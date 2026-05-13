@@ -7,7 +7,7 @@ usage()
 ops_install_staged_assets.sh -- install /tmp-staged DS4 deploy assets (human-run)
 
 Usage:
-  ops_install_staged_assets.sh --instance <name> [--dry-run] [--overwrite-config] [--install-timers] [--install-spark-units] [--start-preflight] [--preflight tp2|tp3|tp4] [--strict]
+  ops_install_staged_assets.sh --instance <name> [--dry-run] [--overwrite-config] [--install-timers] [--install-spark-units] [--start-preflight] [--preflight tp2|tp23|tp3|tp4] [--strict]
 
 Environment (optional overrides):
   DS4_STAGED_SYSTEMD_DIR   Default: /tmp/ds4-systemd
@@ -87,10 +87,10 @@ if [ "$instance" = "" ]; then
 fi
 
 case "$preflight" in
-    tp2|tp3|tp4)
+    tp2|tp23|tp3|tp4)
         ;;
     *)
-        echo "invalid --preflight: $preflight (expected tp2|tp3|tp4)" >&2
+        echo "invalid --preflight: $preflight (expected tp2|tp23|tp3|tp4)" >&2
         usage >&2
         exit 2
         ;;
@@ -250,12 +250,14 @@ echo
 echo "== /opt/ds4 scripts =="
 run install -d -m 0755 /opt/ds4 "$scripts_dir"
 	need_file "$staged_scripts_dir/ops_tp2_readiness.sh"
+	need_file "$staged_scripts_dir/ops_tp23_readiness.sh"
 	need_file "$staged_scripts_dir/ops_tp3_readiness.sh"
 	need_file "$staged_scripts_dir/ops_tp4_readiness.sh"
 	need_file "$staged_scripts_dir/ops_ds4_env_check.sh"
 	need_file "$staged_scripts_dir/ops_ds4_config_check.sh"
 	need_file "$staged_scripts_dir/ops_collect_support_bundle.sh"
 	run install -m 0755 "$staged_scripts_dir/ops_tp2_readiness.sh" "$scripts_dir/ops_tp2_readiness.sh"
+	run install -m 0755 "$staged_scripts_dir/ops_tp23_readiness.sh" "$scripts_dir/ops_tp23_readiness.sh"
 	run install -m 0755 "$staged_scripts_dir/ops_tp3_readiness.sh" "$scripts_dir/ops_tp3_readiness.sh"
 	run install -m 0755 "$staged_scripts_dir/ops_tp4_readiness.sh" "$scripts_dir/ops_tp4_readiness.sh"
 	run install -m 0755 "$staged_scripts_dir/ops_ds4_env_check.sh" "$scripts_dir/ops_ds4_env_check.sh"

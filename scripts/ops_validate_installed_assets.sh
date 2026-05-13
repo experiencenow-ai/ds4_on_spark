@@ -158,6 +158,7 @@ echo "== /opt/ds4 scripts =="
 need_exec "$scripts_dir/ops_ds4_env_check.sh"
 need_exec "$scripts_dir/ops_ds4_config_check.sh"
 need_exec "$scripts_dir/ops_tp2_readiness.sh"
+need_exec "$scripts_dir/ops_tp23_readiness.sh"
 if [ -x "$scripts_dir/ops_tp3_readiness.sh" ]; then
     need_exec "$scripts_dir/ops_tp3_readiness.sh"
 fi

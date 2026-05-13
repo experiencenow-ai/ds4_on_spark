@@ -34,6 +34,9 @@ edit host-specific values, then enable services with `systemctl`.
 - Optional: `ds4-tp4-strict@.service` is like `ds4@.service` but *requires* `ds4-preflight-tp4-strict@%i.service` before start (strict TP=4 gating).
 - Optional: `ds4-preflight@.timer` runs non-destructive preflight on boot and periodically after.
 - Optional: `ds4-preflight-strict@.timer` runs strict preflight on boot and periodically after.
+- Optional TP=2 -> TP=3 transition helpers:
+  - `ds4-preflight-tp23@.service`
+  - `ds4-preflight-tp23-strict@.service`
 - Optional TP=3 helpers:
   - `ds4-preflight-tp3@.service`
   - `ds4-preflight-tp3-strict@.service`
