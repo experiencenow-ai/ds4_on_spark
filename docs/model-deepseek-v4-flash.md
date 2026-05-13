@@ -870,13 +870,18 @@ Recorded probe outputs (range-read header + tensor table only; no full downloads
 
 Pinned GGUF MTP status snapshot (derived from `fixtures/model_contract/deepseek_v4_flash/pinned_gguf_inspects_summary.json` `generated_at_utc` field; built from the JSON probe outputs above):
 
-| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_contract.complete` | `mtp_trust.status` |
-|---|---|---:|---:|---:|---|
-| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | — | absent |
-| nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | — | absent |
-| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | false | false | — | absent |
-| antirez trunk + MTP sidecar (artifact set; DS4-tuned sidecar is complete) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | true | true | false | incomplete |
-| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | true | true | false | incomplete |
+| Artifact set | Probe JSON | `mtp_present` | `mtp_namespace.has_mtp0` | `mtp_preservation.status` | `mtp_preservation.mtp_keys_sha256_match_official` | DS4 sidecar complete? |
+|---|---|---:|---:|---|---:|---:|
+| Preyazz trunk (`Q4_K_M`) | `docs/gguf-inspect-preyazz-6c6d74c-q4-k-m.json` | false | false | absent | — | — |
+| nsparks trunk (mixed `F32` + `F8_E4M3_B128`; experts `MXFP4`) | `docs/gguf-inspect-nsparks-0b34e0b-fp4-fp8-native.json` | false | false | absent | — | — |
+| antirez trunk (IQ2XXS/Q2_K/Q8_0 mix) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2.json` | false | false | absent | — | — |
+| antirez trunk + MTP sidecar (artifact set) | `docs/gguf-inspect-antirez-3274cdc-iq2xxs-chat-v2-mtp-set.json` | true | true | incomplete | false | true |
+| antirez MTP sidecar (separate file) | `docs/gguf-inspect-antirez-3274cdc-mtp-sidecar.json` | true | true | incomplete | false | true |
+
+Notes:
+
+- `mtp_namespace.has_mtp0=true` is required but not sufficient: in the pinned snapshot above, the only MTP-capable candidates are DS4-tuned GGUF sidecars (`DS4 sidecar complete? == true`), and they do **not** preserve the official upstream MTP tensor-key schema (`mtp_keys_sha256_match_official=false` and `mtp_preservation.status=incomplete`).
+- Treat MTP as disabled/untrusted until an artifact both preserves the official MTP key subset (fingerprint gate) and passes an MTP oracle (semantic gate).
 
 For external/quantized artifacts:
 
