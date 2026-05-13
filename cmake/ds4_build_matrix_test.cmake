@@ -5,7 +5,7 @@ if(NOT DEFINED DS4_TMP_DIR)
 	message(FATAL_ERROR "DS4_TMP_DIR is required")
 endif()
 
-function(ds4_run_cmake_build name enable_tests enable_cli)
+function(ds4_run_cmake_build name enable_tests enable_cli enable_asan enable_ubsan)
 	set(_b "${DS4_TMP_DIR}/_matrix_${name}")
 	file(REMOVE_RECURSE "${_b}")
 	file(MAKE_DIRECTORY "${_b}")
@@ -17,6 +17,8 @@ function(ds4_run_cmake_build name enable_tests enable_cli)
 			"-DDS4_ENABLE_TESTS=${enable_tests}"
 			"-DDS4_ENABLE_CLI=${enable_cli}"
 			"-DDS4_ENABLE_CUDA=OFF"
+			"-DDS4_ENABLE_ASAN=${enable_asan}"
+			"-DDS4_ENABLE_UBSAN=${enable_ubsan}"
 			"-DDS4_WERROR=ON"
 		OUTPUT_VARIABLE _cfg_out
 		ERROR_VARIABLE _cfg_err
@@ -38,6 +40,7 @@ function(ds4_run_cmake_build name enable_tests enable_cli)
 endfunction()
 
 # Build-only matrix checks. Keep these CPU-only so they run on macOS and generic CI.
-ds4_run_cmake_build(lib_only OFF OFF)
-ds4_run_cmake_build(cli_only OFF ON)
-ds4_run_cmake_build(tests_no_cli ON OFF)
+ds4_run_cmake_build(lib_only OFF OFF OFF OFF)
+ds4_run_cmake_build(cli_only OFF ON OFF OFF)
+ds4_run_cmake_build(tests_no_cli ON OFF OFF OFF)
+ds4_run_cmake_build(tests_cli_sanitize ON ON ON ON)
