@@ -16,6 +16,7 @@ MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
 PROMPT="${PROMPT:-Hello.}"
 SEED="${SEED:-1234}"
 CTX="${CTX:-32768}"
+DS4_EXTRA_ARGS="${DS4_EXTRA_ARGS:-}"
 
 JSON_ONLY="${JSON_ONLY:-0}"
 
@@ -170,4 +171,4 @@ cd "$DS4_DIR"
 DS4_MTP_PROBE="${DS4_MTP_PROBE:-1}"
 DS4_MTP_FULL_LOGITS="${DS4_MTP_FULL_LOGITS:-1}"
 export DS4_MTP_PROBE DS4_MTP_FULL_LOGITS
-exec sh -lc "\"$DS4_BIN\" --cuda -m \"$TRUNK_GGUF\" --mtp \"$MTP_SIDECAR_GGUF\" -p \"$PROMPT\" -c \"$CTX\" --seed \"$SEED\" --dump-mtp-one-token-json"
+exec sh -lc "\"$DS4_BIN\" --cuda -m \"$TRUNK_GGUF\" --mtp \"$MTP_SIDECAR_GGUF\" -p \"$PROMPT\" -c \"$CTX\" --seed \"$SEED\" $DS4_EXTRA_ARGS --dump-mtp-one-token-json"
