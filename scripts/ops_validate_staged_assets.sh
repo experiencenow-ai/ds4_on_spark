@@ -12,6 +12,8 @@ Usage:
 Environment (optional overrides):
   DS4_STAGED_SYSTEMD_DIR   Default: /tmp/ds4-systemd
   DS4_STAGED_SYSTEMD_USER_DIR Default: /tmp/ds4-systemd-user
+  DS4_STAGED_SYSTEMD_DROPINS_DIR Default: /tmp/ds4-systemd-dropins
+  DS4_STAGED_SYSTEMD_USER_DROPINS_DIR Default: /tmp/ds4-systemd-user-dropins
   DS4_STAGED_CONFIG_DIR    Default: /tmp/ds4-config
   DS4_STAGED_SYSUSERS_DIR  Default: /tmp/ds4-sysusers
   DS4_STAGED_TMPFILES_DIR  Default: /tmp/ds4-tmpfiles
@@ -39,6 +41,8 @@ fi
 
 systemd_dir="${DS4_STAGED_SYSTEMD_DIR:-/tmp/ds4-systemd}"
 systemd_user_dir="${DS4_STAGED_SYSTEMD_USER_DIR:-/tmp/ds4-systemd-user}"
+systemd_dropins_dir="${DS4_STAGED_SYSTEMD_DROPINS_DIR:-/tmp/ds4-systemd-dropins}"
+systemd_user_dropins_dir="${DS4_STAGED_SYSTEMD_USER_DROPINS_DIR:-/tmp/ds4-systemd-user-dropins}"
 config_dir="${DS4_STAGED_CONFIG_DIR:-/tmp/ds4-config}"
 sysusers_dir="${DS4_STAGED_SYSUSERS_DIR:-/tmp/ds4-sysusers}"
 tmpfiles_dir="${DS4_STAGED_TMPFILES_DIR:-/tmp/ds4-tmpfiles}"
@@ -66,6 +70,8 @@ need_key_in_file()
 echo "== validate staged ds4 assets =="
 echo "systemd_dir=$systemd_dir"
 echo "systemd_user_dir=$systemd_user_dir"
+echo "systemd_dropins_dir=$systemd_dropins_dir"
+echo "systemd_user_dropins_dir=$systemd_user_dropins_dir"
 echo "config_dir=$config_dir"
 echo "sysusers_dir=$sysusers_dir"
 echo "tmpfiles_dir=$tmpfiles_dir"
@@ -117,6 +123,24 @@ need_file "$systemd_user_dir/ds4-support-bundle@.timer"
 
 need_file "$systemd_user_dir/spark-master@.service"
 need_file "$systemd_user_dir/spark-worker@.service"
+
+echo "== optional: staged unit drop-ins (best effort) =="
+if [ -d "$systemd_dropins_dir" ]; then
+    need_file "$systemd_dropins_dir/README.md"
+    need_file "$systemd_dropins_dir/ds4@.service.d/20-timeouts.conf.example"
+    need_file "$systemd_dropins_dir/ds4@.service.d/30-restart-policy.conf.example"
+    need_file "$systemd_dropins_dir/ds4@.service.d/40-execstart-override.conf.example"
+else
+    echo "skip (missing dir: $systemd_dropins_dir)"
+fi
+if [ -d "$systemd_user_dropins_dir" ]; then
+    need_file "$systemd_user_dropins_dir/README.md"
+    need_file "$systemd_user_dropins_dir/ds4@.service.d/20-timeouts.conf.example"
+    need_file "$systemd_user_dropins_dir/ds4@.service.d/40-execstart-override.conf.example"
+else
+    echo "skip (missing dir: $systemd_user_dropins_dir)"
+fi
+echo
 
 need_file "$config_dir/ds4.env.example"
 need_file "$config_dir/ds4-spark0.env.example"

@@ -20,6 +20,7 @@ edit host-specific values, then enable services with `systemctl`.
 `deploy/systemd/` contains systemd templates:
 
 - Quick pointers: `deploy/systemd/README.md` and `deploy/systemd-user/README.md`.
+- Optional drop-in examples (overrides without editing base unit files): `deploy/systemd-dropins/README.md` and `deploy/systemd-user-dropins/README.md`.
 
 - `ds4@.service` expects:
   - an optional shared env file at `/etc/ds4/ds4.env`
@@ -50,6 +51,11 @@ edit host-specific values, then enable services with `systemctl`.
 The `%i` instance name should match the host role, e.g. `spark0` or `spark1`.
 
 Optional: `deploy/systemd-user/` contains user-service + timer templates for `systemd --user` (developer bring-up). See `docs/deployment-systemd-user.md`.
+
+Optional: drop-in examples (recommended alternative to editing unit templates directly):
+
+- `deploy/systemd-dropins/` → system units (`/etc/systemd/system/...`)
+- `deploy/systemd-user-dropins/` → user units (`~/.config/systemd/user/...`)
 
 Optional: `deploy/compose/` contains Docker Compose examples for manual model
 serving experiments, including the attributed AEON-7 Qwen3.6 27B XS + DFlash

@@ -679,10 +679,37 @@ fi
     return 0
 }
 
+print_if_set()
+{
+    key="$1"
+    eval "val=\${$key:-}"
+    if [ "$val" != "" ]; then
+        echo "$key=$val"
+    fi
+}
+
 echo "== tp3 readiness (safe) =="
 date -Is 2>/dev/null || date || true
 echo "self=$self"
 echo "topology=$topology"
+echo
+
+echo "== ds4 env (optional) =="
+print_if_set DS4_INSTANCE
+if [ "${DS4_INSTANCE:-}" != "" ] && [ "$self" != "$DS4_INSTANCE" ]; then
+    echo "warning: DS4_INSTANCE mismatch: DS4_INSTANCE=$DS4_INSTANCE --self=$self" >&2
+fi
+print_if_set DS4_WORLD_SIZE
+print_if_set DS4_RANK
+print_if_set DS4_MASTER_ADDR
+print_if_set DS4_MASTER_PORT
+print_if_set DS4_METRICS_ADDR
+print_if_set DS4_METRICS_PORT
+print_if_set DS4_CONFIG_PATH
+print_if_set DS4_RING_HOSTS
+print_if_set DS4_PEER_HOST
+print_if_set DS4_PEER_SSH
+print_if_set DS4_EXPECT_IFACE
 
 if [ "$strict" -ne 0 ]; then
     if ! strict_validate; then

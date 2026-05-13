@@ -120,6 +120,7 @@ See: `docs/deployment-systemd-user.md` and `docs/deployment-spark012-staged-layo
 ## Conventions + Runbooks
 
 - Deployment/systemd templates: `docs/deployment-systemd.md`
+- Optional systemd overrides (drop-ins): `deploy/systemd-dropins/README.md`
 - Logging + metrics: `docs/ops-logging-metrics.md`
 - SSH + network: `docs/ops-ssh-network-runbook.md`
 - TP=3 network + ports: `docs/ops-spark012-network-ports.md`
