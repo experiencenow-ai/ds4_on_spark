@@ -125,10 +125,11 @@ REPORT_MD="$OUT_DIR/report.md"
 echo "writing report to: $OUT_DIR"
 echo "== building remote dummy movement benchmark =="
 
-ssh $SSH_OPTS "$target" "set -eu
-rm -rf '$REMOTE_DIR'
-mkdir -p '$REMOTE_DIR'
-cat > '$REMOTE_DIR/mtp_dummy_movement.cu' <<'EOF_CU'
+ssh $SSH_OPTS "$target" "REMOTE_DIR='$REMOTE_DIR' sh -s" >"$OUT_DIR/remote_build_stdout.txt" 2>"$OUT_DIR/remote_build_stderr.txt" <<'REMOTE_SH'
+set -eu
+rm -rf "$REMOTE_DIR"
+mkdir -p "$REMOTE_DIR"
+cat > "$REMOTE_DIR/mtp_dummy_movement.cu" <<'EOF_CU'
 #include <cuda_runtime.h>
 
 #include <stdint.h>
@@ -136,7 +137,7 @@ cat > '$REMOTE_DIR/mtp_dummy_movement.cu' <<'EOF_CU'
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK_CUDA(expr) do { cudaError_t err__ = (expr); if ( err__ != cudaSuccess ) { fprintf(stderr,\"cuda error: %s:%d %s: %s\\n\",__FILE__,__LINE__,#expr,cudaGetErrorString(err__)); return(10); } } while (0)
+#define CHECK_CUDA(expr) do { cudaError_t err__ = (expr); if ( err__ != cudaSuccess ) { fprintf(stderr,"cuda error: %s:%d %s: %s\n",__FILE__,__LINE__,#expr,cudaGetErrorString(err__)); return(10); } } while (0)
 
 typedef struct
 {
@@ -201,7 +202,7 @@ static int32_t parse_args(cfg_t *cfg,int32_t argc,char **argv)
 			cfg->json = 1;
 		else
 		{
-			fprintf(stderr,\"unknown arg: %s\\n\",argv[i]);
+			fprintf(stderr,"unknown arg: %s\n",argv[i]);
 			return(-1);
 		}
 	}
@@ -416,34 +417,34 @@ int main(int argc,char **argv)
 	cold_total = cfg.steps * cfg.cold_bytes_per_step;
 	if ( cfg.json )
 	{
-		printf(\"{\\n\");
-		printf(\"  \\\"ok\\\": true,\\n\");
-		printf(\"  \\\"device\\\": \\\"%s\\\",\\n\",prop.name);
-		printf(\"  \\\"steps\\\": %llu,\\n\",(unsigned long long)cfg.steps);
-		printf(\"  \\\"warmup\\\": %llu,\\n\",(unsigned long long)cfg.warmup);
-		printf(\"  \\\"draft_len\\\": %llu,\\n\",(unsigned long long)cfg.draft_len);
-		printf(\"  \\\"verify_rows\\\": %llu,\\n\",(unsigned long long)cfg.verify_rows);
-		printf(\"  \\\"n_embd\\\": %llu,\\n\",(unsigned long long)cfg.n_embd);
-		printf(\"  \\\"n_hc\\\": %llu,\\n\",(unsigned long long)cfg.n_hc);
-		printf(\"  \\\"n_vocab\\\": %llu,\\n\",(unsigned long long)cfg.n_vocab);
-		printf(\"  \\\"raw_cache_rows\\\": %llu,\\n\",(unsigned long long)cfg.raw_cache_rows);
-		printf(\"  \\\"raw_row_bytes\\\": %llu,\\n\",(unsigned long long)cfg.raw_row_bytes);
-		printf(\"  \\\"resident_bytes\\\": %llu,\\n\",(unsigned long long)cfg.resident_bytes);
-		printf(\"  \\\"cold_bytes_per_step\\\": %llu,\\n\",(unsigned long long)cfg.cold_bytes_per_step);
-		printf(\"  \\\"host_roundtrip\\\": %d,\\n\",cfg.host_roundtrip);
-		printf(\"  \\\"startup_ms\\\": %.6f,\\n\",(double)startup_ms);
-		printf(\"  \\\"timed_ms\\\": %.6f,\\n\",(double)ms);
-		printf(\"  \\\"steps_per_s\\\": %.6f,\\n\",((double)cfg.steps * 1000.0) / (double)ms);
-		printf(\"  \\\"dummy_output_tokens_per_s_draft_len_plus_one\\\": %.6f,\\n\",((double)cfg.steps * (double)(cfg.draft_len + 1ULL) * 1000.0) / (double)ms);
-		printf(\"  \\\"estimated_movement_bytes\\\": %llu,\\n\",(unsigned long long)movement_bytes);
-		printf(\"  \\\"estimated_cold_copy_bytes\\\": %llu,\\n\",(unsigned long long)cold_total);
-		printf(\"  \\\"estimated_total_bytes\\\": %llu,\\n\",(unsigned long long)(movement_bytes + cold_total));
-		printf(\"  \\\"estimated_movement_gib_s\\\": %.6f\\n\",((double)(movement_bytes + cold_total) / 1073741824.0) / ((double)ms / 1000.0));
-		printf(\"}\\n\");
+		printf("{\n");
+		printf("  \"ok\": true,\n");
+		printf("  \"device\": \"%s\",\n",prop.name);
+		printf("  \"steps\": %llu,\n",(unsigned long long)cfg.steps);
+		printf("  \"warmup\": %llu,\n",(unsigned long long)cfg.warmup);
+		printf("  \"draft_len\": %llu,\n",(unsigned long long)cfg.draft_len);
+		printf("  \"verify_rows\": %llu,\n",(unsigned long long)cfg.verify_rows);
+		printf("  \"n_embd\": %llu,\n",(unsigned long long)cfg.n_embd);
+		printf("  \"n_hc\": %llu,\n",(unsigned long long)cfg.n_hc);
+		printf("  \"n_vocab\": %llu,\n",(unsigned long long)cfg.n_vocab);
+		printf("  \"raw_cache_rows\": %llu,\n",(unsigned long long)cfg.raw_cache_rows);
+		printf("  \"raw_row_bytes\": %llu,\n",(unsigned long long)cfg.raw_row_bytes);
+		printf("  \"resident_bytes\": %llu,\n",(unsigned long long)cfg.resident_bytes);
+		printf("  \"cold_bytes_per_step\": %llu,\n",(unsigned long long)cfg.cold_bytes_per_step);
+		printf("  \"host_roundtrip\": %d,\n",cfg.host_roundtrip);
+		printf("  \"startup_ms\": %.6f,\n",(double)startup_ms);
+		printf("  \"timed_ms\": %.6f,\n",(double)ms);
+		printf("  \"steps_per_s\": %.6f,\n",((double)cfg.steps * 1000.0) / (double)ms);
+		printf("  \"dummy_output_tokens_per_s_draft_len_plus_one\": %.6f,\n",((double)cfg.steps * (double)(cfg.draft_len + 1ULL) * 1000.0) / (double)ms);
+		printf("  \"estimated_movement_bytes\": %llu,\n",(unsigned long long)movement_bytes);
+		printf("  \"estimated_cold_copy_bytes\": %llu,\n",(unsigned long long)cold_total);
+		printf("  \"estimated_total_bytes\": %llu,\n",(unsigned long long)(movement_bytes + cold_total));
+		printf("  \"estimated_movement_gib_s\": %.6f\n",((double)(movement_bytes + cold_total) / 1073741824.0) / ((double)ms / 1000.0));
+		printf("}\n");
 	}
 	else
 	{
-		printf(\"ok device=%s steps=%llu timed_ms=%.3f steps_per_s=%.3f movement_gib_s=%.3f\\n\",prop.name,(unsigned long long)cfg.steps,(double)ms,((double)cfg.steps * 1000.0) / (double)ms,((double)(movement_bytes + cold_total) / 1073741824.0) / ((double)ms / 1000.0));
+		printf("ok device=%s steps=%llu timed_ms=%.3f steps_per_s=%.3f movement_gib_s=%.3f\n",prop.name,(unsigned long long)cfg.steps,(double)ms,((double)cfg.steps * 1000.0) / (double)ms,((double)(movement_bytes + cold_total) / 1073741824.0) / ((double)ms / 1000.0));
 	}
 	CHECK_CUDA(cudaFreeHost(row_tops_host));
 	if ( cold_host != 0 )
@@ -477,8 +478,8 @@ else
 	echo 'nvcc not found' >&2
 	exit 3
 fi
-\$NVCC -O3 --use_fast_math -std=c++17 -arch=sm_121 -o '$REMOTE_DIR/mtp_dummy_movement' '$REMOTE_DIR/mtp_dummy_movement.cu'
-" >"$OUT_DIR/remote_build_stdout.txt" 2>"$OUT_DIR/remote_build_stderr.txt"
+"$NVCC" -O3 --use_fast_math -std=c++17 -arch=sm_121 -o "$REMOTE_DIR/mtp_dummy_movement" "$REMOTE_DIR/mtp_dummy_movement.cu"
+REMOTE_SH
 
 run_remote_variant()
 {
