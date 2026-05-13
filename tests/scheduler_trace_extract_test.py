@@ -4,6 +4,47 @@ from sim.scheduler import trace_extract
 
 
 class SchedulerTraceExtractTest(unittest.TestCase):
+    def test_extract_route_record_coerces_numeric_strings(self) -> None:
+        obj = {
+            "t_ms": "1.25",
+            "cls": "0",
+            "route": {"expert_id": "7", "k": "2"},
+            "mtp": {"accepted": "1", "rejected": "0"},
+            "cost_scale": "1.5",
+            "decode_ms": "0.75",
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        self.assertEqual(rec.get("t_ms"), 1.25)
+        self.assertEqual(rec.get("cls"), "interactive")
+        self.assertEqual(rec.get("candidates"), [7])
+        self.assertEqual(rec.get("k"), 2)
+        self.assertEqual(rec.get("accepted_mtp"), 1)
+        self.assertEqual(rec.get("rejected_mtp"), 0)
+        self.assertEqual(rec.get("cost_scale"), 1.5)
+        self.assertEqual(rec.get("decode_ms"), 0.75)
+
+    def test_extract_route_record_coerces_nested_layer_cost_scale(self) -> None:
+        obj = {
+            "t_ms": 0.0,
+            "cls": "batch",
+            "route": {
+                "layers": [
+                    {"candidates": ["1", "2"], "k": "1", "cost_scale": "2.0"},
+                    {"candidates": ["3"], "k": "1", "cost_scale": "1.0"},
+                ]
+            },
+        }
+        rec = trace_extract.extract_route_record(obj)
+        self.assertIsNotNone(rec)
+        assert rec is not None
+        layers = rec.get("layers")
+        self.assertIsInstance(layers, list)
+        assert isinstance(layers, list)
+        self.assertEqual(layers[0].get("cost_scale"), 2.0)
+        self.assertEqual(layers[1].get("cost_scale"), 1.0)
+
     def test_pack_layers_by_token_index_orders_by_layer_index(self) -> None:
         routes = [
             {"token_index": 0, "layer_index": 2, "t_ms": 0.0, "cls": "batch", "candidates": [3]},
