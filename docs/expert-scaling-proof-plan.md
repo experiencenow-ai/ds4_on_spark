@@ -87,6 +87,18 @@ Use two fixture classes:
        --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
      ```
 
+     Important:
+     - `ffn_moe_topk` dumps contain the **selected experts** for each token/layer.
+     - When replaying these route-only traces in `sim/scheduler/scheduler_sim.py`, set `K=topk` (for DS4: `6`) to avoid underestimating queue depth and service load:
+
+       ```bash
+       python3 sim/scheduler/scheduler_sim.py \
+         --trace-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl \
+         --trace-time-mode dt_ms --trace-non-route error \
+         --k-min-batch 6 --k-max-batch 6 --k-min-interactive 6 --k-max-interactive 6 \
+         --q-low 0 --q-high 0
+       ```
+
      Or run the same sweeps directly from the dump directory (writes a JSON report):
 
      ```bash
