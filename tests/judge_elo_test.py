@@ -123,6 +123,57 @@ class JudgeEloTest(unittest.TestCase):
                 td,
             ])
 
+    def test_compact_records_cli_emits_record_v5(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v2.jsonl")
+        compact_script = os.path.join(root, "scripts", "judge_elo_compact_records.py")
+        with tempfile.TemporaryDirectory() as td:
+            out_path = os.path.join(td, "out_v5.jsonl")
+            subprocess.check_call([
+                "python3",
+                compact_script,
+                "--in",
+                in_path,
+                "--out",
+                out_path,
+                "--quiet",
+            ])
+            for _, obj in schema.iter_jsonl(out_path):
+                self.assertEqual(obj.get("schema"), schema.SCHEMA_RECORD_V5)
+                self.assertEqual(schema.validate_record(obj), [])
+                self.assertIn("tk", obj)
+                self.assertIn("lt", obj)
+                self.assertNotIn("tokens", obj)
+                self.assertNotIn("latency_ms", obj)
+                if obj.get("parse_valid") is True:
+                    self.assertIn("w", obj)
+                    self.assertNotIn("winner", obj)
+
+    def test_compact_records_skip_invalid(self) -> None:
+        root = os.path.dirname(os.path.dirname(__file__))
+        in_path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records_v2.jsonl")
+        with tempfile.TemporaryDirectory() as td:
+            tmp_in = os.path.join(td, "mixed.jsonl")
+            tmp_out = os.path.join(td, "out_v5.jsonl")
+            with open(in_path, "r", encoding="utf-8") as f:
+                first = f.readline().strip()
+            with open(tmp_in, "w", encoding="utf-8") as f:
+                f.write(first + "\n")
+                f.write('{"schema":"ds4_pairwise_judge_record_v2"}\n')
+            subprocess.check_call([
+                "python3",
+                os.path.join(root, "scripts", "judge_elo_compact_records.py"),
+                "--skip-invalid",
+                "--in",
+                tmp_in,
+                "--out",
+                tmp_out,
+                "--quiet",
+            ])
+            out_rows = list(schema.iter_jsonl(tmp_out))
+            self.assertEqual(len(out_rows), 1)
+            self.assertEqual(out_rows[0][1].get("schema"), schema.SCHEMA_RECORD_V5)
+
     def test_budget_computed(self) -> None:
         root = os.path.dirname(os.path.dirname(__file__))
         path = os.path.join(root, "fixtures", "judge-elo", "sample_judge_records.jsonl")
