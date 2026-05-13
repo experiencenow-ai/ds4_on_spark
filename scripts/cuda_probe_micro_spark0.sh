@@ -324,8 +324,10 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
+	(void)cudaGetLastError();
 	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
+		(void)cudaGetLastError();
 		cuda_arch = 0;
 		if ( cudaMalloc((void **)&d_arch,sizeof(uint32_t)) == cudaSuccess )
 		{
@@ -333,7 +335,11 @@ int main(int argc,char **argv)
 			{
 				write_cuda_arch<<<1,1>>>(d_arch);
 				if ( cudaGetLastError() == cudaSuccess )
+				{
+					(void)cudaDeviceSynchronize();
+					(void)cudaGetLastError();
 					(void)cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost);
+				}
 			}
 			cudaFree(d_arch);
 			d_arch = 0;
