@@ -16,6 +16,10 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - fix CUDA weight-cache keying so cached ranges are keyed by `(model_map, fd, offset)` (not just `offset`)
     - add `ds4_gpu_set_model_fd_for_map(model_map, fd)` so the MTP sidecar can register its fd without clobbering the trunk fd state
     - avoids trunk/sidecar cache collisions when `DS4_CUDA_WEIGHT_CACHE=1` (or when fd-caching is enabled)
+    - keeps the trunk startup tensor cache enabled when `--mtp` is active, so decode does not lazily page trunk tensors while drafting/verifying
+    - auto-budgets the MTP trunk cache to half of reported CUDA memory unless `DS4_CUDA_WEIGHT_CACHE_LIMIT_GB` is set
+    - defaults MTP CUDA weight arena chunks to 512 MiB unless `DS4_CUDA_WEIGHT_ARENA_CHUNK_MB` is set, reducing large contiguous allocation pressure
+    - treats MTP startup caching as best-effort so a cache budget stop leaves a hot resident prefix instead of aborting startup
     - keeps the largest cached mapping per key to avoid cache thrash on repeated partial range requests
 
 - `ds4-3630e64-mtp-one-token-json-probe.patch`
