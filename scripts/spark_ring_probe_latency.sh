@@ -29,6 +29,7 @@ Environment:
   DS4_GIT_WORK_TREE     Optional work tree override (defaults to $PWD)
   REDACT=1              Redact IPv4/IPv6/MAC addresses from output (mostly irrelevant here)
   LAT_ITERS             Number of SSH samples per target (default: 3)
+  LAT_WARMUP=1          Run an un-timed SSH warm-up per target (default: 1)
 
 Examples:
   LAT_ITERS=5 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 ./scripts/spark_ring_probe_latency.sh spark0@aitopatom-9ab9.local
@@ -45,6 +46,7 @@ esac
 SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 LAT_ITERS="${LAT_ITERS:-3}"
+LAT_WARMUP="${LAT_WARMUP:-1}"
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -132,6 +134,17 @@ measure_target()
 	out_samples="$3"
 	i=0
 	rm -f "$out_samples"
+	if [ "$LAT_WARMUP" = "1" ]; then
+		set +e
+		warm_out="$(ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$target" 'true' 2>&1 >/dev/null)"
+		warm_rc="$?"
+		if [ "$warm_rc" -ne 0 ]; then
+			echo "warmup: failed ($(ssh_classify_err "$warm_out"))"
+			printf "%s\n" "$warm_out" | sed -n '1,8p' | sed -E 's/^[[:space:]]+//'
+			return 1
+		fi
+		set -e
+	fi
 	while [ "$i" -lt "$LAT_ITERS" ]; do
 		i=$((i + 1))
 		set +e
@@ -222,6 +235,7 @@ summarize_samples()
 	echo "probe args: $probe_args"
 	echo "resolved targets: $targets"
 	echo "lat iters: $LAT_ITERS"
+	echo "lat warmup: $LAT_WARMUP"
 	echo "ssh opts: $SSH_OPTS"
 	for t in $targets; do
 		echo "known_hosts: $t -> $(known_hosts_for_target "$t")"
