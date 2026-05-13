@@ -67,6 +67,12 @@ python3 scripts/summarize_mtp_one_token_draft_probe_diff.py --a /path/to/oracle_
 
 Do not start acceptance/metrics work until the one-token probe emits `ok=true` and the JSON validator passes; otherwise you risk optimizing a non-MTP stub path.
 
+When you *do* start acceptance work, record a machine-readable acceptance summary (per prompt set / run) using:
+
+```bash
+python3 scripts/summarize_mtp_acceptance_trace.py --in-jsonl /path/to/runtime.log.jsonl --draft-len <gamma>
+```
+
 ## Gate 1: Real Quantized Generation
 
 Before scheduler or MTP work, capture one successful run from
