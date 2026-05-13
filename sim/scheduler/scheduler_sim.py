@@ -2804,6 +2804,31 @@ def trace_summary_jsonable(trace: Sequence[TokenRoute], mtp_draft_len: int = 0, 
             inferred["dflash_draft_len_source"] = str(inferred_dflash_source)
     if len(inferred) != 0:
         out["inferred"] = inferred
+
+    hints: Dict[str, object] = {}
+    suggested: Dict[str, object] = {}
+    notes: List[str] = []
+
+    if inferred_num_experts is not None:
+        suggested["num_experts"] = int(inferred_num_experts)
+
+    if present_cost_scale != len(trace):
+        if present_kv_tokens == len(trace):
+            suggested["trace_derive_cost_scale"] = "kv_tokens_p50"
+        elif present_decode_ms == len(trace):
+            suggested["trace_derive_cost_scale"] = "decode_ms_p50"
+
+    if inferred_mtp_source == "accept_len_all_rejects_default1":
+        notes.append("MTP draft_len underdetermined: trace only shows accept_len=1; set meta.mtp_draft_len or log accepted_mtp+rejected_mtp.")
+    if inferred_dflash_source == "accept_len_all_rejects_default1":
+        notes.append("DFlash draft_len underdetermined: trace only shows accept_len=1; set meta.dflash_draft_len or log accepted_dflash+rejected_dflash.")
+
+    if len(suggested) != 0:
+        hints["suggested"] = suggested
+    if len(notes) != 0:
+        hints["notes"] = notes
+    if len(hints) != 0:
+        out["hints"] = hints
     return(out)
 
 

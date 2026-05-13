@@ -105,6 +105,34 @@ class SchedulerSimTest(unittest.TestCase):
             self.assertIsNotNone(r.scores)
             self.assertEqual(len(r.scores or ()), 4)
 
+    def test_trace_summary_hints_suggest_cost_scale_and_mtp_meta(self) -> None:
+        trace = [
+            scheduler_sim.TokenRoute(
+                t_ms=0.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(0, 1),
+                mtp_accept_len=1,
+                kv_tokens=128,
+            ),
+            scheduler_sim.TokenRoute(
+                t_ms=1.0,
+                cls=scheduler_sim.LatencyClass.BATCH,
+                candidates=(1, 0),
+                mtp_accept_len=1,
+                kv_tokens=64,
+            ),
+        ]
+        out = scheduler_sim.trace_summary_jsonable(trace, mtp_draft_len=0, meta={})
+        hints = out.get("hints")
+        self.assertIsInstance(hints, dict)
+        suggested = hints.get("suggested")
+        self.assertIsInstance(suggested, dict)
+        self.assertEqual(suggested.get("num_experts"), 2)
+        self.assertEqual(suggested.get("trace_derive_cost_scale"), "kv_tokens_p50")
+        notes = hints.get("notes")
+        self.assertIsInstance(notes, list)
+        self.assertTrue(any("MTP draft_len underdetermined" in str(n) for n in notes))
+
     def test_runtime_trace_ablation_markdown_renders_topk_dump_probe(self) -> None:
         meta = ds4_topk_dump.Ds4TopkDumpMeta(dump_dir="/tmp/fake", pos=0, topk=2, num_layers=2, tokens_per_layer=4)
         layers = [

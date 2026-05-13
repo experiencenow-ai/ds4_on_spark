@@ -539,6 +539,8 @@ Trace sanity-check (contract summary only):
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
 ```
 
+The trace summary includes `inferred.*` fields (for example `num_experts`, `mtp_draft_len`, `dflash_draft_len`) plus `hints.suggested.*` when the replay is under-specified (for example recommending `--trace-derive-cost-scale kv_tokens_p50` when `cost_scale` is missing but `kv_tokens` is present, or noting when draft length is underdetermined because the trace only logs reject cases).
+
 Per-token simulation dump (debug trace-vs-model mismatches by inspecting per-step latency, drops, stage skips, and MTP accept lengths):
 
 ```bash
