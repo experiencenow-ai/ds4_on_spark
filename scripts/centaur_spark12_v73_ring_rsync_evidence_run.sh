@@ -27,6 +27,7 @@ Environment:
   NODE_SETUP_RUN_ID    Optional node setup run id (default: $RING_RUN_ID)
   RING_SKIP_NODE_SETUP Set to 1 to skip Spark1/2 node setup (still stages zip by default)
   RING_REMOTE_VERIFY   Set to 1 to run post-ring remote `hyor-sync-status` on Spark1/2
+  RING_GEN_REPORT      Set to 1 to write a local ring report Markdown file (review/redact before posting)
   RING_WORKDIR         Optional Spark0 ring workdir override (passed through to the runner; also used for fetch)
   SSH_OPTS             Optional ssh options override (default includes BatchMode + temp known_hosts)
 
@@ -181,6 +182,17 @@ fi
 
 echo "== step 4/4: fetch ring artifacts (Mac) =="
 sh "$fetch" "$spark0" "$run_id" "${RING_WORKDIR:-}" "$local_out"
+
+if [ "${RING_GEN_REPORT:-0}" = "1" ]; then
+	report="$root/scripts/centaur_spark12_v73_ring_rsync_report.sh"
+	if [ ! -x "$report" ]; then
+		echo "missing ring report helper: $report" >&2
+		exit 2
+	fi
+	echo "== optional: generate ring report (Mac) =="
+	sh "$report" "$run_id" "$local_out" "$local_out/ring_rsync_report.md"
+	echo "ring_report: $local_out/ring_rsync_report.md"
+fi
 
 echo "== done =="
 echo "ring_run_id: $run_id"

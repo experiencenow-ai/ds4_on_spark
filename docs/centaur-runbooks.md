@@ -21,6 +21,12 @@ export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
+Optional: have the evidence runner write `smoke_report.md` into the fetched bundle directory:
+
+```bash
+export CENTAUR_GEN_REPORT=1
+```
+
 Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or `scp` (fallback).
 
 The evidence helper runs:

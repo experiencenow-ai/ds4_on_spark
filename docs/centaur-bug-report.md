@@ -16,6 +16,12 @@ export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
+Optional: have the evidence runner write `smoke_report.md` into the fetched bundle directory:
+
+```bash
+export CENTAUR_GEN_REPORT=1
+```
+
 If you already ran the smoke and only want to fetch:
 
 ```bash
@@ -43,6 +49,12 @@ Recommended: run the one-command evidence loop (optional node setup → ring rsy
 ```bash
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
+```
+
+Optional: have the evidence runner write `ring_rsync_report.md` into the fetched bundle directory:
+
+```bash
+export RING_GEN_REPORT=1
 ```
 
 If you already ran the ring rsync and only want to fetch:
