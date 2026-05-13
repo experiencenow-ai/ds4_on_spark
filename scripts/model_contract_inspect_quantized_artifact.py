@@ -234,6 +234,35 @@ def load_default_contract_summary_path() -> Optional[Path]:
 	return None
 
 
+def build_execution_contract_meta(contract_summary: Optional[dict[str, Any]], contract_path: Optional[Path]) -> Optional[dict[str, Any]]:
+	if not isinstance(contract_summary, dict):
+		return None
+	up = contract_summary.get("upstream", {})
+	if not isinstance(up, dict):
+		up = {}
+	fps = contract_summary.get("contract_fingerprints", {})
+	if not isinstance(fps, dict):
+		fps = {}
+	return {
+		"checked": True,
+		"contract_summary_path": (None if contract_path is None else str(contract_path)),
+		"format_version": contract_summary.get("format_version", None),
+		"contract_fingerprints": {
+			"execution_contract_sha256": fps.get("execution_contract_sha256", None),
+			"topology_sha256": fps.get("topology_sha256", None),
+			"attention_schedule_sha256": fps.get("attention_schedule_sha256", None),
+			"cache_semantics_sha256": fps.get("cache_semantics_sha256", None),
+			"tensor_key_invariants_sha256": fps.get("tensor_key_invariants_sha256", None),
+			"tokenizer_encoding_sha256": fps.get("tokenizer_encoding_sha256", None),
+		},
+		"upstream": {
+			"hf_repo_id": up.get("hf_repo_id", None),
+			"hf_revision_pinned": up.get("hf_revision_pinned", None),
+			"x_repo_commit": up.get("x_repo_commit", None),
+		},
+	}
+
+
 def fetch_url_prefix(url: str, want_bytes: int, timeout_s: int) -> bytes:
 	req = Request(url, headers={"Range": f"bytes=0-{want_bytes - 1}"})
 	with urlopen(req, timeout=timeout_s) as resp:
@@ -321,17 +350,37 @@ def guess_tensor_key_namespace(weight_keys: list[str]) -> tuple[str, list[str]]:
 	def saw_any(keys: set[str]) -> bool:
 		return any(k in keys for k in weight_keys)
 
+	def saw_substr(substr: str) -> bool:
+		return any(substr in k for k in weight_keys)
+
+	def saw_ds4_mtp_sidecar_style_keys() -> bool:
+		# DS4-tuned MTP sidecars (GGUF) use a different key schema than the
+		# upstream DeepSeek safetensors namespace. These are typical DS4-sidecar
+		# signatures (e.g. "attn_q_a.weight" vs upstream "attn.wq_a.weight").
+		if not saw_prefix("mtp."):
+			return False
+		return bool(
+			saw_substr(".attn_q_a.weight")
+			or saw_substr(".attn_q_b.weight")
+			or saw_substr(".attn_kv.weight")
+			or saw_substr(".attn_sinks.weight")
+			or saw_substr(".ffn_gate_shexp.weight")
+		)
+
 	if saw_prefix("layers.") or saw_any({"embed.weight", "head.weight", "norm.weight"}):
 		evidence.append("found deepseek upstream-style keys (layers.* and/or embed/head/norm)")
 		return ("deepseek-upstream", evidence)
 
-	if saw_prefix("mtp."):
-		evidence.append("found mtp.* tensor namespace")
-		return ("deepseek-upstream-mtp-only", evidence)
-
 	if saw_prefix("blk.") or saw_any({"token_embd.weight", "output.weight"}):
 		evidence.append("found llama.cpp-style keys (blk.* and/or token_embd/output)")
 		return ("llama.cpp", evidence)
+
+	if saw_prefix("mtp."):
+		if saw_ds4_mtp_sidecar_style_keys():
+			evidence.append("found mtp.* tensors with DS4 MTP sidecar-style key schema (attn_q_a/attn_kv/attn_sinks)")
+			return ("ds4-mtp-sidecar", evidence)
+		evidence.append("found mtp.* tensor namespace (no trunk keys detected)")
+		return ("deepseek-upstream-mtp-only", evidence)
 
 	if saw_prefix("block.") or saw_prefix("model.layers."):
 		evidence.append("found transformer-style keys (block.* or model.layers.*), not deepseek upstream namespace")
@@ -399,7 +448,7 @@ def compute_tensor_type_profile(
 			return "norm"
 		return "other"
 
-	if namespace_guess in ("deepseek-upstream", "deepseek-upstream-mtp-only"):
+	if namespace_guess in ("deepseek-upstream", "deepseek-upstream-mtp-only", "ds4-mtp-sidecar"):
 		categorize = categorize_upstream
 	elif namespace_guess == "llama.cpp":
 		categorize = categorize_llamacpp
@@ -985,6 +1034,12 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 	if not mtp_keys:
 		return {"checked": False, "reason": "no mtp.* tensors present"}
 
+	key_namespace_hint = "deepseek-upstream"
+	namespace_hint_evidence: list[str] = []
+	if any(".attn_q_a.weight" in k for k in mtp_keys) or any(".ffn_gate_shexp.weight" in k for k in mtp_keys):
+		key_namespace_hint = "ds4-mtp-sidecar"
+		namespace_hint_evidence.append("observed DS4 MTP sidecar-style keys (attn_q_a/ffn_gate_shexp)")
+
 	tk = contract_summary.get("tensor_keys", {})
 	moe = contract_summary.get("moe", {})
 	mtp_required_nonexpert_keys_by_layer_id = tk.get("mtp_required_nonexpert_keys_by_layer_id", None)
@@ -1068,6 +1123,8 @@ def compute_mtp_contract(mtp_keys: set[str], contract_summary: dict[str, Any]) -
 				nonexpert_expected += int(len([k for k in keys if isinstance(k, str) and k]))
 	return {
 		"checked": True,
+		"key_namespace_hint": key_namespace_hint,
+		"key_namespace_hint_evidence": namespace_hint_evidence,
 		"complete": (len(missing_sorted) == 0 and len(forbidden_sorted) == 0),
 		"mtp_layer_ids_present": sorted(mtp_layer_ids_present),
 		"nonexpert_key_lists_used": bool(isinstance(mtp_required_nonexpert_keys_by_layer_id, dict) and nonexpert_expected > 0),
@@ -1228,6 +1285,8 @@ def compute_mtp_trust(
 	requires_complete = bool(trust_gates.get("artifact_requires_mtp_contract_complete", True))
 	if requires_complete and mtp_contract.get("complete") is not True:
 		reasons = ["mtp_contract.complete != true"]
+		if mtp_contract.get("key_namespace_hint") == "ds4-mtp-sidecar":
+			reasons.append("mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema")
 		if expected_mtp_keys_sha256 is not None and mtp_keys_sha256 is not None and mtp_keys_sha256 != expected_mtp_keys_sha256:
 			reasons.append("mtp_keys_sha256 != official mtp checkpoint fingerprint")
 		return {
@@ -1337,11 +1396,14 @@ def compute_mtp_preservation(
 				}
 
 	if mtp_contract.get("complete") is not True:
+		reasons = ["mtp_contract.complete != true"]
+		if mtp_contract.get("key_namespace_hint") == "ds4-mtp-sidecar":
+			reasons.append("mtp keys appear DS4-sidecar-formatted (GGUF) rather than upstream DeepSeek safetensors schema")
 		return {
 			"checked": True,
 			"preserves": False,
 			"status": "incomplete",
-			"reasons": ["mtp_contract.complete != true"],
+			"reasons": reasons,
 			"expected_mtp_keys_sha256": expected_mtp_keys_sha256,
 			"mtp_keys_sha256_match_official": mtp_keys_sha256_match_official,
 		}
@@ -1603,6 +1665,7 @@ def main() -> int:
 			contract_summary = load_json(contract_path)
 		except Exception:
 			contract_summary = None
+	execution_contract = build_execution_contract_meta(contract_summary, contract_path)
 
 	def as_dict(res: InspectResult) -> dict[str, Any]:
 		namespace_guess, namespace_evidence = guess_tensor_key_namespace(res.weight_keys_all)
@@ -1627,6 +1690,8 @@ def main() -> int:
 			"mtp_namespace": mtp_namespace,
 			"first_mtp_keys": res.first_mtp_keys,
 		}
+		if execution_contract is not None:
+			out["execution_contract"] = execution_contract
 		if res.mtp_present:
 			out["mtp_keys_sha256"] = sha256_lines(sorted(res.mtp_keys_all))
 		if res.tensor_type_profile is not None:
@@ -1746,6 +1811,7 @@ def main() -> int:
 			print(
 				json.dumps(
 					{
+						"execution_contract": execution_contract,
 						"combined": combine(results),
 						"artifacts": [
 							{

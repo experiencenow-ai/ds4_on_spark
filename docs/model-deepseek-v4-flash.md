@@ -174,6 +174,8 @@ Treat these as **hard gates** before claiming “V4 Flash-compatible” behavior
 - Quantization gate (Flash): trunk FP8 + scale tensors and expert FP4 + scale tensors must satisfy `quantization.*` and `quantization.linear_tensor_contract.*` (Flash vs Base differs by `quantization.inference_config.expert_dtype`).
 - Tensor-key gate: artifact checkpoints must satisfy the `tensor_keys.*` invariants; for GGUF, `scripts/model_contract_inspect_quantized_artifact.py` emits `trunk_contract` as a **structural** compatibility signal.
 - MTP gate: treat MTP as **disabled/untrusted** unless the artifact preserves the upstream `mtp.0.*` namespace and satisfies `mtp.trust_gates.*` (including `mtp_contract.complete == true`) **and** a logits oracle that includes MTP traces is generated and passed (`scripts/model_contract_generate_deepseek_v4_flash_oracle.py --include-mtp`).
+  - Quantized MTP sidecar note: several community GGUF “MTP sidecar” artifacts declare `general.architecture=deepseek4_mtp_support` and use DS4-sidecar-style tensor keys like `mtp.0.attn_q_a.weight` / `mtp.0.attn_kv.weight`. These **do not** match the official DeepSeek safetensors key schema (e.g. `mtp.0.attn.wq_a.weight` / `mtp.0.attn.wkv.weight`) and will not satisfy the upstream `mtp_contract` or match the official `mtp_keys_sha256` fingerprint.
+    - Contract meaning: treat DS4-sidecar-style GGUF MTP as a *non-preserving* artifact (useful for bring-up experiments), and require the MTP logits oracle + acceptance checks before enabling MTP in any baseline reports.
 
 ## Topology constants (from `config.json` + `inference/config.json`)
 

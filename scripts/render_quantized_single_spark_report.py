@@ -446,6 +446,20 @@ def main(argv: Optional[list[str]] = None) -> int:
             df8 = qc.get("dense_fp8_like")
             ef4 = qc.get("expert_fp4_like")
             lines.append(f"- quantization_contract: checked={qc.get('checked')} dense={dense} expert={expert} dense_fp8_like={df8} expert_fp4_like={ef4}")
+        ec = inspect.get("execution_contract")
+        if isinstance(ec, dict) and ec.get("checked") is True:
+            fps = ec.get("contract_fingerprints", {})
+            if not isinstance(fps, dict):
+                fps = {}
+            up = ec.get("upstream", {})
+            if not isinstance(up, dict):
+                up = {}
+            exec_sha = fps.get("execution_contract_sha256")
+            x_repo_commit = up.get("x_repo_commit")
+            if isinstance(exec_sha, str) and exec_sha.strip():
+                lines.append(f"- execution_contract_sha256={exec_sha.strip()}")
+            if isinstance(x_repo_commit, str) and x_repo_commit.strip():
+                lines.append(f"- upstream_x_repo_commit={x_repo_commit.strip()}")
     if arch is not None or file_type is not None or block_count is not None or mtp_present is not None:
         parts = []
         if arch is not None:
