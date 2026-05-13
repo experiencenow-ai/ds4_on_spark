@@ -309,7 +309,7 @@ When you want a completely self-contained check that does not ship `tools/cuda_p
 This script writes a tiny CUDA file directly into a Spark0 temp directory, then:
 
 - Runs best-effort compile-only probes for `-arch=sm_121` plus `sm_121a` / `sm_121f` (variant targets) and `compute_121` (when advertised) (fast toolchain signal; no kernel run required; prints first error lines on failure)
-- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted)
+- Runs best-effort feature-set macro compile-only probes for `-arch=compute_121a` and `-arch=compute_121f` (informational; validates `__CUDA_ARCH_SPECIFIC__` / `__CUDA_ARCH_FAMILY_SPECIFIC__` macro definitions when those targets are accepted; note the probe includes a dummy `__global__` so the macros are emitted in the device compile pass)
 - Prints a best-effort `__CUDA_ARCH_LIST__` snapshot for `-arch=sm_121`, `-arch=sm_121a`, and `-arch=sm_121f` to make NVCC’s implicit “virtual arch list” observable in logs
 - Runs a best-effort compile-only probe using `nvcc --gpu-architecture=sm_121` (long-form flag used by some build systems)
 - Runs a best-effort compile-only probe with `-std=c++20 --extended-lambda --expt-relaxed-constexpr` for `-arch=sm_121` (and `compute_121` when advertised) as a CUTLASS/DeepGEMM-style toolchain gate (no repo transfer)
