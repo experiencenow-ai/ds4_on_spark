@@ -14,7 +14,7 @@ SPARK_SSH_USER=spark0 REDACT=1 SPARK_NODE_FACTS=1 SPARK_KNOWN_HOSTS_PER_HOST=1 D
 ```
 
 If `*.local` name resolution is flaky (SSH appears to “hang” before it can print `resolve_failed`), cap per-target attempts with:
-- `SSH_WALL_TIMEOUT=20` (seconds; requires `timeout` on the Mac)
+- `SSH_WALL_TIMEOUT=20` (seconds; requires `timeout` or `gtimeout` (coreutils) on the Mac)
 
 Quick validation targets (paste-friendly stanzas):
 - `docs/spark-ring-mac-discovery-<stamp>.md`: `== known target checks ==`, `== ping (mac->targets, compact) ==`

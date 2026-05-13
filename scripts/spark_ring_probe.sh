@@ -15,7 +15,7 @@ Defaults:
 Environment:
   SPARK_SSH_USER        Default SSH username for host-only args (default: spark0)
   SSH_OPTS             Extra ssh options (default includes BatchMode + temp known_hosts)
-  SSH_WALL_TIMEOUT     Wall-clock timeout for each SSH probe (seconds; default: 45). Requires `timeout` on the Mac.
+  SSH_WALL_TIMEOUT     Wall-clock timeout for each SSH probe (seconds; default: 45). Requires `timeout` or `gtimeout` (coreutils) on the Mac.
   SPARK_KNOWN_HOSTS    SSH known_hosts path (default: /private/tmp/ds4_spark_known_hosts)
   SPARK_KNOWN_HOSTS_PER_HOST=1  Use per-target known_hosts when SPARK_KNOWN_HOSTS is unset
   DS4_GIT_DIR          Optional git dir override for printing `git: <hash>`
@@ -59,6 +59,12 @@ SPARK_KNOWN_HOSTS_PER_HOST="${SPARK_KNOWN_HOSTS_PER_HOST:-0}"
 SPARK_SSH_USER="${SPARK_SSH_USER:-spark0}"
 RING_PING="${RING_PING:-1}"
 SSH_WALL_TIMEOUT="${SSH_WALL_TIMEOUT:-45}"
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+	TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+	TIMEOUT_BIN="gtimeout"
+fi
 
 if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=5 -o ServerAliveCountMax=2"
@@ -222,8 +228,8 @@ run_ssh()
 {
 	kh="$1"
 	shift 1
-	if command -v timeout >/dev/null 2>&1; then
-		timeout "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
+	if [ "$TIMEOUT_BIN" != "" ]; then
+		"$TIMEOUT_BIN" "${SSH_WALL_TIMEOUT}s" ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
 	else
 		ssh $SSH_OPTS -o UserKnownHostsFile="$kh" "$@"
 	fi
