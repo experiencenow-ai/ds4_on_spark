@@ -19,6 +19,8 @@ ALLOW_RUN=1 \
 scripts/run_quantized_single_spark0_smallest_v4flash_external.sh spark0@aitopatom-9ab9.local
 ```
 
+Note: `scripts/run_quantized_single_spark0_smallest_v4flash_external.sh` defaults `FETCH_LLAMA_OUT_DIR=1` when `ALLOW_RUN=1`, so the local run directory includes `llamacpp_out_dir/` (useful for preserving `fattn_cli_probe.json` and raw runner logs). Set `FETCH_LLAMA_OUT_DIR=0` to skip the fetch.
+
 To capture a new Spark0 milestone run as a commit-ready doc, run the baseline on Spark0 (via `scripts/run_quantized_single_spark.sh`), then render the local output directory into a `docs/baseline-quantized-single-spark0-YYYY-MM-DD.md` report:
 
 ```sh
@@ -49,7 +51,7 @@ Safety gate: `scripts/run_quantized_single_spark.sh` no longer forces `ALLOW_RUN
   `LLAMA_MULTISLOT_PATCH_PROBE=1`) so the report says whether the runtime likely
   contains the FA pad-to-256 reservation fix and the multi-slot reserve/SWA fixes.
   - When the runtime prints `llama_print_timings`, the baseline summary also includes the derived timing breakdown keys: `load_time_s`, `sample_time_s`, `prompt_eval_s`, `eval_time_s`, `total_time_s`.
-- Optional (recommended when debugging FA scheduling): set `FETCH_LLAMA_OUT_DIR=1` to fetch the remote llama.cpp runner `out_dir` tarball into the local `OUT_DIR`, preserving `fattn_cli_probe.json` and the raw runner logs alongside the report.
+- Recommended when debugging FA scheduling: set `FETCH_LLAMA_OUT_DIR=1` to fetch the remote llama.cpp runner `out_dir` tarball into the local `OUT_DIR`, preserving `fattn_cli_probe.json` and the raw runner logs alongside the report.
 - Note the upstream reference defaults are `max_seq_len=4096` and `max_batch_size=4`, but any external runtime may choose different values; record the actual context/window settings used.
 - The report records whether the artifact preserves the upstream MTP namespace
   (`mtp.0.*`) and whether MTP was enabled/disabled for the run (see “MTP / tensor-key compatibility” below).
