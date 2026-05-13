@@ -7,7 +7,7 @@ usage()
 ops_install_staged_assets_user.sh -- install /tmp-staged DS4 user-service assets (human-run, no sudo)
 
 Usage:
-  ops_install_staged_assets_user.sh --instance <name> [--dry-run] [--overwrite-config] [--install-spark-units] [--start-preflight] [--strict]
+  ops_install_staged_assets_user.sh --instance <name> [--dry-run] [--overwrite-config] [--install-spark-units] [--start-preflight] [--preflight tp2|tp23|tp3|tp4] [--strict]
 
 Environment (optional overrides):
   DS4_STAGED_SYSTEMD_USER_DIR  Default: /tmp/ds4-systemd-user
@@ -30,6 +30,7 @@ dry_run=0
 overwrite_config=0
 install_spark_units=0
 start_preflight=0
+preflight="tp2"
 strict=0
 
 while [ $# -gt 0 ]; do
@@ -50,14 +51,18 @@ while [ $# -gt 0 ]; do
             install_spark_units=1
             shift
             ;;
-        --start-preflight)
-            start_preflight=1
-            shift
-            ;;
-        --strict)
-            strict=1
-            shift
-            ;;
+		--start-preflight)
+			start_preflight=1
+			shift
+			;;
+		--preflight)
+			preflight="${2:-}"
+			shift 2
+			;;
+		--strict)
+			strict=1
+			shift
+			;;
         -h|--help)
             usage
             exit 0
@@ -75,6 +80,16 @@ if [ "$instance" = "" ]; then
     usage >&2
     exit 2
 fi
+
+case "$preflight" in
+	tp2|tp23|tp3|tp4)
+		;;
+	*)
+		echo "invalid --preflight: $preflight (expected tp2|tp23|tp3|tp4)" >&2
+		usage >&2
+		exit 2
+		;;
+esac
 
 run()
 {
@@ -152,10 +167,13 @@ echo
 echo "== systemd --user unit templates =="
 need_file "$staged_systemd_user_dir/ds4@.service"
 need_file "$staged_systemd_user_dir/ds4-strict@.service"
+need_file "$staged_systemd_user_dir/ds4-tp2-strict@.service"
 need_file "$staged_systemd_user_dir/ds4-tp3-strict@.service"
 need_file "$staged_systemd_user_dir/ds4-tp4-strict@.service"
 need_file "$staged_systemd_user_dir/ds4-preflight@.service"
 need_file "$staged_systemd_user_dir/ds4-preflight-strict@.service"
+need_file "$staged_systemd_user_dir/ds4-preflight-tp23@.service"
+need_file "$staged_systemd_user_dir/ds4-preflight-tp23-strict@.service"
 need_file "$staged_systemd_user_dir/ds4-preflight-tp3@.service"
 need_file "$staged_systemd_user_dir/ds4-preflight-tp3-strict@.service"
 need_file "$staged_systemd_user_dir/ds4-preflight-tp4@.service"
@@ -190,11 +208,13 @@ echo
 echo "== required ops scripts (for ExecStartPre + preflight) =="
 need_file "$staged_scripts_dir/ops_ds4_env_check.sh"
 need_file "$staged_scripts_dir/ops_tp2_readiness.sh"
+need_file "$staged_scripts_dir/ops_tp23_readiness.sh"
 need_file "$staged_scripts_dir/ops_tp3_readiness.sh"
 need_file "$staged_scripts_dir/ops_tp4_readiness.sh"
 run install -d -m 0755 "$user_scripts_dir"
 run install -m 0755 "$staged_scripts_dir/ops_ds4_env_check.sh" "$user_scripts_dir/ops_ds4_env_check.sh"
 run install -m 0755 "$staged_scripts_dir/ops_tp2_readiness.sh" "$user_scripts_dir/ops_tp2_readiness.sh"
+run install -m 0755 "$staged_scripts_dir/ops_tp23_readiness.sh" "$user_scripts_dir/ops_tp23_readiness.sh"
 run install -m 0755 "$staged_scripts_dir/ops_tp3_readiness.sh" "$user_scripts_dir/ops_tp3_readiness.sh"
 run install -m 0755 "$staged_scripts_dir/ops_tp4_readiness.sh" "$user_scripts_dir/ops_tp4_readiness.sh"
 if [ "$install_spark_units" -ne 0 ] && [ -f "$staged_scripts_dir/ops_spark_standalone_check.sh" ]; then
@@ -216,10 +236,14 @@ echo
 if [ "$start_preflight" -ne 0 ]; then
     echo "== optional: run preflight (human-run) =="
     if command -v systemctl >/dev/null 2>&1; then
+		unit_prefix="ds4-preflight"
+		if [ "$preflight" != "tp2" ]; then
+			unit_prefix="ds4-preflight-${preflight}"
+		fi
         if [ "$strict" -ne 0 ]; then
-            run systemctl --user start "ds4-preflight-strict@${instance}.service"
+            run systemctl --user start "${unit_prefix}-strict@${instance}.service"
         else
-            run systemctl --user start "ds4-preflight@${instance}.service"
+            run systemctl --user start "${unit_prefix}@${instance}.service"
         fi
     else
         echo "skip (missing: systemctl)"

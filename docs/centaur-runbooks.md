@@ -7,7 +7,7 @@ Safety constraints (assumed by all runbooks): no `sudo`, no system services, no 
 ## Start here
 
 - Spark0 v73 smoke (runs the full command sequence): `docs/centaur-spark0-v73-smoke.md`
-- Latest smoke + ring status (evidence bundles + ring-rsync TODO): `docs/centaur-smoke-status-20260512.md`
+- Latest smoke + ring status (evidence bundles + ring-rsync TODO): `docs/centaur-smoke-status-20260513.md`
 - Bug report workflow + sanitization checklist: `docs/centaur-bug-report.md`
 - PR checklist/template (required sections for automation PRs): `docs/centaur-pr-checklist.md`
 
@@ -19,6 +19,12 @@ From your Mac (repo root):
 export SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts"
 export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
+```
+
+Optional: have the evidence runner write `smoke_report.md` into the fetched bundle directory:
+
+```bash
+export CENTAUR_GEN_REPORT=1
 ```
 
 Mac-side prerequisites for the helper scripts: `ssh` plus `rsync` (preferred) or `scp` (fallback).
@@ -64,6 +70,9 @@ If you only have Spark1/Spark2 (3 nodes total including Spark0), use:
 That runbook includes:
 
 - an end-to-end “Quickstart” (Spark0 smoke → Spark1/2 setup → ring rsync → artifact fetch)
+- a safe Centaur prereq check (python3/venv/unzip) using `scripts/centaur_spark_v73_prereqs_check.sh` (recommended before node setup)
+- a safe SSH mesh preflight (Spark0↔Spark1↔Spark2) using `scripts/ops_spark_ring_mesh_check.sh` (recommended before rsync ring-step)
+- an rsync availability preflight using `scripts/ops_spark_rsync_check.sh` (ring-rsync requires rsync on Spark0 + ring nodes)
 - staging `centaur_spec_impl_v73.zip` to Spark1/2
 - per-node setup via `scripts/centaur_spark_v73_node_setup.sh`
 - Spark0-local ring sim (`hyor-ring-step` across multiple local roots)
@@ -83,21 +92,25 @@ If you also have Spark3, use:
   - `scripts/centaur_spark0_v73_smoke.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_validate_artifacts.sh` (runs on Spark0)
   - `scripts/centaur_spark0_v73_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark0_v73_bundle_validate.sh` (Mac-side validation for fetched bundles)
+  - `scripts/centaur_spark0_v73_smoke_report.sh` (generates a PR/issue-ready Markdown summary from a fetched bundle)
   - `scripts/centaur_spark0_v73_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
 - Spark1/2 ring:
   - `scripts/centaur_spark12_v73_stage.sh`
   - `scripts/centaur_spark12_v73_node_setup_run.sh` (Mac-side wrapper)
-  - `scripts/centaur_spark12_v73_node_setup_fetch_logs.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_node_setup_fetch_logs.sh` (Mac-side fetch helper: log + facts + freeze)
   - `scripts/centaur_spark_ring_sim_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_sim_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark12_v73_ring_sim_evidence_run.sh` (Mac-side one-command evidence helper)
   - `scripts/centaur_spark12_v73_ring_sim_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_ring_bundle_validate.sh` (Mac-side validation for fetched ring bundles)
   - `scripts/centaur_spark12_v73_ring_sim_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark_ring_rsync_spark12_v73.sh`
   - `scripts/centaur_spark12_v73_ring_rsync_run.sh` (Mac-side wrapper)
   - `scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh` (Mac-side one-command evidence helper)
   - `scripts/centaur_spark12_v73_ring_rsync_remote_verify.sh` (Mac-side Spark1/2 `hyor-sync-status` verifier)
   - `scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh` (Mac-side fetch helper)
+  - `scripts/centaur_spark12_v73_ring_rsync_report.sh` (generates a PR/issue-ready Markdown summary from a fetched bundle)
   - `scripts/centaur_spark12_v73_ring_rsync_fixture_pack.sh` (packs a fetched bundle into repo fixtures)
   - `scripts/centaur_spark12_v73_validate_ring_artifacts.sh` (runs on orchestrator host)
   - `scripts/centaur_spark_v73_node_setup_run.sh` (single-node wrapper; Spark1/Spark2/etc)
@@ -105,6 +118,8 @@ If you also have Spark3, use:
   - `scripts/centaur_spark_hyor_controller_http_v73.sh`
   - `scripts/centaur_spark_hyor_agent_http_v73.sh`
   - `scripts/centaur_spark_hyor_node_discover_v73.sh`
+  - Notes:
+    - For controller-root selection, prefer `RING_WORKDIR` + `RING_RUN_ID` (ring rsync) or `CENTAUR_WORKDIR` (Spark0 smoke); override with `HYOR_CONTROLLER_ROOT` if needed.
 
 ## Fixtures
 

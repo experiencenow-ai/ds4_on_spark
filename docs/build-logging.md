@@ -39,6 +39,7 @@ For fixed-size log capture with per-entry metadata, `ds4/log_ring.h` provides:
 - `ds4_log_ring_pop`: Pops the oldest entry.
 - `ds4_log_ring_reset`: Clears the ring and resets the drop count to zero.
 - `ds4_log_entry_format`: Formats a popped `ds4_log_entry_t` as `level: msg` (appends ` [truncated]` when the entry was truncated).
+- `ds4_log_ring_drain_format`: Drains the ring into a caller buffer as newline-delimited `level: msg` lines; sets `out_truncated=1` if the buffer fills before all entries can be written.
 
 This is intended for embedded-style “keep the last N events” debugging without allocations.
 

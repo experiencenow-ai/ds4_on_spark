@@ -74,6 +74,7 @@ Policies supported:
 - `--admit-policy ordered` (default): admit in router-provided order
 - `--admit-policy least_pending`: admit the least-pending experts among the candidates (ties broken by router order)
 - `--admit-policy least_pending_work`: admit the least-pending experts by `pending_work` (queued+in-flight sum of `cost_scale`; ties broken by router order)
+- `--admit-policy least_oldest`: admit experts whose chosen queue (interactive/batch) has the youngest outstanding work (oldest-queued age, then pending, then router order)
 - `--admit-policy score_desc`: order candidates by descending `scores` from trace replay (ties broken by router order). Requires `scores` for every trace entry.
 
 ### Per-Expert Service Discipline
@@ -162,6 +163,7 @@ When `--mtp-draft-len > 0`, each trace element is treated as one **verify step**
 - Draft compute: enqueue draft micro-tokens (same routing candidates as the verify token) with per-task cost scaled by `--mtp-draft-cost-scale`.
   - Default `--mtp-draft-attempt-policy full` always enqueues exactly `--mtp-draft-len` draft micro-tokens.
   - `--mtp-draft-attempt-policy stop_at_reject` enqueues only the draft prefix up to the first rejection (synthetic accept sampling) or up to the derived attempted length from `mtp_accept_len` in trace replay.
+  - `--mtp-draft-attempt-policy trace` uses `accepted_mtp + rejected_mtp` (when present and `<= mtp_draft_len`) as the attempted draft length per step; otherwise it falls back to `full`.
   - Draft micro-tokens are enqueued **before** the verify micro-token (FIFO), so they consume capacity first.
   - To model draft work as lower priority (so it can be backpressured without blocking verify work), set `--mtp-draft-queue-cls batch` (default is `inherit`; `lo`/`hi` are accepted aliases for `batch`/`interactive`).
 - Verify compute: enqueue one verify micro-token at full cost (optionally scaled by `--mtp-verify-per-draft-cost-scale` to model verify overhead that grows with draft length).
@@ -402,6 +404,20 @@ cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
 ```
 
+Some runtimes emit **one route record per token per MoE layer** (repeated `token_index`, optional `layer_index`) instead of a single `layers[]` payload. In that case, you can ask the loader to pack those per-layer records into `layers[]` before canonicalization/replay:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-pack-layers-by-token-index 1 --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
+By default, per-layer packing is strict about timestamps: every route record in the token group must agree on `t_ms`/`dt_ms`. If your runtime emits per-layer timestamps that differ (common when routes are logged at dispatch time rather than at token submit time), use a pack-time policy to collapse them:
+
+```bash
+cat /path/to/runtime.log.jsonl | python3 sim/scheduler/scheduler_sim.py --trace-jsonl - --trace-input-format runtime --trace-non-route skip --trace-pack-layers-by-token-index 1 --trace-pack-time-policy min --trace-time-mode dt_ms --canonicalize-trace-jsonl - > /tmp/route.canon.jsonl
+python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.canon.jsonl --num-experts 0 --mtp-draft-len -1 --json
+```
+
 Or, use the lightweight extractor explicitly to map common aliases into the strict simulator contract:
 
 ```bash
@@ -432,6 +448,8 @@ python3 scripts/ds4_topk_dump_recommendations.py \
   --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
   --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
 ```
+
+Note: `ds4_topk_dump_recommendations.py` treats `topk` as the fixed selected-expert `K` when the trace itself does not include `k` fields, so queue depth and service load scale correctly for these route-only fixtures.
 
 Then run the standard trace sweep / recommendations loop:
 
@@ -521,6 +539,8 @@ Trace sanity-check (contract summary only):
 python3 sim/scheduler/scheduler_sim.py --trace-jsonl /tmp/route.jsonl --trace-summary --json
 ```
 
+The trace summary includes `inferred.*` fields (for example `num_experts`, `mtp_draft_len`, `dflash_draft_len`) plus `hints.suggested.*` when the replay is under-specified (for example recommending `--trace-derive-cost-scale kv_tokens_p50` when `cost_scale` is missing but `kv_tokens` is present, or noting when draft length is underdetermined because the trace only logs reject cases).
+
 Per-token simulation dump (debug trace-vs-model mismatches by inspecting per-step latency, drops, stage skips, and MTP accept lengths):
 
 ```bash
@@ -603,7 +623,35 @@ interactive p95, starvation, or partial-admit regressions.
 
 When replaying real traces with `python3 sim/scheduler/recommendations.py --trace-jsonl ...`, prefer the report’s `evidence` block as a quick go/no-go sanity check (`evidence.expert_queueing`, and when MTP counters exist: `evidence.mtp` plus the draft-priority sweep `evidence.mtp_draft_queue_cls`).
 
+To get a concise, PR-friendly summary for a runtime trace ablation, use `--format md`:
+
+```bash
+python3 sim/scheduler/recommendations.py \
+  --trace-jsonl /path/to/route.jsonl \
+  --trace-input-format runtime \
+  --trace-non-route skip \
+  --format md
+```
+
+The markdown tables include time-weighted expert pending-depth p95 (`pending_p95`, plus `pending_hi_p95`/`pending_lo_p95` when both latency classes are present), plus a starvation summary (`starv_frac`, `starv_p95_ms`) so queue-reservation and backpressure changes are visible without opening the full JSON payload.
+
 Tip: when the runtime can also report observed `expert_batch_size`, compare it against `work.batch_size` under the same trace replay settings to see whether the simulator’s batching window + admission policy approximates the observed dispatch regime.
+
+To enable expert-side batching in the runtime-trace ablation harness, pass the batching knobs through `sim/scheduler/recommendations.py`:
+
+```bash
+python3 sim/scheduler/recommendations.py \
+  --trace-jsonl /path/to/route.jsonl \
+  --trace-input-format runtime \
+  --trace-non-route skip \
+  --batch-max-batch 4 \
+  --batch-wait-batch-ms 0.5 \
+  --service-base-ms 0.10 \
+  --service-per-task-ms 0.90 \
+  --format md
+```
+
+When `--service-per-task-ms < 0` (default), the simulator uses `--service-ms` as a fixed per-task service time and still tracks batch sizes. When `--service-per-task-ms >= 0`, the simulator uses `service_base_ms + service_per_task_ms * batch_size` for each expert batch to model per-batch overhead.
 
 ## MTP Simulation
 
@@ -622,7 +670,7 @@ by default until deterministic acceptance tests pass.
 For a small set of *synthetic* quantified signals (expert-queue reservation and MTP breakeven), see:
 
 - `docs/scheduler-simulator-recommendations.md`
-- `docs/scheduler-simulator-recommendations-2026-05-11.json` (generated by `python3 sim/scheduler/recommendations.py --json`)
+- `docs/scheduler-simulator-recommendations-2026-05-12.json` (generated by `python3 sim/scheduler/recommendations.py --json`)
 
 These are intended to keep the loop honest until real quantized-runtime traces exist; re-run the harness after simulator changes to ensure the recommendation thresholds remain stable.
 

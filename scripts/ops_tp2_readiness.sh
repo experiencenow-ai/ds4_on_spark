@@ -165,7 +165,17 @@ fi
 if [ "${SSH_OPTS:-}" = "" ]; then
     known_hosts="/var/lib/ds4/ssh/known_hosts"
     if [ ! -d "/var/lib/ds4/ssh" ]; then
-        known_hosts="/var/tmp/ds4_known_hosts"
+        cache_root="${XDG_CACHE_HOME:-${HOME:-}/.cache}"
+        if [ "${HOME:-}" != "" ] && [ -d "$HOME" ] && [ "$cache_root" != "/.cache" ]; then
+            cache_dir="$cache_root/ds4/ssh"
+            if mkdir -p "$cache_dir" 2>/dev/null; then
+                known_hosts="$cache_dir/known_hosts"
+            else
+                known_hosts="/var/tmp/ds4_known_hosts"
+            fi
+        else
+            known_hosts="/var/tmp/ds4_known_hosts"
+        fi
     fi
     SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
@@ -650,6 +660,9 @@ fi
 
 echo "== ds4 env (optional) =="
 print_if_set DS4_INSTANCE
+if [ "${DS4_INSTANCE:-}" != "" ] && [ "$self" != "$DS4_INSTANCE" ]; then
+    echo "warning: DS4_INSTANCE mismatch: DS4_INSTANCE=$DS4_INSTANCE --self=$self" >&2
+fi
 print_if_set DS4_WORLD_SIZE
 print_if_set DS4_RANK
 print_if_set DS4_MASTER_ADDR

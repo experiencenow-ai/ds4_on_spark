@@ -35,6 +35,8 @@ Supported keys:
 
 For programmatic introspection, `ds4_config_known_key_count`, `ds4_config_known_key`, and `ds4_config_known_key_help` expose the supported key list and a one-line value hint (no allocation). The CLI also supports `ds4_cli --dump-config-keys` and `ds4_cli --dump-config-help`.
 
+For a commented starter config file, the CLI also supports `ds4_cli --dump-config-template`.
+
 ## Validation helper
 
 For callers that populate a `ds4_config_t` directly (not via the parser), `ds4_config_validate` checks basic range/shape constraints (log level range, booleans are `0/1`, non-negative sizes).
@@ -70,6 +72,8 @@ Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "
 
 - `DS4_CONFIG_PATH` (default config file path when no `path` is provided; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
 - `DS4_CONFIG` (inline config text; newline-delimited `key=value` pairs, parsed like a config file; leading/trailing whitespace is trimmed and whitespace-only values are treated as unset)
+
+For programmatic introspection (no allocation), `ds4_config_env_var_count`, `ds4_config_env_var`, and `ds4_config_env_var_help` expose the supported environment variable list and one-line hints. The CLI also supports `ds4_cli --dump-config-env` and `ds4_cli --dump-config-env-help`.
 
 ## Load order helper
 

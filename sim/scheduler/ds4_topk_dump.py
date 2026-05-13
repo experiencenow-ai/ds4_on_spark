@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+from sim.scheduler import expert_queue_probe
+
 
 _TOPK_RE = re.compile(r"ffn_moe_topk-(\d+)_pos(\d+)\.i32$")
 
@@ -185,3 +187,35 @@ def build_scheduler_trace_jsonl_from_ds4_topk_dump(
     finally:
         if f is not None:
             f.close()
+
+
+def probe_expert_queueing_from_ds4_topk_dump_layers(
+    layers: Sequence[Sequence[Sequence[int]]],
+    *,
+    experts: int = 256,
+    topk: int = 6,
+    batches: Tuple[int, ...] = (16, 32, 64, 100, 128, 256, 512),
+    trials: int = 250,
+    seed: int = 20260512,
+    strict_expert_ids: bool = True,
+) -> Dict[str, object]:
+    cfg = expert_queue_probe.ExpertQueueProbeConfig(
+        experts=int(experts),
+        topk=int(topk),
+        batches=tuple(int(b) for b in batches),
+        trials=int(trials),
+        seed=int(seed),
+        strict_expert_ids=bool(strict_expert_ids),
+    )
+    res = expert_queue_probe.analyze_ds4_ffn_moe_topk_layers(layers, cfg)
+    return(
+        {
+            "tokens_per_layer": int(res.tokens_per_layer),
+            "num_layers": int(res.num_layers),
+            "experts": int(res.experts),
+            "topk": int(res.topk),
+            "trials": int(res.trials),
+            "batches": dict(res.batches),
+            "invalid_expert_ids": int(res.invalid_expert_ids),
+        }
+    )

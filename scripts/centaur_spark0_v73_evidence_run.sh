@@ -26,6 +26,7 @@ Environment:
   CENTAUR_PIP_ARGS   Optional extra args for remote pip install
   CENTAUR_SKIP_PIP   Set to 1 to skip remote pip install (assumes deps already present in venv)
   CENTAUR_TRACE      Set to 1 to enable remote shell tracing (prints exact commands)
+  CENTAUR_GEN_REPORT Set to 1 to write a local smoke report Markdown file (review/redact before posting)
 
 Optional follow-up (after manual redaction review):
   sh ./scripts/centaur_spark0_v73_fixture_pack.sh "<run_id>" "<local_out_dir>"
@@ -120,6 +121,17 @@ ssh $SSH_OPTS "$target" "export CENTAUR_RUN_ID=\"$run_id\"; export CENTAUR_WORKD
 
 echo "== step 4/4: fetch artifacts (Mac) =="
 sh "$fetch" "$target" "$run_id" "$remote_dir" "$local_out"
+
+if [ "${CENTAUR_GEN_REPORT:-0}" = "1" ]; then
+	report="$root/scripts/centaur_spark0_v73_smoke_report.sh"
+	if [ ! -x "$report" ]; then
+		echo "missing smoke report helper: $report" >&2
+		exit 2
+	fi
+	echo "== optional: generate smoke report (Mac) =="
+	sh "$report" "$run_id" "$local_out" "$local_out/smoke_report.md"
+	echo "smoke_report: $local_out/smoke_report.md"
+fi
 
 echo "== done =="
 echo "run_id: $run_id"

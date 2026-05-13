@@ -12,12 +12,26 @@ int32_t test_arena(void)
 	uint8_t *z;
 	uint32_t *z2;
 	void *p0,*p1,*p2;
-	int32_t mark0;
+	int32_t mark0,left;
 	int32_t i;
+	a.base = 0;
+	a.size = 0;
+	a.used = 0;
+	if ( ds4_arena_bytes_left(0,&left) >= 0 )
+		return(-200);
+	if ( ds4_arena_bytes_left(&a,&left) >= 0 )
+		return(-201);
 	if ( ds4_arena_init_ex(&a,mem2 + 1,64,16) >= 0 )
 		return(-1);
 	if ( ds4_arena_init_ex(&a,mem,(int32_t)sizeof(mem),16) < 0 )
 		return(-2);
+	if ( ds4_arena_validate(&a) < 0 )
+		return(-202);
+	left = -1;
+	if ( ds4_arena_bytes_left(&a,&left) < 0 )
+		return(-203);
+	if ( left != (int32_t)sizeof(mem) )
+		return(-204);
 	if ( ds4_arena_mark(&a,&mark0) < 0 )
 		return(-3);
 	if ( mark0 != 0 )
@@ -26,6 +40,11 @@ int32_t test_arena(void)
 		return(-5);
 	if ( p0 == 0 )
 		return(-6);
+	left = -1;
+	if ( ds4_arena_bytes_left(&a,&left) < 0 )
+		return(-205);
+	if ( left >= (int32_t)sizeof(mem) )
+		return(-206);
 	if ( ds4_arena_alloc(&a,32,16,&p1) < 0 )
 		return(-7);
 	if ( p1 == 0 )
@@ -53,6 +72,11 @@ int32_t test_arena(void)
 		return(-14);
 	if ( a.used != 0 )
 		return(-15);
+	left = -1;
+	if ( ds4_arena_bytes_left(&a,&left) < 0 )
+		return(-207);
+	if ( left != (int32_t)sizeof(mem) )
+		return(-208);
 	if ( ds4_arena_reset(&a) < 0 )
 		return(-16);
 	if ( a.used != 0 )

@@ -132,6 +132,27 @@ __global__ void __cluster_dims__(2,1,1) cluster_dims_attr_probe(uint32_t *out)
 }
 EOF
 
+cat > \"$REMOTE_DIR\"/cuda_sm121_arch_list_compile_probe_minimal.cu <<'EOF'
+#define STR2(x) #x
+#define STR(x) STR2(x)
+
+#if defined(__CUDA_ARCH_LIST__)
+#pragma message(\"DS4_CUDA_ARCH_LIST=\" STR(__CUDA_ARCH_LIST__))
+#endif
+
+#if defined(__CUDA_ARCH_SPECIFIC__)
+#pragma message(\"DS4_CUDA_ARCH_SPECIFIC=\" STR(__CUDA_ARCH_SPECIFIC__))
+#endif
+
+#if defined(__CUDA_ARCH_FAMILY_SPECIFIC__)
+#pragma message(\"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" STR(__CUDA_ARCH_FAMILY_SPECIFIC__))
+#endif
+
+__global__ void arch_list_compile_probe(void)
+{
+}
+EOF
+
 compile_probe() {
 	tag=\"\$1\"
 	src=\"\$2\"
@@ -149,6 +170,50 @@ compile_probe() {
 	return 1
 }
 
+ptx_target_probe() {
+	tag=\"\$1\"
+	arch=\"\$2\"
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -ptx -o \"$REMOTE_DIR\"/bin/\"\${tag}\".ptx \"$REMOTE_DIR\"/cuda_sm121_compile_probe_minimal.cu 2>\"$REMOTE_DIR\"/bin/\"\${tag}\".err
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		target_line=\$(grep \"^\\\\.target\" \"$REMOTE_DIR\"/bin/\"\${tag}\".ptx | head -n 1 || true)
+		if [ \"\${target_line}\" = \"\" ]; then
+			target_line=\"(missing)\"
+		fi
+		echo \"\${tag}: OK ptx_target=\${target_line}\"
+		return 0
+	fi
+	echo \"\${tag}: FAILED rc=\$rc\" >&2
+	head -n 60 \"$REMOTE_DIR\"/bin/\"\${tag}\".err || true
+	return 1
+}
+
+featureset_macros_probe() {
+	tag=\"\$1\"
+	arch=\"\$2\"
+	set +e
+	\$NVCC -O2 -std=c++17 -arch=\"\${arch}\" -c -o \"$REMOTE_DIR\"/bin/\"\${tag}\".o \"$REMOTE_DIR\"/cuda_sm121_arch_list_compile_probe_minimal.cu 2>\"$REMOTE_DIR\"/bin/\"\${tag}\".err
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		spec=\$(grep -E \"DS4_CUDA_ARCH_SPECIFIC=\" \"$REMOTE_DIR\"/bin/\"\${tag}\".err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_SPECIFIC=//' | tr -cd '0-9')
+		fam=\$(grep -E \"DS4_CUDA_ARCH_FAMILY_SPECIFIC=\" \"$REMOTE_DIR\"/bin/\"\${tag}\".err | head -n 1 | sed -E 's/^.*DS4_CUDA_ARCH_FAMILY_SPECIFIC=//' | tr -cd '0-9')
+		if [ \"\${spec}\" = \"\" ]; then
+			spec=\"(missing)\"
+		fi
+		if [ \"\${fam}\" = \"\" ]; then
+			fam=\"(missing)\"
+		fi
+		echo \"\${tag}: OK __CUDA_ARCH_SPECIFIC__=\${spec} __CUDA_ARCH_FAMILY_SPECIFIC__=\${fam}\"
+		return 0
+	fi
+	echo \"\${tag}: FAILED rc=\$rc\" >&2
+	head -n 60 \"$REMOTE_DIR\"/bin/\"\${tag}\".err || true
+	return 1
+}
+
 compile_probe sm121_arch_sm_121 cuda_sm121_compile_probe_minimal.cu -arch=sm_121
 compile_probe sm121_gpuarch_sm_121 cuda_sm121_compile_probe_minimal.cu --gpu-architecture=sm_121
 compile_probe sm121_gpuarchcode_sm_121 cuda_sm121_compile_probe_minimal.cu --gpu-architecture=compute_121 --gpu-code=sm_121
@@ -159,6 +224,12 @@ compile_probe sm121_arch_sm_121a cuda_sm121_compile_probe_minimal.cu -arch=sm_12
 compile_probe sm121_arch_sm_121f cuda_sm121_compile_probe_minimal.cu -arch=sm_121f || true
 compile_probe sm121_gpuarch_sm_121a cuda_sm121_compile_probe_minimal.cu --gpu-architecture=sm_121a || true
 compile_probe sm121_gpuarch_sm_121f cuda_sm121_compile_probe_minimal.cu --gpu-architecture=sm_121f || true
+
+echo
+echo \"== nvcc: PTX .target probe (best-effort) ==\"
+ptx_target_probe ptx_target_sm_121 sm_121
+ptx_target_probe ptx_target_sm_121a sm_121a || true
+ptx_target_probe ptx_target_sm_121f sm_121f || true
 
 echo
 echo \"== build: sm_121 c++20 flags compile probes (compile-only; no link/run) ==\"
@@ -187,6 +258,31 @@ if [ \"\${do_build_compute121}\" = \"1\" ]; then
 	compile_probe compute121_arch_compute_121 cuda_compute121_compile_probe_minimal.cu -arch=compute_121 || true
 	compile_probe compute121_gpuarch_compute_121 cuda_compute121_compile_probe_minimal.cu --gpu-architecture=compute_121 || true
 	compile_probe compute121_gpuarchcode_sm_121 cuda_compute121_compile_probe_minimal.cu --gpu-architecture=compute_121 --gpu-code=sm_121 || true
+
+	echo
+	echo \"== nvcc: PTX .target probe for compute_121 (best-effort) ==\"
+	ptx_target_probe ptx_target_compute_121 compute_121 || true
+	ptx_target_probe ptx_target_compute_121a compute_121a || true
+	ptx_target_probe ptx_target_compute_121f compute_121f || true
+
+	echo
+	echo \"== nvcc: feature-set macro compile probe (best-effort) ==\"
+	featureset_macros_probe featureset_compute_121a compute_121a || true
+	featureset_macros_probe featureset_compute_121f compute_121f || true
+
+	echo
+	echo \"== nvcc: gencode compile (best-effort) ==\"
+	set +e
+	\$NVCC -O2 -std=c++17 -gencode \"arch=compute_121,code=[sm_121,compute_121]\" -c -o \"$REMOTE_DIR\"/bin/gencode_sm121_plus_ptx.o \"$REMOTE_DIR\"/cuda_sm121_compile_probe_minimal.cu 2>\"$REMOTE_DIR\"/bin/gencode_sm121_plus_ptx.err
+	rc=\$?
+	set -e
+	if [ \$rc -eq 0 ]; then
+		echo \"gencode_sm121_plus_ptx: OK\"
+	else
+		echo \"gencode_sm121_plus_ptx: FAILED rc=\$rc\" >&2
+		head -n 60 \"$REMOTE_DIR\"/bin/gencode_sm121_plus_ptx.err || true
+		exit \"\${rc}\"
+	fi
 fi
 "
 }

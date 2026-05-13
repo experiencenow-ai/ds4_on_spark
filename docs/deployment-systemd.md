@@ -8,6 +8,7 @@ They are **examples**. Adjust flags and sandboxing once the runtime interface is
 stable.
 
 Optional developer path: user-service templates exist under `deploy/systemd-user/` (see `docs/deployment-systemd-user.md`).
+Optional drop-in examples (overrides without editing base unit files) live under `deploy/systemd-dropins/` and `deploy/systemd-user-dropins/`.
 
 Optional (recommended): validate deploy assets + ops scripts before staging:
 
@@ -47,7 +48,8 @@ See `docs/ops-deploy-asset-validation.md` for the full workflow.
 ## Units
 
 - `ds4@.service`: long-running DS4 instance
-- `ds4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict preflight fails)
+- `ds4-tp2-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-strict@%i.service` before start (fails start if strict TP=2 preflight fails)
+- Legacy: `ds4-strict@.service` (same behavior as `ds4-tp2-strict@.service`; retained for compatibility)
 - `ds4-tp3-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-tp3-strict@%i.service` before start (fails start if strict TP=3 preflight fails)
 - `ds4-tp4-strict@.service`: long-running DS4 instance that *requires* `ds4-preflight-tp4-strict@%i.service` before start (fails start if strict TP=4 preflight fails)
 - `ds4-preflight@.service`: oneshot readiness checks (safe to run repeatedly); triggers `ds4-support-bundle@%i.service` on failure
@@ -115,8 +117,8 @@ sudo systemctl start  ds4@spark0.service
 If you want strict TP=2 gating on start, enable the strict service instead:
 
 ```bash
-sudo systemctl enable ds4-strict@spark0.service
-sudo systemctl start  ds4-strict@spark0.service
+sudo systemctl enable ds4-tp2-strict@spark0.service
+sudo systemctl start  ds4-tp2-strict@spark0.service
 ```
 
 If you want strict gating for TP=3 or TP=4 starts, use the topology-specific strict templates:
@@ -144,3 +146,21 @@ For optional journald persistence, file-log rotation, and Prometheus scrape conv
 
 `deploy/systemd/ds4@.service` includes conservative sandboxing. Avoid enabling
 `MemoryDenyWriteExecute=` until CUDA JIT behavior is fully understood.
+
+## Unit Overrides (Drop-Ins) (Optional)
+
+Prefer `systemctl edit` for overrides instead of editing the base unit files in `deploy/systemd/`:
+
+```bash
+# Instance-specific:
+sudo systemctl edit ds4@spark0.service
+
+# Template-wide:
+sudo systemctl edit ds4@.service
+```
+
+Example snippets (copy/paste starting points):
+
+- `deploy/systemd-dropins/README.md`
+- `deploy/systemd-dropins/ds4@.service.d/20-timeouts.conf.example`
+- `deploy/systemd-dropins/ds4@.service.d/40-execstart-override.conf.example`

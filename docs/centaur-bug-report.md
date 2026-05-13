@@ -16,11 +16,33 @@ export CENTAUR_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark0_v73_evidence_run.sh spark0@<spark0-host>
 ```
 
+Optional: have the evidence runner write `smoke_report.md` into the fetched bundle directory:
+
+```bash
+export CENTAUR_GEN_REPORT=1
+```
+
+Optional (recommended for failures): have the Spark0 smoke enable shell tracing so `smoke.log` captures exact command lines:
+
+```bash
+export CENTAUR_TRACE=1
+```
+
 If you already ran the smoke and only want to fetch:
 
 ```bash
 sh ./scripts/centaur_spark0_v73_fetch_artifacts.sh spark0@<spark0-host> "$CENTAUR_RUN_ID"
 ```
+
+Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+```bash
+bundle_dir="/private/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-smoke/spark0-v73/$CENTAUR_RUN_ID"; fi
+sh ./scripts/centaur_spark0_v73_smoke_report.sh "$CENTAUR_RUN_ID" "$bundle_dir" "$bundle_dir/smoke_report.md"
+```
+
+Tip: if you ran `scripts/centaur_spark0_v73_evidence_run.sh`, the bundle directory also contains `smoke.local.log` (Mac-side wrapper output). It includes the exact `ssh ...` command line; the report helper will include it (with the SSH target redacted) when present.
 
 Default local output directory:
 
@@ -35,10 +57,30 @@ export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 sh ./scripts/centaur_spark12_v73_ring_rsync_evidence_run.sh spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
+Optional: have the evidence runner write `ring_rsync_report.md` into the fetched bundle directory:
+
+```bash
+export RING_GEN_REPORT=1
+```
+
+Optional (recommended for failures): enable remote shell tracing so `ring_rsync.log` captures exact command lines:
+
+```bash
+export RING_TRACE=1
+```
+
 If you already ran the ring rsync and only want to fetch:
 
 ```bash
 sh ./scripts/centaur_spark12_v73_ring_rsync_fetch_artifacts.sh spark0@<spark0-host> "$RING_RUN_ID"
+```
+
+Optional: generate a Markdown summary for PRs/issues (review for hostnames/paths before posting):
+
+```bash
+bundle_dir="/private/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"
+if [ ! -d "$bundle_dir" ]; then bundle_dir="/tmp/centaur-ring/spark12-v73/$RING_RUN_ID"; fi
+sh ./scripts/centaur_spark12_v73_ring_rsync_report.sh "$RING_RUN_ID" "$bundle_dir" "$bundle_dir/ring_rsync_report.md"
 ```
 
 Default local output directory:
@@ -51,6 +93,7 @@ Recommended: run the one-command evidence loop (run → validate → fetch):
 
 ```bash
 export RING_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+export RING_TRACE=1
 sh ./scripts/centaur_spark12_v73_ring_sim_evidence_run.sh spark0@<spark0-host>
 ```
 
@@ -75,6 +118,9 @@ Default local output directory:
 - Python + deps:
   - `python3 -V`
   - `pip freeze` excerpt (at least `numpy`, `scipy`, `scikit-learn`) or the full `pip_freeze.txt`
+- For Spark1/2 node setup failures (or ring rsync failures that depend on node setup):
+  - `node_setup_facts.json` (zip/python/requirements + freeze; per-node)
+  - `pip_freeze.txt` (sanitized; per-node)
 - Failing sub-step:
   - exact `centaur.py ...` command line
   - a bounded tail excerpt (sanitized)

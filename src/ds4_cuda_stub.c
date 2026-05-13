@@ -89,6 +89,38 @@ int32_t ds4_cuda_status_format(ds4_cuda_status_t st,char *out,int32_t cap)
 	return(n);
 }
 
+int32_t ds4_cuda_error_format_i32(int32_t cuda_err,const char *expr,const char *file,int32_t line,char *out,int32_t cap)
+{
+	ds4_cuda_status_t st;
+	const char *s;
+	int32_t n;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	if ( expr == 0 )
+		expr = "?";
+	if ( file == 0 )
+		file = "?";
+	if ( cuda_err == 0 )
+		st = ds4_cuda_ok();
+	else
+		st = ds4_cuda_fail(cuda_err);
+	s = ds4_cuda_errstr(st);
+	if ( s == 0 )
+		s = "?";
+	n = (int32_t)snprintf(out,(size_t)cap,"%s:%d %s => code=%d err=%s",file,line,expr,cuda_err,s);
+	if ( n < 0 )
+	{
+		out[0] = 0;
+		return(-3);
+	}
+	out[cap - 1] = 0;
+	if ( n >= cap )
+		return(-4);
+	return(n);
+}
+
 ds4_cuda_status_t ds4_cuda_last_error(void)
 {
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));

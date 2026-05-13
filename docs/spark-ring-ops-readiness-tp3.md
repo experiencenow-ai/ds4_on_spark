@@ -16,18 +16,30 @@ Use this alongside:
 To capture a single “are we ready?” snapshot (mesh + systemd status) across the ordered inventory:
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --journal --lines 120 \
   spark0@<spark0-host> spark1@<spark1-host> spark2@<spark2-host>
 ```
 
 Or using an inventory file (recommended for repeatable runs):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --journal --lines 120 \
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
+Note: snapshots may include hostnames/IPs/routes and journal excerpts; keep the output private and redact before sharing externally.
+
 This is read-only. It does not start/stop services or modify networking.
+
+If you already staged deploy assets to `/tmp/ds4-*` on each Spark, you can also include staged readiness checks in the same snapshot (safe; no sudo):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
 
 ## Readiness Rubric (TP=3)
 
@@ -64,13 +76,20 @@ Ports: `docs/ops-spark012-network-ports.md`.
 
 For each host’s env (`/etc/ds4/ds4-<instance>.env` or user equivalent):
 
-- **READY**: `DS4_WORLD_SIZE=3`, `DS4_RANK=0/1/2`, and a rank-ordered `DS4_RING_HOSTS` list is present and consistent across all hosts.
+- **READY**: `DS4_WORLD_SIZE=3`, `DS4_RANK=0/1/2`, and a rank-ordered `DS4_RING_HOSTS` list is present and consistent across all hosts; `DS4_MASTER_ADDR` resolves to the same host as `DS4_RING_HOSTS` entry 0 (Spark0).
 - **BLOCKED**: any mismatch in `DS4_RING_HOSTS`, duplicate ranks, or world-size mismatch.
 
 If you staged assets, you can audit staged env consistency (safe):
 
 ```bash
 ./scripts/ops_spark_ring_staged_env_audit.sh spark0@... spark1@... spark2@...
+```
+
+If the staged env audit is clean, you can run staged TP=3 readiness checks (safe; no sudo; uses staged `/tmp/ds4-*` assets):
+
+```bash
+./scripts/ops_spark_ring_staged_readiness.sh --topology ring --preflight tp3 --strict \
+  spark0@... spark1@... spark2@...
 ```
 
 ### Systemd Templates + Preflight (Strict Gate)
@@ -98,4 +117,3 @@ TP=2 readiness (Spark0/Spark1) is still useful as a baseline even when targeting
 - Then run TP=3 strict preflight on all three hosts to validate rank + ring host list.
 
 Do not change firewall rules, routing, or system services as part of automation loops; document proposed changes for human approval.
-

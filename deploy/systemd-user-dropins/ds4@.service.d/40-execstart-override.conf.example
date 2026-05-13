@@ -1,0 +1,10 @@
+# Example: override ExecStart without editing the base unit.
+#
+# WARNING:
+# - This is a template; do not guess flags. Verify `ds4_server --help` on your build.
+# - When overriding ExecStart, you must first clear the inherited ExecStart line.
+
+[Service]
+ExecStart=
+ExecStart=%h/ds4/bin/ds4_server --config ${DS4_CONFIG_PATH}
+

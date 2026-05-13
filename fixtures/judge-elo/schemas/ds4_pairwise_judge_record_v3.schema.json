@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_pairwise_judge_record_v3",
+  "description": "JSONL envelope for offline judge-ELO updates (v3: strict-by-schema; requires tokens + latency_ms accounting and expects strict decision consistency. For word-count and cross-field constraints (margin/score mapping), use scripts/judge_elo_schema.py validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "pair_id",
+    "model_a",
+    "model_b",
+    "parse_valid",
+    "tokens",
+    "latency_ms"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "ds4_pairwise_judge_record_v3"
+    },
+    "pair_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "sample_id": {
+      "type": "string"
+    },
+    "judge_model": {
+      "type": "string"
+    },
+    "model_a": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_b": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parse_valid": {
+      "type": "boolean"
+    },
+    "winner": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "tie"
+      ]
+    },
+    "margin": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "score_a": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "score_b": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "reason": {
+      "type": "string",
+      "pattern": "^[^\\r\\n\\s]+([\\t ]+[^\\r\\n\\s]+){0,17}$",
+      "maxLength": 200
+    },
+    "train_hint": {
+      "type": "string",
+      "pattern": "^$|^[^\\r\\n\\s]+([\\t ]+[^\\r\\n\\s]+){0,17}$",
+      "maxLength": 200
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^\\r\\n]*$",
+        "maxLength": 24
+      }
+    },
+    "raw": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]*$",
+      "maxLength": 512
+    },
+    "parse_error": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]*$",
+      "maxLength": 128
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "a_out",
+        "b_out",
+        "judge_in",
+        "judge_out"
+      ],
+      "properties": {
+        "a_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "b_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "judge_in": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "judge_out": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "latency_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "a",
+        "b",
+        "judge"
+      ],
+      "properties": {
+        "a": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "b": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "judge": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "parse_valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "winner",
+          "margin",
+          "score_a",
+          "score_b",
+          "reason",
+          "train_hint",
+          "tags"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "parse_valid": {
+            "const": false
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "raw"
+            ]
+          },
+          {
+            "required": [
+              "parse_error"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "parse_valid": {
+            "const": true
+          },
+          "winner": {
+            "const": "tie"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "margin": {
+            "const": 0
+          }
+        }
+      }
+    }
+  ]
+}

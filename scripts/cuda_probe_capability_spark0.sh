@@ -12,6 +12,7 @@ with_kernel_launch_minimal="${WITH_KERNEL_LAUNCH_MINIMAL:-1}"
 with_kernel_tiny="${WITH_KERNEL_TINY:-1}"
 with_cmake_minimal="${WITH_CMAKE_MINIMAL:-1}"
 with_cublaslt_tiny="${WITH_CUBLASLT_TINY:-1}"
+with_sm121_compile_report_tiny_minimal="${WITH_SM121_COMPILE_REPORT_TINY_MINIMAL:-1}"
 log_path="${LOG_PATH:-}"
 remote_tag="${REMOTE_TAG:-"$(date -u +%Y%m%d-%H%M%S)-$$"}"
 
@@ -49,6 +50,11 @@ run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_nvcc_minimal_${remote_tag}" "$rep
 
 log_line "== cuda probe capability: sm_121 compile probes minimal (no repo transfer) =="
 run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_sm121_compile_probes_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_sm121_compile_probes_minimal_spark0.sh" "$target"
+
+if [ "${with_sm121_compile_report_tiny_minimal}" = "1" ]; then
+	log_line "== cuda probe capability: sm_121 compile report tiny minimal (no repo transfer) =="
+	run_logged env REMOTE_DIR="/tmp/ds4_cuda_probe_sm121_compile_report_tiny_minimal_${remote_tag}" "$repo_root/scripts/cuda_probe_sm121_compile_report_tiny_minimal_spark0.sh" "$target"
+fi
 
 if [ "${with_kernel_launch_minimal}" = "1" ]; then
 	log_line "== cuda probe capability: kernel launch tiny minimal (no cudaMalloc; no repo transfer) =="

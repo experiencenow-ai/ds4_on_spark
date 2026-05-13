@@ -20,6 +20,20 @@ scored summary, use:
 scripts/run_baseline_vllm_matrix_bundle.sh <spark-ssh-target> <matrix.tsv>
 ```
 
+To capture the bundle report as a commit-ready `docs/baseline-vllm-matrix-*.md`
+note (copying only the markdown report, not the `/private/tmp` artifacts), use:
+
+```sh
+scripts/run_baseline_vllm_matrix_bundle_capture_doc.sh <spark-ssh-target> <matrix.tsv>
+```
+
+For the pinned Spark0 ladder order (Ling 2.6 INT4 target-only, then Qwen +
+DFlash pairs), use the convenience wrapper:
+
+```sh
+scripts/run_baseline_vllm_ling_qwen_dflash_ladder_spark0.sh spark0@aitopatom-9ab9.local
+```
+
 This wrapper calls `scripts/run_baseline_vllm_dflash_pair.sh` for each row.
 Spark-side gates still apply (`ALLOW_RUN`, `ALLOW_FETCH`).
 It also writes a self-contained bundle report (`baseline_vllm_matrix_bundle.md`)
@@ -79,6 +93,7 @@ Notes:
   `PUBLIC_QUALITY_BASIS`, `PUBLIC_QUALITY_SOURCE`, `PASSED_TASKS`, `TOTAL_TASKS`,
   `LOCAL_QUALITY_SCORE`, `QUALITY_SCORE`) and run `scripts/model_quality_speed_score.py`.
 - The bundle wrapper also emits `model_quality_speed_scored_summary.txt` (per-run `key=value` blocks including Pareto `dominated_by`) for copy/paste into baseline docs.
+- If your checkout is a worktree that cannot write `FETCH_HEAD`, create a local git shim (`scripts/run_baseline_git_shim.sh`) and pass `DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=.` so the bundle report records the correct `ds4_on_spark` commit.
 - Do not download large model weights unless explicitly approved.
 - These wrappers default to `ALLOW_RUN=0` so nothing executes on Spark unless you opt in.
 

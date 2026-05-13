@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ds4_pairwise_judge_decision_v2",
+  "description": "Compact-key DSv4 pairwise judge decision object (v2). Uses short keys to reduce judge_out tokens: w/winner, m/margin, sa/score_a, sb/score_b, r/reason, h/train_hint, t/tags. Word-count and cross-field constraints are enforced by scripts/judge_elo_schema.py after canonicalization.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "w",
+    "m",
+    "sa",
+    "sb",
+    "r",
+    "h",
+    "t"
+  ],
+  "properties": {
+    "w": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "tie"
+      ]
+    },
+    "m": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "sa": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "sb": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "r": {
+      "type": "string",
+      "pattern": "^[^\\r\\n\\s]+([\\t ]+[^\\r\\n\\s]+){0,17}$",
+      "maxLength": 200
+    },
+    "h": {
+      "type": "string",
+      "pattern": "^$|^[^\\r\\n\\s]+([\\t ]+[^\\r\\n\\s]+){0,17}$",
+      "maxLength": 200
+    },
+    "t": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^\\r\\n]*$",
+        "maxLength": 24
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "w": {
+            "const": "tie"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "m": {
+            "const": 0
+          }
+        }
+      }
+    }
+  ]
+}

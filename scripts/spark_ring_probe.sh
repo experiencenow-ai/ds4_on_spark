@@ -124,6 +124,35 @@ known_hosts_for_target()
 	return 0
 }
 
+ssh_classify_err()
+{
+	msg="$1"
+	case "$msg" in
+		*"Could not resolve hostname"*|*"Name or service not known"*|*"Temporary failure in name resolution"*|*"nodename nor servname provided"*)
+			echo "resolve_failed"
+			;;
+		*"No route to host"*|*"Network is unreachable"*)
+			echo "no_route"
+			;;
+		*"Connection timed out"*|*"Operation timed out"*|*"Connection timeout"*|*"Connection refused"*)
+			echo "timeout"
+			;;
+		*"Permission denied"*|*"Authentication failed"*)
+			echo "auth_failed"
+			;;
+		*"REMOTE HOST IDENTIFICATION HAS CHANGED"*)
+			echo "hostkey_changed"
+			;;
+		*"Host key verification failed"*)
+			echo "hostkey_verification_failed"
+			;;
+		*)
+			echo "ssh_failed"
+			;;
+	esac
+	return 0
+}
+
 count_targets()
 {
 	n=0
@@ -400,10 +429,10 @@ smi_cuda_ver=""
 cuda_ver=""
 cuda_h_version=""
 nvcc_release=""
-if command -v nvidia-smi >/dev/null 2>&1; then
-	(nvidia-smi --version 2>/dev/null || nvidia-smi -V 2>/dev/null || true) | sed -E "/^ERROR:/d" | head -n 20 || true
-	echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
-	q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
+	if command -v nvidia-smi >/dev/null 2>&1; then
+		(nvidia-smi --version 2>/dev/null || nvidia-smi -V 2>/dev/null || true) | sed -E "/^ERROR:/d" | head -n 20 || true
+		echo "columns: index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total"
+		q="$(nvidia-smi --query-gpu=index,gpu_name,pci.bus_id,driver_version,compute_cap,memory.total --format=csv,noheader,nounits 2>/dev/null || true)"
 	if [ "$q" != "" ]; then
 		echo "$q"
 		driver_version="$(printf "%s\n" "$q" | head -n 1 | awk -F"," '{ v=$4; gsub(/^[ \t]+|[ \t]+$/, "", v); print v; }' 2>/dev/null || true)"
@@ -418,19 +447,28 @@ if command -v nvidia-smi >/dev/null 2>&1; then
 	smi_q="$(nvidia-smi -q 2>/dev/null || true)"
 	smi_cuda_ver="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*CUDA Version[[:space:]]*:[[:space:]]*([0-9]+[.][0-9]+).*/\\1/p" | head -n 1 || true)"
 	compute_cap_q="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Compute Capability[[:space:]]*:[[:space:]]*([0-9]+)[.]([0-9]+).*/\\1.\\2/p" | awk -F. '{ v=($1*100)+$2; if ( v > best ) { best=v; bestc=$0; } } END { if ( bestc != "" ) print bestc; }' 2>/dev/null || true)"
-	if [ "$compute_cap_q" != "" ]; then
-		echo "compute_cap (-q): $compute_cap_q"
-		if [ "$compute_cap" = "" ]; then
-			compute_cap="$compute_cap_q"
-		elif [ "$compute_cap" != "$compute_cap_q" ]; then
-			echo "warning: compute_cap selected $compute_cap != nvidia-smi -q compute_cap $compute_cap_q"
+		if [ "$compute_cap_q" != "" ]; then
+			echo "compute_cap (-q): $compute_cap_q"
+			if [ "$compute_cap" = "" ]; then
+				compute_cap="$compute_cap_q"
+			elif [ "$compute_cap" != "$compute_cap_q" ]; then
+				echo "warning: compute_cap selected $compute_cap != nvidia-smi -q compute_cap $compute_cap_q"
+			fi
 		fi
-	fi
-	if [ "$q" != "" ]; then
-		smi_mem_total_any_na="$(printf "%s\n" "$q" | awk -F"," '{ v=$NF; gsub(/^[ \t]+|[ \t]+$/, "", v); if ( v == "[N/A]" ) { print "1"; exit } }' || true)"
-		if [ "$smi_mem_total_any_na" = "1" ]; then
-			echo "note: nvidia-smi memory.total is [N/A] (unified memory); use free -h for system RAM"
-		fi
+		echo
+		echo "== nvidia-smi -q fabric/c2c (summary) =="
+		smi_arch="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Product Architecture[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+		smi_peer_type="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*Peer Type[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+		smi_c2c_mode="$(printf "%s\n" "$smi_q" | sed -nE "s/^[[:space:]]*GPU C2C Mode[[:space:]]*:[[:space:]]*(.+)$/\\1/p" | head -n 1 || true)"
+		[ "$smi_arch" != "" ] && echo "Product Architecture: $smi_arch"
+		[ "$smi_peer_type" != "" ] && echo "Peer Type: $smi_peer_type"
+		[ "$smi_c2c_mode" != "" ] && echo "GPU C2C Mode: $smi_c2c_mode"
+		echo
+		if [ "$q" != "" ]; then
+			smi_mem_total_any_na="$(printf "%s\n" "$q" | awk -F"," '{ v=$NF; gsub(/^[ \t]+|[ \t]+$/, "", v); if ( v == "[N/A]" ) { print "1"; exit } }' || true)"
+			if [ "$smi_mem_total_any_na" = "1" ]; then
+				echo "note: nvidia-smi memory.total is [N/A] (unified memory); use free -h for system RAM"
+			fi
 	fi
 else
 	echo "nvidia-smi not found"
@@ -547,15 +585,16 @@ REMOTE
 				skew_s="$(printf "%s\n" "$out" | sed -nE 's/^skew_s [(]remote-local[)]: (-?[0-9]+).*/\1/p' | head -n 1 || true)"
 		[ "$epoch" = "" ] && epoch="?"
 		[ "$skew_s" = "" ] && skew_s="?"
-		clock_rows="${clock_rows}${clock_rows:+
+			clock_rows="${clock_rows}${clock_rows:+
 }${host} epoch=${epoch} skew_s=${skew_s}"
-		if [ "$rc" -ne 0 ]; then
-			echo "ssh: failed rc=$rc"
-			ssh_fail=$((ssh_fail + 1))
-		fi
-		echo
-	done
-	if [ "$clock_rows" != "" ]; then
+			if [ "$rc" -ne 0 ]; then
+				echo "ssh status: $(ssh_classify_err "$out")"
+				echo "ssh: failed rc=$rc"
+				ssh_fail=$((ssh_fail + 1))
+			fi
+			echo
+		done
+		if [ "$clock_rows" != "" ]; then
 		echo "== clock (summary, remote-local) =="
 		printf "%s\n" "$clock_rows"
 		echo

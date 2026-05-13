@@ -188,3 +188,59 @@ int32_t ds4_pool_used_count(ds4_pool_t *p,int32_t *out)
 	*out = (p->block_count - free_count);
 	return(0);
 }
+
+int32_t ds4_pool_validate(const ds4_pool_t *p)
+{
+	int32_t head,slow,fast,n,next;
+	if ( p == 0 )
+		return(-1);
+	if ( p->base == 0 )
+		return(-2);
+	if ( p->block_size <= 0 )
+		return(-3);
+	if ( p->block_size < (int32_t)sizeof(int32_t) )
+		return(-4);
+	if ( p->block_count <= 0 )
+		return(-5);
+	head = p->free_head;
+	if ( head < -1 )
+		return(-6);
+	if ( head >= p->block_count )
+		return(-7);
+	slow = head;
+	fast = head;
+	for (;;)
+	{
+		if ( fast < 0 )
+			break;
+		if ( fast >= p->block_count )
+			return(-8);
+		fast = ds4_pool_read_i32(p->base + (fast * p->block_size));
+		if ( fast < 0 )
+			break;
+		if ( fast >= p->block_count )
+			return(-9);
+		fast = ds4_pool_read_i32(p->base + (fast * p->block_size));
+		if ( slow < 0 )
+			return(-10);
+		if ( slow >= p->block_count )
+			return(-11);
+		slow = ds4_pool_read_i32(p->base + (slow * p->block_size));
+		if ( slow >= 0 && slow == fast )
+			return(-12);
+	}
+	n = 0;
+	next = head;
+	for (; next>=0; )
+	{
+		if ( next >= p->block_count )
+			return(-13);
+		next = ds4_pool_read_i32(p->base + (next * p->block_size));
+		n += 1;
+		if ( n > p->block_count )
+			return(-14);
+	}
+	if ( n > p->block_count )
+		return(-15);
+	return(0);
+}

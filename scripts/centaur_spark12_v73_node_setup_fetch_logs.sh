@@ -11,6 +11,8 @@ Fetches the remote Spark1/2 node-setup logs created by:
 
 Copies (when present) from Spark1 and Spark2:
   - <remote_dir>/run/node_setup/<run_id>/node_setup.log
+  - <remote_dir>/run/node_setup/<run_id>/pip_freeze.txt
+  - <remote_dir>/run/node_setup/<run_id>/node_setup_facts.json
 
 Environment:
   SSH_OPTS  Optional ssh options override (default includes BatchMode + temp known_hosts)
@@ -58,6 +60,43 @@ if [ "${SSH_OPTS:-}" = "" ]; then
 	SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$known_hosts"
 fi
 
+need_cmd()
+{
+	if command -v "$1" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "missing required command: $1" >&2
+	exit 2
+}
+
+need_copy_tool()
+{
+	if command -v rsync >/dev/null 2>&1; then
+		echo "copy_tool: rsync"
+		return 0
+	fi
+	if command -v scp >/dev/null 2>&1; then
+		echo "copy_tool: scp"
+		return 0
+	fi
+	echo "missing required command: rsync or scp" >&2
+	exit 2
+}
+
+copy_from_remote()
+{
+	src="$1"
+	dst="$2"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -av -e "ssh $SSH_OPTS" "$src" "$dst"
+		return 0
+	fi
+	scp $SSH_OPTS "$src" "$dst"
+}
+
+need_cmd ssh
+need_copy_tool
+
 mkdir -p "$local_out"
 
 fetch_one()
@@ -67,7 +106,10 @@ fetch_one()
 	remote_base="$3"
 
 	remote_base="$(ssh $SSH_OPTS "$target" "cd $remote_base && pwd -P")"
-	remote_log="$remote_base/run/node_setup/$run_id/node_setup.log"
+	remote_dir_run="$remote_base/run/node_setup/$run_id"
+	remote_log="$remote_dir_run/node_setup.log"
+	remote_freeze="$remote_dir_run/pip_freeze.txt"
+	remote_facts="$remote_dir_run/node_setup_facts.json"
 	local_path="$local_out/$label/"
 	mkdir -p "$local_path"
 
@@ -77,9 +119,21 @@ fetch_one()
 	echo "local_dir: $local_path"
 
 	if ssh $SSH_OPTS "$target" "test -f $remote_log"; then
-		rsync -av -e "ssh $SSH_OPTS" "$target:$remote_log" "$local_path/"
+		copy_from_remote "$target:$remote_log" "$local_path/"
 	else
 		echo "skip (not found): $remote_log" >&2
+	fi
+
+	if ssh $SSH_OPTS "$target" "test -f $remote_freeze"; then
+		copy_from_remote "$target:$remote_freeze" "$local_path/"
+	else
+		echo "skip (not found): $remote_freeze" >&2
+	fi
+
+	if ssh $SSH_OPTS "$target" "test -f $remote_facts"; then
+		copy_from_remote "$target:$remote_facts" "$local_path/"
+	else
+		echo "skip (not found): $remote_facts" >&2
 	fi
 }
 
@@ -88,4 +142,3 @@ fetch_one "$spark2" "spark2" "$remote_dir"
 
 echo "== done =="
 echo "local_out: $local_out"
-

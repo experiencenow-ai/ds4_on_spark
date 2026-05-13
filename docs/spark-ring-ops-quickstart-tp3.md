@@ -10,6 +10,8 @@ Use this alongside:
 - Staged layout: `docs/deployment-spark012-staged-layout.md`
 - SSH + network runbook: `docs/ops-ssh-network-runbook.md`
 - Logging + metrics conventions: `docs/ops-logging-metrics.md`
+- Run notes + snapshot hygiene: `docs/ops-run-notes.md`
+- TP=2 → TP=3 transition runbook: `docs/spark-ring-ops-transition-tp2-to-tp3.md`
 - Operating checklist: `docs/spark-ring-ops-checklist-tp3.md`
 - Readiness rubric: `docs/spark-ring-ops-readiness-tp3.md`
 
@@ -40,10 +42,31 @@ Stage templates/config examples/scripts to all 3 hosts (safe; non-destructive):
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 
+Optional (recommended): run staged TP readiness checks immediately after staging (safe; no sudo; uses staged `/tmp/ds4-*` assets):
+
+```bash
+./scripts/ops_stage_spark_ring.sh --mesh-check --topology ring \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
 Optional: capture a single “snapshot” (mesh + systemd status + optional journald tail) for run notes (safe):
 
 ```bash
-./scripts/ops_spark_ring_ops_check.sh --preflight tp3 --strict --journal --lines 120 \
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --journal --lines 120 \
+  --inventory-file deploy/config/inventory.ds4.spark012.example
+```
+
+Note: snapshots may include hostnames/IPs/routes and journal excerpts; keep the output private and redact before sharing externally.
+See: `docs/ops-run-notes.md`.
+
+Optional: if you already staged assets, include staged readiness in the same snapshot (safe; uses `/tmp/ds4-*`):
+
+```bash
+./scripts/ops_spark_ring_ops_check.sh --out "/private/tmp/ds4_ops_check_tp3_$(date -u +%Y%m%d-%H%M%SZ).txt" \
+  --preflight tp3 --strict --journal --lines 120 \
+  --staged-readiness --staged-readiness-strict --staged-readiness-preflight tp3 \
   --inventory-file deploy/config/inventory.ds4.spark012.example
 ```
 

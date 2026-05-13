@@ -101,6 +101,13 @@ __global__ void write_cuda_arch(uint32_t *out)
 #endif
 }
 
+__device__ __constant__ uint32_t ds4_cuda_arch_const =
+#if defined(__CUDA_ARCH__)
+	(uint32_t)__CUDA_ARCH__;
+#else
+	0U;
+#endif
+
 static int32_t ck(cudaError_t err,int32_t code,const char *what)
 {
 	if ( err != cudaSuccess )
@@ -163,16 +170,26 @@ int main(int argc,char **argv)
 #else
 	tma_map = -1;
 #endif
-	if ( cudaMalloc((void **)&d_arch,sizeof(uint32_t)) == cudaSuccess )
+	(void)cudaGetLastError();
+	if ( cudaMemcpyFromSymbol(&cuda_arch,ds4_cuda_arch_const,sizeof(cuda_arch),0,cudaMemcpyDeviceToHost) != cudaSuccess )
 	{
-		if ( cudaMemset(d_arch,0,sizeof(uint32_t)) == cudaSuccess )
+		(void)cudaGetLastError();
+		cuda_arch = 0;
+		if ( cudaMalloc((void **)&d_arch,sizeof(uint32_t)) == cudaSuccess )
 		{
-			write_cuda_arch<<<1,1>>>(d_arch);
-			if ( cudaGetLastError() == cudaSuccess )
-				(void)cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost);
+			if ( cudaMemset(d_arch,0,sizeof(uint32_t)) == cudaSuccess )
+			{
+				write_cuda_arch<<<1,1>>>(d_arch);
+				if ( cudaGetLastError() == cudaSuccess )
+				{
+					(void)cudaDeviceSynchronize();
+					(void)cudaGetLastError();
+					(void)cudaMemcpy(&cuda_arch,d_arch,sizeof(uint32_t),cudaMemcpyDeviceToHost);
+				}
+			}
+			cudaFree(d_arch);
+			d_arch = 0;
 		}
-		cudaFree(d_arch);
-		d_arch = 0;
 	}
 	mem_bytes = (uint64_t)prop.totalGlobalMem;
 	smem_block_bytes = (uint64_t)prop.sharedMemPerBlock;
@@ -309,7 +326,31 @@ set -e
 		head -n 60 \"$REMOTE_DIR\"/cuda_sm121_gpuarch_code_compile_only.err || true
 		exit 6
 	fi
-	
+
+	echo
+	echo \"== build: compute_121 compile-only gate (nvcc --gpu-architecture=compute_121; best-effort) ==\"
+	do_build_compute121_gpuarch=1
+	if [ \"\${list_gpu_arch}\" != \"\" ]; then
+		if echo \"\${list_gpu_arch}\" | grep -q \"compute_121\"; then
+			:
+		else
+			echo \"(nvcc --list-gpu-arch missing compute_121; skipping)\" >&2
+			do_build_compute121_gpuarch=0
+		fi
+	fi
+	if [ \"\${do_build_compute121_gpuarch}\" = \"1\" ]; then
+		set +e
+		\$NVCC -O2 -std=c++17 --gpu-architecture=compute_121 -c -o \"$REMOTE_DIR\"/cuda_compute121_gpuarch_compile_only.o \"$REMOTE_DIR\"/cuda_sm121_compile_only.cu 2>\"$REMOTE_DIR\"/cuda_compute121_gpuarch_compile_only.err
+		rc=\$?
+		set -e
+		if [ \$rc -eq 0 ]; then
+			echo \"compute_121_gpuarch_compile_only: OK\"
+		else
+			echo \"compute_121_gpuarch_compile_only: FAILED rc=\$rc\" >&2
+			head -n 60 \"$REMOTE_DIR\"/cuda_compute121_gpuarch_compile_only.err || true
+		fi
+	fi
+
 	echo
 	echo \"== run: cuda_device_props_minimal ==\"
 	\"$REMOTE_DIR\"/cuda_device_props_minimal

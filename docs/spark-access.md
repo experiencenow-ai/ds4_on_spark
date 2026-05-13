@@ -13,13 +13,13 @@ Current observed Spark identity:
 - Spark wired interface: `enP7s7`, MTU 9000
 - Additional wired NICs observed: Mellanox `mlx5_core` ports at `200000Mb/s` (MTU `9000`; see latest ring probe snapshot for ifnames)
 - SSH key authentication from the Mac is now working for `spark0`.
-- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, 100% loss at `2026-05-12T1830Z`; see latest mac discovery snapshot).
+- Mac→Spark0 ICMP ping is flaky (0% loss at `2026-05-12T1801Z`, `2026-05-12T2132Z`, `2026-05-13T0435Z`, `2026-05-13T0628Z`, and `2026-05-13T0759Z`; 100% loss at `2026-05-12T1830Z`, `2026-05-12T1934Z`, `2026-05-12T2029Z`, `2026-05-12T2058Z`, `2026-05-13T0005Z`, `2026-05-13T0041Z`, `2026-05-13T0527Z`, `2026-05-13T0602Z`, `2026-05-13T0658Z`, `2026-05-13T0730Z`, `2026-05-13T0830Z`, and `2026-05-13T0902Z`; see latest mac discovery snapshot).
 - GPU: `NVIDIA GB10` (Blackwell), `compute_cap=12.1` (via `nvidia-smi` query + `nvcc` runtime probe)
-- CUDA/driver (observed 2026-05-12): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88`, `cuda version.json` `13.0.3`
+- CUDA/driver (observed `2026-05-13T0902Z`): driver `580.142`, `nvidia-smi` CUDA `13.0`, `nvcc` `13.0.88` (installed at `/usr/local/cuda/bin/nvcc`, not on `$PATH`), `cuda version.json` `13.0.3`
 - Stable Spark0 CUDA/toolchain quickref: `docs/spark0-cuda-toolchain-facts.md`
-- Latest commit-safe ring snapshot set: `2026-05-12T1830Z` (`docs/spark-ring-*-2026-05-12T1830Z.md`)
-- Latest Spark0 facts-only snapshot: `2026-05-12T1830Z` (`docs/spark0-probe-facts-2026-05-12T1830Z.md`)
-- PCIe link note (observed 2026-05-12): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-12T1830Z.md`
+- Latest commit-safe ring snapshot set: `2026-05-13T0902Z` (`docs/spark-ring-*-2026-05-13T0902Z.md`)
+- Latest Spark0 facts-only snapshot: `2026-05-13T0902Z` (`docs/spark0-probe-facts-2026-05-13T0902Z.md`)
+- PCIe link note (observed `2026-05-13T0902Z`): `nvidia-smi` `pcie.link.gen.max/current` reports Gen1 x1, but `nvidia-smi -q` reports Gen5 x16 max; see the `warning:` lines in `docs/spark0-probe-facts-2026-05-13T0902Z.md`
 
 ## Reproducible Probes
 
@@ -58,6 +58,24 @@ GIT_DIR=.codex_git GIT_WORK_TREE=. git fetch origin --prune
 GIT_DIR=.codex_git GIT_WORK_TREE=. git checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
 ```
 
+#### Fast path: bare shim + alternates (no copy, minimal network)
+
+If the checkout is a Git worktree with an existing shared object store (`commondir`), you can build a local bare shim gitdir that *reuses* those objects via `objects/info/alternates` (avoids copying the worktree gitdir and avoids re-downloading the whole repo):
+
+```bash
+worktree_gitdir="$(sed -nE 's/^gitdir:[[:space:]]*(.*)/\1/p' .git)"
+common_rel="$(cat "${worktree_gitdir}/commondir")"
+common_abs="$(cd "${worktree_gitdir}" && cd "${common_rel}" && pwd -P)"
+rm -rf .codex_git
+git init --bare .codex_git
+git --git-dir=.codex_git remote add origin git@github.com:experiencenow-ai/ds4_on_spark.git
+mkdir -p .codex_git/objects/info
+printf "%s\\n" "${common_abs}/objects" > .codex_git/objects/info/alternates
+git --git-dir=.codex_git fetch origin main --prune
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
+git --git-dir=.codex_git --work-tree=. checkout -b codex/loop-spark-access-YYYYMMDD-short-suffix origin/main
+```
+
 ```bash
 # One-time setup (from repo root, simplest gitdir shim; creates `.codex_git/` as a gitdir)
 git --git-dir=.codex_git init
@@ -88,7 +106,7 @@ Fast path (overwrites the working tree; only do this when `git status` is clean 
 
 ```bash
 git --git-dir=.codex_git --work-tree=. fetch origin --prune
-git --git-dir=.codex_git --work-tree=. checkout -f -B main origin/main
+git --git-dir=.codex_git --work-tree=. reset --hard origin/main
 ```
 
 If you need to preserve any local files, seed the shim’s `HEAD` and `index` from the automation-provided worktree metadata, then re-run the `fetch`/`reset` step:
@@ -204,11 +222,21 @@ stamp="$(date -u +%Y-%m-%dT%H%MZ)"
 REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" aitopatom-9ab9.local spark1.local spark2.local
 ```
 
+This writes (under `docs/`, commit-safe when `REDACT=1`):
+
+- `docs/spark-ring-mac-discovery-<stamp>.md`
+- `docs/spark-ring-probe-<stamp>.md`
+- `docs/spark-ring-latency-probe-<stamp>.md` (SSH wall-time; no ICMP required)
+- `docs/spark-ring-mtu-probe-<stamp>.md` (unless `SKIP_MTU=1`)
+- `docs/spark-ring-bw-probe-<stamp>.md` (unless `SKIP_BW=1`)
+- `docs/spark0-probe-facts-<stamp>.md` (only when `aitopatom-9ab9.local` is in targets and `SKIP_SPARK0_FACTS!=1`)
+- `docs/spark-ring-node-facts-<host>-<stamp>.md` (when `SPARK_NODE_FACTS=1`)
+
 If each node uses a different SSH user, pass explicit `user@host` targets (the mac discovery step strips the `user@` prefix automatically):
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_snapshots.sh --stamp "$stamp" spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local
 ```
 
 To also capture per-node facts-only snapshots (Spark1/Spark2-ready, when reachable), set `SPARK_NODE_FACTS=1`:
@@ -229,7 +257,7 @@ With explicit per-node SSH users:
 
 ```bash
 stamp="$(date -u +%Y-%m-%dT%H%MZ)"
-REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" spark0@aitopatom-9ab9.local spark1@spark1.local spark2@spark2.local
+REDACT=1 SPARK_KNOWN_HOSTS_PER_HOST=1 DS4_GIT_DIR=.codex_git DS4_GIT_WORK_TREE=. ./scripts/spark_ring_probe_facts.sh --stamp "$stamp" spark0@aitopatom-9ab9.local <spark1_user>@spark1.local <spark2_user>@spark2.local
 ```
 
 ### Spark Hardware + Toolchain Probe
@@ -335,7 +363,7 @@ ssh spark0@aitopatom-9ab9.local hostname
 Human-only (requires Mac admin privileges; do not run from automation loops): make the Spark wired IPv4 reachable directly from the Mac wired port.
 
 ```bash
-ifconfig en0 inet <mac-wired-ipv4> netmask 255.255.255.0 alias
+ifconfig en0 inet <mac-wired-ipv4> netmask <netmask> alias
 ping <spark-wired-ipv4>
 ssh spark0@<spark-wired-ipv4> hostname
 ```

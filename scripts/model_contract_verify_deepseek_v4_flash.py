@@ -190,23 +190,45 @@ def main() -> int:
 		else:
 			try:
 				summary = load_json(contract_summary)
-				up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
-				fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
-				if not isinstance(fixture_sha, dict):
-					fixture_sha = {}
-				expected_sha_keys = [
-					"DeepSeek_V4.pdf",
-					"encoding/tests/test_input_1.json",
-					"encoding/tests/test_output_1.txt",
-					"encoding/tests/test_input_4.json",
-					"encoding/tests/test_output_4.txt",
-					"oracle/prompts.json",
-					"upstream_commit.txt",
-				]
-				for k in expected_sha_keys:
-					if fixture_sha.get(k) is None:
-						failures.append(Failure(32, f"contract summary missing upstream.fixtures_sha256 entry for {k}: {contract_summary}"))
-						break
+				cfg_summary = summary.get("config_summary", None) if isinstance(summary, dict) else None
+				if not isinstance(cfg_summary, dict):
+					failures.append(Failure(30, f"contract summary missing config_summary (expected object): {contract_summary}"))
+				else:
+					want_cfg_summary = {
+						"attention_bias": bool(cfg.get("attention_bias", False)),
+						"attention_dropout": float(cfg.get("attention_dropout", 0.0)),
+						"hidden_act": str(cfg.get("hidden_act", "")),
+						"initializer_range": float(cfg.get("initializer_range", 0.0)),
+						"max_position_embeddings": int(cfg.get("max_position_embeddings", 0)),
+						"rms_norm_eps": float(cfg.get("rms_norm_eps", 0.0)),
+						"tie_word_embeddings": bool(cfg.get("tie_word_embeddings", False)),
+						"torch_dtype": str(cfg.get("torch_dtype", "")),
+						"transformers_version": str(cfg.get("transformers_version", "")),
+						"use_cache": bool(cfg.get("use_cache", True)),
+					}
+					if cfg_summary != want_cfg_summary:
+						failures.append(Failure(31, f"contract summary config_summary mismatch (expected pinned fixtures/config.json semantics): {contract_summary}"))
+
+					up = summary.get("upstream", {}) if isinstance(summary, dict) else {}
+					fixture_sha = up.get("fixtures_sha256", {}) if isinstance(up, dict) else {}
+					if not isinstance(fixture_sha, dict):
+						fixture_sha = {}
+
+					expected_sha_keys = [
+						"DeepSeek_V4.pdf",
+						"checkpoint_keys.txt",
+						"encoding/tests/test_input_1.json",
+						"encoding/tests/test_output_1.txt",
+						"encoding/tests/test_input_4.json",
+						"encoding/tests/test_output_4.txt",
+						"mtp_checkpoint_keys.txt",
+						"oracle/prompts.json",
+						"upstream_commit.txt",
+					]
+					for k in expected_sha_keys:
+						if fixture_sha.get(k) is None:
+							failures.append(Failure(32, f"contract summary missing upstream.fixtures_sha256 entry for {k}: {contract_summary}"))
+							break
 				enc_test_keys = [k for k in fixture_sha.keys() if isinstance(k, str) and k.startswith("encoding/tests/")]
 				if len(enc_test_keys) < 8:
 					failures.append(Failure(33, f"contract summary must record sha256 for encoding oracle vectors under encoding/tests/* (expected >=8, got {len(enc_test_keys)}): {contract_summary}"))
@@ -490,6 +512,25 @@ def main() -> int:
 							failures.append(Failure(149, f"contract summary mtp_sidecar.reference_payload_samples.payload_samples_count mismatch (expected {len(ref_lines)}): {contract_summary}"))
 						if ref.get("payload_samples_sha256") != sha256_lines(ref_lines):
 							failures.append(Failure(150, f"contract summary mtp_sidecar.reference_payload_samples.payload_samples_sha256 mismatch: {contract_summary}"))
+
+				mtp_keys_path = FIX / "mtp_checkpoint_keys.txt"
+				if not mtp_keys_path.exists():
+					failures.append(Failure(153, f"missing derived fixture listing official mtp.* tensor keys: {mtp_keys_path}"))
+				else:
+					want_mtp_keys = sorted([k for k in weight_keys if k.startswith("mtp.")])
+					got_mtp_keys = mtp_keys_path.read_text(encoding="utf-8").splitlines()
+					if got_mtp_keys != want_mtp_keys:
+						failures.append(Failure(154, f"mtp checkpoint key fixture is stale vs model.safetensors.index.json (expected_len={len(want_mtp_keys)} got_len={len(got_mtp_keys)}): {mtp_keys_path}"))
+					else:
+						want_sha = sha256_lines(want_mtp_keys)
+						got_sha = sha256_file(mtp_keys_path)
+						if got_sha != want_sha:
+							failures.append(Failure(155, f"mtp checkpoint key fixture sha256 mismatch (got={got_sha} expected={want_sha}): {mtp_keys_path}"))
+						mtp_obj = summary.get("mtp", {}) if isinstance(summary, dict) else {}
+						ck = (mtp_obj.get("checkpoint_key_fingerprint", {}) if isinstance(mtp_obj, dict) else {}) if isinstance(mtp_obj, dict) else {}
+						expected_mtp_sha = ck.get("keys_sha256", None) if isinstance(ck, dict) else None
+						if expected_mtp_sha is not None and expected_mtp_sha != want_sha:
+							failures.append(Failure(156, f"contract summary mtp.checkpoint_key_fingerprint.keys_sha256 mismatch vs fixtures (got={expected_mtp_sha} expected={want_sha}): {contract_summary}"))
 
 				cache_update = summary.get("cache", {}).get("update_semantics", {})
 				ring_expr = cache_update.get("decode_sliding_ring_update_expr")
@@ -945,10 +986,11 @@ def main() -> int:
 						else:
 							# Enforce machine-readable per-layer suffix + count helpers for DS4 implementers.
 							layer_req = tk.get("layer_required_nonexpert_suffixes_by_layer_id", None)
+							layer_req_keys = tk.get("layer_required_nonexpert_keys_by_layer_id", None)
 							layer_expected = tk.get("layer_expected_tensor_key_count_by_layer_id", None)
 							layer_counts = tk.get("layer_tensor_key_count_by_layer_id", None)
 							layer_ok = tk.get("layer_expected_tensor_key_count_by_layer_id_ok", None)
-							if not (isinstance(layer_req, dict) and isinstance(layer_expected, dict) and isinstance(layer_counts, dict) and isinstance(layer_ok, dict)):
+							if not (isinstance(layer_req, dict) and isinstance(layer_req_keys, dict) and isinstance(layer_expected, dict) and isinstance(layer_counts, dict) and isinstance(layer_ok, dict)):
 								failures.append(Failure(121, f"contract summary missing tensor_keys.layer_* per-layer helpers (required_nonexpert_suffixes / expected_counts / counts / ok): {contract_summary}"))
 							else:
 								try:
@@ -972,6 +1014,12 @@ def main() -> int:
 									got_req = layer_req.get(key)
 									if got_req != exp:
 										failures.append(Failure(122, f"contract summary tensor_keys.layer_required_nonexpert_suffixes_by_layer_id[{i}] mismatch (got_len={len(got_req) if isinstance(got_req, list) else 'n/a'} expected_len={len(exp)}): {contract_summary}"))
+										break
+
+									exp_keys = [f"layers.{i}.{s}" for s in exp]
+									got_req_keys = layer_req_keys.get(key)
+									if got_req_keys != exp_keys:
+										failures.append(Failure(126, f"contract summary tensor_keys.layer_required_nonexpert_keys_by_layer_id[{i}] mismatch (got_len={len(got_req_keys) if isinstance(got_req_keys, list) else 'n/a'} expected_len={len(exp_keys)}): {contract_summary}"))
 										break
 
 									got_count = layer_counts.get(key)
@@ -1010,7 +1058,10 @@ def main() -> int:
 
 					mtp_counts = tk.get("mtp_tensor_key_count_by_layer_id", None)
 					mtp_ok = tk.get("mtp_expected_tensor_key_count_by_layer_id_ok", None)
-					if not isinstance(mtp_counts, dict) or not isinstance(mtp_ok, dict):
+					mtp_req_keys_by_layer = tk.get("mtp_required_nonexpert_keys_by_layer_id", None)
+					mtp_req_suffixes = tk.get("mtp_required_nonexpert_suffixes", None)
+					mtp0 = tk.get("mtp0", None)
+					if not isinstance(mtp_counts, dict) or not isinstance(mtp_ok, dict) or not isinstance(mtp_req_keys_by_layer, dict) or not isinstance(mtp_req_suffixes, list) or not isinstance(mtp0, dict):
 						failures.append(Failure(107, f"contract summary missing tensor_keys mtp per-layer count objects (mtp_tensor_key_count_by_layer_id / mtp_expected_tensor_key_count_by_layer_id_ok): {contract_summary}"))
 					else:
 						mtp_layer_ids = find_mtp_layer_ids(weight_keys)
@@ -1025,6 +1076,18 @@ def main() -> int:
 							if ok is not True:
 								failures.append(Failure(109, f"contract summary tensor_keys.mtp_expected_tensor_key_count_by_layer_id_ok[{mtp_id}] must be true: {contract_summary}"))
 								break
+
+							exp_mtp_keys = [prefix + str(s) for s in mtp_req_suffixes]
+							got_mtp_keys = mtp_req_keys_by_layer.get(str(mtp_id))
+							if got_mtp_keys != exp_mtp_keys:
+								failures.append(Failure(127, f"contract summary tensor_keys.mtp_required_nonexpert_keys_by_layer_id[{mtp_id}] mismatch (got_len={len(got_mtp_keys) if isinstance(got_mtp_keys, list) else 'n/a'} expected_len={len(exp_mtp_keys)}): {contract_summary}"))
+								break
+
+						if mtp0.get("present") is True:
+							got0 = mtp0.get("required_nonexpert_keys", None)
+							want0 = mtp_req_keys_by_layer.get("0")
+							if got0 != want0:
+								failures.append(Failure(128, f"contract summary tensor_keys.mtp0.required_nonexpert_keys must match mtp_required_nonexpert_keys_by_layer_id[0]: {contract_summary}"))
 
 						# Enforce MTP tensor-key semantics for the official checkpoint: no compressor/indexer, no tid2eid, and full key coverage.
 						req_layer = tk.get("required_layer_suffixes", None)
@@ -1129,6 +1192,21 @@ def main() -> int:
 								if not (isinstance(v, list) and all(isinstance(x, str) and x.startswith("mtp.") for x in v)):
 									failures.append(Failure(188, f"contract summary mtp.checkpoint_key_examples.{k} must be a list of mtp.* strings or null: {contract_summary}"))
 									break
+						ns = mtp.get("namespace", None)
+						if not isinstance(ns, dict):
+							failures.append(Failure(189, f"contract summary mtp.namespace must be an object when num_nextn_predict_layers>0: {contract_summary}"))
+						else:
+							want_prefixes = [f"mtp.{i}." for i in expected_layer_ids]
+							if ns.get("expected_layer_ids") != expected_layer_ids:
+								failures.append(Failure(190, f"contract summary mtp.namespace.expected_layer_ids mismatch (got {ns.get('expected_layer_ids')!r} expected {expected_layer_ids}): {contract_summary}"))
+							elif ns.get("expected_prefixes") != want_prefixes:
+								failures.append(Failure(191, f"contract summary mtp.namespace.expected_prefixes mismatch (got {ns.get('expected_prefixes')!r} expected {want_prefixes}): {contract_summary}"))
+							elif ns.get("official_present_layer_ids") != expected_layer_ids:
+								failures.append(Failure(192, f"contract summary mtp.namespace.official_present_layer_ids mismatch (got {ns.get('official_present_layer_ids')!r} expected {expected_layer_ids}): {contract_summary}"))
+							elif ns.get("official_present_prefixes") != want_prefixes:
+								failures.append(Failure(193, f"contract summary mtp.namespace.official_present_prefixes mismatch (got {ns.get('official_present_prefixes')!r} expected {want_prefixes}): {contract_summary}"))
+							elif ns.get("official_complete") is not True:
+								failures.append(Failure(194, f"contract summary mtp.namespace.official_complete must be true when num_nextn_predict_layers>0: {contract_summary}"))
 
 				mtp_sem = mtp.get("semantics", {}) if isinstance(mtp, dict) else {}
 				if not isinstance(mtp_sem, dict):
@@ -1221,6 +1299,22 @@ def main() -> int:
 				want_cfg = cfg.get("quantization_config", None)
 				if want_cfg is not None and q_cfg != want_cfg:
 					failures.append(Failure(77, f"contract summary quantization.config_quantization_config mismatch (expected config.json quantization_config): {contract_summary}"))
+
+				gc = q.get("gguf_compat", {}) if isinstance(q, dict) else {}
+				if not isinstance(gc, dict):
+					failures.append(Failure(78, f"contract summary quantization.gguf_compat must be an object: {contract_summary}"))
+				else:
+					want_prefixes = ["F8_"]
+					want_cats = ["attn", "ffn_other", "shared_expert_packed", "shared_experts", "top_level"]
+					want_fp4_types = ["MXFP4"]
+					if gc.get("dense_fp8_like_type_prefixes") != want_prefixes:
+						failures.append(Failure(79, f"contract summary quantization.gguf_compat.dense_fp8_like_type_prefixes mismatch (got {gc.get('dense_fp8_like_type_prefixes')!r} expected {want_prefixes!r}): {contract_summary}"))
+					if gc.get("dense_fp8_like_evidence_categories") != want_cats:
+						failures.append(Failure(80, f"contract summary quantization.gguf_compat.dense_fp8_like_evidence_categories mismatch (got {gc.get('dense_fp8_like_evidence_categories')!r} expected {want_cats!r}): {contract_summary}"))
+					if gc.get("expert_fp4_like_types") != want_fp4_types:
+						failures.append(Failure(81, f"contract summary quantization.gguf_compat.expert_fp4_like_types mismatch (got {gc.get('expert_fp4_like_types')!r} expected {want_fp4_types!r}): {contract_summary}"))
+					if not (isinstance(gc.get("note"), str) and gc.get("note")):
+						failures.append(Failure(82, f"contract summary quantization.gguf_compat.note must be a non-empty string: {contract_summary}"))
 
 				oracle = summary.get("oracle", {})
 				if not isinstance(oracle, dict):

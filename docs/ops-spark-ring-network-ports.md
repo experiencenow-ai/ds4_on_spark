@@ -10,6 +10,10 @@ This is a **human-run** reference for the expected network shape and the ports D
 
 Do not change Spark firewall rules, routing, or system networking as part of automation loops; document proposed changes for human approval.
 
+If you need a starting point for drafting an allowlist (human-run), see:
+
+- `docs/ops-firewall-allowlist.md`
+
 ## Hostnames + Paths
 
 Decide which path is authoritative for distributed runs:

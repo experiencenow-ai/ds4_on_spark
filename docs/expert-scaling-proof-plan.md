@@ -87,18 +87,33 @@ Use two fixture classes:
        --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
      ```
 
+     Important:
+     - `ffn_moe_topk` dumps contain the **selected experts** for each token/layer.
+     - When replaying these route-only traces in `sim/scheduler/scheduler_sim.py`, set `K=topk` (for DS4: `6`) to avoid underestimating queue depth and service load:
+
+       ```bash
+       python3 sim/scheduler/scheduler_sim.py \
+         --trace-jsonl /tmp/ds4_expert_fuzz_20260512T1335Z/routes_pos0.jsonl \
+         --trace-time-mode dt_ms --trace-non-route error \
+         --k-min-batch 6 --k-max-batch 6 --k-min-interactive 6 --k-max-interactive 6 \
+         --q-low 0 --q-high 0
+       ```
+
      Or run the same sweeps directly from the dump directory (writes a JSON report):
 
      ```bash
      python3 scripts/ds4_topk_dump_recommendations.py \
        --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
        --out-json /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_report.json \
-       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100
+       --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
+       --probe-expert-queueing
      ```
 
      Notes:
      - The `t_ms`/`dt_ms` fields are synthetic (dumps have no timestamps). Keep the report explicit about this.
      - `--batch-size B` groups `B` tokens at the same timestamp (decode-like batch step). This is useful for stress-testing queue depth and backpressure logic; it is not a full decode replay.
+     - `--probe-expert-queueing` attaches a route-only resampling probe that summarizes per-layer expert queue depth and cap-6 pair-work speedups across batch sizes (still not a full decode replay).
+     - For a loop-friendly markdown report, add `--format md` and write to `scheduler_report.md` instead of JSON.
 
 2. **Hidden-state replay fixture**
    - Input: real `ffn_norm`, `ffn_moe_topk`, and `ffn_moe_weights_scaled`

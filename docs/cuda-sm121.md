@@ -19,12 +19,17 @@ For convenience on single-GPU bring-up:
 
 The probe `tools/cuda_probe/bin/cuda_sm121_arch_list_report` prints `__CUDA_ARCH_LIST__` (and CUDA 13 feature-set macros when present) at runtime for a normal `-arch=sm_121` build, which is handy when diagnosing “what arch list did `nvcc` think we built?” issues.
 
+The probe `tools/cuda_probe/bin/cuda_sm121_compile_report_tiny` prints a single line with NVCC/CUDART macro versions plus device CC and `__CUDA_ARCH__` / `__CUDA_ARCH_LIST__` (useful for log capture in automation runs).
+
+For the same single-line report without shipping `tools/cuda_probe/` to Spark0, use `scripts/cuda_probe_sm121_compile_report_tiny_minimal_spark0.sh` (compiles a tiny `.cu` on Spark0 via `nvcc -arch=sm_121` and runs it).
+
 ### CUDA 13 NVCC Linkage / Visibility Defaults
 
 CUDA 13 changes `nvcc` defaults that can matter for CUTLASS/DeepGEMM-style builds:
 
 - `-static-global-template-stub=true` (default in CUDA 13) can break “explicitly instantiate a `__global__` template in TU A, launch it from TU B” in whole-program compilation mode (`-rdc=false`). Fix options include `-rdc=true` or `-static-global-template-stub=false`. `scripts/cuda_probe_nvcc_minimal_spark0.sh` prints `template_stub_default` / `template_stub_stubfalse` / `template_stub_rdc` as a concrete Spark0 check.
 - `-device-entity-has-hidden-visibility=true` (default in CUDA 13) forces hidden ELF visibility for `__global__` functions and device variables when building shared libraries (can cause link errors across `.so` boundaries unless you opt out and ensure a single shared CUDART).
+- Shared-library boundary probe: `scripts/cuda_probe_nvcc_minimal_spark0.sh` also attempts a tiny “kernel in `.so`, launched from main” build. On CUDA 13 defaults this is expected to fail to link; the opt-out build uses `-cudart=shared -device-entity-has-hidden-visibility=false` and should run (printing `hi!`).
 
 Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): `template_stub_default` fails to link (warning `#20280-D` + undefined reference), while `template_stub_stubfalse` (`-static-global-template-stub=false`) and `template_stub_rdc` (`-rdc=true`) both build and run successfully.
 
@@ -59,7 +64,7 @@ CUDA 13 adds architecture-specific (`a`) and family-specific (`f`) feature-set t
 
 These probes are informational; the hard failure for GB10 targeting remains “missing `sm_121` support”.
 
-Observed on Spark0 (2026-05-12 / CUDA 13.0 `V13.0.88`): toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`, and the compile-report probe currently reports `__CUDA_ARCH_SPECIFIC__=(missing)` / `__CUDA_ARCH_FAMILY_SPECIFIC__=(missing)` (treat as “flags accepted, macros not surfaced” until a newer toolkit proves otherwise).
+Observed on Spark0 (2026-05-13 / CUDA 13.0 `V13.0.88`): the toolchain accepts `-arch=compute_121a` / `-arch=compute_121f`; the feature-set macro compile probes report `compute_121a`: `__CUDA_ARCH_SPECIFIC__=1210` and `__CUDA_ARCH_FAMILY_SPECIFIC__=1210`, while `compute_121f` reports `__CUDA_ARCH_SPECIFIC__=(missing)` and `__CUDA_ARCH_FAMILY_SPECIFIC__=1210` (treat `*f` as “family-specific only” in macro gating).
 
 ### NVCC `__CUDA_ARCH_LIST__` (Toolchain Introspection)
 

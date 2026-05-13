@@ -106,6 +106,7 @@ echo
 echo "== systemd templates =="
 need_file "$systemd_dir/ds4@.service"
 need_file "$systemd_dir/ds4-strict@.service"
+need_file "$systemd_dir/ds4-tp2-strict@.service"
 need_file "$systemd_dir/ds4-tp3-strict@.service"
 need_file "$systemd_dir/ds4-tp4-strict@.service"
 need_file "$systemd_dir/ds4-preflight@.service"
@@ -125,7 +126,7 @@ echo
 
 echo "== systemd unit syntax (best effort) =="
 if command -v systemd-analyze >/dev/null 2>&1; then
-    units="$systemd_dir/ds4@.service $systemd_dir/ds4-strict@.service $systemd_dir/ds4-tp3-strict@.service $systemd_dir/ds4-tp4-strict@.service $systemd_dir/ds4-preflight@.service $systemd_dir/ds4-preflight-strict@.service $systemd_dir/ds4-support-bundle@.service"
+    units="$systemd_dir/ds4@.service $systemd_dir/ds4-strict@.service $systemd_dir/ds4-tp2-strict@.service $systemd_dir/ds4-tp3-strict@.service $systemd_dir/ds4-tp4-strict@.service $systemd_dir/ds4-preflight@.service $systemd_dir/ds4-preflight-strict@.service $systemd_dir/ds4-support-bundle@.service"
     if [ -f "$systemd_dir/ds4-preflight@.timer" ]; then
         units="$units $systemd_dir/ds4-preflight@.timer"
     fi
@@ -157,6 +158,7 @@ echo "== /opt/ds4 scripts =="
 need_exec "$scripts_dir/ops_ds4_env_check.sh"
 need_exec "$scripts_dir/ops_ds4_config_check.sh"
 need_exec "$scripts_dir/ops_tp2_readiness.sh"
+need_exec "$scripts_dir/ops_tp23_readiness.sh"
 if [ -x "$scripts_dir/ops_tp3_readiness.sh" ]; then
     need_exec "$scripts_dir/ops_tp3_readiness.sh"
 fi

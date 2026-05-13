@@ -35,6 +35,14 @@ int32_t test_cuda(void)
 		return(-203);
 	if ( ds4_cuda_status_format(st0,msg0,0) != -2 )
 		return(-204);
+	if ( ds4_cuda_error_format_i32(0,"expr","file",7,msg0,(int32_t)sizeof(msg0)) <= 0 || msg0[0] == 0 )
+		return(-205);
+	if ( ds4_cuda_error_format_i32(DS4_CUDA_ERR_DISABLED,"expr","file",7,msg0,(int32_t)sizeof(msg0)) <= 0 || msg0[0] == 0 )
+		return(-206);
+	if ( ds4_cuda_error_format_i32(0,"expr","file",7,0,1) != -1 )
+		return(-207);
+	if ( ds4_cuda_error_format_i32(0,"expr","file",7,msg0,0) != -2 )
+		return(-208);
 	cur_dev = -2;
 	st0 = ds4_cuda_get_device(&cur_dev);
 	s = ds4_cuda_errstr(st0);

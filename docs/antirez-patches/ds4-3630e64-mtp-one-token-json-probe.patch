@@ -1,0 +1,357 @@
+diff --git a/ds4.c b/ds4.c
+index f0f8cc1..f9e3f55 100644
+--- a/ds4.c
++++ b/ds4.c
+@@ -16338,6 +16338,131 @@ int ds4_engine_generate_argmax(
+                                 emit, done, emit_ud, progress, progress_ud);
+ }
+ 
++#ifndef DS4_NO_GPU
++static uint64_t mtp_probe_fnv1a64(const void *ptr, uint64_t nbytes) {
++    const uint8_t *p = (const uint8_t *)ptr;
++    uint64_t h = 14695981039346656037ull;
++    for (uint64_t i = 0; i < nbytes; i++) {
++        h ^= (uint64_t)p[i];
++        h *= 1099511628211ull;
++    }
++    return h;
++}
++
++static int mtp_probe_capture_tensor(
++        ds4_tensor_fingerprint *out,
++        ds4_gpu_tensor *t,
++        uint64_t nbytes,
++        uint32_t ndim,
++        uint32_t s0,
++        uint32_t s1,
++        char *err,
++        size_t errlen) {
++    if (!out || !t || nbytes == 0) {
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: missing tensor capture");
++        return 1;
++    }
++    if (ds4_gpu_synchronize() == 0) {
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: failed to synchronize before capture");
++        return 1;
++    }
++    uint8_t *buf = xmalloc((size_t)nbytes);
++    if (ds4_gpu_tensor_read(t, 0, buf, nbytes) == 0) {
++        free(buf);
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: failed to read tensor capture");
++        return 1;
++    }
++    out->fnv64 = mtp_probe_fnv1a64(buf, nbytes);
++    out->nbytes = nbytes;
++    out->ndim = ndim;
++    out->shape[0] = s0;
++    out->shape[1] = s1;
++    free(buf);
++    return 0;
++}
++#endif
++
++int ds4_engine_mtp_one_token_probe(
++        ds4_engine *e,
++        const ds4_tokens *prompt,
++        int ctx_size,
++        ds4_mtp_one_token_probe *out,
++        char *err,
++        size_t errlen) {
++    if (!e || !prompt || !out || ctx_size <= 0) return 1;
++    if (!e->mtp_ready) {
++        if (errlen) snprintf(err, errlen, "mtp one-token probe requires --mtp sidecar");
++        return 1;
++    }
++    if (!ds4_backend_uses_graph(e->backend) || !e->metal_ready) {
++        if (errlen) snprintf(err, errlen, "mtp one-token probe requires a graph backend (metal/cuda)");
++        return 1;
++    }
++#ifdef DS4_NO_GPU
++    (void)err;
++    (void)errlen;
++    return 1;
++#else
++    memset(out, 0, sizeof(*out));
++
++    ds4_session *session = NULL;
++    if (ds4_session_create(&session, e, ctx_size) != 0) {
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: failed to create session");
++        return 1;
++    }
++
++    char sync_err[160];
++    sync_err[0] = '\0';
++    if (ds4_session_sync(session, prompt, sync_err, sizeof(sync_err)) != 0) {
++        ds4_session_free(session);
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: prompt processing failed: %s", sync_err);
++        return 1;
++    }
++
++    const int base_next = ds4_session_argmax(session);
++    out->base_next_token_id = base_next;
++    if (base_next < 0) {
++        ds4_session_free(session);
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: failed to select base next token");
++        return 1;
++    }
++
++    char eval_err[160];
++    eval_err[0] = '\0';
++    if (ds4_session_eval(session, base_next, eval_err, sizeof(eval_err)) != 0) {
++        ds4_session_free(session);
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: base eval failed: %s", eval_err);
++        return 1;
++    }
++
++    if (!session->mtp_draft_valid || session->mtp_draft_token < 0) {
++        ds4_session_free(session);
++        if (errlen) snprintf(err, errlen, "mtp one-token probe: mtp draft token not available after base eval");
++        return 1;
++    }
++    out->mtp_draft_token_id = session->mtp_draft_token;
++
++    const uint32_t hc_dim = (uint32_t)(DS4_N_HC * DS4_N_EMBD);
++    const uint64_t hc_bytes = (uint64_t)hc_dim * sizeof(float);
++    const uint64_t embd_bytes = (uint64_t)DS4_N_EMBD * sizeof(float);
++
++    int cap_err = 0;
++    cap_err |= mtp_probe_capture_tensor(&out->trunk_token_embd, session->graph.mtp_embed, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->trunk_pre_hc_head, session->graph.cur_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_enorm, session->graph.mtp_enorm, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_eproj, session->graph.mtp_eproj, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_eproj_hc, session->graph.mtp_eproj_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_hnorm_hc, session->graph.mtp_hnorm_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_hproj_hc, session->graph.mtp_hproj_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_input_hc, session->graph.mtp_input_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_block_out_hc, session->graph.mtp_state_hc, hc_bytes, 2, DS4_N_HC, DS4_N_EMBD, err, errlen);
++    cap_err |= mtp_probe_capture_tensor(&out->mtp_head_norm, session->graph.output_norm, embd_bytes, 1, DS4_N_EMBD, 0, err, errlen);
++
++    ds4_session_free(session);
++    return cap_err != 0 ? 1 : 0;
++#endif
++}
++
+ int ds4_engine_metal_graph_test(ds4_engine *e, const ds4_tokens *prompt) {
+ #ifndef DS4_NO_GPU
+     if (!e->metal_ready) {
+diff --git a/ds4.h b/ds4.h
+index 9613b0d..b803e00 100644
+--- a/ds4.h
++++ b/ds4.h
+@@ -175,6 +175,40 @@ bool ds4_engine_has_mtp(ds4_engine *e);
+ int ds4_engine_mtp_draft_tokens(ds4_engine *e);
+ const ds4_tokens *ds4_session_tokens(ds4_session *s);
+ 
++typedef struct {
++    uint64_t fnv64;
++    uint64_t nbytes;
++    uint32_t ndim;
++    uint32_t shape[2];
++} ds4_tensor_fingerprint;
++
++typedef struct {
++    int base_next_token_id;
++    int mtp_draft_token_id;
++    ds4_tensor_fingerprint trunk_token_embd;
++    ds4_tensor_fingerprint trunk_pre_hc_head;
++    ds4_tensor_fingerprint mtp_enorm;
++    ds4_tensor_fingerprint mtp_eproj;
++    ds4_tensor_fingerprint mtp_eproj_hc;
++    ds4_tensor_fingerprint mtp_hnorm_hc;
++    ds4_tensor_fingerprint mtp_hproj_hc;
++    ds4_tensor_fingerprint mtp_input_hc;
++    ds4_tensor_fingerprint mtp_block_out_hc;
++    ds4_tensor_fingerprint mtp_head_norm;
++} ds4_mtp_one_token_probe;
++
++/* Capture a deterministic `gamma=1` one-token MTP draft probe suitable for
++ * oracle-vs-candidate comparisons. The probe commits exactly one target token
++ * (argmax) and then returns the MTP draft token plus intermediate tensor
++ * fingerprints from the MTP draft path. */
++int ds4_engine_mtp_one_token_probe(
++        ds4_engine *e,
++        const ds4_tokens *prompt,
++        int ctx_size,
++        ds4_mtp_one_token_probe *out,
++        char *err,
++        size_t errlen);
++
+ /* Disk KV cache payload helpers.  The server owns the outer file header and
+  * policy; the engine owns the DS4-specific serialized graph state. */
+ uint64_t ds4_session_payload_bytes(ds4_session *s);
+diff --git a/ds4_cli.c b/ds4_cli.c
+index 838a394..bf2ff9f 100644
+--- a/ds4_cli.c
++++ b/ds4_cli.c
+@@ -34,6 +34,7 @@ typedef struct {
+     bool dump_tokens;
+     const char *dump_logprobs_path;
+     int dump_logprobs_top_k;
++    bool dump_mtp_one_token_json;
+     ds4_think_mode think_mode;
+     bool head_test;
+     bool first_token_test;
+@@ -123,6 +124,8 @@ static void usage(FILE *fp) {
+         "      Nucleus sampling probability. Default: 1\n"
+         "  --seed N\n"
+         "      Sampling seed for reproducible non-greedy runs. Default: time-based\n"
++        "  --dump-mtp-one-token-json\n"
++        "      Emit a deterministic one-token MTP draft probe JSON to stdout and exit (requires --mtp).\n"
+         "  --think\n"
+         "      Use normal thinking mode. This is the default.\n"
+         "  --think-max\n"
+@@ -698,6 +701,130 @@ static int run_logprob_dump(ds4_engine *engine, const cli_config *cfg, const ds4
+     return 0;
+ }
+ 
++static void json_write_u64_hex(FILE *fp, uint64_t v) {
++    fprintf(fp, "\"%016llx\"", (unsigned long long)v);
++}
++
++static void json_write_shape(FILE *fp, const ds4_tensor_fingerprint *t) {
++    fputc('[', fp);
++    if (t && t->ndim >= 1) {
++        fprintf(fp, "%u", t->shape[0]);
++        if (t->ndim >= 2) fprintf(fp, ",%u", t->shape[1]);
++    }
++    fputc(']', fp);
++}
++
++static int run_mtp_one_token_json_dump(ds4_engine *engine, const cli_config *cfg, const ds4_tokens *prompt) {
++    ds4_mtp_one_token_probe probe;
++    char err[160];
++    err[0] = '\0';
++    if (ds4_engine_mtp_one_token_probe(engine, prompt, cfg->gen.ctx_size, &probe, err, sizeof(err)) != 0) {
++        fprintf(stderr, "ds4: mtp one-token probe failed: %s\n", err[0] ? err : "unknown error");
++        return 1;
++    }
++
++    size_t n_base = 0;
++    char *base_text = ds4_token_text(engine, probe.base_next_token_id, &n_base);
++    size_t n_draft = 0;
++    char *draft_text = ds4_token_text(engine, probe.mtp_draft_token_id, &n_draft);
++
++    FILE *fp = stdout;
++    fprintf(fp, "{\n");
++    fprintf(fp, "  \"runtime_repo\":\"https://github.com/antirez/ds4\",\n");
++    fprintf(fp, "  \"runtime_commit\":\"3630e64\",\n");
++    fprintf(fp, "  \"trunk_gguf_path\":");
++    json_write_string(fp, cfg->engine.model_path ? cfg->engine.model_path : "", cfg->engine.model_path ? strlen(cfg->engine.model_path) : 0);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_sidecar_path\":");
++    json_write_string(fp, cfg->engine.mtp_path ? cfg->engine.mtp_path : "", cfg->engine.mtp_path ? strlen(cfg->engine.mtp_path) : 0);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"prompt\":");
++    json_write_string(fp, cfg->gen.prompt ? cfg->gen.prompt : "", cfg->gen.prompt ? strlen(cfg->gen.prompt) : 0);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"seed\":%llu,\n", (unsigned long long)cfg->gen.seed);
++    fprintf(fp, "  \"temperature\":%.9g,\n", cfg->gen.temperature);
++    fprintf(fp, "  \"top_k\":1,\n");
++    fprintf(fp, "  \"top_p\":%.9g,\n", cfg->gen.top_p);
++    fprintf(fp, "  \"verify_step_idx\":0,\n");
++    fprintf(fp, "  \"base_next_token_id\":%d,\n", probe.base_next_token_id);
++    fprintf(fp, "  \"base_next_token\":");
++    json_write_string(fp, base_text ? base_text : "", base_text ? n_base : 0);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_draft_token_id\":%d,\n", probe.mtp_draft_token_id);
++    fprintf(fp, "  \"mtp_draft_token\":");
++    json_write_string(fp, draft_text ? draft_text : "", draft_text ? n_draft : 0);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"trunk_token_embd_fnv64\":");
++    json_write_u64_hex(fp, probe.trunk_token_embd.fnv64);
++    fprintf(fp, ",\n  \"trunk_token_embd_nbytes\":%llu,\n  \"trunk_token_embd_shape\":", (unsigned long long)probe.trunk_token_embd.nbytes);
++    json_write_shape(fp, &probe.trunk_token_embd);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"trunk_pre_hc_head_fnv64\":");
++    json_write_u64_hex(fp, probe.trunk_pre_hc_head.fnv64);
++    fprintf(fp, ",\n  \"trunk_pre_hc_head_nbytes\":%llu,\n  \"trunk_pre_hc_head_shape\":", (unsigned long long)probe.trunk_pre_hc_head.nbytes);
++    json_write_shape(fp, &probe.trunk_pre_hc_head);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_enorm_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_enorm.fnv64);
++    fprintf(fp, ",\n  \"mtp_enorm_nbytes\":%llu,\n  \"mtp_enorm_shape\":", (unsigned long long)probe.mtp_enorm.nbytes);
++    json_write_shape(fp, &probe.mtp_enorm);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_eproj_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_eproj.fnv64);
++    fprintf(fp, ",\n  \"mtp_eproj_nbytes\":%llu,\n  \"mtp_eproj_shape\":", (unsigned long long)probe.mtp_eproj.nbytes);
++    json_write_shape(fp, &probe.mtp_eproj);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_eproj_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_eproj_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_eproj_hc_nbytes\":%llu,\n  \"mtp_eproj_hc_shape\":", (unsigned long long)probe.mtp_eproj_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_eproj_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_hnorm_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_hnorm_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_hnorm_hc_nbytes\":%llu,\n  \"mtp_hnorm_hc_shape\":", (unsigned long long)probe.mtp_hnorm_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_hnorm_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_hproj_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_hproj_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_hproj_hc_nbytes\":%llu,\n  \"mtp_hproj_hc_shape\":", (unsigned long long)probe.mtp_hproj_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_hproj_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_input_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_input_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_input_hc_nbytes\":%llu,\n  \"mtp_input_hc_shape\":", (unsigned long long)probe.mtp_input_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_input_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_block_out_hc_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_block_out_hc.fnv64);
++    fprintf(fp, ",\n  \"mtp_block_out_hc_nbytes\":%llu,\n  \"mtp_block_out_hc_shape\":", (unsigned long long)probe.mtp_block_out_hc.nbytes);
++    json_write_shape(fp, &probe.mtp_block_out_hc);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_head_norm_fnv64\":");
++    json_write_u64_hex(fp, probe.mtp_head_norm.fnv64);
++    fprintf(fp, ",\n  \"mtp_head_norm_nbytes\":%llu,\n  \"mtp_head_norm_shape\":", (unsigned long long)probe.mtp_head_norm.nbytes);
++    json_write_shape(fp, &probe.mtp_head_norm);
++    fprintf(fp, ",\n");
++    fprintf(fp, "  \"mtp_params\":{\n");
++    fprintf(fp, "    \"n_embd\":4096,\n");
++    fprintf(fp, "    \"n_head\":64,\n");
++    fprintf(fp, "    \"n_head_dim\":512,\n");
++    fprintf(fp, "    \"n_hc\":4,\n");
++    fprintf(fp, "    \"n_lora_q\":1024,\n");
++    fprintf(fp, "    \"n_out_group\":8,\n");
++    fprintf(fp, "    \"n_lora_o\":1024,\n");
++    fprintf(fp, "    \"n_expert\":256,\n");
++    fprintf(fp, "    \"n_ff_exp\":2048\n");
++    fprintf(fp, "  },\n");
++    fprintf(fp, "  \"ok\":true,\n");
++    fprintf(fp, "  \"errors\":[]\n");
++    fprintf(fp, "}\n");
++    fflush(fp);
++
++    free(base_text);
++    free(draft_text);
++    return 0;
++}
++
+ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
+     ds4_tokens prompt = {0};
+     build_prompt(engine, &cfg->gen, &prompt);
+@@ -723,6 +850,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
+         ds4_tokens_free(&prompt);
+         return rc;
+     }
++    if (cfg->gen.dump_mtp_one_token_json) {
++        rc = run_mtp_one_token_json_dump(engine, cfg, &prompt);
++        ds4_tokens_free(&prompt);
++        return rc;
++    }
+ 
+     const bool diagnostic = cfg->gen.dump_tokens ||
+                             cfg->gen.head_test ||
+@@ -1230,6 +1362,11 @@ static cli_config parse_options(int argc, char **argv) {
+             c.gen.top_p = parse_float_range(need_arg(&i, argc, argv, arg), arg, 0.0f, 1.0f);
+         } else if (!strcmp(arg, "--seed")) {
+             c.gen.seed = parse_u64(need_arg(&i, argc, argv, arg), arg);
++        } else if (!strcmp(arg, "--dump-mtp-one-token-json")) {
++            c.gen.dump_mtp_one_token_json = true;
++            c.gen.temperature = 0.0f;
++            c.gen.top_p = 1.0f;
++            c.gen.n_predict = 1;
+         } else if (!strcmp(arg, "--quality")) {
+             c.engine.quality = true;
+         } else if (!strcmp(arg, "--dir-steering-file")) {
