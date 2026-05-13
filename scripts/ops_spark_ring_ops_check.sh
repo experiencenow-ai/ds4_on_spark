@@ -23,6 +23,7 @@ Notes:
       2) systemd status snapshot via ops_spark_ring_status.sh
       3) optional staged env audit (requires prior staging) via ops_spark_ring_staged_env_audit.sh
       4) optional staged readiness (requires prior staging) via ops_spark_ring_staged_readiness.sh
+      5) prints a glanceable readiness status summary (READY/WARN/BLOCKED)
 EOF
 }
 
@@ -230,20 +231,25 @@ do_work()
 	echo "staged_readiness=$staged_readiness"
 	echo "staged_readiness_strict=$staged_readiness_strict"
 	echo "staged_readiness_preflight=$picked_staged_preflight"
-	echo
-
-	echo "== mesh check =="
-	args=""
-	if [ "$tcp_ports" != "" ]; then
-		for p in $tcp_ports; do
-			args="$args --tcp $p"
-		done
-	fi
-	"$scripts_dir/ops_spark_ring_mesh_check.sh" --topology "$topology" $args "$@"
-	echo
-
-	echo "== systemd status snapshot =="
-	status_args=""
+		echo
+	
+		echo "== mesh check =="
+		args=""
+		if [ "$tcp_ports" != "" ]; then
+			for p in $tcp_ports; do
+				args="$args --tcp $p"
+			done
+		fi
+		step_mesh_rc=0
+		if "$scripts_dir/ops_spark_ring_mesh_check.sh" --topology "$topology" $args "$@"; then
+			step_mesh_rc=0
+		else
+			step_mesh_rc=$?
+		fi
+		echo
+	
+		echo "== systemd status snapshot =="
+		status_args=""
 	if [ "$systemd_mode" = "user" ]; then
 		status_args="$status_args --user"
 	else
@@ -253,38 +259,75 @@ do_work()
 	if [ "$strict" -ne 0 ]; then
 		status_args="$status_args --strict"
 	fi
-	if [ "$with_journal" -ne 0 ]; then
-		status_args="$status_args --journal --lines $journal_lines"
-	fi
-	"$scripts_dir/ops_spark_ring_status.sh" $status_args $instance_opts "$@" || true
-	echo
-
-	if [ "$staged_env_audit" -ne 0 ]; then
-		echo "== staged env audit (requires prior staging) =="
-		"$scripts_dir/ops_spark_ring_staged_env_audit.sh" $instance_opts "$@" || true
+		if [ "$with_journal" -ne 0 ]; then
+			status_args="$status_args --journal --lines $journal_lines"
+		fi
+		step_systemd_rc=0
+		if "$scripts_dir/ops_spark_ring_status.sh" $status_args $instance_opts "$@"; then
+			step_systemd_rc=0
+		else
+			step_systemd_rc=$?
+		fi
 		echo
-	fi
-
-	if [ "$staged_readiness" -ne 0 ]; then
-		echo "== staged readiness (requires prior staging) =="
-		readiness_args=""
-		readiness_args="$readiness_args --topology $topology"
+	
+		step_staged_env_rc=0
+		if [ "$staged_env_audit" -ne 0 ]; then
+			echo "== staged env audit (requires prior staging) =="
+			if "$scripts_dir/ops_spark_ring_staged_env_audit.sh" $instance_opts "$@"; then
+				step_staged_env_rc=0
+			else
+				step_staged_env_rc=$?
+			fi
+			echo
+		fi
+	
+		step_staged_readiness_rc=0
+		if [ "$staged_readiness" -ne 0 ]; then
+			echo "== staged readiness (requires prior staging) =="
+			readiness_args=""
+			readiness_args="$readiness_args --topology $topology"
 		if [ "$tcp_ports" != "" ]; then
 			for p in $tcp_ports; do
 				readiness_args="$readiness_args --tcp $p"
 			done
 		fi
-		readiness_args="$readiness_args --preflight $picked_staged_preflight"
-		if [ "$staged_readiness_strict" -ne 0 ]; then
-			readiness_args="$readiness_args --strict"
+			readiness_args="$readiness_args --preflight $picked_staged_preflight"
+			if [ "$staged_readiness_strict" -ne 0 ]; then
+				readiness_args="$readiness_args --strict"
+			fi
+			if "$scripts_dir/ops_spark_ring_staged_readiness.sh" $readiness_args $instance_opts "$@"; then
+				step_staged_readiness_rc=0
+			else
+				step_staged_readiness_rc=$?
+			fi
+			echo
 		fi
-		"$scripts_dir/ops_spark_ring_staged_readiness.sh" $readiness_args $instance_opts "$@" || true
-		echo
-	fi
 
-	echo "== next =="
-	case "$picked_preflight" in
-		tp2)
+		echo "== readiness status =="
+		echo "mesh_rc=$step_mesh_rc"
+		echo "systemd_rc=$step_systemd_rc"
+		echo "staged_env_audit_rc=$step_staged_env_rc"
+		echo "staged_readiness_rc=$step_staged_readiness_rc"
+		status="READY"
+		if [ "$step_mesh_rc" -ne 0 ]; then
+			status="BLOCKED"
+		elif [ "$step_systemd_rc" -ne 0 ]; then
+			status="WARN"
+		elif [ "$staged_env_audit" -ne 0 ] && [ "$step_staged_env_rc" -ne 0 ]; then
+			status="WARN"
+		elif [ "$staged_readiness" -ne 0 ] && [ "$step_staged_readiness_rc" -ne 0 ]; then
+			if [ "$staged_readiness_strict" -ne 0 ]; then
+				status="BLOCKED"
+			else
+				status="WARN"
+			fi
+		fi
+		echo "status=$status"
+		echo
+	
+		echo "== next =="
+		case "$picked_preflight" in
+			tp2)
 			echo "readiness rubric: docs/spark-ring-ops-readiness-tp2.md"
 			echo "operating checklist: docs/spark-ring-ops-checklist-tp2.md"
 			echo "deployment guide: docs/deployment-spark0-spark1.md"
@@ -301,9 +344,12 @@ do_work()
 			echo "readiness rubric: docs/spark-ring-ops-readiness-tp3.md"
 			echo "operating checklist: docs/spark-ring-ops-checklist-tp3.md"
 			;;
-	esac
-	echo "== done =="
-}
+		esac
+		echo "== done =="
+		if [ "$step_mesh_rc" -ne 0 ]; then
+			return "$step_mesh_rc"
+		fi
+	}
 
 if [ "$out_path" != "" ]; then
 	tmp="${out_path}.tmp.$$"
