@@ -535,10 +535,10 @@ index 0000000..a65998b
 +} // namespace ds4
 diff --git a/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
 new file mode 100644
-index 0000000..680d9af
+index 0000000..0a22c7a
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,763 @@
+@@ -0,0 +1,1089 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -548,6 +548,7 @@ index 0000000..680d9af
 +
 +#include <algorithm>
 +#include <clocale>
++#include <cmath>
 +#include <cstdint>
 +#include <cstdio>
 +#include <cstdlib>
@@ -603,6 +604,21 @@ index 0000000..680d9af
 +        return std::string();
 +    }
 +    return std::string(buf, (size_t) n);
++}
++
++static std::string ds4_render_chat_prompt(const std::string & prompt) {
++    static const char * bos = "<｜begin▁of▁sentence｜>";
++    if (prompt.rfind(bos, 0) == 0) {
++        return prompt;
++    }
++    std::string rendered;
++    rendered.reserve(prompt.size() + 96);
++    rendered += bos;
++    rendered += "You are a helpful assistant";
++    rendered += "<｜User｜>";
++    rendered += prompt;
++    rendered += "<｜Assistant｜><think>";
++    return rendered;
 +}
 +
 +struct tensor_capture {
@@ -762,6 +778,301 @@ index 0000000..680d9af
 +    pre = dsv4_add_scalar(ctx, ggml_sigmoid(ctx, pre), hc_eps);
 +
 +    return ggml_dsv4_hc_weighted_sum(ctx, x, pre);
++}
++
++struct dsv4_hc_mix {
++    ggml_tensor * x;
++    ggml_tensor * pre;
++    ggml_tensor * post;
++    ggml_tensor * comb;
++};
++
++static bool capture_graph_tensor(ggml_tensor * t, tensor_capture * out, std::string * err) {
++    if (t == nullptr || out == nullptr) {
++        if (err != nullptr) *err = "null tensor capture";
++        return false;
++    }
++    const size_t n_bytes = ggml_nbytes(t);
++    out->bytes.resize(n_bytes);
++    if (t->data == nullptr) {
++        if (err != nullptr) *err = "tensor capture has null data";
++        return false;
++    }
++    std::memcpy(out->bytes.data(), t->data, n_bytes);
++    out->type = t->type;
++    out->ne0 = t->ne[0];
++    out->ne1 = t->ne[1];
++    out->ne2 = t->ne[2];
++    out->ne3 = t->ne[3];
++    out->got = true;
++    return true;
++}
++
++static dsv4_hc_mix dsv4_hc_pre(
++        ggml_context * ctx,
++        ggml_tensor  * x,
++        ggml_tensor  * hc_fn,
++        ggml_tensor  * hc_scale,
++        ggml_tensor  * hc_base,
++        int64_t        n_embd,
++        int64_t        n_hc,
++        int64_t        n_tokens,
++        float          norm_eps,
++        int            sinkhorn_iters,
++        float          hc_eps) {
++    const int64_t hc_dim = n_embd * n_hc;
++    ggml_tensor * flat = ggml_cont(ctx, ggml_reshape_2d(ctx, x, hc_dim, n_tokens));
++    flat = ggml_rms_norm(ctx, flat, norm_eps);
++    ggml_tensor * mixes = ggml_mul_mat(ctx, hc_fn, flat);
++    ggml_tensor * split = ggml_dsv4_hc_split_sinkhorn(ctx, mixes, hc_scale, hc_base, n_hc, sinkhorn_iters, hc_eps);
++    ggml_tensor * pre = ggml_view_2d(ctx, split, n_hc, n_tokens, split->nb[1], 0);
++    ggml_tensor * post = ggml_view_2d(ctx, split, n_hc, n_tokens, split->nb[1], n_hc * split->nb[0]);
++    ggml_tensor * comb = ggml_view_2d(ctx, split, n_hc * n_hc, n_tokens, split->nb[1], 2 * n_hc * split->nb[0]);
++    comb = ggml_reshape_3d(ctx, comb, n_hc, n_hc, n_tokens);
++    ggml_tensor * y = ggml_dsv4_hc_weighted_sum(ctx, x, pre);
++    return { y, pre, post, comb };
++}
++
++static ggml_tensor * dsv4_hc_post(
++        ggml_context * ctx,
++        ggml_tensor  * x,
++        ggml_tensor  * residual,
++        ggml_tensor  * post,
++        ggml_tensor  * comb) {
++    return ggml_dsv4_hc_expand(ctx, x, residual, post, comb);
++}
++
++static ggml_tensor * dsv4_apply_rope_tail(
++        ggml_context * ctx,
++        ggml_tensor  * x,
++        ggml_tensor  * pos,
++        int64_t        n_embd_head,
++        int64_t        n_head,
++        int64_t        n_tokens,
++        int64_t        n_rot,
++        int            rope_type,
++        float          freq_base,
++        bool           inverse) {
++    GGML_ASSERT(x->ne[0] == n_embd_head);
++    GGML_ASSERT(x->ne[1] == n_head);
++    GGML_ASSERT(x->ne[2] == n_tokens);
++    if (n_rot == n_embd_head) {
++        return inverse
++            ? ggml_rope_ext_back(ctx, x, pos, nullptr, n_rot, rope_type, 0, freq_base, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f)
++            : ggml_rope_ext     (ctx, x, pos, nullptr, n_rot, rope_type, 0, freq_base, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f);
++    }
++    return ggml_dsv4_rope_tail(ctx, x, pos, nullptr, n_rot, rope_type, 0, freq_base, 1.0f, 0.0f, 1.0f, 32.0f, 1.0f, inverse);
++}
++
++static ggml_tensor * dsv4_grouped_out(
++        ggml_context * ctx,
++        ggml_tensor  * o,
++        ggml_tensor  * wo_a,
++        ggml_tensor  * wo_b,
++        int64_t        n_embd_head,
++        int64_t        n_head,
++        int64_t        n_groups,
++        int64_t        o_lora_rank,
++        int64_t        n_tokens) {
++    const int64_t group_heads = n_head / n_groups;
++    const int64_t group_dim = n_embd_head * group_heads;
++    o = ggml_cont(ctx, o);
++    o = ggml_reshape_3d(ctx, o, group_dim, n_groups, n_tokens);
++    ggml_tensor * wo_a_g = ggml_reshape_3d(ctx, wo_a, group_dim, o_lora_rank, n_groups);
++    ggml_tensor * ids = ggml_arange(ctx, 0.0f, float(n_groups), 1.0f);
++    ids = ggml_cast(ctx, ids, GGML_TYPE_I32);
++    ids = ggml_repeat_4d(ctx, ids, n_groups, n_tokens, 1, 1);
++    ggml_tensor * low = ggml_mul_mat_id(ctx, wo_a_g, o, ids);
++    low = ggml_reshape_2d(ctx, low, o_lora_rank * n_groups, n_tokens);
++    return ggml_mul_mat(ctx, wo_b, low);
++}
++
++static ggml_tensor * dsv4_attn_mha_one(
++        ggml_context * ctx,
++        ggml_tensor  * q,
++        ggml_tensor  * k,
++        ggml_tensor  * v,
++        ggml_tensor  * sinks,
++        const llama_hparams & hparams,
++        float          kq_scale) {
++    const bool v_trans = v->nb[1] > v->nb[2];
++    q = ggml_view_4d(ctx, q, q->ne[0], q->ne[1], q->ne[2], 1, q->nb[1], q->nb[2], q->nb[3], 0);
++    q = ggml_permute(ctx, q, 0, 2, 1, 3);
++    k = ggml_permute(ctx, k, 0, 2, 1, 3);
++    v = ggml_permute(ctx, v, 0, 2, 1, 3);
++    ggml_tensor * kq = ggml_mul_mat(ctx, k, q);
++    ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
++    if (hparams.attn_soft_cap) {
++        kq = ggml_scale(ctx, kq, 1.0f / hparams.f_attn_logit_softcapping);
++        kq = ggml_tanh(ctx, kq);
++        kq = ggml_scale(ctx, kq, hparams.f_attn_logit_softcapping);
++    }
++    kq = ggml_soft_max_ext(ctx, kq, nullptr, kq_scale, hparams.f_max_alibi_bias);
++    ggml_soft_max_add_sinks(kq, sinks);
++    if (!v_trans) {
++        v = ggml_cont(ctx, ggml_transpose(ctx, v));
++    }
++    ggml_tensor * kqv = ggml_mul_mat(ctx, v, kq);
++    ggml_tensor * cur = ggml_permute(ctx, kqv, 0, 2, 1, 3);
++    return ggml_cont_2d(ctx, cur, cur->ne[0] * cur->ne[1], cur->ne[2] * cur->ne[3]);
++}
++
++static float dsv4_swiglu_limit(const llama_hparams & hparams) {
++    for (float v : hparams.swiglu_clamp_exp) {
++        if (v > 1.0e-6f) {
++            return v;
++        }
++    }
++    return 10.0f;
++}
++
++static ggml_tensor * dsv4_moe_ffn_one(
++        ggml_context * ctx,
++        ggml_tensor  * cur,
++        const ds4::deepseek4_mtp_sidecar & sidecar,
++        const llama_hparams & hparams) {
++    const int64_t n_embd = 4096;
++    const int64_t n_tokens = 1;
++    const int64_t n_expert = hparams.n_expert > 0 ? hparams.n_expert : 256;
++    const int64_t n_expert_used = hparams.n_expert_used > 0 ? hparams.n_expert_used : 8;
++    ggml_tensor * logits = ggml_mul_mat(ctx, sidecar.ffn_gate_inp, cur);
++    ggml_tensor * probs = ggml_sigmoid(ctx, logits);
++    ggml_tensor * selection_probs = ggml_add(ctx, probs, sidecar.exp_probs_b_bias);
++    ggml_tensor * selected = ggml_argsort_top_k(ctx, selection_probs, n_expert_used);
++    ggml_tensor * probs3 = ggml_reshape_3d(ctx, probs, 1, n_expert, n_tokens);
++    ggml_tensor * weights = ggml_get_rows(ctx, probs3, selected);
++    weights = ggml_reshape_2d(ctx, weights, n_expert_used, n_tokens);
++    ggml_tensor * weights_sum = ggml_sum_rows(ctx, weights);
++    weights_sum = ggml_clamp(ctx, weights_sum, 6.103515625e-5, INFINITY);
++    weights = ggml_div(ctx, weights, weights_sum);
++    if (hparams.expert_weights_scale != 0.0f && hparams.expert_weights_scale != 1.0f) {
++        weights = ggml_scale(ctx, weights, hparams.expert_weights_scale);
++    }
++    weights = ggml_reshape_3d(ctx, weights, 1, n_expert_used, n_tokens);
++    cur = ggml_reshape_3d(ctx, cur, n_embd, 1, n_tokens);
++    ggml_tensor * up = ggml_mul_mat_id(ctx, sidecar.ffn_up_exps, cur, selected);
++    ggml_tensor * gate = ggml_mul_mat_id(ctx, sidecar.ffn_gate_exps, cur, selected);
++    const float limit = dsv4_swiglu_limit(hparams);
++    gate = ggml_clamp(ctx, gate, -INFINITY, limit);
++    gate = ggml_silu(ctx, gate);
++    up = ggml_clamp(ctx, up, -limit, limit);
++    cur = ggml_mul(ctx, gate, up);
++    cur = ggml_mul(ctx, cur, weights);
++    ggml_tensor * experts = ggml_mul_mat_id(ctx, sidecar.ffn_down_exps, cur, selected);
++    ggml_tensor * out = ggml_view_2d(ctx, experts, n_embd, n_tokens, experts->nb[2], 0);
++    for (int64_t i = 1; i < n_expert_used; i++) {
++        ggml_tensor * v = ggml_view_2d(ctx, experts, n_embd, n_tokens, experts->nb[2], i * experts->nb[1]);
++        out = ggml_add(ctx, out, v);
++    }
++    return out;
++}
++
++static ggml_tensor * dsv4_shared_ffn_one(
++        ggml_context * ctx,
++        ggml_tensor  * cur,
++        const ds4::deepseek4_mtp_sidecar & sidecar) {
++    ggml_tensor * gate = ggml_mul_mat(ctx, sidecar.ffn_gate_shexp, cur);
++    ggml_tensor * up = ggml_mul_mat(ctx, sidecar.ffn_up_shexp, cur);
++    cur = ggml_swiglu_split(ctx, gate, up);
++    return ggml_mul_mat(ctx, sidecar.ffn_down_shexp, cur);
++}
++
++static bool compute_mtp_gamma1_block(
++        const tensor_capture & mtp_input_hc,
++        const ds4::deepseek4_mtp_sidecar & sidecar,
++        const llama_hparams & hparams,
++        int32_t position,
++        tensor_capture * block_out_hc,
++        tensor_capture * head_norm,
++        std::string * err) {
++    if (!mtp_input_hc.got) {
++        if (err != nullptr) *err = "missing mtp input_hc";
++        return false;
++    }
++    if (!(mtp_input_hc.ne0 == 4096 && mtp_input_hc.ne1 == 4 && mtp_input_hc.ne2 == 1)) {
++        if (err != nullptr) *err = "mtp input_hc has unexpected shape";
++        return false;
++    }
++    ggml_init_params ip = {};
++    ip.mem_size = 1024ull * 1024ull * 1024ull;
++    ip.mem_buffer = nullptr;
++    ip.no_alloc = false;
++    ggml_context * ctx = ggml_init(ip);
++    if (ctx == nullptr) {
++        if (err != nullptr) *err = "ggml_init failed";
++        return false;
++    }
++    ggml_tensor * pos = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, 1);
++    if (pos == nullptr || pos->data == nullptr) {
++        if (err != nullptr) *err = "failed to alloc pos";
++        ggml_free(ctx);
++        return false;
++    }
++    ((int32_t *) pos->data)[0] = position;
++    ggml_tensor * inp = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, 4096, 4, 1);
++    if (inp == nullptr || inp->data == nullptr) {
++        if (err != nullptr) *err = "failed to alloc input_hc";
++        ggml_free(ctx);
++        return false;
++    }
++    if (mtp_input_hc.bytes.size() != ggml_nbytes(inp)) {
++        if (err != nullptr) *err = "mtp input_hc nbytes mismatch";
++        ggml_free(ctx);
++        return false;
++    }
++    std::memcpy(inp->data, mtp_input_hc.bytes.data(), mtp_input_hc.bytes.size());
++    const int64_t n_embd = 4096;
++    const int64_t n_hc = 4;
++    const int64_t n_tokens = 1;
++    const int64_t n_head = 64;
++    const int64_t n_embd_head = 512;
++    const int64_t n_lora_o = 1024;
++    const int64_t n_out_group = 8;
++    const int64_t n_rot = hparams.n_rot();
++    const int rope_type = (int) hparams.rope_type;
++    const float freq_base = hparams.rope_freq_base_train;
++    const float kq_scale = 1.0f / std::sqrt((float) n_embd_head);
++    ggml_tensor * residual = inp;
++    dsv4_hc_mix mix = dsv4_hc_pre(ctx, inp, sidecar.hc_attn_fn, sidecar.hc_attn_scale, sidecar.hc_attn_base, n_embd, n_hc, n_tokens, hparams.f_norm_rms_eps, hparams.hc_sinkhorn_iters, hparams.hc_eps);
++    ggml_tensor * cur = ggml_rms_norm(ctx, mix.x, hparams.f_norm_rms_eps);
++    cur = ggml_mul(ctx, cur, sidecar.attn_norm);
++    ggml_tensor * qr = ggml_mul_mat(ctx, sidecar.attn_q_a, cur);
++    qr = ggml_rms_norm(ctx, qr, hparams.f_norm_rms_eps);
++    qr = ggml_mul(ctx, qr, sidecar.attn_q_a_norm);
++    ggml_tensor * q = ggml_mul_mat(ctx, sidecar.attn_q_b, qr);
++    q = ggml_reshape_3d(ctx, q, n_embd_head, n_head, n_tokens);
++    q = ggml_rms_norm(ctx, q, hparams.f_norm_rms_eps);
++    q = dsv4_apply_rope_tail(ctx, q, pos, n_embd_head, n_head, n_tokens, n_rot, rope_type, freq_base, false);
++    ggml_tensor * kv = ggml_mul_mat(ctx, sidecar.attn_kv, cur);
++    kv = ggml_rms_norm(ctx, kv, hparams.f_norm_rms_eps);
++    kv = ggml_mul(ctx, kv, sidecar.attn_kv_a_norm);
++    kv = ggml_reshape_3d(ctx, kv, n_embd_head, 1, n_tokens);
++    kv = dsv4_apply_rope_tail(ctx, kv, pos, n_embd_head, 1, n_tokens, n_rot, rope_type, freq_base, false);
++    cur = dsv4_attn_mha_one(ctx, q, kv, kv, sidecar.attn_sinks, hparams, kq_scale);
++    cur = ggml_reshape_3d(ctx, cur, n_embd_head, n_head, n_tokens);
++    cur = dsv4_apply_rope_tail(ctx, cur, pos, n_embd_head, n_head, n_tokens, n_rot, rope_type, freq_base, true);
++    cur = dsv4_grouped_out(ctx, cur, sidecar.attn_output_a, sidecar.attn_output_b, n_embd_head, n_head, n_out_group, n_lora_o, n_tokens);
++    ggml_tensor * after_attn = dsv4_hc_post(ctx, cur, residual, mix.post, mix.comb);
++    residual = after_attn;
++    mix = dsv4_hc_pre(ctx, after_attn, sidecar.hc_ffn_fn, sidecar.hc_ffn_scale, sidecar.hc_ffn_base, n_embd, n_hc, n_tokens, hparams.f_norm_rms_eps, hparams.hc_sinkhorn_iters, hparams.hc_eps);
++    cur = ggml_rms_norm(ctx, mix.x, hparams.f_norm_rms_eps);
++    cur = ggml_mul(ctx, cur, sidecar.ffn_norm);
++    ggml_tensor * moe = dsv4_moe_ffn_one(ctx, cur, sidecar, hparams);
++    ggml_tensor * shexp = dsv4_shared_ffn_one(ctx, cur, sidecar);
++    cur = ggml_add(ctx, moe, shexp);
++    ggml_tensor * block = dsv4_hc_post(ctx, cur, residual, mix.post, mix.comb);
++    ggml_tensor * head = dsv4_hc_head(ctx, block, sidecar.hc_head_fn, sidecar.hc_head_scale, sidecar.hc_head_base, n_embd, n_hc, n_tokens, hparams.f_norm_rms_eps, hparams.hc_eps);
++    head = ggml_rms_norm(ctx, head, hparams.f_norm_rms_eps);
++    head = ggml_mul(ctx, head, sidecar.norm);
++    ggml_cgraph * gf = ggml_new_graph(ctx);
++    ggml_build_forward_expand(gf, head);
++    ggml_graph_compute_with_ctx(ctx, gf, 4);
++    bool ok = capture_graph_tensor(block, block_out_hc, err);
++    if (ok) {
++        ok = capture_graph_tensor(head, head_norm, err);
++    }
++    ggml_free(ctx);
++    return ok;
 +}
 +
 +static bool compute_stub_mtp_input_hc(
@@ -989,6 +1300,7 @@ index 0000000..680d9af
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
 +        const tensor_capture & mtp_input_hc,
++        const tensor_capture & mtp_block_out_hc,
 +        const tensor_capture & mtp_head_norm,
 +        bool ok,
 +        const std::vector<std::string> & errors) {
@@ -1039,6 +1351,20 @@ index 0000000..680d9af
 +        std::printf("  \"mtp_input_hc_fnv64\": null,\n");
 +        std::printf("  \"mtp_input_hc_nbytes\": null,\n");
 +        std::printf("  \"mtp_input_hc_shape\": null,\n");
++    }
++
++    if (mtp_block_out_hc.got) {
++        std::printf("  \"mtp_block_out_hc_fnv64\": \"%s\",\n",
++                hex_u64(fnv1a64(mtp_block_out_hc.bytes.data(), mtp_block_out_hc.bytes.size())).c_str());
++        std::printf("  \"mtp_block_out_hc_nbytes\": %zu,\n", mtp_block_out_hc.bytes.size());
++        std::printf("  \"mtp_block_out_hc_shape\": [%lld, %lld, %lld],\n",
++                (long long) mtp_block_out_hc.ne0,
++                (long long) mtp_block_out_hc.ne1,
++                (long long) mtp_block_out_hc.ne2);
++    } else {
++        std::printf("  \"mtp_block_out_hc_fnv64\": null,\n");
++        std::printf("  \"mtp_block_out_hc_nbytes\": null,\n");
++        std::printf("  \"mtp_block_out_hc_shape\": null,\n");
 +    }
 +
 +    if (mtp_head_norm.got) {
@@ -1139,6 +1465,7 @@ index 0000000..680d9af
 +
 +    probe_captures caps;
 +    tensor_capture stub_input_hc;
++    tensor_capture mtp_block_out_hc;
 +    tensor_capture stub_head_norm;
 +
 +    ggml_backend_load_all();
@@ -1156,28 +1483,29 @@ index 0000000..680d9af
 +    if (model == nullptr) {
 +        errors.push_back("failed to load trunk model");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
 +        }
 +        return 2;
 +    }
 +
 +    const llama_vocab * vocab = llama_model_get_vocab(model);
++    const std::string tokenized_prompt = ds4_render_chat_prompt(prompt);
 +
-+    const int32_t n_prompt = -llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), nullptr, 0, true, true);
++    const int32_t n_prompt = -llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), nullptr, 0, false, true);
 +    if (n_prompt <= 0) {
 +        errors.push_back("failed to tokenize prompt");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
 +        }
 +        llama_model_free(model);
 +        return 3;
 +    }
 +
 +    std::vector<llama_token> prompt_tokens((size_t) n_prompt);
-+    if (llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), true, true) < 0) {
++    if (llama_tokenize(vocab, tokenized_prompt.c_str(), (int) tokenized_prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), false, true) < 0) {
 +        errors.push_back("failed to tokenize prompt (2nd pass)");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
 +        }
 +        llama_model_free(model);
 +        return 4;
@@ -1195,7 +1523,7 @@ index 0000000..680d9af
 +    if (ctx == nullptr) {
 +        errors.push_back("failed to init llama_context");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
 +        }
 +        llama_model_free(model);
 +        return 5;
@@ -1205,7 +1533,7 @@ index 0000000..680d9af
 +    if (llama_decode(ctx, batch) != 0) {
 +        errors.push_back("llama_decode failed for prompt");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
 +        }
 +        llama_free(ctx);
 +        llama_model_free(model);
@@ -1239,7 +1567,7 @@ index 0000000..680d9af
 +    if (sidecar_gguf == nullptr || sidecar_ctx == nullptr) {
 +        errors.push_back("failed to open sidecar GGUF (metadata-only)");
 +        if (json) {
-+            print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++            print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, false, errors);
 +        }
 +        if (sidecar_gguf) {
 +            gguf_free(sidecar_gguf);
@@ -1274,12 +1602,12 @@ index 0000000..680d9af
 +        if (!compute_stub_mtp_input_hc(caps.token_embd, caps.pre_hc_head, sidecar, model->hparams, &stub_input_hc, &stub_err)) {
 +            errors.push_back(std::string("stub mtp input_hc compute failed: ") + stub_err);
 +        }
-+        if (!compute_stub_mtp_output_head_norm(caps.pre_hc_head, sidecar, model->hparams, &stub_head_norm, &stub_err)) {
-+            errors.push_back(std::string("stub output head compute failed: ") + stub_err);
++        if (!compute_mtp_gamma1_block(stub_input_hc, sidecar, model->hparams, (int32_t) prompt_tokens.size(), &mtp_block_out_hc, &stub_head_norm, &stub_err)) {
++            errors.push_back(std::string("gamma1 mtp block compute failed: ") + stub_err);
 +        }
 +        if (stub_head_norm.got) {
 +            if (!compute_argmax_logits_from_output(stub_head_norm, model, &mtp_stub_token_id, &stub_err)) {
-+                errors.push_back(std::string("stub head-only draft token failed: ") + stub_err);
++                errors.push_back(std::string("gamma1 draft token failed: ") + stub_err);
 +            } else {
 +                mtp_stub_token = token_to_piece(vocab, (llama_token) mtp_stub_token_id);
 +            }
@@ -1291,10 +1619,8 @@ index 0000000..680d9af
 +    gguf_free(sidecar_gguf);
 +    ggml_free(sidecar_ctx);
 +
-+    errors.push_back("TODO: implement gamma=1 MTP draft compute using sidecar weights + MTP KV/raw-cache state");
-+
 +    if (json) {
-+        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, mtp_stub_token_id, mtp_stub_token, caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
++        print_probe_json(trunk_path, sidecar_path, prompt, seed, base_next_token_id, base_next_token, mtp_stub_token_id, mtp_stub_token, caps.token_embd, caps.pre_hc_head, stub_input_hc, mtp_block_out_hc, stub_head_norm, errors.empty(), errors);
 +    }
 +
 +    llama_free(ctx);

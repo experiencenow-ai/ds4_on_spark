@@ -94,8 +94,13 @@ def main() -> None:
 			_die(
 				f"runtime_commit mismatch: expected {expected_commit} (from filename), got {actual_commit}"
 			)
-	if "TODO: implement gamma=1 MTP draft compute" not in joined:
-		_die("one-token probe cpp hunk missing expected TODO marker (patch likely truncated)")
+	if (
+		"TODO: implement gamma=1 MTP draft compute" not in joined
+		and "compute_mtp_gamma1_block" not in joined
+	):
+		_die("one-token probe cpp hunk missing expected TODO or gamma1 implementation marker (patch likely truncated)")
+	if "compute_mtp_gamma1_block" in joined and "mtp_block_out_hc_fnv64" not in joined:
+		_die("one-token probe gamma1 implementation missing mtp_block_out_hc fingerprint output")
 
 	hpp_header = (
 		"diff --git a/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp "
