@@ -114,7 +114,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 		return;
 	if ( argv0 == 0 )
 		argv0 = "ds4_cli";
-	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--cuda-arena-size BYTES] [--log-ring-entries N] [--dump-config] [--dump-config-keys] [--dump-config-help] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
+	fprintf(fp,"usage: %s [--config PATH|-] [--strict-config] [--log-level LVL] [--enable-cuda BOOL] [--cuda-device DEV] [--arena-size BYTES] [--cuda-arena-size BYTES] [--log-ring-entries N] [--dump-config] [--dump-config-template] [--dump-config-keys] [--dump-config-help] [--version] [--smoke-ctx] [--smoke-cuda]\n",argv0);
 	fprintf(fp,"  --config PATH     Load key=value config file (PATH or '-')\n");
 	fprintf(fp,"                  (or set DS4_CONFIG for inline config text, DS4_CONFIG_PATH for a default config path)\n");
 	fprintf(fp,"  --strict-config   Reject unknown keys in config file\n");
@@ -127,6 +127,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --cuda-arena-size B Override cuda_arena_size (bytes)\n");
 	fprintf(fp,"  --log-ring-entries N Override log_ring_entries (entries)\n");
 	fprintf(fp,"  --dump-config     Print effective config to stdout\n");
+	fprintf(fp,"  --dump-config-template Print a commented default config template\n");
 	fprintf(fp,"  --dump-config-keys Print supported config keys to stdout\n");
 	fprintf(fp,"  --dump-config-help Print supported config keys and value hints\n");
 	fprintf(fp,"  --version         Print ds4 version\n");
@@ -135,7 +136,7 @@ static void ds4_cli_usage(FILE *fp,const char *argv0)
 	fprintf(fp,"  --help            Show this help\n");
 }
 
-static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **cuda_arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *dump_keys,int32_t *dump_help,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
+static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path,int32_t *strict_cfg,const char **log_level,const char **enable_cuda,const char **cuda_device,const char **arena_size,const char **cuda_arena_size,const char **log_ring_entries,int32_t *dump_cfg,int32_t *dump_template,int32_t *dump_keys,int32_t *dump_help,int32_t *print_ver,int32_t *smoke_ctx,int32_t *smoke_cuda)
 {
 	int32_t i;
 	const char *a;
@@ -157,16 +158,18 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		return(-8);
 	if ( dump_cfg == 0 )
 		return(-9);
-	if ( dump_keys == 0 )
+	if ( dump_template == 0 )
 		return(-10);
-	if ( dump_help == 0 )
+	if ( dump_keys == 0 )
 		return(-11);
-	if ( print_ver == 0 )
+	if ( dump_help == 0 )
 		return(-12);
-	if ( smoke_ctx == 0 )
+	if ( print_ver == 0 )
 		return(-13);
-	if ( smoke_cuda == 0 )
+	if ( smoke_ctx == 0 )
 		return(-14);
+	if ( smoke_cuda == 0 )
+		return(-15);
 	*cfg_path = 0;
 	*strict_cfg = 0;
 	*log_level = 0;
@@ -176,6 +179,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 	*cuda_arena_size = 0;
 	*log_ring_entries = 0;
 	*dump_cfg = 0;
+	*dump_template = 0;
 	*dump_keys = 0;
 	*dump_help = 0;
 	*print_ver = 0;
@@ -185,7 +189,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 	{
 		a = argv[i];
 		if ( a == 0 )
-			return(-10);
+			return(-16);
 		if ( strcmp(a,"--help") == 0 || strcmp(a,"-h") == 0 )
 			return(1);
 		if ( strcmp(a,"--version") == 0 )
@@ -196,6 +200,11 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--dump-config") == 0 )
 		{
 			*dump_cfg = 1;
+			continue;
+		}
+		if ( strcmp(a,"--dump-config-template") == 0 )
+		{
+			*dump_template = 1;
 			continue;
 		}
 		if ( strcmp(a,"--dump-config-keys") == 0 )
@@ -211,7 +220,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--config") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-15);
+				return(-17);
 			*cfg_path = argv[i + 1];
 			i += 1;
 			continue;
@@ -224,7 +233,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--log-level") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-16);
+				return(-18);
 			*log_level = argv[i + 1];
 			i += 1;
 			continue;
@@ -232,7 +241,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--enable-cuda") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-17);
+				return(-19);
 			*enable_cuda = argv[i + 1];
 			i += 1;
 			continue;
@@ -240,7 +249,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--cuda-device") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-18);
+				return(-20);
 			*cuda_device = argv[i + 1];
 			i += 1;
 			continue;
@@ -248,7 +257,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--arena-size") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-19);
+				return(-21);
 			*arena_size = argv[i + 1];
 			i += 1;
 			continue;
@@ -256,7 +265,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--cuda-arena-size") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-20);
+				return(-22);
 			*cuda_arena_size = argv[i + 1];
 			i += 1;
 			continue;
@@ -264,7 +273,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 		if ( strcmp(a,"--log-ring-entries") == 0 )
 		{
 			if ( (i + 1) >= argc )
-				return(-21);
+				return(-23);
 			*log_ring_entries = argv[i + 1];
 			i += 1;
 			continue;
@@ -289,7 +298,7 @@ static int32_t ds4_cli_parse_args(int32_t argc,char **argv,const char **cfg_path
 			*smoke_cuda = 1;
 			continue;
 		}
-		return(-22);
+		return(-24);
 	}
 	return(0);
 }
@@ -326,6 +335,35 @@ static int32_t ds4_cli_dump_config_help(void)
 			return(-3);
 		printf("%s: %s\n",k,h);
 	}
+	return(0);
+}
+
+static int32_t ds4_cli_dump_config_template(void)
+{
+	ds4_config_t cfg;
+	char out[128];
+	const char *k,*h;
+	int32_t i,count,n;
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-1);
+	if ( ds4_config_known_key_count(&count) < 0 )
+		return(-2);
+	printf("# ds4 config template\n");
+	for (i=0; i<count; i++)
+	{
+		k = ds4_config_known_key(i);
+		if ( k == 0 )
+			return(-3);
+		h = ds4_config_known_key_help(i);
+		if ( h == 0 )
+			return(-4);
+		printf("# %s: %s\n",k,h);
+	}
+	printf("\n");
+	n = ds4_config_format(&cfg,out,(int32_t)sizeof(out));
+	if ( n < 0 )
+		return(-5);
+	fputs(out,stdout);
 	return(0);
 }
 
@@ -378,8 +416,9 @@ int main(int argc,char **argv)
 	const char *cfg_path,*log_level,*enable_cuda,*cuda_device,*arena_size,*cuda_arena_size,*log_ring_entries;
 	uint8_t cfg_buf[4096];
 	ds4_config_diag_t diag;
-	int32_t dump_cfg,dump_keys,dump_help,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
+	int32_t dump_cfg,dump_template,dump_keys,dump_help,print_ver,strict_cfg,smoke_ctx,smoke_cuda,err,unknown;
 	dump_cfg = 0;
+	dump_template = 0;
 	dump_keys = 0;
 	dump_help = 0;
 	print_ver = 0;
@@ -394,7 +433,7 @@ int main(int argc,char **argv)
 	arena_size = 0;
 	cuda_arena_size = 0;
 	log_ring_entries = 0;
-	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&cuda_arena_size,&log_ring_entries,&dump_cfg,&dump_keys,&dump_help,&print_ver,&smoke_ctx,&smoke_cuda);
+	err = ds4_cli_parse_args((int32_t)argc,argv,&cfg_path,&strict_cfg,&log_level,&enable_cuda,&cuda_device,&arena_size,&cuda_arena_size,&log_ring_entries,&dump_cfg,&dump_template,&dump_keys,&dump_help,&print_ver,&smoke_ctx,&smoke_cuda);
 	if ( err != 0 )
 	{
 		if ( err > 0 )
@@ -408,6 +447,12 @@ int main(int argc,char **argv)
 	if ( dump_keys != 0 )
 	{
 		if ( ds4_cli_dump_config_keys() < 0 )
+			return(1);
+		return(0);
+	}
+	if ( dump_template != 0 )
+	{
+		if ( ds4_cli_dump_config_template() < 0 )
 			return(1);
 		return(0);
 	}
