@@ -36,6 +36,11 @@ def build_ds4_topk_dump_trace_report_bundle(
     probe_experts: int = 256,
     probe_batches: Tuple[int, ...] = (16, 32, 64, 100, 128, 256, 512),
     probe_trials: int = 250,
+    probe_expert_transitions: bool = False,
+    probe_transition_sparks: int = 8,
+    probe_transition_logical_lanes: int = 32,
+    probe_transition_top_masses: Tuple[int, ...] = (1, 4, 8, 16, 32),
+    probe_transition_top_next: int = 8,
     overwrite: bool = False,
 ) -> Dict[str, object]:
     """
@@ -68,6 +73,7 @@ def build_ds4_topk_dump_trace_report_bundle(
     )
 
     topk_dump_probe: Dict[str, object] = {}
+    topk_transition_probe: Dict[str, object] = {}
     if bool(probe_expert_queueing):
         topk_dump_probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
             layers,
@@ -77,6 +83,18 @@ def build_ds4_topk_dump_trace_report_bundle(
             trials=int(probe_trials),
             seed=int(seed),
             strict_expert_ids=True,
+        )
+    if bool(probe_expert_transitions):
+        topk_transition_probe = ds4_topk_dump.probe_expert_transitions_from_ds4_topk_dump_layers(
+            layers,
+            experts=int(probe_experts),
+            topk=int(topk),
+            logical_lanes=int(probe_transition_logical_lanes),
+            sparks=int(probe_transition_sparks),
+            top_masses=tuple(int(x) for x in probe_transition_top_masses),
+            top_next=int(probe_transition_top_next),
+            strict_expert_ids=True,
+            compact=True,
         )
 
     ds4_topk_dump.build_scheduler_trace_jsonl_from_ds4_topk_dump(
@@ -120,6 +138,12 @@ def build_ds4_topk_dump_trace_report_bundle(
             "present": True,
             "note": "Probe uses real routes from the topk dumps but resamples rows and assumes synthetic batch sizes; this is not a full decode replay.",
             "summary": topk_dump_probe,
+        }
+    if len(topk_transition_probe) != 0:
+        report["topk_transition_probe"] = {
+            "present": True,
+            "note": "Probe measures adjacent-layer P(next expert | current expert) and compares expert_id % logical_lanes routing against a balanced layer-specific affinity table.",
+            "summary": topk_transition_probe,
         }
 
     report_json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -165,6 +189,11 @@ def build_ds4_topk_dump_trace_report_bundle(
             "probe_experts": int(probe_experts),
             "probe_batches": [int(b) for b in probe_batches],
             "probe_trials": int(probe_trials),
+            "probe_expert_transitions": bool(probe_expert_transitions),
+            "probe_transition_sparks": int(probe_transition_sparks),
+            "probe_transition_logical_lanes": int(probe_transition_logical_lanes),
+            "probe_transition_top_masses": [int(x) for x in probe_transition_top_masses],
+            "probe_transition_top_next": int(probe_transition_top_next),
         },
     }
     meta_path.write_text(json.dumps(bundle_meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -179,4 +208,3 @@ def build_ds4_topk_dump_trace_report_bundle(
             "report": report,
         }
     )
-

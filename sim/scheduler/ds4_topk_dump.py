@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sim.scheduler import expert_queue_probe
+from sim.scheduler import expert_transition_probe
 
 
 _TOPK_RE = re.compile(r"ffn_moe_topk-(\d+)_pos(\d+)\.i32$")
@@ -219,3 +220,30 @@ def probe_expert_queueing_from_ds4_topk_dump_layers(
             "invalid_expert_ids": int(res.invalid_expert_ids),
         }
     )
+
+
+def probe_expert_transitions_from_ds4_topk_dump_layers(
+    layers: Sequence[Sequence[Sequence[int]]],
+    *,
+    experts: int = 256,
+    topk: int = 6,
+    logical_lanes: int = 32,
+    sparks: int = 8,
+    top_masses: Tuple[int, ...] = (1, 4, 8, 16, 32),
+    top_next: int = 8,
+    strict_expert_ids: bool = True,
+    compact: bool = True,
+) -> Dict[str, object]:
+    cfg = expert_transition_probe.ExpertTransitionProbeConfig(
+        experts=int(experts),
+        topk=int(topk),
+        logical_lanes=int(logical_lanes),
+        sparks=int(sparks),
+        top_masses=tuple(int(x) for x in top_masses),
+        top_next=int(top_next),
+        strict_expert_ids=bool(strict_expert_ids),
+    )
+    res = expert_transition_probe.analyze_expert_transitions(layers, cfg)
+    if bool(compact):
+        return(expert_transition_probe.as_compact_report(res, top_current=int(top_next)))
+    return(res)

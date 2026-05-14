@@ -469,10 +469,26 @@ python3 scripts/ds4_topk_dump_recommendations.py \
   --bundle-dir /tmp/ds4_expert_fuzz_20260512T1335Z/scheduler_bundle_pos0 \
   --pos 0 --topk 6 --time-mode dt_ms --arrival-rate-tps 8000 --batch-size 100 \
   --probe-expert-queueing --probe-experts 256 --probe-batches 16,32,64,100,128,256,512 --probe-trials 250 \
+  --probe-expert-transitions --probe-transition-sparks 8 --probe-transition-logical-lanes 32 \
   --expert-queue-max 128 --expert-parallelism 1 --service-ms 1.0 --starvation-ms 50.0
 ```
 
 Note: `ds4_topk_dump_recommendations.py` treats `topk` as the fixed selected-expert `K` when the trace itself does not include `k` fields, so queue depth and service load scale correctly for these route-only fixtures.
+
+To analyze only adjacent-layer expert affinity, run:
+
+```bash
+python3 scripts/analyze_ds4_expert_transitions.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --pos 0 --topk 6 --experts 256 --logical-lanes 32 --sparks 8 \
+  --json-out /tmp/ds4_expert_fuzz_20260512T1335Z/expert_transition_affinity.json
+```
+
+This reports `P(next expert | current expert)` concentration (`top1/top4/top8`
+mass and entropy), plus the same-spark transition rate for the current
+`expert_id % 32` map versus a balanced, layer-specific affinity table. The
+affinity table is still just data: runtime routing can stay table-driven as
+`spark = table[layer][expert_id]`.
 
 Then run the standard trace sweep / recommendations loop:
 

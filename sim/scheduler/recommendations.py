@@ -96,6 +96,7 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
     mtp_draft_queue_cls = _as_dict(evidence.get("mtp_draft_queue_cls"))
     dflash = _as_dict(out.get("dflash_comparator"))
     topk_dump_probe = _as_dict(out.get("topk_dump_probe"))
+    topk_transition_probe = _as_dict(out.get("topk_transition_probe"))
     results = _as_dict(out.get("results"))
 
     lines: List[str] = []
@@ -225,6 +226,29 @@ def format_runtime_trace_ablation_markdown(out: Dict[str, Any]) -> str:
                     parts.append(f"b{int(batch)} active={active:.2f} p90_depth={p90:.2f} speedup_cap6={sp6:.2f}x")
                 if len(parts) != 0:
                     lines.append("  - " + "; ".join(parts))
+
+    if bool(topk_transition_probe.get("present")):
+        tnote = _as_str(topk_transition_probe, "note", "")
+        summary = _as_dict(topk_transition_probe.get("summary"))
+        cond = _as_dict(summary.get("conditional_summary"))
+        same = _as_dict(summary.get("same_spark"))
+        invalid = _as_int(summary, "invalid_expert_ids", 0)
+        lines.append(f"- topk_transition_probe: present invalid_expert_ids={int(invalid)}")
+        if tnote != "":
+            lines.append(f"  - note: {tnote}")
+        lines.append(
+            "  - conditional: "
+            f"top1={_as_float(cond, 'weighted_top1_mass', 0.0):.4f} "
+            f"top4={_as_float(cond, 'weighted_top4_mass', 0.0):.4f} "
+            f"top8={_as_float(cond, 'weighted_top8_mass', 0.0):.4f} "
+            f"norm_entropy={_as_float(cond, 'weighted_normalized_entropy', 0.0):.4f}"
+        )
+        lines.append(
+            "  - same_spark: "
+            f"mod_lane={_as_float(same, 'mod_lane_same_spark_rate', 0.0):.4f} "
+            f"affinity_table={_as_float(same, 'affinity_same_spark_rate', 0.0):.4f} "
+            f"cross_reduction={_as_float(same, 'affinity_cross_spark_reduction', 0.0):.4f}"
+        )
 
 
 
