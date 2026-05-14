@@ -64,9 +64,10 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Target: `antirez/ds4@3630e64`, applied after the batched expert-tile slice patch
   - Purpose:
     - adds `--cuda-moe-probe` to isolate the real CUDA routed-MoE path without running the full decode graph
+    - adds `--cuda-layer-probe` and `--cuda-ffn-probe` to measure the graph layer or FFN half around the routed-MoE kernel at the same synthetic batch size
     - uses the real router matmul, real selected experts, real expert weights, and real `ds4_gpu_routed_moe_batch_tensor(...)`
     - adds `--cuda-moe-layer`, `--cuda-moe-tokens`, and `--cuda-moe-iters` sweep knobs
-    - emits JSON with queue depth, best routed-pair throughput, output fingerprint, and non-finite counts
+    - emits JSON with queue depth, best routed-pair throughput, best layer/FFN row throughput, output fingerprint, and non-finite counts
     - adds `DS4_CUDA_MOE_PROBE_COMPARE_FULL=1` to compare batched active-slice output against the full-slab tiled path in one process
     - adds `DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1` so the probe can keep lazy expert loading while avoiding huge eager startup cache attempts
 

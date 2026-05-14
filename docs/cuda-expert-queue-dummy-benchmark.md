@@ -270,3 +270,68 @@ With 43 DS4 layers, that is a rough `620 tok/s` aggregate MoE-only ceiling
 before attention, shared experts, KV, sampling, and scheduling overhead. This is
 still not end-to-end decode throughput, but it is a real improvement in the
 routed expert kernel path.
+
+## Spark0 FFN Envelope Probe
+
+The CUDA probe patch now also exposes:
+
+```bash
+DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1 \
+DS4_CUDA_MOE_BATCHED_EXPERT_SLICE_CACHE=1 \
+./ds4 -m /home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf \
+  --cuda-ffn-probe --cuda-moe-layer 1 --cuda-moe-tokens 1024 --cuda-moe-iters 5
+```
+
+This runs the real graph FFN half around the routed MoE kernel using synthetic
+resident HC activations. It is the closest current measurement for saturated
+expert-queue throughput because it includes HC pre/post, norm, router, shared
+expert, and routed experts without turning the batch into one contiguous
+prefill-attention block.
+
+The repo runner captures MoE-only, FFN, and optional FFN stage-profile logs:
+
+```bash
+BATCHES="512 1024" ITERS=5 ./scripts/run_ds4_cuda_ffn_envelope_spark.sh spark0@aitopatom-9ab9.local
+```
+
+Spark0 steady-state result:
+
+```json
+{"cuda_layer_probe":true,"part":"ffn","layer":1,"tokens":1024,"iterations":5,"raw_cap":128,"ctx_size":1024,"avg_ms":453.952,"best_ms":42.654,"best_tokens_per_s":24007.073,"out_fnv64":"0e7b25784c493a05","out_nonfinite":0}
+```
+
+Same patched build, MoE-only repeat:
+
+```json
+{"cuda_moe_probe":true,"layer":1,"tokens":1024,"pairs":6144,"iterations":5,"active_experts":256,"mean_queue_depth":24.000,"max_queue_depth":43,"avg_ms":73.761,"best_ms":37.922,"best_pairs_per_s":162017.472,"out_fnv64":"634a2e04d5a14391","out_nonfinite":0}
+```
+
+Stage-profile run with `DS4_METAL_LAYER_STAGE_PROFILE=1`, ignoring the cold
+first iteration:
+
+| FFN stage | steady ms |
+| --- | ---: |
+| `hc_pre` | 2.33 |
+| `norm` | 0.22 |
+| `router` | 0.17 |
+| `routed_moe` | 37.8-38.5 |
+| `shared_gate_up` | 0.64 |
+| `shared_down` | 0.49 |
+| `hc_post` | 0.99 |
+
+At this `tokens=1024` saturation point, routed MoE is about `89%` of the FFN
+half. The non-MoE FFN overhead is roughly `4.85 ms`, so the measured FFN envelope
+is about `24.0k token-layer/s`, or `~558 tok/s` across 43 layers before attention,
+KV/cache traffic, sampling, network routing, and scheduler overhead.
+
+Additional FFN envelope checks:
+
+| tokens | best ms | token-layer/s |
+| ---: | ---: | ---: |
+| 512 | 23.174 | 22.1k |
+| 1024 | 42.654 | 24.0k |
+
+The full `--cuda-layer-probe` path intentionally runs batched prefill attention
+over one contiguous prompt chunk. That is a useful attention stress test, but it
+is not the decode expert-queue shape; at larger token counts it can hit CUDA
+launch timeouts before reaching a steady-state expert-queue measurement.

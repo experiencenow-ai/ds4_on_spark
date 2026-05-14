@@ -46,7 +46,11 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"DS4_CUDA_SKIP_STARTUP_MODEL_CACHE",
 		"int ds4_engine_cuda_moe_probe(ds4_engine *e, uint32_t il, uint32_t n_tokens, uint32_t iterations)",
 		"int ds4_engine_cuda_moe_probe(ds4_engine *e, uint32_t layer, uint32_t n_tokens, uint32_t iterations);",
+		"int ds4_engine_cuda_layer_probe(ds4_engine *e, uint32_t il, uint32_t n_tokens, uint32_t iterations, bool ffn_only)",
+		"int ds4_engine_cuda_layer_probe(ds4_engine *e, uint32_t layer, uint32_t n_tokens, uint32_t iterations, bool ffn_only);",
 		"--cuda-moe-probe",
+		"--cuda-layer-probe",
+		"--cuda-ffn-probe",
 		"--cuda-moe-layer",
 		"--cuda-moe-tokens",
 		"--cuda-moe-iters",
@@ -65,6 +69,10 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"best_pairs_per_s\\\":%.3f",
 		"out_nonfinite\\\":",
 		"full_slab_nonfinite\\\":",
+		"metal_graph_encode_layer_attention_batch(g, model, layer, il, 0, n_tokens)",
+		"metal_graph_encode_layer_ffn_batch(g, model, layer, il, 0, n_tokens)",
+		"cuda_layer_probe\\\":true",
+		"best_tokens_per_s\\\":%.3f",
 	]
 	for s in required_substrings:
 		if s not in patch_text:
@@ -82,6 +90,11 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"max_abs_diff",
 		"mean_abs_diff",
 		"cfg.gen.cuda_moe_probe",
+		"cfg.gen.cuda_layer_probe",
+		"cfg.gen.cuda_layer_ffn_only",
+		"static uint64_t cuda_probe_nonfinite_count(const uint8_t *buf, uint64_t bytes)",
+		"static bool cuda_layer_probe_run(",
+		"ffn_only ? \"ffn\" : \"layer\"",
 	]
 	for s in required_added_substrings:
 		if s not in added_text:
