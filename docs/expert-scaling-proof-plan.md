@@ -163,6 +163,46 @@ The Spark0 batch sweep shows MoE per-row cost continuing to improve through
 - bulk/offline lane: `B>=2048` only when added latency and memory headroom are
   acceptable.
 
+## Current CUDA Work Queue
+
+The next five implementation tracks should stay independent enough for separate
+automation loops:
+
+1. **Reach decode reliably.** Fix or bypass startup/prefill CUDA timeouts so the
+   one-token decode path can be benchmarked repeatedly. Log analysis should
+   distinguish startup model-cache failure, whole-slab expert allocation, kernel
+   timeout, and illegal-memory fallout.
+2. **Batch the expert-slice path.** Extend the selected-expert slice cache from
+   `n_tokens == 1` into sorted batched expert tiles. The goal is to avoid
+   bringing 256 expert slabs into GPU memory when a decode batch only touches a
+   subset.
+3. **Time the decode sublayers.** Keep per-token counters for attention, router,
+   gate/up, mid quantization, down, sum, dense/shared FFN, sampling, and sync.
+   These counters must survive failure logs.
+4. **Build a dummy-data expert-queue benchmark.** Use the same data movement,
+   pointer arrays, sorted tiles, and CUDA kernels as the real path, but feed
+   synthetic activations/routes so MTP correctness and decode scheduler state do
+   not block measurement.
+5. **Compare real and synthetic ceilings.** Run the dummy benchmark and the real
+   decode path at the same batch sizes. If the dummy path scales and real decode
+   does not, the bottleneck is attention/KV/session scheduling rather than the
+   expert kernels.
+
+The existing analyzer can now produce machine-readable failure summaries:
+
+```bash
+python3 scripts/analyze_ds4_moe_profile.py --json /tmp/ds4_decode.err
+```
+
+or through the stable task runner:
+
+```bash
+python3 scripts/codex_task.py analyze-moe-log --json /tmp/ds4_decode.err
+```
+
+Use this in automation loops so timeout and illegal-memory regressions are
+visible before a run gets summarized as a throughput result.
+
 ## Cross-Spark Expectation
 
 Routing between Sparks can reduce time-to-output only if one of these is true:
