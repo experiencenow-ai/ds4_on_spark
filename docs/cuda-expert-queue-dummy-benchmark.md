@@ -335,3 +335,76 @@ The full `--cuda-layer-probe` path intentionally runs batched prefill attention
 over one contiguous prompt chunk. That is a useful attention stress test, but it
 is not the decode expert-queue shape; at larger token counts it can hit CUDA
 launch timeouts before reaching a steady-state expert-queue measurement.
+
+## Spark0 Decode/Layer Envelope
+
+The next highest-risk question is whether the real warmed decode layer is close
+to the FFN-only ceiling. The answer is no: single-row decode is dominated by
+non-queued attention/compressor/output stages plus one-row MoE launch overhead,
+which explains why the current end-to-end path stays near the observed Antirez
+range.
+
+The CUDA probe patch now also exposes a synthetic resident decode-layer probe:
+
+```bash
+DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1 \
+DS4_CUDA_MOE_EXPERT_SLICE_CACHE=1 \
+DS4_CUDA_MOE_BATCHED_EXPERT_SLICE_CACHE=1 \
+DS4_METAL_DECODE_STAGE_PROFILE=1 \
+DS4_METAL_INDEXER_STAGE_PROFILE=1 \
+./ds4 -m /home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf \
+  --cuda-decode-probe --cuda-moe-layer 2 --cuda-decode-pos 4096 --cuda-moe-iters 4
+```
+
+The repo runner captures raw/SWA, ratio-4/indexer, ratio-128 decode probes and
+matching full-batch layer probes:
+
+```bash
+ITERS=4 ./scripts/run_ds4_cuda_decode_envelope_spark.sh spark0@aitopatom-9ab9.local
+```
+
+Spark0 warmed decode-layer results:
+
+| layer shape | layer | pos | best ms/layer-token | layer-token/s |
+| --- | ---: | ---: | ---: | ---: |
+| raw/SWA | 0 | 128 | 1.372 | 729 |
+| raw/SWA | 1 | 128 | 1.325 | 755 |
+| ratio-4 + indexer | 2 | 4096 | 1.919 | 521 |
+| ratio-128 | 3 | 4096 | 1.489 | 672 |
+
+Weighted across DS4's layer mix (`2 raw + 21 ratio-4 + 20 ratio-128`), this is
+`~72.8 ms/token`, or `~13.7 tok/s per Spark` before output head, sampling, and
+scheduler overhead. That is the verified current single-stream decode shape.
+
+The same build, full batched layer probe at 1024 rows:
+
+| layer shape | layer | best ms/1024 rows | row-layer/s |
+| --- | ---: | ---: | ---: |
+| raw/SWA | 0 | 56.293 | 18.2k |
+| raw/SWA | 1 | 57.889 | 17.7k |
+| ratio-4 + indexer | 2 | 61.234 | 16.7k |
+| ratio-128 | 3 | 55.052 | 18.6k |
+
+Weighted across all layers, this is `~2.50 s` for a 1024-row synthetic layer
+pipeline, or `~409 tok/s per Spark` before output head, KV bookkeeping,
+cross-node routing, and scheduler overhead. This is the first measured ceiling
+that supports a 3-Spark aggregate near `~1.2k tok/s`, but only with a real
+resident batched/pipelined decode scheduler. Expert queuing alone removes only
+the routed-MoE slice of the single-row decode time; the bigger practical win is
+keeping whole-layer work batched across many active prompts.
+
+Verified high-risk slowness list after these probes:
+
+1. Cold/lazy model-range upload is still the largest reliability risk. Real
+   `ds4-bench` prefill failed before decode with CUDA upload timeouts on
+   `token_embd`, `attn_out_a`, and lazy MoE ranges when startup cache was
+   skipped.
+2. Single-row decode is structurally capped near `~14 tok/s/Spark` by warmed
+   layer latency, even though the MoE kernel alone can sustain `~162k`
+   expert-pairs/s at queue depth.
+3. Ratio-4/indexer layers are the worst warmed decode shape (`~1.9 ms/layer`),
+   mostly from compressor/indexer, attention, output projection, and one-row
+   routed/shared FFN stages.
+4. Fully batched layer throughput is promising (`~409 tok/s/Spark` synthetic),
+   but it is not yet a real decode scheduler with independent KV streams,
+   token-dependent routing, output head, and cross-node pipeline handoff.
