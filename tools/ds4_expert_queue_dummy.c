@@ -33,6 +33,8 @@ static int32_t apply_arg(ds4_cuda_expert_queue_dummy_config_t *cfg,const char *k
 		cfg->topk = v;
 	else if ( strcmp(key,"--experts") == 0 )
 		cfg->n_experts = v;
+	else if ( strcmp(key,"--route-experts") == 0 )
+		cfg->route_experts = v;
 	else if ( strcmp(key,"--hidden") == 0 )
 		cfg->hidden_dim = v;
 	else if ( strcmp(key,"--mid") == 0 )
@@ -48,9 +50,22 @@ static int32_t apply_arg(ds4_cuda_expert_queue_dummy_config_t *cfg,const char *k
 	return(0);
 }
 
+static int32_t apply_flag(ds4_cuda_expert_queue_dummy_config_t *cfg,const char *key)
+{
+	if ( cfg == 0 || key == 0 )
+		return(-1);
+	if ( strcmp(key,"--sorted") == 0 )
+		cfg->sorted = 1;
+	else if ( strcmp(key,"--unsorted") == 0 )
+		cfg->sorted = 0;
+	else
+		return(-2);
+	return(0);
+}
+
 static void usage(const char *argv0)
 {
-	fprintf(stderr,"usage: %s [--json] [--tokens N] [--topk N] [--experts N] [--hidden N] [--mid N] [--out N] [--iterations N] [--seed N]\n",argv0);
+	fprintf(stderr,"usage: %s [--json] [--sorted|--unsorted] [--tokens N] [--topk N] [--experts N] [--route-experts N] [--hidden N] [--mid N] [--out N] [--iterations N] [--seed N]\n",argv0);
 }
 
 static void print_json(const ds4_cuda_expert_queue_dummy_result_t *r,int32_t cuda_code,const char *cuda_error)
@@ -62,10 +77,15 @@ static void print_json(const ds4_cuda_expert_queue_dummy_result_t *r,int32_t cud
 	printf("  \"tokens\": %d,\n",r->tokens);
 	printf("  \"topk\": %d,\n",r->topk);
 	printf("  \"experts\": %d,\n",r->n_experts);
+	printf("  \"route_experts\": %d,\n",r->route_experts);
 	printf("  \"hidden_dim\": %d,\n",r->hidden_dim);
 	printf("  \"mid_dim\": %d,\n",r->mid_dim);
 	printf("  \"out_dim\": %d,\n",r->out_dim);
 	printf("  \"iterations\": %d,\n",r->iterations);
+	printf("  \"sorted\": %s,\n",r->sorted != 0 ? "true" : "false");
+	printf("  \"active_experts\": %d,\n",r->active_experts);
+	printf("  \"max_queue_depth\": %d,\n",r->max_queue_depth);
+	printf("  \"mean_queue_depth\": %.6f,\n",r->mean_queue_depth);
 	printf("  \"gateup_ms\": %.6f,\n",r->gateup_ms);
 	printf("  \"down_ms\": %.6f,\n",r->down_ms);
 	printf("  \"total_ms\": %.6f,\n",r->total_ms);
@@ -97,6 +117,8 @@ int main(int argc,char **argv)
 			json = 1;
 			continue;
 		}
+		if ( apply_flag(&cfg,argv[i]) == 0 )
+			continue;
 		if ( i + 1 >= argc || apply_arg(&cfg,argv[i],argv[i + 1]) < 0 )
 		{
 			usage(argv[0]);
@@ -112,8 +134,8 @@ int main(int argc,char **argv)
 		print_json(&result,st.code,err);
 	else
 	{
-		printf("ok=%d cuda_code=%d err=%s tokens=%d topk=%d experts=%d hidden=%d mid=%d out=%d iterations=%d gateup_ms=%.6f down_ms=%.6f total_ms=%.6f tokens_per_s=%.6f expert_pairs_per_s=%.6f estimated_gib_per_s=%.6f\n",
-			st.code == 0 ? 1 : 0,st.code,err,result.tokens,result.topk,result.n_experts,result.hidden_dim,result.mid_dim,result.out_dim,result.iterations,result.gateup_ms,result.down_ms,result.total_ms,result.tokens_per_s,result.expert_pairs_per_s,result.estimated_gib_per_s);
+		printf("ok=%d cuda_code=%d err=%s tokens=%d topk=%d experts=%d route_experts=%d hidden=%d mid=%d out=%d iterations=%d sorted=%d active_experts=%d max_queue_depth=%d mean_queue_depth=%.6f gateup_ms=%.6f down_ms=%.6f total_ms=%.6f tokens_per_s=%.6f expert_pairs_per_s=%.6f estimated_gib_per_s=%.6f\n",
+			st.code == 0 ? 1 : 0,st.code,err,result.tokens,result.topk,result.n_experts,result.route_experts,result.hidden_dim,result.mid_dim,result.out_dim,result.iterations,result.sorted,result.active_experts,result.max_queue_depth,result.mean_queue_depth,result.gateup_ms,result.down_ms,result.total_ms,result.tokens_per_s,result.expert_pairs_per_s,result.estimated_gib_per_s);
 	}
 	if ( st.code != 0 )
 		return(3);

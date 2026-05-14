@@ -37,10 +37,12 @@ typedef struct
 	int32_t tokens;
 	int32_t topk;
 	int32_t n_experts;
+	int32_t route_experts;
 	int32_t hidden_dim;
 	int32_t mid_dim;
 	int32_t out_dim;
 	int32_t iterations;
+	int32_t sorted;
 	uint32_t seed;
 } ds4_cuda_expert_queue_dummy_config_t;
 
@@ -49,11 +51,16 @@ typedef struct
 	int32_t tokens;
 	int32_t topk;
 	int32_t n_experts;
+	int32_t route_experts;
 	int32_t hidden_dim;
 	int32_t mid_dim;
 	int32_t out_dim;
 	int32_t iterations;
+	int32_t sorted;
+	int32_t active_experts;
+	int32_t max_queue_depth;
 	int64_t estimated_bytes_moved;
+	float mean_queue_depth;
 	float gateup_ms;
 	float down_ms;
 	float total_ms;

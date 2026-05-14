@@ -41,6 +41,18 @@ Small smoke:
 ./build-cuda/ds4_expert_queue_dummy --json --tokens 8 --topk 6 --experts 32 --hidden 64 --mid 128 --out 64 --iterations 2
 ```
 
+Sorted expert-queue smoke:
+
+```bash
+./build-cuda/ds4_expert_queue_dummy --json --sorted --tokens 8 --topk 6 --experts 32 --hidden 64 --mid 128 --out 64 --iterations 2
+```
+
+Deeper synthetic queue smoke:
+
+```bash
+./build-cuda/ds4_expert_queue_dummy --json --sorted --tokens 128 --topk 6 --experts 256 --route-experts 64 --hidden 128 --mid 256 --out 128 --iterations 4
+```
+
 Throughput-oriented shape:
 
 ```bash
@@ -60,11 +72,38 @@ Key fields:
 - `tokens_per_s`: aggregate synthetic decode rows per second.
 - `expert_pairs_per_s`: `tokens * topk` expert assignments per second.
 - `estimated_gib_per_s`: rough read movement rate for the synthetic kernels.
+- `active_experts`, `max_queue_depth`, and `mean_queue_depth`: host-built
+  route queue statistics. In `--sorted` mode these queues drive the CUDA grid.
+- `route_experts`: optional synthetic route cap. Set this below `experts` to
+  create deeper per-expert queues without changing the allocated model shape.
 
 The acceptance gate is not a specific number yet. The first proof question is
 whether `tokens_per_s` scales upward as batch size grows while per-token time
 falls. If this dummy path scales but real decode does not, the remaining
 bottleneck is attention/KV/session orchestration rather than expert math.
+
+## Sorted Mode
+
+`--sorted` builds a host-side queue layout that mirrors the real expert-routing
+shape:
+
+```text
+selected pair ids -> expert_counts + expert_offsets + sorted_pairs
+```
+
+The CUDA gate/up kernel launches by `(row_block, expert, queue_slot)` and reads
+`sorted_pairs[expert_offsets[expert] + queue_slot]`. The down kernel uses the
+same expert queue and atomically accumulates each expert contribution into the
+token output row.
+
+`--route-experts N` constrains synthetic selected experts to `[0,N)`. This is
+useful for stressing queue depth; for example, `tokens=128 topk=6
+route_experts=64` gives an average active depth near `12` instead of `3`.
+
+This is still a synthetic float benchmark, but it now exercises the core queue
+plumbing that the real DS4 decode scheduler needs: selected rows are grouped by
+expert, queue depths are visible, and the kernels consume the queued layout
+instead of a flat unsorted pair list.
 
 ## Spark0 Smoke Result
 
@@ -79,6 +118,26 @@ Observed on the first pass:
 - `tokens_per_s`: about `60k` synthetic rows/s.
 - `expert_pairs_per_s`: about `360k` routed expert pairs/s.
 - `estimated_gib_per_s`: about `178 GiB/s`.
+
+After adding sorted expert queues, a route-capped synthetic run on Spark0:
+
+```bash
+./build-cuda-sorted-dummy/ds4_expert_queue_dummy --json --sorted \
+  --tokens 2048 --topk 6 --experts 256 --route-experts 64 \
+  --hidden 128 --mid 256 --out 128 --iterations 2
+```
+
+reported:
+
+- `active_experts`: `64`
+- `mean_queue_depth`: `192`
+- `tokens_per_s`: about `193k` synthetic rows/s
+- `expert_pairs_per_s`: about `1.16M` routed expert pairs/s
+- `estimated_gib_per_s`: about `564 GiB/s`
+
+This route-capped result is not a model-quality claim. It proves the queue
+layout and kernel launch shape can consume deep per-expert queues at much higher
+synthetic throughput than the shallow uniform route case.
 
 This is a deliberately naive float kernel, so it is not a ceiling for the real
 quantized MoE kernels. It is a baseline that proves the benchmark path compiles,
