@@ -22,6 +22,16 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - treats MTP startup caching as best-effort so a cache budget stop leaves a hot resident prefix instead of aborting startup
     - keeps the largest cached mapping per key to avoid cache thrash on repeated partial range requests
 
+- `ds4-3630e64-cuda-moe-expert-slice-cache.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the Q4K sidecar patch and multi-model cache patch
+  - Purpose:
+    - adds an opt-in decode path for `DS4_CUDA_MOE_EXPERT_SLICE_CACHE=1`
+    - copies the selected top-6 expert IDs to host for one-token decode, caches only those gate/up/down expert slices, and passes per-expert device pointers into CUDA kernels
+    - avoids requesting the full 256-expert `moe_gate`, `moe_up`, and `moe_down` slabs on the hot decode path
+    - covers the fast IQ2/Q2 decode kernels and the Q4_K MTP sidecar fallback kernels
+    - keeps the existing full-slab path as fallback; `DS4_CUDA_MOE_EXPERT_SLICE_STRICT=1` makes slice preparation failures fatal for testing
+    - `DS4_CUDA_MOE_EXPERT_SLICE_VERBOSE=1` prints selected-slice residency size
+
 - `ds4-3630e64-mtp-one-token-json-probe.patch`
   - Target: `antirez/ds4@3630e64`
   - Purpose:
@@ -38,6 +48,7 @@ cd ds4
 git checkout 3630e64
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-expert-slice-cache.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
@@ -56,6 +67,7 @@ Patch verifiers (no CUDA required):
 ```bash
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_mtp_q4k_sidecar_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_multi_model_cache_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_expert_slice_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-expert-slice-cache.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
