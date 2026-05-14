@@ -343,3 +343,42 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h_async(void *dst,const void *src,int64_t by
 	DS4_UNUSED(s);
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }
+
+void ds4_cuda_expert_queue_dummy_default_config(ds4_cuda_expert_queue_dummy_config_t *out)
+{
+	if ( out == 0 )
+		return;
+	out->tokens = 32;
+	out->topk = 6;
+	out->n_experts = 256;
+	out->hidden_dim = 128;
+	out->mid_dim = 256;
+	out->out_dim = 128;
+	out->iterations = 8;
+	out->seed = 1234u;
+}
+
+ds4_cuda_status_t ds4_cuda_expert_queue_dummy_run(const ds4_cuda_expert_queue_dummy_config_t *cfg,ds4_cuda_expert_queue_dummy_result_t *out)
+{
+	if ( out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	out->tokens = 0;
+	out->topk = 0;
+	out->n_experts = 0;
+	out->hidden_dim = 0;
+	out->mid_dim = 0;
+	out->out_dim = 0;
+	out->iterations = 0;
+	out->estimated_bytes_moved = 0;
+	out->gateup_ms = 0.0f;
+	out->down_ms = 0.0f;
+	out->total_ms = 0.0f;
+	out->tokens_per_s = 0.0f;
+	out->expert_pairs_per_s = 0.0f;
+	out->estimated_gib_per_s = 0.0f;
+	if ( cfg == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( cfg->tokens <= 0 || cfg->topk <= 0 || cfg->n_experts <= 0 || cfg->hidden_dim <= 0 || cfg->mid_dim <= 0 || cfg->out_dim <= 0 || cfg->iterations <= 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
+}

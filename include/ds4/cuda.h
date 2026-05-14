@@ -32,6 +32,36 @@ typedef struct
 	void *h;
 } ds4_cuda_event_t;
 
+typedef struct
+{
+	int32_t tokens;
+	int32_t topk;
+	int32_t n_experts;
+	int32_t hidden_dim;
+	int32_t mid_dim;
+	int32_t out_dim;
+	int32_t iterations;
+	uint32_t seed;
+} ds4_cuda_expert_queue_dummy_config_t;
+
+typedef struct
+{
+	int32_t tokens;
+	int32_t topk;
+	int32_t n_experts;
+	int32_t hidden_dim;
+	int32_t mid_dim;
+	int32_t out_dim;
+	int32_t iterations;
+	int64_t estimated_bytes_moved;
+	float gateup_ms;
+	float down_ms;
+	float total_ms;
+	float tokens_per_s;
+	float expert_pairs_per_s;
+	float estimated_gib_per_s;
+} ds4_cuda_expert_queue_dummy_result_t;
+
 #define DS4_CUDA_STREAM_FLAGS_DEFAULT 0
 
 #define DS4_CUDA_EVENT_FLAGS_DEFAULT 0
@@ -76,6 +106,8 @@ ds4_cuda_status_t ds4_cuda_fill_u8(void *dst,uint8_t value,int64_t bytes,ds4_cud
 ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds4_cuda_stream_t s);
 ds4_cuda_status_t ds4_cuda_memcpy_h2d_async(void *dst,const void *src,int64_t bytes,ds4_cuda_stream_t s);
 ds4_cuda_status_t ds4_cuda_memcpy_d2h_async(void *dst,const void *src,int64_t bytes,ds4_cuda_stream_t s);
+void ds4_cuda_expert_queue_dummy_default_config(ds4_cuda_expert_queue_dummy_config_t *out);
+ds4_cuda_status_t ds4_cuda_expert_queue_dummy_run(const ds4_cuda_expert_queue_dummy_config_t *cfg,ds4_cuda_expert_queue_dummy_result_t *out);
 DS4_EXTERN_C_END
 
 #define DS4_CUDA_CALL(expr) ds4_cuda_check_i32((int32_t)(expr),#expr,__FILE__,(int32_t)__LINE__)
@@ -83,9 +115,9 @@ DS4_EXTERN_C_END
 #define DS4_CUDA_CHECK_PEEK_LAST_ERROR() ds4_cuda_check_peek_last_error(__FILE__,(int32_t)__LINE__)
 
 #if DS4_HAS_CUDA && defined(__CUDACC__)
-#define DS4_CUDA_KERNEL_LAUNCH(call) ((call),ds4_cuda_check_peek_last_error_ex(#call,__FILE__,(int32_t)__LINE__))
+#define DS4_CUDA_KERNEL_LAUNCH(...) ((__VA_ARGS__),ds4_cuda_check_peek_last_error_ex(#__VA_ARGS__,__FILE__,(int32_t)__LINE__))
 #endif
 
 #if !DS4_HAS_CUDA
-#define DS4_CUDA_KERNEL_LAUNCH(call) ds4_cuda_fail(DS4_CUDA_ERR_DISABLED)
+#define DS4_CUDA_KERNEL_LAUNCH(...) ds4_cuda_fail(DS4_CUDA_ERR_DISABLED)
 #endif
