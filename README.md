@@ -34,6 +34,8 @@ The repository starts from `docs/implementation-plan.md`; correctness gating rem
 - `docs/implementation-plan.md`: phased plan and parallel tracks.
 - `docs/automation-loops.md`: proposed 30-minute automation loops.
 - `docs/spark-access.md`: current Spark networking and SSH notes.
+- `docs/expert-scaling-proof-plan.md`: CUDA expert-queue proof gates.
+- `docs/centaur-ds4-prefix-kv-contract.md`: Centaur/DS4 prefix KV boundary.
 - `scripts/spark_probe.sh`: remote Spark hardware/software probe.
 - `scripts/mac_spark_discovery.sh`: Mac-side Spark discovery helper.
 

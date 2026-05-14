@@ -214,6 +214,14 @@ def task_spark_ring_status(args: argparse.Namespace) -> None:
 	run(cmd)
 
 
+def task_analyze_moe_log(args: argparse.Namespace) -> None:
+	cmd = [sys.executable, "scripts/analyze_ds4_moe_profile.py"]
+	if args.json:
+		cmd.append("--json")
+	cmd.extend(args.logs)
+	run(cmd)
+
+
 def build_parser() -> argparse.ArgumentParser:
 	parser = argparse.ArgumentParser(description="Run allowlisted ds4_on_spark Codex maintenance tasks.")
 	sub = parser.add_subparsers(dest="task", required=True)
@@ -297,6 +305,11 @@ def build_parser() -> argparse.ArgumentParser:
 	p = sub.add_parser("spark-ring-status", help="Run the repo Spark ring status helper.")
 	p.add_argument("--target", default="")
 	p.set_defaults(func=task_spark_ring_status)
+
+	p = sub.add_parser("analyze-moe-log", help="Summarize DS4 CUDA MoE profile/runtime logs.")
+	p.add_argument("--json", action="store_true")
+	p.add_argument("logs", nargs="+")
+	p.set_defaults(func=task_analyze_moe_log)
 
 	return parser
 

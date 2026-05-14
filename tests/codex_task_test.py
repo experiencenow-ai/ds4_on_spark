@@ -10,6 +10,7 @@ class CodexTaskTest(unittest.TestCase):
 		self.assertEqual(
 			set(subparsers.choices),
 			{
+				"analyze-moe-log",
 				"automation-status",
 				"mtp-local-verify",
 				"pr-status",
