@@ -275,6 +275,28 @@ def _same_spark_rate(
     return(int(same), int(total), float(rate))
 
 
+def _table_spark_counts(table: Sequence[int], sparks: int) -> List[int]:
+    counts = [0 for _ in range(int(sparks))]
+    for owner in table:
+        if int(owner) < 0 or int(owner) >= int(sparks):
+            raise ValueError("expert owner table contains out-of-range spark id")
+        counts[int(owner)] += 1
+    return(counts)
+
+
+def table_balance_summary(tables: Sequence[Sequence[int]], sparks: int) -> Dict[str, Any]:
+    per_layer = [_table_spark_counts(table, int(sparks)) for table in tables]
+    imbalances = []
+    for counts in per_layer:
+        imbalances.append(float(max(counts) - min(counts)) if len(counts) != 0 else 0.0)
+    return(
+        {
+            "per_layer_counts": per_layer,
+            "imbalance": _summary(imbalances),
+        }
+    )
+
+
 def analyze_expert_transitions(
     layers: Sequence[Sequence[Sequence[int]]],
     cfg: ExpertTransitionProbeConfig,
@@ -356,6 +378,7 @@ def analyze_expert_transitions(
                 "affinity_same_spark_rate": _summary(affinity_rates),
                 "affinity_cross_spark_reduction": _summary(reductions),
             },
+            "table_balance": table_balance_summary(affinity_tables, int(cfg.sparks)),
             "layer_pairs_detail": layer_pairs,
             "mod_lane_spark_table": mod_table,
             "affinity_spark_tables": affinity_tables,
@@ -386,5 +409,47 @@ def as_compact_report(result: Dict[str, Any], top_current: int = 8) -> Dict[str,
             "same_spark": result.get("same_spark", {}),
             "layer_pair_summary": result.get("layer_pair_summary", {}),
             "top_current_experts": top_rows[: max(1, int(top_current))],
+        }
+    )
+
+
+def build_owner_table_artifact(
+    result: Dict[str, Any],
+    *,
+    strategy: str = "affinity",
+) -> Dict[str, Any]:
+    if strategy not in ("affinity", "mod_lane"):
+        raise ValueError("strategy must be affinity or mod_lane")
+    if strategy == "affinity":
+        raw_tables = result.get("affinity_spark_tables")
+    else:
+        base = result.get("mod_lane_spark_table")
+        raw_tables = [base for _ in range(int(result.get("num_layers", 0)))]
+    if not isinstance(raw_tables, list) or len(raw_tables) == 0:
+        raise ValueError("result does not contain owner tables")
+    tables: List[List[int]] = []
+    for layer, table in enumerate(raw_tables):
+        if not isinstance(table, list):
+            raise ValueError(f"owner table for layer {int(layer)} is not a list")
+        tables.append([int(x) for x in table])
+    experts = int(result.get("experts", len(tables[0]) if len(tables) != 0 else 0))
+    sparks = int(result.get("sparks", 0))
+    for layer, table in enumerate(tables):
+        if len(table) != int(experts):
+            raise ValueError(f"owner table for layer {int(layer)} has {len(table)} entries, expected {int(experts)}")
+    balance = table_balance_summary(tables, int(sparks))
+    return(
+        {
+            "schema": "ds4_expert_owner_table_v1",
+            "strategy": str(strategy),
+            "num_layers": int(result.get("num_layers", len(tables))),
+            "experts": int(experts),
+            "sparks": int(sparks),
+            "logical_lanes": int(result.get("logical_lanes", 0)),
+            "source_transition_schema": result.get("schema"),
+            "same_spark": result.get("same_spark", {}),
+            "layer_pair_summary": result.get("layer_pair_summary", {}),
+            "table_balance": balance,
+            "owner_table": tables,
         }
     )
