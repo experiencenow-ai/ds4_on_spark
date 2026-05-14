@@ -8,6 +8,8 @@ int32_t test_cuda(void)
 	ds4_cuda_device_info_t di;
 	ds4_cuda_stream_t stream;
 	ds4_cuda_event_t ev0,ev1;
+	ds4_cuda_expert_queue_dummy_config_t dummy_cfg;
+	ds4_cuda_expert_queue_dummy_result_t dummy_result;
 	const char *s;
 	void *dev,*host;
 	int32_t dev_count,cur_dev;
@@ -43,12 +45,31 @@ int32_t test_cuda(void)
 		return(-207);
 	if ( ds4_cuda_error_format_i32(0,"expr","file",7,msg0,0) != -2 )
 		return(-208);
+	ds4_cuda_expert_queue_dummy_default_config(&dummy_cfg);
+	if ( dummy_cfg.tokens <= 0 || dummy_cfg.topk != 6 || dummy_cfg.n_experts != 256 )
+		return(-400);
+	st0 = ds4_cuda_expert_queue_dummy_run(0,&dummy_result);
+	if ( st0.code != DS4_CUDA_ERR_INVALID_ARG )
+		return(-401);
+	st0 = ds4_cuda_expert_queue_dummy_run(&dummy_cfg,0);
+	if ( st0.code != DS4_CUDA_ERR_INVALID_ARG )
+		return(-402);
+	dummy_cfg.tokens = 0;
+	st0 = ds4_cuda_expert_queue_dummy_run(&dummy_cfg,&dummy_result);
+	if ( st0.code != DS4_CUDA_ERR_INVALID_ARG )
+		return(-403);
+	ds4_cuda_expert_queue_dummy_default_config(&dummy_cfg);
 	cur_dev = -2;
 	st0 = ds4_cuda_get_device(&cur_dev);
 	s = ds4_cuda_errstr(st0);
 	if ( s == 0 )
 		return(-60);
 #if !DS4_HAS_CUDA
+	st0 = ds4_cuda_expert_queue_dummy_run(&dummy_cfg,&dummy_result);
+	if ( st0.code != DS4_CUDA_ERR_DISABLED )
+		return(-404);
+	if ( dummy_result.tokens != 0 || dummy_result.tokens_per_s != 0.0f )
+		return(-405);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )
 		return(-63);
 	if ( cur_dev != -1 )
@@ -120,6 +141,18 @@ int32_t test_cuda(void)
 	{
 		uint8_t h0[16],h1[16];
 		int32_t i;
+		dummy_cfg.tokens = 2;
+		dummy_cfg.topk = 2;
+		dummy_cfg.n_experts = 4;
+		dummy_cfg.hidden_dim = 8;
+		dummy_cfg.mid_dim = 8;
+		dummy_cfg.out_dim = 8;
+		dummy_cfg.iterations = 1;
+		st0 = ds4_cuda_expert_queue_dummy_run(&dummy_cfg,&dummy_result);
+		if ( ds4_cuda_is_ok(st0) == 0 )
+			return(-406);
+		if ( dummy_result.tokens != 2 || dummy_result.topk != 2 || dummy_result.tokens_per_s <= 0.0f )
+			return(-407);
 		dev_count = -1;
 		st0 = ds4_cuda_device_count(&dev_count);
 		if ( ds4_cuda_is_ok(st0) == 0 )

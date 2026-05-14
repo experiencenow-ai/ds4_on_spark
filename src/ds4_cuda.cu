@@ -23,6 +23,15 @@ ds4_cuda_status_t ds4_cuda_fail(int32_t code)
 	return(st);
 }
 
+static int32_t ds4_cuda_i64_fits_size(int64_t bytes)
+{
+	if ( bytes < 0 )
+		return(0);
+	if ( (uint64_t)bytes > (uint64_t)SIZE_MAX )
+		return(0);
+	return(1);
+}
+
 int32_t ds4_cuda_is_ok(ds4_cuda_status_t st)
 {
 	if ( st.code == 0 )
@@ -414,7 +423,7 @@ ds4_cuda_status_t ds4_cuda_malloc(void **out,int64_t bytes)
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	if ( bytes == 0 )
 		return(ds4_cuda_ok());
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	err = cudaMalloc(out,(size_t)bytes);
 	if ( err != cudaSuccess )
@@ -441,7 +450,7 @@ ds4_cuda_status_t ds4_cuda_malloc_host(void **out,int64_t bytes)
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	if ( bytes == 0 )
 		return(ds4_cuda_ok());
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	err = cudaMallocHost(out,(size_t)bytes);
 	if ( err != cudaSuccess )
@@ -467,7 +476,7 @@ ds4_cuda_status_t ds4_cuda_memset(void *dst,int32_t value,int64_t bytes)
 		return(ds4_cuda_ok());
 	if ( dst == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	err = cudaMemset(dst,value,(size_t)bytes);
 	if ( err != cudaSuccess )
@@ -486,7 +495,7 @@ ds4_cuda_status_t ds4_cuda_memcpy_h2d(void *dst,const void *src,int64_t bytes)
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	if ( src == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	err = cudaMemcpy(dst,src,(size_t)bytes,cudaMemcpyHostToDevice);
 	if ( err != cudaSuccess )
@@ -505,7 +514,7 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h(void *dst,const void *src,int64_t bytes)
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	if ( src == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	err = cudaMemcpy(dst,src,(size_t)bytes,cudaMemcpyDeviceToHost);
 	if ( err != cudaSuccess )
@@ -545,6 +554,420 @@ ds4_cuda_status_t ds4_cuda_fill_u8(void *dst,uint8_t value,int64_t bytes,ds4_cud
 	return(DS4_CUDA_KERNEL_LAUNCH(ds4_fill_u8_kernel<<<grid,block,0,stream>>>((uint8_t *)dst,value,n)));
 }
 
+typedef struct
+{
+	float *x,*gate,*up,*down,*mid,*out;
+	int32_t *selected;
+	const float **gate_ptrs,**up_ptrs,**down_ptrs;
+	const float **host_gate_ptrs,**host_up_ptrs,**host_down_ptrs;
+	int32_t *host_selected;
+} ds4_expert_dummy_buffers_t;
+
+static __global__ void ds4_expert_dummy_init_float_kernel(float *dst,int64_t n,uint32_t seed)
+{
+	int64_t idx;
+	uint32_t x;
+	idx = ((int64_t)((int32_t)blockIdx.x) * (int64_t)((int32_t)blockDim.x));
+	idx += (int64_t)((int32_t)threadIdx.x);
+	if ( idx >= n )
+		return;
+	x = (uint32_t)idx ^ seed;
+	x = ((x * 1664525u) + 1013904223u);
+	dst[idx] = ((float)(int32_t)(x & 1023u) - 512.0f) * 0.0009765625f;
+}
+
+static __global__ void ds4_expert_dummy_gateup_kernel(float *mid,const float *x,const float * const *gate_ptrs,const float * const *up_ptrs,const int32_t *selected,int32_t tokens,int32_t topk,int32_t hidden_dim,int32_t mid_dim)
+{
+	int32_t row,pair,token,expert,h;
+	const float *xr,*gr,*ur;
+	float gate,up;
+	row = ((int32_t)blockIdx.x * (int32_t)blockDim.x) + (int32_t)threadIdx.x;
+	pair = (int32_t)blockIdx.y;
+	if ( row >= mid_dim )
+		return;
+	if ( pair >= (tokens * topk) )
+		return;
+	token = (pair / topk);
+	expert = selected[pair];
+	xr = x + ((int64_t)token * (int64_t)hidden_dim);
+	gr = gate_ptrs[expert] + ((int64_t)row * (int64_t)hidden_dim);
+	ur = up_ptrs[expert] + ((int64_t)row * (int64_t)hidden_dim);
+	gate = 0.0f;
+	up = 0.0f;
+	for (h=0; h<hidden_dim; h++)
+	{
+		gate += (gr[h] * xr[h]);
+		up += (ur[h] * xr[h]);
+	}
+	mid[((int64_t)pair * (int64_t)mid_dim) + row] = ((gate / (1.0f + expf(-gate))) * up);
+}
+
+static __global__ void ds4_expert_dummy_down_kernel(float *out,const float *mid,const float * const *down_ptrs,const int32_t *selected,int32_t tokens,int32_t topk,int32_t mid_dim,int32_t out_dim)
+{
+	int32_t row,token,k,expert,m,pair;
+	const float *mr,*dr;
+	float acc;
+	row = ((int32_t)blockIdx.x * (int32_t)blockDim.x) + (int32_t)threadIdx.x;
+	token = (int32_t)blockIdx.y;
+	if ( row >= out_dim )
+		return;
+	if ( token >= tokens )
+		return;
+	acc = 0.0f;
+	for (k=0; k<topk; k++)
+	{
+		pair = ((token * topk) + k);
+		expert = selected[pair];
+		mr = mid + ((int64_t)pair * (int64_t)mid_dim);
+		dr = down_ptrs[expert] + ((int64_t)row * (int64_t)mid_dim);
+		for (m=0; m<mid_dim; m++)
+			acc += (dr[m] * mr[m]);
+	}
+	out[((int64_t)token * (int64_t)out_dim) + row] = acc;
+}
+
+static int32_t ds4_i64_mul_checked(int64_t *out,int64_t a,int64_t b)
+{
+	if ( out == 0 )
+		return(-1);
+	*out = 0;
+	if ( a < 0 || b < 0 )
+		return(-2);
+	if ( a != 0 && b > (INT64_MAX / a) )
+		return(-3);
+	*out = (a * b);
+	return(0);
+}
+
+static int32_t ds4_expert_dummy_bytes(const ds4_cuda_expert_queue_dummy_config_t *cfg,int64_t *x_bytes,int64_t *gate_bytes,int64_t *down_bytes,int64_t *mid_bytes,int64_t *out_bytes,int64_t *selected_bytes,int64_t *ptr_bytes)
+{
+	int64_t pairs,hidden_bytes,mid_float_bytes,out_float_bytes,experts_mid;
+	if ( cfg == 0 || x_bytes == 0 || gate_bytes == 0 || down_bytes == 0 || mid_bytes == 0 || out_bytes == 0 || selected_bytes == 0 || ptr_bytes == 0 )
+		return(-1);
+	if ( cfg->tokens <= 0 || cfg->topk <= 0 || cfg->n_experts <= 0 || cfg->hidden_dim <= 0 || cfg->mid_dim <= 0 || cfg->out_dim <= 0 || cfg->iterations <= 0 )
+		return(-2);
+	if ( ds4_i64_mul_checked(&pairs,(int64_t)cfg->tokens,(int64_t)cfg->topk) < 0 )
+		return(-3);
+	if ( ds4_i64_mul_checked(&hidden_bytes,(int64_t)cfg->hidden_dim,(int64_t)sizeof(float)) < 0 )
+		return(-4);
+	if ( ds4_i64_mul_checked(&mid_float_bytes,(int64_t)cfg->mid_dim,(int64_t)sizeof(float)) < 0 )
+		return(-5);
+	if ( ds4_i64_mul_checked(&out_float_bytes,(int64_t)cfg->out_dim,(int64_t)sizeof(float)) < 0 )
+		return(-6);
+	if ( ds4_i64_mul_checked(x_bytes,(int64_t)cfg->tokens,hidden_bytes) < 0 )
+		return(-7);
+	if ( ds4_i64_mul_checked(&experts_mid,(int64_t)cfg->n_experts,(int64_t)cfg->mid_dim) < 0 )
+		return(-8);
+	if ( ds4_i64_mul_checked(gate_bytes,experts_mid,hidden_bytes) < 0 )
+		return(-9);
+	if ( ds4_i64_mul_checked(down_bytes,(int64_t)cfg->n_experts,(int64_t)cfg->out_dim) < 0 )
+		return(-10);
+	if ( ds4_i64_mul_checked(down_bytes,*down_bytes,mid_float_bytes) < 0 )
+		return(-11);
+	if ( ds4_i64_mul_checked(mid_bytes,pairs,mid_float_bytes) < 0 )
+		return(-12);
+	if ( ds4_i64_mul_checked(out_bytes,(int64_t)cfg->tokens,out_float_bytes) < 0 )
+		return(-13);
+	if ( ds4_i64_mul_checked(selected_bytes,pairs,(int64_t)sizeof(int32_t)) < 0 )
+		return(-14);
+	if ( ds4_i64_mul_checked(ptr_bytes,(int64_t)cfg->n_experts,(int64_t)sizeof(float *)) < 0 )
+		return(-15);
+	return(0);
+}
+
+static void ds4_expert_dummy_zero(ds4_expert_dummy_buffers_t *b)
+{
+	b->x = 0;
+	b->gate = 0;
+	b->up = 0;
+	b->down = 0;
+	b->mid = 0;
+	b->out = 0;
+	b->selected = 0;
+	b->gate_ptrs = 0;
+	b->up_ptrs = 0;
+	b->down_ptrs = 0;
+	b->host_gate_ptrs = 0;
+	b->host_up_ptrs = 0;
+	b->host_down_ptrs = 0;
+	b->host_selected = 0;
+}
+
+static void ds4_expert_dummy_free(ds4_expert_dummy_buffers_t *b)
+{
+	if ( b->x != 0 )
+		cudaFree(b->x);
+	if ( b->gate != 0 )
+		cudaFree(b->gate);
+	if ( b->up != 0 )
+		cudaFree(b->up);
+	if ( b->down != 0 )
+		cudaFree(b->down);
+	if ( b->mid != 0 )
+		cudaFree(b->mid);
+	if ( b->out != 0 )
+		cudaFree(b->out);
+	if ( b->selected != 0 )
+		cudaFree(b->selected);
+	if ( b->gate_ptrs != 0 )
+		cudaFree(b->gate_ptrs);
+	if ( b->up_ptrs != 0 )
+		cudaFree(b->up_ptrs);
+	if ( b->down_ptrs != 0 )
+		cudaFree(b->down_ptrs);
+	if ( b->host_gate_ptrs != 0 )
+		cudaFreeHost((void *)b->host_gate_ptrs);
+	if ( b->host_up_ptrs != 0 )
+		cudaFreeHost((void *)b->host_up_ptrs);
+	if ( b->host_down_ptrs != 0 )
+		cudaFreeHost((void *)b->host_down_ptrs);
+	if ( b->host_selected != 0 )
+		cudaFreeHost((void *)b->host_selected);
+	ds4_expert_dummy_zero(b);
+}
+
+static ds4_cuda_status_t ds4_expert_dummy_alloc(ds4_expert_dummy_buffers_t *b,const ds4_cuda_expert_queue_dummy_config_t *cfg)
+{
+	int64_t x_bytes,gate_bytes,down_bytes,mid_bytes,out_bytes,selected_bytes,ptr_bytes;
+	cudaError_t err;
+	if ( ds4_expert_dummy_bytes(cfg,&x_bytes,&gate_bytes,&down_bytes,&mid_bytes,&out_bytes,&selected_bytes,&ptr_bytes) < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	if ( ds4_cuda_i64_fits_size(x_bytes) == 0 || ds4_cuda_i64_fits_size(gate_bytes) == 0 || ds4_cuda_i64_fits_size(down_bytes) == 0 || ds4_cuda_i64_fits_size(mid_bytes) == 0 || ds4_cuda_i64_fits_size(out_bytes) == 0 || ds4_cuda_i64_fits_size(selected_bytes) == 0 || ds4_cuda_i64_fits_size(ptr_bytes) == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
+	err = cudaMalloc((void **)&b->x,(size_t)x_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->gate,(size_t)gate_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->up,(size_t)gate_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->down,(size_t)down_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->mid,(size_t)mid_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->out,(size_t)out_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->selected,(size_t)selected_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->gate_ptrs,(size_t)ptr_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->up_ptrs,(size_t)ptr_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMalloc((void **)&b->down_ptrs,(size_t)ptr_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMallocHost((void **)&b->host_gate_ptrs,(size_t)ptr_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMallocHost((void **)&b->host_up_ptrs,(size_t)ptr_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMallocHost((void **)&b->host_down_ptrs,(size_t)ptr_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMallocHost((void **)&b->host_selected,(size_t)selected_bytes);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	return(ds4_cuda_ok());
+}
+
+static ds4_cuda_status_t ds4_expert_dummy_prepare(ds4_expert_dummy_buffers_t *b,const ds4_cuda_expert_queue_dummy_config_t *cfg)
+{
+	int64_t x_bytes,gate_bytes,down_bytes,mid_bytes,out_bytes,selected_bytes,ptr_bytes;
+	int32_t i,pairs,threads,blocks;
+	ds4_cuda_status_t st;
+	cudaError_t err;
+	pairs = (cfg->tokens * cfg->topk);
+	if ( ds4_expert_dummy_bytes(cfg,&x_bytes,&gate_bytes,&down_bytes,&mid_bytes,&out_bytes,&selected_bytes,&ptr_bytes) < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	for (i=0; i<cfg->n_experts; i++)
+	{
+		b->host_gate_ptrs[i] = b->gate + ((int64_t)i * (int64_t)cfg->mid_dim * (int64_t)cfg->hidden_dim);
+		b->host_up_ptrs[i] = b->up + ((int64_t)i * (int64_t)cfg->mid_dim * (int64_t)cfg->hidden_dim);
+		b->host_down_ptrs[i] = b->down + ((int64_t)i * (int64_t)cfg->out_dim * (int64_t)cfg->mid_dim);
+	}
+	for (i=0; i<pairs; i++)
+		b->host_selected[i] = (int32_t)(((uint32_t)i * 37u + cfg->seed) % (uint32_t)cfg->n_experts);
+	err = cudaMemcpy(b->gate_ptrs,b->host_gate_ptrs,(size_t)ptr_bytes,cudaMemcpyHostToDevice);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMemcpy(b->up_ptrs,b->host_up_ptrs,(size_t)ptr_bytes,cudaMemcpyHostToDevice);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMemcpy(b->down_ptrs,b->host_down_ptrs,(size_t)ptr_bytes,cudaMemcpyHostToDevice);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	err = cudaMemcpy(b->selected,b->host_selected,(size_t)selected_bytes,cudaMemcpyHostToDevice);
+	if ( err != cudaSuccess )
+		return(ds4_cuda_fail((int32_t)err));
+	threads = 256;
+	blocks = (int32_t)((x_bytes / (int64_t)sizeof(float) + threads - 1) / threads);
+	st = DS4_CUDA_KERNEL_LAUNCH(ds4_expert_dummy_init_float_kernel<<<blocks,threads>>>(b->x,x_bytes / (int64_t)sizeof(float),cfg->seed ^ 0x11u));
+	if ( ds4_cuda_is_ok(st) == 0 )
+		return(st);
+	blocks = (int32_t)((gate_bytes / (int64_t)sizeof(float) + threads - 1) / threads);
+	st = DS4_CUDA_KERNEL_LAUNCH(ds4_expert_dummy_init_float_kernel<<<blocks,threads>>>(b->gate,gate_bytes / (int64_t)sizeof(float),cfg->seed ^ 0x22u));
+	if ( ds4_cuda_is_ok(st) == 0 )
+		return(st);
+	st = DS4_CUDA_KERNEL_LAUNCH(ds4_expert_dummy_init_float_kernel<<<blocks,threads>>>(b->up,gate_bytes / (int64_t)sizeof(float),cfg->seed ^ 0x33u));
+	if ( ds4_cuda_is_ok(st) == 0 )
+		return(st);
+	blocks = (int32_t)((down_bytes / (int64_t)sizeof(float) + threads - 1) / threads);
+	st = DS4_CUDA_KERNEL_LAUNCH(ds4_expert_dummy_init_float_kernel<<<blocks,threads>>>(b->down,down_bytes / (int64_t)sizeof(float),cfg->seed ^ 0x44u));
+	if ( ds4_cuda_is_ok(st) == 0 )
+		return(st);
+	return(ds4_cuda_device_synchronize());
+}
+
+static ds4_cuda_status_t ds4_expert_dummy_launch_gateup(ds4_expert_dummy_buffers_t *b,const ds4_cuda_expert_queue_dummy_config_t *cfg)
+{
+	dim3 grid,block;
+	block = dim3(128,1,1);
+	grid = dim3((unsigned int)((cfg->mid_dim + 127) / 128),(unsigned int)(cfg->tokens * cfg->topk),1);
+	return(DS4_CUDA_KERNEL_LAUNCH(ds4_expert_dummy_gateup_kernel<<<grid,block>>>(b->mid,b->x,b->gate_ptrs,b->up_ptrs,b->selected,cfg->tokens,cfg->topk,cfg->hidden_dim,cfg->mid_dim)));
+}
+
+static ds4_cuda_status_t ds4_expert_dummy_launch_down(ds4_expert_dummy_buffers_t *b,const ds4_cuda_expert_queue_dummy_config_t *cfg)
+{
+	dim3 grid,block;
+	block = dim3(128,1,1);
+	grid = dim3((unsigned int)((cfg->out_dim + 127) / 128),(unsigned int)cfg->tokens,1);
+	return(DS4_CUDA_KERNEL_LAUNCH(ds4_expert_dummy_down_kernel<<<grid,block>>>(b->out,b->mid,b->down_ptrs,b->selected,cfg->tokens,cfg->topk,cfg->mid_dim,cfg->out_dim)));
+}
+
+static ds4_cuda_status_t ds4_expert_dummy_measure(float *gateup_ms,float *down_ms,ds4_expert_dummy_buffers_t *b,const ds4_cuda_expert_queue_dummy_config_t *cfg)
+{
+	ds4_cuda_event_t a,beg,end;
+	ds4_cuda_status_t st;
+	int32_t i;
+	*gateup_ms = 0.0f;
+	*down_ms = 0.0f;
+	a.h = 0;
+	beg.h = 0;
+	end.h = 0;
+	st = ds4_expert_dummy_launch_gateup(b,cfg);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_expert_dummy_launch_down(b,cfg);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_device_synchronize();
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_create(&a,DS4_CUDA_EVENT_FLAGS_DEFAULT);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_create(&beg,DS4_CUDA_EVENT_FLAGS_DEFAULT);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_create(&end,DS4_CUDA_EVENT_FLAGS_DEFAULT);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_record(a,(ds4_cuda_stream_t){0});
+	for (i=0; ds4_cuda_is_ok(st) != 0 && i<cfg->iterations; i++)
+		st = ds4_expert_dummy_launch_gateup(b,cfg);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_record(beg,(ds4_cuda_stream_t){0});
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_synchronize(beg);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_elapsed_ms(gateup_ms,a,beg);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_record(a,(ds4_cuda_stream_t){0});
+	for (i=0; ds4_cuda_is_ok(st) != 0 && i<cfg->iterations; i++)
+		st = ds4_expert_dummy_launch_down(b,cfg);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_record(end,(ds4_cuda_stream_t){0});
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_synchronize(end);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_cuda_event_elapsed_ms(down_ms,a,end);
+	if ( a.h != 0 )
+		ds4_cuda_event_destroy(&a);
+	if ( beg.h != 0 )
+		ds4_cuda_event_destroy(&beg);
+	if ( end.h != 0 )
+		ds4_cuda_event_destroy(&end);
+	return(st);
+}
+
+void ds4_cuda_expert_queue_dummy_default_config(ds4_cuda_expert_queue_dummy_config_t *out)
+{
+	if ( out == 0 )
+		return;
+	out->tokens = 32;
+	out->topk = 6;
+	out->n_experts = 256;
+	out->hidden_dim = 128;
+	out->mid_dim = 256;
+	out->out_dim = 128;
+	out->iterations = 8;
+	out->seed = 1234u;
+}
+
+ds4_cuda_status_t ds4_cuda_expert_queue_dummy_run(const ds4_cuda_expert_queue_dummy_config_t *cfg,ds4_cuda_expert_queue_dummy_result_t *out)
+{
+	ds4_cuda_expert_queue_dummy_config_t c;
+	ds4_expert_dummy_buffers_t b;
+	ds4_cuda_status_t st;
+	int64_t x_bytes,gate_bytes,down_bytes,mid_bytes,out_bytes,selected_bytes,ptr_bytes,move_bytes;
+	float gateup_ms,down_ms,total_ms;
+	if ( cfg == 0 || out == 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	c = *cfg;
+	out->tokens = 0;
+	out->topk = 0;
+	out->n_experts = 0;
+	out->hidden_dim = 0;
+	out->mid_dim = 0;
+	out->out_dim = 0;
+	out->iterations = 0;
+	out->estimated_bytes_moved = 0;
+	out->gateup_ms = 0.0f;
+	out->down_ms = 0.0f;
+	out->total_ms = 0.0f;
+	out->tokens_per_s = 0.0f;
+	out->expert_pairs_per_s = 0.0f;
+	out->estimated_gib_per_s = 0.0f;
+	if ( ds4_expert_dummy_bytes(&c,&x_bytes,&gate_bytes,&down_bytes,&mid_bytes,&out_bytes,&selected_bytes,&ptr_bytes) < 0 )
+		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
+	st = ds4_cuda_init();
+	ds4_expert_dummy_zero(&b);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_expert_dummy_alloc(&b,&c);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_expert_dummy_prepare(&b,&c);
+	if ( ds4_cuda_is_ok(st) != 0 )
+		st = ds4_expert_dummy_measure(&gateup_ms,&down_ms,&b,&c);
+	ds4_expert_dummy_free(&b);
+	if ( ds4_cuda_is_ok(st) == 0 )
+		return(st);
+	move_bytes = ((int64_t)c.tokens * (int64_t)c.topk * (int64_t)c.mid_dim * (int64_t)c.hidden_dim * (int64_t)sizeof(float) * 3);
+	move_bytes += ((int64_t)c.tokens * (int64_t)c.topk * (int64_t)c.out_dim * (int64_t)c.mid_dim * (int64_t)sizeof(float));
+	move_bytes *= (int64_t)c.iterations;
+	total_ms = (gateup_ms + down_ms);
+	out->tokens = c.tokens;
+	out->topk = c.topk;
+	out->n_experts = c.n_experts;
+	out->hidden_dim = c.hidden_dim;
+	out->mid_dim = c.mid_dim;
+	out->out_dim = c.out_dim;
+	out->iterations = c.iterations;
+	out->estimated_bytes_moved = move_bytes;
+	out->gateup_ms = gateup_ms;
+	out->down_ms = down_ms;
+	out->total_ms = total_ms;
+	if ( total_ms > 0.0f )
+	{
+		out->tokens_per_s = (((float)c.tokens * (float)c.iterations * 1000.0f) / total_ms);
+		out->expert_pairs_per_s = (((float)c.tokens * (float)c.topk * (float)c.iterations * 1000.0f) / total_ms);
+		out->estimated_gib_per_s = ((float)((double)move_bytes / (1024.0 * 1024.0 * 1024.0)) * 1000.0f / total_ms);
+	}
+	return(ds4_cuda_ok());
+}
+
 ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds4_cuda_stream_t s)
 {
 	cudaError_t err;
@@ -555,7 +978,7 @@ ds4_cuda_status_t ds4_cuda_memset_async(void *dst,int32_t value,int64_t bytes,ds
 		return(ds4_cuda_ok());
 	if ( dst == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	stream = (cudaStream_t)s.h;
 	err = cudaMemsetAsync(dst,value,(size_t)bytes,stream);
@@ -576,7 +999,7 @@ ds4_cuda_status_t ds4_cuda_memcpy_h2d_async(void *dst,const void *src,int64_t by
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	if ( src == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	stream = (cudaStream_t)s.h;
 	err = cudaMemcpyAsync(dst,src,(size_t)bytes,cudaMemcpyHostToDevice,stream);
@@ -597,7 +1020,7 @@ ds4_cuda_status_t ds4_cuda_memcpy_d2h_async(void *dst,const void *src,int64_t by
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	if ( src == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( bytes > (int64_t)SIZE_MAX )
+	if ( ds4_cuda_i64_fits_size(bytes) == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_SIZE_OVERFLOW));
 	stream = (cudaStream_t)s.h;
 	err = cudaMemcpyAsync(dst,src,(size_t)bytes,cudaMemcpyDeviceToHost,stream);
