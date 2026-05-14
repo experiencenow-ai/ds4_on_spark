@@ -1,5 +1,5 @@
 diff --git a/ds4_cuda.cu b/ds4_cuda.cu
-index 6b5bde9..152e9af 100644
+index 6b5bde9..96bc0a3 100644
 --- a/ds4_cuda.cu
 +++ b/ds4_cuda.cu
 @@ -8029,6 +8029,8 @@ __global__ static void moe_gate_up_mid_expert_tile4_row32_kernel(
@@ -253,7 +253,15 @@ index 6b5bde9..152e9af 100644
              getenv("DS4_CUDA_MOE_NO_EXPERT_TILES") == NULL;
          const uint32_t expert_tile_m = getenv("DS4_CUDA_MOE_TILE4") ? 4u : 8u;
          const uint32_t write_gate_up = getenv("DS4_CUDA_MOE_WRITE_GATE_UP") != NULL;
-@@ -9905,6 +9946,7 @@ static int routed_moe_launch(
+@@ -9852,6 +9893,7 @@ static int routed_moe_launch(
+         const uint32_t use_down_tile16 = use_atomic_down && expert_tile_m == 8u &&
+             n_tokens >= 128u && getenv("DS4_CUDA_MOE_NO_DOWN_TILE16") == NULL;
+         const uint32_t use_down_block16 = use_down_tile16 && midq_blocks <= 8u &&
++            getenv("DS4_CUDA_MOE_DOWN_BLOCK16") != NULL &&
+             getenv("DS4_CUDA_MOE_NO_DOWN_BLOCK16") == NULL;
+         const uint32_t use_decode_lut_gate =
+             n_tokens == 1u && xq_blocks <= 16u &&
+@@ -9905,6 +9947,7 @@ static int routed_moe_launch(
              const uint64_t tile16_total_bytes = use_down_tile16 ? sizeof(uint32_t) : 0u;
              const uint64_t tile16_experts_bytes = (uint64_t)tile16_capacity * sizeof(uint32_t);
              const uint64_t tile16_starts_bytes = (uint64_t)tile16_capacity * sizeof(uint32_t);
@@ -261,7 +269,7 @@ index 6b5bde9..152e9af 100644
              const uint64_t tile_offsets_off = counts_bytes + offsets_bytes + cursors_bytes + sorted_bytes;
              const uint64_t tile_total_off = tile_offsets_off + tile_offsets_bytes;
              const uint64_t tile_experts_off = tile_total_off + tile_total_bytes;
-@@ -9913,12 +9955,14 @@ static int routed_moe_launch(
+@@ -9913,12 +9956,14 @@ static int routed_moe_launch(
              const uint64_t tile16_total_off = tile16_offsets_off + tile16_offsets_bytes;
              const uint64_t tile16_experts_off = tile16_total_off + tile16_total_bytes;
              const uint64_t tile16_starts_off = tile16_experts_off + tile16_experts_bytes;
@@ -277,7 +285,7 @@ index 6b5bde9..152e9af 100644
                  uint32_t *counts = (uint32_t *)scratch;
                  uint32_t *offsets = (uint32_t *)(scratch + counts_bytes);
                  uint32_t *cursors = (uint32_t *)(scratch + counts_bytes + offsets_bytes);
-@@ -9975,6 +10019,7 @@ static int routed_moe_launch(
+@@ -9975,6 +10020,7 @@ static int routed_moe_launch(
                                                                 gate_offset, up_offset, down_offset,
                                                                 gate_expert_bytes, down_expert_bytes,
                                                                 counts, 256u,
@@ -285,7 +293,7 @@ index 6b5bde9..152e9af 100644
                                                                 &gate_slices, &up_slices, &down_slices,
                                                                 &active_experts)) {
                          if (getenv("DS4_CUDA_MOE_EXPERT_SLICE_STRICT") != NULL) return 0;
-@@ -9997,7 +10042,10 @@ static int routed_moe_launch(
+@@ -9997,7 +10043,10 @@ static int routed_moe_launch(
                          dim3 tgrid((expert_mid_dim + 511u) / 512u, tile_capacity, 1);
                          moe_gate_up_mid_expert_tile8_rowspan_kernel<512><<<tgrid, 256>>>(
                              (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -297,7 +305,7 @@ index 6b5bde9..152e9af 100644
                              tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                              gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                              write_gate_up, clamp);
-@@ -10005,7 +10053,10 @@ static int routed_moe_launch(
+@@ -10005,7 +10054,10 @@ static int routed_moe_launch(
                          dim3 tgrid((expert_mid_dim + 1023u) / 1024u, tile_capacity, 1);
                          moe_gate_up_mid_expert_tile8_rowspan_kernel<1024><<<tgrid, 256>>>(
                              (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -309,7 +317,7 @@ index 6b5bde9..152e9af 100644
                              tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                              gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                              write_gate_up, clamp);
-@@ -10013,7 +10064,10 @@ static int routed_moe_launch(
+@@ -10013,7 +10065,10 @@ static int routed_moe_launch(
                          dim3 tgrid((expert_mid_dim + 2047u) / 2048u, tile_capacity, 1);
                          moe_gate_up_mid_expert_tile8_row2048_kernel<<<tgrid, 256>>>(
                              (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -321,7 +329,7 @@ index 6b5bde9..152e9af 100644
                              tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                              gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                              write_gate_up, clamp);
-@@ -10022,7 +10076,10 @@ static int routed_moe_launch(
+@@ -10022,7 +10077,10 @@ static int routed_moe_launch(
                      dim3 tgrid((expert_mid_dim + 31u) / 32u, tile_capacity, 1);
                      moe_gate_up_mid_expert_tile8_row32_kernel<<<tgrid, 256>>>(
                          (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -333,7 +341,7 @@ index 6b5bde9..152e9af 100644
                          tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                          gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                          write_gate_up, clamp);
-@@ -10030,7 +10087,10 @@ static int routed_moe_launch(
+@@ -10030,7 +10088,10 @@ static int routed_moe_launch(
                      dim3 tgrid((expert_mid_dim + 31u) / 32u, tile_capacity, 1);
                      moe_gate_up_mid_expert_tile4_row32_kernel<<<tgrid, 256>>>(
                          (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -345,7 +353,7 @@ index 6b5bde9..152e9af 100644
                          tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                          gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                          write_gate_up, clamp);
-@@ -10231,13 +10291,15 @@ static int routed_moe_launch(
+@@ -10231,13 +10292,15 @@ static int routed_moe_launch(
                          if (use_down_block16) {
                              moe_down_expert_tile16_rowspan_block16_kernel<512><<<tgrid, 256>>>(
                                  use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
@@ -363,7 +371,7 @@ index 6b5bde9..152e9af 100644
                                  down_tile_total, down_tile_experts, down_tile_starts, down_expert_bytes, down_row_bytes,
                                  midq_blocks, out_dim, n_expert, use_atomic_down);
                          }
-@@ -10246,13 +10308,15 @@ static int routed_moe_launch(
+@@ -10246,13 +10309,15 @@ static int routed_moe_launch(
                          if (use_down_block16) {
                              moe_down_expert_tile16_rowspan_block16_kernel<1024><<<tgrid, 256>>>(
                                  use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
@@ -381,7 +389,7 @@ index 6b5bde9..152e9af 100644
                                  down_tile_total, down_tile_experts, down_tile_starts, down_expert_bytes, down_row_bytes,
                                  midq_blocks, out_dim, n_expert, use_atomic_down);
                          }
-@@ -10261,13 +10325,15 @@ static int routed_moe_launch(
+@@ -10261,13 +10326,15 @@ static int routed_moe_launch(
                          if (use_down_block16) {
                              moe_down_expert_tile16_rowspan_block16_kernel<2048><<<tgrid, 256>>>(
                                  use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
@@ -399,7 +407,7 @@ index 6b5bde9..152e9af 100644
                                  down_tile_total, down_tile_experts, down_tile_starts, down_expert_bytes, down_row_bytes,
                                  midq_blocks, out_dim, n_expert, use_atomic_down);
                          }
-@@ -10276,21 +10342,24 @@ static int routed_moe_launch(
+@@ -10276,21 +10343,24 @@ static int routed_moe_launch(
                      dim3 tgrid((out_dim + 31u) / 32u, down_tile_capacity, 1);
                      moe_down_expert_tile16_row32_kernel<<<tgrid, 256>>>(
                          use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
