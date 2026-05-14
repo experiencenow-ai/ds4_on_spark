@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import statistics
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,10 @@ def _sha256(path: Path) -> str:
 
 def _write_json(path: Path, obj: dict[str, Any]) -> None:
     path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_bytes(path: Path, data: bytes) -> None:
+    path.write_bytes(data)
 
 
 def _validate_owner_table(obj: dict[str, Any]) -> list[list[int]]:
@@ -116,6 +121,54 @@ def _build_rank_manifest(
     )
 
 
+def _rank_manifest_binary(manifest: dict[str, Any]) -> bytes:
+    rank = int(manifest.get("rank", -1))
+    world_size = int(manifest.get("world_size", 0))
+    layers = int(manifest.get("num_layers", 0))
+    experts = int(manifest.get("experts", 0))
+    owner_hash = str(manifest.get("owner_table_sha256", ""))
+    owned = manifest.get("owned_experts_by_layer")
+    if rank < 0:
+        raise ValueError("rank manifest rank must be >= 0")
+    if world_size <= 0:
+        raise ValueError("rank manifest world_size must be > 0")
+    if layers <= 0:
+        raise ValueError("rank manifest num_layers must be > 0")
+    if experts <= 0:
+        raise ValueError("rank manifest experts must be > 0")
+    if len(owner_hash) != 64:
+        raise ValueError("rank manifest owner_table_sha256 must be 64 hex chars")
+    if not isinstance(owned, list) or len(owned) != layers:
+        raise ValueError("rank manifest owned_experts_by_layer must match num_layers")
+    stride = (experts + 7) // 8
+    payload = bytearray(stride * layers)
+    for layer, row in enumerate(owned):
+        if not isinstance(row, list):
+            raise ValueError(f"owned_experts_by_layer[{int(layer)}] is not a list")
+        for expert in row:
+            expert_i = int(expert)
+            if expert_i < 0 or expert_i >= experts:
+                raise ValueError(f"expert {int(expert_i)} is outside 0..{int(experts) - 1}")
+            off = (int(layer) * stride) + (expert_i // 8)
+            payload[off] |= 1 << (expert_i & 7)
+    header = struct.pack(
+        "<8sIIIIIIII64s",
+        b"DS4EXM1\0",
+        128,
+        1,
+        rank,
+        world_size,
+        layers,
+        experts,
+        stride,
+        len(payload),
+        owner_hash.encode("ascii"),
+    )
+    if len(header) > 128:
+        raise ValueError("internal error: binary manifest header exceeds 128 bytes")
+    return(header + (b"\0" * (128 - len(header))) + bytes(payload))
+
+
 def _validate_partition(manifests: list[dict[str, Any]], experts: int, layers: int) -> None:
     for layer in range(int(layers)):
         seen: set[int] = set()
@@ -137,7 +190,7 @@ def _validate_partition(manifests: list[dict[str, Any]], experts: int, layers: i
             raise ValueError(f"layer {int(layer)} partition covers {len(seen)} experts, expected {int(experts)}")
 
 
-def build_manifests(owner_path: Path, out_dir: Path, prefix: str, index_name: str) -> dict[str, Any]:
+def build_manifests(owner_path: Path, out_dir: Path, prefix: str, index_name: str, emit_binary: bool) -> dict[str, Any]:
     owner_obj = _read_json(owner_path)
     table = _validate_owner_table(owner_obj)
     owner_hash = _sha256(owner_path)
@@ -154,11 +207,17 @@ def build_manifests(owner_path: Path, out_dir: Path, prefix: str, index_name: st
     for manifest in manifests:
         rank = int(manifest["rank"])
         rel = f"{str(prefix)}-{rank:03d}.json"
+        bin_rel = f"{str(prefix)}-{rank:03d}.bin"
+        if bool(emit_binary):
+            manifest["binary_path"] = bin_rel
         _write_json(out_dir / rel, manifest)
+        if bool(emit_binary):
+            _write_bytes(out_dir / bin_rel, _rank_manifest_binary(manifest))
         ranks.append(
             {
                 "rank": int(rank),
                 "path": rel,
+                "binary_path": bin_rel if bool(emit_binary) else "",
                 "total_owned_layer_experts": int(manifest["total_owned_layer_experts"]),
                 "min_owned_per_layer": int(manifest["min_owned_per_layer"]),
                 "median_owned_per_layer": float(manifest["median_owned_per_layer"]),
@@ -177,6 +236,7 @@ def build_manifests(owner_path: Path, out_dir: Path, prefix: str, index_name: st
         "load_contract": {
             "intent": "preload exactly the MoE expert slices each Spark owns, not every model on every Spark",
             "routing": "dispatch expert work to the owning rank using the source owner table",
+            "binary_manifest": "optional rank-XXX.bin is a 128-byte little-endian header followed by layer-major owned-expert bitsets",
         },
         "table_balance": owner_obj.get("table_balance", {}),
         "same_spark": owner_obj.get("same_spark", {}),
@@ -207,12 +267,14 @@ def main() -> int:
     parser.add_argument("--out-dir", required=True, help="Directory for manifest index and per-rank files.")
     parser.add_argument("--rank-prefix", default="rank")
     parser.add_argument("--index-name", default="manifest.json")
+    parser.add_argument("--emit-binary", action="store_true", help="Also write rank-XXX.bin bitset files for C/CUDA runtime loading.")
     args = parser.parse_args()
     index = build_manifests(
         Path(str(args.owner_table_json)),
         Path(str(args.out_dir)),
         str(args.rank_prefix),
         str(args.index_name),
+        bool(args.emit_binary),
     )
     _print_summary(index, Path(str(args.out_dir)))
     return(0)

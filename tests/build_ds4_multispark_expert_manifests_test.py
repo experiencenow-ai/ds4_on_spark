@@ -37,6 +37,7 @@ class BuildDs4MultisparkExpertManifestsTest(unittest.TestCase):
                     owner,
                     "--out-dir",
                     out_dir,
+                    "--emit-binary",
                 ],
                 check=True,
                 cwd=os.getcwd(),
@@ -49,11 +50,17 @@ class BuildDs4MultisparkExpertManifestsTest(unittest.TestCase):
             self.assertEqual(index["schema"], "ds4_multispark_owned_expert_manifest_index_v1")
             self.assertEqual(index["world_size"], 3)
             self.assertEqual(len(index["ranks"]), 3)
+            self.assertEqual(index["ranks"][0]["binary_path"], "rank-000.bin")
             with open(os.path.join(out_dir, "rank-000.json"), "r", encoding="utf-8") as f:
                 rank0 = json.loads(f.read())
             self.assertEqual(rank0["schema"], "ds4_multispark_owned_expert_manifest_v1")
             self.assertEqual(rank0["owned_experts_by_layer"], [[0, 3], [4]])
             self.assertEqual(rank0["total_owned_layer_experts"], 3)
+            with open(os.path.join(out_dir, "rank-000.bin"), "rb") as f:
+                b0 = f.read()
+            self.assertEqual(b0[:8], b"DS4EXM1\0")
+            self.assertEqual(len(b0), 130)
+            self.assertEqual(b0[128:130], bytes([0x09, 0x10]))
             all_by_layer = [set(), set()]
             for rank in range(3):
                 with open(os.path.join(out_dir, f"rank-{rank:03d}.json"), "r", encoding="utf-8") as f:
