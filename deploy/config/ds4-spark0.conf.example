@@ -14,6 +14,10 @@
 #   - arena_size (bytes; supports K/M/G suffix; non-negative)
 #   - cuda_arena_size (bytes; supports K/M/G suffix; non-negative; requires enable_cuda=1 when >0)
 #   - log_ring_entries (count; supports K/M/G suffix; non-negative)
+#   - rank (-1 unset, or >=0 distributed rank)
+#   - world_size (>=1 distributed rank count)
+#   - expert_owner_table_path (path to generated owner table JSON)
+#   - expert_manifest_path (path to this rank's generated manifest JSON)
 #
 # Most deployments should set the effective values via the per-instance env file
 # (`/etc/ds4/ds4-spark0.env`) so operators can override without editing this file.
@@ -24,3 +28,7 @@
 #arena_size=0
 #cuda_arena_size=0
 #log_ring_entries=0
+#rank=0
+#world_size=3
+#expert_owner_table_path=/tmp/ds4-owned-experts-sparks3/expert_owner_table_sparks3.json
+#expert_manifest_path=/tmp/ds4-owned-experts-sparks3/rank-000.json

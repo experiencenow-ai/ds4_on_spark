@@ -359,7 +359,7 @@ static int32_t ds4_cli_dump_config_help(void)
 static int32_t ds4_cli_dump_config_template(void)
 {
 	ds4_config_t cfg;
-	char out[128];
+	char out[2048];
 	const char *k,*h;
 	int32_t i,count,n;
 	if ( ds4_config_defaults(&cfg) < 0 )
@@ -422,7 +422,7 @@ static int32_t ds4_cli_dump_config_env_help(void)
 
 static int32_t ds4_cli_dump_config(const ds4_config_t *cfg)
 {
-	char out[128];
+	char out[2048];
 	int32_t n;
 	if ( cfg == 0 )
 		return(-1);

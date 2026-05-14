@@ -10,6 +10,10 @@ typedef struct
 	int32_t arena_size;
 	int32_t cuda_arena_size;
 	int32_t log_ring_entries;
+	int32_t rank;
+	int32_t world_size;
+	char expert_owner_table_path[512];
+	char expert_manifest_path[512];
 } ds4_config_t;
 
 typedef struct
@@ -33,6 +37,8 @@ typedef struct
 #define DS4_LOG_LEVEL_MAX 3
 
 #define DS4_CUDA_DEVICE_AUTO (-1)
+#define DS4_RANK_NONE (-1)
+#define DS4_WORLD_SIZE_MIN 1
 
 DS4_EXTERN_C_BEGIN
 int32_t ds4_config_diag_init(ds4_config_diag_t *d);

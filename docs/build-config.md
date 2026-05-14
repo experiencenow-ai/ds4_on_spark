@@ -65,6 +65,10 @@ You can also override config fields from the environment with `ds4_config_parse_
 - `DS4_ARENA_SIZE` (supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `512k`, `512KiB`)
 - `DS4_CUDA_ARENA_SIZE` (supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `256m`, `256MiB`)
 - `DS4_LOG_RING_ENTRIES` (supports `k`/`m`/`g` and `KiB`/`MiB`/`GiB` suffixes, e.g. `4k`, `4KiB`)
+- `DS4_WORLD_SIZE`
+- `DS4_RANK`
+- `DS4_EXPERT_OWNER_TABLE_PATH`
+- `DS4_EXPERT_MANIFEST_PATH`
 
 Empty or whitespace-only values (e.g. `DS4_LOG_LEVEL=""` or `DS4_LOG_LEVEL="   "`) are treated as unset and ignored; surrounding whitespace is trimmed before parsing.
 

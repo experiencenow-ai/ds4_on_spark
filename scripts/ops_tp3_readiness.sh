@@ -737,6 +737,8 @@ print_if_set DS4_MASTER_PORT
 print_if_set DS4_METRICS_ADDR
 print_if_set DS4_METRICS_PORT
 print_if_set DS4_CONFIG_PATH
+print_if_set DS4_EXPERT_OWNER_TABLE_PATH
+print_if_set DS4_EXPERT_MANIFEST_PATH
 print_if_set DS4_RING_HOSTS
 print_if_set DS4_PEER_HOST
 print_if_set DS4_PEER_SSH

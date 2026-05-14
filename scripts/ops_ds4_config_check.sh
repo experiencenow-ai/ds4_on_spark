@@ -175,6 +175,8 @@ check_one()
 
 	enable_cuda=""
 	cuda_arena_size=""
+	rank=""
+	world_size=""
 
 	lineno=0
 	while IFS= read -r line || [ "$line" != "" ]; do
@@ -248,6 +250,34 @@ check_one()
 					return 2
 				fi
 				;;
+			rank)
+				if ! is_i32 "$val"; then
+					echo "$label:$lineno: invalid rank (expected -1 or >=0 int): $val" >&2
+					return 2
+				fi
+				if [ "$val" -lt -1 ]; then
+					echo "$label:$lineno: invalid rank (min -1): $val" >&2
+					return 2
+				fi
+				rank="$val"
+				;;
+			world_size)
+				if ! is_uint "$val"; then
+					echo "$label:$lineno: invalid world_size (expected positive int): $val" >&2
+					return 2
+				fi
+				if [ "$val" -lt 1 ]; then
+					echo "$label:$lineno: invalid world_size (min 1): $val" >&2
+					return 2
+				fi
+				world_size="$val"
+				;;
+			expert_owner_table_path|expert_manifest_path)
+				if [ "$val" = "" ]; then
+					echo "$label:$lineno: invalid $key (path must be non-empty)" >&2
+					return 2
+				fi
+				;;
 			*)
 				if [ "$strict_unknown" -ne 0 ]; then
 					echo "$label:$lineno: unknown key: $key" >&2
@@ -261,6 +291,12 @@ check_one()
 	if [ "$cuda_arena_size" != "" ] && [ "$cuda_arena_size" -gt 0 ]; then
 		if [ "${enable_cuda:-0}" != "1" ]; then
 			echo "$label: cuda_arena_size>0 requires enable_cuda=1 (enable_cuda=${enable_cuda:-0})" >&2
+			return 2
+		fi
+	fi
+	if [ "$rank" != "" ] && [ "$world_size" != "" ] && [ "$rank" -ge 0 ]; then
+		if [ "$rank" -ge "$world_size" ]; then
+			echo "$label: rank must be less than world_size (rank=$rank world_size=$world_size)" >&2
 			return 2
 		fi
 	fi
