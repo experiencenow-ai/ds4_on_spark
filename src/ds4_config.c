@@ -13,6 +13,10 @@ static const char *DS4_CONFIG_KEYS[] =
 	"arena_size",
 	"cuda_arena_size",
 	"log_ring_entries",
+	"rank",
+	"world_size",
+	"expert_owner_table_path",
+	"expert_manifest_path",
 };
 
 static const char *DS4_CONFIG_KEY_HELP[] =
@@ -23,6 +27,10 @@ static const char *DS4_CONFIG_KEY_HELP[] =
 	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory (default=0)",
 	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory; requires enable_cuda=1 (default=0)",
 	"entries (k/m/g or KiB/MiB/GiB suffix ok), advisory (default=0)",
+	"-1=single-node unset or >=0 distributed rank (default=-1)",
+	">=1 distributed world size (default=1)",
+	"path to ds4_expert_owner_table_v1 JSON (default empty)",
+	"path to this rank's ds4_multispark_owned_expert_manifest_v1 JSON (default empty)",
 };
 
 static const char *DS4_CONFIG_ENV_VARS[] =
@@ -35,6 +43,10 @@ static const char *DS4_CONFIG_ENV_VARS[] =
 	"DS4_ARENA_SIZE",
 	"DS4_CUDA_ARENA_SIZE",
 	"DS4_LOG_RING_ENTRIES",
+	"DS4_RANK",
+	"DS4_WORLD_SIZE",
+	"DS4_EXPERT_OWNER_TABLE_PATH",
+	"DS4_EXPERT_MANIFEST_PATH",
 };
 
 static const char *DS4_CONFIG_ENV_VARS_HELP[] =
@@ -47,6 +59,10 @@ static const char *DS4_CONFIG_ENV_VARS_HELP[] =
 	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory (overrides config)",
 	"bytes (k/m/g or KiB/MiB/GiB suffix ok), advisory; requires enable_cuda=1 (overrides config)",
 	"entries (k/m/g or KiB/MiB/GiB suffix ok), advisory (overrides config)",
+	"-1=single-node unset or >=0 distributed rank (overrides config)",
+	">=1 distributed world size (overrides config)",
+	"path to ds4_expert_owner_table_v1 JSON (overrides config)",
+	"path to this rank's ds4_multispark_owned_expert_manifest_v1 JSON (overrides config)",
 };
 
 _Static_assert((sizeof(DS4_CONFIG_KEYS) / sizeof(DS4_CONFIG_KEYS[0])) == (sizeof(DS4_CONFIG_KEY_HELP) / sizeof(DS4_CONFIG_KEY_HELP[0])),"DS4_CONFIG_KEY_HELP mismatch");
@@ -96,6 +112,14 @@ const char *ds4_config_env_err_var(int32_t err)
 		return("DS4_LOG_RING_ENTRIES");
 	if ( err == -19 || err == -20 || err == -21 )
 		return("DS4_CUDA_ARENA_SIZE");
+	if ( err == -22 || err == -23 || err == -24 )
+		return("DS4_WORLD_SIZE");
+	if ( err == -25 || err == -26 || err == -27 )
+		return("DS4_RANK");
+	if ( err == -28 || err == -29 )
+		return("DS4_EXPERT_OWNER_TABLE_PATH");
+	if ( err == -30 || err == -31 )
+		return("DS4_EXPERT_MANIFEST_PATH");
 	return(0);
 }
 
@@ -379,6 +403,29 @@ static int32_t ds4_parse_log_level(const char *s,int32_t slen,int32_t *out)
 	return(-6);
 }
 
+static int32_t ds4_config_copy_path(char *out,int32_t cap,const char *v,int32_t vlen)
+{
+	int32_t i;
+	if ( out == 0 )
+		return(-1);
+	if ( cap <= 0 )
+		return(-2);
+	if ( v == 0 )
+		return(-3);
+	if ( vlen <= 0 )
+		return(-4);
+	if ( vlen >= cap )
+		return(-5);
+	for (i=0; i<vlen; i++)
+	{
+		if ( ((uint8_t)v[i]) < 32 )
+			return(-6);
+		out[i] = v[i];
+	}
+	out[vlen] = 0;
+	return(0);
+}
+
 int32_t ds4_config_defaults(ds4_config_t *cfg)
 {
 	if ( cfg == 0 )
@@ -389,6 +436,10 @@ int32_t ds4_config_defaults(ds4_config_t *cfg)
 	cfg->arena_size = 0;
 	cfg->cuda_arena_size = 0;
 	cfg->log_ring_entries = 0;
+	cfg->rank = DS4_RANK_NONE;
+	cfg->world_size = 1;
+	cfg->expert_owner_table_path[0] = 0;
+	cfg->expert_manifest_path[0] = 0;
 	return(0);
 }
 
@@ -412,6 +463,12 @@ int32_t ds4_config_validate(const ds4_config_t *cfg)
 		return(-8);
 	if ( cfg->log_ring_entries < 0 )
 		return(-9);
+	if ( cfg->rank < DS4_RANK_NONE )
+		return(-10);
+	if ( cfg->world_size < DS4_WORLD_SIZE_MIN )
+		return(-11);
+	if ( cfg->rank >= 0 && cfg->rank >= cfg->world_size )
+		return(-12);
 	return(0);
 }
 
@@ -597,6 +654,60 @@ int32_t ds4_config_parse_env(ds4_config_t *cfg)
 			cfg->log_ring_entries = iv;
 		}
 	}
+	v = getenv("DS4_WORLD_SIZE");
+	if ( v != 0 )
+	{
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-22);
+		if ( rv != 0 )
+		{
+			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
+				return(-23);
+			if ( iv < DS4_WORLD_SIZE_MIN )
+				return(-24);
+			cfg->world_size = iv;
+		}
+	}
+	v = getenv("DS4_RANK");
+	if ( v != 0 )
+	{
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-25);
+		if ( rv != 0 )
+		{
+			if ( ds4_parse_i32(tv,tvlen,&iv) < 0 )
+				return(-26);
+			if ( iv < DS4_RANK_NONE )
+				return(-27);
+			cfg->rank = iv;
+		}
+	}
+	v = getenv("DS4_EXPERT_OWNER_TABLE_PATH");
+	if ( v != 0 )
+	{
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-28);
+		if ( rv != 0 )
+		{
+			if ( ds4_config_copy_path(cfg->expert_owner_table_path,(int32_t)sizeof(cfg->expert_owner_table_path),tv,tvlen) < 0 )
+				return(-29);
+		}
+	}
+	v = getenv("DS4_EXPERT_MANIFEST_PATH");
+	if ( v != 0 )
+	{
+		rv = ds4_trim_env_value(v,&tv,&tvlen);
+		if ( rv < 0 )
+			return(-30);
+		if ( rv != 0 )
+		{
+			if ( ds4_config_copy_path(cfg->expert_manifest_path,(int32_t)sizeof(cfg->expert_manifest_path),tv,tvlen) < 0 )
+				return(-31);
+		}
+	}
 	return(0);
 }
 
@@ -661,6 +772,36 @@ int32_t ds4_config_parse_kv(ds4_config_t *cfg,const char *k,int32_t klen,const c
 		if ( iv < 0 )
 			return(-21);
 		cfg->log_ring_entries = iv;
+		return(0);
+	}
+	if ( ds4_span_eq(k,klen,"rank") != 0 )
+	{
+		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+			return(-24);
+		if ( iv < DS4_RANK_NONE )
+			return(-25);
+		cfg->rank = iv;
+		return(0);
+	}
+	if ( ds4_span_eq(k,klen,"world_size") != 0 )
+	{
+		if ( ds4_parse_i32(v,vlen,&iv) < 0 )
+			return(-26);
+		if ( iv < DS4_WORLD_SIZE_MIN )
+			return(-27);
+		cfg->world_size = iv;
+		return(0);
+	}
+	if ( ds4_span_eq(k,klen,"expert_owner_table_path") != 0 )
+	{
+		if ( ds4_config_copy_path(cfg->expert_owner_table_path,(int32_t)sizeof(cfg->expert_owner_table_path),v,vlen) < 0 )
+			return(-28);
+		return(0);
+	}
+	if ( ds4_span_eq(k,klen,"expert_manifest_path") != 0 )
+	{
+		if ( ds4_config_copy_path(cfg->expert_manifest_path,(int32_t)sizeof(cfg->expert_manifest_path),v,vlen) < 0 )
+			return(-29);
 		return(0);
 	}
 	return(1);
@@ -1278,9 +1419,9 @@ int32_t ds4_config_format(const ds4_config_t *cfg,char *out,int32_t cap)
 	if ( cfg->log_level >= DS4_LOG_LEVEL_MIN && cfg->log_level <= DS4_LOG_LEVEL_MAX )
 		lvl = ds4_log_level_name(cfg->log_level);
 	if ( lvl != 0 )
-		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%s\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\ncuda_arena_size=%d\nlog_ring_entries=%d\n",lvl,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->cuda_arena_size,cfg->log_ring_entries);
+		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%s\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\ncuda_arena_size=%d\nlog_ring_entries=%d\nrank=%d\nworld_size=%d\nexpert_owner_table_path=%s\nexpert_manifest_path=%s\n",lvl,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->cuda_arena_size,cfg->log_ring_entries,cfg->rank,cfg->world_size,cfg->expert_owner_table_path,cfg->expert_manifest_path);
 	else
-		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\ncuda_arena_size=%d\nlog_ring_entries=%d\n",cfg->log_level,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->cuda_arena_size,cfg->log_ring_entries);
+		n = (int32_t)snprintf(out,(size_t)cap,"log_level=%d\nenable_cuda=%d\ncuda_device=%d\narena_size=%d\ncuda_arena_size=%d\nlog_ring_entries=%d\nrank=%d\nworld_size=%d\nexpert_owner_table_path=%s\nexpert_manifest_path=%s\n",cfg->log_level,cfg->enable_cuda,cfg->cuda_device,cfg->arena_size,cfg->cuda_arena_size,cfg->log_ring_entries,cfg->rank,cfg->world_size,cfg->expert_owner_table_path,cfg->expert_manifest_path);
 	if ( n < 0 )
 		return(-4);
 	out[cap - 1] = 0;

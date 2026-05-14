@@ -49,6 +49,18 @@ This writes:
 Each rank file contains `owned_experts_by_layer`. The loader should interpret
 that as the exact list of MoE expert slices to keep GPU-resident for that rank.
 
+The runtime config now has generic fields for this handoff:
+
+```bash
+DS4_WORLD_SIZE=3
+DS4_RANK=1
+DS4_EXPERT_OWNER_TABLE_PATH=/tmp/ds4-owned-experts-sparks3/expert_owner_table_sparks3.json
+DS4_EXPERT_MANIFEST_PATH=/tmp/ds4-owned-experts-sparks3/rank-001.json
+```
+
+The same variables work for any rank count; only the generated paths and rank
+values change.
+
 ## Runtime Contract
 
 For layer `L` and expert `E`, `owner_table[L][E]` is the rank that owns the

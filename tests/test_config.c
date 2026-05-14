@@ -41,6 +41,7 @@ int32_t test_config(void)
 	static const uint8_t buf_cuda_dev_bad[] = "cuda_device=-2\n";
 	static const uint8_t buf_mem0[] = "arena_size=256\nlog_ring_entries=8\n";
 	static const uint8_t buf_mem1[] = "arena_size=2k\nlog_ring_entries=3k\n";
+	static const uint8_t buf_multispark0[] = "rank=1\nworld_size=3\nexpert_owner_table_path=/tmp/owner.json\nexpert_manifest_path=/tmp/rank-001.json\n";
 	static const uint8_t buf_mem_over2[] = "arena_size=3g\n";
 	static const uint8_t buf_unknown0[] = "log_level=2\nunknown_key=1\nenable_cuda=0\n";
 	static const uint8_t buf_over0[] = "log_level=2147483648\nenable_cuda=0\n";
@@ -52,19 +53,27 @@ int32_t test_config(void)
 	static const uint8_t env_cfg_unknown0[] = "unknown_key=1\n";
 	char path[64];
 	char env_path[96];
-	char out[128];
+	char out[1024];
 	const char *k0,*h0,*env_name,*env_help;
 	const char *ev;
 	int32_t fd,fdin,fd_save,plen,n,out_len,env_len;
 	uint8_t io_buf[64];
 	uint8_t io_cap_buf[12];
-	int32_t unknown,key_count,env_count,env_i,found_log_level,found_cfg_path;
+	int32_t unknown,key_count,env_count,env_i,found_log_level,found_cfg_path,found_world_size,found_manifest_path;
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-1);
+	if ( cfg.rank != DS4_RANK_NONE )
+		return(-18100);
+	if ( cfg.world_size != 1 )
+		return(-18101);
+	if ( cfg.expert_owner_table_path[0] != 0 )
+		return(-18102);
+	if ( cfg.expert_manifest_path[0] != 0 )
+		return(-18103);
 	key_count = -1;
 	if ( ds4_config_known_key_count(&key_count) < 0 )
 		return(-1812);
-	if ( key_count < 6 )
+	if ( key_count < 10 )
 		return(-1813);
 	if ( ds4_config_known_key(-1) != 0 )
 		return(-1814);
@@ -85,7 +94,7 @@ int32_t test_config(void)
 	env_count = -1;
 	if ( ds4_config_env_var_count(&env_count) < 0 )
 		return(-18210);
-	if ( env_count < 8 )
+	if ( env_count < 12 )
 		return(-18211);
 	if ( ds4_config_env_var(-1) != 0 )
 		return(-18212);
@@ -97,6 +106,8 @@ int32_t test_config(void)
 		return(-18215);
 	found_log_level = 0;
 	found_cfg_path = 0;
+	found_world_size = 0;
+	found_manifest_path = 0;
 	for (env_i=0; env_i<env_count; env_i++)
 	{
 		env_name = ds4_config_env_var(env_i);
@@ -109,11 +120,19 @@ int32_t test_config(void)
 			found_log_level = 1;
 		if ( strcmp(env_name,"DS4_CONFIG_PATH") == 0 )
 			found_cfg_path = 1;
+		if ( strcmp(env_name,"DS4_WORLD_SIZE") == 0 )
+			found_world_size = 1;
+		if ( strcmp(env_name,"DS4_EXPERT_MANIFEST_PATH") == 0 )
+			found_manifest_path = 1;
 	}
 	if ( found_log_level == 0 )
 		return(-18218);
 	if ( found_cfg_path == 0 )
 		return(-18219);
+	if ( found_world_size == 0 )
+		return(-18220);
+	if ( found_manifest_path == 0 )
+		return(-18221);
 	ev = ds4_config_env_err_var(-3);
 	if ( ev == 0 || strcmp(ev,"DS4_LOG_LEVEL") != 0 )
 		return(-1821);
@@ -132,6 +151,18 @@ int32_t test_config(void)
 	ev = ds4_config_env_err_var(-18);
 	if ( ev == 0 || strcmp(ev,"DS4_LOG_RING_ENTRIES") != 0 )
 		return(-1826);
+	ev = ds4_config_env_err_var(-24);
+	if ( ev == 0 || strcmp(ev,"DS4_WORLD_SIZE") != 0 )
+		return(-1828);
+	ev = ds4_config_env_err_var(-27);
+	if ( ev == 0 || strcmp(ev,"DS4_RANK") != 0 )
+		return(-1829);
+	ev = ds4_config_env_err_var(-29);
+	if ( ev == 0 || strcmp(ev,"DS4_EXPERT_OWNER_TABLE_PATH") != 0 )
+		return(-1830);
+	ev = ds4_config_env_err_var(-31);
+	if ( ev == 0 || strcmp(ev,"DS4_EXPERT_MANIFEST_PATH") != 0 )
+		return(-1831);
 	if ( ds4_config_env_err_var(0) != 0 )
 		return(-1827);
 	if ( ds4_config_validate(&cfg) < 0 )
@@ -167,6 +198,22 @@ int32_t test_config(void)
 		return(-1809);
 	cfg.enable_cuda = 0;
 	cfg.cuda_arena_size = 0;
+	cfg.rank = -2;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-18104);
+	cfg.rank = 3;
+	cfg.world_size = 3;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-18105);
+	cfg.rank = 2;
+	cfg.world_size = 3;
+	if ( ds4_config_validate(&cfg) < 0 )
+		return(-18106);
+	cfg.rank = DS4_RANK_NONE;
+	cfg.world_size = 0;
+	if ( ds4_config_validate(&cfg) >= 0 )
+		return(-18107);
+	cfg.world_size = 1;
 	if ( ds4_config_validate(0) >= 0 )
 		return(-1806);
 	if ( ds4_config_parse_kv_cstr(&cfg,"log_level","debug") != 0 )
@@ -217,6 +264,22 @@ int32_t test_config(void)
 		return(-1730);
 	if ( cfg.log_ring_entries != 2048 )
 		return(-1731);
+	if ( ds4_config_parse_kv_cstr(&cfg,"world_size","3") != 0 )
+		return(-1832);
+	if ( cfg.world_size != 3 )
+		return(-1833);
+	if ( ds4_config_parse_kv_cstr(&cfg,"rank","1") != 0 )
+		return(-1834);
+	if ( cfg.rank != 1 )
+		return(-1835);
+	if ( ds4_config_parse_kv_cstr(&cfg,"expert_owner_table_path","/tmp/owner.json") != 0 )
+		return(-1836);
+	if ( strcmp(cfg.expert_owner_table_path,"/tmp/owner.json") != 0 )
+		return(-1837);
+	if ( ds4_config_parse_kv_cstr(&cfg,"expert_manifest_path","/tmp/rank-001.json") != 0 )
+		return(-1838);
+	if ( strcmp(cfg.expert_manifest_path,"/tmp/rank-001.json") != 0 )
+		return(-1839);
 	if ( ds4_config_parse_kv_cstr(&cfg,0,"1") >= 0 )
 		return(-64);
 	if ( ds4_config_parse_mem(&cfg,buf0,(int32_t)(sizeof(buf0) - 1)) < 0 )
@@ -273,6 +336,16 @@ int32_t test_config(void)
 		return(-177);
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-178);
+	if ( ds4_config_parse_mem(&cfg,buf_multispark0,(int32_t)(sizeof(buf_multispark0) - 1)) < 0 )
+		return(-1840);
+	if ( cfg.rank != 1 || cfg.world_size != 3 )
+		return(-1841);
+	if ( strcmp(cfg.expert_owner_table_path,"/tmp/owner.json") != 0 )
+		return(-1842);
+	if ( strcmp(cfg.expert_manifest_path,"/tmp/rank-001.json") != 0 )
+		return(-1843);
+	if ( ds4_config_defaults(&cfg) < 0 )
+		return(-1844);
 	if ( ds4_config_parse_mem(&cfg,buf_mem_over2,(int32_t)(sizeof(buf_mem_over2) - 1)) >= 0 )
 		return(-179);
 	if ( ds4_config_defaults(&cfg) < 0 )
@@ -390,6 +463,14 @@ int32_t test_config(void)
 		return(-1520);
 	if ( setenv("DS4_LOG_RING_ENTRIES","4k",1) != 0 )
 		return(-149);
+	if ( setenv("DS4_WORLD_SIZE","3",1) != 0 )
+		return(-1845);
+	if ( setenv("DS4_RANK","2",1) != 0 )
+		return(-1846);
+	if ( setenv("DS4_EXPERT_OWNER_TABLE_PATH","/tmp/env-owner.json",1) != 0 )
+		return(-1847);
+	if ( setenv("DS4_EXPERT_MANIFEST_PATH","/tmp/env-rank-002.json",1) != 0 )
+		return(-1848);
 	if ( ds4_config_parse_env(&cfg) < 0 )
 		return(-18);
 	if ( cfg.log_level != 1 )
@@ -404,12 +485,24 @@ int32_t test_config(void)
 		return(-1521);
 	if ( cfg.log_ring_entries != 4096 )
 		return(-151);
+	if ( cfg.world_size != 3 )
+		return(-1849);
+	if ( cfg.rank != 2 )
+		return(-1850);
+	if ( strcmp(cfg.expert_owner_table_path,"/tmp/env-owner.json") != 0 )
+		return(-1851);
+	if ( strcmp(cfg.expert_manifest_path,"/tmp/env-rank-002.json") != 0 )
+		return(-1852);
 	unsetenv("DS4_LOG_LEVEL");
 	unsetenv("DS4_ENABLE_CUDA");
 	unsetenv("DS4_CUDA_DEVICE");
 	unsetenv("DS4_ARENA_SIZE");
 	unsetenv("DS4_CUDA_ARENA_SIZE");
 	unsetenv("DS4_LOG_RING_ENTRIES");
+	unsetenv("DS4_WORLD_SIZE");
+	unsetenv("DS4_RANK");
+	unsetenv("DS4_EXPERT_OWNER_TABLE_PATH");
+	unsetenv("DS4_EXPERT_MANIFEST_PATH");
 	if ( ds4_config_defaults(&cfg) < 0 )
 		return(-153);
 	if ( setenv("DS4_LOG_LEVEL","",1) != 0 )
@@ -640,7 +733,7 @@ int32_t test_config(void)
 		return(-29);
 	}
 	n = ds4_cstr_len_i32(out);
-	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\ncuda_device=-1\narena_size=0\ncuda_arena_size=0\nlog_ring_entries=0\n") == 0 )
+	if ( ds4_span_eq(out,n,"log_level=info\nenable_cuda=1\ncuda_device=-1\narena_size=0\ncuda_arena_size=0\nlog_ring_entries=0\nrank=-1\nworld_size=1\nexpert_owner_table_path=\nexpert_manifest_path=\n") == 0 )
 	{
 		unlink(path);
 		return(-49);
