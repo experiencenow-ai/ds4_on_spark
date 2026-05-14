@@ -33,6 +33,21 @@ python3 scripts/ds4_topk_dump_recommendations.py \
   --probe-experts 256 --probe-transition-sparks 8 --probe-transition-logical-lanes 32
 ```
 
+To emit the table artifact that a runtime can consume:
+
+```bash
+python3 scripts/build_ds4_expert_owner_table.py \
+  --dump-dir /tmp/ds4_expert_fuzz_20260512T1335Z \
+  --pos 0 --topk 6 --experts 256 --logical-lanes 32 --sparks 8 \
+  --json-out /tmp/ds4_expert_fuzz_20260512T1335Z/expert_owner_table.json \
+  --c-header-out /tmp/ds4_expert_fuzz_20260512T1335Z/expert_owner_table.h
+```
+
+The JSON artifact uses schema `ds4_expert_owner_table_v1` and contains
+`owner_table[layer][expert_id] -> spark_rank`. The optional C header is only a
+static export convenience; the distributed runtime should prefer loading the
+JSON or a compact binary form so table updates do not require recompilation.
+
 ## Metrics
 
 The probe counts every adjacent-layer selected-expert pair. With `topk=6`, each

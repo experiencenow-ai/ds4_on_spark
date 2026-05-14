@@ -54,6 +54,28 @@ class ExpertTransitionProbeTest(unittest.TestCase):
         self.assertIn("same_spark", compact)
         self.assertNotIn("affinity_spark_tables", compact)
 
+    def test_owner_table_artifact_is_balanced_and_keeps_tables(self) -> None:
+        layers = [
+            [[0, 1], [0, 1], [2, 3], [2, 3]],
+            [[4, 5], [4, 5], [6, 7], [6, 7]],
+        ]
+        cfg = expert_transition_probe.ExpertTransitionProbeConfig(
+            experts=8,
+            topk=2,
+            logical_lanes=8,
+            sparks=2,
+            top_masses=(1, 2, 4),
+            top_next=4,
+        )
+        result = expert_transition_probe.analyze_expert_transitions(layers, cfg)
+        artifact = expert_transition_probe.build_owner_table_artifact(result)
+        self.assertEqual(artifact["schema"], "ds4_expert_owner_table_v1")
+        self.assertEqual(artifact["strategy"], "affinity")
+        self.assertEqual(len(artifact["owner_table"]), 2)
+        self.assertEqual(artifact["owner_table"][1][4:8], [0, 0, 0, 0])
+        counts = artifact["table_balance"]["per_layer_counts"]
+        self.assertEqual(counts, [[4, 4], [4, 4]])
+
 
 if __name__ == "__main__":
     unittest.main()
