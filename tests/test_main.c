@@ -17,18 +17,20 @@ int main(void)
 		err = -4;
 	if ( test_config() < 0 )
 		err = -5;
-	if ( test_log() < 0 )
+	if ( test_expert_manifest() < 0 )
 		err = -6;
-	if ( test_ctx() < 0 )
+	if ( test_log() < 0 )
 		err = -7;
-	if ( test_cuda() < 0 )
+	if ( test_ctx() < 0 )
 		err = -8;
-	if ( test_gguf() < 0 )
+	if ( test_cuda() < 0 )
 		err = -9;
-	if ( test_log_ring() < 0 )
+	if ( test_gguf() < 0 )
 		err = -10;
-	if ( test_cuda_arena() < 0 )
+	if ( test_log_ring() < 0 )
 		err = -11;
+	if ( test_cuda_arena() < 0 )
+		err = -12;
 	if ( err < 0 )
 	{
 		fprintf(stderr,"ds4_tests failed (%d)\n",err);

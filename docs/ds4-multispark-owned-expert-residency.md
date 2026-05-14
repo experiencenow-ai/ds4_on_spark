@@ -38,16 +38,20 @@ Turn the owner table into deployable residency manifests:
 ```bash
 python3 scripts/build_ds4_multispark_expert_manifests.py \
   --owner-table-json /tmp/ds4-owner-table-sparks3.json \
-  --out-dir /tmp/ds4-owned-experts-sparks3
+  --out-dir /tmp/ds4-owned-experts-sparks3 \
+  --emit-binary
 ```
 
 This writes:
 
 - `manifest.json`: cluster-level index and source hash
 - `rank-000.json`, `rank-001.json`, ...: owned expert IDs by layer
+- `rank-000.bin`, `rank-001.bin`, ...: optional C/CUDA runtime bitsets
 
 Each rank file contains `owned_experts_by_layer`. The loader should interpret
 that as the exact list of MoE expert slices to keep GPU-resident for that rank.
+The binary form is a fixed 128-byte little-endian header followed by layer-major
+owned-expert bitsets, so runtime code can query ownership without parsing JSON.
 
 The runtime config now has generic fields for this handoff:
 
