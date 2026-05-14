@@ -66,11 +66,13 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - adds `--cuda-moe-probe` to isolate the real CUDA routed-MoE path without running the full decode graph
     - adds `--cuda-layer-probe` and `--cuda-ffn-probe` to measure the graph layer or FFN half around the routed-MoE kernel at the same synthetic batch size
     - adds `--cuda-decode-probe` to measure one warmed decode layer with synthetic resident HC/raw/compressed cache state
+    - adds `--cuda-decode-stack-probe`, `--cuda-batch-stack-probe`, and `--cuda-output-head-probe` to move from weighted estimates toward direct full-stack measurements
     - uses the real router matmul, real selected experts, real expert weights, and real `ds4_gpu_routed_moe_batch_tensor(...)`
     - adds `--cuda-moe-layer`, `--cuda-moe-tokens`, `--cuda-moe-iters`, and `--cuda-decode-pos` sweep knobs
     - emits JSON with queue depth, best routed-pair throughput, best layer/FFN/decode throughput, output fingerprint, and non-finite counts
     - adds `DS4_CUDA_MOE_PROBE_COMPARE_FULL=1` to compare batched active-slice output against the full-slab tiled path in one process
     - adds `DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1` so the probe can keep lazy expert loading while avoiding huge eager startup cache attempts
+    - lowers the startup preload span floor to 4 MiB and adds `DS4_CUDA_WEIGHT_PRELOAD_SLEEP_US` for paced residency experiments
 
 Apply (example):
 
