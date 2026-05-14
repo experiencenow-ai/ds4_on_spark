@@ -185,19 +185,66 @@ make -C /tmp/ds4-tile-slices-compile CUDA_ARCH=sm_121 ds4_cuda.o
 make -C /tmp/ds4-tile-slices-compile CUDA_ARCH=sm_121 ds4 ds4-bench
 ```
 
-A tiny direct-model `ds4-bench` prefill smoke currently exits after emitting
-layer profiles, so this is a kernel-path/profile smoke rather than a completed
-generation benchmark. With `tokens=2, pairs=12`, warm-layer MoE profile lines
-on the same prompt/model showed:
+A tiny `ds4-bench` graph smoke emitted MoE profile lines, but it later failed
+inside the compressed-attention/KV path. Treat that old `ds4-bench` signal as a
+path smoke only. It is not a correctness benchmark for the MoE queue.
 
-- batched expert slices + expert tiles: `total=0.236 ms`, with
-  `gateup=0.036 ms` and `down=0.117 ms`
-- batched expert slices with `DS4_CUDA_MOE_NO_EXPERT_TILES=1`:
-  `total=7.430 ms`, with `gateup=5.753 ms` and `down=1.622 ms`
-- default full-slab path: `total=262.553 ms`, with `gateup=167.604 ms` and
-  `down=94.888 ms`
+While wiring the tiled active-slice path, a targeted probe caught a real bug:
+the slice pointer table was allocated through the same global CUDA temp buffer
+as the sorted-pair scratch. Because `cuda_tmp_alloc(...)` reuses the existing
+allocation when the new request is smaller, the pointer table overwrote expert
+counts/offsets. That produced very fast but non-finite output. The tile-slice
+patch now reserves pointer-table bytes inside the sorted scratch allocation and
+passes that region to `cuda_moe_prepare_counted_expert_slices(...)`.
 
-That makes the tiled active-expert slice route roughly `31x` faster than the
-non-tiled active-expert slice fallback for this tiny layer smoke. It should not
-be treated as final tok/sec, but it is the first measured signal that the real
-expert queue is landing on the intended high-throughput CUDA path.
+## Targeted Real-Kernel Probe
+
+The follow-on patch:
+
+```text
+docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
+```
+
+adds a focused upstream `ds4` mode:
+
+```bash
+DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1 \
+DS4_CUDA_WEIGHT_CACHE_LIMIT_GB=4 \
+DS4_CUDA_WEIGHT_ARENA_CHUNK_MB=256 \
+DS4_CUDA_MOE_BATCHED_EXPERT_SLICE_CACHE=1 \
+DS4_CUDA_MOE_PROBE_COMPARE_FULL=1 \
+./ds4 -m /home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf \
+  --cuda --cuda-moe-probe --cuda-moe-layer 1 --cuda-moe-tokens 16 --cuda-moe-iters 3
+```
+
+This probe runs the real router matmul, real batched router selection, and real
+`ds4_gpu_routed_moe_batch_tensor(...)` against actual model expert weights. It
+then optionally reruns the full-slab tiled path in the same process and reports
+output diff statistics.
+
+The full-slab compare is intentionally heavier: with startup caching skipped it
+may need to cold-load hundreds of MiB of contiguous MoE slabs. If that path hits
+a CUDA upload timeout, rerun without `DS4_CUDA_MOE_PROBE_COMPARE_FULL=1` for the
+active-slice timing, or warm/cache the full-slab path before comparing.
+
+Spark0 result after fixing the scratch collision:
+
+```json
+{"cuda_moe_probe":true,"layer":1,"tokens":16,"pairs":96,"iterations":3,"active_experts":80,"mean_queue_depth":1.200,"max_queue_depth":3,"avg_ms":200.661,"best_ms":5.710,"best_pairs_per_s":16811.976,"out_fnv64":"5c70e771dfb07f19","out_nonfinite":0,"full_slab_fnv64":"5c70e771dfb07f19","full_slab_nonfinite":0,"full_slab_max_abs_diff":0,"full_slab_mean_abs_diff":0}
+```
+
+Larger batch sweeps on Spark0 with finite outputs:
+
+| tokens | pairs | active experts | mean queue | max queue | best ms | pairs/s |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 768 | 242 | 3.174 | 10 | 20.462 | 37.5k |
+| 256 | 1536 | 256 | 6.000 | 13 | 26.960 | 57.0k |
+| 512 | 3072 | 256 | 12.000 | 23 | 43.097 | 71.3k |
+| 1024 | 6144 | 256 | 24.000 | 43 | 82.166 | 74.8k |
+
+The important correction: the previously observed `31x` number was not a valid
+speedup; it came from the scratch overwrite causing incomplete/corrupt work.
+The honest current result is correctness parity with full-slab tiled kernels
+and improving expert-pair throughput as queue depth grows. The next CUDA work
+needs to reduce the real gate/up and down tile compute time, not just change
+which weight ranges are resident.
