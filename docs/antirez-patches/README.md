@@ -49,6 +49,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - makes the down row32, row-span, and block16 tile kernels accept optional per-expert slice pointer tables
     - preserves the contiguous full-slab path by passing null pointer tables when slice caching is disabled
     - moves the real batched slice path onto the high-throughput expert-tile route instead of the scalar sorted fallback
+    - reserves slice-pointer storage inside the sorted-pair scratch buffer so the pointer table cannot overwrite expert counts/offsets
 
 - `ds4-3630e64-mtp-one-token-json-probe.patch`
   - Target: `antirez/ds4@3630e64`
@@ -57,6 +58,16 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - captures `base_next_token_id`, `mtp_draft_token_id`, plus intermediate tensor `*_fnv64` fingerprints (`trunk_token_embd`, `trunk_pre_hc_head`, `mtp_input_hc`, `mtp_block_out_hc`, `mtp_head_norm`)
     - also captures pre-`mtp_input_hc` intermediates (`mtp_enorm`, `mtp_eproj`, `mtp_eproj_hc`, `mtp_hnorm_hc`, `mtp_hproj_hc`) to localize oracle-vs-candidate mismatches
     - intended for oracle-vs-candidate diffs via `python3 scripts/diff_mtp_one_token_draft_probe.py`
+
+- `ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the batched expert-tile slice patch
+  - Purpose:
+    - adds `--cuda-moe-probe` to isolate the real CUDA routed-MoE path without running the full decode graph
+    - uses the real router matmul, real selected experts, real expert weights, and real `ds4_gpu_routed_moe_batch_tensor(...)`
+    - adds `--cuda-moe-layer`, `--cuda-moe-tokens`, and `--cuda-moe-iters` sweep knobs
+    - emits JSON with queue depth, best routed-pair throughput, output fingerprint, and non-finite counts
+    - adds `DS4_CUDA_MOE_PROBE_COMPARE_FULL=1` to compare batched active-slice output against the full-slab tiled path in one process
+    - adds `DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1` so the probe can keep lazy expert loading while avoiding huge eager startup cache attempts
 
 Apply (example):
 
@@ -69,6 +80,7 @@ git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-multi-mode
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-expert-slice-cache.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-slice-queue.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
@@ -90,6 +102,7 @@ python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_multi_model_cache_
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_expert_slice_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-expert-slice-cache.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_batched_expert_slice_queue_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-slice-queue.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_batched_expert_tile_slices_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_probe_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 

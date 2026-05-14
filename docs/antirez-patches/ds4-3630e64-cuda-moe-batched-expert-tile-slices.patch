@@ -1,5 +1,5 @@
 diff --git a/ds4_cuda.cu b/ds4_cuda.cu
-index 6b5bde9..7c25fee 100644
+index 6b5bde9..152e9af 100644
 --- a/ds4_cuda.cu
 +++ b/ds4_cuda.cu
 @@ -8029,6 +8029,8 @@ __global__ static void moe_gate_up_mid_expert_tile4_row32_kernel(
@@ -223,7 +223,28 @@ index 6b5bde9..7c25fee 100644
          float acc[16] = {0.0f};
          for (uint32_t b = lane; b < midq_blocks; b += 8u) {
              dev_dot_q2_K_q8_K_block16(wr + b,
-@@ -9833,7 +9871,7 @@ static int routed_moe_launch(
+@@ -9668,6 +9706,7 @@ static int cuda_moe_prepare_counted_expert_slices(
+         uint64_t down_expert_bytes,
+         const uint32_t *counts,
+         uint32_t n_routed_experts,
++        const char **dev_ptrs,
+         const char ***gate_slices_out,
+         const char ***up_slices_out,
+         const char ***down_slices_out,
+@@ -9711,8 +9750,10 @@ static int cuda_moe_prepare_counted_expert_slices(
+     }
+     const uint64_t ptr_count = 3ull * n_routed_experts;
+     const uint64_t ptr_bytes = ptr_count * sizeof(const char *);
+-    const char **dev_ptrs = (const char **)cuda_tmp_alloc(ptr_bytes, "routed_moe batched expert slice pointers");
+-    if (!dev_ptrs) return 0;
++    if (dev_ptrs == NULL) {
++        dev_ptrs = (const char **)cuda_tmp_alloc(ptr_bytes, "routed_moe batched expert slice pointers");
++        if (!dev_ptrs) return 0;
++    }
+     if (!cuda_ok(cudaMemcpy(dev_ptrs, host_ptrs, (size_t)ptr_bytes, cudaMemcpyHostToDevice),
+                  "routed_moe batched expert slice pointer copy")) {
+         return 0;
+@@ -9833,7 +9874,7 @@ static int routed_moe_launch(
          }
          const uint32_t pair_count = n_tokens * n_expert;
          const uint32_t use_sorted_pairs = n_tokens > 1u;
@@ -232,7 +253,39 @@ index 6b5bde9..7c25fee 100644
              getenv("DS4_CUDA_MOE_NO_EXPERT_TILES") == NULL;
          const uint32_t expert_tile_m = getenv("DS4_CUDA_MOE_TILE4") ? 4u : 8u;
          const uint32_t write_gate_up = getenv("DS4_CUDA_MOE_WRITE_GATE_UP") != NULL;
-@@ -9997,7 +10035,10 @@ static int routed_moe_launch(
+@@ -9905,6 +9946,7 @@ static int routed_moe_launch(
+             const uint64_t tile16_total_bytes = use_down_tile16 ? sizeof(uint32_t) : 0u;
+             const uint64_t tile16_experts_bytes = (uint64_t)tile16_capacity * sizeof(uint32_t);
+             const uint64_t tile16_starts_bytes = (uint64_t)tile16_capacity * sizeof(uint32_t);
++            const uint64_t slice_ptrs_bytes = use_batched_expert_slices ? 3ull * 256ull * sizeof(const char *) : 0u;
+             const uint64_t tile_offsets_off = counts_bytes + offsets_bytes + cursors_bytes + sorted_bytes;
+             const uint64_t tile_total_off = tile_offsets_off + tile_offsets_bytes;
+             const uint64_t tile_experts_off = tile_total_off + tile_total_bytes;
+@@ -9913,12 +9955,14 @@ static int routed_moe_launch(
+             const uint64_t tile16_total_off = tile16_offsets_off + tile16_offsets_bytes;
+             const uint64_t tile16_experts_off = tile16_total_off + tile16_total_bytes;
+             const uint64_t tile16_starts_off = tile16_experts_off + tile16_experts_bytes;
+-            const uint64_t scratch_bytes = tile16_starts_off + tile16_starts_bytes;
++            const uint64_t slice_ptrs_off = (tile16_starts_off + tile16_starts_bytes + 7ull) & ~7ull;
++            const uint64_t scratch_bytes = slice_ptrs_off + slice_ptrs_bytes;
+             uint8_t *scratch = (uint8_t *)cuda_tmp_alloc(scratch_bytes,
+                                                          "routed_moe sorted pairs");
+             if (!scratch) {
+                 ok = 0;
+             } else {
++                const char **batched_slice_ptrs = use_batched_expert_slices ? (const char **)(scratch + slice_ptrs_off) : NULL;
+                 uint32_t *counts = (uint32_t *)scratch;
+                 uint32_t *offsets = (uint32_t *)(scratch + counts_bytes);
+                 uint32_t *cursors = (uint32_t *)(scratch + counts_bytes + offsets_bytes);
+@@ -9975,6 +10019,7 @@ static int routed_moe_launch(
+                                                                gate_offset, up_offset, down_offset,
+                                                                gate_expert_bytes, down_expert_bytes,
+                                                                counts, 256u,
++                                                               batched_slice_ptrs,
+                                                                &gate_slices, &up_slices, &down_slices,
+                                                                &active_experts)) {
+                         if (getenv("DS4_CUDA_MOE_EXPERT_SLICE_STRICT") != NULL) return 0;
+@@ -9997,7 +10042,10 @@ static int routed_moe_launch(
                          dim3 tgrid((expert_mid_dim + 511u) / 512u, tile_capacity, 1);
                          moe_gate_up_mid_expert_tile8_rowspan_kernel<512><<<tgrid, 256>>>(
                              (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -244,7 +297,7 @@ index 6b5bde9..7c25fee 100644
                              tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                              gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                              write_gate_up, clamp);
-@@ -10005,7 +10046,10 @@ static int routed_moe_launch(
+@@ -10005,7 +10053,10 @@ static int routed_moe_launch(
                          dim3 tgrid((expert_mid_dim + 1023u) / 1024u, tile_capacity, 1);
                          moe_gate_up_mid_expert_tile8_rowspan_kernel<1024><<<tgrid, 256>>>(
                              (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -256,7 +309,7 @@ index 6b5bde9..7c25fee 100644
                              tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                              gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                              write_gate_up, clamp);
-@@ -10013,7 +10057,10 @@ static int routed_moe_launch(
+@@ -10013,7 +10064,10 @@ static int routed_moe_launch(
                          dim3 tgrid((expert_mid_dim + 2047u) / 2048u, tile_capacity, 1);
                          moe_gate_up_mid_expert_tile8_row2048_kernel<<<tgrid, 256>>>(
                              (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -268,7 +321,7 @@ index 6b5bde9..7c25fee 100644
                              tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                              gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                              write_gate_up, clamp);
-@@ -10022,7 +10069,10 @@ static int routed_moe_launch(
+@@ -10022,7 +10076,10 @@ static int routed_moe_launch(
                      dim3 tgrid((expert_mid_dim + 31u) / 32u, tile_capacity, 1);
                      moe_gate_up_mid_expert_tile8_row32_kernel<<<tgrid, 256>>>(
                          (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -280,7 +333,7 @@ index 6b5bde9..7c25fee 100644
                          tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                          gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                          write_gate_up, clamp);
-@@ -10030,7 +10080,10 @@ static int routed_moe_launch(
+@@ -10030,7 +10087,10 @@ static int routed_moe_launch(
                      dim3 tgrid((expert_mid_dim + 31u) / 32u, tile_capacity, 1);
                      moe_gate_up_mid_expert_tile4_row32_kernel<<<tgrid, 256>>>(
                          (float *)gate->ptr, (float *)up->ptr, (float *)mid->ptr,
@@ -292,7 +345,7 @@ index 6b5bde9..7c25fee 100644
                          tile_total, tile_experts, tile_starts, (const float *)weights->ptr,
                          gate_expert_bytes, gate_row_bytes, xq_blocks, expert_mid_dim, n_expert,
                          write_gate_up, clamp);
-@@ -10231,13 +10284,15 @@ static int routed_moe_launch(
+@@ -10231,13 +10291,15 @@ static int routed_moe_launch(
                          if (use_down_block16) {
                              moe_down_expert_tile16_rowspan_block16_kernel<512><<<tgrid, 256>>>(
                                  use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
@@ -310,7 +363,7 @@ index 6b5bde9..7c25fee 100644
                                  down_tile_total, down_tile_experts, down_tile_starts, down_expert_bytes, down_row_bytes,
                                  midq_blocks, out_dim, n_expert, use_atomic_down);
                          }
-@@ -10246,13 +10301,15 @@ static int routed_moe_launch(
+@@ -10246,13 +10308,15 @@ static int routed_moe_launch(
                          if (use_down_block16) {
                              moe_down_expert_tile16_rowspan_block16_kernel<1024><<<tgrid, 256>>>(
                                  use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
@@ -328,7 +381,7 @@ index 6b5bde9..7c25fee 100644
                                  down_tile_total, down_tile_experts, down_tile_starts, down_expert_bytes, down_row_bytes,
                                  midq_blocks, out_dim, n_expert, use_atomic_down);
                          }
-@@ -10261,13 +10318,15 @@ static int routed_moe_launch(
+@@ -10261,13 +10325,15 @@ static int routed_moe_launch(
                          if (use_down_block16) {
                              moe_down_expert_tile16_rowspan_block16_kernel<2048><<<tgrid, 256>>>(
                                  use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
@@ -346,7 +399,7 @@ index 6b5bde9..7c25fee 100644
                                  down_tile_total, down_tile_experts, down_tile_starts, down_expert_bytes, down_row_bytes,
                                  midq_blocks, out_dim, n_expert, use_atomic_down);
                          }
-@@ -10276,21 +10335,24 @@ static int routed_moe_launch(
+@@ -10276,21 +10342,24 @@ static int routed_moe_launch(
                      dim3 tgrid((out_dim + 31u) / 32u, down_tile_capacity, 1);
                      moe_down_expert_tile16_row32_kernel<<<tgrid, 256>>>(
                          use_atomic_down ? (float *)out->ptr : (float *)down->ptr,
