@@ -54,8 +54,14 @@ def main() -> int:
     p.add_argument("--probe-experts", type=int, default=256, help="Expert count for expert-queue probe (default: 256).")
     p.add_argument("--probe-batches", type=str, default="16,32,64,100,128,256,512", help="Comma-separated batch sizes for expert-queue probe.")
     p.add_argument("--probe-trials", type=int, default=250, help="Trials per layer per batch size for expert-queue probe.")
+    p.add_argument("--probe-expert-transitions", action="store_true", help="Attach adjacent-layer P(next expert | current expert) and same-spark affinity stats.")
+    p.add_argument("--probe-transition-sparks", type=int, default=8, help="Spark count for transition-affinity probe (default: 8).")
+    p.add_argument("--probe-transition-logical-lanes", type=int, default=32, help="Logical expert lanes for transition-affinity probe (default: 32).")
+    p.add_argument("--probe-transition-top-masses", type=str, default="1,4,8,16,32", help="Comma-separated top-N masses for conditional next-expert stats.")
+    p.add_argument("--probe-transition-top-next", type=int, default=8, help="Number of current-expert rows / next-expert entries to retain.")
     args = p.parse_args()
 
+    transition_top_masses = tuple(int(x) for x in str(args.probe_transition_top_masses).split(",") if str(x).strip() != "")
     if str(args.bundle_dir).strip() != "":
         batches = tuple(int(x) for x in str(args.probe_batches).split(",") if str(x).strip() != "")
         out = topk_dump_report.build_ds4_topk_dump_trace_report_bundle(
@@ -83,6 +89,11 @@ def main() -> int:
             probe_experts=int(args.probe_experts),
             probe_batches=batches,
             probe_trials=int(args.probe_trials),
+            probe_expert_transitions=bool(args.probe_expert_transitions),
+            probe_transition_sparks=int(args.probe_transition_sparks),
+            probe_transition_logical_lanes=int(args.probe_transition_logical_lanes),
+            probe_transition_top_masses=transition_top_masses,
+            probe_transition_top_next=int(args.probe_transition_top_next),
             overwrite=bool(args.bundle_overwrite),
         )
         print(
@@ -108,6 +119,7 @@ def main() -> int:
 
     trace_meta: dict[str, object] = {}
     topk_dump_probe: dict[str, object] = {}
+    topk_transition_probe: dict[str, object] = {}
     if bool(args.probe_expert_queueing):
         batches = tuple(int(x) for x in str(args.probe_batches).split(",") if str(x).strip() != "")
         topk_dump_probe = ds4_topk_dump.probe_expert_queueing_from_ds4_topk_dump_layers(
@@ -118,6 +130,18 @@ def main() -> int:
             trials=int(args.probe_trials),
             seed=int(args.seed),
             strict_expert_ids=True,
+        )
+    if bool(args.probe_expert_transitions):
+        topk_transition_probe = ds4_topk_dump.probe_expert_transitions_from_ds4_topk_dump_layers(
+            layers,
+            experts=int(args.probe_experts),
+            topk=int(args.topk),
+            logical_lanes=int(args.probe_transition_logical_lanes),
+            sparks=int(args.probe_transition_sparks),
+            top_masses=transition_top_masses,
+            top_next=int(args.probe_transition_top_next),
+            strict_expert_ids=True,
+            compact=True,
         )
 
     with tempfile.TemporaryDirectory() as td:
@@ -163,6 +187,12 @@ def main() -> int:
             "present": True,
             "note": "Probe uses real routes from the topk dumps but resamples rows and assumes synthetic batch sizes; this is not a full decode replay.",
             "summary": topk_dump_probe,
+        }
+    if len(topk_transition_probe) != 0:
+        report["topk_transition_probe"] = {
+            "present": True,
+            "note": "Probe measures adjacent-layer P(next expert | current expert) and compares expert_id % logical_lanes routing against a balanced layer-specific affinity table.",
+            "summary": topk_transition_probe,
         }
 
     fmt = str(args.format).strip().lower()

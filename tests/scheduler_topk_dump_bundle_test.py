@@ -49,6 +49,11 @@ class SchedulerTopkDumpBundleTest(unittest.TestCase):
                     probe_experts=8,
                     probe_batches=(4, 100),
                     probe_trials=4,
+                    probe_expert_transitions=True,
+                    probe_transition_sparks=2,
+                    probe_transition_logical_lanes=8,
+                    probe_transition_top_masses=(1, 2, 4),
+                    probe_transition_top_next=4,
                 )
 
                 trace_path = str(out.get("trace_path", ""))
@@ -73,6 +78,7 @@ class SchedulerTopkDumpBundleTest(unittest.TestCase):
                     md = f.read()
                 self.assertIn("Scheduler Simulator Runtime Trace Report", md)
                 self.assertIn("topk_dump_probe: present", md)
+                self.assertIn("topk_transition_probe: present", md)
 
                 with open(meta_path, "r", encoding="utf-8") as f:
                     meta = json.loads(f.read())
@@ -80,3 +86,6 @@ class SchedulerTopkDumpBundleTest(unittest.TestCase):
                 dump_meta = meta.get("dump_meta", {})
                 self.assertIsInstance(dump_meta, dict)
                 self.assertEqual(dump_meta.get("topk"), topk)
+                args = meta.get("args", {})
+                self.assertIsInstance(args, dict)
+                self.assertEqual(args.get("probe_transition_sparks"), 2)
