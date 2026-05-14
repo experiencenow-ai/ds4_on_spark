@@ -20,6 +20,7 @@ CTX="${CTX:-32768}"
 JSON_ONLY="${JSON_ONLY:-0}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
+ALLOW_CLEAN="${ALLOW_CLEAN:-0}"
 ALLOW_PATCH="${ALLOW_PATCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
@@ -61,13 +62,16 @@ if [ ! -d "$DS4_DIR" ]; then
 fi
 
 need_git_prepare=0
-if [ "$ALLOW_FETCH" = "1" ] || [ "$ALLOW_PATCH" = "1" ]; then
+if [ "$ALLOW_FETCH" = "1" ] || [ "$ALLOW_CLEAN" = "1" ] || [ "$ALLOW_PATCH" = "1" ]; then
 	need_git_prepare=1
 fi
 
 if [ "$need_git_prepare" = "1" ]; then
 	if [ "$ALLOW_FETCH" = "1" ]; then
 		(cd "$DS4_DIR" && git fetch --all --tags)
+	fi
+	if [ "$ALLOW_CLEAN" = "1" ]; then
+		(cd "$DS4_DIR" && git reset --hard && git clean -fd)
 	fi
 	if ! (cd "$DS4_DIR" && git checkout "$DS4_COMMIT"); then
 		json_err "unable to checkout DS4_COMMIT=$DS4_COMMIT (set ALLOW_FETCH=1 to fetch, or ensure the commit exists locally)"
@@ -92,7 +96,7 @@ apply_patch_file()
 		return 0
 	fi
 	if ! (cd "$DS4_DIR" && git apply --check "$patch_path" >/dev/null 2>&1); then
-		json_err "patch does not apply cleanly: $patch_label (reset DS4_DIR and re-run with ALLOW_FETCH=1 ALLOW_PATCH=1)"
+		json_err "patch does not apply cleanly: $patch_label (set ALLOW_CLEAN=1 to reset/clean DS4_DIR, then re-run)"
 		exit 8
 	fi
 	(cd "$DS4_DIR" && git apply "$patch_path")
