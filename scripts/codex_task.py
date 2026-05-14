@@ -102,12 +102,19 @@ def task_mtp_local_verify(args: argparse.Namespace) -> None:
 	])
 	run([
 		sys.executable,
+		"scripts/verify_antirez_ds4_cuda_moe_expert_slice_patch.py",
+		"--patch",
+		"docs/antirez-patches/ds4-3630e64-cuda-moe-expert-slice-cache.patch",
+	])
+	run([
+		sys.executable,
 		"-m",
 		"unittest",
 		"tests/q4k_llamacpp_fixture_test.py",
 		"tests/mtp_one_token_draft_probe_diff_test.py",
 		"tests/antirez_ds4_cuda_mtp_q4k_sidecar_patch_test.py",
 		"tests/antirez_ds4_cuda_multi_model_cache_patch_test.py",
+		"tests/antirez_ds4_cuda_moe_expert_slice_patch_test.py",
 	])
 	run(["git", "diff", "--check"])
 
