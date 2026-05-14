@@ -159,8 +159,45 @@ expert slices, and launches sorted MoE kernels through per-expert pointer
 tables.
 
 This is no longer synthetic routing: the active experts come from the model's
-real router output for the current batch. The first version intentionally keeps
-the tiled full-slab kernels disabled for the batched slice path, so the next
-CUDA target is adding slice-pointer variants of the expert-tile row-span
-kernels and comparing them against the full-slab tiled path under
+real router output for the current batch.
+
+The follow-on real-runtime bridge is:
+
+```text
+docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
+```
+
+Apply it after the batched expert-slice queue patch. It keeps expert-tile
+kernels enabled with `DS4_CUDA_MOE_BATCHED_EXPERT_SLICE_CACHE=1` and passes
+optional gate/up/down per-expert slice pointer tables into the row32, row-span,
+and block16 tiled kernels. This is the first version where the real active
+expert cache and the high-throughput tile route are wired together; the next
+measurement target is comparing it against full-slab tiles under
 `DS4_CUDA_MOE_PROFILE=1`.
+
+## Spark0 Real-Kernel Smoke
+
+On Spark0, the full patch chain through
+`ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch` builds with:
+
+```bash
+make -C /tmp/ds4-tile-slices-compile CUDA_ARCH=sm_121 ds4_cuda.o
+make -C /tmp/ds4-tile-slices-compile CUDA_ARCH=sm_121 ds4 ds4-bench
+```
+
+A tiny direct-model `ds4-bench` prefill smoke currently exits after emitting
+layer profiles, so this is a kernel-path/profile smoke rather than a completed
+generation benchmark. With `tokens=2, pairs=12`, warm-layer MoE profile lines
+on the same prompt/model showed:
+
+- batched expert slices + expert tiles: `total=0.236 ms`, with
+  `gateup=0.036 ms` and `down=0.117 ms`
+- batched expert slices with `DS4_CUDA_MOE_NO_EXPERT_TILES=1`:
+  `total=7.430 ms`, with `gateup=5.753 ms` and `down=1.622 ms`
+- default full-slab path: `total=262.553 ms`, with `gateup=167.604 ms` and
+  `down=94.888 ms`
+
+That makes the tiled active-expert slice route roughly `31x` faster than the
+non-tiled active-expert slice fallback for this tiny layer smoke. It should not
+be treated as final tok/sec, but it is the first measured signal that the real
+expert queue is landing on the intended high-throughput CUDA path.
