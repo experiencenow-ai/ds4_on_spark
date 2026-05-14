@@ -50,6 +50,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - preserves the contiguous full-slab path by passing null pointer tables when slice caching is disabled
     - moves the real batched slice path onto the high-throughput expert-tile route instead of the scalar sorted fallback
     - reserves slice-pointer storage inside the sorted-pair scratch buffer so the pointer table cannot overwrite expert counts/offsets
+    - defaults the batched down tile path away from the slower block16 down kernel on Spark/GB10; `DS4_CUDA_MOE_DOWN_BLOCK16=1` restores it for A/B testing
 
 - `ds4-3630e64-mtp-one-token-json-probe.patch`
   - Target: `antirez/ds4@3630e64`

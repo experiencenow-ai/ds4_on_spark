@@ -248,3 +248,25 @@ The honest current result is correctness parity with full-slab tiled kernels
 and improving expert-pair throughput as queue depth grows. The next CUDA work
 needs to reduce the real gate/up and down tile compute time, not just change
 which weight ranges are resident.
+
+## Spark0 Down-Tile Retune
+
+The first real tuning win is disabling the block16 down tile kernel as the
+default for batched expert tiles. On Spark/GB10, the non-block16 tile16 down
+kernel is consistently faster at useful batch sizes, while preserving finite
+output. The patch keeps `DS4_CUDA_MOE_DOWN_BLOCK16=1` as an explicit A/B escape
+hatch.
+
+Spark0 before/after, same layer-1 probe and model:
+
+| tokens | old best ms | new best ms | speedup | new pairs/s |
+| ---: | ---: | ---: | ---: | ---: |
+| 256 | 26.960 | 15.346 | 1.76x | 100.1k |
+| 512 | 43.097 | 21.389 | 2.02x | 143.6k |
+| 1024 | 82.166 | 38.461 | 2.14x | 159.7k |
+
+The `tokens=1024` MoE-only, one-layer rate is now about `26.6k token-layer/s`.
+With 43 DS4 layers, that is a rough `620 tok/s` aggregate MoE-only ceiling
+before attention, shared experts, KV, sampling, and scheduling overhead. This is
+still not end-to-end decode throughput, but it is a real improvement in the
+routed expert kernel path.

@@ -67,6 +67,7 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"const char **batched_slice_ptrs = use_batched_expert_slices ? (const char **)(scratch + slice_ptrs_off) : NULL;",
 		"if (dev_ptrs == NULL) {",
 		"batched_slice_ptrs,",
+		"getenv(\"DS4_CUDA_MOE_DOWN_BLOCK16\") != NULL",
 		"use_batched_expert_slices ? gate_slices : NULL",
 		"use_batched_expert_slices ? up_slices : NULL",
 		"use_batched_expert_slices ? down_slices : NULL",
