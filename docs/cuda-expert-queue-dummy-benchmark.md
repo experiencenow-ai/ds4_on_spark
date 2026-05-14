@@ -142,3 +142,25 @@ synthetic throughput than the shallow uniform route case.
 This is a deliberately naive float kernel, so it is not a ceiling for the real
 quantized MoE kernels. It is a baseline that proves the benchmark path compiles,
 runs, and can now be optimized independently.
+
+## Real DS4 Bridge
+
+The first real-runtime bridge is:
+
+```text
+docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-slice-queue.patch
+```
+
+Apply it after the existing MTP/Q4K, multi-model cache, and one-token expert
+slice-cache patches. It adds `DS4_CUDA_MOE_BATCHED_EXPERT_SLICE_CACHE=1`, which
+uses the real batched selected-expert tensor to build sorted expert counts,
+copies only the 256-count histogram back to host, caches active gate/up/down
+expert slices, and launches sorted MoE kernels through per-expert pointer
+tables.
+
+This is no longer synthetic routing: the active experts come from the model's
+real router output for the current batch. The first version intentionally keeps
+the tiled full-slab kernels disabled for the batched slice path, so the next
+CUDA target is adding slice-pointer variants of the expert-tile row-span
+kernels and comparing them against the full-slab tiled path under
+`DS4_CUDA_MOE_PROFILE=1`.
