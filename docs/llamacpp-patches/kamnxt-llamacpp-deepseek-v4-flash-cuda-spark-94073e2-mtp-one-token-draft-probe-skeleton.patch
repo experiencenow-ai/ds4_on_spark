@@ -15,10 +15,11 @@ new file mode 100644
 index 0000000..bd44d62
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/CMakeLists.txt
-@@ -0,0 +1,5 @@
+@@ -0,0 +1,6 @@
 +set(TARGET llama-ds4-mtp-one-token-draft-probe)
 +add_executable(${TARGET} ds4-mtp-one-token-draft-probe.cpp)
 +install(TARGETS ${TARGET} RUNTIME)
++target_include_directories(${TARGET} PRIVATE ../../src)
 +target_link_libraries(${TARGET} PRIVATE llama ${CMAKE_THREAD_LIBS_INIT})
 +target_compile_features(${TARGET} PRIVATE cxx_std_17)
 diff --git a/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp b/examples/ds4-mtp-one-token-draft-probe/deepseek4_mtp_sidecar.hpp
@@ -89,7 +90,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_head_base.weight";
 +		return false;
 +	}
-+	if (!(s->hc_head_base->n_dims == 1 && s->hc_head_base->ne[0] == 4)) {
++	if (!(ggml_n_dims(s->hc_head_base) == 1 && s->hc_head_base->ne[0] == 4)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_head_base.weight";
 +		return false;
 +	}
@@ -103,7 +104,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_head_fn.weight";
 +		return false;
 +	}
-+	if (!(s->hc_head_fn->n_dims == 2 && s->hc_head_fn->ne[0] == 16384 && s->hc_head_fn->ne[1] == 4)) {
++	if (!(ggml_n_dims(s->hc_head_fn) == 2 && s->hc_head_fn->ne[0] == 16384 && s->hc_head_fn->ne[1] == 4)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_head_fn.weight";
 +		return false;
 +	}
@@ -117,7 +118,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_head_scale.weight";
 +		return false;
 +	}
-+	if (!(s->hc_head_scale->n_dims == 1 && s->hc_head_scale->ne[0] == 1)) {
++	if (!(ggml_n_dims(s->hc_head_scale) == 1 && s->hc_head_scale->ne[0] == 1)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_head_scale.weight";
 +		return false;
 +	}
@@ -131,7 +132,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.e_proj.weight";
 +		return false;
 +	}
-+	if (!(s->e_proj->n_dims == 2 && s->e_proj->ne[0] == 4096 && s->e_proj->ne[1] == 4096)) {
++	if (!(ggml_n_dims(s->e_proj) == 2 && s->e_proj->ne[0] == 4096 && s->e_proj->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.e_proj.weight";
 +		return false;
 +	}
@@ -145,7 +146,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.h_proj.weight";
 +		return false;
 +	}
-+	if (!(s->h_proj->n_dims == 2 && s->h_proj->ne[0] == 4096 && s->h_proj->ne[1] == 4096)) {
++	if (!(ggml_n_dims(s->h_proj) == 2 && s->h_proj->ne[0] == 4096 && s->h_proj->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.h_proj.weight";
 +		return false;
 +	}
@@ -159,7 +160,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.enorm.weight";
 +		return false;
 +	}
-+	if (!(s->enorm->n_dims == 1 && s->enorm->ne[0] == 4096)) {
++	if (!(ggml_n_dims(s->enorm) == 1 && s->enorm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.enorm.weight";
 +		return false;
 +	}
@@ -173,7 +174,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hnorm.weight";
 +		return false;
 +	}
-+	if (!(s->hnorm->n_dims == 1 && s->hnorm->ne[0] == 4096)) {
++	if (!(ggml_n_dims(s->hnorm) == 1 && s->hnorm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hnorm.weight";
 +		return false;
 +	}
@@ -187,7 +188,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.norm.weight";
 +		return false;
 +	}
-+	if (!(s->norm->n_dims == 1 && s->norm->ne[0] == 4096)) {
++	if (!(ggml_n_dims(s->norm) == 1 && s->norm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.norm.weight";
 +		return false;
 +	}
@@ -201,7 +202,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_attn_fn.weight";
 +		return false;
 +	}
-+	if (!(s->hc_attn_fn->n_dims == 2 && s->hc_attn_fn->ne[0] == 16384 && s->hc_attn_fn->ne[1] == 24)) {
++	if (!(ggml_n_dims(s->hc_attn_fn) == 2 && s->hc_attn_fn->ne[0] == 16384 && s->hc_attn_fn->ne[1] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_attn_fn.weight";
 +		return false;
 +	}
@@ -215,7 +216,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_attn_scale.weight";
 +		return false;
 +	}
-+	if (!(s->hc_attn_scale->n_dims == 1 && s->hc_attn_scale->ne[0] == 3)) {
++	if (!(ggml_n_dims(s->hc_attn_scale) == 1 && s->hc_attn_scale->ne[0] == 3)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_attn_scale.weight";
 +		return false;
 +	}
@@ -229,7 +230,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_attn_base.weight";
 +		return false;
 +	}
-+	if (!(s->hc_attn_base->n_dims == 1 && s->hc_attn_base->ne[0] == 24)) {
++	if (!(ggml_n_dims(s->hc_attn_base) == 1 && s->hc_attn_base->ne[0] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_attn_base.weight";
 +		return false;
 +	}
@@ -243,7 +244,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_norm.weight";
 +		return false;
 +	}
-+	if (!(s->attn_norm->n_dims == 1 && s->attn_norm->ne[0] == 4096)) {
++	if (!(ggml_n_dims(s->attn_norm) == 1 && s->attn_norm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_norm.weight";
 +		return false;
 +	}
@@ -257,7 +258,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_q_a.weight";
 +		return false;
 +	}
-+	if (!(s->attn_q_a->n_dims == 2 && s->attn_q_a->ne[0] == 4096 && s->attn_q_a->ne[1] == 1024)) {
++	if (!(ggml_n_dims(s->attn_q_a) == 2 && s->attn_q_a->ne[0] == 4096 && s->attn_q_a->ne[1] == 1024)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_q_a.weight";
 +		return false;
 +	}
@@ -271,7 +272,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_q_a_norm.weight";
 +		return false;
 +	}
-+	if (!(s->attn_q_a_norm->n_dims == 1 && s->attn_q_a_norm->ne[0] == 1024)) {
++	if (!(ggml_n_dims(s->attn_q_a_norm) == 1 && s->attn_q_a_norm->ne[0] == 1024)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_q_a_norm.weight";
 +		return false;
 +	}
@@ -285,7 +286,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_q_b.weight";
 +		return false;
 +	}
-+	if (!(s->attn_q_b->n_dims == 2 && s->attn_q_b->ne[0] == 1024 && s->attn_q_b->ne[1] == 32768)) {
++	if (!(ggml_n_dims(s->attn_q_b) == 2 && s->attn_q_b->ne[0] == 1024 && s->attn_q_b->ne[1] == 32768)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_q_b.weight";
 +		return false;
 +	}
@@ -299,7 +300,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_kv.weight";
 +		return false;
 +	}
-+	if (!(s->attn_kv->n_dims == 2 && s->attn_kv->ne[0] == 4096 && s->attn_kv->ne[1] == 512)) {
++	if (!(ggml_n_dims(s->attn_kv) == 2 && s->attn_kv->ne[0] == 4096 && s->attn_kv->ne[1] == 512)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_kv.weight";
 +		return false;
 +	}
@@ -313,7 +314,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_kv_a_norm.weight";
 +		return false;
 +	}
-+	if (!(s->attn_kv_a_norm->n_dims == 1 && s->attn_kv_a_norm->ne[0] == 512)) {
++	if (!(ggml_n_dims(s->attn_kv_a_norm) == 1 && s->attn_kv_a_norm->ne[0] == 512)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_kv_a_norm.weight";
 +		return false;
 +	}
@@ -327,7 +328,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_sinks.weight";
 +		return false;
 +	}
-+	if (!(s->attn_sinks->n_dims == 1 && s->attn_sinks->ne[0] == 64)) {
++	if (!(ggml_n_dims(s->attn_sinks) == 1 && s->attn_sinks->ne[0] == 64)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_sinks.weight";
 +		return false;
 +	}
@@ -341,7 +342,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_output_a.weight";
 +		return false;
 +	}
-+	if (!(s->attn_output_a->n_dims == 2 && s->attn_output_a->ne[0] == 4096 && s->attn_output_a->ne[1] == 8192)) {
++	if (!(ggml_n_dims(s->attn_output_a) == 2 && s->attn_output_a->ne[0] == 4096 && s->attn_output_a->ne[1] == 8192)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_output_a.weight";
 +		return false;
 +	}
@@ -355,7 +356,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.attn_output_b.weight";
 +		return false;
 +	}
-+	if (!(s->attn_output_b->n_dims == 2 && s->attn_output_b->ne[0] == 8192 && s->attn_output_b->ne[1] == 4096)) {
++	if (!(ggml_n_dims(s->attn_output_b) == 2 && s->attn_output_b->ne[0] == 8192 && s->attn_output_b->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.attn_output_b.weight";
 +		return false;
 +	}
@@ -369,7 +370,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_ffn_fn.weight";
 +		return false;
 +	}
-+	if (!(s->hc_ffn_fn->n_dims == 2 && s->hc_ffn_fn->ne[0] == 16384 && s->hc_ffn_fn->ne[1] == 24)) {
++	if (!(ggml_n_dims(s->hc_ffn_fn) == 2 && s->hc_ffn_fn->ne[0] == 16384 && s->hc_ffn_fn->ne[1] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_ffn_fn.weight";
 +		return false;
 +	}
@@ -383,7 +384,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_ffn_scale.weight";
 +		return false;
 +	}
-+	if (!(s->hc_ffn_scale->n_dims == 1 && s->hc_ffn_scale->ne[0] == 3)) {
++	if (!(ggml_n_dims(s->hc_ffn_scale) == 1 && s->hc_ffn_scale->ne[0] == 3)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_ffn_scale.weight";
 +		return false;
 +	}
@@ -397,7 +398,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.hc_ffn_base.weight";
 +		return false;
 +	}
-+	if (!(s->hc_ffn_base->n_dims == 1 && s->hc_ffn_base->ne[0] == 24)) {
++	if (!(ggml_n_dims(s->hc_ffn_base) == 1 && s->hc_ffn_base->ne[0] == 24)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.hc_ffn_base.weight";
 +		return false;
 +	}
@@ -411,7 +412,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_norm.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_norm->n_dims == 1 && s->ffn_norm->ne[0] == 4096)) {
++	if (!(ggml_n_dims(s->ffn_norm) == 1 && s->ffn_norm->ne[0] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_norm.weight";
 +		return false;
 +	}
@@ -425,7 +426,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_gate_inp.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_gate_inp->n_dims == 2 && s->ffn_gate_inp->ne[0] == 4096 && s->ffn_gate_inp->ne[1] == 256)) {
++	if (!(ggml_n_dims(s->ffn_gate_inp) == 2 && s->ffn_gate_inp->ne[0] == 4096 && s->ffn_gate_inp->ne[1] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_gate_inp.weight";
 +		return false;
 +	}
@@ -439,7 +440,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.exp_probs_b.bias";
 +		return false;
 +	}
-+	if (!(s->exp_probs_b_bias->n_dims == 1 && s->exp_probs_b_bias->ne[0] == 256)) {
++	if (!(ggml_n_dims(s->exp_probs_b_bias) == 1 && s->exp_probs_b_bias->ne[0] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.exp_probs_b.bias";
 +		return false;
 +	}
@@ -453,7 +454,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_gate_exps.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_gate_exps->n_dims == 3 && s->ffn_gate_exps->ne[0] == 4096 && s->ffn_gate_exps->ne[1] == 2048 && s->ffn_gate_exps->ne[2] == 256)) {
++	if (!(ggml_n_dims(s->ffn_gate_exps) == 3 && s->ffn_gate_exps->ne[0] == 4096 && s->ffn_gate_exps->ne[1] == 2048 && s->ffn_gate_exps->ne[2] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_gate_exps.weight";
 +		return false;
 +	}
@@ -467,7 +468,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_up_exps.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_up_exps->n_dims == 3 && s->ffn_up_exps->ne[0] == 4096 && s->ffn_up_exps->ne[1] == 2048 && s->ffn_up_exps->ne[2] == 256)) {
++	if (!(ggml_n_dims(s->ffn_up_exps) == 3 && s->ffn_up_exps->ne[0] == 4096 && s->ffn_up_exps->ne[1] == 2048 && s->ffn_up_exps->ne[2] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_up_exps.weight";
 +		return false;
 +	}
@@ -481,7 +482,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_down_exps.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_down_exps->n_dims == 3 && s->ffn_down_exps->ne[0] == 2048 && s->ffn_down_exps->ne[1] == 4096 && s->ffn_down_exps->ne[2] == 256)) {
++	if (!(ggml_n_dims(s->ffn_down_exps) == 3 && s->ffn_down_exps->ne[0] == 2048 && s->ffn_down_exps->ne[1] == 4096 && s->ffn_down_exps->ne[2] == 256)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_down_exps.weight";
 +		return false;
 +	}
@@ -495,7 +496,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_gate_shexp.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_gate_shexp->n_dims == 2 && s->ffn_gate_shexp->ne[0] == 4096 && s->ffn_gate_shexp->ne[1] == 2048)) {
++	if (!(ggml_n_dims(s->ffn_gate_shexp) == 2 && s->ffn_gate_shexp->ne[0] == 4096 && s->ffn_gate_shexp->ne[1] == 2048)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_gate_shexp.weight";
 +		return false;
 +	}
@@ -509,7 +510,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_up_shexp.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_up_shexp->n_dims == 2 && s->ffn_up_shexp->ne[0] == 4096 && s->ffn_up_shexp->ne[1] == 2048)) {
++	if (!(ggml_n_dims(s->ffn_up_shexp) == 2 && s->ffn_up_shexp->ne[0] == 4096 && s->ffn_up_shexp->ne[1] == 2048)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_up_shexp.weight";
 +		return false;
 +	}
@@ -523,7 +524,7 @@ index 0000000..a65998b
 +		if (err != nullptr) *err = "tensor has unexpected type: mtp.0.ffn_down_shexp.weight";
 +		return false;
 +	}
-+	if (!(s->ffn_down_shexp->n_dims == 2 && s->ffn_down_shexp->ne[0] == 2048 && s->ffn_down_shexp->ne[1] == 4096)) {
++	if (!(ggml_n_dims(s->ffn_down_shexp) == 2 && s->ffn_down_shexp->ne[0] == 2048 && s->ffn_down_shexp->ne[1] == 4096)) {
 +		if (err != nullptr) *err = "tensor has unexpected dims: mtp.0.ffn_down_shexp.weight";
 +		return false;
 +	}
@@ -604,7 +605,15 @@ index 0000000..680d9af
 +    return std::string(buf, (size_t) n);
 +}
 +
-+struct tensor_capture;
++struct tensor_capture {
++    bool got = false;
++    ggml_type type = GGML_TYPE_F32;
++    int64_t ne0 = 0;
++    int64_t ne1 = 0;
++    int64_t ne2 = 0;
++    int64_t ne3 = 0;
++    std::vector<uint8_t> bytes;
++};
 +
 +static bool compute_argmax_logits_from_output(
 +        const tensor_capture & embd,
@@ -694,15 +703,7 @@ index 0000000..680d9af
 +    return (*out_token_id >= 0);
 +}
 +
-+struct tensor_capture {
-+    bool got = false;
-+    ggml_type type = GGML_TYPE_F32;
-+    int64_t ne0 = 0;
-+    int64_t ne1 = 0;
-+    int64_t ne2 = 0;
-+    int64_t ne3 = 0;
-+    std::vector<uint8_t> bytes;
-+};
++struct tensor_capture;
 +
 +struct probe_captures {
 +    bool enable = false;
