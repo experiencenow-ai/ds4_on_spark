@@ -408,3 +408,52 @@ Verified high-risk slowness list after these probes:
 4. Fully batched layer throughput is promising (`~409 tok/s/Spark` synthetic),
    but it is not yet a real decode scheduler with independent KV streams,
    token-dependent routing, output head, and cross-node pipeline handoff.
+
+## Spark0 Full-Stack Reality Pass
+
+The next probe pass moved from weighted estimates to direct stack execution:
+
+- `--cuda-decode-stack-probe`: all 43 decode layers, synthetic resident raw and
+  compressed caches, optional output head.
+- `--cuda-batch-stack-probe`: all 43 batch layers at `--cuda-moe-tokens N`,
+  optional one-row output head.
+- `--cuda-output-head-probe`: output HC collapse, output norm, and vocab
+  projection only.
+
+The successful measured part is the warmed output head:
+
+```json
+{"cuda_output_head_probe":true,"iterations":3,"avg_ms":197.955,"best_ms":2.579,"best_heads_per_s":387.807,"logits_fnv64":"d99730a7a09d8f8a","logits_nonfinite":0}
+```
+
+So the prior single-row decode estimate changes only slightly: `~72.8 ms` for
+the weighted 43 decode layers plus `~2.6 ms` for the output head, or about
+`~13.3 tok/s/Spark` if all needed weights are already resident.
+
+The important real finding is that full-stack execution does **not** yet reach a
+clean measured throughput number. It currently fails on CUDA weight residency
+before the stack can finish:
+
+| probe | command shape | observed blocker |
+| --- | --- | --- |
+| decode stack, no split, with head | 43 layers + output head | first cold iteration reached `4562 ms`, then subsequent lazy MoE range uploads timed out |
+| decode stack, split every layer, no head | 43 layers only | stage trace reached layer 9, then `q8_0` lazy range upload timed out |
+| batch stack, 128 rows, split every layer, no head | 43 batch layers | lazy `moe_down_expert_batched` / full-slab fallback timed out |
+| startup preload, 64 MiB spans | best effort | timeout after `2.07 GiB` cached |
+| startup preload, 16 MiB spans | best effort | timeout after `7.26 GiB` cached |
+| startup preload, 4 MiB spans + 10 ms pacing, 1 GiB limit | bounded best effort | preload completed, then stack timed out on uncached/direct fallback |
+
+This replaces the soft projection with a harder conclusion: the CUDA kernels
+have enough measured local capacity, but the current full-stack path cannot
+keep all required DS4 weights resident safely across many layers. The next
+highest-risk task is therefore not another MoE tile tweak; it is a robust
+resident-weight plan for the full stack:
+
+1. Avoid poisoning the CUDA context on preload failure; best-effort cache must
+   stop before a timeout, not after one.
+2. Preload/cache the exact layer-stack ranges needed by the decode/batch stack
+   in paced phases that are known to survive on Spark.
+3. Keep per-layer expert slices resident across the full stack without falling
+   back to the full 528 MiB/1.8 GiB slabs.
+4. Only after the full-stack probe completes should the `~409 rows/s/Spark`
+   synthetic batch ceiling be treated as a real scheduler target.
