@@ -183,8 +183,9 @@ automation loops:
    pointer arrays, sorted tiles, and CUDA kernels as the real path, but feed
    synthetic activations/routes so MTP correctness and decode scheduler state do
    not block measurement. The first repo-native fixture is
-   `ds4_expert_queue_dummy`; see
-   `docs/cuda-expert-queue-dummy-benchmark.md`.
+   `ds4_expert_queue_dummy`; use `--sorted` to exercise the per-expert queue
+   layout (`expert_counts`, `expert_offsets`, `sorted_pairs`) before wiring the
+   same shape into real decode. See `docs/cuda-expert-queue-dummy-benchmark.md`.
 5. **Compare real and synthetic ceilings.** Run the dummy benchmark and the real
    decode path at the same batch sizes. If the dummy path scales and real decode
    does not, the bottleneck is attention/KV/session scheduling rather than the

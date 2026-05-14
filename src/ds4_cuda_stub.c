@@ -351,10 +351,12 @@ void ds4_cuda_expert_queue_dummy_default_config(ds4_cuda_expert_queue_dummy_conf
 	out->tokens = 32;
 	out->topk = 6;
 	out->n_experts = 256;
+	out->route_experts = 256;
 	out->hidden_dim = 128;
 	out->mid_dim = 256;
 	out->out_dim = 128;
 	out->iterations = 8;
+	out->sorted = 0;
 	out->seed = 1234u;
 }
 
@@ -365,11 +367,16 @@ ds4_cuda_status_t ds4_cuda_expert_queue_dummy_run(const ds4_cuda_expert_queue_du
 	out->tokens = 0;
 	out->topk = 0;
 	out->n_experts = 0;
+	out->route_experts = 0;
 	out->hidden_dim = 0;
 	out->mid_dim = 0;
 	out->out_dim = 0;
 	out->iterations = 0;
+	out->sorted = 0;
+	out->active_experts = 0;
+	out->max_queue_depth = 0;
 	out->estimated_bytes_moved = 0;
+	out->mean_queue_depth = 0.0f;
 	out->gateup_ms = 0.0f;
 	out->down_ms = 0.0f;
 	out->total_ms = 0.0f;
@@ -378,7 +385,7 @@ ds4_cuda_status_t ds4_cuda_expert_queue_dummy_run(const ds4_cuda_expert_queue_du
 	out->estimated_gib_per_s = 0.0f;
 	if ( cfg == 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
-	if ( cfg->tokens <= 0 || cfg->topk <= 0 || cfg->n_experts <= 0 || cfg->hidden_dim <= 0 || cfg->mid_dim <= 0 || cfg->out_dim <= 0 || cfg->iterations <= 0 )
+	if ( cfg->tokens <= 0 || cfg->topk <= 0 || cfg->n_experts <= 0 || cfg->route_experts <= 0 || cfg->route_experts > cfg->n_experts || cfg->hidden_dim <= 0 || cfg->mid_dim <= 0 || cfg->out_dim <= 0 || cfg->iterations <= 0 )
 		return(ds4_cuda_fail(DS4_CUDA_ERR_INVALID_ARG));
 	return(ds4_cuda_fail(DS4_CUDA_ERR_DISABLED));
 }

@@ -46,7 +46,7 @@ int32_t test_cuda(void)
 	if ( ds4_cuda_error_format_i32(0,"expr","file",7,msg0,0) != -2 )
 		return(-208);
 	ds4_cuda_expert_queue_dummy_default_config(&dummy_cfg);
-	if ( dummy_cfg.tokens <= 0 || dummy_cfg.topk != 6 || dummy_cfg.n_experts != 256 )
+	if ( dummy_cfg.tokens <= 0 || dummy_cfg.topk != 6 || dummy_cfg.n_experts != 256 || dummy_cfg.route_experts != 256 || dummy_cfg.sorted != 0 )
 		return(-400);
 	st0 = ds4_cuda_expert_queue_dummy_run(0,&dummy_result);
 	if ( st0.code != DS4_CUDA_ERR_INVALID_ARG )
@@ -68,7 +68,7 @@ int32_t test_cuda(void)
 	st0 = ds4_cuda_expert_queue_dummy_run(&dummy_cfg,&dummy_result);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )
 		return(-404);
-	if ( dummy_result.tokens != 0 || dummy_result.tokens_per_s != 0.0f )
+	if ( dummy_result.tokens != 0 || dummy_result.tokens_per_s != 0.0f || dummy_result.active_experts != 0 )
 		return(-405);
 	if ( st0.code != DS4_CUDA_ERR_DISABLED )
 		return(-63);
@@ -144,15 +144,19 @@ int32_t test_cuda(void)
 		dummy_cfg.tokens = 2;
 		dummy_cfg.topk = 2;
 		dummy_cfg.n_experts = 4;
+		dummy_cfg.route_experts = 2;
 		dummy_cfg.hidden_dim = 8;
 		dummy_cfg.mid_dim = 8;
 		dummy_cfg.out_dim = 8;
 		dummy_cfg.iterations = 1;
+		dummy_cfg.sorted = 1;
 		st0 = ds4_cuda_expert_queue_dummy_run(&dummy_cfg,&dummy_result);
 		if ( ds4_cuda_is_ok(st0) == 0 )
 			return(-406);
-		if ( dummy_result.tokens != 2 || dummy_result.topk != 2 || dummy_result.tokens_per_s <= 0.0f )
+		if ( dummy_result.tokens != 2 || dummy_result.topk != 2 || dummy_result.route_experts != 2 || dummy_result.tokens_per_s <= 0.0f || dummy_result.sorted != 1 )
 			return(-407);
+		if ( dummy_result.active_experts <= 0 || dummy_result.max_queue_depth <= 0 )
+			return(-408);
 		dev_count = -1;
 		st0 = ds4_cuda_device_count(&dev_count);
 		if ( ds4_cuda_is_ok(st0) == 0 )
