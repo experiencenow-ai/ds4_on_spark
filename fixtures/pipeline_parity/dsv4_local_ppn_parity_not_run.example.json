@@ -1,0 +1,86 @@
+{
+  "artifact_refs": [
+    {
+      "name": "stage_boundary_shape",
+      "path": "fixtures/pipeline_boundary/dsv4_stage_boundary_source_observed.example.json",
+      "sha256": "sha256:97059b7c2d8781a813e758730b08fa0d79a90fea45c45d7b7043c3c4700b12b2"
+    }
+  ],
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:90ec35ffe0ebdf89fb3d26df092e7a981a672e254f01ca1eae37aace20aac505",
+  "blocker_detail": "local PP=N emulated split not run: missing Python runtime dependencies: torch, transformers",
+  "boundary_after_layers": [
+    14,
+    28
+  ],
+  "boundary_state_layout": {
+    "dtype": "bfloat16",
+    "layout": "batch,sequence,hc_mult,hidden_size after each Transformer block",
+    "shape": [
+      "batch",
+      "sequence",
+      4,
+      4096
+    ],
+    "status": "observed"
+  },
+  "command_sha256": "sha256:495324f70831cdd7e82e2bf0e3758f1c8caf55174fc06b88a46229381274888c",
+  "comparison_kind": "hidden_state",
+  "format": "ds4-layer-pipeline-parity-v1",
+  "input_tokens_sha256": "sha256:f854b1caff187b1e850cfacaa6e5486d22ae8d960a32452b4e70672bdbcf51cd",
+  "layer_ranges": [
+    {
+      "end": 14,
+      "stage_id": 0,
+      "start": 0
+    },
+    {
+      "end": 28,
+      "stage_id": 1,
+      "start": 15
+    },
+    {
+      "end": 42,
+      "stage_id": 2,
+      "start": 29
+    }
+  ],
+  "max_abs_error": null,
+  "mean_abs_error": null,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "parity_run_id": "dsv4-local-ppn-parity-not-run-example",
+  "parity_status": "not_run",
+  "pipeline_id": "spark012-ds4-layer-pipeline-local-ppn",
+  "pp1_output_sha256": "",
+  "ppn_output_sha256": "",
+  "provider_id": "spark-ring-dsv4-layer-pipeline",
+  "quality_parity_detail": "local PP=N emulated split not run: missing Python runtime dependencies: torch, transformers",
+  "quality_parity_eligible": false,
+  "quantization_id": "DeepSeek-V4-Flash-config-source",
+  "runtime_id": "fixture_source_static",
+  "stage_count": 3,
+  "stage_inventory": [
+    {
+      "node_id": "spark0",
+      "stage_id": 0
+    },
+    {
+      "node_id": "spark1",
+      "stage_id": 1
+    },
+    {
+      "node_id": "spark2",
+      "stage_id": 2
+    }
+  ],
+  "stage_manifest_sha256": "sha256:f22a46d12c4e64a4b7bcf392074d90af063058075857ae360c79d346e478c48c",
+  "token_match_count": null,
+  "token_total_count": null,
+  "tokenizer_hash_status": "not_available",
+  "tokenizer_id": "deepseek-v4-flash-tokenizer",
+  "tokenizer_sha256": "",
+  "tolerance": {
+    "max_abs_error": null,
+    "mean_abs_error": null
+  }
+}

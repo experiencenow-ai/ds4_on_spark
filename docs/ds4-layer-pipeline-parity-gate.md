@@ -52,6 +52,31 @@ contiguous ownership. Boundary state fields are intentionally explicit because
 DeepSeek V4 Flash uses Hyper-Connections (`hc_mult=4`) and the actual crossing
 state may be more than a simple hidden-state row.
 
+## Parity Levels
+
+Level 0: synthetic pipeline integrity.
+This proves ordering, checksums, callback insertion, and payload movement only.
+It is never DS4 quality parity.
+
+Level 1: boundary-shape observed.
+This proves the stage boundary ABI is known. The current source-static probe
+observes the fixture DS4 reference shape as `[batch, sequence, hc_mult, dim]`,
+with `hc_mult=4` and `dim=4096`, after each Transformer block. This is enough
+to design a split-forward hook, but it is not enough for routing.
+
+Level 2: local PP=N emulated parity.
+This runs PP=1 and contiguous PP=N in one process or on one Spark, with no
+network in the loop. It proves the model can be partitioned before distributed
+execution is attempted. Current local fixture status is `not_run` because the
+repo-only Mac validation environment lacks `torch` and `transformers`.
+
+Level 3: cross-Spark PP=N parity.
+This proves distributed pipeline correctness and is required before provider
+eligibility.
+
+Level 4: parity-passed prefill/decode throughput.
+This is the first point where DS4 layer-pipeline tok/sec claims are allowed.
+
 ## Comparison Kinds
 
 Allowed `comparison_kind` values:
@@ -117,3 +142,28 @@ python3 scripts/validate_ds4_pipeline_parity.py fixtures/pipeline_parity/*.json
 The first DS4 parity fixture is intentionally `not_run`. The synthetic fixture
 is allowed to pass as transport integrity, but the validator and telemetry
 validator prevent it from satisfying DS4 quality parity.
+
+## Probe Commands
+
+Observe the current source-static boundary ABI from the repo fixture:
+
+```sh
+python3 scripts/ds4_stage_boundary_shape_probe.py \
+  --probe-kind source_static \
+  --config fixtures/model_contract/deepseek_v4_flash/config.json \
+  --runtime-id fixture_source_static \
+  --quantization-id DeepSeek-V4-Flash-config-source \
+  --stage 0:spark0:0:14 \
+  --stage 1:spark1:15:28 \
+  --stage 2:spark2:29:42 \
+  --candidate-boundary-after-layer 14
+```
+
+Emit the current local PP=N parity attempt. In a repo-only environment without
+the Python DS4 runtime dependencies, this emits `parity_status: not_run` and a
+precise blocker instead of pretending parity ran:
+
+```sh
+python3 scripts/ds4_local_ppn_parity_probe.py \
+  --boundary-artifact fixtures/pipeline_boundary/dsv4_stage_boundary_source_observed.example.json
+```
