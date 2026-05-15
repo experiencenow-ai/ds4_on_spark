@@ -1,0 +1,41 @@
+{
+  "artifact_refs": {
+    "stderr": "fixtures/full_stack_truth/logs/ffn_558.err",
+    "stdout": "fixtures/full_stack_truth/logs/ffn_558.out"
+  },
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:952ca01c41a83654ea80ba7346b4eca58deb086284c8a0031cdc9553f2e18a18",
+  "avg_ms": 42.654,
+  "batch_size": 1024,
+  "best_ms": 42.654,
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "compared_ceiling_tok_s": {
+    "ffn_envelope_ceiling": 558.0,
+    "moe_only_ceiling": 620.0,
+    "synthetic_layer_ceiling": 409.0
+  },
+  "failure_status": "success",
+  "finite_output": true,
+  "format": "ds4-full-stack-truth-v1",
+  "includes_attention": false,
+  "includes_kv": false,
+  "includes_output_head": false,
+  "includes_sampling": false,
+  "layers_executed": 43,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "output_hash": "fnv64:3333333333333333",
+  "path_kind": "batch_stack_no_head",
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "realization_ratio": {
+    "vs_ffn_envelope_ceiling": 1.0,
+    "vs_moe_only_ceiling": 0.9,
+    "vs_synthetic_layer_ceiling": 1.3643031784841075
+  },
+  "residency_policy": "moe-ffn-envelope-only",
+  "run_id": "fixture-ffn-envelope-558",
+  "runtime_id": "ds4-cuda-ffn-envelope-probe",
+  "spark_node": "spark0-fixture",
+  "tokens_per_second": 558.0,
+  "warmup_policy": "warm-envelope"
+}

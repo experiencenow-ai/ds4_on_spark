@@ -1,0 +1,41 @@
+{
+  "artifact_refs": {
+    "stderr": "fixtures/full_stack_truth/logs/synthetic_layer_409.err",
+    "stdout": "fixtures/full_stack_truth/logs/synthetic_layer_409.out"
+  },
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:80a8cc772ba1950a94fd663d1c3ac91db067af0e90b394de2f231435ac05742b",
+  "avg_ms": 312.96,
+  "batch_size": 128,
+  "best_ms": 312.96,
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "compared_ceiling_tok_s": {
+    "ffn_envelope_ceiling": 558.0,
+    "moe_only_ceiling": 620.0,
+    "synthetic_layer_ceiling": 409.0
+  },
+  "failure_status": "success",
+  "finite_output": true,
+  "format": "ds4-full-stack-truth-v1",
+  "includes_attention": false,
+  "includes_kv": false,
+  "includes_output_head": false,
+  "includes_sampling": false,
+  "layers_executed": 43,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "output_hash": "fnv64:2222222222222222",
+  "path_kind": "batch_stack_no_head",
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "realization_ratio": {
+    "vs_ffn_envelope_ceiling": 0.7329749103942653,
+    "vs_moe_only_ceiling": 0.6596774193548387,
+    "vs_synthetic_layer_ceiling": 1.0
+  },
+  "residency_policy": "synthetic-resident-layer-inputs",
+  "run_id": "fixture-synthetic-layer-409",
+  "runtime_id": "ds4-synthetic-full-layer-batch-probe",
+  "spark_node": "spark0-fixture",
+  "tokens_per_second": 409.0,
+  "warmup_policy": "warm-synthetic"
+}
