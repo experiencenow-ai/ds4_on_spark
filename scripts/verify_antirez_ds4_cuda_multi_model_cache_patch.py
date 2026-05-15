@@ -74,7 +74,7 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"+        if (!accelerator_cache_model_tensors(e->backend, &e->model, cache_best_effort)) {",
 		"diff --git a/ds4_gpu.h b/ds4_gpu.h",
 		"int ds4_gpu_set_model_fd_for_map(const void *model_map, int fd);",
-		"if (getenv(\"DS4_CUDA_NO_FD_CACHE\") == NULL) {",
+		"DS4_CUDA_WEIGHT_CACHE_SYNC",
 	]
 
 	for s in required_substrings:
