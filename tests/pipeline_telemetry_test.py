@@ -13,6 +13,8 @@ class PipelineTelemetryTest(unittest.TestCase):
         artifact = telemetry.load_json(FIX / "spark_layer_pipeline_run_not_run.example.json")
         self.assertEqual(telemetry.validate_run(artifact), [])
         self.assertEqual(artifact["stage_count"], 3)
+        self.assertEqual(artifact["artifact_schema_version"], 1)
+        self.assertEqual(artifact["artifact_sha256"], telemetry.artifact_sha256(artifact))
         self.assertEqual(artifact["quality_parity_status"], "not_run")
 
     def test_combine_builds_generic_n_stage_artifact(self) -> None:
@@ -27,6 +29,9 @@ class PipelineTelemetryTest(unittest.TestCase):
         self.assertEqual(telemetry.validate_run(artifact), [])
         self.assertAlmostEqual(artifact["speedup_over_sequential"], 43.16546763 / 15.0)
         self.assertEqual(artifact["slowest_stage_id"], "spark2")
+        self.assertEqual(artifact["provider_id"], "spark-ring-dsv4-layer-pipeline")
+        self.assertTrue(artifact["manifest_sha256"].startswith("sha256:"))
+        self.assertTrue(artifact["input_payload_sha256"].startswith("sha256:"))
 
     def test_quality_parity_status_is_required(self) -> None:
         artifact = telemetry.load_json(FIX / "spark_layer_pipeline_run_not_run.example.json")
@@ -41,6 +46,29 @@ class PipelineTelemetryTest(unittest.TestCase):
         artifact["sequential_items_per_s"] = 0.0
         errors = telemetry.validate_run(artifact)
         self.assertTrue(any("sequential_items_per_s" in item for item in errors))
+
+    def test_artifact_hash_mismatch_fails_validation(self) -> None:
+        artifact = telemetry.load_json(FIX / "spark_layer_pipeline_run_not_run.example.json")
+        artifact = copy.deepcopy(artifact)
+        artifact["pipeline_items_per_s"] = artifact["pipeline_items_per_s"] + 1.0
+        errors = telemetry.validate_run(artifact)
+        self.assertTrue(any("artifact_sha256" in item for item in errors))
+
+    def test_top_level_world_size_is_rejected(self) -> None:
+        artifact = telemetry.load_json(FIX / "spark_layer_pipeline_run_not_run.example.json")
+        artifact = copy.deepcopy(artifact)
+        artifact["world_size"] = 3
+        artifact["artifact_sha256"] = telemetry.artifact_sha256(artifact)
+        errors = telemetry.validate_run(artifact)
+        self.assertTrue(any("fixed Spark count" in item for item in errors))
+
+    def test_provider_id_must_be_non_empty(self) -> None:
+        artifact = telemetry.load_json(FIX / "spark_layer_pipeline_run_not_run.example.json")
+        artifact = copy.deepcopy(artifact)
+        artifact["provider_id"] = ""
+        artifact["artifact_sha256"] = telemetry.artifact_sha256(artifact)
+        errors = telemetry.validate_run(artifact)
+        self.assertTrue(any("provider_id" in item for item in errors))
 
     def test_four_stage_manifest_is_valid(self) -> None:
         manifest = telemetry.load_json(FIX / "ds4_pipeline_manifest.example.json")

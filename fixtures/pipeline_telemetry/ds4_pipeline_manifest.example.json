@@ -1,9 +1,17 @@
 {
   "format": "ds4-pipeline-run-manifest-v1",
   "run_id": "spark012-pipeline-mre-example",
+  "provider_id": "spark-ring-dsv4-layer-pipeline",
   "pipeline_id": "spark012-ds4-layer-pipeline-mre",
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
   "runtime_id": "ds4_pipeline_mre",
+  "command": {
+    "tool": "ds4_pipeline_mre",
+    "role": "rank",
+    "process": "checksum",
+    "payload_bytes": 1048576,
+    "items": 120
+  },
   "stage_nodes": [
     "spark0",
     "spark1",
