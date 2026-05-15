@@ -1,0 +1,115 @@
+{
+  "achieved_streaming_rows_per_s": 0.0,
+  "actual_end_to_end_rows_per_s_if_measured": 0.0,
+  "artifact_dir": "/private/tmp/ds4-util-b1024-mb4-20260515Tsteady",
+  "batch_size": 1024,
+  "blocker_detail": "[{\"blocked\": [{\"age_s\": 0.2022264003753662, \"command\": \"./ds4 --cuda -m /home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf --temp 0 -p Explain Redis streams in one paragraph. Keep it concise, covering key features: append-only log, consumer groups, blocking reads, message persistence, and -c 2048 -n 32 --seed 1234\", \"lock_path\": \"/tmp/ds4.lock\", \"pid\": 923373}], \"candidates\": [], \"cleaned\": [], \"returncode\": 0, \"stage_node\": \"spark0\"}]",
+  "blocker_kind": "stale_process_lock",
+  "boundary_bytes": 67108864,
+  "boundary_dtype": "f32",
+  "boundary_layout": "batch,hc,hidden",
+  "bubble_overhead_ratio": 0.0,
+  "drain_ms": 0.0,
+  "fill_ms": 0.0,
+  "final_logits_hash": "",
+  "final_logits_hashes": [],
+  "final_output_finite": false,
+  "format": "ds4-stage-handoff-truth-v1",
+  "layer_ranges": [
+    [
+      0,
+      15
+    ],
+    [
+      15,
+      29
+    ],
+    [
+      29,
+      43
+    ]
+  ],
+  "microbatch_count": 4,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "observed_steady_state_rows_per_s": 0.0,
+  "parity_scope": "stage_handoff_finite_logits",
+  "parity_status": "not_run",
+  "pipeline_depth": 3,
+  "pipeline_rows_per_s_bound": 0.0,
+  "production_generation_eligible": false,
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "resident_worker_mode": true,
+  "run_id": "ds4-util-b1024-mb4-20260515Tsteady",
+  "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp",
+  "slowest_resource_id": null,
+  "slowest_resource_kind": "",
+  "slowest_resource_service_ms": 0.0,
+  "slowest_stage_id": null,
+  "stage_count": 3,
+  "stage_ms": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "stage_nodes": [
+    "spark0",
+    "spark1",
+    "spark2"
+  ],
+  "stale_lock_preflight": [
+    {
+      "blocked": [
+        {
+          "age_s": 0.2022264003753662,
+          "command": "./ds4 --cuda -m /home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf --temp 0 -p Explain Redis streams in one paragraph. Keep it concise, covering key features: append-only log, consumer groups, blocking reads, message persistence, and -c 2048 -n 32 --seed 1234",
+          "lock_path": "/tmp/ds4.lock",
+          "pid": 923373
+        }
+      ],
+      "candidates": [],
+      "cleaned": [],
+      "returncode": 0,
+      "stage_node": "spark0"
+    },
+    {
+      "blocked": [],
+      "candidates": [],
+      "cleaned": [
+        {
+          "age_s": 54.89624333381653,
+          "command": "lockfile:/tmp/ds4.lock",
+          "lock_path": "/tmp/ds4.lock",
+          "pid": 141979,
+          "renamed_to": "/tmp/ds4.lock.stale.20260515T121854Z"
+        }
+      ],
+      "returncode": 0,
+      "stage_node": "spark1"
+    },
+    {
+      "blocked": [],
+      "candidates": [],
+      "cleaned": [
+        {
+          "age_s": 56.441625356674194,
+          "command": "lockfile:/tmp/ds4.lock",
+          "lock_path": "/tmp/ds4.lock",
+          "pid": 92762,
+          "renamed_to": "/tmp/ds4.lock.stale.20260515T121856Z"
+        }
+      ],
+      "returncode": 0,
+      "stage_node": "spark2"
+    }
+  ],
+  "steady_state_microbatch_interval_ms": 0.0,
+  "steady_state_pipeline_bound_rows_per_s": 0.0,
+  "steady_state_rows_per_s": 0.0,
+  "streaming_pipeline": true,
+  "transfer_ms": 0.0,
+  "transfer_ms_by_boundary": [
+    [],
+    []
+  ],
+  "transport_kind": "tcp_binary"
+}

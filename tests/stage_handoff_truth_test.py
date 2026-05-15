@@ -57,6 +57,13 @@ class StageHandoffTruthTest(unittest.TestCase):
 		errors = handoff.validate_artifact(obj)
 		self.assertTrue(any("production_generation_eligible" in item for item in errors))
 
+	def test_resident_fixture_records_steady_state_bound(self) -> None:
+		obj = handoff.load_json(FIX / "spark012_b512_tcp_resident_mb8.example.json")
+		self.assertEqual(obj["slowest_resource_kind"], "stage_compute")
+		self.assertEqual(obj["slowest_resource_id"], 0)
+		self.assertGreater(obj["steady_state_pipeline_bound_rows_per_s"], obj["achieved_streaming_rows_per_s"])
+		self.assertGreater(obj["observed_steady_state_rows_per_s"], 0.0)
+
 
 if __name__ == "__main__":
 	unittest.main()

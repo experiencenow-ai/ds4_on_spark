@@ -106,6 +106,30 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		for key in ["achieved_streaming_rows_per_s", "bubble_overhead_ratio"]:
 			if not isinstance(obj.get(key), (int, float)):
 				errors.append(f"streaming handoff requires numeric {key}")
+		for key in [
+			"steady_state_rows_per_s",
+			"observed_steady_state_rows_per_s",
+			"steady_state_microbatch_interval_ms",
+			"steady_state_pipeline_bound_rows_per_s",
+			"fill_ms",
+			"drain_ms",
+			"slowest_resource_service_ms",
+		]:
+			if key in obj and not isinstance(obj.get(key), (int, float)):
+				errors.append(f"streaming handoff {key} must be numeric when present")
+		if "steady_state_window_microbatches" in obj:
+			window = obj.get("steady_state_window_microbatches")
+			if not isinstance(window, list) or not all(isinstance(v, int) for v in window):
+				errors.append("steady_state_window_microbatches must be a list of integers")
+		if "slowest_resource_kind" in obj and obj.get("slowest_resource_kind") not in ("", "stage_compute", "boundary_transfer"):
+			errors.append("slowest_resource_kind must be stage_compute or boundary_transfer when present")
+		if "slowest_resource_id" in obj and obj.get("slowest_resource_id") is not None and not isinstance(obj.get("slowest_resource_id"), int):
+			errors.append("slowest_resource_id must be an integer or null")
+		if "slowest_stage_id" in obj and obj.get("slowest_stage_id") is not None:
+			if not isinstance(obj.get("slowest_stage_id"), int):
+				errors.append("slowest_stage_id must be an integer or null")
+			elif isinstance(stage_count, int) and not (0 <= obj["slowest_stage_id"] < stage_count):
+				errors.append("slowest_stage_id must be within stage_count")
 		transfers = obj.get("transfer_ms_by_boundary")
 		if not isinstance(transfers, list) or not isinstance(stage_count, int) or len(transfers) != max(stage_count - 1, 0):
 			errors.append("transfer_ms_by_boundary length must match stage_count-1")
