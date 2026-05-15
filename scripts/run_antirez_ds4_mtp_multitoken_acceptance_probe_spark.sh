@@ -6,7 +6,15 @@ SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChec
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_antirez_ds4_mtp_multitoken_acceptance}"
 REMOTE_ANTIREZ_DS4_MTP_ACCEPT_ENV="${REMOTE_ANTIREZ_DS4_MTP_ACCEPT_ENV:-}"
+BASELINE_GENERATION_TPS="${BASELINE_GENERATION_TPS:-}"
+MODEL_ID="${MODEL_ID:-DeepSeek-V4-Flash-IQ2XXS-chat-v2}"
+RUNTIME_ID="${RUNTIME_ID:-antirez/ds4@3630e64+cuda-mtp}"
+PROMPT="${PROMPT:-Explain Redis streams in one paragraph. Keep it concise, covering key features: append-only log, consumer groups, blocking reads, message persistence, and}"
+PROMPT_HASH="${PROMPT_HASH:-}"
+MTP_DRAFT="${MTP_DRAFT:-2}"
+MTP_MARGIN="${MTP_MARGIN:-0}"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_ID="${RUN_ID:-$ts-mtp-draft-$MTP_DRAFT}"
 OUT_DIR="$OUT_ROOT/$ts"
 
 mkdir -p "$OUT_DIR"
@@ -26,6 +34,8 @@ HELPER_LOCAL="$repo_root/scripts/antirez_ds4_mtp_acceptance_probe_patch.sh"
 PATCH_Q4K_LOCAL="$repo_root/docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch"
 PATCH_CACHE_LOCAL="$repo_root/docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch"
 EXTRACTOR_LOCAL="$repo_root/scripts/extract_antirez_ds4_mtp_conf_log.py"
+SLOWPATH_LOCAL="$repo_root/scripts/build_ds4_mtp_slowpath_report.py"
+SLOWPATH_VALIDATOR_LOCAL="$repo_root/scripts/validate_ds4_mtp_slowpath.py"
 
 REPORT_MD="$OUT_DIR/antirez_ds4_mtp_multitoken_acceptance_probe_spark.md"
 
@@ -74,8 +84,8 @@ if [ ! -r "$HELPER_LOCAL" ]; then
 	echo "helper not readable: $HELPER_LOCAL"
 	exit 2
 fi
-if [ ! -r "$PATCH_Q4K_LOCAL" ] || [ ! -r "$PATCH_CACHE_LOCAL" ] || [ ! -r "$EXTRACTOR_LOCAL" ]; then
-	echo "missing local file(s): helper/patches/extractor"
+if [ ! -r "$PATCH_Q4K_LOCAL" ] || [ ! -r "$PATCH_CACHE_LOCAL" ] || [ ! -r "$EXTRACTOR_LOCAL" ] || [ ! -r "$SLOWPATH_LOCAL" ] || [ ! -r "$SLOWPATH_VALIDATOR_LOCAL" ]; then
+	echo "missing local file(s): helper/patches/extractor/slowpath"
 	exit 3
 fi
 
@@ -108,6 +118,38 @@ python3 "$EXTRACTOR_LOCAL" --in "$OUT_DIR/remote_probe_stdout.txt" --in "$OUT_DI
 	--out-jsonl "$OUT_DIR/acceptance_events.jsonl" \
 	>"$OUT_DIR/acceptance_summary_stdout.txt" 2>"$OUT_DIR/acceptance_summary_stderr.txt" || true
 
+echo "== building slow-path telemetry (local) =="
+if [ "$BASELINE_GENERATION_TPS" != "" ]; then
+	python3 "$SLOWPATH_LOCAL" \
+		--mtp-log "$OUT_DIR/remote_probe_stdout.txt" \
+		--mtp-log "$OUT_DIR/remote_probe_stderr.txt" \
+		--baseline-generation-tps "$BASELINE_GENERATION_TPS" \
+		--run-id "$RUN_ID" \
+		--model-id "$MODEL_ID" \
+		--runtime-id "$RUNTIME_ID" \
+		--prompt "$PROMPT" \
+		--prompt-hash "$PROMPT_HASH" \
+		--mtp-draft "$MTP_DRAFT" \
+		--mtp-margin "$MTP_MARGIN" \
+		--out-json "$OUT_DIR/mtp_slowpath.json" \
+		>"$OUT_DIR/mtp_slowpath_stdout.txt" 2>"$OUT_DIR/mtp_slowpath_stderr.txt" || true
+else
+	python3 "$SLOWPATH_LOCAL" \
+		--mtp-log "$OUT_DIR/remote_probe_stdout.txt" \
+		--mtp-log "$OUT_DIR/remote_probe_stderr.txt" \
+		--run-id "$RUN_ID" \
+		--model-id "$MODEL_ID" \
+		--runtime-id "$RUNTIME_ID" \
+		--prompt "$PROMPT" \
+		--prompt-hash "$PROMPT_HASH" \
+		--mtp-draft "$MTP_DRAFT" \
+		--mtp-margin "$MTP_MARGIN" \
+		--out-json "$OUT_DIR/mtp_slowpath.json" \
+		>"$OUT_DIR/mtp_slowpath_stdout.txt" 2>"$OUT_DIR/mtp_slowpath_stderr.txt" || true
+fi
+python3 "$SLOWPATH_VALIDATOR_LOCAL" "$OUT_DIR/mtp_slowpath.json" \
+	>"$OUT_DIR/mtp_slowpath_validate.json" 2>"$OUT_DIR/mtp_slowpath_validate_stderr.txt" || true
+
 {
 	echo "## Results"
 	echo
@@ -119,12 +161,20 @@ python3 "$EXTRACTOR_LOCAL" --in "$OUT_DIR/remote_probe_stdout.txt" --in "$OUT_DI
 	echo "- mixed log: $OUT_DIR/remote_probe_log.txt"
 	echo "- acceptance summary: $OUT_DIR/acceptance_summary.json"
 	echo "- acceptance events JSONL: $OUT_DIR/acceptance_events.jsonl"
+	echo "- slow-path telemetry: $OUT_DIR/mtp_slowpath.json"
+	echo "- slow-path validator: $OUT_DIR/mtp_slowpath_validate.json"
 	echo "- extractor stderr: $OUT_DIR/acceptance_summary_stderr.txt"
 	echo
 	echo "Acceptance summary (prefix):"
 	echo
 	echo '```'
 	sed -n '1,200p' "$OUT_DIR/acceptance_summary.json" 2>/dev/null || true
+	echo '```'
+	echo
+	echo "Slow-path telemetry (prefix):"
+	echo
+	echo '```'
+	sed -n '1,200p' "$OUT_DIR/mtp_slowpath.json" 2>/dev/null || true
 	echo '```'
 	echo
 } >>"$REPORT_MD"
@@ -154,6 +204,8 @@ doc = {
 		"log": str(out_dir / "remote_probe_log.txt"),
 		"acceptance_summary_json": str(out_dir / "acceptance_summary.json"),
 		"acceptance_events_jsonl": str(out_dir / "acceptance_events.jsonl"),
+		"mtp_slowpath_json": str(out_dir / "mtp_slowpath.json"),
+		"mtp_slowpath_validate_json": str(out_dir / "mtp_slowpath_validate.json"),
 	},
 	"summary": summary,
 }
@@ -161,4 +213,3 @@ doc = {
 PY
 
 echo "done: $REPORT_MD"
-

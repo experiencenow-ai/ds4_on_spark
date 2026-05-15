@@ -48,6 +48,19 @@ CACHE_PREP_RE = re.compile(
 
 CUDA_LOADING_RE = re.compile(r"ds4: CUDA loading model tensors")
 
+TIMING_RE = re.compile(r"ds4: mtp timing (?P<kind>[a-z0-9_-]+)\s+(?P<body>.*)")
+
+TIMING_KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_-]*)=(?P<value>-?[0-9]+(?:\.[0-9]+)?)")
+
+TIMING_COMPONENT_KEYS = {
+	"draft": "draft_eval_ms",
+	"verify": "target_eval_ms",
+	"snapshot": "capture_ms",
+	"prefix": "token_commit_ms",
+	"replay": "verifier_replay_ms",
+	"exact_replay": "verifier_replay_ms",
+}
+
 
 @dataclass(frozen=True)
 class ConfEvent:
@@ -63,6 +76,12 @@ class ConfEvent:
 @dataclass(frozen=True)
 class MissFirstEvent:
 	draft: Optional[int]
+
+
+@dataclass(frozen=True)
+class TimingEvent:
+	kind: str
+	values: dict[str, float]
 
 
 def _iter_lines(paths: list[Path]) -> Iterable[str]:
@@ -89,9 +108,53 @@ def _as_float(s: str) -> float:
 		return 0.0
 
 
+def _parse_timing_values(body: str) -> dict[str, float]:
+	values: dict[str, float] = {}
+	for m in TIMING_KV_RE.finditer(body):
+		values[str(m.group("key"))] = _as_float(m.group("value"))
+	return values
+
+
+def _zero_components() -> dict[str, float]:
+	return {
+		"verifier_replay_ms": 0.0,
+		"draft_eval_ms": 0.0,
+		"target_eval_ms": 0.0,
+		"cache_sync_ms": 0.0,
+		"cuda_sync_ms": 0.0,
+		"logging_ms": 0.0,
+		"capture_ms": 0.0,
+		"token_commit_ms": 0.0,
+	}
+
+
+def summarize_timing_events(events: list[TimingEvent]) -> dict[str, Any]:
+	components = _zero_components()
+	total_ms = 0.0
+	kinds: Counter[str] = Counter()
+	for ev in events:
+		kinds[str(ev.kind)] += 1
+		for key, component in TIMING_COMPONENT_KEYS.items():
+			components[component] += float(ev.values.get(key, 0.0))
+		total_ms += float(ev.values.get("total", 0.0))
+	slowest_component = None
+	if len(events) > 0:
+		slowest_component = max(components.items(), key=lambda kv: float(kv[1]))[0]
+	if slowest_component is not None and float(components.get(slowest_component, 0.0)) <= 0.0:
+		slowest_component = None
+	return {
+		"events": int(len(events)),
+		"kinds": {str(k): int(v) for k, v in sorted(kinds.items(), key=lambda kv: kv[0])},
+		"per_component_ms": components,
+		"total_reported_ms": float(total_ms),
+		"slowest_component": slowest_component,
+	}
+
+
 def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 	conf_events: list[ConfEvent] = []
 	miss_first_events: list[MissFirstEvent] = []
+	timing_events: list[TimingEvent] = []
 	cuda_loading_lines = 0
 	prefill_tps: Optional[float] = None
 	generation_tps: Optional[float] = None
@@ -127,6 +190,11 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 		if m is not None:
 			prefill_tps = _as_float(m.group("prefill"))
 			generation_tps = _as_float(m.group("gen"))
+			continue
+
+		m = TIMING_RE.search(line)
+		if m is not None:
+			timing_events.append(TimingEvent(kind=str(m.group("kind")), values=_parse_timing_values(str(m.group("body")))))
 			continue
 
 		m = CACHE_PREP_RE.search(line)
@@ -179,6 +247,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 			"startup_cache_gib": startup_cache_gib,
 			"startup_cache_s": startup_cache_s,
 		},
+		"timing": summarize_timing_events(timing_events),
 	}
 
 	# If we didn't find any acceptance-related records, treat this as not-ok.
@@ -194,6 +263,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 def write_events_jsonl(
 	conf_events: list[ConfEvent],
 	miss_first_events: list[MissFirstEvent],
+	timing_events: list[TimingEvent],
 	dst: Path,
 ) -> None:
 	with dst.open("w", encoding="utf-8") as f:
@@ -216,6 +286,8 @@ def write_events_jsonl(
 			)
 		for ev in miss_first_events:
 			f.write(json.dumps({"type": "mtp_miss_first", "draft": ev.draft}, sort_keys=True) + "\n")
+		for ev in timing_events:
+			f.write(json.dumps({"type": "mtp_timing", "kind": ev.kind, "values": ev.values}, sort_keys=True) + "\n")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -248,6 +320,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 	if out_jsonl_path:
 		conf_events: list[ConfEvent] = []
 		miss_first_events: list[MissFirstEvent] = []
+		timing_events: list[TimingEvent] = []
 		for line in all_lines:
 			m = CONF_RE.search(line)
 			if m is not None:
@@ -268,7 +341,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 				draft_raw = m.group("draft")
 				miss_first_events.append(MissFirstEvent(draft=_as_int(draft_raw) if draft_raw is not None else None))
 				continue
-		write_events_jsonl(conf_events, miss_first_events, Path(out_jsonl_path))
+			m = TIMING_RE.search(line)
+			if m is not None:
+				timing_events.append(TimingEvent(kind=str(m.group("kind")), values=_parse_timing_values(str(m.group("body")))))
+				continue
+		write_events_jsonl(conf_events, miss_first_events, timing_events, Path(out_jsonl_path))
 
 	print(json.dumps(res, indent=2, sort_keys=True))
 	return 0 if bool(res.get("ok", False)) else 1
