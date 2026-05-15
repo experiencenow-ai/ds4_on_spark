@@ -1,0 +1,45 @@
+{
+  "actual_end_to_end_rows_per_s_if_measured": 29.688319038098463,
+  "batch_size": 64,
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "boundary_bytes": 4194304,
+  "boundary_dtype": "f32",
+  "boundary_layout": "batch,hc,hidden",
+  "file_handoff_detail": "Boundary files were copied by scp through the Mac coordinator for this correctness proof; transfer time was not separately instrumented.",
+  "file_handoff_ms": null,
+  "final_logits_hash": "fnv64:668711b0b3638b46",
+  "final_output_finite": true,
+  "format": "ds4-stage-handoff-truth-v1",
+  "layer_ranges": [
+    [
+      0,
+      15
+    ],
+    [
+      15,
+      29
+    ],
+    [
+      29,
+      43
+    ]
+  ],
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "pipeline_rows_per_s_bound": 84.06242160194078,
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "run_id": "ds4-spark012-stage-handoff-b64-20260515",
+  "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff",
+  "stage_count": 3,
+  "stage_ms": [
+    761.339,
+    716.549,
+    677.842
+  ],
+  "stage_nodes": [
+    "spark0",
+    "spark1",
+    "spark2"
+  ],
+  "transfer_ms": null
+}
