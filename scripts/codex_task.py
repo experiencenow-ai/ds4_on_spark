@@ -23,7 +23,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 fallback is rare
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TARGET = "spark0@aitopatom-9ab9.local"
+DEFAULT_TARGET = "spark0@172.16.11.228"
 DEFAULT_TRUNK_GGUF = "/home/spark0/models/ds4/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf"
 DEFAULT_MTP_SIDECAR_GGUF = "/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf"
 DEFAULT_LLAMA_DIR = "/home/spark0/src/llama-mtp-probe-94073e2-fixed"

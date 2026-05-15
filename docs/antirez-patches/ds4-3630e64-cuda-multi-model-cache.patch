@@ -46,6 +46,7 @@ index dee4ce5..f5f4eec 100644
          getenv("DS4_CUDA_Q8_F32_PRELOAD") != NULL) {
          for (uint64_t i = 0; i < m->n_tensors; i++) {
 @@ -1460,9 +1469,10 @@ static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model
++    if (getenv("DS4_CUDA_WEIGHT_CACHE_SYNC") != NULL) (void)ds4_gpu_synchronize();
      return true;
  }
  #else

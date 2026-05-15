@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-target="${1:-spark0@aitopatom-9ab9.local}"
+target="${1:-spark0@172.16.11.228}"
 SSH_OPTS="${SSH_OPTS:--o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/private/tmp/ds4_spark_known_hosts}"
 
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_mtp_sidecar_probe}"
