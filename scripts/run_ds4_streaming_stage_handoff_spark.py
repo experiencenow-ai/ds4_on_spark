@@ -263,6 +263,18 @@ def q(s: str) -> str:
 	return shlex.quote(s)
 
 
+def parse_stage_env(items: list[str]) -> dict[str, str]:
+	out: dict[str, str] = {}
+	for item in items:
+		if "=" not in item:
+			raise SystemExit(f"error: --stage-env requires KEY=VALUE, got {item!r}")
+		key, value = item.split("=", 1)
+		if not key or key[0].isdigit() or any(not (ch.isalnum() or ch == "_") for ch in key):
+			raise SystemExit(f"error: invalid --stage-env key {key!r}")
+		out[key] = value
+	return out
+
+
 def stage_dir(run_root: str, stage_index: int) -> str:
 	return f"{run_root}/stage{stage_index}"
 
@@ -292,6 +304,8 @@ def build_stage_command(stage: Stage, idx: int, total: int, args: argparse.Names
 		env.append(f"DS4_CUDA_STACK_PROBE_INPUT_WAIT_MS={args.input_wait_ms}")
 	if idx + 1 < total:
 		env.append(f"DS4_CUDA_STACK_PROBE_OUTPUT_HC_FILE={q(boundary_path(args.remote_run_root, idx))}")
+	for key, value in args.stage_env.items():
+		env.append(f"{key}={q(value)}")
 	cmd = " ".join(env + [
 		"./ds4",
 		"-m",
@@ -573,6 +587,7 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"transport_kind": "tcp_binary",
 		"streaming_pipeline": True,
 		"resident_worker_mode": True,
+		"stage_env": args.stage_env,
 		"microbatch_count": args.microbatches,
 		"pipeline_depth": min(args.pipeline_depth, args.microbatches),
 		"transfer_ms": max((item["transfer_ms"] for link in transfers for item in link), default=0.0),
@@ -642,6 +657,7 @@ def build_failure_artifact(args: argparse.Namespace, stages: list[Stage], outdir
 		"transport_kind": "tcp_binary",
 		"streaming_pipeline": True,
 		"resident_worker_mode": True,
+		"stage_env": args.stage_env,
 		"microbatch_count": args.microbatches,
 		"pipeline_depth": min(args.pipeline_depth, args.microbatches),
 		"transfer_ms": 0.0,
@@ -690,6 +706,7 @@ def parse_args() -> argparse.Namespace:
 	ap.add_argument("--transfer-wait-s", type=float, default=900.0)
 	ap.add_argument("--base-port", type=int, default=19100)
 	ap.add_argument("--known-hosts", default="/private/tmp/ds4_spark_known_hosts")
+	ap.add_argument("--stage-env", action="append", default=[], help="Extra KEY=VALUE environment variable for every DS4 stage worker.")
 	ap.add_argument("--cleanup-stale-stage-locks", action="store_true", help="Terminate stale --cuda-batch-stack-probe ds4 workers before the run.")
 	ap.add_argument("--stale-lock-min-age-s", type=float, default=120.0)
 	args = ap.parse_args()
@@ -698,6 +715,7 @@ def parse_args() -> argparse.Namespace:
 	if not args.local_out_dir:
 		args.local_out_dir = f"/private/tmp/{args.run_id}"
 	args.boundary_bytes = args.batch * 4 * 4096 * 4
+	args.stage_env = parse_stage_env(args.stage_env)
 	return args
 
 
