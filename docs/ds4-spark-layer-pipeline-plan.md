@@ -193,6 +193,20 @@ It is built from the library-backed `tools/ds4_pipeline_mre` executable, whose
 rank mode calls `ds4_pipeline_stage_run()` and whose sequential mode calls
 `ds4_pipeline_sequential_run()`.
 
+The run artifact includes replay-friendly hashes and inventory:
+
+- `artifact_schema_version`
+- `artifact_sha256`, recomputed by the validator from canonical JSON
+- `provider_id`
+- `manifest_sha256`
+- `command_sha256`
+- `input_payload_sha256`
+- `output_payload_checksum`
+- `sequential_result_sha256`
+- `stage_results_sha256`
+- `stage_inventory`
+- `quality_parity_status`
+
 Per-rank stage output uses `ds4-pipeline-stage-result-v1`. The MRE can also run
 a deterministic callback with `--process checksum`, proving that stage process
 callbacks can mutate/checksum payloads instead of only sleeping and forwarding.

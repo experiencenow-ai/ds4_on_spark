@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -12,15 +14,27 @@ from typing import Any
 FORMAT = "spark-layer-pipeline-run-v1"
 STAGE_FORMAT = "ds4-pipeline-stage-result-v1"
 MANIFEST_FORMAT = "ds4-pipeline-run-manifest-v1"
+SCHEMA_VERSION = 1
 QUALITY = {"not_run", "passed", "failed"}
+FIXED_SPARK_COUNT_FIELDS = {"world_size", "spark_count", "num_sparks"}
 REQUIRED = (
 	"format",
+	"artifact_schema_version",
+	"artifact_sha256",
 	"run_id",
+	"provider_id",
 	"pipeline_id",
 	"model_id",
 	"runtime_id",
+	"manifest_sha256",
+	"command_sha256",
+	"input_payload_sha256",
+	"output_payload_checksum",
+	"sequential_result_sha256",
+	"stage_results_sha256",
 	"stage_count",
 	"stage_nodes",
+	"stage_inventory",
 	"payload_bytes",
 	"items",
 	"sequential_items_per_s",
@@ -33,6 +47,31 @@ REQUIRED = (
 	"quality_parity_status",
 	"quality_parity_detail",
 )
+
+
+def canonical_bytes(obj: Any) -> bytes:
+	return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def sha256_obj(obj: Any) -> str:
+	return "sha256:" + hashlib.sha256(canonical_bytes(obj)).hexdigest()
+
+
+def sha256_zero_bytes(size: int) -> str:
+	h = hashlib.sha256()
+	chunk = b"\x00" * 65536
+	remaining = max(0, size)
+	while remaining > 0:
+		n = min(remaining, len(chunk))
+		h.update(chunk[:n])
+		remaining -= n
+	return "sha256:" + h.hexdigest()
+
+
+def artifact_sha256(obj: dict[str, Any]) -> str:
+	tmp = copy.deepcopy(obj)
+	tmp.pop("artifact_sha256", None)
+	return sha256_obj(tmp)
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -61,13 +100,26 @@ def validate_run(obj: dict[str, Any]) -> list[str]:
 	for key in REQUIRED:
 		if key not in obj:
 			errors.append(f"missing required field: {key}")
+	for key in FIXED_SPARK_COUNT_FIELDS:
+		if key in obj:
+			errors.append(f"top-level fixed Spark count field is not allowed: {key}")
 	if obj.get("format") != FORMAT:
 		errors.append(f"format must be {FORMAT}")
+	for key in ("run_id", "provider_id", "pipeline_id", "model_id", "runtime_id"):
+		if not isinstance(obj.get(key), str) or obj.get(key, "").strip() == "":
+			errors.append(f"{key} must be a non-empty string")
+	if obj.get("artifact_schema_version") != SCHEMA_VERSION:
+		errors.append(f"artifact_schema_version must be {SCHEMA_VERSION}")
+	if obj.get("artifact_sha256") != artifact_sha256(obj):
+		errors.append("artifact_sha256 does not match canonical artifact body")
 	stage_nodes = obj.get("stage_nodes")
 	if not isinstance(stage_nodes, list) or len(stage_nodes) == 0:
 		errors.append("stage_nodes must be a non-empty list")
 	elif int(obj.get("stage_count", -1)) != len(stage_nodes):
 		errors.append("stage_count must equal len(stage_nodes)")
+	stage_inventory = obj.get("stage_inventory")
+	if not isinstance(stage_inventory, list) or len(stage_inventory) != int(obj.get("stage_count", -1)):
+		errors.append("stage_inventory must contain one entry per stage")
 	q = obj.get("quality_parity_status")
 	if q not in QUALITY:
 		errors.append("quality_parity_status must be not_run, passed, or failed")
@@ -83,6 +135,12 @@ def validate_run(obj: dict[str, Any]) -> list[str]:
 		errors.append("stage_balance_ratio must be > 0")
 	if obj.get("quality_parity_detail") is None:
 		errors.append("quality_parity_detail must not be null")
+	for key in ("manifest_sha256", "command_sha256", "input_payload_sha256", "sequential_result_sha256", "stage_results_sha256"):
+		value = obj.get(key)
+		if not isinstance(value, str) or not value.startswith("sha256:"):
+			errors.append(f"{key} must be a sha256: string")
+	if not isinstance(obj.get("output_payload_checksum"), str) or obj.get("output_payload_checksum") == "":
+		errors.append("output_payload_checksum must be a non-empty string")
 	return errors
 
 
@@ -124,17 +182,36 @@ def build_run(
 	mean_interval = sum(intervals) / float(len(intervals))
 	slowest_idx = max(range(len(norm)), key=lambda i: intervals[i])
 	pipeline_wall_us = max(as_float(stage, "elapsed_us") for stage in norm)
+	sequential_active_us = as_float(sequential, "active_us")
 	ideal_wall_us = max(intervals) * float(max(1, as_int(sink, "items")))
 	bubble = max(0.0, pipeline_wall_us - ideal_wall_us) / pipeline_wall_us if pipeline_wall_us > 0.0 else 0.0
-	return {
+	payload_bytes = as_int(sink, "payload_bytes")
+	stage_inventory = [
+		{
+			"stage_id": i,
+			"node_id": str(norm[i].get("node") or stage_nodes[i]),
+			"rank": as_int(norm[i], "rank"),
+		}
+		for i in range(len(norm))
+	]
+	run = {
 		"format": FORMAT,
+		"artifact_schema_version": SCHEMA_VERSION,
 		"run_id": str(manifest.get("run_id", "")),
+		"provider_id": str(manifest.get("provider_id", "")),
 		"pipeline_id": str(manifest.get("pipeline_id", "")),
 		"model_id": str(manifest.get("model_id", "")),
 		"runtime_id": str(manifest.get("runtime_id", "")),
+		"manifest_sha256": sha256_obj(manifest),
+		"command_sha256": sha256_obj(manifest.get("command", {})),
+		"input_payload_sha256": str(manifest.get("input_payload_sha256") or sha256_zero_bytes(payload_bytes)),
+		"output_payload_checksum": str(sink.get("payload_checksum", "")),
+		"sequential_result_sha256": sha256_obj(sequential),
+		"stage_results_sha256": sha256_obj(norm),
 		"stage_count": len(norm),
 		"stage_nodes": stage_nodes,
-		"payload_bytes": as_int(sink, "payload_bytes"),
+		"stage_inventory": stage_inventory,
+		"payload_bytes": payload_bytes,
 		"items": as_int(sink, "items"),
 		"microbatches": as_int(sink, "items"),
 		"sequential_items_per_s": seq_tps,
@@ -144,10 +221,17 @@ def build_run(
 		"transfer_or_payload_GBps": as_float(sink, "payload_GBps"),
 		"slowest_stage_id": norm[slowest_idx].get("node", slowest_idx),
 		"stage_balance_ratio": max(intervals) / mean_interval if mean_interval > 0.0 else 0.0,
+		"timing_summary_us": {
+			"pipeline_wall_us": pipeline_wall_us,
+			"sequential_active_us": sequential_active_us,
+			"slowest_stage_interval_us": intervals[slowest_idx],
+		},
 		"quality_parity_status": quality_status,
 		"quality_parity_detail": quality_detail,
 		"stage_results": norm,
 	}
+	run["artifact_sha256"] = artifact_sha256(run)
+	return run
 
 
 def cmd_combine(args: argparse.Namespace) -> int:
