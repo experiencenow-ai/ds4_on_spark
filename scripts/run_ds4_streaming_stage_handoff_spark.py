@@ -497,6 +497,8 @@ def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[d
 		picked = [values[mb] for mb in steady_resource_indices if mb < len(values)]
 		avg = sum(picked) / len(picked) if picked else 0.0
 		stage_resources.append((avg, s))
+	stage_resource_values = [v for v, _s in stage_resources if v > 0]
+	stage_balance_ratio = (max(stage_resource_values) / min(stage_resource_values)) if stage_resource_values else 0.0
 	link_resources = []
 	for link, values in enumerate(transfer_ms):
 		picked = [values[mb] for mb in steady_resource_indices if mb < len(values)]
@@ -530,6 +532,7 @@ def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[d
 		"steady_state_pipeline_bound_rows_per_s": steady_bound,
 		"slowest_stage_id": int(slowest_stage[1]),
 		"slowest_stage_service_ms": float(slowest_stage[0]),
+		"stage_balance_ratio": stage_balance_ratio,
 		"slowest_resource_kind": slowest_kind,
 		"slowest_resource_id": slowest_id,
 		"slowest_resource_service_ms": slowest_value,
@@ -586,6 +589,7 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"steady_state_pipeline_bound_rows_per_s": schedule["steady_state_pipeline_bound_rows_per_s"],
 		"slowest_stage_id": schedule["slowest_stage_id"],
 		"slowest_stage_service_ms": schedule["slowest_stage_service_ms"],
+		"stage_balance_ratio": schedule["stage_balance_ratio"],
 		"slowest_resource_kind": schedule["slowest_resource_kind"],
 		"slowest_resource_id": schedule["slowest_resource_id"],
 		"slowest_resource_service_ms": schedule["slowest_resource_service_ms"],
@@ -611,6 +615,7 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"final_output_finite": finite,
 		"parity_status": "not_run",
 		"parity_scope": "stage_handoff_finite_logits",
+		"parity_blocker": "missing_repo_owned_split_forward_runtime_hook",
 		"production_generation_eligible": False,
 		"stale_lock_preflight": lock_results,
 		"blocker_kind": "none" if finite else "nonfinite_final_output",
@@ -651,6 +656,7 @@ def build_failure_artifact(args: argparse.Namespace, stages: list[Stage], outdir
 		"fill_ms": 0.0,
 		"drain_ms": 0.0,
 		"slowest_stage_id": None,
+		"stage_balance_ratio": 0.0,
 		"slowest_resource_kind": "",
 		"slowest_resource_id": None,
 		"slowest_resource_service_ms": 0.0,
@@ -660,6 +666,7 @@ def build_failure_artifact(args: argparse.Namespace, stages: list[Stage], outdir
 		"final_output_finite": False,
 		"parity_status": "not_run",
 		"parity_scope": "stage_handoff_finite_logits",
+		"parity_blocker": "missing_repo_owned_split_forward_runtime_hook",
 		"production_generation_eligible": False,
 		"stale_lock_preflight": lock_results,
 		"blocker_kind": blocker_kind,

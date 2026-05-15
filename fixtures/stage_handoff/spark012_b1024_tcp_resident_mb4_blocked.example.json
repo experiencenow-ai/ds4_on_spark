@@ -32,6 +32,7 @@
   "microbatch_count": 4,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
   "observed_steady_state_rows_per_s": 0.0,
+  "parity_blocker": "missing_repo_owned_split_forward_runtime_hook",
   "parity_scope": "stage_handoff_finite_logits",
   "parity_status": "not_run",
   "pipeline_depth": 3,
