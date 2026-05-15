@@ -103,6 +103,15 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - `DS4_CUDA_STACK_PROBE_INPUT_HC_FILE=/path/boundary.bin` imports that boundary for the next stage
     - emits boundary metadata in the probe JSON so handoff artifacts can prove finite final logits/hash
 
+- `ds4-3630e64-cuda-stage-handoff-streaming.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the stage-handoff files patch
+  - Purpose:
+    - allows `%u` in boundary input/output paths so one resident stage process can process multiple microbatches without restarting
+    - adds `DS4_CUDA_STACK_PROBE_INPUT_WAIT_MS` so downstream stages can wait for upstream boundary files
+    - writes one boundary file per microbatch and reads one boundary file per microbatch
+    - emits `iter_ms`, `out_fnv64s`, `out_nonfinites`, `logits_fnv64s`, and `logits_nonfinites` arrays for streaming schedule reconstruction
+    - keeps PP=1 parity separate; the streaming handoff proof is finite-logits evidence, not provider eligibility
+
 Apply (example):
 
 ```bash
@@ -118,6 +127,7 @@ git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stage-range-preload.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-explicit-stage-preload.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-files.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-streaming.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
@@ -143,6 +153,7 @@ python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_probe_patch.py
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stack_stage_preload_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stage-range-preload.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_explicit_stage_preload_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-explicit-stage-preload.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stage_handoff_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-files.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stage_handoff_streaming_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-streaming.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 

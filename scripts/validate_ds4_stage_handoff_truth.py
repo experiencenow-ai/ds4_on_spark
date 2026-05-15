@@ -85,13 +85,72 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 	else:
 		if obj.get("blocker_kind") in (None, "", "none"):
 			errors.append("failed handoff requires a blocker_kind")
-	if isinstance(stage_ms, list) and all(isinstance(v, (int, float)) and v > 0 for v in stage_ms):
+	if obj.get("streaming_pipeline") is not True and isinstance(stage_ms, list) and all(isinstance(v, (int, float)) and v > 0 for v in stage_ms):
 		batch = obj.get("batch_size")
 		bound = obj.get("pipeline_rows_per_s_bound")
 		if isinstance(batch, int) and batch > 0 and isinstance(bound, (int, float)):
 			expected = batch * 1000.0 / max(float(v) for v in stage_ms)
 			if not math.isclose(float(bound), expected, rel_tol=0.001, abs_tol=0.001):
 				errors.append("pipeline_rows_per_s_bound does not match slowest stage")
+	if obj.get("streaming_pipeline") is True:
+		if obj.get("transport_kind") != "tcp_binary":
+			errors.append("streaming handoff requires transport_kind=tcp_binary")
+		microbatches = obj.get("microbatch_count")
+		depth = obj.get("pipeline_depth")
+		if not isinstance(microbatches, int) or microbatches <= 0:
+			errors.append("streaming handoff requires positive microbatch_count")
+		if not isinstance(depth, int) or depth <= 0:
+			errors.append("streaming handoff requires positive pipeline_depth")
+		if isinstance(microbatches, int) and isinstance(depth, int) and depth > microbatches:
+			errors.append("pipeline_depth must not exceed microbatch_count")
+		for key in ["achieved_streaming_rows_per_s", "bubble_overhead_ratio"]:
+			if not isinstance(obj.get(key), (int, float)):
+				errors.append(f"streaming handoff requires numeric {key}")
+		transfers = obj.get("transfer_ms_by_boundary")
+		if not isinstance(transfers, list) or not isinstance(stage_count, int) or len(transfers) != max(stage_count - 1, 0):
+			errors.append("transfer_ms_by_boundary length must match stage_count-1")
+		elif isinstance(microbatches, int):
+			for idx, link in enumerate(transfers):
+				if not isinstance(link, list) or len(link) != microbatches:
+					errors.append(f"transfer_ms_by_boundary[{idx}] length must match microbatch_count")
+				elif not all(isinstance(v, (int, float)) and v >= 0 for v in link):
+					errors.append(f"transfer_ms_by_boundary[{idx}] must contain non-negative numbers")
+		hashes = obj.get("final_logits_hashes")
+		if not isinstance(hashes, list) or not isinstance(microbatches, int) or len(hashes) != microbatches:
+			errors.append("final_logits_hashes length must match microbatch_count")
+		elif not all(isinstance(v, str) and v.startswith("fnv64:") and not v.endswith("0000000000000000") for v in hashes):
+			errors.append("final_logits_hashes must contain non-zero fnv64 hashes")
+		if obj.get("parity_scope") not in (None, "stage_handoff_finite_logits"):
+			errors.append("streaming handoff parity_scope must be stage_handoff_finite_logits when present")
+		if obj.get("parity_status") not in (None, "not_run"):
+			errors.append("streaming handoff parity_status must remain not_run")
+		stage_iters = obj.get("stage_ms_by_microbatch")
+		bound = obj.get("pipeline_rows_per_s_bound")
+		batch = obj.get("batch_size")
+		if (
+			isinstance(stage_iters, list)
+			and isinstance(transfers, list)
+			and isinstance(batch, int)
+			and batch > 0
+			and isinstance(bound, (int, float))
+		):
+			service: list[float] = []
+			for idx, values in enumerate(stage_iters):
+				if not isinstance(values, list):
+					errors.append(f"stage_ms_by_microbatch[{idx}] must be a list")
+					continue
+				for mb, value in enumerate(values):
+					if not isinstance(value, (int, float)) or value <= 0:
+						errors.append(f"stage_ms_by_microbatch[{idx}][{mb}] must be positive")
+						continue
+					total = float(value)
+					if idx + 1 < len(stage_iters) and isinstance(transfers[idx], list) and mb < len(transfers[idx]):
+						total += float(transfers[idx][mb])
+					service.append(total)
+			if service:
+				expected = batch * 1000.0 / max(service)
+				if not math.isclose(float(bound), expected, rel_tol=0.001, abs_tol=0.001):
+					errors.append("pipeline_rows_per_s_bound does not match streaming service bottleneck")
 	return errors
 
 
