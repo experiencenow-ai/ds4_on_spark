@@ -1,0 +1,257 @@
+diff --git a/ds4.c b/ds4.c
+index d3a3c3b..808581b 100644
+--- a/ds4.c
++++ b/ds4.c
+@@ -16793,6 +16793,140 @@ static bool cuda_stack_probe_include_head(void) {
+     return getenv("DS4_CUDA_STACK_PROBE_NO_HEAD") == NULL;
+ }
+ 
++static uint32_t cuda_stack_probe_layer_bound(const char *name, uint32_t fallback) {
++    const char *env = getenv(name);
++    if (!env || !env[0]) return fallback;
++    char *end = NULL;
++    unsigned long v = strtoul(env, &end, 10);
++    if (end == env || v > DS4_N_LAYER) return fallback;
++    return (uint32_t)v;
++}
++
++static uint32_t cuda_stack_probe_layer_begin(void) {
++    return cuda_stack_probe_layer_bound("DS4_CUDA_STACK_PROBE_LAYER_BEGIN", 0u);
++}
++
++static uint32_t cuda_stack_probe_layer_end(void) {
++    const uint32_t begin = cuda_stack_probe_layer_begin();
++    uint32_t end = cuda_stack_probe_layer_bound("DS4_CUDA_STACK_PROBE_LAYER_END", DS4_N_LAYER);
++    if (end < begin) end = begin;
++    return end;
++}
++
++static bool cuda_stack_probe_stage_has_head(void) {
++    return cuda_stack_probe_include_head() && cuda_stack_probe_layer_end() == DS4_N_LAYER;
++}
++
++static bool cuda_stack_probe_preload_stage_enabled(void) {
++    return getenv("DS4_CUDA_STACK_PROBE_PRELOAD_STAGE") != NULL;
++}
++
++static uint64_t cuda_stack_probe_preload_chunk_bytes(void) {
++    const char *env = getenv("DS4_CUDA_STACK_PROBE_PRELOAD_CHUNK_MB");
++    uint64_t mb = 64;
++    if (env && env[0]) {
++        char *end = NULL;
++        unsigned long long v = strtoull(env, &end, 10);
++        if (end != env && v > 0) mb = (uint64_t)v;
++    }
++    if (mb < 4) mb = 4;
++    if (mb > 512) mb = 512;
++    return mb * 1048576ull;
++}
++
++static void cuda_stack_probe_preload_pause(void) {
++    const char *env = getenv("DS4_CUDA_STACK_PROBE_PRELOAD_SLEEP_US");
++    if (!env || !env[0]) return;
++    char *end = NULL;
++    unsigned long v = strtoul(env, &end, 10);
++    if (end == env || v == 0 || v > 1000000ul) return;
++    usleep((useconds_t)v);
++}
++
++static bool cuda_stack_probe_cache_tensor(
++        const ds4_model  *model,
++        const ds4_tensor *t,
++        const char       *label,
++        uint64_t         *bytes_out,
++        uint32_t         *tensors_out) {
++    const uint64_t chunk_bytes = cuda_stack_probe_preload_chunk_bytes();
++    uint64_t done = 0;
++    uint32_t chunk = 0;
++    char chunk_label[128];
++    if (!t || t->bytes == 0) return true;
++    if (t->abs_offset > model->size || t->bytes > model->size - t->abs_offset) return false;
++    while (done < t->bytes) {
++        uint64_t n = t->bytes - done;
++        if (n > chunk_bytes) n = chunk_bytes;
++        snprintf(chunk_label, sizeof(chunk_label), "%s_c%u", label, chunk);
++        if (ds4_gpu_cache_model_range(model->map, model->size, t->abs_offset + done, n, chunk_label) == 0) return false;
++        done += n;
++        chunk++;
++        cuda_stack_probe_preload_pause();
++    }
++    if (bytes_out) *bytes_out += t->bytes;
++    if (tensors_out) (*tensors_out)++;
++    return true;
++}
++
++static bool cuda_stack_probe_preload_layer(
++        const ds4_model         *model,
++        const ds4_layer_weights *layer,
++        uint32_t                 il,
++        uint64_t                *bytes_out,
++        uint32_t                *tensors_out) {
++    const ds4_tensor *tensors[] = {
++        layer->hc_attn_fn, layer->hc_attn_scale, layer->hc_attn_base,
++        layer->attn_norm, layer->attn_q_a, layer->attn_q_a_norm,
++        layer->attn_q_b, layer->attn_kv, layer->attn_kv_a_norm,
++        layer->attn_sinks, layer->attn_output_a, layer->attn_output_b,
++        layer->attn_compressor_ape, layer->attn_compressor_kv,
++        layer->attn_compressor_gate, layer->attn_compressor_norm,
++        layer->indexer_attn_q_b, layer->indexer_proj,
++        layer->indexer_compressor_ape, layer->indexer_compressor_kv,
++        layer->indexer_compressor_gate, layer->indexer_compressor_norm,
++        layer->hc_ffn_fn, layer->hc_ffn_scale, layer->hc_ffn_base,
++        layer->ffn_norm, layer->ffn_gate_tid2eid, layer->ffn_gate_inp,
++        layer->ffn_exp_probs_b, layer->ffn_gate_exps, layer->ffn_up_exps,
++        layer->ffn_down_exps, layer->ffn_gate_shexp, layer->ffn_up_shexp,
++        layer->ffn_down_shexp,
++    };
++    char label[96];
++    for (uint32_t i = 0; i < sizeof(tensors) / sizeof(tensors[0]); i++) {
++        snprintf(label, sizeof(label), "stack_stage_l%u_t%u", il, i);
++        if (!cuda_stack_probe_cache_tensor(model, tensors[i], label, bytes_out, tensors_out)) return false;
++    }
++    return true;
++}
++
++static bool cuda_stack_probe_preload_stage(
++        const ds4_model   *model,
++        const ds4_weights *weights) {
++    const uint32_t begin = cuda_stack_probe_layer_begin();
++    const uint32_t end = cuda_stack_probe_layer_end();
++    uint64_t bytes = 0;
++    uint32_t tensors = 0;
++    if (begin >= end || end > DS4_N_LAYER) return false;
++    for (uint32_t il = begin; il < end; il++) {
++        if (!cuda_stack_probe_preload_layer(model, &weights->layer[il], il, &bytes, &tensors)) return false;
++    }
++    if (cuda_stack_probe_stage_has_head()) {
++        if (!cuda_stack_probe_cache_tensor(model, weights->output_hc_base, "stack_stage_output_hc_base", &bytes, &tensors)) return false;
++        if (!cuda_stack_probe_cache_tensor(model, weights->output_hc_fn, "stack_stage_output_hc_fn", &bytes, &tensors)) return false;
++        if (!cuda_stack_probe_cache_tensor(model, weights->output_hc_scale, "stack_stage_output_hc_scale", &bytes, &tensors)) return false;
++        if (!cuda_stack_probe_cache_tensor(model, weights->output_norm, "stack_stage_output_norm", &bytes, &tensors)) return false;
++        if (!cuda_stack_probe_cache_tensor(model, weights->output, "stack_stage_output", &bytes, &tensors)) return false;
++    }
++    if (ds4_gpu_synchronize() == 0) return false;
++    fprintf(stderr,
++            "ds4: CUDA stack stage preload cached layers [%u,%u) %u tensors %.2f GiB including routed experts\n",
++            begin,
++            end,
++            tensors,
++            (double)bytes / 1073741824.0);
++    return true;
++}
++
+ static bool cuda_decode_stack_probe_run(
+         ds4_gpu_graph       *g,
+         const ds4_model     *model,
+@@ -16804,8 +16938,10 @@ static bool cuda_decode_stack_probe_run(
+     const uint32_t raw_row = pos % g->raw_cap;
+     const uint32_t n_raw = metal_graph_raw_span_for_batch(g, pos, 1);
+     const uint32_t split_layers = cuda_stack_probe_split_layers();
++    const uint32_t begin = cuda_stack_probe_layer_begin();
++    const uint32_t end = cuda_stack_probe_layer_end();
+     bool ok = ds4_gpu_begin_commands() != 0;
+-    for (uint32_t il = 0; ok && il < DS4_N_LAYER; il++) {
++    for (uint32_t il = begin; ok && il < end; il++) {
+         ok = metal_graph_encode_decode_layer(g,
+                                              model,
+                                              &weights->layer[il],
+@@ -16824,7 +16960,7 @@ static bool cuda_decode_stack_probe_run(
+             ok = ds4_gpu_flush_commands() != 0;
+         }
+     }
+-    if (ok && cuda_stack_probe_include_head()) {
++    if (ok && cuda_stack_probe_stage_has_head()) {
+         ok = metal_graph_encode_output_head(g, model, weights, weights->output->dim[1]);
+     }
+     if (ok) {
+@@ -16842,8 +16978,10 @@ static bool cuda_batch_stack_probe_run(
+         const ds4_weights   *weights,
+         uint32_t             n_tokens) {
+     const uint32_t split_layers = cuda_stack_probe_split_layers();
++    const uint32_t begin = cuda_stack_probe_layer_begin();
++    const uint32_t end = cuda_stack_probe_layer_end();
+     bool ok = ds4_gpu_begin_commands() != 0;
+-    for (uint32_t il = 0; ok && il < DS4_N_LAYER; il++) {
++    for (uint32_t il = begin; ok && il < end; il++) {
+         ok = metal_graph_encode_layer_batch(g, model, &weights->layer[il], il, 0, n_tokens);
+         if (ok && split_layers != 0 && il + 1u < DS4_N_LAYER &&
+             ((il + 1u) % split_layers) == 0u) {
+@@ -16852,12 +16990,12 @@ static bool cuda_batch_stack_probe_run(
+     }
+     ds4_gpu_tensor *last_hc = NULL;
+     ds4_gpu_tensor *saved_cur = g->cur_hc;
+-    if (ok && cuda_stack_probe_include_head()) {
++    if (ok && cuda_stack_probe_stage_has_head()) {
+         const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
+         last_hc = metal_graph_tensor_row_view(g->batch_cur_hc, n_tokens - 1u, hc_dim);
+         ok = last_hc != NULL;
+     }
+-    if (ok && cuda_stack_probe_include_head()) {
++    if (ok && cuda_stack_probe_stage_has_head()) {
+         g->cur_hc = last_hc;
+         ok = metal_graph_encode_output_head(g, model, weights, weights->output->dim[1]);
+         g->cur_hc = saved_cur;
+@@ -16938,7 +17076,12 @@ int ds4_engine_cuda_decode_stack_probe(ds4_engine *e, uint32_t pos, uint32_t ite
+     uint32_t n_comp_base[DS4_N_LAYER];
+     uint32_t n_index_base[DS4_N_LAYER];
+     ds4_gpu_graph g;
+-    bool ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, 1, false);
++    memset(&g, 0, sizeof(g));
++    bool ok = true;
++    if (cuda_stack_probe_preload_stage_enabled()) {
++        ok = cuda_stack_probe_preload_stage(model, weights);
++    }
++    if (ok) ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, 1, false);
+     if (ok) ok = cuda_stack_probe_reset_compressor_state(&g);
+     if (ok) ok = cuda_decode_stack_probe_seed(&g, pos, n_comp_base, n_index_base);
+     if (ok) ok = ds4_gpu_synchronize() != 0;
+@@ -16962,7 +17105,7 @@ int ds4_engine_cuda_decode_stack_probe(ds4_engine *e, uint32_t pos, uint32_t ite
+     uint64_t logits_hash = 0;
+     uint64_t hc_nonfinite = 0;
+     uint64_t logits_nonfinite = 0;
+-    const bool include_head = cuda_stack_probe_include_head();
++    const bool include_head = cuda_stack_probe_stage_has_head();
+     if (ok) {
+         ok = ds4_gpu_tensor_read(g.cur_hc, 0, host_hc, hc_bytes) != 0;
+         if (ok && include_head) ok = ds4_gpu_tensor_read(g.logits, 0, host_logits, logits_bytes) != 0;
+@@ -16978,7 +17121,7 @@ int ds4_engine_cuda_decode_stack_probe(ds4_engine *e, uint32_t pos, uint32_t ite
+     if (ok) {
+         const double avg_ms = total_ms / (double)iterations;
+         printf("{\"cuda_decode_stack_probe\":true,\"layers\":%u,\"pos\":%u,\"iterations\":%u,\"raw_cap\":%u,\"includes_output_head\":%s,\"avg_ms\":%.3f,\"best_ms\":%.3f,\"best_tokens_per_s\":%.3f,\"hc_fnv64\":\"%016" PRIx64 "\",\"hc_nonfinite\":%" PRIu64 ",\"logits_fnv64\":\"%016" PRIx64 "\",\"logits_nonfinite\":%" PRIu64 "}\n",
+-               (uint32_t)DS4_N_LAYER,
++               cuda_stack_probe_layer_end() - cuda_stack_probe_layer_begin(),
+                pos,
+                iterations,
+                raw_cap,
+@@ -17149,7 +17292,12 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t
+     uint8_t *host_logits = xmalloc((size_t)logits_bytes);
+     cuda_moe_probe_fill(host_hc, host_tokens, n_tokens, (uint32_t)hc_dim);
+     ds4_gpu_graph g;
+-    bool ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, n_tokens, false);
++    memset(&g, 0, sizeof(g));
++    bool ok = true;
++    if (cuda_stack_probe_preload_stage_enabled()) {
++        ok = cuda_stack_probe_preload_stage(model, weights);
++    }
++    if (ok) ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, n_tokens, false);
+     if (ok) ok = ds4_gpu_tensor_write(g.prefill_tokens, 0, host_tokens, (uint64_t)n_tokens * sizeof(int32_t)) != 0;
+     if (ok) ok = ds4_gpu_synchronize() != 0;
+     double total_ms = 0.0;
+@@ -17172,7 +17320,7 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t
+     uint64_t logits_hash = 0;
+     uint64_t out_nonfinite = 0;
+     uint64_t logits_nonfinite = 0;
+-    const bool include_head = cuda_stack_probe_include_head();
++    const bool include_head = cuda_stack_probe_stage_has_head();
+     if (ok) {
+         ok = ds4_gpu_tensor_read(g.batch_cur_hc, 0, host_out, hc_bytes) != 0;
+         if (ok && include_head) ok = ds4_gpu_tensor_read(g.logits, 0, host_logits, logits_bytes) != 0;
+@@ -17188,7 +17336,7 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t
+     if (ok) {
+         const double avg_ms = total_ms / (double)iterations;
+         printf("{\"cuda_batch_stack_probe\":true,\"layers\":%u,\"tokens\":%u,\"iterations\":%u,\"raw_cap\":%u,\"ctx_size\":%u,\"includes_one_output_head\":%s,\"avg_ms\":%.3f,\"best_ms\":%.3f,\"best_rows_per_s\":%.3f,\"out_fnv64\":\"%016" PRIx64 "\",\"out_nonfinite\":%" PRIu64 ",\"logits_fnv64\":\"%016" PRIx64 "\",\"logits_nonfinite\":%" PRIu64 "}\n",
+-               (uint32_t)DS4_N_LAYER,
++               cuda_stack_probe_layer_end() - cuda_stack_probe_layer_begin(),
+                n_tokens,
+                iterations,
+                raw_cap,
