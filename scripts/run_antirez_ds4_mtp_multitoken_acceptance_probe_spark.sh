@@ -33,6 +33,7 @@ fi
 HELPER_LOCAL="$repo_root/scripts/antirez_ds4_mtp_acceptance_probe_patch.sh"
 PATCH_Q4K_LOCAL="$repo_root/docs/antirez-patches/ds4-3630e64-cuda-mtp-q4k-and-sidecar-map.patch"
 PATCH_CACHE_LOCAL="$repo_root/docs/antirez-patches/ds4-3630e64-cuda-multi-model-cache.patch"
+PATCH_VERIFY_LOCAL="$repo_root/docs/antirez-patches/ds4-3630e64-mtp-decode2-default-verifier.patch"
 EXTRACTOR_LOCAL="$repo_root/scripts/extract_antirez_ds4_mtp_conf_log.py"
 SLOWPATH_LOCAL="$repo_root/scripts/build_ds4_mtp_slowpath_report.py"
 SLOWPATH_VALIDATOR_LOCAL="$repo_root/scripts/validate_ds4_mtp_slowpath.py"
@@ -77,6 +78,7 @@ REPORT_MD="$OUT_DIR/antirez_ds4_mtp_multitoken_acceptance_probe_spark.md"
 	echo
 	echo "- $PATCH_Q4K_LOCAL"
 	echo "- $PATCH_CACHE_LOCAL"
+	echo "- $PATCH_VERIFY_LOCAL"
 	echo
 } >"$REPORT_MD"
 
@@ -84,7 +86,7 @@ if [ ! -r "$HELPER_LOCAL" ]; then
 	echo "helper not readable: $HELPER_LOCAL"
 	exit 2
 fi
-if [ ! -r "$PATCH_Q4K_LOCAL" ] || [ ! -r "$PATCH_CACHE_LOCAL" ] || [ ! -r "$EXTRACTOR_LOCAL" ] || [ ! -r "$SLOWPATH_LOCAL" ] || [ ! -r "$SLOWPATH_VALIDATOR_LOCAL" ]; then
+if [ ! -r "$PATCH_Q4K_LOCAL" ] || [ ! -r "$PATCH_CACHE_LOCAL" ] || [ ! -r "$PATCH_VERIFY_LOCAL" ] || [ ! -r "$EXTRACTOR_LOCAL" ] || [ ! -r "$SLOWPATH_LOCAL" ] || [ ! -r "$SLOWPATH_VALIDATOR_LOCAL" ]; then
 	echo "missing local file(s): helper/patches/extractor/slowpath"
 	exit 3
 fi
@@ -99,13 +101,17 @@ ssh $SSH_OPTS "$target" 'cat > /tmp/ds4_cuda_mtp_q4k_and_sidecar_map.patch' \
 ssh $SSH_OPTS "$target" 'cat > /tmp/ds4_cuda_multi_model_cache.patch' \
 	<"$PATCH_CACHE_LOCAL" \
 	>"$OUT_DIR/remote_upload_patch_cache_stdout.txt" 2>"$OUT_DIR/remote_upload_patch_cache_stderr.txt" || true
+ssh $SSH_OPTS "$target" 'cat > /tmp/ds4_mtp_decode2_default_verifier.patch' \
+	<"$PATCH_VERIFY_LOCAL" \
+	>"$OUT_DIR/remote_upload_patch_verify_stdout.txt" 2>"$OUT_DIR/remote_upload_patch_verify_stderr.txt" || true
 
 echo "== running antirez/ds4 acceptance probe on spark (may be gated) =="
 ssh $SSH_OPTS "$target" "$REMOTE_ANTIREZ_DS4_MTP_ACCEPT_ENV sh -lc '
 set -eu
 PATCH_Q4K_FILE=/tmp/ds4_cuda_mtp_q4k_and_sidecar_map.patch
 PATCH_CACHE_FILE=/tmp/ds4_cuda_multi_model_cache.patch
-export PATCH_Q4K_FILE PATCH_CACHE_FILE
+PATCH_VERIFY_FILE=/tmp/ds4_mtp_decode2_default_verifier.patch
+export PATCH_Q4K_FILE PATCH_CACHE_FILE PATCH_VERIFY_FILE
 /tmp/antirez_ds4_mtp_multitoken_acceptance_probe.sh
 ' " \
 	>"$OUT_DIR/remote_probe_stdout.txt" 2>"$OUT_DIR/remote_probe_stderr.txt" || true

@@ -9,7 +9,9 @@ DS4_COMMIT="${DS4_COMMIT:-3630e64}"
 
 PATCH_Q4K_FILE="${PATCH_Q4K_FILE:-/tmp/ds4_cuda_mtp_q4k_and_sidecar_map.patch}"
 PATCH_CACHE_FILE="${PATCH_CACHE_FILE:-/tmp/ds4_cuda_multi_model_cache.patch}"
+PATCH_VERIFY_FILE="${PATCH_VERIFY_FILE:-/tmp/ds4_mtp_decode2_default_verifier.patch}"
 APPLY_CACHE_PATCH="${APPLY_CACHE_PATCH:-1}"
+APPLY_VERIFY_PATCH="${APPLY_VERIFY_PATCH:-1}"
 
 TRUNK_GGUF="${TRUNK_GGUF:-}"
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
@@ -97,6 +99,11 @@ if [ "$APPLY_CACHE_PATCH" = "1" ]; then
 	apply_patch_file "$PATCH_CACHE_FILE" "cuda-multi-model-cache"
 else
 	note "patch skipped (APPLY_CACHE_PATCH=0): cuda-multi-model-cache"
+fi
+if [ "$APPLY_VERIFY_PATCH" = "1" ]; then
+	apply_patch_file "$PATCH_VERIFY_FILE" "mtp-decode2-default-verifier"
+else
+	note "patch skipped (APPLY_VERIFY_PATCH=0): mtp-decode2-default-verifier"
 fi
 
 if [ "$ALLOW_BUILD" != "1" ]; then
