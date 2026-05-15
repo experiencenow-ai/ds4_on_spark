@@ -5,7 +5,7 @@ index f0f8cc1..2855d5f 100644
 @@ -1372,7 +1372,7 @@ static uint64_t accelerator_cuda_preload_span_bytes(void) {
      return mb * 1048576ull;
  }
- 
+
 -static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *cached_out) {
 +static bool accelerator_cache_model_tensor_spans(const ds4_model *m, bool best_effort, uint64_t *cached_out) {
      accelerator_tensor_span *spans = xmalloc((size_t)m->n_tensors * sizeof(spans[0]));
@@ -30,14 +30,14 @@ index f0f8cc1..2855d5f 100644
 @@ -1423,7 +1432,7 @@ static bool accelerator_cache_model_tensor_spans(const ds4_model *m, uint64_t *c
      return true;
  }
- 
+
 -static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model *m) {
 +static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model *m, bool best_effort) {
      if (backend != DS4_BACKEND_CUDA) return true;
      if (!m || !m->map || m->size == 0) return false;
      if (getenv("DS4_CUDA_DIRECT_MODEL") != NULL) {
 @@ -1432,7 +1441,7 @@ static bool accelerator_cache_model_tensors(ds4_backend backend, const ds4_model
- 
+
      const double t0 = now_sec();
      uint64_t cached = 0;
 -    if (!accelerator_cache_model_tensor_spans(m, &cached)) return false;
@@ -122,7 +122,7 @@ index 34c68c7..41ecd3e 100644
 @@ -114,13 +120,30 @@ struct cuda_q8_f32_range {
      float *device_ptr;
  };
- 
+
 +struct cuda_model_offset_key {
 +    const void *host_base;
 +    int fd;
@@ -161,11 +161,11 @@ index 34c68c7..41ecd3e 100644
 +static int cuda_model_fd_for_map(const void *model_map);
 +static uint64_t cuda_model_direct_align_for_map(const void *model_map);
  static uint64_t g_model_stage_bytes;
- 
+
  static int cuda_ok(cudaError_t err, const char *what);
 @@ -196,8 +222,9 @@ static const char *cuda_model_range_ptr(const void *model_map, uint64_t offset,
      if (direct_env && direct_env[0]) return cuda_model_ptr(model_map, offset);
- 
+
      const uint64_t end = offset + bytes;
 -    auto exact = g_model_range_by_offset.find(offset);
 -    if (exact != g_model_range_by_offset.end()) {
@@ -257,7 +257,7 @@ index 34c68c7..41ecd3e 100644
 @@ -651,11 +690,31 @@ static void cuda_model_discard_source_pages(const void *model_map, uint64_t mode
  #endif
  }
- 
+
 -static void cuda_model_drop_file_pages(uint64_t offset, uint64_t bytes) {
 +static cuda_model_file_state *cuda_model_file_state_mut(const void *model_map) {
 +    auto it = g_model_file_state_by_base.find(model_map);
@@ -292,7 +292,7 @@ index 34c68c7..41ecd3e 100644
 @@ -679,8 +738,9 @@ static void *cuda_align_ptr(void *ptr, uint64_t align) {
      return (void *)(((p + a - 1u) / a) * a);
  }
- 
+
 -static int cuda_model_stage_pool_alloc(uint64_t bytes) {
 -    if (g_model_stage_bytes >= bytes) return 1;
 +static int cuda_model_stage_pool_alloc(uint64_t bytes, uint64_t align) {
@@ -325,11 +325,11 @@ index 34c68c7..41ecd3e 100644
 +    g_model_stage_align = align;
      return 1;
  }
- 
+
 @@ -735,21 +797,22 @@ static int cuda_pread_full(int fd, void *buf, uint64_t bytes, uint64_t offset) {
      return 1;
  }
- 
+
 -static int cuda_model_stage_read(void *stage, uint64_t stage_bytes,
 +static int cuda_model_stage_read(const void *model_map, void *stage, uint64_t stage_bytes,
                                   uint64_t offset, uint64_t bytes,
@@ -378,7 +378,7 @@ index 34c68c7..41ecd3e 100644
 +    if (fd < 0) return 0;
 +    return cuda_pread_full(fd, stage, bytes, offset);
  }
- 
+
  static uint64_t cuda_model_cache_limit_bytes(void) {
 @@ -780,6 +845,13 @@ static uint64_t cuda_model_cache_limit_bytes(void) {
          unsigned long long v = strtoull(env, &end, 10);
@@ -420,14 +420,14 @@ index 34c68c7..41ecd3e 100644
          if (getenv("DS4_CUDA_WEIGHT_CACHE_VERBOSE")) {
 @@ -868,8 +941,9 @@ static const char *cuda_model_range_ptr_from_fd(
      cudaError_t err = cudaSuccess;
- 
+
      const uint64_t chunk = cuda_model_copy_chunk_bytes();
 -    const uint64_t stage_bytes = chunk + (g_model_direct_align > 1 ? g_model_direct_align : 1);
 -    if (!cuda_model_stage_pool_alloc(stage_bytes)) return NULL;
 +    const uint64_t stage_align = cuda_model_direct_align_for_map(model_map);
 +    const uint64_t stage_bytes = chunk + stage_align;
 +    if (!cuda_model_stage_pool_alloc(stage_bytes, stage_align)) return NULL;
- 
+
      uint64_t copied = 0;
      uint64_t chunk_idx = 0;
 @@ -886,7 +960,7 @@ static const char *cuda_model_range_ptr_from_fd(
@@ -450,7 +450,7 @@ index 34c68c7..41ecd3e 100644
          cuda_model_load_progress_note(g_model_range_bytes + copied);
 @@ -926,7 +1000,13 @@ static const char *cuda_model_range_ptr_from_fd(
      }
- 
+
      g_model_ranges.push_back({model_map, offset, bytes, dev, NULL, NULL, 0, 0, 1});
 -    g_model_range_by_offset[offset] = g_model_ranges.size() - 1u;
 +    /* Keep the largest cached range per (map,fd,offset) to avoid thrashing. */
@@ -524,7 +524,7 @@ index 34c68c7..41ecd3e 100644
 @@ -1292,19 +1371,20 @@ extern "C" int ds4_gpu_set_model_map_range(const void *model_map, uint64_t model
      return 1;
  }
- 
+
 -extern "C" int ds4_gpu_set_model_fd(int fd) {
 -    g_model_fd = fd;
 -    g_model_file_size = 0;
@@ -569,7 +569,7 @@ index 34c68c7..41ecd3e 100644
 @@ -1327,6 +1407,18 @@ extern "C" int ds4_gpu_set_model_fd(int fd) {
      return 1;
  }
- 
+
 +extern "C" int ds4_gpu_set_model_fd_for_map(const void *model_map, int fd) {
 +    if (!model_map) return 0;
 +    cuda_model_file_state &state = g_model_file_state_by_base[model_map];
@@ -590,7 +590,7 @@ index 799065a..3e82447 100644
 --- a/ds4_gpu.h
 +++ b/ds4_gpu.h
 @@ -36,6 +36,7 @@ int ds4_gpu_synchronize(void);
- 
+
  int ds4_gpu_set_model_map(const void *model_map, uint64_t model_size);
  int ds4_gpu_set_model_fd(int fd);
 +int ds4_gpu_set_model_fd_for_map(const void *model_map, int fd);
