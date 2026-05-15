@@ -1,14 +1,16 @@
 {
-  "achieved_streaming_rows_per_s": 152.77676875862682,
-  "actual_end_to_end_rows_per_s_if_measured": 152.77676875862682,
-  "artifact_dir": "/private/tmp/ds4-resident-stage-b512-mb4-20260515T1202Z",
+  "achieved_streaming_rows_per_s": 153.37418043861794,
+  "actual_end_to_end_rows_per_s_if_measured": 153.37418043861794,
+  "artifact_dir": "/private/tmp/ds4-util-b512-mb4-20260515Tsteady",
   "batch_size": 512,
   "blocker_detail": "",
   "blocker_kind": "none",
   "boundary_bytes": 33554432,
   "boundary_dtype": "f32",
   "boundary_layout": "batch,hc,hidden",
-  "bubble_overhead_ratio": 0.24375609077773852,
+  "bubble_overhead_ratio": 0.26386017489565994,
+  "drain_ms": 1966.512999999999,
+  "fill_ms": 7459.325587280273,
   "final_logits_hash": "fnv64:5c9c39e9a1665737",
   "final_logits_hashes": [
     "fnv64:5c9c39e9a1665737",
@@ -17,6 +19,11 @@
     "fnv64:5c9c39e9a1665737"
   ],
   "final_output_finite": true,
+  "final_stage_completion_intervals_ms": [
+    1962.589,
+    1964.5370000000003,
+    1966.512999999999
+  ],
   "format": "ds4-stage-handoff-truth-v1",
   "layer_ranges": [
     [
@@ -34,58 +41,64 @@
   ],
   "microbatch_count": 4,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
-  "orchestrator_wall_ms": 44760.212898254395,
+  "observed_steady_state_rows_per_s": 260.619966713265,
+  "orchestrator_wall_ms": 50912.378787994385,
   "overhead_breakdown_ms": {
-    "boundary_send_recv": 316.509485244751,
-    "coordinator_wall": 44760.212898254395,
+    "boundary_send_recv": 367.4736022949219,
+    "coordinator_wall": 50912.378787994385,
     "finalization_hash": null,
-    "stage_compute": 25583.549,
+    "stage_compute": 25618.429,
     "stage_process_extra_by_stage": [
-      27420.14382646179,
-      30356.847157043456,
-      36366.24186158752
+      37828.16814141846,
+      40656.261888809204,
+      42585.72911216736
     ],
     "stage_process_wall_by_stage": [
-      36481.36782646179,
-      38494.60315704346,
-      44750.810861587524
+      46886.93714141846,
+      48899.566888809204,
+      50902.08411216736
     ],
     "startup_preload_excluded": true,
-    "worker_idle_wait": 7922.549614089967
+    "worker_idle_wait": 7870.013948669433
   },
   "parity_scope": "stage_handoff_finite_logits",
   "parity_status": "not_run",
   "pipeline_depth": 3,
-  "pipeline_rows_per_s_bound": 190.01703667288422,
+  "pipeline_rows_per_s_bound": 193.8435185136302,
   "production_generation_eligible": false,
   "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
   "resident_worker_mode": true,
-  "run_id": "ds4-resident-stage-b512-mb4-20260515T1202Z",
+  "run_id": "ds4-util-b512-mb4-20260515Tsteady",
   "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp",
+  "slowest_resource_id": 0,
+  "slowest_resource_kind": "stage_compute",
+  "slowest_resource_service_ms": 2151.1013333333335,
+  "slowest_stage_id": 0,
+  "slowest_stage_service_ms": 2151.1013333333335,
   "stage_count": 3,
   "stage_ms": [
-    2139.365,
-    1946.674,
-    1964.633
+    2147.669,
+    1961.459,
+    1962.589
   ],
   "stage_ms_by_microbatch": [
     [
-      2630.101,
-      2139.764,
-      2139.365,
-      2151.994
+      2605.465,
+      2147.669,
+      2152.658,
+      2152.977
     ],
     [
-      2295.976,
-      1947.777,
-      1947.329,
-      1946.674
+      2355.852,
+      1962.439,
+      1963.555,
+      1961.459
     ],
     [
-      2488.011,
-      1965.775,
-      1966.15,
-      1964.633
+      2422.716,
+      1962.589,
+      1964.537,
+      1966.513
     ]
   ],
   "stage_nodes": [
@@ -97,79 +110,111 @@
     {
       "blocked": [],
       "candidates": [],
-      "cleaned": [],
+      "cleaned": [
+        {
+          "age_s": 58.42886972427368,
+          "command": "lockfile:/tmp/ds4.lock",
+          "lock_path": "/tmp/ds4.lock",
+          "pid": 917367,
+          "renamed_to": "/tmp/ds4.lock.stale.20260515T121548Z"
+        }
+      ],
       "returncode": 0,
       "stage_node": "spark0"
     },
     {
       "blocked": [],
       "candidates": [],
-      "cleaned": [],
+      "cleaned": [
+        {
+          "age_s": 60.34838080406189,
+          "command": "lockfile:/tmp/ds4.lock",
+          "lock_path": "/tmp/ds4.lock",
+          "pid": 129112,
+          "renamed_to": "/tmp/ds4.lock.stale.20260515T121550Z"
+        }
+      ],
       "returncode": 0,
       "stage_node": "spark1"
     },
     {
       "blocked": [],
       "candidates": [],
-      "cleaned": [],
+      "cleaned": [
+        {
+          "age_s": 61.88742256164551,
+          "command": "lockfile:/tmp/ds4.lock",
+          "lock_path": "/tmp/ds4.lock",
+          "pid": 87938,
+          "renamed_to": "/tmp/ds4.lock.stale.20260515T121552Z"
+        }
+      ],
       "returncode": 0,
       "stage_node": "spark2"
     }
   ],
+  "steady_state_microbatch_interval_ms": 1964.546333333333,
+  "steady_state_pipeline_bound_rows_per_s": 238.01761082385084,
+  "steady_state_rows_per_s": 238.01761082385084,
+  "steady_state_window_microbatches": [
+    1,
+    2,
+    3
+  ],
   "streaming_pipeline": true,
   "streaming_schedule_finish_ms": [
     [
-      2630.101,
-      4769.865,
-      6909.23,
-      9061.224
+      2605.465,
+      4753.134,
+      6905.7919999999995,
+      9058.769
     ],
     [
-      4990.471235610962,
-      6938.248235610962,
-      8888.092479690551,
-      11039.69517063904
+      4997.157749740601,
+      6959.596749740601,
+      8940.443181869507,
+      11076.709361389161
     ],
     [
-      7508.6214434509275,
-      9474.396443450927,
-      11440.546443450927,
-      13405.179443450927
+      7459.325587280273,
+      9421.914587280273,
+      11386.451587280273,
+      13352.964587280272
     ]
   ],
   "streaming_schedule_start_ms": [
     [
       0.0,
-      2630.101,
-      4769.865,
-      6909.23
+      2605.465,
+      4753.134,
+      6905.7919999999995
     ],
     [
-      2694.495235610962,
-      4990.471235610962,
-      6940.763479690551,
-      9093.021170639038
+      2641.3057497406007,
+      4997.157749740601,
+      6976.888181869506,
+      9115.25036138916
     ],
     [
-      5020.610443450928,
-      7508.6214434509275,
-      9474.396443450927,
-      11440.546443450927
+      5036.609587280273,
+      7459.325587280273,
+      9421.914587280273,
+      11386.451587280273
     ]
   ],
-  "transfer_ms": 67.82674789428711,
+  "transfer_ms": 72.52979278564453,
   "transfer_ms_by_boundary": [
     [
-      64.39423561096191,
-      34.6524715423584,
-      31.533479690551758,
-      31.797170639038086
+      35.840749740600586,
+      29.642343521118164,
+      71.09618186950684,
+      56.481361389160156
     ],
     [
-      30.13920783996582,
-      67.82674789428711,
-      30.439138412475586,
-      25.727033615112305
+      39.45183753967285,
+      33.53381156921387,
+      28.897523880004883,
+      72.52979278564453
     ]
   ],
   "transfer_records": [
@@ -179,11 +224,11 @@
       "dst": "spark1",
       "dst_ip": "10.10.1.248",
       "microbatch": 0,
-      "recv_ms": 63.13276290893555,
-      "send_ms": 64.39423561096191,
+      "recv_ms": 35.840749740600586,
+      "send_ms": 35.63094139099121,
       "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
       "src": "spark0",
-      "transfer_ms": 64.39423561096191
+      "transfer_ms": 35.840749740600586
     },
     {
       "boundary": 0,
@@ -191,11 +236,11 @@
       "dst": "spark1",
       "dst_ip": "10.10.1.248",
       "microbatch": 1,
-      "recv_ms": 34.6524715423584,
-      "send_ms": 34.314632415771484,
+      "recv_ms": 29.642343521118164,
+      "send_ms": 29.595613479614258,
       "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
       "src": "spark0",
-      "transfer_ms": 34.6524715423584
+      "transfer_ms": 29.642343521118164
     },
     {
       "boundary": 0,
@@ -203,11 +248,11 @@
       "dst": "spark1",
       "dst_ip": "10.10.1.248",
       "microbatch": 2,
-      "recv_ms": 31.533479690551758,
-      "send_ms": 30.163049697875977,
+      "recv_ms": 70.26982307434082,
+      "send_ms": 71.09618186950684,
       "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
       "src": "spark0",
-      "transfer_ms": 31.533479690551758
+      "transfer_ms": 71.09618186950684
     },
     {
       "boundary": 0,
@@ -215,11 +260,11 @@
       "dst": "spark1",
       "dst_ip": "10.10.1.248",
       "microbatch": 3,
-      "recv_ms": 31.797170639038086,
-      "send_ms": 31.78119659423828,
+      "recv_ms": 56.3359260559082,
+      "send_ms": 56.481361389160156,
       "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
       "src": "spark0",
-      "transfer_ms": 31.797170639038086
+      "transfer_ms": 56.481361389160156
     },
     {
       "boundary": 1,
@@ -227,11 +272,11 @@
       "dst": "spark2",
       "dst_ip": "10.10.5.2",
       "microbatch": 0,
-      "recv_ms": 30.13920783996582,
-      "send_ms": 28.689861297607422,
+      "recv_ms": 38.32507133483887,
+      "send_ms": 39.45183753967285,
       "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
       "src": "spark1",
-      "transfer_ms": 30.13920783996582
+      "transfer_ms": 39.45183753967285
     },
     {
       "boundary": 1,
@@ -239,11 +284,11 @@
       "dst": "spark2",
       "dst_ip": "10.10.5.2",
       "microbatch": 1,
-      "recv_ms": 66.6956901550293,
-      "send_ms": 67.82674789428711,
+      "recv_ms": 33.53381156921387,
+      "send_ms": 32.38487243652344,
       "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
       "src": "spark1",
-      "transfer_ms": 67.82674789428711
+      "transfer_ms": 33.53381156921387
     },
     {
       "boundary": 1,
@@ -251,11 +296,11 @@
       "dst": "spark2",
       "dst_ip": "10.10.5.2",
       "microbatch": 2,
-      "recv_ms": 30.439138412475586,
-      "send_ms": 29.028654098510742,
+      "recv_ms": 28.897523880004883,
+      "send_ms": 27.94480323791504,
       "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
       "src": "spark1",
-      "transfer_ms": 30.439138412475586
+      "transfer_ms": 28.897523880004883
     },
     {
       "boundary": 1,
@@ -263,11 +308,11 @@
       "dst": "spark2",
       "dst_ip": "10.10.5.2",
       "microbatch": 3,
-      "recv_ms": 25.727033615112305,
-      "send_ms": 25.637388229370117,
+      "recv_ms": 71.38514518737793,
+      "send_ms": 72.52979278564453,
       "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
       "src": "spark1",
-      "transfer_ms": 25.727033615112305
+      "transfer_ms": 72.52979278564453
     }
   ],
   "transport_kind": "tcp_binary",
@@ -279,13 +324,13 @@
       0.0
     ],
     [
-      2694.495235610962,
+      2641.3057497406007,
       0.0,
-      2.515244079589138,
-      204.9286909484872
+      17.2914321289054,
+      174.8071795196538
     ],
     [
-      5020.610443450928,
+      5036.609587280273,
       0.0,
       0.0,
       0.0

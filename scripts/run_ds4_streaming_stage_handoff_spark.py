@@ -144,6 +144,30 @@ LOCK_PROBE_CODE = r"""
 import json,os,signal,sys,time
 cleanup=int(sys.argv[1]); min_age=float(sys.argv[2])
 now=time.time(); candidates=[]; cleaned=[]; blocked=[]
+lock_path="/tmp/ds4.lock"
+if os.path.exists(lock_path):
+    try:
+        pid_txt=open(lock_path,"r",encoding="utf-8").read().strip()
+        pid=int(pid_txt)
+        age=max(0.0, now-os.stat(lock_path).st_mtime)
+        item={"pid":pid,"age_s":age,"command":"lockfile:/tmp/ds4.lock","lock_path":lock_path}
+        if not os.path.exists(f"/proc/{pid}") and cleanup and age >= min_age:
+            dst=lock_path+".stale."+time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
+            os.replace(lock_path,dst)
+            item["renamed_to"]=dst
+            cleaned.append(item)
+        elif not os.path.exists(f"/proc/{pid}"):
+            item["stale_lockfile"]=True
+            blocked.append(item)
+        else:
+            try:
+                raw=open(f"/proc/{pid}/cmdline","rb").read().replace(b"\0",b" ").decode("utf-8","replace").strip()
+            except Exception:
+                raw=""
+            item["command"]=raw[:500]
+            blocked.append(item)
+    except Exception as e:
+        blocked.append({"lock_path":lock_path,"lock_error":str(e)})
 for name in os.listdir("/proc"):
     if not name.isdigit(): continue
     pid=int(name)
@@ -187,6 +211,21 @@ if cleaned:
             except Exception as e:
                 item["sigkill_error"]=str(e)
                 blocked.append(item)
+cleaned_pids=set()
+for item in cleaned:
+    if "pid" in item and not item.get("sigkill_error") and not os.path.exists(f"/proc/{item['pid']}"):
+        cleaned_pids.add(item["pid"])
+if cleaned_pids and os.path.exists(lock_path):
+    try:
+        pid=int(open(lock_path,"r",encoding="utf-8").read().strip())
+        if pid in cleaned_pids and not os.path.exists(f"/proc/{pid}"):
+            dst=lock_path+".stale."+time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
+            os.replace(lock_path,dst)
+            cleaned.append({"pid":pid,"age_s":max(0.0,now-os.stat(dst).st_mtime),"command":"lockfile:/tmp/ds4.lock","lock_path":lock_path,"renamed_to":dst})
+    except Exception as e:
+        blocked.append({"lock_path":lock_path,"lock_error":str(e)})
+if cleaned_pids:
+    blocked=[item for item in blocked if item.get("pid") not in cleaned_pids]
 print(json.dumps({"candidates":candidates,"cleaned":cleaned,"blocked":blocked}, sort_keys=True), flush=True)
 """
 
@@ -312,21 +351,28 @@ def lock_preflight_blockers(lock_results: list[dict[str, Any]]) -> list[dict[str
 	return blockers
 
 
-def run_stage_thread(stage: Stage, idx: int, total: int, args: argparse.Namespace, outdir: Path, results: list[dict[str, Any]], errors: "queue.Queue[str]") -> None:
+def run_stage_thread(stage: Stage, idx: int, total: int, args: argparse.Namespace, outdir: Path, results: list[dict[str, Any]], errors: "queue.Queue[str]", cancel_event: threading.Event) -> None:
 	cmd = build_stage_command(stage, idx, total, args)
 	t0 = time.time()
 	proc = popen_remote(stage, args.known_hosts, cmd)
+	while proc.poll() is None:
+		if cancel_event.is_set():
+			proc.terminate()
+			break
+		time.sleep(0.5)
 	stdout, stderr = proc.communicate()
 	t1 = time.time()
 	write_log(outdir / f"stage{idx}.out", stdout or "")
 	write_log(outdir / f"stage{idx}.err", stderr or "")
 	if proc.returncode != 0:
 		errors.put(f"stage{idx} failed rc={proc.returncode}: {(stderr or '').splitlines()[-8:]}")
+		cancel_event.set()
 		return
 	try:
 		obj = parse_last_json(stdout or "")
 	except Exception as e:
 		errors.put(f"stage{idx} JSON parse failed: {e}")
+		cancel_event.set()
 		return
 	obj["stage_process_wall_ms"] = (t1 - t0) * 1000.0
 	obj["stage_node"] = stage.name
@@ -342,6 +388,7 @@ def run_transfer_pair(
 	expected_bytes: int,
 	args: argparse.Namespace,
 	outdir: Path,
+	cancel_event: threading.Event,
 ) -> dict[str, Any]:
 	src_path = boundary_path(args.remote_run_root, link_idx).replace("%u", str(mb))
 	dst_path = boundary_path(args.remote_run_root, link_idx).replace("%u", str(mb))
@@ -350,6 +397,21 @@ def run_transfer_pair(
 	recv = popen_remote(dst, args.known_hosts, recv_cmd)
 	time.sleep(0.15)
 	send = popen_remote(src, args.known_hosts, send_cmd)
+	while send.poll() is None or recv.poll() is None:
+		if cancel_event.is_set():
+			for proc in (send, recv):
+				if proc.poll() is None:
+					proc.terminate()
+			raise RuntimeError("cancelled because another stage or transfer failed")
+		if send.poll() is not None and send.returncode != 0 and recv.poll() is None:
+			cancel_event.set()
+			recv.terminate()
+			break
+		if recv.poll() is not None and recv.returncode != 0 and send.poll() is None:
+			cancel_event.set()
+			send.terminate()
+			break
+		time.sleep(0.2)
 	send_out, send_err = send.communicate()
 	recv_out, recv_err = recv.communicate()
 	prefix = outdir / f"transfer{link_idx}_mb{mb}"
@@ -375,14 +437,17 @@ def run_transfer_pair(
 	}
 
 
-def transfer_thread(stages: list[Stage], link_idx: int, args: argparse.Namespace, outdir: Path, transfers: list[list[dict[str, Any]]], errors: "queue.Queue[str]") -> None:
+def transfer_thread(stages: list[Stage], link_idx: int, args: argparse.Namespace, outdir: Path, transfers: list[list[dict[str, Any]]], errors: "queue.Queue[str]", cancel_event: threading.Event) -> None:
 	try:
 		for mb in range(args.microbatches):
+			if cancel_event.is_set():
+				raise RuntimeError("cancelled because another stage or transfer failed")
 			port = args.base_port + link_idx * 1000 + mb
-			item = run_transfer_pair(stages[link_idx], stages[link_idx + 1], link_idx, mb, port, args.boundary_bytes, args, outdir)
+			item = run_transfer_pair(stages[link_idx], stages[link_idx + 1], link_idx, mb, port, args.boundary_bytes, args, outdir, cancel_event)
 			transfers[link_idx][mb] = item
 	except Exception as e:
 		errors.put(f"transfer link={link_idx} failed: {e}")
+		cancel_event.set()
 
 
 def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[dict[str, Any]]], batch: int, microbatches: int) -> dict[str, Any]:
@@ -417,15 +482,62 @@ def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[d
 			cur.append(v)
 		service.append(cur)
 	bottleneck = max(max(v) for v in service)
+	completions = stage_finish[-1]
+	completion_intervals = [completions[i] - completions[i - 1] for i in range(1, len(completions))]
+	if len(completion_intervals) >= 4:
+		selected_intervals = completion_intervals[1:-1]
+		selected_indices = list(range(2, len(completions) - 1))
+	else:
+		selected_intervals = completion_intervals[:]
+		selected_indices = list(range(1, len(completions)))
+	steady_interval = sum(selected_intervals) / len(selected_intervals) if selected_intervals else 0.0
+	steady_resource_indices = selected_indices if selected_indices else list(range(microbatches))
+	stage_resources = []
+	for s, values in enumerate(stage_iters):
+		picked = [values[mb] for mb in steady_resource_indices if mb < len(values)]
+		avg = sum(picked) / len(picked) if picked else 0.0
+		stage_resources.append((avg, s))
+	link_resources = []
+	for link, values in enumerate(transfer_ms):
+		picked = [values[mb] for mb in steady_resource_indices if mb < len(values)]
+		avg = sum(picked) / len(picked) if picked else 0.0
+		link_resources.append((avg, link))
+	slowest_stage = max(stage_resources, default=(bottleneck, 0))
+	slowest_link = max(link_resources, default=(0.0, -1))
+	if slowest_link[0] > slowest_stage[0]:
+		slowest_kind = "boundary_transfer"
+		slowest_id = int(slowest_link[1])
+		slowest_value = float(slowest_link[0])
+	else:
+		slowest_kind = "stage_compute"
+		slowest_id = int(slowest_stage[1])
+		slowest_value = float(slowest_stage[0])
+	observed_steady_rows = (batch * 1000.0 / steady_interval) if steady_interval > 0 else 0.0
+	steady_bound = batch * 1000.0 / slowest_value if slowest_value > 0 else 0.0
+	steady_rows = min(observed_steady_rows, steady_bound) if steady_bound > 0 else observed_steady_rows
+	raw_bubble = (last_ms / (microbatches * bottleneck) - 1.0) if bottleneck > 0 else 0.0
 	return {
 		"stage_ms_by_microbatch": stage_iters,
 		"transfer_ms_by_boundary": transfer_ms,
 		"worker_idle_wait_ms_by_stage": idle_wait,
 		"streaming_schedule_start_ms": stage_start,
 		"streaming_schedule_finish_ms": stage_finish,
+		"final_stage_completion_intervals_ms": completion_intervals,
+		"steady_state_window_microbatches": selected_indices,
+		"steady_state_microbatch_interval_ms": steady_interval,
+		"observed_steady_state_rows_per_s": observed_steady_rows,
+		"steady_state_rows_per_s": steady_rows,
+		"steady_state_pipeline_bound_rows_per_s": steady_bound,
+		"slowest_stage_id": int(slowest_stage[1]),
+		"slowest_stage_service_ms": float(slowest_stage[0]),
+		"slowest_resource_kind": slowest_kind,
+		"slowest_resource_id": slowest_id,
+		"slowest_resource_service_ms": slowest_value,
+		"fill_ms": completions[0] if completions else 0.0,
+		"drain_ms": completion_intervals[-1] if completion_intervals else 0.0,
 		"achieved_streaming_rows_per_s": (batch * microbatches * 1000.0 / last_ms) if last_ms > 0 else 0.0,
 		"pipeline_rows_per_s_bound": (batch * 1000.0 / bottleneck) if bottleneck > 0 else 0.0,
-		"bubble_overhead_ratio": (last_ms / (microbatches * bottleneck) - 1.0) if bottleneck > 0 else 0.0,
+		"bubble_overhead_ratio": max(0.0, raw_bubble),
 	}
 
 
@@ -466,6 +578,19 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"worker_idle_wait_ms_by_stage": schedule["worker_idle_wait_ms_by_stage"],
 		"streaming_schedule_start_ms": schedule["streaming_schedule_start_ms"],
 		"streaming_schedule_finish_ms": schedule["streaming_schedule_finish_ms"],
+		"final_stage_completion_intervals_ms": schedule["final_stage_completion_intervals_ms"],
+		"steady_state_window_microbatches": schedule["steady_state_window_microbatches"],
+		"steady_state_microbatch_interval_ms": schedule["steady_state_microbatch_interval_ms"],
+		"steady_state_rows_per_s": schedule["steady_state_rows_per_s"],
+		"observed_steady_state_rows_per_s": schedule["observed_steady_state_rows_per_s"],
+		"steady_state_pipeline_bound_rows_per_s": schedule["steady_state_pipeline_bound_rows_per_s"],
+		"slowest_stage_id": schedule["slowest_stage_id"],
+		"slowest_stage_service_ms": schedule["slowest_stage_service_ms"],
+		"slowest_resource_kind": schedule["slowest_resource_kind"],
+		"slowest_resource_id": schedule["slowest_resource_id"],
+		"slowest_resource_service_ms": schedule["slowest_resource_service_ms"],
+		"fill_ms": schedule["fill_ms"],
+		"drain_ms": schedule["drain_ms"],
 		"pipeline_rows_per_s_bound": schedule["pipeline_rows_per_s_bound"],
 		"actual_end_to_end_rows_per_s_if_measured": schedule["achieved_streaming_rows_per_s"],
 		"achieved_streaming_rows_per_s": schedule["achieved_streaming_rows_per_s"],
@@ -519,6 +644,16 @@ def build_failure_artifact(args: argparse.Namespace, stages: list[Stage], outdir
 		"pipeline_rows_per_s_bound": 0.0,
 		"actual_end_to_end_rows_per_s_if_measured": 0.0,
 		"achieved_streaming_rows_per_s": 0.0,
+		"steady_state_rows_per_s": 0.0,
+		"observed_steady_state_rows_per_s": 0.0,
+		"steady_state_microbatch_interval_ms": 0.0,
+		"steady_state_pipeline_bound_rows_per_s": 0.0,
+		"fill_ms": 0.0,
+		"drain_ms": 0.0,
+		"slowest_stage_id": None,
+		"slowest_resource_kind": "",
+		"slowest_resource_id": None,
+		"slowest_resource_service_ms": 0.0,
 		"bubble_overhead_ratio": 0.0,
 		"final_logits_hash": "",
 		"final_logits_hashes": [],
@@ -578,14 +713,15 @@ def main() -> int:
 			print(rc.stderr, file=sys.stderr)
 			return 2
 	errors: queue.Queue[str] = queue.Queue()
+	cancel_event = threading.Event()
 	results: list[dict[str, Any]] = [{} for _ in stages]
 	transfers: list[list[dict[str, Any]]] = [[{} for _ in range(args.microbatches)] for _ in range(len(stages) - 1)]
 	t0 = time.time()
 	threads: list[threading.Thread] = []
 	for link in range(len(stages) - 1):
-		threads.append(threading.Thread(target=transfer_thread, args=(stages, link, args, outdir, transfers, errors), daemon=True))
+		threads.append(threading.Thread(target=transfer_thread, args=(stages, link, args, outdir, transfers, errors, cancel_event), daemon=True))
 	for idx, stage in enumerate(stages):
-		threads.append(threading.Thread(target=run_stage_thread, args=(stage, idx, len(stages), args, outdir, results, errors), daemon=True))
+		threads.append(threading.Thread(target=run_stage_thread, args=(stage, idx, len(stages), args, outdir, results, errors, cancel_event), daemon=True))
 	for thread in threads:
 		thread.start()
 	for thread in threads:
