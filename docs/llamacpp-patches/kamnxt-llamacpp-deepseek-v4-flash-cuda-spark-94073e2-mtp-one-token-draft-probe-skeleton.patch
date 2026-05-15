@@ -537,7 +537,7 @@ new file mode 100644
 index 0000000..680d9af
 --- /dev/null
 +++ b/examples/ds4-mtp-one-token-draft-probe/ds4-mtp-one-token-draft-probe.cpp
-@@ -0,0 +1,877 @@
+@@ -0,0 +1,975 @@
 +#include "deepseek4_mtp_sidecar.hpp"
 +
 +#include "ggml-backend.h"
@@ -791,6 +791,99 @@ index 0000000..680d9af
 +    return ggml_dsv4_hc_weighted_sum(ctx, x, pre);
 +}
 +
++static bool reorder_f32_2d(
++        const tensor_capture & in,
++        int64_t in_ne0,
++        int64_t in_ne1,
++        int64_t out_ne0,
++        int64_t out_ne1,
++        bool transpose,
++        std::vector<uint8_t> * out_bytes,
++        std::string * err) {
++    if (out_bytes == nullptr) {
++        if (err != nullptr) *err = "null out_bytes";
++        return false;
++    }
++    out_bytes->clear();
++    if (in.type != GGML_TYPE_F32) {
++        if (err != nullptr) *err = "input is not f32";
++        return false;
++    }
++    if (in.bytes.size() != (size_t) (in_ne0 * in_ne1 * (int64_t) sizeof(float))) {
++        if (err != nullptr) *err = "input bytes size mismatch";
++        return false;
++    }
++    if (out_ne0 <= 0 || out_ne1 <= 0) {
++        if (err != nullptr) *err = "invalid output shape";
++        return false;
++    }
++    if (out_ne0 * out_ne1 != in_ne0 * in_ne1) {
++        if (err != nullptr) *err = "output elements mismatch";
++        return false;
++    }
++
++    out_bytes->resize((size_t) (out_ne0 * out_ne1 * (int64_t) sizeof(float)));
++    const float * src = (const float *) in.bytes.data();
++    float * dst = (float *) out_bytes->data();
++
++    if (!transpose) {
++        std::memcpy(dst, src, out_bytes->size());
++        return true;
++    }
++
++    // ggml contiguous: element(x,y) at linear index (x + ne0*y).
++    if (!(out_ne0 == in_ne1 && out_ne1 == in_ne0)) {
++        if (err != nullptr) *err = "transpose requested but output dims are not swapped";
++        return false;
++    }
++    for (int64_t y = 0; y < in_ne1; y++) {
++        for (int64_t x = 0; x < in_ne0; x++) {
++            const int64_t src_idx = x + in_ne0 * y;
++            const int64_t dst_idx = y + out_ne0 * x;
++            dst[dst_idx] = src[src_idx];
++        }
++    }
++    return true;
++}
++
++static bool normalize_token_embd_bytes(
++        const tensor_capture & trunk_token_embd,
++        std::vector<uint8_t> * out_bytes,
++        std::string * err) {
++    // Accept either [4096,1,*] or [1,4096,*] captures; normalize to [4096,1].
++    if (trunk_token_embd.ne2 != 1 || trunk_token_embd.ne3 != 1) {
++        if (err != nullptr) *err = "trunk token_embd unexpected ne2/ne3";
++        return false;
++    }
++    if (trunk_token_embd.ne0 == 4096 && trunk_token_embd.ne1 == 1) {
++        return reorder_f32_2d(trunk_token_embd, 4096, 1, 4096, 1, false, out_bytes, err);
++    }
++    if (trunk_token_embd.ne0 == 1 && trunk_token_embd.ne1 == 4096) {
++        return reorder_f32_2d(trunk_token_embd, 1, 4096, 4096, 1, true, out_bytes, err);
++    }
++    if (err != nullptr) *err = "trunk token_embd has unsupported shape";
++    return false;
++}
++
++static bool normalize_pre_hc_head_bytes(
++        const tensor_capture & trunk_pre_hc_head,
++        std::vector<uint8_t> * out_bytes,
++        std::string * err) {
++    // Accept either [4096,4,*] or [4,4096,*] captures; normalize to [4096,4].
++    if (trunk_pre_hc_head.ne2 != 1 || trunk_pre_hc_head.ne3 != 1) {
++        if (err != nullptr) *err = "trunk pre_hc_head unexpected ne2/ne3";
++        return false;
++    }
++    if (trunk_pre_hc_head.ne0 == 4096 && trunk_pre_hc_head.ne1 == 4) {
++        return reorder_f32_2d(trunk_pre_hc_head, 4096, 4, 4096, 4, false, out_bytes, err);
++    }
++    if (trunk_pre_hc_head.ne0 == 4 && trunk_pre_hc_head.ne1 == 4096) {
++        return reorder_f32_2d(trunk_pre_hc_head, 4, 4096, 4096, 4, true, out_bytes, err);
++    }
++    if (err != nullptr) *err = "trunk pre_hc_head has unsupported shape";
++    return false;
++}
++
 +static bool compute_stub_mtp_input_hc(
 +        const tensor_capture & trunk_token_embd,
 +        const tensor_capture & trunk_pre_hc_head,
@@ -820,12 +913,14 @@ index 0000000..680d9af
 +        if (err != nullptr) *err = "trunk pre_hc_head is not f32";
 +        return false;
 +    }
-+    if (!(trunk_token_embd.ne0 == 4096 && trunk_token_embd.ne1 == 1 && trunk_token_embd.ne2 == 1)) {
-+        if (err != nullptr) *err = "trunk token_embd has unexpected shape";
++    std::vector<uint8_t> tok_bytes;
++    std::vector<uint8_t> prev_bytes;
++    if (!normalize_token_embd_bytes(trunk_token_embd, &tok_bytes, err)) {
++        if (err != nullptr && err->empty()) *err = "trunk token_embd normalize failed";
 +        return false;
 +    }
-+    if (!(trunk_pre_hc_head.ne0 == 4096 && trunk_pre_hc_head.ne1 == 4 && trunk_pre_hc_head.ne2 == 1)) {
-+        if (err != nullptr) *err = "trunk pre_hc_head has unexpected shape";
++    if (!normalize_pre_hc_head_bytes(trunk_pre_hc_head, &prev_bytes, err)) {
++        if (err != nullptr && err->empty()) *err = "trunk pre_hc_head normalize failed";
 +        return false;
 +    }
 +
@@ -846,12 +941,12 @@ index 0000000..680d9af
 +        ggml_free(ctx);
 +        return false;
 +    }
-+    if (trunk_token_embd.bytes.size() != ggml_nbytes(tok)) {
++    if (tok_bytes.size() != ggml_nbytes(tok)) {
 +        if (err != nullptr) *err = "trunk token_embd nbytes mismatch";
 +        ggml_free(ctx);
 +        return false;
 +    }
-+    std::memcpy(tok->data, trunk_token_embd.bytes.data(), trunk_token_embd.bytes.size());
++    std::memcpy(tok->data, tok_bytes.data(), tok_bytes.size());
 +
 +    ggml_tensor * prev = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, 4096, 4);
 +    if (prev == nullptr || prev->data == nullptr) {
@@ -859,12 +954,12 @@ index 0000000..680d9af
 +        ggml_free(ctx);
 +        return false;
 +    }
-+    if (trunk_pre_hc_head.bytes.size() != ggml_nbytes(prev)) {
++    if (prev_bytes.size() != ggml_nbytes(prev)) {
 +        if (err != nullptr) *err = "trunk pre_hc_head nbytes mismatch (prev)";
 +        ggml_free(ctx);
 +        return false;
 +    }
-+    std::memcpy(prev->data, trunk_pre_hc_head.bytes.data(), trunk_pre_hc_head.bytes.size());
++    std::memcpy(prev->data, prev_bytes.data(), prev_bytes.size());
 +
 +    ggml_tensor * mtp_enorm = ggml_rms_norm(ctx, tok, hparams.f_norm_rms_eps);
 +    mtp_enorm = ggml_mul(ctx, mtp_enorm, sidecar.enorm);
@@ -926,8 +1021,9 @@ index 0000000..680d9af
 +        if (err != nullptr) *err = "trunk pre_hc_head is not f32";
 +        return false;
 +    }
-+    if (!(trunk_pre_hc_head.ne0 == 4096 && trunk_pre_hc_head.ne1 == 4 && trunk_pre_hc_head.ne2 == 1)) {
-+        if (err != nullptr) *err = "trunk pre_hc_head has unexpected shape";
++    std::vector<uint8_t> prev_bytes;
++    if (!normalize_pre_hc_head_bytes(trunk_pre_hc_head, &prev_bytes, err)) {
++        if (err != nullptr && err->empty()) *err = "trunk pre_hc_head normalize failed";
 +        return false;
 +    }
 +
@@ -948,12 +1044,12 @@ index 0000000..680d9af
 +        ggml_free(ctx);
 +        return false;
 +    }
-+    if (trunk_pre_hc_head.bytes.size() != ggml_nbytes(x)) {
++    if (prev_bytes.size() != ggml_nbytes(x)) {
 +        if (err != nullptr) *err = "trunk pre_hc_head nbytes mismatch";
 +        ggml_free(ctx);
 +        return false;
 +    }
-+    std::memcpy(x->data, trunk_pre_hc_head.bytes.data(), trunk_pre_hc_head.bytes.size());
++    std::memcpy(x->data, prev_bytes.data(), prev_bytes.size());
 +
 +    ggml_tensor * cur = dsv4_hc_head(ctx, x,
 +            sidecar.hc_head_fn, sidecar.hc_head_scale, sidecar.hc_head_base,
@@ -1276,7 +1372,9 @@ index 0000000..680d9af
 +
 +    const llama_vocab * vocab = llama_model_get_vocab(model);
 +
-+    const int32_t n_prompt = -llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), nullptr, 0, true, true);
++    const std::string rendered_bos = "<｜begin▁of▁sentence｜>";
++    const bool add_special = prompt.compare(0, rendered_bos.size(), rendered_bos) != 0;
++    const int32_t n_prompt = -llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), nullptr, 0, add_special, true);
 +    if (n_prompt <= 0) {
 +        errors.push_back("failed to tokenize prompt");
 +        if (json) {
@@ -1287,7 +1385,7 @@ index 0000000..680d9af
 +    }
 +
 +    std::vector<llama_token> prompt_tokens((size_t) n_prompt);
-+    if (llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), true, true) < 0) {
++    if (llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), prompt_tokens.data(), (int) prompt_tokens.size(), add_special, true) < 0) {
 +        errors.push_back("failed to tokenize prompt (2nd pass)");
 +        if (json) {
 +            print_probe_json(trunk_path, sidecar_path, prompt, seed, -1, "", -1, "", caps.token_embd, caps.pre_hc_head, stub_input_hc, stub_head_norm, false, errors);
