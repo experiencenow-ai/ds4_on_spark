@@ -181,6 +181,8 @@ microbatch.
 3. Build a dummy stage pipeline that validates ordering, checksums,
    backpressure, cancellation, and per-stage timing without DS4 weights.
 4. Probe the true DS4 stage-boundary tensor shape with `hc_mult=4`.
+   Current source-static evidence from the DS4 fixture shows the post-block
+   boundary layout as `[batch, sequence, hc_mult, hidden_size]`.
 5. Implement a tiny deterministic PP=1 versus PP=N correctness gate:
    logits/tokens must match within the chosen quantized-runtime tolerance.
 6. Only after the correctness gate passes, report end-to-end tok/sec for
@@ -265,6 +267,33 @@ is unavailable:
 ```sh
 python3 scripts/ds4_stage_boundary_shape_probe.py --probe-status not_available
 ```
+
+Observe the repo fixture's source-static boundary ABI for the initial
+contiguous three-stage split:
+
+```sh
+python3 scripts/ds4_stage_boundary_shape_probe.py \
+  --probe-kind source_static \
+  --config fixtures/model_contract/deepseek_v4_flash/config.json \
+  --runtime-id fixture_source_static \
+  --quantization-id DeepSeek-V4-Flash-config-source \
+  --stage 0:spark0:0:14 \
+  --stage 1:spark1:15:28 \
+  --stage 2:spark2:29:42 \
+  --candidate-boundary-after-layer 14
+```
+
+Attempt the local PP=N emulated parity gate:
+
+```sh
+python3 scripts/ds4_local_ppn_parity_probe.py \
+  --boundary-artifact fixtures/pipeline_boundary/dsv4_stage_boundary_source_observed.example.json
+```
+
+The current local PP=N fixture is `not_run`: this Mac-side repo validation
+environment does not have `torch` or `transformers`, and the DS4 runtime does
+not yet expose a repo-owned split-forward hook. That is the next implementation
+blocker before any cross-Spark model execution.
 
 ## First Acceptance Criteria
 
