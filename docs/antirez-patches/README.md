@@ -74,6 +74,17 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - adds `DS4_CUDA_SKIP_STARTUP_MODEL_CACHE=1` so the probe can keep lazy expert loading while avoiding huge eager startup cache attempts
     - lowers the startup preload span floor to 4 MiB and adds `DS4_CUDA_WEIGHT_PRELOAD_SLEEP_US` for paced residency experiments
 
+- `ds4-3630e64-cuda-stack-stage-range-preload.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the CUDA MoE probe/startup-cache skip patch
+  - Purpose:
+    - adds `DS4_CUDA_STACK_PROBE_LAYER_BEGIN` and `DS4_CUDA_STACK_PROBE_LAYER_END` so stack probes can run a contiguous layer stage instead of all 43 layers
+    - adds `DS4_CUDA_STACK_PROBE_PRELOAD_STAGE=1` to preload every tensor required by that stage before timing
+    - adds `DS4_CUDA_STACK_PROBE_PRELOAD_CHUNK_MB` and `DS4_CUDA_STACK_PROBE_PRELOAD_SLEEP_US` for stage-local residency tuning when large range uploads hit CUDA launch timeouts
+    - preloads routed expert slabs (`ffn_gate_exps`, `ffn_up_exps`, `ffn_down_exps`) for every owned layer so the tested stage does not fall back to lazy expert loads
+    - preloads stage weights before graph activation buffers are allocated, so the stage's owned weights get first claim on GPU memory
+    - keeps output-head work only on the final stage unless `DS4_CUDA_STACK_PROBE_NO_HEAD=1` is absent and the stage ends at layer 43
+    - lets a three-Spark stage split run as `[0,15)`, `[15,29)`, `[29,43)` without hardcoding the topology into C
+
 Apply (example):
 
 ```bash
@@ -86,6 +97,7 @@ git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-expert
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-slice-queue.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stage-range-preload.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
@@ -108,6 +120,7 @@ python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_expert_slice_p
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_batched_expert_slice_queue_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-slice-queue.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_batched_expert_tile_slices_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_probe_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stack_stage_preload_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stage-range-preload.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
