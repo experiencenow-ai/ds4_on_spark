@@ -44,6 +44,7 @@ REPORT_MD="$OUT_DIR/antirez_ds4_mtp_one_token_oracle_probe_spark.md"
 	echo "Set env vars on Spark via REMOTE_ANTIREZ_DS4_MTP_ORACLE_ENV:"
 	echo
 	echo "- ALLOW_FETCH=1 (clone antirez/ds4 if missing)"
+	echo "- ALLOW_CLEAN=1 (git reset --hard && git clean -fd before checkout)"
 	echo "- ALLOW_PATCH=1 (apply the ds4 CUDA + one-token oracle patches)"
 	echo "- ALLOW_BUILD=1 (build ds4 via Makefile/nvcc)"
 	echo "- ALLOW_RUN=1 (run the probe; loads trunk GGUF + MTP sidecar GGUF)"

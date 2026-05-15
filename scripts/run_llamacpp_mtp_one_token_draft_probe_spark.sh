@@ -78,6 +78,7 @@ fi
 	echo "Set env vars on Spark via REMOTE_LLAMA_MTP_ONE_TOKEN_PROBE_ENV:"
 	echo
 	echo "- ALLOW_FETCH=1 (clone the llama.cpp fork if missing)"
+	echo "- ALLOW_CLEAN=1 (git reset --hard && git clean -fd before checkout)"
 	echo "- ALLOW_PATCH=1 (apply the one-token probe patch)"
 	echo "- ALLOW_BUILD=1 (build llama-ds4-mtp-one-token-draft-probe)"
 	echo "- ALLOW_RUN=1 (run the probe; loads trunk GGUF)"

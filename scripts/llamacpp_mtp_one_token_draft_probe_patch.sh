@@ -25,13 +25,14 @@ MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
 PROMPT="${PROMPT:-Hello.}"
 PROMPT_FILE="${PROMPT_FILE:-}"
 SEED="${SEED:-1234}"
-LOAD_SIDECAR_WEIGHTS="${LOAD_SIDECAR_WEIGHTS:-0}"
+LOAD_SIDECAR_WEIGHTS="${LOAD_SIDECAR_WEIGHTS:-1}"
 
 JSON_ONLY="${JSON_ONLY:-0}"
 
 CUDACXX="${CUDACXX:-}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
+ALLOW_CLEAN="${ALLOW_CLEAN:-0}"
 ALLOW_PATCH="${ALLOW_PATCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
@@ -81,13 +82,16 @@ if [ "$JSON_ONLY" != "1" ]; then
 fi
 
 need_git_prepare=0
-if [ "$ALLOW_FETCH" = "1" ] || [ "$ALLOW_PATCH" = "1" ]; then
+if [ "$ALLOW_FETCH" = "1" ] || [ "$ALLOW_CLEAN" = "1" ] || [ "$ALLOW_PATCH" = "1" ]; then
 	need_git_prepare=1
 fi
 
 if [ "$need_git_prepare" = "1" ]; then
 	if [ "$ALLOW_FETCH" = "1" ]; then
 		(cd "$LLAMA_DIR" && git fetch --all --tags)
+	fi
+	if [ "$ALLOW_CLEAN" = "1" ]; then
+		(cd "$LLAMA_DIR" && git reset --hard && git clean -fd)
 	fi
 	if ! (cd "$LLAMA_DIR" && git checkout "$LLAMA_COMMIT"); then
 		json_err "unable to checkout LLAMA_COMMIT=$LLAMA_COMMIT (set ALLOW_FETCH=1 to fetch, or ensure the commit exists locally)"
@@ -110,7 +114,7 @@ else
 		fi
 	else
 		if ! (cd "$LLAMA_DIR" && git apply --check "$PATCH_FILE" >/dev/null 2>&1); then
-			json_err "patch does not apply cleanly (clean tree or reset LLAMA_DIR; then set ALLOW_FETCH=1 ALLOW_PATCH=1)"
+			json_err "patch does not apply cleanly (set ALLOW_CLEAN=1 to reset/clean LLAMA_DIR, then re-run)"
 			exit 8
 		fi
 		(cd "$LLAMA_DIR" && git apply "$PATCH_FILE")

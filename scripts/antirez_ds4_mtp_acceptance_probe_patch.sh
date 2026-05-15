@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-target_note="antirez/ds4: one-token MTP draft probe (oracle JSON)"
+target_note="antirez/ds4: MTP multi-token acceptance probe"
 
 DS4_DIR="${DS4_DIR:-$HOME/src/ds4}"
 DS4_REPO="${DS4_REPO:-https://github.com/antirez/ds4.git}"
@@ -9,15 +9,16 @@ DS4_COMMIT="${DS4_COMMIT:-3630e64}"
 
 PATCH_Q4K_FILE="${PATCH_Q4K_FILE:-/tmp/ds4_cuda_mtp_q4k_and_sidecar_map.patch}"
 PATCH_CACHE_FILE="${PATCH_CACHE_FILE:-/tmp/ds4_cuda_multi_model_cache.patch}"
-PATCH_PROBE_FILE="${PATCH_PROBE_FILE:-/tmp/ds4_mtp_one_token_json_probe.patch}"
+APPLY_CACHE_PATCH="${APPLY_CACHE_PATCH:-1}"
 
 TRUNK_GGUF="${TRUNK_GGUF:-}"
 MTP_SIDECAR_GGUF="${MTP_SIDECAR_GGUF:-}"
-PROMPT="${PROMPT:-Hello.}"
+PROMPT="${PROMPT:-Explain Redis streams in one paragraph. Keep it concise, covering key features: append-only log, consumer groups, blocking reads, message persistence, and}"
 SEED="${SEED:-1234}"
-CTX="${CTX:-32768}"
-
-JSON_ONLY="${JSON_ONLY:-0}"
+CTX="${CTX:-2048}"
+N_PREDICT="${N_PREDICT:-32}"
+MTP_DRAFT="${MTP_DRAFT:-2}"
+MTP_MARGIN="${MTP_MARGIN:-0}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_CLEAN="${ALLOW_CLEAN:-0}"
@@ -25,21 +26,9 @@ ALLOW_PATCH="${ALLOW_PATCH:-0}"
 ALLOW_BUILD="${ALLOW_BUILD:-0}"
 ALLOW_RUN="${ALLOW_RUN:-0}"
 
-json_err()
-{
-	msg="$1"
-	if [ "$JSON_ONLY" = "1" ]; then
-		printf '{\n  "ok": false,\n  "errors": [%s]\n}\n' "\"$msg\""
-	else
-		echo "$msg" 1>&2
-	fi
-}
-
 note()
 {
-	if [ "$JSON_ONLY" != "1" ]; then
-		echo "$@" 1>&2
-	fi
+	echo "$@" 1>&2
 }
 
 note "== $target_note =="
@@ -56,7 +45,7 @@ if [ ! -d "$DS4_DIR" ]; then
 		mkdir -p "$(dirname "$DS4_DIR")"
 		git clone "$DS4_REPO" "$DS4_DIR"
 	else
-		json_err "missing DS4_DIR; set ALLOW_FETCH=1 to clone antirez/ds4"
+		echo "missing DS4_DIR; set ALLOW_FETCH=1 to clone antirez/ds4" 1>&2
 		exit 2
 	fi
 fi
@@ -74,7 +63,7 @@ if [ "$need_git_prepare" = "1" ]; then
 		(cd "$DS4_DIR" && git reset --hard && git clean -fd)
 	fi
 	if ! (cd "$DS4_DIR" && git checkout "$DS4_COMMIT"); then
-		json_err "unable to checkout DS4_COMMIT=$DS4_COMMIT (set ALLOW_FETCH=1 to fetch, or ensure the commit exists locally)"
+		echo "unable to checkout DS4_COMMIT=$DS4_COMMIT (set ALLOW_FETCH=1 to fetch, or ensure the commit exists locally)" 1>&2
 		exit 7
 	fi
 fi
@@ -88,7 +77,7 @@ apply_patch_file()
 		return 0
 	fi
 	if [ ! -r "$patch_path" ]; then
-		json_err "patch not readable: $patch_label ($patch_path)"
+		echo "patch not readable: $patch_label ($patch_path)" 1>&2
 		exit 3
 	fi
 	if (cd "$DS4_DIR" && git apply --reverse --check "$patch_path" >/dev/null 2>&1); then
@@ -96,7 +85,7 @@ apply_patch_file()
 		return 0
 	fi
 	if ! (cd "$DS4_DIR" && git apply --check "$patch_path" >/dev/null 2>&1); then
-		json_err "patch does not apply cleanly: $patch_label (set ALLOW_CLEAN=1 to reset/clean DS4_DIR, then re-run)"
+		echo "patch does not apply cleanly: $patch_label (set ALLOW_CLEAN=1 to reset/clean DS4_DIR, then re-run)" 1>&2
 		exit 8
 	fi
 	(cd "$DS4_DIR" && git apply "$patch_path")
@@ -104,17 +93,16 @@ apply_patch_file()
 }
 
 apply_patch_file "$PATCH_Q4K_FILE" "cuda-mtp-q4k-and-sidecar-map"
-apply_patch_file "$PATCH_CACHE_FILE" "cuda-multi-model-cache"
-apply_patch_file "$PATCH_PROBE_FILE" "mtp-one-token-json-probe"
+if [ "$APPLY_CACHE_PATCH" = "1" ]; then
+	apply_patch_file "$PATCH_CACHE_FILE" "cuda-multi-model-cache"
+else
+	note "patch skipped (APPLY_CACHE_PATCH=0): cuda-multi-model-cache"
+fi
 
 if [ "$ALLOW_BUILD" != "1" ]; then
 	note "build skipped (set ALLOW_BUILD=1 to compile ds4)"
 else
-	if [ "$JSON_ONLY" = "1" ]; then
-		(cd "$DS4_DIR" && make -j) 1>&2
-	else
-		(cd "$DS4_DIR" && make -j)
-	fi
+	(cd "$DS4_DIR" && make -j)
 fi
 
 if [ "$ALLOW_RUN" != "1" ]; then
@@ -138,7 +126,7 @@ if [ "$TRUNK_GGUF" = "" ]; then
 		fi
 	done
 	if [ "$TRUNK_GGUF" = "" ]; then
-		json_err "TRUNK_GGUF is required for ALLOW_RUN=1"
+		echo "TRUNK_GGUF is required for ALLOW_RUN=1" 1>&2
 		exit 4
 	fi
 fi
@@ -147,6 +135,7 @@ if [ "$MTP_SIDECAR_GGUF" = "" ]; then
 	for p in \
 		/home/spark0/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
 		/home/spark1/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
+		/home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K_Q8_0-F32.gguf \
 		/home/spark/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
 		/mnt/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf \
 		/models/ds4/DeepSeek-V4-Flash-MTP-Q4K-Q8_0-F32.gguf
@@ -159,19 +148,38 @@ if [ "$MTP_SIDECAR_GGUF" = "" ]; then
 		fi
 	done
 	if [ "$MTP_SIDECAR_GGUF" = "" ]; then
-		json_err "MTP_SIDECAR_GGUF is required for ALLOW_RUN=1"
+		echo "MTP_SIDECAR_GGUF is required for ALLOW_RUN=1" 1>&2
 		exit 5
 	fi
 fi
 
 DS4_BIN="$DS4_DIR/ds4"
 if [ ! -x "$DS4_BIN" ]; then
-	json_err "ds4 binary not found (set ALLOW_BUILD=1 to build it): $DS4_BIN"
+	echo "ds4 binary not found (set ALLOW_BUILD=1 to build it): $DS4_BIN" 1>&2
 	exit 6
 fi
 
 cd "$DS4_DIR"
-DS4_MTP_PROBE="${DS4_MTP_PROBE:-1}"
-DS4_MTP_FULL_LOGITS="${DS4_MTP_FULL_LOGITS:-1}"
-export DS4_MTP_PROBE DS4_MTP_FULL_LOGITS
-exec sh -lc "\"$DS4_BIN\" --cuda -m \"$TRUNK_GGUF\" --mtp \"$MTP_SIDECAR_GGUF\" -p \"$PROMPT\" -c \"$CTX\" --seed \"$SEED\" --dump-mtp-one-token-json"
+
+DS4_MTP_CONF_LOG="${DS4_MTP_CONF_LOG:-1}"
+DS4_MTP_TIMING="${DS4_MTP_TIMING:-1}"
+DS4_MTP_MIN_MARGIN="${DS4_MTP_MIN_MARGIN:-0}"
+export DS4_MTP_CONF_LOG DS4_MTP_TIMING DS4_MTP_MIN_MARGIN
+
+# Spark CUDA stability knobs (best-effort defaults).
+# These can be overridden by setting the env vars explicitly on Spark.
+if [ "${DS4_CUDA_WEIGHT_CACHE_SYNC:-}" = "" ]; then
+	DS4_CUDA_WEIGHT_CACHE_SYNC="1"
+	note "defaulted DS4_CUDA_WEIGHT_CACHE_SYNC=$DS4_CUDA_WEIGHT_CACHE_SYNC"
+fi
+if [ "${DS4_CUDA_WEIGHT_ARENA_CHUNK_MB:-}" = "" ]; then
+	DS4_CUDA_WEIGHT_ARENA_CHUNK_MB="256"
+	note "defaulted DS4_CUDA_WEIGHT_ARENA_CHUNK_MB=$DS4_CUDA_WEIGHT_ARENA_CHUNK_MB"
+fi
+if [ "${DS4_CUDA_MODEL_COPY_CHUNK_MB:-}" = "" ]; then
+	DS4_CUDA_MODEL_COPY_CHUNK_MB="16"
+	note "defaulted DS4_CUDA_MODEL_COPY_CHUNK_MB=$DS4_CUDA_MODEL_COPY_CHUNK_MB"
+fi
+export DS4_CUDA_WEIGHT_CACHE_SYNC DS4_CUDA_WEIGHT_ARENA_CHUNK_MB DS4_CUDA_MODEL_COPY_CHUNK_MB
+
+exec sh -lc "\"$DS4_BIN\" --cuda -m \"$TRUNK_GGUF\" --mtp \"$MTP_SIDECAR_GGUF\" --mtp-draft \"$MTP_DRAFT\" --mtp-margin \"$MTP_MARGIN\" --temp 0 -p \"$PROMPT\" -c \"$CTX\" -n \"$N_PREDICT\" --seed \"$SEED\""
