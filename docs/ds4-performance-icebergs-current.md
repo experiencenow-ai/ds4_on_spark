@@ -17,7 +17,7 @@ multiple microbatches, and stage2 emits finite final logits.
 | Output-head-only cap | 381.873 heads/s trusted warm result |
 | Previous blocker | generic demand-cache upload inside stage preload |
 | Latest finite handoff pipeline bound | 84.062 rows/s at B=64 |
-| Latest finite TCP streaming achieved rate | 140.637 rows/s at B=256, microbatch_count=4 |
+| Latest finite TCP streaming achieved rate | 188.511 rows/s at B=512, microbatch_count=8 |
 
 The output head produced finite logits:
 
@@ -79,6 +79,8 @@ ran resident stage processes with multiple microbatches in flight:
 | 256 | 2 | 16,777,216 | 96.816 | 169.520 | 0.751 | 23.825 | `fnv64:66c3ff107ae15075` |
 | 256 | 4 | 16,777,216 | 140.637 | 175.008 | 0.244 | 44.962 | `fnv64:66c3ff107ae15075` |
 | 512 | 2 | 33,554,432 | 108.136 | 187.241 | 0.732 | 49.490 | `fnv64:5c9c39e9a1665737` |
+| 512 | 4 | 33,554,432 | 152.777 | 190.017 | 0.244 | 67.827 | `fnv64:5c9c39e9a1665737` |
+| 512 | 8 | 33,554,432 | 188.511 | 188.987 | 0.003 | 81.893 | `fnv64:5c9c39e9a1665737` |
 
 The streaming rate is computed from measured per-microbatch stage times and
 actual TCP boundary transfer times. One-time process startup and model preload
@@ -102,6 +104,13 @@ is still writing.
 | B=128 mb=4 | 7,743.025 | 773.556 | 2,822.435 | fill/drain idle plus Spark1->Spark2 send outliers |
 | B=256 mb=4 | 13,581.121 | 248.537 | 4,297.231 | fill/drain idle |
 | B=512 mb=2 | 13,495.351 | 154.556 | 7,869.990 | too few microbatches |
+| B=512 mb=8 | 49,899.559 | 675.559 | 9,293.794 | essentially saturated; bubble overhead 0.003 |
+
+PP=1 parity remains not run. The current parity probe still reports the exact
+blocker: the repo validation path lacks `torch`/`transformers`, and the DS4
+runtime still lacks a repo-owned split-forward hook for PP=1 versus PP=N model
+comparison. Do not mark the distributed provider eligible until that hook exists
+and parity passes.
 
 ## Next Code Change
 
@@ -110,9 +119,9 @@ Turn the proof into a real resident service next:
 - keep each stage's owned layer tensors resident using the explicit preload path;
 - replace SSH-launched one-shot probes with long-lived worker daemons and a small control protocol;
 - keep exact-size boundary readiness before every send;
-- run PP=1 versus local PP=N parity before calling the distributed path eligible;
+- implement the DS4 split-forward hook needed for PP=1 versus local PP=N parity;
 - keep direct binary activation transfer over the high-speed links;
-- rerun B=512 with four or more microbatches after daemonization.
+- after daemonization, rerun B=512/B1024 with enough microbatches to stay saturated.
 
 ## MTP PR Triage
 
@@ -138,3 +147,5 @@ Latest handoff artifacts:
 - `fixtures/stage_handoff/spark012_b256_tcp_resident_mb2.example.json`
 - `fixtures/stage_handoff/spark012_b256_tcp_resident_mb4.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb2.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb4.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb8.example.json`

@@ -1,0 +1,294 @@
+{
+  "achieved_streaming_rows_per_s": 152.77676875862682,
+  "actual_end_to_end_rows_per_s_if_measured": 152.77676875862682,
+  "artifact_dir": "/private/tmp/ds4-resident-stage-b512-mb4-20260515T1202Z",
+  "batch_size": 512,
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "boundary_bytes": 33554432,
+  "boundary_dtype": "f32",
+  "boundary_layout": "batch,hc,hidden",
+  "bubble_overhead_ratio": 0.24375609077773852,
+  "final_logits_hash": "fnv64:5c9c39e9a1665737",
+  "final_logits_hashes": [
+    "fnv64:5c9c39e9a1665737",
+    "fnv64:5c9c39e9a1665737",
+    "fnv64:5c9c39e9a1665737",
+    "fnv64:5c9c39e9a1665737"
+  ],
+  "final_output_finite": true,
+  "format": "ds4-stage-handoff-truth-v1",
+  "layer_ranges": [
+    [
+      0,
+      15
+    ],
+    [
+      15,
+      29
+    ],
+    [
+      29,
+      43
+    ]
+  ],
+  "microbatch_count": 4,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "orchestrator_wall_ms": 44760.212898254395,
+  "overhead_breakdown_ms": {
+    "boundary_send_recv": 316.509485244751,
+    "coordinator_wall": 44760.212898254395,
+    "finalization_hash": null,
+    "stage_compute": 25583.549,
+    "stage_process_extra_by_stage": [
+      27420.14382646179,
+      30356.847157043456,
+      36366.24186158752
+    ],
+    "stage_process_wall_by_stage": [
+      36481.36782646179,
+      38494.60315704346,
+      44750.810861587524
+    ],
+    "startup_preload_excluded": true,
+    "worker_idle_wait": 7922.549614089967
+  },
+  "parity_scope": "stage_handoff_finite_logits",
+  "parity_status": "not_run",
+  "pipeline_depth": 3,
+  "pipeline_rows_per_s_bound": 190.01703667288422,
+  "production_generation_eligible": false,
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "resident_worker_mode": true,
+  "run_id": "ds4-resident-stage-b512-mb4-20260515T1202Z",
+  "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp",
+  "stage_count": 3,
+  "stage_ms": [
+    2139.365,
+    1946.674,
+    1964.633
+  ],
+  "stage_ms_by_microbatch": [
+    [
+      2630.101,
+      2139.764,
+      2139.365,
+      2151.994
+    ],
+    [
+      2295.976,
+      1947.777,
+      1947.329,
+      1946.674
+    ],
+    [
+      2488.011,
+      1965.775,
+      1966.15,
+      1964.633
+    ]
+  ],
+  "stage_nodes": [
+    "spark0",
+    "spark1",
+    "spark2"
+  ],
+  "stale_lock_preflight": [
+    {
+      "blocked": [],
+      "candidates": [],
+      "cleaned": [],
+      "returncode": 0,
+      "stage_node": "spark0"
+    },
+    {
+      "blocked": [],
+      "candidates": [],
+      "cleaned": [],
+      "returncode": 0,
+      "stage_node": "spark1"
+    },
+    {
+      "blocked": [],
+      "candidates": [],
+      "cleaned": [],
+      "returncode": 0,
+      "stage_node": "spark2"
+    }
+  ],
+  "streaming_pipeline": true,
+  "streaming_schedule_finish_ms": [
+    [
+      2630.101,
+      4769.865,
+      6909.23,
+      9061.224
+    ],
+    [
+      4990.471235610962,
+      6938.248235610962,
+      8888.092479690551,
+      11039.69517063904
+    ],
+    [
+      7508.6214434509275,
+      9474.396443450927,
+      11440.546443450927,
+      13405.179443450927
+    ]
+  ],
+  "streaming_schedule_start_ms": [
+    [
+      0.0,
+      2630.101,
+      4769.865,
+      6909.23
+    ],
+    [
+      2694.495235610962,
+      4990.471235610962,
+      6940.763479690551,
+      9093.021170639038
+    ],
+    [
+      5020.610443450928,
+      7508.6214434509275,
+      9474.396443450927,
+      11440.546443450927
+    ]
+  ],
+  "transfer_ms": 67.82674789428711,
+  "transfer_ms_by_boundary": [
+    [
+      64.39423561096191,
+      34.6524715423584,
+      31.533479690551758,
+      31.797170639038086
+    ],
+    [
+      30.13920783996582,
+      67.82674789428711,
+      30.439138412475586,
+      25.727033615112305
+    ]
+  ],
+  "transfer_records": [
+    {
+      "boundary": 0,
+      "bytes": 33554432,
+      "dst": "spark1",
+      "dst_ip": "10.10.1.248",
+      "microbatch": 0,
+      "recv_ms": 63.13276290893555,
+      "send_ms": 64.39423561096191,
+      "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
+      "src": "spark0",
+      "transfer_ms": 64.39423561096191
+    },
+    {
+      "boundary": 0,
+      "bytes": 33554432,
+      "dst": "spark1",
+      "dst_ip": "10.10.1.248",
+      "microbatch": 1,
+      "recv_ms": 34.6524715423584,
+      "send_ms": 34.314632415771484,
+      "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
+      "src": "spark0",
+      "transfer_ms": 34.6524715423584
+    },
+    {
+      "boundary": 0,
+      "bytes": 33554432,
+      "dst": "spark1",
+      "dst_ip": "10.10.1.248",
+      "microbatch": 2,
+      "recv_ms": 31.533479690551758,
+      "send_ms": 30.163049697875977,
+      "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
+      "src": "spark0",
+      "transfer_ms": 31.533479690551758
+    },
+    {
+      "boundary": 0,
+      "bytes": 33554432,
+      "dst": "spark1",
+      "dst_ip": "10.10.1.248",
+      "microbatch": 3,
+      "recv_ms": 31.797170639038086,
+      "send_ms": 31.78119659423828,
+      "sha256": "7cf042de03cbaf5a63471e53b33aca31de35fb49795dbd60da5749cb35dc09ac",
+      "src": "spark0",
+      "transfer_ms": 31.797170639038086
+    },
+    {
+      "boundary": 1,
+      "bytes": 33554432,
+      "dst": "spark2",
+      "dst_ip": "10.10.5.2",
+      "microbatch": 0,
+      "recv_ms": 30.13920783996582,
+      "send_ms": 28.689861297607422,
+      "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
+      "src": "spark1",
+      "transfer_ms": 30.13920783996582
+    },
+    {
+      "boundary": 1,
+      "bytes": 33554432,
+      "dst": "spark2",
+      "dst_ip": "10.10.5.2",
+      "microbatch": 1,
+      "recv_ms": 66.6956901550293,
+      "send_ms": 67.82674789428711,
+      "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
+      "src": "spark1",
+      "transfer_ms": 67.82674789428711
+    },
+    {
+      "boundary": 1,
+      "bytes": 33554432,
+      "dst": "spark2",
+      "dst_ip": "10.10.5.2",
+      "microbatch": 2,
+      "recv_ms": 30.439138412475586,
+      "send_ms": 29.028654098510742,
+      "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
+      "src": "spark1",
+      "transfer_ms": 30.439138412475586
+    },
+    {
+      "boundary": 1,
+      "bytes": 33554432,
+      "dst": "spark2",
+      "dst_ip": "10.10.5.2",
+      "microbatch": 3,
+      "recv_ms": 25.727033615112305,
+      "send_ms": 25.637388229370117,
+      "sha256": "80af115fa068eba9f0666f6576027ef5a7497859d3b0624feeddc4f14d7815f1",
+      "src": "spark1",
+      "transfer_ms": 25.727033615112305
+    }
+  ],
+  "transport_kind": "tcp_binary",
+  "worker_idle_wait_ms_by_stage": [
+    [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      2694.495235610962,
+      0.0,
+      2.515244079589138,
+      204.9286909484872
+    ],
+    [
+      5020.610443450928,
+      0.0,
+      0.0,
+      0.0
+    ]
+  ]
+}
