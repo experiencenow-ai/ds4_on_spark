@@ -84,7 +84,7 @@ class PipelineTelemetryTest(unittest.TestCase):
         stages[3] = copy.deepcopy(stages[3])
         stages[3]["rank"] = 3
         stages[3]["stage_node"] = "s3"
-        artifact = telemetry.build_run(manifest, sequential, stages, "passed", "fixture parity")
+        artifact = telemetry.build_run(manifest, sequential, stages, "not_run", "fixture parity not run")
         self.assertEqual(telemetry.validate_run(artifact), [])
         self.assertEqual(artifact["stage_count"], 4)
 
