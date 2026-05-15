@@ -36,6 +36,20 @@ class StageHandoffTruthTest(unittest.TestCase):
 		errors = handoff.validate_artifact(obj)
 		self.assertTrue(any("pipeline_rows_per_s_bound" in item for item in errors))
 
+	def test_streaming_fixture_requires_microbatch_hashes(self) -> None:
+		obj = handoff.load_json(FIX / "spark012_b64_tcp_streaming_mb2.example.json")
+		obj = copy.deepcopy(obj)
+		obj["final_logits_hashes"] = obj["final_logits_hashes"][:1]
+		errors = handoff.validate_artifact(obj)
+		self.assertTrue(any("final_logits_hashes" in item for item in errors))
+
+	def test_streaming_fixture_cannot_claim_parity_passed(self) -> None:
+		obj = handoff.load_json(FIX / "spark012_b64_tcp_streaming_mb2.example.json")
+		obj = copy.deepcopy(obj)
+		obj["parity_status"] = "passed"
+		errors = handoff.validate_artifact(obj)
+		self.assertTrue(any("parity_status" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()
