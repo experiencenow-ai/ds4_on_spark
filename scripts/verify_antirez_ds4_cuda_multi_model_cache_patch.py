@@ -69,6 +69,8 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"DS4_CUDA_MTP_CACHE_AUTO_LIMIT",
 		"DS4_CUDA_WEIGHT_ARENA_CHUNK_MB",
 		"setenv(\"DS4_CUDA_WEIGHT_ARENA_CHUNK_MB\", \"512\", 0)",
+		"DS4_CUDA_WEIGHT_CACHE_SYNC",
+		"ds4_gpu_synchronize()) return false",
 		"ds4: accelerator stopped startup model cache after %.2f GiB at tensor span",
 		"const bool cache_best_effort =",
 		"+        if (!accelerator_cache_model_tensors(e->backend, &e->model, cache_best_effort)) {",
