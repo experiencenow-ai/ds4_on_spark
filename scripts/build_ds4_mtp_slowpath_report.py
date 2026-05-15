@@ -25,6 +25,7 @@ REQUIRED_COMPONENTS = (
 	"logging_ms",
 	"capture_ms",
 	"token_commit_ms",
+	"scheduler_overhead_ms",
 )
 
 BLOCKER_BY_COMPONENT = {
@@ -36,6 +37,7 @@ BLOCKER_BY_COMPONENT = {
 	"logging_ms": "logging_overhead",
 	"capture_ms": "capture_overhead",
 	"token_commit_ms": "token_commit_overhead",
+	"scheduler_overhead_ms": "scheduler_overhead",
 }
 
 
@@ -183,6 +185,9 @@ def build_report_from_lines(
 		speedup_vs_baseline = float(mtp_generation_tps) / float(baseline_generation_tps)
 	per_component_ms = _components(timing.get("per_component_ms") or {})
 	slowest_component = _slowest_component(per_component_ms, timing.get("slowest_component"))
+	target_next_mismatch_events = _int_or_zero(mismatches.get("target_next_mismatch_events"))
+	verifier_ms = per_component_ms["verifier_replay_ms"]
+	logging_capture_ms = per_component_ms["logging_ms"] + per_component_ms["capture_ms"]
 	blocker_kind, blocker_detail = _blocker(
 		baseline_generation_tps=baseline_generation_tps,
 		mtp_generation_tps=mtp_generation_tps,
@@ -202,21 +207,27 @@ def build_report_from_lines(
 		"mtp_margin": float(mtp_margin),
 		"accepted_tokens": int(accepted_tokens),
 		"attempted_draft_tokens": int(attempted_draft_tokens),
+		"draft_tokens_accepted": int(accepted_tokens),
+		"draft_tokens_attempted": int(attempted_draft_tokens),
 		"accept_rate": accept_rate,
 		"baseline_generation_tps": baseline_generation_tps,
 		"mtp_generation_tps": mtp_generation_tps,
 		"speedup_vs_baseline": speedup_vs_baseline,
-		"target_next_mismatch_count": _int_or_zero(mismatches.get("target_next_mismatch_events")),
+		"target_next_mismatch_count": target_next_mismatch_events,
+		"target_next_mismatch_events": target_next_mismatch_events,
 		"slowest_component": slowest_component,
 		"per_component_ms": per_component_ms,
 		"verifier_replay_ms": per_component_ms["verifier_replay_ms"],
+		"verifier_ms": verifier_ms,
 		"draft_eval_ms": per_component_ms["draft_eval_ms"],
 		"target_eval_ms": per_component_ms["target_eval_ms"],
 		"cache_sync_ms": per_component_ms["cache_sync_ms"],
 		"cuda_sync_ms": per_component_ms["cuda_sync_ms"],
 		"logging_ms": per_component_ms["logging_ms"],
 		"capture_ms": per_component_ms["capture_ms"],
+		"logging_capture_ms": logging_capture_ms,
 		"token_commit_ms": per_component_ms["token_commit_ms"],
+		"scheduler_overhead_ms": per_component_ms["scheduler_overhead_ms"],
 		"blocker_kind": blocker_kind,
 		"blocker_detail": blocker_detail,
 		"timing_event_count": _int_or_zero(timing.get("events")),

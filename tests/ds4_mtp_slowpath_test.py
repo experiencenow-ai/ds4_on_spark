@@ -18,6 +18,7 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertAlmostEqual(float(components.get("draft_eval_ms")), 5.0)
 		self.assertAlmostEqual(float(components.get("target_eval_ms")), 28.0)
 		self.assertAlmostEqual(float(components.get("verifier_replay_ms")), 30.0)
+		self.assertAlmostEqual(float(components.get("scheduler_overhead_ms")), 1.5)
 		self.assertEqual(timing.get("slowest_component"), "verifier_replay_ms")
 
 	def test_builds_and_validates_slowpath_report(self) -> None:
@@ -40,15 +41,21 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertEqual(report.get("format"), "ds4-mtp-slowpath-v1")
 		self.assertEqual(report.get("accepted_tokens"), 2)
 		self.assertEqual(report.get("attempted_draft_tokens"), 2)
+		self.assertEqual(report.get("draft_tokens_accepted"), 2)
+		self.assertEqual(report.get("draft_tokens_attempted"), 2)
 		self.assertAlmostEqual(float(report.get("accept_rate")), 1.0)
 		self.assertAlmostEqual(float(report.get("speedup_vs_baseline")), 1.38 / 15.07)
 		self.assertEqual(report.get("target_next_mismatch_count"), 0)
+		self.assertEqual(report.get("target_next_mismatch_events"), 0)
+		self.assertEqual(report.get("verifier_ms"), report.get("verifier_replay_ms"))
+		self.assertAlmostEqual(float(report.get("logging_capture_ms")), 1.0)
+		self.assertAlmostEqual(float(report.get("scheduler_overhead_ms")), 1.0)
 		self.assertEqual(report.get("slowest_component"), "target_eval_ms")
 		self.assertEqual(report.get("blocker_kind"), "target_verifier_overhead")
 		self.assertTrue(validate.validate_report(report).get("ok"))
 
-	def test_validator_rejects_invalid_speedup_claim(self) -> None:
-		report = {
+	def _valid_report(self) -> dict[str, object]:
+		report: dict[str, object] = {
 			"format": "ds4-mtp-slowpath-v1",
 			"run_id": "r",
 			"model_id": "m",
@@ -58,101 +65,56 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 			"mtp_margin": 0.0,
 			"accepted_tokens": 1,
 			"attempted_draft_tokens": 2,
-			"accept_rate": 0.5,
-			"baseline_generation_tps": 10.0,
-			"mtp_generation_tps": 9.0,
-			"speedup_vs_baseline": 1.2,
-			"target_next_mismatch_count": 0,
-			"slowest_component": "target_eval_ms",
-			"per_component_ms": {k: 0.0 for k in validate.COMPONENT_FIELDS},
-			"blocker_kind": "target_verifier_overhead",
-			"blocker_detail": "slow",
-		}
-		for k in validate.COMPONENT_FIELDS:
-			report[k] = 0.0
-		res = validate.validate_report(report)
-		self.assertFalse(bool(res.get("ok")))
-		self.assertTrue(any("speedup_vs_baseline > 1" in e for e in res.get("errors", [])))
-
-	def test_validator_rejects_accept_rate_without_counts(self) -> None:
-		report = {
-			"format": "ds4-mtp-slowpath-v1",
-			"run_id": "r",
-			"model_id": "m",
-			"runtime_id": "rt",
-			"prompt_hash": "h",
-			"mtp_draft": 2,
-			"mtp_margin": 0.0,
-			"accepted_tokens": 0,
-			"attempted_draft_tokens": 0,
+			"draft_tokens_accepted": 1,
+			"draft_tokens_attempted": 2,
 			"accept_rate": 0.5,
 			"baseline_generation_tps": 10.0,
 			"mtp_generation_tps": 9.0,
 			"speedup_vs_baseline": 0.9,
 			"target_next_mismatch_count": 0,
+			"target_next_mismatch_events": 0,
 			"slowest_component": "target_eval_ms",
 			"per_component_ms": {k: 0.0 for k in validate.COMPONENT_FIELDS},
+			"verifier_ms": 0.0,
+			"logging_capture_ms": 0.0,
 			"blocker_kind": "target_verifier_overhead",
 			"blocker_detail": "slow",
 		}
 		for k in validate.COMPONENT_FIELDS:
 			report[k] = 0.0
+		return report
+
+	def test_validator_rejects_invalid_speedup_claim(self) -> None:
+		report = self._valid_report()
+		report["speedup_vs_baseline"] = 1.2
 		res = validate.validate_report(report)
 		self.assertFalse(bool(res.get("ok")))
-		self.assertTrue(any("attempted_draft_tokens > 0" in e for e in res.get("errors", [])))
+		self.assertTrue(any("speedup_vs_baseline > 1" in e for e in res.get("errors", [])))
+
+	def test_validator_rejects_accept_rate_without_counts(self) -> None:
+		report = self._valid_report()
+		report["draft_tokens_accepted"] = 0
+		report["draft_tokens_attempted"] = 0
+		res = validate.validate_report(report)
+		self.assertFalse(bool(res.get("ok")))
+		self.assertTrue(any("draft_tokens_attempted > 0" in e for e in res.get("errors", [])))
 
 	def test_validator_rejects_slower_mtp_without_blocker(self) -> None:
-		report = {
-			"format": "ds4-mtp-slowpath-v1",
-			"run_id": "r",
-			"model_id": "m",
-			"runtime_id": "rt",
-			"prompt_hash": "h",
-			"mtp_draft": 2,
-			"mtp_margin": 0.0,
-			"accepted_tokens": 1,
-			"attempted_draft_tokens": 2,
-			"accept_rate": 0.5,
-			"baseline_generation_tps": 10.0,
-			"mtp_generation_tps": 5.0,
-			"speedup_vs_baseline": 0.5,
-			"target_next_mismatch_count": 0,
-			"slowest_component": "target_eval_ms",
-			"per_component_ms": {k: 0.0 for k in validate.COMPONENT_FIELDS},
-			"blocker_kind": "none",
-			"blocker_detail": "",
-		}
-		for k in validate.COMPONENT_FIELDS:
-			report[k] = 0.0
+		report = self._valid_report()
+		report["mtp_generation_tps"] = 5.0
+		report["speedup_vs_baseline"] = 0.5
+		report["blocker_kind"] = "none"
+		report["blocker_detail"] = ""
 		res = validate.validate_report(report)
 		self.assertFalse(bool(res.get("ok")))
 		self.assertTrue(any("requires blocker_kind" in e for e in res.get("errors", [])))
 
-	def test_validator_rejects_missing_target_next_mismatch_count(self) -> None:
-		report = {
-			"format": "ds4-mtp-slowpath-v1",
-			"run_id": "r",
-			"model_id": "m",
-			"runtime_id": "rt",
-			"prompt_hash": "h",
-			"mtp_draft": 2,
-			"mtp_margin": 0.0,
-			"accepted_tokens": 1,
-			"attempted_draft_tokens": 2,
-			"accept_rate": 0.5,
-			"baseline_generation_tps": 10.0,
-			"mtp_generation_tps": 5.0,
-			"speedup_vs_baseline": 0.5,
-			"slowest_component": "target_eval_ms",
-			"per_component_ms": {k: 0.0 for k in validate.COMPONENT_FIELDS},
-			"blocker_kind": "target_verifier_overhead",
-			"blocker_detail": "slow",
-		}
-		for k in validate.COMPONENT_FIELDS:
-			report[k] = 0.0
+	def test_validator_rejects_missing_target_next_mismatch_events(self) -> None:
+		report = self._valid_report()
+		report.pop("target_next_mismatch_events")
 		res = validate.validate_report(report)
 		self.assertFalse(bool(res.get("ok")))
-		self.assertTrue(any("target_next_mismatch_count" in e for e in res.get("errors", [])))
+		self.assertTrue(any("target_next_mismatch_events" in e for e in res.get("errors", [])))
 
 
 if __name__ == "__main__":

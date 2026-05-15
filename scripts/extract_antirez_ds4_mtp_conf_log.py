@@ -125,6 +125,7 @@ def _zero_components() -> dict[str, float]:
 		"logging_ms": 0.0,
 		"capture_ms": 0.0,
 		"token_commit_ms": 0.0,
+		"scheduler_overhead_ms": 0.0,
 	}
 
 
@@ -134,9 +135,15 @@ def summarize_timing_events(events: list[TimingEvent]) -> dict[str, Any]:
 	kinds: Counter[str] = Counter()
 	for ev in events:
 		kinds[str(ev.kind)] += 1
+		event_component_ms = 0.0
 		for key, component in TIMING_COMPONENT_KEYS.items():
-			components[component] += float(ev.values.get(key, 0.0))
-		total_ms += float(ev.values.get("total", 0.0))
+			component_ms = float(ev.values.get(key, 0.0))
+			components[component] += component_ms
+			event_component_ms += component_ms
+		event_total_ms = float(ev.values.get("total", 0.0))
+		if event_total_ms > event_component_ms:
+			components["scheduler_overhead_ms"] += (event_total_ms - event_component_ms)
+		total_ms += event_total_ms
 	slowest_component = None
 	if len(events) > 0:
 		slowest_component = max(components.items(), key=lambda kv: float(kv[1]))[0]
