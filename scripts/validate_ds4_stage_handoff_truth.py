@@ -109,21 +109,23 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		transfers = obj.get("transfer_ms_by_boundary")
 		if not isinstance(transfers, list) or not isinstance(stage_count, int) or len(transfers) != max(stage_count - 1, 0):
 			errors.append("transfer_ms_by_boundary length must match stage_count-1")
-		elif isinstance(microbatches, int):
+		elif isinstance(microbatches, int) and obj.get("final_output_finite") is True:
 			for idx, link in enumerate(transfers):
 				if not isinstance(link, list) or len(link) != microbatches:
 					errors.append(f"transfer_ms_by_boundary[{idx}] length must match microbatch_count")
 				elif not all(isinstance(v, (int, float)) and v >= 0 for v in link):
 					errors.append(f"transfer_ms_by_boundary[{idx}] must contain non-negative numbers")
 		hashes = obj.get("final_logits_hashes")
-		if not isinstance(hashes, list) or not isinstance(microbatches, int) or len(hashes) != microbatches:
+		if obj.get("final_output_finite") is True and (not isinstance(hashes, list) or not isinstance(microbatches, int) or len(hashes) != microbatches):
 			errors.append("final_logits_hashes length must match microbatch_count")
-		elif not all(isinstance(v, str) and v.startswith("fnv64:") and not v.endswith("0000000000000000") for v in hashes):
+		elif obj.get("final_output_finite") is True and not all(isinstance(v, str) and v.startswith("fnv64:") and not v.endswith("0000000000000000") for v in hashes):
 			errors.append("final_logits_hashes must contain non-zero fnv64 hashes")
 		if obj.get("parity_scope") not in (None, "stage_handoff_finite_logits"):
 			errors.append("streaming handoff parity_scope must be stage_handoff_finite_logits when present")
 		if obj.get("parity_status") not in (None, "not_run"):
 			errors.append("streaming handoff parity_status must remain not_run")
+		if obj.get("production_generation_eligible") is True:
+			errors.append("stage handoff proof must not claim production_generation_eligible")
 		stage_iters = obj.get("stage_ms_by_microbatch")
 		bound = obj.get("pipeline_rows_per_s_bound")
 		batch = obj.get("batch_size")
@@ -133,6 +135,7 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			and isinstance(batch, int)
 			and batch > 0
 			and isinstance(bound, (int, float))
+			and obj.get("final_output_finite") is True
 		):
 			service: list[float] = []
 			for idx, values in enumerate(stage_iters):
