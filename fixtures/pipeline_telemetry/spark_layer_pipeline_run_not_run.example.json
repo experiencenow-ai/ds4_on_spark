@@ -1,6 +1,6 @@
 {
   "artifact_schema_version": 1,
-  "artifact_sha256": "sha256:33def3c3c39d77bdf2779f73f9f7214b45196b9e7a3270c3006ab686d4e28fca",
+  "artifact_sha256": "sha256:5983c3852bbe1e08fa721a474a1a662a5f18dbbcb55eba06f3975c3f323c3b03",
   "bubble_overhead_ratio": 0.014184397163120567,
   "command_sha256": "sha256:ff8c2189412b09a584d5013c113334698d36378211f9a8eb25d5067473daee15",
   "format": "spark-layer-pipeline-run-v1",
@@ -14,6 +14,8 @@
   "pipeline_id": "spark012-ds4-layer-pipeline-mre",
   "pipeline_items_per_s": 43.16546763,
   "provider_id": "spark-ring-dsv4-layer-pipeline",
+  "quality_parity_artifact": "",
+  "quality_parity_artifact_sha256": "",
   "quality_parity_detail": "PP=1 vs PP=N logits/token parity not run",
   "quality_parity_status": "not_run",
   "run_id": "spark012-pipeline-mre-example",

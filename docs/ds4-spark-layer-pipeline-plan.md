@@ -206,6 +206,8 @@ The run artifact includes replay-friendly hashes and inventory:
 - `stage_results_sha256`
 - `stage_inventory`
 - `quality_parity_status`
+- `quality_parity_artifact`
+- `quality_parity_artifact_sha256`
 
 Per-rank stage output uses `ds4-pipeline-stage-result-v1`. The MRE can also run
 a deterministic callback with `--process checksum`, proving that stage process
@@ -239,12 +241,30 @@ Validate the run artifact:
 
 ```sh
 python3 scripts/ds4_pipeline_telemetry.py validate \
-  fixtures/pipeline_telemetry/spark_layer_pipeline_run_not_run.example.json
+  fixtures/pipeline_telemetry/*.json
 ```
 
 The current fixture keeps `quality_parity_status` at `not_run`. That is
 intentional: DS4 must not claim provider eligibility for real generation until a
 PP=1 vs PP=N logits/token parity check exists and passes.
+
+The parity gate artifact is `ds4-layer-pipeline-parity-v1`; see
+`docs/ds4-layer-pipeline-parity-gate.md`. The telemetry validator accepts
+`quality_parity_status: passed` only when the run references a validated,
+non-synthetic parity artifact whose own `parity_status` is `passed`.
+
+Validate parity fixtures:
+
+```sh
+python3 scripts/validate_ds4_pipeline_parity.py fixtures/pipeline_parity/*.json
+```
+
+Emit the current honest boundary-shape probe scaffold when the live DS4 runtime
+is unavailable:
+
+```sh
+python3 scripts/ds4_stage_boundary_shape_probe.py --probe-status not_available
+```
 
 ## First Acceptance Criteria
 

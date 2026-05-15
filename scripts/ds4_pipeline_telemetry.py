@@ -10,6 +10,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+try:
+	from scripts import validate_ds4_pipeline_parity as parity_validator
+except ImportError:
+	import validate_ds4_pipeline_parity as parity_validator
+
 
 FORMAT = "spark-layer-pipeline-run-v1"
 STAGE_FORMAT = "ds4-pipeline-stage-result-v1"
@@ -46,6 +51,8 @@ REQUIRED = (
 	"stage_balance_ratio",
 	"quality_parity_status",
 	"quality_parity_detail",
+	"quality_parity_artifact",
+	"quality_parity_artifact_sha256",
 )
 
 
@@ -95,7 +102,58 @@ def as_int(obj: dict[str, Any], key: str, default: int = 0) -> int:
 	return int(value)
 
 
-def validate_run(obj: dict[str, Any]) -> list[str]:
+def is_sha256_text(value: Any, allow_empty: bool = False) -> bool:
+	if allow_empty and value == "":
+		return True
+	if not isinstance(value, str):
+		return False
+	return value.startswith("sha256:") and len(value) == 71
+
+
+def load_parity_artifact(path_text: str, base_dir: Path | None, errors: list[str]) -> dict[str, Any] | None:
+	path = Path(path_text)
+	if not path.is_absolute() and base_dir is not None:
+		path = base_dir / path
+	try:
+		return parity_validator.load_json(path)
+	except (OSError, ValueError, json.JSONDecodeError) as exc:
+		errors.append(f"quality_parity_artifact could not be loaded: {exc}")
+		return None
+
+
+def validate_parity_reference(obj: dict[str, Any], base_dir: Path | None, errors: list[str]) -> None:
+	status = obj.get("quality_parity_status")
+	artifact_ref = obj.get("quality_parity_artifact", "")
+	artifact_hash = obj.get("quality_parity_artifact_sha256", "")
+	artifact_hash_text = artifact_hash if isinstance(artifact_hash, str) else ""
+	if not isinstance(artifact_ref, str):
+		errors.append("quality_parity_artifact must be a string")
+		return
+	if not is_sha256_text(artifact_hash, allow_empty=True):
+		errors.append("quality_parity_artifact_sha256 must be empty or sha256:<hex>")
+	if status == "passed" and artifact_ref.strip() == "":
+		errors.append("quality_parity_status passed requires quality_parity_artifact")
+		return
+	if status == "passed" and artifact_hash_text.strip() == "":
+		errors.append("quality_parity_status passed requires quality_parity_artifact_sha256")
+	if status != "passed" and artifact_ref.strip() == "":
+		return
+	artifact = load_parity_artifact(artifact_ref, base_dir, errors)
+	if artifact is None:
+		return
+	artifact_errors = parity_validator.validate_artifact(artifact)
+	for item in artifact_errors:
+		errors.append(f"quality_parity_artifact: {item}")
+	actual_hash = artifact.get("artifact_sha256")
+	if artifact_hash_text != "" and artifact_hash_text != actual_hash:
+		errors.append("quality_parity_artifact_sha256 does not match referenced artifact")
+	if status == "passed" and not parity_validator.is_quality_parity_pass(artifact):
+		errors.append("quality_parity_status passed requires a non-synthetic DS4 quality parity artifact")
+	if status == "failed" and artifact.get("parity_status") == "passed":
+		errors.append("quality_parity_status failed cannot reference a passed parity artifact")
+
+
+def validate_run(obj: dict[str, Any], base_dir: Path | None = None) -> list[str]:
 	errors: list[str] = []
 	for key in REQUIRED:
 		if key not in obj:
@@ -123,6 +181,8 @@ def validate_run(obj: dict[str, Any]) -> list[str]:
 	q = obj.get("quality_parity_status")
 	if q not in QUALITY:
 		errors.append("quality_parity_status must be not_run, passed, or failed")
+	if q in ("passed", "failed") and (not isinstance(obj.get("quality_parity_detail"), str) or obj.get("quality_parity_detail", "").strip() == ""):
+		errors.append("quality_parity_detail must explain passed/failed parity status")
 	if as_float(obj, "sequential_items_per_s") <= 0.0:
 		errors.append("sequential_items_per_s must be > 0 for throughput claims")
 	if as_float(obj, "pipeline_items_per_s") <= 0.0:
@@ -141,6 +201,7 @@ def validate_run(obj: dict[str, Any]) -> list[str]:
 			errors.append(f"{key} must be a sha256: string")
 	if not isinstance(obj.get("output_payload_checksum"), str) or obj.get("output_payload_checksum") == "":
 		errors.append("output_payload_checksum must be a non-empty string")
+	validate_parity_reference(obj, base_dir, errors)
 	return errors
 
 
@@ -163,6 +224,8 @@ def build_run(
 	stages: list[dict[str, Any]],
 	quality_status: str,
 	quality_detail: str,
+	quality_parity_artifact: str = "",
+	quality_parity_artifact_sha256: str = "",
 ) -> dict[str, Any]:
 	if manifest.get("format") != MANIFEST_FORMAT:
 		raise ValueError(f"manifest format must be {MANIFEST_FORMAT}")
@@ -228,6 +291,8 @@ def build_run(
 		},
 		"quality_parity_status": quality_status,
 		"quality_parity_detail": quality_detail,
+		"quality_parity_artifact": quality_parity_artifact,
+		"quality_parity_artifact_sha256": quality_parity_artifact_sha256,
 		"stage_results": norm,
 	}
 	run["artifact_sha256"] = artifact_sha256(run)
@@ -238,8 +303,20 @@ def cmd_combine(args: argparse.Namespace) -> int:
 	manifest = load_json(Path(args.manifest))
 	sequential = load_json(Path(args.sequential))
 	stages = [load_json(Path(path)) for path in args.stage]
-	run = build_run(manifest, sequential, stages, args.quality_parity_status, args.quality_parity_detail)
-	errors = validate_run(run)
+	quality_parity_artifact_sha256 = args.quality_parity_artifact_sha256
+	if args.quality_parity_artifact and quality_parity_artifact_sha256 == "":
+		quality_parity_artifact_sha256 = str(load_json(Path(args.quality_parity_artifact)).get("artifact_sha256", ""))
+	run = build_run(
+		manifest,
+		sequential,
+		stages,
+		args.quality_parity_status,
+		args.quality_parity_detail,
+		args.quality_parity_artifact,
+		quality_parity_artifact_sha256,
+	)
+	base_dir = Path(args.out).parent if args.out else None
+	errors = validate_run(run, base_dir)
 	if errors:
 		for item in errors:
 			print(item)
@@ -257,7 +334,11 @@ def cmd_validate(args: argparse.Namespace) -> int:
 	for path_text in args.artifact:
 		path = Path(path_text)
 		obj = load_json(path)
-		errors = validate_run(obj)
+		if obj.get("format") in (STAGE_FORMAT, MANIFEST_FORMAT):
+			if not args.quiet:
+				print(f"skip: {path}")
+			continue
+		errors = validate_run(obj, path.parent)
 		if errors:
 			ok = False
 			for item in errors:
@@ -276,6 +357,8 @@ def main() -> int:
 	combine.add_argument("--stage", action="append", required=True)
 	combine.add_argument("--quality-parity-status", default="not_run", choices=sorted(QUALITY))
 	combine.add_argument("--quality-parity-detail", default="PP=1 vs PP=N logits/token parity not run")
+	combine.add_argument("--quality-parity-artifact", default="")
+	combine.add_argument("--quality-parity-artifact-sha256", default="")
 	combine.add_argument("--out", default="")
 	validate = sub.add_parser("validate")
 	validate.add_argument("artifact", nargs="+")
