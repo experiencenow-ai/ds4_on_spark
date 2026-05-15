@@ -1,0 +1,36 @@
+{
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:483fb5f4682832a9781d1cac31b8633804c2b2d520ba2c0b340b85b8e7a4f2e9",
+  "baseline_tok_s": 13.3,
+  "best_full_stack_finite_output": true,
+  "best_full_stack_output_hash": "fnv64:3333333333333333",
+  "best_full_stack_record": "full_stack_b128_120",
+  "best_full_stack_tok_s": 120.0,
+  "component_ceiling_tok_s": {
+    "ffn_envelope_ceiling": 558.0,
+    "moe_only_ceiling": 620.0,
+    "synthetic_layer_ceiling": 409.0
+  },
+  "current_primary_blocker": "output_head_cap",
+  "current_secondary_blocker": "none",
+  "do_not_build_more_scaffolding_until": "slowest measured lifecycle stage is optimized against a finite-output full-stack baseline",
+  "exceeds_15_tok_s": true,
+  "format": "ds4-perf-iceberg-summary-v1",
+  "input_prefill_tok_s": null,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "next_code_change_required": "Add a batched/head-sharded output projection probe and optimize the vocab projection path.",
+  "output_head_cap_tok_s": 387.807,
+  "prefix_hit_load_ms": null,
+  "quantization_id": "fixture.gguf",
+  "realization_ratio_vs_409": 0.293398533007335,
+  "realization_ratio_vs_558": 0.21505376344086022,
+  "realization_ratio_vs_620": 0.1935483870967742,
+  "records": [
+    "output_head_b1024",
+    "full_stack_b128_120"
+  ],
+  "run_id": "fixture-output-cap",
+  "runtime_id": "fixture-runtime",
+  "spark_node": "spark-fixture",
+  "suffix_prefill_tok_s": null
+}
