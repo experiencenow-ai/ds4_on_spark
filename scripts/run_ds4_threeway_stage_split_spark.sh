@@ -93,13 +93,18 @@ wait_stage 0
 wait_stage 1
 wait_stage 2
 
-python3 - "$LOCAL_OUT_DIR" "$BATCH" <<'PY'
+python3 - "$LOCAL_OUT_DIR" "$BATCH" "$STAGE0_BEGIN" "$STAGE0_END" "$STAGE1_BEGIN" "$STAGE1_END" "$STAGE2_BEGIN" "$STAGE2_END" <<'PY'
 import json
 import pathlib
 import sys
 
 root = pathlib.Path(sys.argv[1])
 batch = int(sys.argv[2])
+stage_ranges = [
+	[int(sys.argv[3]), int(sys.argv[4])],
+	[int(sys.argv[5]), int(sys.argv[6])],
+	[int(sys.argv[7]), int(sys.argv[8])],
+]
 rows = []
 ok = True
 for stage in range(3):
@@ -118,6 +123,9 @@ success_rows = [r for r in rows if r.get("rc") == 0 and "best_ms" in r]
 summary = {
 	"format": "ds4-threeway-stage-split-v1",
 	"batch": batch,
+	"preload_policy": "explicit_stage_preload",
+	"stage_count": 3,
+	"stage_layer_ranges": stage_ranges,
 	"all_stages_success": ok and len(success_rows) == 3,
 	"stages": rows,
 }

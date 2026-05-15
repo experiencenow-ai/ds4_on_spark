@@ -85,6 +85,15 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - keeps output-head work only on the final stage unless `DS4_CUDA_STACK_PROBE_NO_HEAD=1` is absent and the stage ends at layer 43
     - lets a three-Spark stage split run as `[0,15)`, `[15,29)`, `[29,43)` without hardcoding the topology into C
 
+- `ds4-3630e64-cuda-explicit-stage-preload.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the stack-stage range preload patch
+  - Purpose:
+    - fixes the stage preload path so it no longer calls the generic demand-cache range loader for each tensor/chunk
+    - adds `ds4_gpu_preload_model_range(...)`, which allocates the final device-resident tensor range from the CUDA arena, reads through the pinned staging pool, copies explicit chunks with `cudaMemcpy`, and registers the completed range in the CUDA model cache
+    - keeps routed expert slabs resident as full owned-stage tensors, with semantic labels such as `stack_stage_l0_ffn_gate_exps`, `stack_stage_l0_ffn_up_exps`, and `stack_stage_l0_ffn_down_exps`
+    - turns the prior misleading `lazy_moe_range_upload` timeout into a real explicit-preload path with exact tensor labels
+    - allowed the first successful B=64 three-Spark owned-stage run after the Sparks were made headless and stale RPC GPU contexts were killed
+
 Apply (example):
 
 ```bash
@@ -98,6 +107,7 @@ git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batche
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stage-range-preload.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-explicit-stage-preload.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
@@ -121,6 +131,7 @@ python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_batched_expert
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_batched_expert_tile_slices_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-batched-expert-tile-slices.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_moe_probe_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-moe-probe-and-startup-cache-skip.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stack_stage_preload_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stage-range-preload.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_explicit_stage_preload_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-explicit-stage-preload.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
