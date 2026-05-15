@@ -50,6 +50,13 @@ class StageHandoffTruthTest(unittest.TestCase):
 		errors = handoff.validate_artifact(obj)
 		self.assertTrue(any("parity_status" in item for item in errors))
 
+	def test_resident_fixture_cannot_claim_production_generation_eligible(self) -> None:
+		obj = handoff.load_json(FIX / "spark012_b256_tcp_resident_mb4.example.json")
+		obj = copy.deepcopy(obj)
+		obj["production_generation_eligible"] = True
+		errors = handoff.validate_artifact(obj)
+		self.assertTrue(any("production_generation_eligible" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()

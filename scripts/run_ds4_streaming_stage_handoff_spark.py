@@ -112,12 +112,16 @@ print(json.dumps({"bytes":n,"sha256":h.hexdigest(),"transfer_ms":(t1-t0)*1000.0,
 
 SEND_CODE = r"""
 import hashlib,json,os,socket,struct,sys,time
-host=sys.argv[1]; port=int(sys.argv[2]); path=sys.argv[3]; timeout=float(sys.argv[4])
+host=sys.argv[1]; port=int(sys.argv[2]); path=sys.argv[3]; timeout=float(sys.argv[4]); expected=int(sys.argv[5])
 t_wait=time.time()
-while not os.path.exists(path):
-    if (time.time()-t_wait) > timeout: raise RuntimeError(f"timeout waiting for {path}")
+while True:
+    if os.path.exists(path) and (expected <= 0 or os.path.getsize(path) == expected): break
+    if (time.time()-t_wait) > timeout:
+        size=os.path.getsize(path) if os.path.exists(path) else -1
+        raise RuntimeError(f"timeout waiting for {path} size={size} expected={expected}")
     time.sleep(0.01)
 data=open(path,"rb").read()
+if expected > 0 and len(data) != expected: raise RuntimeError(f"size {len(data)} expected {expected}")
 h=hashlib.sha256(data).digest()
 t0=time.time(); last=None
 while True:
@@ -134,6 +138,56 @@ with s:
     s.sendall(h)
 t1=time.time()
 print(json.dumps({"bytes":len(data),"sha256":h.hex(),"transfer_ms":(t1-t0)*1000.0,"dest":host}), flush=True)
+"""
+
+LOCK_PROBE_CODE = r"""
+import json,os,signal,sys,time
+cleanup=int(sys.argv[1]); min_age=float(sys.argv[2])
+now=time.time(); candidates=[]; cleaned=[]; blocked=[]
+for name in os.listdir("/proc"):
+    if not name.isdigit(): continue
+    pid=int(name)
+    try:
+        raw=open(f"/proc/{pid}/cmdline","rb").read().replace(b"\0",b" ").decode("utf-8","replace").strip()
+        st=os.stat(f"/proc/{pid}")
+    except Exception:
+        continue
+    if raw.startswith("python") or "python3 -c" in raw: continue
+    if raw.startswith("ssh ") or raw.startswith("bash ") or raw.startswith("sh "): continue
+    if "--cuda-batch-stack-probe" not in raw: continue
+    if "ds4" not in raw: continue
+    age=max(0.0, now-st.st_ctime)
+    item={"pid":pid,"age_s":age,"command":raw[:500]}
+    candidates.append(item)
+    if cleanup and age >= min_age:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            cleaned.append(item)
+        except ProcessLookupError:
+            pass
+        except Exception as e:
+            item["cleanup_error"]=str(e)
+            blocked.append(item)
+    else:
+        blocked.append(item)
+if cleaned:
+    time.sleep(1.0)
+    for item in list(cleaned):
+        pid=item["pid"]
+        if not os.path.exists(f"/proc/{pid}"):
+            continue
+        try:
+            raw=open(f"/proc/{pid}/cmdline","rb").read().replace(b"\0",b" ").decode("utf-8","replace").strip()
+        except Exception:
+            raw=""
+        if "--cuda-batch-stack-probe" in raw and "ds4" in raw:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                item["sigkill"]=True
+            except Exception as e:
+                item["sigkill_error"]=str(e)
+                blocked.append(item)
+print(json.dumps({"candidates":candidates,"cleaned":cleaned,"blocked":blocked}, sort_keys=True), flush=True)
 """
 
 
@@ -227,6 +281,37 @@ def write_log(path: Path, text: str) -> None:
 	path.write_text(text, encoding="utf-8")
 
 
+def probe_stage_locks(stage: Stage, args: argparse.Namespace) -> dict[str, Any]:
+	cmd = "python3 -c {} {} {}".format(q(LOCK_PROBE_CODE), 1 if args.cleanup_stale_stage_locks else 0, args.stale_lock_min_age_s)
+	rc = run_remote(stage, args.known_hosts, cmd)
+	obj: dict[str, Any]
+	try:
+		obj = parse_last_json(rc.stdout or "")
+	except Exception:
+		obj = {"candidates": [], "cleaned": [], "blocked": [], "probe_error": (rc.stderr or rc.stdout or "").strip()}
+	obj["stage_node"] = stage.name
+	obj["returncode"] = rc.returncode
+	return obj
+
+
+def preflight_locks(stages: list[Stage], args: argparse.Namespace, outdir: Path) -> list[dict[str, Any]]:
+	results = [probe_stage_locks(stage, args) for stage in stages]
+	write_log(outdir / "stale_lock_preflight.json", json.dumps(results, indent=2, sort_keys=True) + "\n")
+	return results
+
+
+def lock_preflight_blockers(lock_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	blockers = []
+	for result in lock_results:
+		if result.get("returncode") != 0 or result.get("probe_error"):
+			blockers.append(result)
+			continue
+		blocked = result.get("blocked")
+		if isinstance(blocked, list) and blocked:
+			blockers.append(result)
+	return blockers
+
+
 def run_stage_thread(stage: Stage, idx: int, total: int, args: argparse.Namespace, outdir: Path, results: list[dict[str, Any]], errors: "queue.Queue[str]") -> None:
 	cmd = build_stage_command(stage, idx, total, args)
 	t0 = time.time()
@@ -261,7 +346,7 @@ def run_transfer_pair(
 	src_path = boundary_path(args.remote_run_root, link_idx).replace("%u", str(mb))
 	dst_path = boundary_path(args.remote_run_root, link_idx).replace("%u", str(mb))
 	recv_cmd = "python3 -c {} {} {} {}".format(q(RECV_CODE), port, q(dst_path), expected_bytes)
-	send_cmd = "python3 -c {} {} {} {} {}".format(q(SEND_CODE), q(dst.listen_ip), port, q(src_path), args.transfer_wait_s)
+	send_cmd = "python3 -c {} {} {} {} {} {}".format(q(SEND_CODE), q(dst.listen_ip), port, q(src_path), args.transfer_wait_s, expected_bytes)
 	recv = popen_remote(dst, args.known_hosts, recv_cmd)
 	time.sleep(0.15)
 	send = popen_remote(src, args.known_hosts, send_cmd)
@@ -309,13 +394,18 @@ def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[d
 		stage_iters.append([float(v) for v in values])
 	transfer_ms = [[float(item["transfer_ms"]) for item in link] for link in transfers]
 	stage_finish = [[0.0 for _ in range(microbatches)] for _ in stage_results]
+	stage_start = [[0.0 for _ in range(microbatches)] for _ in stage_results]
+	idle_wait = [[0.0 for _ in range(microbatches)] for _ in stage_results]
 	for mb in range(microbatches):
 		prev = stage_finish[0][mb - 1] if mb else 0.0
-		stage_finish[0][mb] = prev + stage_iters[0][mb]
+		stage_start[0][mb] = prev
+		stage_finish[0][mb] = stage_start[0][mb] + stage_iters[0][mb]
 		for s in range(1, len(stage_results)):
 			ready = stage_finish[s - 1][mb] + transfer_ms[s - 1][mb]
 			prev_stage = stage_finish[s][mb - 1] if mb else 0.0
-			stage_finish[s][mb] = max(ready, prev_stage) + stage_iters[s][mb]
+			stage_start[s][mb] = max(ready, prev_stage)
+			idle_wait[s][mb] = max(0.0, ready - prev_stage)
+			stage_finish[s][mb] = stage_start[s][mb] + stage_iters[s][mb]
 	last_ms = stage_finish[-1][-1]
 	service = []
 	for s in range(len(stage_results)):
@@ -330,6 +420,8 @@ def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[d
 	return {
 		"stage_ms_by_microbatch": stage_iters,
 		"transfer_ms_by_boundary": transfer_ms,
+		"worker_idle_wait_ms_by_stage": idle_wait,
+		"streaming_schedule_start_ms": stage_start,
 		"streaming_schedule_finish_ms": stage_finish,
 		"achieved_streaming_rows_per_s": (batch * microbatches * 1000.0 / last_ms) if last_ms > 0 else 0.0,
 		"pipeline_rows_per_s_bound": (batch * 1000.0 / bottleneck) if bottleneck > 0 else 0.0,
@@ -337,13 +429,17 @@ def compute_schedule(stage_results: list[dict[str, Any]], transfers: list[list[d
 	}
 
 
-def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[dict[str, Any]], transfers: list[list[dict[str, Any]]], schedule: dict[str, Any], outdir: Path, wall_ms: float) -> dict[str, Any]:
+def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[dict[str, Any]], transfers: list[list[dict[str, Any]]], schedule: dict[str, Any], outdir: Path, wall_ms: float, lock_results: list[dict[str, Any]]) -> dict[str, Any]:
 	final = results[-1]
 	hashes = [f"fnv64:{h}" for h in final.get("logits_fnv64s", [])]
 	if not hashes and final.get("logits_fnv64"):
 		hashes = [f"fnv64:{final['logits_fnv64']}"]
 	nonfinites = final.get("logits_nonfinites", [final.get("logits_nonfinite", 0)])
 	finite = all(int(v) == 0 for v in nonfinites) and all(h != "fnv64:0000000000000000" for h in hashes)
+	stage_compute_ms = sum(sum(values) for values in schedule["stage_ms_by_microbatch"])
+	boundary_transfer_ms = sum(sum(values) for values in schedule["transfer_ms_by_boundary"])
+	worker_idle_ms = sum(sum(values) for values in schedule["worker_idle_wait_ms_by_stage"])
+	process_wall = [float(r.get("stage_process_wall_ms", 0.0)) for r in results]
 	return {
 		"format": "ds4-stage-handoff-truth-v1",
 		"run_id": args.run_id,
@@ -361,22 +457,78 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"stage_ms_by_microbatch": schedule["stage_ms_by_microbatch"],
 		"transport_kind": "tcp_binary",
 		"streaming_pipeline": True,
+		"resident_worker_mode": True,
 		"microbatch_count": args.microbatches,
 		"pipeline_depth": min(args.pipeline_depth, args.microbatches),
 		"transfer_ms": max((item["transfer_ms"] for link in transfers for item in link), default=0.0),
 		"transfer_ms_by_boundary": schedule["transfer_ms_by_boundary"],
+		"transfer_records": [item for link in transfers for item in link],
+		"worker_idle_wait_ms_by_stage": schedule["worker_idle_wait_ms_by_stage"],
+		"streaming_schedule_start_ms": schedule["streaming_schedule_start_ms"],
+		"streaming_schedule_finish_ms": schedule["streaming_schedule_finish_ms"],
 		"pipeline_rows_per_s_bound": schedule["pipeline_rows_per_s_bound"],
 		"actual_end_to_end_rows_per_s_if_measured": schedule["achieved_streaming_rows_per_s"],
 		"achieved_streaming_rows_per_s": schedule["achieved_streaming_rows_per_s"],
 		"bubble_overhead_ratio": schedule["bubble_overhead_ratio"],
+		"overhead_breakdown_ms": {
+			"startup_preload_excluded": True,
+			"stage_compute": stage_compute_ms,
+			"boundary_send_recv": boundary_transfer_ms,
+			"worker_idle_wait": worker_idle_ms,
+			"coordinator_wall": wall_ms,
+			"stage_process_wall_by_stage": process_wall,
+			"stage_process_extra_by_stage": [max(0.0, process_wall[i] - sum(schedule["stage_ms_by_microbatch"][i])) for i in range(len(process_wall))],
+			"finalization_hash": None,
+		},
 		"orchestrator_wall_ms": wall_ms,
 		"final_logits_hash": hashes[-1] if hashes else "",
 		"final_logits_hashes": hashes,
 		"final_output_finite": finite,
 		"parity_status": "not_run",
 		"parity_scope": "stage_handoff_finite_logits",
+		"production_generation_eligible": False,
+		"stale_lock_preflight": lock_results,
 		"blocker_kind": "none" if finite else "nonfinite_final_output",
 		"blocker_detail": "" if finite else "stage2 produced nonfinite or zero final logits",
+		"artifact_dir": str(outdir),
+	}
+
+
+def build_failure_artifact(args: argparse.Namespace, stages: list[Stage], outdir: Path, blocker_kind: str, blocker_detail: str, lock_results: list[dict[str, Any]]) -> dict[str, Any]:
+	return {
+		"format": "ds4-stage-handoff-truth-v1",
+		"run_id": args.run_id,
+		"model_id": MODEL_ID,
+		"runtime_id": RUNTIME_ID,
+		"quantization_id": QUANT_ID,
+		"batch_size": args.batch,
+		"stage_count": len(stages),
+		"stage_nodes": [s.name for s in stages],
+		"layer_ranges": [[s.layer_begin, s.layer_end] for s in stages],
+		"boundary_layout": "batch,hc,hidden",
+		"boundary_dtype": "f32",
+		"boundary_bytes": args.boundary_bytes,
+		"stage_ms": [0.0 for _ in stages],
+		"transport_kind": "tcp_binary",
+		"streaming_pipeline": True,
+		"resident_worker_mode": True,
+		"microbatch_count": args.microbatches,
+		"pipeline_depth": min(args.pipeline_depth, args.microbatches),
+		"transfer_ms": 0.0,
+		"transfer_ms_by_boundary": [[] for _ in range(max(0, len(stages) - 1))],
+		"pipeline_rows_per_s_bound": 0.0,
+		"actual_end_to_end_rows_per_s_if_measured": 0.0,
+		"achieved_streaming_rows_per_s": 0.0,
+		"bubble_overhead_ratio": 0.0,
+		"final_logits_hash": "",
+		"final_logits_hashes": [],
+		"final_output_finite": False,
+		"parity_status": "not_run",
+		"parity_scope": "stage_handoff_finite_logits",
+		"production_generation_eligible": False,
+		"stale_lock_preflight": lock_results,
+		"blocker_kind": blocker_kind,
+		"blocker_detail": blocker_detail,
 		"artifact_dir": str(outdir),
 	}
 
@@ -396,6 +548,8 @@ def parse_args() -> argparse.Namespace:
 	ap.add_argument("--transfer-wait-s", type=float, default=900.0)
 	ap.add_argument("--base-port", type=int, default=19100)
 	ap.add_argument("--known-hosts", default="/private/tmp/ds4_spark_known_hosts")
+	ap.add_argument("--cleanup-stale-stage-locks", action="store_true", help="Terminate stale --cuda-batch-stack-probe ds4 workers before the run.")
+	ap.add_argument("--stale-lock-min-age-s", type=float, default=120.0)
 	args = ap.parse_args()
 	if not args.remote_run_root:
 		args.remote_run_root = f"/tmp/{args.run_id}"
@@ -410,6 +564,14 @@ def main() -> int:
 	stages = load_stage_manifest(args.stage_manifest) if args.stage_manifest else default_stages()
 	outdir = Path(args.local_out_dir)
 	outdir.mkdir(parents=True, exist_ok=True)
+	lock_results = preflight_locks(stages, args, outdir)
+	lock_blockers = lock_preflight_blockers(lock_results)
+	if lock_blockers:
+		detail = json.dumps(lock_blockers, sort_keys=True)[:4000]
+		artifact = build_failure_artifact(args, stages, outdir, "stale_process_lock", detail, lock_results)
+		(outdir / "summary.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+		print(json.dumps(artifact, indent=2, sort_keys=True))
+		return 2
 	for idx, stage in enumerate(stages):
 		rc = run_remote(stage, args.known_hosts, f"mkdir -p {q(stage_dir(args.remote_run_root, idx))}")
 		if rc.returncode != 0:
@@ -430,11 +592,16 @@ def main() -> int:
 		thread.join()
 	wall_ms = (time.time() - t0) * 1000.0
 	if not errors.empty():
+		items = []
 		while not errors.empty():
-			print(f"error: {errors.get()}", file=sys.stderr)
+			item = errors.get()
+			items.append(item)
+			print(f"error: {item}", file=sys.stderr)
+		artifact = build_failure_artifact(args, stages, outdir, "stage_or_transfer_failure", "; ".join(items)[:4000], lock_results)
+		(outdir / "summary.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 		return 2
 	schedule = compute_schedule(results, transfers, args.batch, args.microbatches)
-	artifact = build_artifact(args, stages, results, transfers, schedule, outdir, wall_ms)
+	artifact = build_artifact(args, stages, results, transfers, schedule, outdir, wall_ms, lock_results)
 	(outdir / "summary.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 	print(json.dumps(artifact, indent=2, sort_keys=True))
 	return 0 if artifact["final_output_finite"] else 1
