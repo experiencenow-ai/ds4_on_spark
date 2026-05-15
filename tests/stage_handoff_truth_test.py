@@ -64,6 +64,16 @@ class StageHandoffTruthTest(unittest.TestCase):
 		self.assertGreater(obj["steady_state_pipeline_bound_rows_per_s"], obj["achieved_streaming_rows_per_s"])
 		self.assertGreater(obj["observed_steady_state_rows_per_s"], 0.0)
 
+	def test_base_ceiling_fixture_records_stage_balance_and_parity_blocker(self) -> None:
+		obj = handoff.load_json(FIX / "spark012_b512_tcp_resident_mb16.example.json")
+		self.assertEqual(obj["parity_status"], "not_run")
+		self.assertEqual(obj["parity_blocker"], "missing_repo_owned_split_forward_runtime_hook")
+		self.assertFalse(obj["production_generation_eligible"])
+		self.assertEqual(obj["slowest_resource_kind"], "stage_compute")
+		self.assertEqual(obj["slowest_stage_id"], 0)
+		self.assertGreater(obj["stage_balance_ratio"], 1.0)
+		self.assertGreater(obj["achieved_streaming_rows_per_s"], 200.0)
+
 
 if __name__ == "__main__":
 	unittest.main()

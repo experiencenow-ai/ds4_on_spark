@@ -114,9 +114,12 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			"fill_ms",
 			"drain_ms",
 			"slowest_resource_service_ms",
+			"stage_balance_ratio",
 		]:
 			if key in obj and not isinstance(obj.get(key), (int, float)):
 				errors.append(f"streaming handoff {key} must be numeric when present")
+		if "stage_balance_ratio" in obj and isinstance(obj.get("stage_balance_ratio"), (int, float)) and obj["stage_balance_ratio"] < 0:
+			errors.append("stage_balance_ratio must be non-negative")
 		if "steady_state_window_microbatches" in obj:
 			window = obj.get("steady_state_window_microbatches")
 			if not isinstance(window, list) or not all(isinstance(v, int) for v in window):
@@ -148,6 +151,8 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			errors.append("streaming handoff parity_scope must be stage_handoff_finite_logits when present")
 		if obj.get("parity_status") not in (None, "not_run"):
 			errors.append("streaming handoff parity_status must remain not_run")
+		if obj.get("parity_blocker") not in (None, "missing_repo_owned_split_forward_runtime_hook"):
+			errors.append("streaming handoff parity_blocker must identify the missing split-forward hook when present")
 		if obj.get("production_generation_eligible") is True:
 			errors.append("stage handoff proof must not claim production_generation_eligible")
 		stage_iters = obj.get("stage_ms_by_microbatch")

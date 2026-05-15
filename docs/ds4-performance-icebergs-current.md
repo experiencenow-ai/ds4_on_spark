@@ -1,6 +1,6 @@
 # DS4 Performance Icebergs: Current Truth
 
-Status as of the 2026-05-15 streaming-stage utilization window:
+Status as of the 2026-05-15 base-pipeline ceiling window:
 DS4 has finite three-stage TCP binary handoff with real boundary activations.
 Each stage preloads its owned layer range, stage2 includes the output head, and
 successful runs emit finite logits hashes. This is still not production
@@ -10,61 +10,72 @@ generation: PP=1 parity is not run and `production_generation_eligible=false`.
 
 | Metric | Value |
 | --- | ---: |
-| Best achieved streaming rows/s | 188.506 at B=512, microbatches=8 |
-| Best corrected steady-state bound | 243.610 rows/s at B=1024, microbatches=2 |
-| Best B=512 corrected steady-state bound | 237.966 rows/s |
+| Best achieved streaming rows/s | 209.036 at B=512, microbatches=16 |
+| Best corrected steady-state bound | 244.270 rows/s at B=1024, microbatches=4 |
+| Best B=512 corrected steady-state bound | 237.492 rows/s |
 | Exceeds 15 rows/s | true |
+| Exceeds 250 rows/s | false |
 | PP=1 parity | not run |
-| Current primary bottleneck | stage0 compute, not transfer |
+| Current primary bottleneck | stage compute, not transfer or pipeline bubble |
 
-## Utilization Sweep
+## B/Depth Probe
 
 The legacy `pipeline_rows_per_s_bound` field is preserved for compatibility.
 The corrected utilization number is `steady_state_pipeline_bound_rows_per_s`,
 which treats stage compute and TCP transfers as separate overlapped resources.
 
-| Batch | Microbatches | Achieved rows/s | Legacy bound | Corrected steady bound | Bubble | Fill ms | Drain ms | Max transfer ms | Slowest resource | Final logits hash | Status |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |
-| 256 | 8 | 179.361 | 169.816 | 229.220 | 0.000 | 4,236.172 | 1,025.349 | 54.928 | stage0 compute, 1,116.833 ms | `fnv64:66c3ff107ae15075` | finite |
-| 512 | 4 | 153.374 | 193.844 | 238.018 | 0.264 | 7,459.326 | 1,966.513 | 72.530 | stage0 compute, 2,151.101 ms | `fnv64:5c9c39e9a1665737` | finite |
-| 512 | 8 | 188.506 | 189.717 | 237.966 | 0.006 | 7,397.494 | 2,142.330 | 64.023 | stage0 compute, 2,151.565 ms | `fnv64:5c9c39e9a1665737` | finite |
-| 1024 | 2 | 112.007 | 201.665 | 243.610 | 0.800 | 14,413.096 | 3,871.460 | 108.211 | stage0 compute, 4,203.435 ms | `fnv64:c5078c09143550f8` | finite, too shallow |
-| 1024 | 4 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | blocked | none | blocked by live Spark0 ds4 process |
+| Batch | Microbatches | Achieved rows/s | Legacy bound | Corrected steady bound | Bubble | Slowest stage | Stage balance | Max transfer ms | Final logits hash | Status |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | --- |
+| 512 | 8 | 188.506 | 189.717 | 237.966 | 0.006 | stage0, 2,151.565 ms | 1.124 | 64.023 | `fnv64:5c9c39e9a1665737` | finite |
+| 512 | 16 | 209.036 | 191.615 | 237.492 | 0.000 | stage0, 2,155.858 ms | 1.100 | 241.836 | `fnv64:5c9c39e9a1665737` | finite, current best |
+| 1024 | 4 | 156.443 | 198.484 | 244.270 | 0.269 | stage0, 4,192.088 ms | 1.084 | 120.796 | `fnv64:c5078c09143550f8` | finite, does not improve |
 
-## Bubble Breakdown
+B=1024 did not hit a memory or residency failure, but it did not improve over
+B=512/mb16. The achieved result is fill/drain limited at mb4, while the
+steady-state ceiling remains compute-bound around 244 rows/s.
 
-| Run | Stage compute ms | Boundary send/recv ms | Worker idle wait ms | Read |
-| --- | ---: | ---: | ---: | --- |
-| B=256 mb=8 | 26,271.719 | 431.792 | 4,809.525 | stage0 is slowest; transfer is small |
-| B=512 mb=4 | 25,618.429 | 367.474 | 7,870.014 | too few microbatches |
-| B=512 mb=8 | 49,946.539 | 626.158 | 9,220.731 | best achieved; still stage0-bound |
-| B=1024 mb=2 | 26,241.567 | 282.709 | 14,790.250 | fill/drain dominates |
+## Split Rebalance
 
-## Stale Lock Behavior
+The original split remains the best measured split:
+`[0,15), [15,29), [29,43)+head`.
 
-The runner now handles two lock cases:
+| Split | Batch/mb | Achieved rows/s | Corrected steady bound | Bubble | Slowest stage | Stage balance | Hash | Read |
+| --- | --- | ---: | ---: | ---: | --- | ---: | --- | --- |
+| `[0,15),[15,29),[29,43)+head` | 512/16 | 209.036 | 237.492 | 0.000 | stage0, 2,155.858 ms | 1.100 | `fnv64:5c9c39e9a1665737` | best achieved |
+| `[0,14),[14,28),[28,43)+head` | 512/8 | 183.614 | 242.309 | 0.061 | stage2, 2,113.002 ms | 1.076 | `fnv64:5c9c39e9a1665737` | stage2/head side too heavy |
+| `[0,14),[14,29),[29,43)+head` | 512/8 | 186.146 | 243.480 | 0.015 | stage1, 2,102.841 ms | 1.065 | `fnv64:5c9c39e9a1665737` | stage1 becomes bottleneck |
+| `[0,16),[16,30),[30,43)+head` | 512/8 | 180.991 | 223.501 | 0.026 | stage0, 2,290.820 ms | 1.240 | `fnv64:5c9c39e9a1665737` | stage0 too heavy |
 
-- dead-PID `/tmp/ds4.lock` files are renamed to `.stale.*`;
-- safe stale `--cuda-batch-stack-probe` processes are terminated before the run.
+## Output Head
 
-The B=1024/mb4 attempt correctly refused to kill an unrelated live Spark0
-generation process:
+Stage2 includes the output head, but a narrow head-only check does not show it
+as the current bottleneck:
 
-```text
-./ds4 --cuda ... -p Explain Redis streams in one paragraph ...
-```
+| Batch | Best head ms | Heads/s | Finite logits | Hash |
+| ---: | ---: | ---: | --- | --- |
+| 512 | 2.527 | 395.732 | yes | `d99730a7a09d8f8a` |
+| 1024 | 2.533 | 394.835 | yes | `d99730a7a09d8f8a` |
 
-## Next Code Change
+This is consistent with the earlier roughly 380-395 heads/s result. Stage2
+full-stage time is around 1.96-1.98 s at B=512, so the head-only probe is not
+the visible stage2 bottleneck.
 
-Turn the probe into a real resident service with persistent stage workers and a
-small control protocol. The next utilization target is B=1024 with depth >= 4
-after Spark0 is idle; the next correctness target remains the DS4 split-forward
-hook for PP=1 versus local PP=N parity.
+## Current Blocker
+
+The base pipeline did not reach 250 rows/s. Pipeline bubble is effectively
+gone at B=512/mb16 and transfer is not material. The next bottleneck is stage
+compute, with the default split stage0 at roughly 2.16 s for B=512 and 4.19 s
+for B=1024.
+
+Exact next code change: stop tuning depth/split for this path and optimize
+per-stage compute. The next performance patch should instrument and reduce the
+stage0 layer-stack cost, while the next correctness patch remains the
+repo-owned split-forward hook for PP=1 versus local PP=N parity.
 
 Latest handoff artifacts:
 
-- `fixtures/stage_handoff/spark012_b256_tcp_resident_mb8.example.json`
-- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb4.example.json`
-- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb8.example.json`
-- `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb2.example.json`
-- `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4_blocked.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16.example.json`
+- `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4.example.json`
+- `fixtures/stage_handoff/spark012_split_014_028_043_b512_mb8.example.json`
+- `fixtures/stage_handoff/spark012_split_014_029_043_b512_mb8.example.json`
+- `fixtures/stage_handoff/spark012_split_016_030_043_b512_mb8.example.json`
