@@ -60,22 +60,59 @@ This is consistent with the earlier roughly 380-395 heads/s result. Stage2
 full-stage time is around 1.96-1.98 s at B=512, so the head-only probe is not
 the visible stage2 bottleneck.
 
+## Kernel Profile
+
+Per-layer profiling on the default split shows the stage-compute bottleneck is
+routed MoE, not attention, transfer, output head, or residency fallback.
+
+| Stage | Layers | Sum layer ms | Sum FFN ms | Sum routed MoE ms | FFN share | MoE share |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| stage0 | `[0,15)` | 2,066.737 | 1,945.872 | 1,910.568 | 94.15% | 92.44% |
+| stage1 | `[15,29)` | 1,892.529 | 1,775.551 | 1,739.909 | 93.82% | 91.94% |
+| stage2 | `[29,43)+head` | 1,887.297 | 1,772.436 | 1,736.867 | 93.91% | 92.03% |
+
+The slowest stage remains stage0. Its worst profiled layer was layer 2 at
+146.076 ms, with 137.422 ms in FFN and 134.959 ms in routed MoE.
+
+## Optimization Attempt
+
+One bounded runtime-kernel variant was tested in the full B=512/mb16 streaming
+path: `DS4_CUDA_MOE_TILE4=1`.
+
+| Run | Achieved rows/s | Corrected steady bound | Slowest stage | Slowest service ms | Hash | Read |
+| --- | ---: | ---: | --- | ---: | --- | --- |
+| Default | 209.036 | 237.492 | stage0 | 2,155.858 | `fnv64:5c9c39e9a1665737` | baseline |
+| TILE4 | 209.950 | 237.812 | stage0 | 2,152.962 | `fnv64:5c9c39e9a1665737` | +0.44% achieved |
+
+The TILE4 variant is a tiny safe improvement, not a new ceiling. A narrow MoE
+variant sweep on stage0 layers 0, 3, and 14 showed `DS4_CUDA_MOE_NO_P2=1` is
+much slower, so the sorted P2 path is required. `DS4_CUDA_MOE_DOWN_BLOCK16=1`
+was neutral to worse.
+
 ## Current Blocker
 
 The base pipeline did not reach 250 rows/s. Pipeline bubble is effectively
-gone at B=512/mb16 and transfer is not material. The next bottleneck is stage
-compute, with the default split stage0 at roughly 2.16 s for B=512 and 4.19 s
-for B=1024.
+gone at B=512/mb16 and transfer is not material. The current bottleneck is
+stage0 routed MoE compute, with the default split stage0 at roughly 2.16 s for
+B=512 and 4.19 s for B=1024.
 
-Exact next code change: stop tuning depth/split for this path and optimize
-per-stage compute. The next performance patch should instrument and reduce the
-stage0 layer-stack cost, while the next correctness patch remains the
-repo-owned split-forward hook for PP=1 versus local PP=N parity.
+Exact next code change: add CUDA event timing inside the routed MoE P2 path
+around gate/up, activation/quantize, down, and accumulation, then optimize the
+dominant tile kernel. Depth/split tuning is no longer the right lever for this
+path.
 
 Latest handoff artifacts:
 
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_tile4.example.json`
 - `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4.example.json`
 - `fixtures/stage_handoff/spark012_split_014_028_043_b512_mb8.example.json`
 - `fixtures/stage_handoff/spark012_split_014_029_043_b512_mb8.example.json`
 - `fixtures/stage_handoff/spark012_split_016_030_043_b512_mb8.example.json`
+
+Latest kernel-profile artifacts:
+
+- `fixtures/stage_kernel_profile/spark0_stage0_kernel_profile_b512.example.json`
+- `fixtures/stage_kernel_profile/spark1_stage1_kernel_profile_b512.example.json`
+- `fixtures/stage_kernel_profile/spark2_stage2_kernel_profile_b512.example.json`
+- `fixtures/stage_kernel_profile/spark0_moe_variant_sweep_b512.example.json`
