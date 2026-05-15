@@ -1,0 +1,36 @@
+{
+  "format": "ds4-model-provider-profile-v1",
+  "provider_id": "qwen3-coder-next-local-vllm",
+  "tier": "local_coder",
+  "model_id": "Qwen/Qwen3-Coder-Next",
+  "runtime": "vllm",
+  "endpoint": {
+    "kind": "openai_compatible_http",
+    "url": "http://127.0.0.1:8000/v1",
+    "auth": "none",
+    "status": "example_unprovisioned"
+  },
+  "node_ids": [],
+  "provider_kind": "openai_compatible_endpoint",
+  "supported_lanes": [
+    "routine_code_patch",
+    "test_interpretation",
+    "schema_repair",
+    "tool_use"
+  ],
+  "preferred_batch_tokens": 32768,
+  "minimum_batch_tokens": 2048,
+  "maximum_wait_ms": 250,
+  "measured_input_tps": null,
+  "measured_output_tps": null,
+  "quality_scores": {
+    "coding": null,
+    "reasoning": null,
+    "tool_use": null
+  },
+  "last_probe_artifact": "",
+  "source_refs": [
+    "https://huggingface.co/Qwen/Qwen3-Coder-Next"
+  ],
+  "notes": "Example local coder provider only; no local throughput or quality claim has been recorded."
+}

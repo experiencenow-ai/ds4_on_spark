@@ -1,0 +1,32 @@
+{
+  "format": "ds4-model-provider-profile-v1",
+  "provider_id": "spark-ring-dsv4-layer-pipeline",
+  "tier": "near_frontier_local",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime": "ds4_layer_pipeline",
+  "endpoint": null,
+  "node_ids": [],
+  "provider_kind": "layer_pipeline",
+  "supported_lanes": [
+    "hard_reasoning",
+    "large_candidate_generation",
+    "batch_judge",
+    "long_context_synthesis"
+  ],
+  "preferred_batch_tokens": 65536,
+  "minimum_batch_tokens": 8192,
+  "maximum_wait_ms": 100,
+  "measured_input_tps": null,
+  "measured_output_tps": null,
+  "quality_scores": {
+    "coding": null,
+    "reasoning": null,
+    "tool_use": null
+  },
+  "last_probe_artifact": "",
+  "source_refs": [
+    "docs/ds4-spark-layer-pipeline-plan.md",
+    "docs/expert-scaling-proof-plan.md"
+  ],
+  "notes": "Deployment topology is resolved from a stage manifest; this fixture intentionally does not encode a fixed Spark count."
+}

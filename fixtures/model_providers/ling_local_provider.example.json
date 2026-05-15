@@ -1,0 +1,37 @@
+{
+  "format": "ds4-model-provider-profile-v1",
+  "provider_id": "ling-mini-2-local-sglang",
+  "tier": "local_small",
+  "model_id": "inclusionAI/Ling-mini-2.0",
+  "runtime": "sglang",
+  "endpoint": {
+    "kind": "openai_compatible_http",
+    "url": "http://127.0.0.1:30000/v1",
+    "auth": "none",
+    "status": "example_unprovisioned"
+  },
+  "node_ids": [],
+  "provider_kind": "openai_compatible_endpoint",
+  "supported_lanes": [
+    "classification",
+    "summarization",
+    "schema_cleanup",
+    "candidate_prefilter"
+  ],
+  "preferred_batch_tokens": 8192,
+  "minimum_batch_tokens": 1024,
+  "maximum_wait_ms": 100,
+  "measured_input_tps": null,
+  "measured_output_tps": null,
+  "quality_scores": {
+    "coding": null,
+    "reasoning": null,
+    "tool_use": null
+  },
+  "last_probe_artifact": "",
+  "source_refs": [
+    "https://huggingface.co/inclusionAI/Ling-mini-2.0",
+    "https://github.com/inclusionAI/Ling-V2"
+  ],
+  "notes": "Example small local provider only; no DS4-local measurement has been recorded."
+}
