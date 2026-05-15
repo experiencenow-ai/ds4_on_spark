@@ -8,6 +8,7 @@ int32_t test_ring(void);
 int32_t test_version(void);
 int32_t test_config(void);
 int32_t test_expert_manifest(void);
+int32_t test_pipeline(void);
 int32_t test_log(void);
 int32_t test_log_ring(void);
 int32_t test_ctx(void);

@@ -36,6 +36,7 @@ add_library(ds4
 	src/ds4_ring.c
 	src/ds4_config.c
 	src/ds4_expert_manifest.c
+	src/ds4_pipeline.c
 	src/ds4_gguf.c
 	src/ds4_log.c
 	src/ds4_log_ring.c
@@ -88,6 +89,12 @@ if(DS4_ENABLE_CLI)
 	target_link_libraries(ds4_expert_queue_dummy PRIVATE ds4)
 	ds4_target_warnings(ds4_expert_queue_dummy ${DS4_WERROR})
 	ds4_target_sanitizers(ds4_expert_queue_dummy ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
+	add_executable(ds4_pipeline_mre
+		tools/ds4_pipeline_mre.c
+	)
+	target_link_libraries(ds4_pipeline_mre PRIVATE ds4)
+	ds4_target_warnings(ds4_pipeline_mre ${DS4_WERROR})
+	ds4_target_sanitizers(ds4_pipeline_mre ${DS4_ENABLE_ASAN} ${DS4_ENABLE_UBSAN})
 endif()
 
 if(DS4_ENABLE_TESTS)
@@ -100,6 +107,7 @@ if(DS4_ENABLE_TESTS)
 		tests/test_ring.c
 		tests/test_config.c
 		tests/test_expert_manifest.c
+		tests/test_pipeline.c
 		tests/test_log.c
 		tests/test_ctx.c
 		tests/test_cuda.c
@@ -115,6 +123,7 @@ if(DS4_ENABLE_TESTS)
 		tests/header_smoke_cuda_arena.c
 		tests/header_smoke_ds4.c
 		tests/header_smoke_expert_manifest.c
+		tests/header_smoke_pipeline.c
 		tests/header_smoke_gguf.c
 		tests/header_smoke_log.c
 		tests/header_smoke_log_ring.c

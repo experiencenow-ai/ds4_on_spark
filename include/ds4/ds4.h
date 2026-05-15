@@ -11,6 +11,7 @@
 #include "ds4/cuda.h"
 #include "ds4/cuda_arena.h"
 #include "ds4/expert_manifest.h"
+#include "ds4/pipeline.h"
 
 typedef struct
 {
