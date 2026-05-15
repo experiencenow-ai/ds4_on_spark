@@ -186,6 +186,52 @@ microbatch.
 6. Only after the correctness gate passes, report end-to-end tok/sec for
    prefill and decode separately.
 
+## Telemetry Artifact Path
+
+The first repo-backed telemetry artifact is `spark-layer-pipeline-run-v1`.
+It is built from the library-backed `tools/ds4_pipeline_mre` executable, whose
+rank mode calls `ds4_pipeline_stage_run()` and whose sequential mode calls
+`ds4_pipeline_sequential_run()`.
+
+Per-rank stage output uses `ds4-pipeline-stage-result-v1`. The MRE can also run
+a deterministic callback with `--process checksum`, proving that stage process
+callbacks can mutate/checksum payloads instead of only sleeping and forwarding.
+
+Example local callback proof:
+
+```sh
+/tmp/ds4-pipeline-telemetry-build/ds4_pipeline_mre \
+  --role sequential --rank 0 --world-size 3 --items 4 \
+  --payload-bytes 128 --stage-us 1000 \
+  --pipeline-id local-3stage-callback \
+  --model-id deepseek-ai/DeepSeek-V4-Flash \
+  --runtime-id ds4_pipeline_mre --stage-node local0 \
+  --process checksum
+```
+
+Combine stage outputs into a Centaur-consumable artifact:
+
+```sh
+python3 scripts/ds4_pipeline_telemetry.py combine \
+  --manifest fixtures/pipeline_telemetry/ds4_pipeline_manifest.example.json \
+  --sequential fixtures/pipeline_telemetry/sequential.example.json \
+  --stage fixtures/pipeline_telemetry/stage0.example.json \
+  --stage fixtures/pipeline_telemetry/stage1.example.json \
+  --stage fixtures/pipeline_telemetry/stage2.example.json \
+  --out /tmp/spark_layer_pipeline_run.json
+```
+
+Validate the run artifact:
+
+```sh
+python3 scripts/ds4_pipeline_telemetry.py validate \
+  fixtures/pipeline_telemetry/spark_layer_pipeline_run_not_run.example.json
+```
+
+The current fixture keeps `quality_parity_status` at `not_run`. That is
+intentional: DS4 must not claim provider eligibility for real generation until a
+PP=1 vs PP=N logits/token parity check exists and passes.
+
 ## First Acceptance Criteria
 
 - No hardcoded Spark count.
