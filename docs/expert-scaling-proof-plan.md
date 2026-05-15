@@ -69,6 +69,37 @@ This proves the expert-tiled path can turn real routed batches into a large
 kernel-level gain. It is not yet a decode scheduler proof because prefill gives
 the runtime a natural multi-token batch.
 
+## Direct Routed-MoE Batch Ladder
+
+The 2026-05-15 Spark0 direct `--cuda-moe-probe` ladder used the patched DS4
+probe binary at `/home/spark0/src/ds4_perf_stack_20260515T080833` with the
+quantized DS4 Flash GGUF and the real CUDA routed-MoE path. It is still a
+MoE-only measurement, not an end-to-end decode tok/sec result.
+
+Run shape:
+
+```bash
+DS4_DIR=/home/spark0/src/ds4_perf_stack_20260515T080833 \
+BATCHES="16 64 128 256 512 1024" \
+ITERS=5 \
+scripts/run_ds4_cuda_moe_batch_ladder_spark.sh spark0@aitopatom-9ab9.local
+```
+
+Successful finite rows:
+
+| tokens | pairs | active experts | mean queue | max queue | best ms | expert-pairs/s | gain vs first ok |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 16 | 96 | 80 | 1.200 | 3 | 5.978 | 16058.0 | 1.00x |
+| 64 | 384 | 197 | 1.949 | 6 | 15.113 | 25408.8 | 1.58x |
+| 128 | 768 | 242 | 3.174 | 10 | 14.380 | 53408.2 | 3.33x |
+| 512 | 3072 | 256 | 12.000 | 23 | 21.356 | 143846.1 | 8.96x |
+| 1024 | 6144 | 256 | 24.000 | 43 | 38.020 | 161599.2 | 10.06x |
+
+Failures in the same ladder were still informative: `tokens=1` and `tokens=256`
+hit CUDA model staging or full-slab fallback timeouts. The direct action item is
+to keep the selected-expert slice path resident and avoid whole-expert slab
+fallbacks before this can become stable end-to-end decode throughput.
+
 ## Artificial But Valid Scaling Fixtures
 
 Use two fixture classes:
