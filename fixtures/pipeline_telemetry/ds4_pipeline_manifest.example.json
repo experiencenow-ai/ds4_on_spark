@@ -1,0 +1,12 @@
+{
+  "format": "ds4-pipeline-run-manifest-v1",
+  "run_id": "spark012-pipeline-mre-example",
+  "pipeline_id": "spark012-ds4-layer-pipeline-mre",
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "runtime_id": "ds4_pipeline_mre",
+  "stage_nodes": [
+    "spark0",
+    "spark1",
+    "spark2"
+  ]
+}
