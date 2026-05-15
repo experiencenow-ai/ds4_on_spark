@@ -1,0 +1,36 @@
+{
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:dad2ecf00dec1659a41b27072b29079a0fe65e7fe7a8a667bf7c176c239588e6",
+  "baseline_tok_s": 13.3,
+  "best_full_stack_finite_output": false,
+  "best_full_stack_output_hash": "",
+  "best_full_stack_record": "",
+  "best_full_stack_tok_s": null,
+  "component_ceiling_tok_s": {
+    "ffn_envelope_ceiling": 558.0,
+    "moe_only_ceiling": 620.0,
+    "synthetic_layer_ceiling": 409.0
+  },
+  "current_primary_blocker": "prefix_prefill_cap",
+  "current_secondary_blocker": "suffix_prefill_cap",
+  "do_not_build_more_scaffolding_until": "full-stack B>=16 completes with finite output/hash",
+  "exceeds_15_tok_s": false,
+  "format": "ds4-perf-iceberg-summary-v1",
+  "input_prefill_tok_s": 18.4,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "next_code_change_required": "Add prefix-hit/fork and suffix-prefill probes, then reduce suffix work or batch prefill.",
+  "output_head_cap_tok_s": 900.0,
+  "prefix_hit_load_ms": 7.5,
+  "quantization_id": "fixture.gguf",
+  "realization_ratio_vs_409": null,
+  "realization_ratio_vs_558": null,
+  "realization_ratio_vs_620": null,
+  "records": [
+    "prefix_miss_prefill_t2048",
+    "suffix_prefill_t512"
+  ],
+  "run_id": "fixture-input-cap",
+  "runtime_id": "fixture-runtime",
+  "spark_node": "spark-fixture",
+  "suffix_prefill_tok_s": 21.0
+}

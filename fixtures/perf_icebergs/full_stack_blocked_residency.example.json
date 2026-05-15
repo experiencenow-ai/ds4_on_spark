@@ -1,0 +1,35 @@
+{
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:74054ba3f4bcd41693bbd3d93a7421e713efb5587159fb0cbc52931f704fbba0",
+  "baseline_tok_s": 13.3,
+  "best_full_stack_finite_output": false,
+  "best_full_stack_output_hash": "",
+  "best_full_stack_record": "",
+  "best_full_stack_tok_s": null,
+  "component_ceiling_tok_s": {
+    "ffn_envelope_ceiling": 558.0,
+    "moe_only_ceiling": 620.0,
+    "synthetic_layer_ceiling": 409.0
+  },
+  "current_primary_blocker": "lazy_moe_range_upload",
+  "current_secondary_blocker": "none",
+  "do_not_build_more_scaffolding_until": "full-stack B>=16 completes with finite output/hash",
+  "exceeds_15_tok_s": false,
+  "format": "ds4-perf-iceberg-summary-v1",
+  "input_prefill_tok_s": null,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "next_code_change_required": "Fix CUDA residency first: full-stack/stage preloads must complete without lazy range uploads or fallback slabs.",
+  "output_head_cap_tok_s": 387.807,
+  "prefix_hit_load_ms": null,
+  "quantization_id": "fixture.gguf",
+  "realization_ratio_vs_409": null,
+  "realization_ratio_vs_558": null,
+  "realization_ratio_vs_620": null,
+  "records": [
+    "batch_with_head_b128"
+  ],
+  "run_id": "fixture-blocked-residency",
+  "runtime_id": "fixture-runtime",
+  "spark_node": "spark-fixture",
+  "suffix_prefill_tok_s": null
+}
