@@ -83,8 +83,8 @@ finite and deterministic by repeated `fnv64` final-logits hash, but it is not
 production eligible. The parity artifact
 `fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_blocked_20260516.example.json`
 records `parity_status: not_run`, `quality_parity_eligible: false`, and the
-exact blocker: the current Spark handoff runner exposes no repo-owned PP=1
-logits/token export and no SHA comparison hook for the optimized PP=N output.
+exact blocker: the PPN export hook now exists, but the matching PP=1
+logits/token export has not been produced yet for the same prompt/model/context.
 
 ## Comparison Kinds
 
@@ -182,4 +182,21 @@ precise blocker instead of pretending parity ran:
 ```sh
 python3 scripts/ds4_local_ppn_parity_probe.py \
   --boundary-artifact fixtures/pipeline_boundary/dsv4_stage_boundary_source_observed.example.json
+```
+
+Package the current slice-tile8 PPN final-output hash from an existing stage
+handoff artifact, then compare it with a PP=1 export when that target-only run
+is available:
+
+```sh
+python3 scripts/compare_ds4_pp1_ppn_outputs.py export-ppn-from-stage-handoff \
+  --stage-handoff fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8.example.json \
+  --optimized-kernel-flag DS4_CUDA_MOE_SLICE_TILE8=1 \
+  --out fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json
+
+python3 scripts/compare_ds4_pp1_ppn_outputs.py compare \
+  --pp1-export /path/to/pp1_final_output_export.json \
+  --ppn-export fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json \
+  --quality-parity-eligible \
+  --out /path/to/parity.json
 ```
