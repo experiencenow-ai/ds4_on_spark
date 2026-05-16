@@ -70,6 +70,9 @@ TIMING_COUNT_KEYS = {
 	"rewind_calls": "cache_rewind_count",
 	"cache_sync_calls": "cache_sync_count",
 	"cuda_sync_calls": "cuda_sync_count",
+	"head_rows": "output_head_rows",
+	"full_vocab_rows": "full_vocab_logits_rows",
+	"top1_rows": "top1_only_rows",
 }
 
 
@@ -150,6 +153,9 @@ def _zero_counts() -> dict[str, int]:
 		"cache_rewind_count": 0,
 		"cache_sync_count": 0,
 		"cuda_sync_count": 0,
+		"output_head_rows": 0,
+		"full_vocab_logits_rows": 0,
+		"top1_only_rows": 0,
 	}
 
 
