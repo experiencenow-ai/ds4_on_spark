@@ -17,12 +17,22 @@ SCHEMA_VERSION = 1
 PARITY_STATUS = {"not_run", "passed", "failed"}
 COMPARISON_KINDS = {"logits", "tokens", "hidden_state", "synthetic_integrity"}
 QUALITY_COMPARISON_KINDS = {"logits", "tokens", "hidden_state"}
+PARITY_SCOPES = {
+	"cross_spark_ppn",
+	"parity_passed_prefill_decode",
+	"local_split_forward",
+	"local_stage_reassembly",
+	"local_ppn_emulated",
+	"synthetic_integrity",
+}
+QUALITY_PARITY_SCOPES = {"cross_spark_ppn", "parity_passed_prefill_decode"}
 FIXED_SPARK_COUNT_FIELDS = {"spark_count", "num_sparks", "world_size"}
 REQUIRED = (
 	"format",
 	"artifact_schema_version",
 	"artifact_sha256",
 	"parity_run_id",
+	"parity_scope",
 	"provider_id",
 	"pipeline_id",
 	"model_id",
@@ -43,12 +53,14 @@ REQUIRED = (
 	"comparison_kind",
 	"parity_status",
 	"quality_parity_eligible",
+	"optimized_kernel_flags",
 	"tolerance",
 	"max_abs_error",
 	"mean_abs_error",
 	"token_match_count",
 	"token_total_count",
 	"quality_parity_detail",
+	"blocker_detail",
 	"command_sha256",
 	"artifact_refs",
 )
@@ -139,15 +151,37 @@ def validate_stage_shape(obj: dict[str, Any], errors: list[str]) -> None:
 def validate_metrics(obj: dict[str, Any], errors: list[str]) -> None:
 	status = obj.get("parity_status")
 	kind = obj.get("comparison_kind")
+	scope = obj.get("parity_scope")
 	if status not in PARITY_STATUS:
 		errors.append("parity_status must be not_run, passed, or failed")
 	if kind not in COMPARISON_KINDS:
 		errors.append("comparison_kind must be logits, tokens, hidden_state, or synthetic_integrity")
+	if scope not in PARITY_SCOPES:
+		errors.append("parity_scope must be one of the declared parity scopes")
 	eligible = obj.get("quality_parity_eligible")
 	if not isinstance(eligible, bool):
 		errors.append("quality_parity_eligible must be boolean")
 	if kind == "synthetic_integrity" and eligible is True:
 		errors.append("synthetic_integrity cannot be marked quality_parity_eligible")
+	if eligible is True:
+		if status != "passed":
+			errors.append("quality_parity_eligible requires parity_status=passed")
+		if scope not in QUALITY_PARITY_SCOPES:
+			errors.append("quality_parity_eligible requires cross_spark_ppn or parity_passed_prefill_decode scope")
+		if kind not in QUALITY_COMPARISON_KINDS:
+			errors.append("quality_parity_eligible requires logits, tokens, or hidden_state comparison")
+	flags = obj.get("optimized_kernel_flags")
+	if not isinstance(flags, dict):
+		errors.append("optimized_kernel_flags must be an object")
+	blocker = obj.get("blocker_detail", "")
+	if status != "passed" and (not isinstance(blocker, str) or blocker.strip() == ""):
+		errors.append("blocker_detail must explain non-passed parity")
+	for key in ("pp1_output_sha256", "ppn_output_sha256"):
+		value = obj.get(key)
+		if not is_sha256_text(value, allow_empty=True):
+			errors.append(f"{key} must be empty or sha256:<hex>")
+		if value == "" and (not isinstance(blocker, str) or blocker.strip() == ""):
+			errors.append(f"{key} requires blocker_detail when absent")
 	if status in ("passed", "failed"):
 		for key in ("pp1_output_sha256", "ppn_output_sha256"):
 			if not is_sha256_text(obj.get(key)):
@@ -205,6 +239,7 @@ def is_quality_parity_pass(obj: dict[str, Any]) -> bool:
 	return (
 		obj.get("format") == FORMAT
 		and obj.get("parity_status") == "passed"
+		and obj.get("parity_scope") in QUALITY_PARITY_SCOPES
 		and obj.get("comparison_kind") in QUALITY_COMPARISON_KINDS
 		and obj.get("quality_parity_eligible") is True
 		and len(validate_artifact(obj)) == 0

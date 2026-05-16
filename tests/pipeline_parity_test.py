@@ -109,6 +109,26 @@ class PipelineParityTest(unittest.TestCase):
                 self.assertEqual(parity.validate_artifact(artifact), [])
                 self.assertTrue(parity.is_quality_parity_pass(artifact))
 
+    def test_local_scope_cannot_claim_quality_eligibility(self) -> None:
+        source = parity.load_json(FIX / "dsv4_pipeline_parity_failed.example.json")
+        artifact = copy.deepcopy(source)
+        artifact["parity_run_id"] = "dsv4-local-scope-quality-claim-temp"
+        artifact["parity_status"] = "passed"
+        artifact["parity_scope"] = "local_split_forward"
+        artifact["comparison_kind"] = "logits"
+        artifact["quality_parity_eligible"] = True
+        artifact["max_abs_error"] = 0.0
+        artifact["mean_abs_error"] = 0.0
+        artifact["token_match_count"] = 1
+        artifact["token_total_count"] = 1
+        artifact["ppn_output_sha256"] = artifact["pp1_output_sha256"]
+        artifact["tolerance"] = {"max_abs_error": 0.0, "mean_abs_error": 0.0}
+        artifact["blocker_detail"] = ""
+        artifact["artifact_sha256"] = parity.artifact_sha256(artifact)
+        errors = parity.validate_artifact(artifact)
+        self.assertTrue(any("quality_parity_eligible requires" in item for item in errors))
+        self.assertFalse(parity.is_quality_parity_pass(artifact))
+
     def test_telemetry_not_run_remains_valid_without_parity_artifact(self) -> None:
         obj = telemetry.load_json(TEL / "spark_layer_pipeline_run_not_run.example.json")
         self.assertEqual(telemetry.validate_run(obj, TEL), [])
