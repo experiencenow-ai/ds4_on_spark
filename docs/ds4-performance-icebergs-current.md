@@ -29,6 +29,7 @@ which treats stage compute and TCP transfers as separate overlapped resources.
 | 512 | 8 | 188.506 | 189.717 | 237.966 | 0.006 | stage0, 2,151.565 ms | 1.124 | 64.023 | `fnv64:5c9c39e9a1665737` | finite |
 | 512 | 16 | 209.036 | 191.615 | 237.492 | 0.000 | stage0, 2,155.858 ms | 1.100 | 241.836 | `fnv64:5c9c39e9a1665737` | finite, old baseline |
 | 512 | 16 | 631.672 | 452.208 | 741.444 | 0.000 | stage0, 690.545 ms | 1.108 | 354.814 | `fnv64:5c9c39e9a1665737` | finite, slice-tile8 gate/up |
+| 512 | 16 | 559.396 | 427.999 | 659.235 | 0.000 | stage0, 776.658 ms | 1.123 | 354.814 | `fnv64:5c9c39e9a1665737` | finite, slice-down-tile8 rejected |
 | 1024 | 4 | 156.443 | 198.484 | 244.270 | 0.269 | stage0, 4,192.088 ms | 1.084 | 120.796 | `fnv64:c5078c09143550f8` | finite, does not improve |
 
 B=1024 did not hit a memory or residency failure, but it did not improve over
@@ -138,17 +139,38 @@ Down projection remains on the existing P2 slices path.
 | P2 skip aux writes | 210.999 | 237.992 | stage0 | 2,151.329 | `fnv64:5c9c39e9a1665737` | previous best |
 | Slice-tile8 gate/up | 631.672 | 741.444 | stage0 | 690.545 | `fnv64:5c9c39e9a1665737` | current best |
 
+## Slice-Down-Tile8 Attempt
+
+With `DS4_CUDA_MOE_SLICE_TILE8=1`, the remaining routed-MoE time is split
+between gate/up and down. A bounded `DS4_CUDA_MOE_SLICE_DOWN_TILE8=1` path was
+added to reuse the same per-expert tile descriptors for down projection. It is
+finite and hash-stable, but it regresses the down projection and full pipeline.
+
+| Layer | Queue ms | Pointer ms | Gate/up ms | Quantize ms | Down ms | Accum ms | Total ms | Bottleneck |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 0.043 | 0.037 | 18.725 | 0.250 | 21.185 | 0.321 | 40.560 | down |
+| 1 | 0.046 | 0.051 | 18.711 | 0.248 | 21.742 | 0.318 | 41.116 | down |
+| 2 | 0.041 | 0.037 | 18.757 | 0.247 | 21.163 | 0.322 | 40.567 | down |
+| 3 | 0.045 | 0.020 | 14.158 | 0.250 | 17.454 | 0.325 | 32.252 | down |
+| 14 | 0.046 | 0.020 | 14.065 | 0.250 | 17.387 | 0.326 | 32.094 | down |
+
+| Run | Achieved rows/s | Corrected steady bound | Slowest stage | Slowest service ms | Hash | Read |
+| --- | ---: | ---: | --- | ---: | --- | --- |
+| Slice-tile8 gate/up | 631.672 | 741.444 | stage0 | 690.545 | `fnv64:5c9c39e9a1665737` | current best |
+| Slice-tile8 + slice-down-tile8 | 559.396 | 659.235 | stage0 | 776.658 | `fnv64:5c9c39e9a1665737` | rejected, down got slower |
+
 ## Current Blocker
 
 The base pipeline now exceeds 250 rows/s. Pipeline bubble is effectively gone
 at B=512/mb16 and transfer is not material. The slice-tile8 gate/up path cut
-stage0 service time from about 2,151 ms to about 691 ms, shifting the next
-kernel target from gate/up alone to the remaining routed-MoE projection work:
-down projection is now comparable to gate/up on the clumpier profiled layers.
+stage0 service time from about 2,151 ms to about 691 ms. The first slice-down
+tile attempt did not help: it raised layer 2 down from about 16.8 ms to about
+21.2 ms and dropped the full pipeline from 631.672 to 559.396 rows/s.
 
-Exact next code change: add a slice-aware down-tile/direct-accumulate path to
-pair with slice-tile8 gate/up, then decide whether to make slice-tile8 the
-default after PP=1 parity or a stronger local parity check covers the new path.
+Exact next code change: keep the slice-tile8 gate/up path, do not enable
+slice-down-tile8, and target either a direct sum6-style down accumulation for
+batched top-6 rows or a lower-register-pressure down tile that beats the
+existing P2 slices down kernel before retesting full pipeline speed.
 
 Latest handoff artifacts:
 
@@ -156,6 +178,7 @@ Latest handoff artifacts:
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_tile4.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_skipaux.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_down_tile8.example.json`
 - `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4.example.json`
 - `fixtures/stage_handoff/spark012_split_014_028_043_b512_mb8.example.json`
 - `fixtures/stage_handoff/spark012_split_014_029_043_b512_mb8.example.json`
@@ -170,3 +193,4 @@ Latest kernel-profile artifacts:
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_before.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_skipaux.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_slice_tile8.example.json`
+- `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_slice_down_tile8.example.json`
