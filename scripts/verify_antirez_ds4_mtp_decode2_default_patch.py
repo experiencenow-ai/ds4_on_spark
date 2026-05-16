@@ -46,7 +46,20 @@ def validate_patch_text(patch_text: str) -> list[str]:
 		"The useful N=2 verifier is the exact decode2 path",
 		"that is slower than target-only decode on CUDA/Metal",
 		"draft_n == 2 && getenv(\"DS4_MTP_BATCH_VERIFY\") == NULL",
+		"typedef struct {",
+		"int target_eval_call_count;",
+		"int output_head_call_count;",
+		"double target_eval_ms;",
+		"double output_head_ms;",
+		"ds4_mtp_decode2_stats *stats",
+		"stats->target_eval_call_count += 2;",
+		"stats->output_head_call_count++;",
+		"NULL,\n                                                  row_logits,\n                                                  &decode2_stats);",
 		"ds4: mtp conf drafted=%d committed=%d mtp_top=%d runner=%d margin=%.6f target_next=%d draft_next=%d\\n",
+		"target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=%d emitted=3",
+		"target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d draft_calls=1 replay_calls=1 rewind_calls=1 cache_sync_calls=0 cuda_sync_calls=%d replay=%.3f ms",
+		"ok = have_frontier && spec_frontier_restore(&frontier, s);",
+		"metal_graph_eval_token_raw_swa(&s->graph,",
 		"row0_top,",
 		"drafts[1]);",
 	]:
@@ -55,6 +68,9 @@ def validate_patch_text(patch_text: str) -> list[str]:
 	for s in [
 		"draft_n == 2 && strict_mtp && getenv(\"DS4_MTP_BATCH_VERIFY\") == NULL",
 		"DS4_MTP_STRICT selects the exact decode verifier",
+		"row0_logits,",
+		"float *row0_logits = xmalloc",
+		"ok = spec_frontier_commit_prefix1(s);",
 	]:
 		if s not in removed_text:
 			errors.append(f"missing expected removed substring: {s!r}")

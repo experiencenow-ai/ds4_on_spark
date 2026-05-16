@@ -20,6 +20,7 @@ REQUIRED_COMPONENTS = (
 	"verifier_replay_ms",
 	"draft_eval_ms",
 	"target_eval_ms",
+	"output_head_ms",
 	"cache_sync_ms",
 	"cuda_sync_ms",
 	"logging_ms",
@@ -32,6 +33,7 @@ BLOCKER_BY_COMPONENT = {
 	"verifier_replay_ms": "verifier_replay_overhead",
 	"draft_eval_ms": "draft_eval_overhead",
 	"target_eval_ms": "target_verifier_overhead",
+	"output_head_ms": "output_head_overhead",
 	"cache_sync_ms": "cache_sync_overhead",
 	"cuda_sync_ms": "cuda_sync_overhead",
 	"logging_ms": "logging_overhead",
@@ -172,6 +174,8 @@ def build_report_from_lines(
 	speed = extracted.get("speed") or {}
 	mismatches = extracted.get("mismatches") or {}
 	timing = extracted.get("timing") or {}
+	counts = timing.get("call_counts") or {}
+	extract_counts = extracted.get("counts") or {}
 	accepted_tokens = _int_or_zero(totals.get("draft_tokens_accepted_est"))
 	attempted_draft_tokens = _int_or_zero(totals.get("draft_tokens_attempted_est"))
 	accept_rate = None
@@ -186,8 +190,17 @@ def build_report_from_lines(
 	per_component_ms = _components(timing.get("per_component_ms") or {})
 	slowest_component = _slowest_component(per_component_ms, timing.get("slowest_component"))
 	target_next_mismatch_events = _int_or_zero(mismatches.get("target_next_mismatch_events"))
-	verifier_ms = per_component_ms["verifier_replay_ms"]
+	verifier_ms = float(_float_or_none(timing.get("verifier_ms")) or per_component_ms["target_eval_ms"])
 	logging_capture_ms = per_component_ms["logging_ms"] + per_component_ms["capture_ms"]
+	emitted_tokens = _int_or_zero(timing.get("emitted_tokens"))
+	if emitted_tokens == 0:
+		emitted_tokens = int(accepted_tokens) + _int_or_zero(extract_counts.get("conf_events")) + _int_or_zero(extract_counts.get("miss_first_events"))
+	target_eval_per_emitted = None
+	if emitted_tokens > 0:
+		target_eval_per_emitted = per_component_ms["target_eval_ms"] / float(emitted_tokens)
+	target_eval_per_accepted = None
+	if accepted_tokens > 0:
+		target_eval_per_accepted = per_component_ms["target_eval_ms"] / float(accepted_tokens)
 	blocker_kind, blocker_detail = _blocker(
 		baseline_generation_tps=baseline_generation_tps,
 		mtp_generation_tps=mtp_generation_tps,
@@ -221,6 +234,7 @@ def build_report_from_lines(
 		"verifier_ms": verifier_ms,
 		"draft_eval_ms": per_component_ms["draft_eval_ms"],
 		"target_eval_ms": per_component_ms["target_eval_ms"],
+		"output_head_ms": per_component_ms["output_head_ms"],
 		"cache_sync_ms": per_component_ms["cache_sync_ms"],
 		"cuda_sync_ms": per_component_ms["cuda_sync_ms"],
 		"logging_ms": per_component_ms["logging_ms"],
@@ -228,6 +242,16 @@ def build_report_from_lines(
 		"logging_capture_ms": logging_capture_ms,
 		"token_commit_ms": per_component_ms["token_commit_ms"],
 		"scheduler_overhead_ms": per_component_ms["scheduler_overhead_ms"],
+		"target_eval_call_count": _int_or_zero(counts.get("target_eval_call_count")),
+		"draft_eval_call_count": _int_or_zero(counts.get("draft_eval_call_count")),
+		"output_head_call_count": _int_or_zero(counts.get("output_head_call_count")),
+		"verifier_replay_count": _int_or_zero(counts.get("verifier_replay_count")),
+		"cache_rewind_count": _int_or_zero(counts.get("cache_rewind_count")),
+		"cache_sync_count": _int_or_zero(counts.get("cache_sync_count")),
+		"cuda_sync_count": _int_or_zero(counts.get("cuda_sync_count")),
+		"emitted_tokens": int(emitted_tokens),
+		"target_eval_ms_per_emitted_token": target_eval_per_emitted,
+		"target_eval_ms_per_accepted_draft_token": target_eval_per_accepted,
 		"blocker_kind": blocker_kind,
 		"blocker_detail": blocker_detail,
 		"timing_event_count": _int_or_zero(timing.get("events")),
