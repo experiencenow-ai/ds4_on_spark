@@ -65,6 +65,7 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["output_head_rows"], 2)
 		self.assertEqual(report["full_vocab_logits_rows"], 1)
 		self.assertEqual(report["top1_only_rows"], 1)
+		self.assertEqual(report["blocker_kind"], "target_suffix_verifier_still_serial")
 		self.assertTrue(validate.validate_report(report)["ok"])
 
 	def test_validator_rejects_bad_speedup(self) -> None:

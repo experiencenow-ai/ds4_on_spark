@@ -1,0 +1,98 @@
+diff --git a/ds4.c b/ds4.c
+--- a/ds4.c
++++ b/ds4.c
+@@
+ typedef struct {
+     int target_eval_call_count;
+     int draft_eval_call_count;
+     int output_head_call_count;
+@@
+     double token_commit_ms;
+ } ds4_mtp_decode2_stats;
++
++typedef struct
++{
++    int32_t draft_tokens[2];
++    int32_t target_top1_pos1;
++    int32_t target_top1_pos2;
++    int32_t accepted_count;
++    bool has_continuation_logits;
++    bool staged_kv_ready;
++} ds4_mtp_suffix2_result;
+@@
+-/* Exact N=2 target verifier for MTP.
++/* Exact K=2 target suffix verifier for MTP.
++ *
++ * This is the architecture reset hook: callers ask for one strict suffix
++ * verification over two draft positions, and the implementation owns target
++ * state staging, top1 comparison, continuation logits, and KV commit/restore
++ * semantics.  The first implementation deliberately delegates to the existing
++ * decode2 verifier, so invocation accounting proves whether the path is still
++ * serial.  A real speed path must replace this body with one target suffix pass.
++ */
++static bool target_suffix_verify_k2(
++        ds4_gpu_graph          *g,
++        const ds4_model        *model,
++        const ds4_weights      *weights,
++        int32_t                 draft0,
++        int32_t                 draft1,
++        uint32_t                start_pos,
++        ds4_mtp_suffix2_result *out,
++        float                  *continuation_logits,
++        ds4_mtp_decode2_stats  *stats)
++{
++    int32_t row0_top;
++    if (g == NULL || model == NULL || weights == NULL || out == NULL || continuation_logits == NULL)
++        return false;
++    memset(out,0,sizeof(*out));
++    out->draft_tokens[0] = draft0;
++    out->draft_tokens[1] = draft1;
++    if (!metal_graph_verify_decode2_exact(g,model,weights,draft0,draft1,start_pos,&row0_top,NULL,continuation_logits,stats))
++        return false;
++    out->target_top1_pos1 = row0_top;
++    out->target_top1_pos2 = -1;
++    out->accepted_count = (row0_top == draft1) ? 2 : 1;
++    out->has_continuation_logits = true;
++    out->staged_kv_ready = false;
++    return true;
++}
++
++/* Exact N=2 target verifier for MTP.
+  * It runs the target model for draft[0] and then draft[1] from the current
+  * session frontier, checks whether target top-1 after draft[0] equals
+  * draft[1], and returns continuation logits after draft[1].
+@@
+-        int row0_top = -1;
++        ds4_mtp_suffix2_result suffix2;
+@@
+-            ok = metal_graph_verify_decode2_exact(&s->graph,
+-                                                  &e->model,
+-                                                  &e->weights,
+-                                                  drafts[0],
+-                                                  drafts[1],
+-                                                  (uint32_t)start,
+-                                                  &row0_top,
+-                                                  NULL,
+-                                                  row_logits,
+-                                                  &decode2_stats);
++            ok = target_suffix_verify_k2(&s->graph,
++                                          &e->model,
++                                          &e->weights,
++                                          drafts[0],
++                                          drafts[1],
++                                          (uint32_t)start,
++                                          &suffix2,
++                                          row_logits,
++                                          &decode2_stats);
+         }
+@@
+-        if (ok && row0_top == drafts[1]) {
++        if (ok && suffix2.accepted_count == 2) {
+@@
+-            ok = spec_frontier_commit_prefix1(s);
++            ok = spec_frontier_commit_prefix1(s);
+         }
+@@
+                         "ds4: mtp timing decode2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",
+@@
+                         "ds4: mtp timing decode2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",

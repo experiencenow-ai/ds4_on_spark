@@ -129,6 +129,15 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - emits per-step decode, commit, KV-update, and token-hash arrays for `ds4-b512-end-to-end-decode-v1`
     - keeps row replacement disabled for this PR
 
+- `ds4-3630e64-mtp-target-suffix-verify-k2.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the decode2 head-fusion MTP patch
+  - Purpose:
+    - introduces the target-suffix verifier API shape required for economical MTP verification:
+      `target_suffix_verify(checkpoint_state, draft_tokens[2])`
+    - routes the current exact decode2 verifier through `target_suffix_verify_k2(...)`
+    - preserves strict K=2 correctness while making target/top1/logits/KV staging ownership explicit
+    - intentionally records `staged_kv_ready=false`, proving this prototype still degenerates to serial target eval until a real target-suffix pass replaces the delegate body
+
 - `ds4-3630e64-cuda-b512-row-token-input.patch`
   - Target: `antirez/ds4@3630e64`, applied after the token-commit profile/constrained patch
   - Purpose:
