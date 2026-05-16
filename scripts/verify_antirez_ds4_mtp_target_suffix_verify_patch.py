@@ -18,15 +18,26 @@ def validate_patch_text(text: str) -> list[str]:
 	required = [
 		"typedef struct",
 		"ds4_mtp_suffix2_result",
+		"ds4_mtp_kv_checkpoint",
+		"static bool mtp_kv_checkpoint_begin(",
+		"static void mtp_kv_checkpoint_restore(",
+		"static bool mtp_kv_checkpoint_commit_suffix2(",
+		"static bool metal_graph_eval_target_suffix_k2_staged(",
 		"static bool target_suffix_verify_k2(",
 		"int32_t draft_tokens[2];",
 		"staged_kv_ready",
 		"has_continuation_logits",
-		"metal_graph_verify_decode2_exact(g,model,weights,draft0,draft1,start_pos",
+		"stats->target_verifier_invocation_count++;",
+		"stats->target_eval_call_count++;",
+		"stats->target_positions_verified += 2;",
+		"metal_graph_decode2_fused_output_head(g,model,weights,cur0,cur1,&row0_top,continuation_logits,stats)",
 		"out->accepted_count = (row0_top == draft1) ? 2 : 1;",
-		"out->staged_kv_ready = false;",
+		"out->staged_kv_ready = true;",
 		"ok = target_suffix_verify_k2(&s->graph,",
 		"suffix2.accepted_count == 2",
+		"mtp_kv_checkpoint_commit_suffix2(&s->graph,&suffix2.checkpoint,2)",
+		"mtp_kv_checkpoint_commit_suffix2(&s->graph,&suffix2.checkpoint,1)",
+		"verifier_calls=%d target_positions=%d target_calls=%d",
 	]
 	for needle in required:
 		if needle not in added:
@@ -36,6 +47,8 @@ def validate_patch_text(text: str) -> list[str]:
 		"draft_n == 4",
 		"cross_spark",
 		"DS4_CUDA_MOE_SLICE",
+		"metal_graph_verify_decode2_exact(g,model,weights,draft0,draft1,start_pos",
+		"out->staged_kv_ready = false;",
 	]:
 		if forbidden in added:
 			errors.append(f"forbidden architecture creep in patch: {forbidden!r}")
