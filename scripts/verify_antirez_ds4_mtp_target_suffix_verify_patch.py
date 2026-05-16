@@ -27,6 +27,8 @@ def validate_patch_text(text: str) -> list[str]:
 		"stats->target_positions_verified += 2;",
 		"metal_graph_decode2_fused_output_head(g, model, weights, cur0, cur1, top0, logits1, stats)",
 		"NULL,\n                                                  row_logits,\n                                                  &decode2_stats);",
+		"const double snapshot_done = snapshot_t0;",
+		"metal_graph_read_spec_logits_row(&s->graph, 0, row_logits)",
 		"verifier_calls=%d target_positions=%d target_calls=%d",
 	]
 	for needle in required:
@@ -40,6 +42,9 @@ def validate_patch_text(text: str) -> list[str]:
 		"metal_graph_verify_decode2_exact(g,model,weights,draft0,draft1,start_pos",
 		"out->staged_kv_ready = false;",
 		"row0_logits = xmalloc",
+		"spec_frontier_snapshot(&frontier, s)",
+		"spec_frontier_free(&frontier)",
+		"spec_frontier_restore(&frontier, s)",
 	]:
 		if forbidden in added:
 			errors.append(f"forbidden architecture creep in patch: {forbidden!r}")
