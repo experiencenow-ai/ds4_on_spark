@@ -173,7 +173,12 @@ cd "$DS4_DIR"
 DS4_MTP_CONF_LOG="${DS4_MTP_CONF_LOG:-1}"
 DS4_MTP_TIMING="${DS4_MTP_TIMING:-1}"
 DS4_MTP_MIN_MARGIN="${DS4_MTP_MIN_MARGIN:-0}"
-export DS4_MTP_CONF_LOG DS4_MTP_TIMING DS4_MTP_MIN_MARGIN
+export DS4_MTP_CONF_LOG DS4_MTP_MIN_MARGIN
+if [ "$DS4_MTP_TIMING" = "0" ]; then
+	unset DS4_MTP_TIMING
+else
+	export DS4_MTP_TIMING
+fi
 
 # Spark CUDA stability knobs (best-effort defaults).
 # These can be overridden by setting the env vars explicitly on Spark.
