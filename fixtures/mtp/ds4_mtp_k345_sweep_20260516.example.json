@@ -1,0 +1,282 @@
+{
+  "accept_prob_used_for_projection": 1.0,
+  "artifact_sha256": "sha256:72ba640b98cd86cc6b8cea15be8ef759dddb6d0398f5a796f9a2409b3fbfd72b",
+  "best_projected_k_by_idle_rows": [
+    {
+      "best_k": null,
+      "idle_extra_rows": 0,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 1,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 2,
+      "reason": "no K fits"
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 3
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 4,
+      "idle_extra_rows": 4
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 5
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 6
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 8
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 16
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 64
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 128
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 256
+    },
+    {
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 5,
+      "idle_extra_rows": 511
+    }
+  ],
+  "best_supported_k_by_idle_rows": [
+    {
+      "best_k": null,
+      "idle_extra_rows": 0,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 1,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 2,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 3,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 4,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 5,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 6,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 8,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 16,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 64,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 128,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 256,
+      "reason": "no K fits"
+    },
+    {
+      "best_k": null,
+      "idle_extra_rows": 511,
+      "reason": "no K fits"
+    }
+  ],
+  "blocker_detail": "candidate K values [3, 4, 5] are projected/classified only; measured reference K values are [2]",
+  "blocker_kind": "candidate_k_runtime_not_implemented",
+  "format": "ds4-mtp-k-sweep-v1",
+  "idle_extra_rows_swept": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8,
+    16,
+    64,
+    128,
+    256,
+    511
+  ],
+  "integration_rule": "K consumes K extra verifier rows beyond the normal target row; use MTP only when those rows are idle or when measured scheduler-level output tokens/s improves.",
+  "k_power_of_two_required": false,
+  "k_results": [
+    {
+      "blocker_detail": "K=3 needs target_suffix_verify over 4 positions plus staged KV prefix commit; current runtime support set is [2]",
+      "blocker_kind": "runtime_suffix_k_not_implemented",
+      "expected_accept_prob_per_draft_token": 1.0,
+      "expected_bonus_tokens_per_extra_idle_row": 1.0,
+      "expected_draft_calls_per_output_token": 0.75,
+      "expected_emitted_tokens_per_group": 4.0,
+      "expected_target_rows_per_output_token": 1.0,
+      "extra_idle_rows_required_per_promoted_sequence": 3,
+      "fits_idle_extra_rows": {
+        "0": false,
+        "1": false,
+        "128": true,
+        "16": true,
+        "2": false,
+        "256": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "511": true,
+        "6": true,
+        "64": true,
+        "8": true
+      },
+      "k": 3,
+      "k_power_of_two": false,
+      "measurement_status": "projected_unsupported_runtime",
+      "runtime_supported": false,
+      "total_target_verifier_rows_per_group": 4
+    },
+    {
+      "blocker_detail": "K=4 needs target_suffix_verify over 5 positions plus staged KV prefix commit; current runtime support set is [2]",
+      "blocker_kind": "runtime_suffix_k_not_implemented",
+      "expected_accept_prob_per_draft_token": 1.0,
+      "expected_bonus_tokens_per_extra_idle_row": 1.0,
+      "expected_draft_calls_per_output_token": 0.8,
+      "expected_emitted_tokens_per_group": 5.0,
+      "expected_target_rows_per_output_token": 1.0,
+      "extra_idle_rows_required_per_promoted_sequence": 4,
+      "fits_idle_extra_rows": {
+        "0": false,
+        "1": false,
+        "128": true,
+        "16": true,
+        "2": false,
+        "256": true,
+        "3": false,
+        "4": true,
+        "5": true,
+        "511": true,
+        "6": true,
+        "64": true,
+        "8": true
+      },
+      "k": 4,
+      "k_power_of_two": true,
+      "measurement_status": "projected_unsupported_runtime",
+      "runtime_supported": false,
+      "total_target_verifier_rows_per_group": 5
+    },
+    {
+      "blocker_detail": "K=5 needs target_suffix_verify over 6 positions plus staged KV prefix commit; current runtime support set is [2]",
+      "blocker_kind": "runtime_suffix_k_not_implemented",
+      "expected_accept_prob_per_draft_token": 1.0,
+      "expected_bonus_tokens_per_extra_idle_row": 1.0,
+      "expected_draft_calls_per_output_token": 0.8333333333333334,
+      "expected_emitted_tokens_per_group": 6.0,
+      "expected_target_rows_per_output_token": 1.0,
+      "extra_idle_rows_required_per_promoted_sequence": 5,
+      "fits_idle_extra_rows": {
+        "0": false,
+        "1": false,
+        "128": true,
+        "16": true,
+        "2": false,
+        "256": true,
+        "3": false,
+        "4": false,
+        "5": true,
+        "511": true,
+        "6": true,
+        "64": true,
+        "8": true
+      },
+      "k": 5,
+      "k_power_of_two": false,
+      "measurement_status": "projected_unsupported_runtime",
+      "runtime_supported": false,
+      "total_target_verifier_rows_per_group": 6
+    }
+  ],
+  "k_values_tested_or_classified": [
+    3,
+    4,
+    5
+  ],
+  "model_id": "DeepSeek-V4-Flash-IQ2XXS-chat-v2",
+  "prompt_hash": "9bb098e9af0bd1aad2335fca85248a624a361637c523d0248e810a48353479d5",
+  "reference_measurements": [
+    {
+      "accept_rate": 1.0,
+      "accepted_draft_tokens": 84,
+      "attempted_draft_tokens": 84,
+      "baseline_tps": 11.02,
+      "emitted_tokens": 126,
+      "full_vocab_logits_rows": 42,
+      "k": 2,
+      "mtp_tps": 20.55,
+      "output_head_invocation_count": 42,
+      "slowest_component": "target_eval_ms",
+      "source_artifact": "/private/tmp/ds4_on_spark_antirez_ds4_mtp_true_suffix_k2_pendingtop/20260516T142212Z/mtp_verifier_economics.baseline1102.json",
+      "speedup_vs_baseline": 1.8647912885662434,
+      "target_positions_per_invocation": 3.0,
+      "target_positions_verified": 126,
+      "target_verifier_invocation_count": 42,
+      "top1_only_rows": 84
+    }
+  ],
+  "run_id": "ds4-mtp-k345-sweep-20260516",
+  "runtime_id": "antirez/ds4@3630e64+cuda-mtp-true-suffix-k2-reference",
+  "runtime_supported_k": [
+    2
+  ]
+}
