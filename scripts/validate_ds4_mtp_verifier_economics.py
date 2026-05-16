@@ -41,6 +41,14 @@ REQUIRED_FIELDS = (
 	"blocker_detail",
 )
 
+TARGET_SUFFIX_BLOCKER_FIELDS = (
+	"target_suffix_verifier_implemented",
+	"target_suffix_verifier_delegates_to_serial_decode",
+	"staged_kv_ready",
+	"true_suffix_blocker",
+	"exact_next_code_change",
+)
+
 
 def _num(raw: Any) -> Optional[float]:
 	if raw is None:
@@ -116,6 +124,19 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		detail = str(obj.get("blocker_detail", "") or "").strip()
 		if blocker == "" or blocker == "none" or detail == "":
 			errors.append("MTP not faster than baseline requires blocker_kind and blocker_detail")
+		if blocker in {"target_suffix_verifier_still_serial", "target_suffix_verifier_not_implemented"}:
+			for field in TARGET_SUFFIX_BLOCKER_FIELDS:
+				if field not in obj:
+					errors.append(f"{blocker} requires {field}")
+			if obj.get("target_suffix_verifier_implemented") is not True:
+				errors.append(f"{blocker} requires target_suffix_verifier_implemented=true for the API prototype")
+			if obj.get("target_suffix_verifier_delegates_to_serial_decode") is not True:
+				errors.append(f"{blocker} requires target_suffix_verifier_delegates_to_serial_decode=true")
+			if obj.get("staged_kv_ready") is not False:
+				errors.append(f"{blocker} requires staged_kv_ready=false")
+			for field in ("true_suffix_blocker", "exact_next_code_change"):
+				if not isinstance(obj.get(field), str) or obj.get(field, "").strip() == "":
+					errors.append(f"{blocker} requires non-empty {field}")
 	return {"ok": len(errors) == 0, "errors": errors}
 
 
