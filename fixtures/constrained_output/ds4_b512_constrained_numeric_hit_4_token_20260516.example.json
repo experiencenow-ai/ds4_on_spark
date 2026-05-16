@@ -1,5 +1,5 @@
 {
-  "artifact_hash": "sha256:2bac56ee8ee96312ca9e5b03594f9fb60bc84828060f27acede861d2c217cfe7",
+  "artifact_hash": "sha256:fb8f693bdd0fcadf77543faa91acce801ce28c099841ff68fc9b3fbb3a22dbd5",
   "artifact_refs": [
     {
       "name": "end_to_end_decode_artifact",
@@ -12,7 +12,7 @@
       "sha256": "sha256:52308fa2a2d6ea52eef29e4efe43da56f5488e66608c783ee544059f2344fc4b"
     }
   ],
-  "artifact_sha256": "sha256:2bac56ee8ee96312ca9e5b03594f9fb60bc84828060f27acede861d2c217cfe7",
+  "artifact_sha256": "sha256:fb8f693bdd0fcadf77543faa91acce801ce28c099841ff68fc9b3fbb3a22dbd5",
   "batch_size": 512,
   "blocker_detail": "",
   "blocker_kind": "none",
@@ -36,6 +36,7 @@
   ],
   "candidate_token_ids_sha256": "sha256:d343e70d995e2225acc16bf81a6604575adfd0fd8c7b51f3e1340164bd94edc2",
   "candidate_vocabulary_kind": "numeric_ids",
+  "commit_lane": "constrained_candidate_commit",
   "committed_token_ids_present": true,
   "constrained_commit_ms": 104.948,
   "decode_ms": 51975.32698156739,
@@ -46,6 +47,7 @@
   "finite_output": true,
   "format": "ds4-b512-constrained-output-benchmark-v1",
   "full_vocab_commit_ms": 0.0,
+  "input_provenance": "derived_multistep_kv_loop",
   "measurement_source": "derived_from_decode_only_1_token_until_spark0_rerun",
   "microbatch_count": 16,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
@@ -70,6 +72,7 @@
   "prompt_pattern": "shared_prefix_compact_suffix",
   "provider_id": "spark012-dsv4-layer-pipeline",
   "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "request_shape": "b512_separate_rows",
   "run_id": "ds4-b512-constrained-numeric-hit-4-token-20260516",
   "runtime_hook_patch": "docs/antirez-patches/ds4-3630e64-cuda-b512-multistep-kv-loop.patch",
   "runtime_hook_status": "derived_multistep_kv_loop_until_spark0_rerun",

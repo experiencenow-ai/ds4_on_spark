@@ -1,5 +1,5 @@
 {
-  "artifact_hash": "sha256:44414d5b7316491635022bbd1719598b7be05ab078b981caaff2d0c915ba4175",
+  "artifact_hash": "sha256:1af646e0d971e046877fe8d19303b04f526d1b09e0d2796eecfe9d59faf9a2f6",
   "artifact_refs": [
     {
       "name": "end_to_end_decode_artifact",
@@ -12,7 +12,7 @@
       "sha256": "sha256:52308fa2a2d6ea52eef29e4efe43da56f5488e66608c783ee544059f2344fc4b"
     }
   ],
-  "artifact_sha256": "sha256:44414d5b7316491635022bbd1719598b7be05ab078b981caaff2d0c915ba4175",
+  "artifact_sha256": "sha256:1af646e0d971e046877fe8d19303b04f526d1b09e0d2796eecfe9d59faf9a2f6",
   "batch_size": 512,
   "blocker_detail": "",
   "blocker_kind": "none",
@@ -36,6 +36,7 @@
   ],
   "candidate_token_ids_sha256": "sha256:d343e70d995e2225acc16bf81a6604575adfd0fd8c7b51f3e1340164bd94edc2",
   "candidate_vocabulary_kind": "numeric_ids",
+  "commit_lane": "constrained_candidate_commit",
   "committed_token_ids_present": true,
   "constrained_commit_ms": 37.368,
   "decode_ms": 0.0,
@@ -46,6 +47,7 @@
   "finite_output": true,
   "format": "ds4-b512-constrained-output-benchmark-v1",
   "full_vocab_commit_ms": 0.0,
+  "input_provenance": "row_token_suffix_probe",
   "microbatch_count": 16,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
   "optimized_kernel_flags": {
@@ -70,6 +72,7 @@
   "prompt_pattern": "shared_prefix_compact_suffix",
   "provider_id": "spark012-dsv4-layer-pipeline",
   "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "request_shape": "b512_separate_rows",
   "run_id": "ds4-b512-constrained-numeric-hit-1-token-20260516",
   "runtime_hook_status": "live_row_token_suffix_probe",
   "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp",

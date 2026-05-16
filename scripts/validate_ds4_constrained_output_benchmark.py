@@ -13,11 +13,15 @@ from typing import Any
 
 
 FORMAT = "ds4-b512-constrained-output-benchmark-v1"
-CANDIDATE_KINDS = {"numeric_ids", "digits_spaces_newline", "explicit_token_set", "full_vocab"}
+CONSTRAINED_CANDIDATE_KINDS = {"numeric_ids", "digits_spaces_newline", "explicit_token_set"}
+CONTROL_CANDIDATE_KINDS = {"full_vocab"}
+CANDIDATE_KINDS = CONSTRAINED_CANDIDATE_KINDS | CONTROL_CANDIDATE_KINDS
 PROMPT_PATTERNS = {"shared_prefix_compact_suffix", "decode_only"}
 PREFIX_MODES = {"hit_fork", "miss_prepare", "no_prefix"}
 OUTPUT_TARGETS = {1, 4, 8}
 PRODUCTION_HOOKS = {"shared_prefix_hit_fork_runtime"}
+COMMIT_LANES = {"constrained_candidate_commit", "full_vocab_output_projection_control"}
+REQUEST_SHAPES = {"b512_separate_rows"}
 
 
 def canonical_bytes(obj: Any) -> bytes:
@@ -69,6 +73,16 @@ def parity_flags_match(artifact_flags: dict[str, Any], parity_flags: dict[str, A
 	return True
 
 
+def input_provenance(flags: dict[str, Any], runtime_hook: str, measurement_source: str) -> str:
+	if "DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS" in flags:
+		return "row_token_suffix_probe"
+	if "derived" in measurement_source:
+		return "derived_multistep_kv_loop"
+	if runtime_hook in PRODUCTION_HOOKS:
+		return "shared_prefix_hit_fork_runtime"
+	return runtime_hook
+
+
 def build_from_end_to_end(args: argparse.Namespace) -> dict[str, Any]:
 	src = load_json(Path(args.end_to_end_artifact))
 	parity = load_json(Path(args.parity_artifact))
@@ -82,6 +96,8 @@ def build_from_end_to_end(args: argparse.Namespace) -> dict[str, Any]:
 	parity_flags = dict(parity.get("optimized_kernel_flags", {}))
 	runtime_hook = args.runtime_hook_status
 	production = bool(args.production_generation_eligible)
+	measurement_source = str(src.get("measurement_source", ""))
+	commit_lane = "full_vocab_output_projection_control" if kind == "full_vocab" else "constrained_candidate_commit"
 	obj: dict[str, Any] = {
 		"format": FORMAT,
 		"run_id": args.run_id,
@@ -97,8 +113,11 @@ def build_from_end_to_end(args: argparse.Namespace) -> dict[str, Any]:
 		"candidate_token_count": len(candidate_ids),
 		"candidate_token_ids": candidate_ids,
 		"candidate_token_ids_sha256": sha256_obj(candidate_ids) if candidate_ids else "",
+		"commit_lane": commit_lane,
+		"request_shape": "b512_separate_rows",
 		"token_commit_mode": str(src.get("token_commit_mode", "")),
 		"runtime_hook_status": runtime_hook,
+		"input_provenance": input_provenance(flags, runtime_hook, measurement_source),
 		"output_token_target": int(src.get("output_token_target", 0)),
 		"prefix_mode": str(src.get("prefix_mode", "")),
 		"prefix_prepare_ms": float(src.get("prefix_prepare_ms", 0.0)),
@@ -153,7 +172,7 @@ def expect_number(errors: list[str], obj: dict[str, Any], key: str, minimum: flo
 
 def validate_artifact(obj: dict[str, Any]) -> list[str]:
 	errors: list[str] = []
-	for key in ("format", "run_id", "provider_id", "model_id", "runtime_id", "quantization_id", "prompt_pattern", "candidate_vocabulary_kind", "prefix_mode", "token_hash", "parity_artifact_sha256", "blocker_kind", "artifact_sha256", "artifact_hash"):
+	for key in ("format", "run_id", "provider_id", "model_id", "runtime_id", "quantization_id", "prompt_pattern", "candidate_vocabulary_kind", "commit_lane", "request_shape", "input_provenance", "prefix_mode", "token_hash", "parity_artifact_sha256", "blocker_kind", "artifact_sha256", "artifact_hash"):
 		expect_string(errors, obj, key)
 	if obj.get("format") != FORMAT:
 		errors.append(f"format must be {FORMAT}")
@@ -169,6 +188,10 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		errors.append("prompt_pattern is invalid")
 	if obj.get("candidate_vocabulary_kind") not in CANDIDATE_KINDS:
 		errors.append("candidate_vocabulary_kind is invalid")
+	if obj.get("commit_lane") not in COMMIT_LANES:
+		errors.append("commit_lane is invalid")
+	if obj.get("request_shape") not in REQUEST_SHAPES:
+		errors.append("request_shape must be b512_separate_rows")
 	if obj.get("prefix_mode") not in PREFIX_MODES:
 		errors.append("prefix_mode is invalid")
 	if obj.get("output_token_target") not in OUTPUT_TARGETS:
@@ -209,6 +232,8 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		errors.append("candidate_token_ids must be a list")
 	else:
 		if kind == "full_vocab":
+			if obj.get("commit_lane") != "full_vocab_output_projection_control":
+				errors.append("full_vocab control requires full_vocab_output_projection_control commit_lane")
 			if len(candidate_ids) != 0 or obj.get("candidate_token_count") != 0:
 				errors.append("full_vocab control must not declare constrained candidate ids")
 			if obj.get("token_commit_mode") != "full_vocab_batch_head":
@@ -216,6 +241,8 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			if float(obj.get("full_vocab_commit_ms", 0.0)) <= 0.0:
 				errors.append("full_vocab control requires full_vocab_commit_ms")
 		else:
+			if obj.get("commit_lane") != "constrained_candidate_commit":
+				errors.append("constrained benchmark requires constrained_candidate_commit commit_lane")
 			if len(candidate_ids) == 0:
 				errors.append("constrained benchmark requires candidate_token_ids")
 			if obj.get("candidate_token_count") != len(candidate_ids):
@@ -237,10 +264,20 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 	if obj.get("production_generation_eligible") is True:
 		if kind == "full_vocab":
 			errors.append("full-vocab control is not the constrained-output production lane")
+		if kind not in CONSTRAINED_CANDIDATE_KINDS:
+			errors.append("production eligibility requires a constrained candidate vocabulary kind")
+		if obj.get("commit_lane") != "constrained_candidate_commit":
+			errors.append("production eligibility requires constrained_candidate_commit")
+		if obj.get("request_shape") != "b512_separate_rows":
+			errors.append("production eligibility requires B=512 separate rows")
 		if obj.get("prompt_pattern") != "shared_prefix_compact_suffix" or obj.get("prefix_mode") != "hit_fork":
 			errors.append("production eligibility requires shared_prefix_compact_suffix hit_fork")
 		if obj.get("runtime_hook_status") not in PRODUCTION_HOOKS:
 			errors.append("production eligibility requires a real shared-prefix hit/fork runtime hook")
+		if obj.get("input_provenance") != "shared_prefix_hit_fork_runtime":
+			errors.append("production eligibility requires input_provenance=shared_prefix_hit_fork_runtime")
+		if "DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS" in obj.get("optimized_kernel_flags", {}):
+			errors.append("production eligibility cannot use row-token suffix probe input")
 		if "derived" in str(obj.get("measurement_source", "")):
 			errors.append("production eligibility cannot use derived measurement_source")
 	return errors
