@@ -7,7 +7,7 @@
     }
   ],
   "artifact_schema_version": 1,
-  "artifact_sha256": "sha256:90ec35ffe0ebdf89fb3d26df092e7a981a672e254f01ca1eae37aace20aac505",
+  "artifact_sha256": "sha256:690464a6fed205297bdba3314bb4fa1f73817e3bd9d689d51a74e1a1b4748808",
   "blocker_detail": "local PP=N emulated split not run: missing Python runtime dependencies: torch, transformers",
   "boundary_after_layers": [
     14,
@@ -48,7 +48,9 @@
   "max_abs_error": null,
   "mean_abs_error": null,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "optimized_kernel_flags": {},
   "parity_run_id": "dsv4-local-ppn-parity-not-run-example",
+  "parity_scope": "local_ppn_emulated",
   "parity_status": "not_run",
   "pipeline_id": "spark012-ds4-layer-pipeline-local-ppn",
   "pp1_output_sha256": "",

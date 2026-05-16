@@ -1,0 +1,90 @@
+{
+  "artifact_refs": [
+    {
+      "name": "stage_handoff_slice_tile8",
+      "path": "fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8.example.json",
+      "sha256": "sha256:ab68ea1718a6e1c85e0b9365997d861106269e7fbd9c45e17dddd92899126180"
+    }
+  ],
+  "artifact_schema_version": 1,
+  "artifact_sha256": "sha256:431e05299a1439d971737fc4d5b4334945848c6fea0501e6b751a698fbb8202c",
+  "blocker_detail": "Real PP=1 vs PP=N parity is blocked: scripts/run_ds4_streaming_stage_handoff_spark.py and the patched antirez/ds4 --cuda-batch-stack-probe path emit only fnv64 final_logits_hash for the PPN stage path and expose no repo-owned PP=1 logits/token dump or SHA comparison hook for the same prompt/model/context. Missing runtime hook/API: PP=1 target-only final logits/token export plus PPN final logits SHA export/comparison for DS4_CUDA_MOE_SLICE_TILE8=1.",
+  "boundary_after_layers": [
+    14,
+    28
+  ],
+  "boundary_state_layout": {
+    "dtype": "f32",
+    "layout": "batch,hc,hidden",
+    "shape": [
+      512,
+      4,
+      4096
+    ],
+    "status": "observed_stage_handoff"
+  },
+  "command_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "comparison_kind": "logits",
+  "format": "ds4-layer-pipeline-parity-v1",
+  "input_tokens_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "layer_ranges": [
+    {
+      "end": 15,
+      "stage_id": 0,
+      "start": 0
+    },
+    {
+      "end": 29,
+      "stage_id": 1,
+      "start": 15
+    },
+    {
+      "end": 43,
+      "include_head": true,
+      "stage_id": 2,
+      "start": 29
+    }
+  ],
+  "max_abs_error": null,
+  "mean_abs_error": null,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "optimized_kernel_flags": {
+    "DS4_CUDA_MOE_SLICE_TILE8": "1"
+  },
+  "parity_run_id": "dsv4-slice-tile8-cross-spark-ppn-blocked-20260516",
+  "parity_scope": "cross_spark_ppn",
+  "parity_status": "not_run",
+  "pipeline_id": "spark012-ds4-layer-pipeline-slice-tile8",
+  "pp1_output_sha256": "",
+  "ppn_output_sha256": "",
+  "provider_id": "spark-ring-dsv4-layer-pipeline",
+  "quality_parity_detail": "Slice-tile8 stage handoff is finite and deterministic by repeated fnv64 final_logits_hash, but PP=1 reference logits/tokens were not emitted and no SHA comparison hook exists; production eligibility remains false.",
+  "quality_parity_eligible": false,
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp+slice-tile8",
+  "stage_count": 3,
+  "stage_inventory": [
+    {
+      "node_id": "spark0",
+      "stage_id": 0
+    },
+    {
+      "node_id": "spark1",
+      "stage_id": 1
+    },
+    {
+      "node_id": "spark2",
+      "stage_id": 2
+    }
+  ],
+  "stage_manifest_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "token_match_count": null,
+  "token_total_count": null,
+  "tokenizer_hash_status": "not_available",
+  "tokenizer_id": "deepseek-v4-flash-tokenizer",
+  "tokenizer_sha256": "",
+  "tolerance": {
+    "max_abs_error": null,
+    "mean_abs_error": null
+  }
+}

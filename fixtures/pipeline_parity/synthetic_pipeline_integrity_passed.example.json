@@ -7,7 +7,8 @@
     }
   ],
   "artifact_schema_version": 1,
-  "artifact_sha256": "sha256:4af94736d58f7149090a9aa7a977af29c8a489f8b774a008af06160a98c5d04a",
+  "artifact_sha256": "sha256:d52ea03dce09365660346d6fb4e45ef678e56e5dfad1647cf74e3744c86eb500",
+  "blocker_detail": "",
   "boundary_after_layers": [
     14,
     28
@@ -44,7 +45,9 @@
   "max_abs_error": 0.0,
   "mean_abs_error": 0.0,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "optimized_kernel_flags": {},
   "parity_run_id": "synthetic-pipeline-integrity-example",
+  "parity_scope": "synthetic_integrity",
   "parity_status": "passed",
   "pipeline_id": "spark012-ds4-layer-pipeline-mre",
   "pp1_output_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",

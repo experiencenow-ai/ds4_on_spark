@@ -1,7 +1,8 @@
 {
   "artifact_refs": [],
   "artifact_schema_version": 1,
-  "artifact_sha256": "sha256:f06f93ca50082a47aa60c770b2c961ec79ba29d019bdce3ca20eb193385f8bb0",
+  "artifact_sha256": "sha256:1538051b2165a0b1a33f03941a9b94271bd8e2be94dd673ff2bebac345c9325d",
+  "blocker_detail": "Fixture failure: PP=N output token did not match PP=1.",
   "boundary_after_layers": [
     14,
     28
@@ -39,7 +40,9 @@
   "max_abs_error": 0.25,
   "mean_abs_error": 0.05,
   "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "optimized_kernel_flags": {},
   "parity_run_id": "dsv4-pipeline-parity-failed-example",
+  "parity_scope": "cross_spark_ppn",
   "parity_status": "failed",
   "pipeline_id": "spark012-ds4-layer-pipeline-mre",
   "pp1_output_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

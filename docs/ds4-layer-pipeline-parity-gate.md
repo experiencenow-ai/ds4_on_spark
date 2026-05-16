@@ -77,6 +77,15 @@ eligibility.
 Level 4: parity-passed prefill/decode throughput.
 This is the first point where DS4 layer-pipeline tok/sec claims are allowed.
 
+Current optimized path under gate: `DS4_CUDA_MOE_SLICE_TILE8=1` with the
+default split `[0,15), [15,29), [29,43)+head`. The latest stage-handoff run is
+finite and deterministic by repeated `fnv64` final-logits hash, but it is not
+production eligible. The parity artifact
+`fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_blocked_20260516.example.json`
+records `parity_status: not_run`, `quality_parity_eligible: false`, and the
+exact blocker: the current Spark handoff runner exposes no repo-owned PP=1
+logits/token export and no SHA comparison hook for the optimized PP=N output.
+
 ## Comparison Kinds
 
 Allowed `comparison_kind` values:
@@ -142,6 +151,13 @@ python3 scripts/validate_ds4_pipeline_parity.py fixtures/pipeline_parity/*.json
 The first DS4 parity fixture is intentionally `not_run`. The synthetic fixture
 is allowed to pass as transport integrity, but the validator and telemetry
 validator prevent it from satisfying DS4 quality parity.
+
+Real provider eligibility requires all of the following: `parity_status:
+passed`, `parity_scope` of `cross_spark_ppn` or
+`parity_passed_prefill_decode`, `comparison_kind` of `logits`, `tokens`, or
+`hidden_state`, a non-synthetic artifact, and explicit
+`optimized_kernel_flags`. Local split/reassembly evidence is useful
+implementation evidence, but it is not enough for production routing.
 
 ## Probe Commands
 

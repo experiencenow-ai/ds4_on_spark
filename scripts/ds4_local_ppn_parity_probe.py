@@ -77,12 +77,14 @@ def build_artifact(args: argparse.Namespace) -> dict[str, Any]:
 	command = {
 		"probe": "local_ppn_emulated",
 		"parity_run_id": args.parity_run_id,
+		"parity_scope": getattr(args, "parity_scope", "local_ppn_emulated"),
 		"boundary_artifact": args.boundary_artifact,
 		"comparison_kind": args.comparison_kind,
 		"parity_status": status,
 		"input_tokens": args.input_tokens,
 		"stage_inventory": stage_inventory,
 		"layer_ranges": layer_ranges,
+		"optimized_kernel_flags": getattr(args, "optimized_kernel_flags", {}),
 	}
 	pp1_hash = args.pp1_output_sha256
 	ppn_hash = args.ppn_output_sha256
@@ -90,6 +92,7 @@ def build_artifact(args: argparse.Namespace) -> dict[str, Any]:
 		"format": parity.FORMAT,
 		"artifact_schema_version": parity.SCHEMA_VERSION,
 		"parity_run_id": args.parity_run_id,
+		"parity_scope": getattr(args, "parity_scope", "local_ppn_emulated"),
 		"provider_id": args.provider_id,
 		"pipeline_id": args.pipeline_id,
 		"model_id": boundary_artifact.get("model_id", args.model_id),
@@ -110,6 +113,7 @@ def build_artifact(args: argparse.Namespace) -> dict[str, Any]:
 		"comparison_kind": args.comparison_kind,
 		"parity_status": status,
 		"quality_parity_eligible": bool(args.quality_parity_eligible and status == "passed" and args.comparison_kind != "synthetic_integrity"),
+		"optimized_kernel_flags": getattr(args, "optimized_kernel_flags", {}),
 		"tolerance": {
 			"max_abs_error": args.tolerance_max_abs_error,
 			"mean_abs_error": args.tolerance_mean_abs_error,
@@ -142,8 +146,10 @@ def main() -> int:
 	parser.add_argument("--tokenizer-hash-status", default="not_available")
 	parser.add_argument("--input-tokens", default="fixture:local-ppn-smoke")
 	parser.add_argument("--comparison-kind", choices=sorted(parity.COMPARISON_KINDS), default="hidden_state")
+	parser.add_argument("--parity-scope", choices=sorted(parity.PARITY_SCOPES), default="local_ppn_emulated")
 	parser.add_argument("--parity-status", choices=("auto", "not_run", "passed", "failed"), default="auto")
 	parser.add_argument("--quality-parity-eligible", action="store_true")
+	parser.add_argument("--optimized-kernel-flag", action="append", default=[], help="Record optimized kernel flag as KEY=VALUE.")
 	parser.add_argument("--pp1-output-sha256", default="")
 	parser.add_argument("--ppn-output-sha256", default="")
 	parser.add_argument("--tolerance-max-abs-error", type=float, default=None)
@@ -155,6 +161,13 @@ def main() -> int:
 	parser.add_argument("--quality-parity-detail", default="")
 	parser.add_argument("--blocker-detail", default="")
 	args = parser.parse_args()
+	flags = {}
+	for item in args.optimized_kernel_flag:
+		if "=" not in item:
+			parser.error("--optimized-kernel-flag must be KEY=VALUE")
+		k, v = item.split("=", 1)
+		flags[k] = v
+	args.optimized_kernel_flags = flags
 	try:
 		artifact = build_artifact(args)
 	except ValueError as exc:
