@@ -265,6 +265,20 @@ Artifacts:
 
 ## Current Blocker
 
+MTP remains paused as a speed path. The latest accepted-token run is not an
+acceptance failure: baseline greedy is 14.65 t/s, MTP draft=2 is 2.00 t/s, and
+acceptance is 21/21. The verifier-economics artifact shows the real blocker:
+target evaluation is still paid almost token-for-token. The target-suffix K=2
+prototype makes the intended API explicit and can fuse output-head accounting
+from 21 invocations to 11, but it still delegates to serial target decode with
+`staged_kv_ready=false`, so `target_eval_ms` remains dominant.
+
+Exact next MTP code change: replace the delegated body of
+`target_suffix_verify_k2(...)` with a real staged target suffix pass that
+verifies two draft positions in one target invocation, preserves rollbackable
+KV/cache state, commits the accepted prefix, and returns continuation logits
+without a second full target eval.
+
 The base pipeline now exceeds 250 rows/s and has PP=1/PP=N logits parity.
 Pipeline bubble is effectively gone at B=512/mb16 and transfer is not material.
 The slice-tile8 gate/up path cut stage0 service time from about 2,151 ms to
