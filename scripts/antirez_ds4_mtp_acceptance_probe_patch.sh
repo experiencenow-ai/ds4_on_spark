@@ -21,6 +21,7 @@ CTX="${CTX:-2048}"
 N_PREDICT="${N_PREDICT:-32}"
 MTP_DRAFT="${MTP_DRAFT:-2}"
 MTP_MARGIN="${MTP_MARGIN:-0}"
+RUN_LABEL="${RUN_LABEL:-mtp_draft${MTP_DRAFT}}"
 
 ALLOW_FETCH="${ALLOW_FETCH:-0}"
 ALLOW_CLEAN="${ALLOW_CLEAN:-0}"
@@ -165,6 +166,7 @@ if [ ! -x "$DS4_BIN" ]; then
 	echo "ds4 binary not found (set ALLOW_BUILD=1 to build it): $DS4_BIN" 1>&2
 	exit 6
 fi
+export DS4_BIN TRUNK_GGUF MTP_SIDECAR_GGUF PROMPT SEED CTX N_PREDICT MTP_DRAFT MTP_MARGIN RUN_LABEL
 
 cd "$DS4_DIR"
 
@@ -189,4 +191,71 @@ if [ "${DS4_CUDA_MODEL_COPY_CHUNK_MB:-}" = "" ]; then
 fi
 export DS4_CUDA_WEIGHT_CACHE_SYNC DS4_CUDA_WEIGHT_ARENA_CHUNK_MB DS4_CUDA_MODEL_COPY_CHUNK_MB
 
-exec sh -lc "\"$DS4_BIN\" --cuda -m \"$TRUNK_GGUF\" --mtp \"$MTP_SIDECAR_GGUF\" --mtp-draft \"$MTP_DRAFT\" --mtp-margin \"$MTP_MARGIN\" --temp 0 -p \"$PROMPT\" -c \"$CTX\" -n \"$N_PREDICT\" --seed \"$SEED\""
+python3 - <<'PY'
+import hashlib
+import os
+import subprocess
+import sys
+import time
+
+cmd = [
+	os.environ["DS4_BIN"],
+	"--cuda",
+	"-m",
+	os.environ["TRUNK_GGUF"],
+	"--mtp",
+	os.environ["MTP_SIDECAR_GGUF"],
+	"--mtp-draft",
+	os.environ["MTP_DRAFT"],
+	"--mtp-margin",
+	os.environ["MTP_MARGIN"],
+	"--temp",
+	"0",
+	"-p",
+	os.environ["PROMPT"],
+	"-c",
+	os.environ["CTX"],
+	"-n",
+	os.environ["N_PREDICT"],
+	"--seed",
+	os.environ["SEED"],
+]
+prompt_hash = hashlib.sha256(os.environ["PROMPT"].encode("utf-8")).hexdigest()
+cmd_hash = hashlib.sha256("\0".join(cmd).encode("utf-8")).hexdigest()
+spec_disabled = 1 if os.environ.get("DS4_MTP_SPEC_DISABLE", "") != "" else 0
+phase = os.environ.get("RUN_LABEL", "mtp")
+print(
+	"ds4: mtp bench phase=%s command_sha256=%s prompt_sha256=%s n_predict=%s mtp_draft=%s ctx=%s seed=%s spec_disabled=%d"
+	% (
+		phase,
+		cmd_hash,
+		prompt_hash,
+		os.environ["N_PREDICT"],
+		os.environ["MTP_DRAFT"],
+		os.environ["CTX"],
+		os.environ["SEED"],
+		spec_disabled,
+	),
+	file=sys.stderr,
+	flush=True,
+)
+t0 = time.monotonic()
+rc = subprocess.call(cmd)
+wall = time.monotonic() - t0
+print(
+	"ds4: mtp bench phase=%s external_wall_s=%.6f exit_code=%d n_predict=%s mtp_draft=%s ctx=%s seed=%s spec_disabled=%d"
+	% (
+		phase,
+		wall,
+		rc,
+		os.environ["N_PREDICT"],
+		os.environ["MTP_DRAFT"],
+		os.environ["CTX"],
+		os.environ["SEED"],
+		spec_disabled,
+	),
+	file=sys.stderr,
+	flush=True,
+)
+raise SystemExit(rc)
+PY
