@@ -120,6 +120,15 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - avoids the full 512-row vocabulary projection for constrained short-output tasks while preserving a final-row full-logits hash
     - keeps `production_generation_eligible=false`; this is a decode-only committed-token benchmark path, not the shared-prefix/suffix/KV production loop
 
+- `ds4-3630e64-cuda-b512-multistep-kv-loop.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the constrained token-commit profile patch
+  - Purpose:
+    - adds `DS4_CUDA_STACK_PROBE_DECODE_STEPS=4|8` for repeated short-output decode
+    - commits token ids and token hashes at every step
+    - feeds committed ids back through the token embedding path so step 2+ updates session/KV state instead of reseeding from the original probe input
+    - emits per-step decode, commit, KV-update, and token-hash arrays for `ds4-b512-end-to-end-decode-v1`
+    - keeps row replacement disabled for this PR
+
 Apply (example):
 
 ```bash

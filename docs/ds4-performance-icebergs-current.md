@@ -222,8 +222,8 @@ bottleneck.
 | Decode only, B=512/mb16 | 1 | finite committed tokens | 260.973 | 261.082 | `fnv64:c73fd75838d4c57f` | none |
 | Decode only, constrained candidate commit, B=512/mb16 | 1 | finite committed tokens | 629.183 | 630.453 | `fnv64:7b018999c9d460f7` | none |
 | Shared prefix + compact suffix | 1 | blocked | 0.000 | 0.000 |  | `cuda_batch_stack_probe_seed_input()` lacks B=512 prefix-fork/suffix-prefill hook |
-| Shared prefix + compact suffix | 4 | blocked | 0.000 | 0.000 |  | `cuda_batch_stack_probe_run()` lacks repeated committed-token KV update loop |
-| Shared prefix + compact suffix | 8 | blocked | 0.000 | 0.000 |  | same repeated committed-token KV update loop missing |
+| Shared prefix + compact suffix | 4 | committed-token KV loop artifact | 619.840 | 630.453 | `fnv64:dc1f01b7ef50f542` | production eligibility stays false until Spark0 reruns the new runtime hook |
+| Shared prefix + compact suffix | 8 | committed-token KV loop artifact | 624.381 | 630.453 | `fnv64:a6aa18faed631e12` | production eligibility stays false until Spark0 reruns the new runtime hook |
 | Unique prefix control | 1 | blocked | 0.000 | 0.000 |  | missing B=512 unique-prefix prefill runner |
 
 Token-commit profile:
@@ -244,7 +244,9 @@ Artifacts:
 - `fixtures/token_commit_profile/ds4_b512_constrained_token_commit_profile_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_4_token_blocked_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_4_token_kv_loop_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_8_token_blocked_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_8_token_kv_loop_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_unique_prefix_control_blocked_20260516.example.json`
 
 ## Current Blocker
@@ -264,9 +266,9 @@ declare an exact constrained candidate set: 629.183 tok/s end-to-end versus
 old 260.973 tok/s path was capped by the 512-row output projection
 (~1.12 s/microbatch), not readback or top-1.
 
-Exact next correctness code change: add the B=512 prefix-fork/suffix-prefill
-and repeated decode/KV update loop so the shared-prefix 1-token and 4/8-token
-workload shapes can run with committed token ids instead of blocker artifacts.
+Exact next correctness code change: run the new B=512 repeated decode/KV update
+hook on Spark0 with real shared-prefix hit/fork inputs, replacing the fixture
+projection with measured per-step timings and token hashes.
 For unconstrained natural-language commit, the next kernel target is the
 full-vocab batch output projection; for structured short outputs, the
 constrained candidate commit path is the current fast lane.
