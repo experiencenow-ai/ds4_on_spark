@@ -52,6 +52,7 @@ def validate_patch_text(text: str) -> list[str]:
 		"metal_graph_verify_suffix_tops(g, model, weights, checkpoint",
 		"(uint32_t)start, 3, true",
 		"n_predict - n_generated >= 3",
+		"pos = checkpoint.len;",
 		"first_eval=0.000 ms",
 		"verifier_calls=1 target_positions=3 target_calls=1 head_calls=1",
 		"committed=1 first_eval=0.000 ms",
