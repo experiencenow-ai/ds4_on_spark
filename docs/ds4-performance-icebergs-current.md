@@ -10,7 +10,7 @@ generation: PP=1 parity is not run and `production_generation_eligible=false`.
 
 | Metric | Value |
 | --- | ---: |
-| Best achieved streaming rows/s | 209.036 at B=512, microbatches=16 |
+| Best achieved streaming rows/s | 210.999 at B=512, microbatches=16 |
 | Best corrected steady-state bound | 244.270 rows/s at B=1024, microbatches=4 |
 | Best B=512 corrected steady-state bound | 237.492 rows/s |
 | Exceeds 15 rows/s | true |
@@ -89,22 +89,48 @@ variant sweep on stage0 layers 0, 3, and 14 showed `DS4_CUDA_MOE_NO_P2=1` is
 much slower, so the sorted P2 path is required. `DS4_CUDA_MOE_DOWN_BLOCK16=1`
 was neutral to worse.
 
+## P2 Inner Timing
+
+`DS4_CUDA_MOE_P2_INNER_PROFILE=1` splits routed MoE into queue build, pointer
+table setup, gate/up, quantize, down, and accumulation. Stage0 B=512/mb16 shows
+gate/up dominates.
+
+| Layer | Queue ms | Pointer ms | Gate/up ms | Quantize ms | Down ms | Accum ms | Total ms | Bottleneck |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 0.020 | 0.034 | 116.993 | 0.250 | 16.798 | 0.321 | 134.415 | gate/up |
+| 1 | 0.020 | 0.038 | 117.214 | 0.250 | 16.725 | 0.321 | 134.567 | gate/up |
+| 2 | 0.020 | 0.034 | 117.682 | 0.250 | 16.770 | 0.316 | 135.073 | gate/up |
+| 3 | 0.020 | 0.013 | 110.051 | 0.261 | 14.538 | 0.330 | 125.212 | gate/up |
+| 14 | 0.023 | 0.020 | 110.734 | 0.266 | 14.586 | 0.333 | 125.962 | gate/up |
+
+The first bounded P2 code change stops writing P2 `gate_out` and `up_out`
+unless `DS4_CUDA_MOE_WRITE_GATE_UP=1`, matching the tiled kernels' existing
+aux-write behavior. The component profile barely moves, but the full pipeline
+does improve.
+
+| Run | Achieved rows/s | Corrected steady bound | Slowest stage | Slowest service ms | Hash | Read |
+| --- | ---: | ---: | --- | ---: | --- | --- |
+| Default | 209.036 | 237.492 | stage0 | 2,155.858 | `fnv64:5c9c39e9a1665737` | baseline |
+| TILE4 | 209.950 | 237.812 | stage0 | 2,152.962 | `fnv64:5c9c39e9a1665737` | tiny env-only gain |
+| P2 skip aux writes | 210.999 | 237.992 | stage0 | 2,151.329 | `fnv64:5c9c39e9a1665737` | current best |
+
 ## Current Blocker
 
-The base pipeline did not reach 250 rows/s. Pipeline bubble is effectively
-gone at B=512/mb16 and transfer is not material. The current bottleneck is
-stage0 routed MoE compute, with the default split stage0 at roughly 2.16 s for
-B=512 and 4.19 s for B=1024.
+The base pipeline still did not reach 250 rows/s. Pipeline bubble is
+effectively gone at B=512/mb16 and transfer is not material. The current
+bottleneck is stage0 P2 routed MoE gate/up compute, with layer 2 gate/up at
+roughly 117.7 ms of 135.1 ms total routed MoE.
 
-Exact next code change: add CUDA event timing inside the routed MoE P2 path
-around gate/up, activation/quantize, down, and accumulation, then optimize the
-dominant tile kernel. Depth/split tuning is no longer the right lever for this
-path.
+Exact next code change: optimize the P2 gate/up dot kernel itself, or replace
+the P2 gate/up path with a correctly slice-aware expert-tile gate/up kernel.
+Queue build, pointer-table setup, down, and accumulation are not the primary
+limit.
 
 Latest handoff artifacts:
 
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_tile4.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_skipaux.example.json`
 - `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4.example.json`
 - `fixtures/stage_handoff/spark012_split_014_028_043_b512_mb8.example.json`
 - `fixtures/stage_handoff/spark012_split_014_029_043_b512_mb8.example.json`
@@ -116,3 +142,5 @@ Latest kernel-profile artifacts:
 - `fixtures/stage_kernel_profile/spark1_stage1_kernel_profile_b512.example.json`
 - `fixtures/stage_kernel_profile/spark2_stage2_kernel_profile_b512.example.json`
 - `fixtures/stage_kernel_profile/spark0_moe_variant_sweep_b512.example.json`
+- `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_before.example.json`
+- `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_skipaux.example.json`
