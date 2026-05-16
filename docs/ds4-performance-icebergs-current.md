@@ -269,24 +269,23 @@ Constrained candidate-set sweep:
 
 | Candidate tokens | Kind | Output tok/s | Commit ms | Runtime-enforced set | Token hash | Status |
 | ---: | --- | ---: | ---: | --- | --- | --- |
-| 15 | `numeric_ids` | 665.660 | 33.411 | yes | `fnv64:0f3476a5eb4356b4` | validated |
-| 32 | `synthetic_candidate_set` | 648.727 | 37.526 | yes | `fnv64:ae6016264c78bc95` | validated |
-| 64 | `synthetic_candidate_set` | 660.921 | 38.430 | yes | `fnv64:fa7b9ce2062f2e6f` | validated |
-| 128 | `synthetic_candidate_set` | 666.892 | 42.943 | yes | `fnv64:39893c9f6d3939d5` | validated |
-| 256 | `synthetic_candidate_set` | 655.235 | 56.594 | yes | `fnv64:472c95dbdf2fe27e` | validated |
-| 512 | `synthetic_candidate_set` | 646.712 | 55.482 | reported 256 | `fnv64:472c95dbdf2fe27e` | blocked: runtime candidate set truncated |
-| 1024 | `synthetic_candidate_set` | 653.886 | 55.407 | reported 256 | `fnv64:472c95dbdf2fe27e` | blocked: runtime candidate set truncated |
-| 2048 | `synthetic_candidate_set` | 659.867 | 52.046 | reported 256 | `fnv64:472c95dbdf2fe27e` | blocked: runtime candidate set truncated |
+| 15 | `numeric_ids` | 652.799 | 37.139 | 15 | `fnv64:0f3476a5eb4356b4` | validated |
+| 32 | `synthetic_candidate_set` | 669.177 | 27.943 | 32 | `fnv64:ae6016264c78bc95` | validated |
+| 64 | `synthetic_candidate_set` | 650.946 | 36.087 | 64 | `fnv64:fa7b9ce2062f2e6f` | validated |
+| 128 | `synthetic_candidate_set` | 662.449 | 43.777 | 128 | `fnv64:39893c9f6d3939d5` | validated |
+| 256 | `synthetic_candidate_set` | 667.093 | 44.594 | 256 | `fnv64:472c95dbdf2fe27e` | validated |
+| 512 | `synthetic_candidate_set` | 664.646 | 75.411 | 512 | `fnv64:42d68a8c4fe438e4` | validated |
+| 1024 | `synthetic_candidate_set` | 663.463 | 116.462 | 1024 | `fnv64:d7114fb304484760` | validated |
+| 2048 | `synthetic_candidate_set` | 646.129 | 195.545 | 2048 | `fnv64:3f9f15f52bbd35dc` | validated |
 | full vocab | control | 264.586 | n/a | n/a | `fnv64:4dbeb5a7e01d8828` | full-vocab control |
 
-Largest validated candidate set above 600 tok/s: 256 tokens. Largest validated
-candidate set above 500 tok/s: 256 tokens. The first unproven size is 512
-tokens because the runtime reported only 256 active constrained token IDs, so
-512/1024/2048 cannot be counted as runtime-enforced larger candidate sets even
-though their measured rows stayed fast. Numeric file IDs should use a
-digit/space/newline grammar where possible: the logical answer space can be very
-large while the next-token candidate set remains tiny. One-token-per-file-ID is
-not the preferred design for huge file lists.
+Largest validated candidate set above 600 tok/s: 2048 tokens. Largest validated
+candidate set above 500 tok/s: 2048 tokens. The previous 256-token runtime cap
+is removed: the stage artifact now reports requested/enforced/reported candidate
+counts matching the requested set through 2048 candidates. Numeric file IDs
+should still use a digit/space/newline grammar where possible: the logical
+answer space can be very large while the next-token candidate set remains tiny.
+One-token-per-file-ID is not the preferred design for huge file lists.
 
 Artifacts:
 

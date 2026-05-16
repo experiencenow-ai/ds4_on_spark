@@ -146,6 +146,13 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - emits `row_token_input`, `row_token_count`, and suffix-token metadata through the stage-handoff artifact path
     - enables the shared-prefix compact-suffix 1-token prompt benchmark without changing MoE kernels or claiming production eligibility
 
+- `ds4-3630e64-cuda-constrained-candidate-dynamic.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the row-token input patch
+  - Purpose:
+    - removes the fixed 256-token `DS4_CUDA_STACK_PROBE_CONSTRAINED_TOKEN_IDS` parse cap
+    - allocates the constrained candidate ID list from the actual env-sized count for probe startup
+    - emits requested/enforced constrained candidate counts so sweep artifacts can reject truncation
+
 Apply (example):
 
 ```bash

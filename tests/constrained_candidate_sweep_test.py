@@ -16,27 +16,29 @@ class ConstrainedCandidateSweepTest(unittest.TestCase):
 				obj = sweep.load_json(path)
 				self.assertEqual(sweep.validate_artifact(obj), [])
 
-	def test_thresholds_stop_at_validated_256_candidates(self) -> None:
+	def test_thresholds_include_runtime_enforced_2048_candidates(self) -> None:
 		obj = sweep.load_json(MAIN_FIXTURE)
-		self.assertEqual(obj["largest_candidate_token_count_above_600_tok_s"], 256)
-		self.assertEqual(obj["largest_candidate_token_count_above_500_tok_s"], 256)
+		self.assertEqual(obj["largest_candidate_token_count_above_600_tok_s"], 2048)
+		self.assertEqual(obj["largest_candidate_token_count_above_500_tok_s"], 2048)
 		self.assertIsNone(obj["first_candidate_token_count_below_500_tok_s"])
-		self.assertEqual(obj["first_unproven_candidate_token_count"], 512)
-		self.assertEqual(obj["regression_component"], "runtime_candidate_set_truncated")
+		self.assertIsNone(obj["first_unproven_candidate_token_count"])
+		self.assertEqual(obj["regression_component"], "not_observed")
 
-	def test_512_plus_candidate_sets_are_not_counted_as_validated(self) -> None:
+	def test_512_plus_candidate_sets_are_runtime_enforced(self) -> None:
 		obj = sweep.load_json(MAIN_FIXTURE)
-		blocked = {
+		rows = {
 			int(row["candidate_token_count"]): row
 			for row in obj["sweep_results"]
 			if row["candidate_vocabulary_kind"] != "full_vocab_control"
-			and row["blocker_kind"] != "none"
 		}
-		self.assertEqual(sorted(blocked), [512, 1024, 2048])
-		for row in blocked.values():
-			self.assertEqual(row["blocker_kind"], "runtime_candidate_set_truncated")
-			self.assertEqual(row["runtime_reported_candidate_token_count"], 256)
-			self.assertFalse(row["candidate_set_fully_reported"])
+		for count in (512, 1024, 2048):
+			row = rows[count]
+			self.assertEqual(row["blocker_kind"], "none")
+			self.assertEqual(row["runtime_requested_candidate_token_count"], count)
+			self.assertEqual(row["runtime_enforced_candidate_token_count"], count)
+			self.assertEqual(row["runtime_reported_candidate_token_count"], count)
+			self.assertTrue(row["candidate_set_fully_reported"])
+			self.assertGreater(row["end_to_end_output_tokens_per_s"], 600.0)
 
 	def test_full_vocab_control_stays_separate_and_slow(self) -> None:
 		obj = sweep.load_json(MAIN_FIXTURE)
@@ -58,7 +60,7 @@ class ConstrainedCandidateSweepTest(unittest.TestCase):
 	def test_bad_threshold_fails_validation(self) -> None:
 		obj = sweep.load_json(MAIN_FIXTURE)
 		obj = copy.deepcopy(obj)
-		obj["largest_candidate_token_count_above_600_tok_s"] = 2048
+		obj["largest_candidate_token_count_above_600_tok_s"] = 256
 		obj["artifact_sha256"] = sweep.artifact_sha256(obj)
 		obj["artifact_hash"] = obj["artifact_sha256"]
 		errors = sweep.validate_artifact(obj)
