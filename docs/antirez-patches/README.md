@@ -145,6 +145,8 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - adds `DS4_SUPPRESS_OUTPUT=1` for model-throughput benchmarks that still commit tokens but skip per-token CLI text rendering and stdout flush
     - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
     - emits verifier invocation/position/head-row accounting; the intended fast path reports `verifier_calls=1`, `target_positions=3`, and `first_eval=0.000 ms` for full K=2 accepts
+    - prototypes the next K=3 direct verifier first: `--mtp-draft 3` drafts three tokens, verifies `[target_token,draft0,draft1,draft2]` in one 4-row target suffix job, uses top1 rows 0-2 plus full continuation logits on row3, and reports `target_positions=4` on full accepts
+    - K=3 partial accepts intentionally fall back to the existing prefix-1/prefix-2 commit points until a measured run proves a prefix-3 cache frontier is worth adding
 
 - `ds4-3630e64-cuda-b512-row-token-input.patch`
   - Target: `antirez/ds4@3630e64`, applied after the token-commit profile/constrained patch

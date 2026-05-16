@@ -17,6 +17,8 @@ class Ds4MtpKSweepTest(unittest.TestCase):
 		self.assertTrue(validate.validate_report(obj)["ok"])
 		self.assertEqual(obj["k_values_tested_or_classified"], [3, 4, 5])
 		self.assertFalse(obj["k_power_of_two_required"])
+		self.assertEqual(obj["k_results"][0]["measurement_status"], "measured")
+		self.assertAlmostEqual(float(obj["k_results"][0]["target_positions_per_invocation"]), 4.0)
 
 	def test_builder_classifies_k345_against_k2_reference(self) -> None:
 		measurement = {
@@ -44,7 +46,7 @@ class Ds4MtpKSweepTest(unittest.TestCase):
 				runtime_id="rt",
 				prompt_hash="p",
 				k_values=[3, 4, 5],
-				supported_k={2},
+				supported_k={2, 3},
 				idle_slots=[2, 3, 4, 5],
 				accept_prob=None,
 				measured_paths=[path],
@@ -52,8 +54,10 @@ class Ds4MtpKSweepTest(unittest.TestCase):
 		self.assertTrue(validate.validate_report(obj)["ok"])
 		self.assertEqual([row["k"] for row in obj["k_results"]], [3, 4, 5])
 		self.assertEqual([row["k"] for row in obj["reference_measurements"]], [2])
-		self.assertTrue(all(row["measurement_status"] == "projected_unsupported_runtime" for row in obj["k_results"]))
-		self.assertEqual(obj["blocker_kind"], "candidate_k_runtime_not_implemented")
+		self.assertEqual(obj["k_results"][0]["measurement_status"], "supported_unmeasured")
+		self.assertEqual(obj["k_results"][1]["measurement_status"], "projected_unsupported_runtime")
+		self.assertEqual(obj["k_results"][2]["measurement_status"], "projected_unsupported_runtime")
+		self.assertEqual(obj["blocker_kind"], "candidate_k_needs_spark_measurement")
 		self.assertEqual(obj["best_projected_k_by_idle_rows"][1]["best_k_for_sequence_latency"], 3)
 		self.assertEqual(obj["best_projected_k_by_idle_rows"][2]["best_k_for_sequence_latency"], 4)
 		self.assertEqual(obj["best_projected_k_by_idle_rows"][3]["best_k_for_sequence_latency"], 5)

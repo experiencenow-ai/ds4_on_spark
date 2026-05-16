@@ -218,6 +218,9 @@ def build_sweep(
 	if any(r.get("measurement_status") == "measured" for r in rows):
 		blocker_kind = "none"
 		blocker_detail = ""
+	elif any(r.get("measurement_status") == "supported_unmeasured" for r in rows):
+		blocker_kind = "candidate_k_needs_spark_measurement"
+		blocker_detail = f"candidate K values {[r['k'] for r in rows if r.get('measurement_status') == 'supported_unmeasured']} are runtime-supported but not measured in this artifact"
 	elif references:
 		blocker_kind = "candidate_k_runtime_not_implemented"
 		blocker_detail = f"candidate K values {k_values} are projected/classified only; measured reference K values are {[r['k'] for r in references]}"

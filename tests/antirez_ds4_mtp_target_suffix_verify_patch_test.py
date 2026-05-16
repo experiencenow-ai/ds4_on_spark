@@ -16,6 +16,11 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		self.assertTrue(any("use_target_suffix2" in item for item in errors))
 		self.assertTrue(any("forbidden" in item for item in errors))
 
+	def test_rejects_k2_without_k3_direct_path(self) -> None:
+		text = "+const bool use_target_suffix2 =\n+static int metal_graph_try_mtp_suffix2_direct(\n"
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("metal_graph_try_mtp_suffix3_direct" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()
