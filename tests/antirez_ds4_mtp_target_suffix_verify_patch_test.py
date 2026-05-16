@@ -32,6 +32,11 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("spec_frontier_commit_prefix3_graph" in item for item in errors))
 
+	def test_rejects_k2_without_top1_continuation_head(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace("metal_graph_encode_output_head_suffix3_top3", "")
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("metal_graph_encode_output_head_suffix3_top3" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()

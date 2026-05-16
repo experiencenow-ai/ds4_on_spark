@@ -138,8 +138,9 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - makes the DeepSeek-shaped K=2 verifier the default path: preserve the current target hidden state, draft two future tokens from it, append `[target_token, draft0, draft1]`, and run one target suffix verifier over all three positions
     - captures prefix-1 and prefix-2 verifier frontiers, so a row0-only match can still commit `[target_token, draft0]` without replaying serial target decode
     - preloads the MTP sidecar before the decode timer so first-draft lazy tensor caching does not poison generation TPS
-    - uses the CUDA Q8 output-head top1 primitive by default for row0/row1 accept checking; row2 remains full logits for continuation, and `DS4_MTP_ROW0_FULL_LOGITS=1` restores full-vocab verifier rows for A/B testing
-    - reads the row2 continuation top1 from the GPU output-head result and carries it into the next loop iteration, avoiding a CPU full-vocab argmax scan per accepted group
+    - uses the CUDA Q8 output-head top1 primitive by default for row0/row1 accept checking; row2 remains full logits for exact greedy continuation, and `DS4_MTP_ROW0_FULL_LOGITS=1` restores full-vocab verifier rows for A/B testing
+    - reads the row2 continuation top1 from the GPU full-logits/indexer result and carries it into the next loop iteration, avoiding a CPU full-vocab argmax scan per accepted group
+    - keeps the experimental row2 top1-only continuation path behind `DS4_MTP_ROW2_TOP1_CONT=1`; the measured experiment lowered acceptance, so it is not the default exact path
     - stops the direct generation loop once `n_generated >= n_predict`, so multi-token commits do not run extra serial iterations after the requested output budget
     - uses top1-only MTP draft heads when draft logits are not requested; `DS4_MTP_DRAFT_FULL_LOGITS=1` restores full-vocab draft logits for diagnostics
     - adds `DS4_SUPPRESS_OUTPUT=1` for model-throughput benchmarks that still commit tokens but skip per-token CLI text rendering and stdout flush

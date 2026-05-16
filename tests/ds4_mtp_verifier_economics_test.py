@@ -148,6 +148,29 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["blocker_kind"], "none")
 		self.assertTrue(validate.validate_report(report)["ok"])
 
+	def test_k2_row2_top1_cont_experiment_records_acceptance_drop(self) -> None:
+		import json
+		path = FIX / "ds4_mtp_verifier_economics_k2_row2_top1_cont_experiment_20260516.example.json"
+		obj = json.loads(path.read_text(encoding="utf-8"))
+		self.assertAlmostEqual(obj["accept_rate"], 70.0 / 112.0)
+		self.assertEqual(obj["full_vocab_logits_rows"], 62)
+		self.assertEqual(obj["top1_only_rows"], 137)
+		self.assertLess(obj["mtp_tps"], 20.55)
+		self.assertEqual(obj["blocker_kind"], "continuation_top1_not_equivalent")
+		self.assertTrue(validate.validate_report(obj)["ok"])
+
+	def test_k2_guarded_default_preserves_exact_acceptance(self) -> None:
+		import json
+		path = FIX / "ds4_mtp_verifier_economics_k2_guarded_default_20260516.example.json"
+		obj = json.loads(path.read_text(encoding="utf-8"))
+		self.assertAlmostEqual(obj["accept_rate"], 1.0)
+		self.assertEqual(obj["accepted_draft_tokens"], 84)
+		self.assertEqual(obj["attempted_draft_tokens"], 84)
+		self.assertEqual(obj["full_vocab_logits_rows"], 42)
+		self.assertEqual(obj["top1_only_rows"], 84)
+		self.assertGreater(obj["speedup_vs_baseline"], 1.8)
+		self.assertTrue(validate.validate_report(obj)["ok"])
+
 	def test_target_suffix_blocker_requires_explicit_staging_fields(self) -> None:
 		report = {
 			"format": "ds4-mtp-verifier-economics-v1",
