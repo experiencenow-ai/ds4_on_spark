@@ -223,6 +223,7 @@ bottleneck.
 | Decode only, constrained candidate commit, B=512/mb16 | 1 | finite committed tokens | 629.183 | 630.453 | `fnv64:7b018999c9d460f7` | none |
 | Shared prefix hit + compact suffix, full vocab | 1 | finite committed tokens | 264.586 | 264.706 | `fnv64:4dbeb5a7e01d8828` | none |
 | Shared prefix miss + compact suffix, full vocab | 1 | finite committed tokens | 251.016 | 264.706 | `fnv64:4dbeb5a7e01d8828` | none |
+| Shared prefix hit + compact suffix, constrained numeric IDs | 1 | finite committed tokens | 648.332 | 650.255 | `fnv64:0f3476a5eb4356b4` | production eligibility false: row-token suffix probe, not production shared-prefix KV service |
 | Shared prefix + compact suffix | 4 | committed-token KV loop artifact | 619.840 | 630.453 | `fnv64:dc1f01b7ef50f542` | production eligibility stays false until Spark0 reruns the new runtime hook |
 | Shared prefix + compact suffix | 8 | committed-token KV loop artifact | 624.381 | 630.453 | `fnv64:a6aa18faed631e12` | production eligibility stays false until Spark0 reruns the new runtime hook |
 | Unique prefix control | 1 | blocked | 0.000 | 0.000 |  | missing B=512 unique-prefix prefill runner |
@@ -244,16 +245,39 @@ Token-commit profile:
 | Full-vocab batch head | 632.808 | 1125.538 | 0.189 | 28.297 | full batch output projection |
 | Constrained candidate commit | not instrumented | not instrumented | 3.868 | 32.614 | stage compute after full-vocab head removal |
 
+Constrained-output benchmark:
+
+| Case | Candidate kind | Output target | End-to-end output tok/s | Commit mode | Production eligible |
+| --- | --- | ---: | ---: | --- | --- |
+| Shared-prefix hit, numeric IDs | `numeric_ids` | 1 | 648.332 | `constrained_vocab_cpu_top1` | false |
+| Shared-prefix hit, numeric IDs | `numeric_ids` | 4 | 619.840 | `constrained_vocab_cpu_top1` | false |
+| Shared-prefix hit, numeric IDs | `numeric_ids` | 8 | 624.381 | `constrained_vocab_cpu_top1` | false |
+| Shared-prefix hit, full-vocab control | `full_vocab` | 1 | 264.586 | `full_vocab_batch_head` | false |
+
+The constrained 1-token row is a live Spark0->Spark1->Spark2 row-token suffix
+probe with committed IDs. The 4/8-token rows are KV-loop artifacts derived from
+the one-step constrained lane until Spark0 reruns the production shared-prefix
+hit/fork runtime hook. The constrained-output validator requires an explicit
+candidate set, passed parity artifact, token hash, committed IDs, and matching
+optimized kernel flags before any artifact can be considered for production
+eligibility.
+
 Artifacts:
 
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_batch_head_token_commit.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_full_vocab_token_profile.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_constrained_token_commit.example.json`
 - `fixtures/stage_handoff/spark012_b512_shared_prefix_compact_suffix_full_vocab_20260516.example.json`
+- `fixtures/stage_handoff/spark012_b512_shared_prefix_compact_suffix_constrained_commit_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_decode_only_1_token_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_decode_only_1_token_constrained_commit_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_hit_short_suffix_1_token_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_miss_short_suffix_1_token_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_shared_prefix_hit_constrained_numeric_1_token_20260516.example.json`
+- `fixtures/constrained_output/ds4_b512_constrained_numeric_hit_1_token_20260516.example.json`
+- `fixtures/constrained_output/ds4_b512_constrained_numeric_hit_4_token_20260516.example.json`
+- `fixtures/constrained_output/ds4_b512_constrained_numeric_hit_8_token_20260516.example.json`
+- `fixtures/constrained_output/ds4_b512_full_vocab_control_hit_1_token_20260516.example.json`
 - `fixtures/token_commit_profile/ds4_b512_full_vocab_token_commit_profile_20260516.example.json`
 - `fixtures/token_commit_profile/ds4_b512_constrained_token_commit_profile_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json`
@@ -283,13 +307,15 @@ old 260.973 tok/s path was capped by the 512-row output projection
 The B=512 shared-prefix compact-suffix 1-token hook now runs with explicit
 per-row suffix token IDs and committed token hashes. It does not cross 300 tok/s
 on the full-vocab path because stage2 still spends about 1.73 s per B=512
-microbatch in the full batch-head projection path; prefix miss adds only about
-1.67 s one time for the measured 64-token shared prefix. The 4/8-token KV-loop
-artifacts exist, but production eligibility stays false until Spark0 reruns the
-new runtime hook with real shared-prefix hit/fork inputs and measured per-step
-timings/token hashes. For unconstrained natural-language commit, the next kernel
-target remains the full-vocab batch output projection; for structured short
-outputs, the constrained candidate commit path is the current fast lane.
+microbatch in the full batch-head projection path. The same shared-prefix
+1-token shape with constrained numeric IDs reaches 648.332 tok/s. Prefix miss
+adds only about 1.67 s one time for the measured 64-token shared prefix. The
+4/8-token KV-loop artifacts exist, but production eligibility stays false until
+Spark0 reruns the new runtime hook with real shared-prefix hit/fork inputs and
+measured per-step timings/token hashes. For unconstrained natural-language
+commit, the next kernel target remains the full-vocab batch output projection;
+for structured short outputs, the constrained candidate commit path is the
+current fast lane.
 
 Latest handoff artifacts:
 
