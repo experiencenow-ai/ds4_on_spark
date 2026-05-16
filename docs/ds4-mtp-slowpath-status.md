@@ -9,6 +9,12 @@
 - Current production artifact validator: `scripts/validate_ds4_mtp_k2_production_benchmark.py`.
 - Current PR #1125 evidence fixture: `fixtures/mtp_k2_production/pr1125_n126_short_instruction_stdout.example.json`.
 
+## K=3 prefix-frontier status
+
+- K=3 now has a prefix-3 verifier frontier so row0+row1 matches can commit `[target_token,draft0,draft1]` without serial target replay.
+- Controlled result: baseline greedy 11.01 t/s, MTP draft=3 11.19 t/s, speedup 1.016x, acceptance 75/153, target-next mismatches 0.
+- K=3 is a proof-of-life speed path, not the selected path: K=2 remains better on this prompt at 20.55 t/s.
+
 Production-eligible K=2 requires:
 
 - `target_next_mismatch_events == 0`;

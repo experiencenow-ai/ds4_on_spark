@@ -38,6 +38,7 @@ argmax scan.
 | Direct K=2 top1 | 128 | 6.99 | 7.87 | 1.126x | 74/88 | 102 | 44 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_direct_k2/20260516T130640Z/mtp_verifier_economics.json` |
 | True K=2 suffix + GPU continuation top1 | 126 | 11.02 | 20.55 | 1.865x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_true_suffix_k2_pendingtop/20260516T142212Z/mtp_verifier_economics.baseline1102.json` |
 | K=3 suffix prototype | 128 | 11.01 | 7.42 | 0.674x | 49/174 | 114 | 174 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k3_prototype/20260516T154041Z/mtp_verifier_economics.json` |
+| K=3 suffix + prefix-3 frontier | 128 | 11.01 | 11.19 | 1.016x | 75/153 | 97 | 153 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k3_prefix3/20260516T232454Z/mtp_verifier_economics.json` |
 
 MTP is now a measured speed path on the controlled prompt/model/context:
 baseline greedy with the same patched runtime measured 11.02 t/s, while K=2 MTP
@@ -56,10 +57,11 @@ promote larger K when those extra rows would otherwise be idle. The repo-owned
 `ds4-mtp-k-sweep-v1` fixture classifies `K=3,4,5` against the measured K=2
 reference: `K=3` first fits at 3 idle extra rows, `K=4` first fits at 4, and
 `K=5` first fits at 5. Current runtime support is K=2 measured plus a K=3
-prototype. The K=3 prototype verifies four target positions per invocation,
-but it measured slower than baseline because draft acceptance collapsed to
-49/174 and partial accepts fall back to the existing prefix-1/prefix-2 commit
-points. K=4/K=5 remain projected-only.
+prefix-frontier prototype. Adding the prefix-3 frontier moved K=3 from 7.42 t/s
+to 11.19 t/s on the same controlled prompt, just above the 11.01 t/s baseline.
+K=3 now has measured proof-of-life but is still far behind K=2's 20.55 t/s on
+this prompt. K=4/K=5 remain projected-only until their suffix verifier and
+prefix frontier states exist.
 
 ## B/Depth Probe
 

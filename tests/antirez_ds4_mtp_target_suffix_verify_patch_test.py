@@ -21,6 +21,17 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("metal_graph_try_mtp_suffix3_direct" in item for item in errors))
 
+	def test_rejects_k3_without_prefix3_frontier(self) -> None:
+		text = "\n".join([
+			"+const bool use_target_suffix2 =",
+			"+static int metal_graph_try_mtp_suffix2_direct(",
+			"+static int metal_graph_try_mtp_suffix3_direct(",
+			"+metal_graph_encode_output_head_suffix4_top3",
+			"+drafted=3 committed=3",
+		])
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("spec_frontier_commit_prefix3_graph" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()

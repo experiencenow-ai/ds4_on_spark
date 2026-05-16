@@ -1,6 +1,6 @@
 {
   "accept_prob_used_for_projection": 1.0,
-  "artifact_sha256": "sha256:32eaffdfa73d2a3748399696e077478ad7e931320738b71c68b1074e79d4038e",
+  "artifact_sha256": "sha256:11d03febd72e353c824f2c061b32bf3aed5f7f5df5a29788a214067b84e46b2a",
   "best_projected_k_by_idle_rows": [
     {
       "best_k": null,
@@ -157,13 +157,13 @@
   "k_power_of_two_required": false,
   "k_results": [
     {
-      "accept_rate": 0.28160919540229884,
-      "accepted_draft_tokens": 49,
-      "attempted_draft_tokens": 174,
+      "accept_rate": 0.49019607843137253,
+      "accepted_draft_tokens": 75,
+      "attempted_draft_tokens": 153,
       "baseline_tps": 11.01,
-      "blocker_detail": "MTP 7.420000 t/s <= baseline 11.010000 t/s; verifier invocations=58 target_positions=232 output_head_invocations=114",
-      "blocker_kind": "target_verifier_overhead",
-      "emitted_tokens": 107,
+      "blocker_detail": "",
+      "blocker_kind": "none",
+      "emitted_tokens": 126,
       "expected_accept_prob_per_draft_token": 1.0,
       "expected_bonus_tokens_per_extra_idle_row": 1.0,
       "expected_draft_calls_per_output_token": 0.75,
@@ -185,21 +185,21 @@
         "64": true,
         "8": true
       },
-      "full_vocab_logits_rows": 114,
+      "full_vocab_logits_rows": 97,
       "k": 3,
       "k_power_of_two": false,
       "measurement_status": "measured",
-      "mtp_tps": 7.42,
-      "output_head_invocation_count": 114,
+      "mtp_tps": 11.19,
+      "output_head_invocation_count": 97,
       "runtime_supported": true,
       "slowest_component": "target_eval_ms",
-      "source_artifact": "fixtures/mtp/ds4_mtp_verifier_economics_k3_prototype_20260516.example.json",
-      "speedup_vs_baseline": 0.6739327883742052,
+      "source_artifact": "fixtures/mtp/ds4_mtp_verifier_economics_k3_prefix3_20260516.example.json",
+      "speedup_vs_baseline": 1.0163487738419619,
       "target_positions_per_invocation": 4.0,
-      "target_positions_verified": 232,
-      "target_verifier_invocation_count": 58,
-      "timing_coverage_rate": 1.004050822429907,
-      "top1_only_rows": 174,
+      "target_positions_verified": 204,
+      "target_verifier_invocation_count": 51,
+      "timing_coverage_rate": 1.0832652678571426,
+      "top1_only_rows": 153,
       "total_target_verifier_rows_per_group": 4
     },
     {
@@ -290,8 +290,8 @@
       "top1_only_rows": 84
     }
   ],
-  "run_id": "ds4-mtp-k345-sweep-20260516",
-  "runtime_id": "antirez/ds4@3630e64+cuda-mtp-true-suffix-k3-prototype",
+  "run_id": "ds4-mtp-k345-sweep-prefix3-20260516",
+  "runtime_id": "antirez/ds4@3630e64+cuda-mtp-true-suffix-k3-prefix3",
   "runtime_supported_k": [
     2,
     3
