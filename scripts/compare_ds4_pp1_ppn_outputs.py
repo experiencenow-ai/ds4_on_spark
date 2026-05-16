@@ -45,6 +45,7 @@ def sha256_file(path: Path) -> str:
 def artifact_sha256(obj: dict[str, Any]) -> str:
 	tmp = copy.deepcopy(obj)
 	tmp.pop("artifact_sha256", None)
+	tmp.pop("artifact_hash", None)
 	return sha256_obj(tmp)
 
 
@@ -117,8 +118,11 @@ def build_export_from_handoff(args: argparse.Namespace) -> dict[str, Any]:
 		"quantization_id": str(stage.get("quantization_id", QUANT_ID)),
 		"comparison_kind": args.comparison_kind,
 		"input_sha256": args.input_sha256 or sha256_text(args.input_text),
+		"input_tokens_sha256": args.input_sha256 or sha256_text(args.input_text),
 		"output_hash": output_hash,
 		"output_sha256": output_sha_from_hash(output_hash),
+		"final_logits_hash": output_hash if args.comparison_kind == "logits" else "",
+		"token_hash": output_hash if args.comparison_kind == "tokens" else "",
 		"stage_count": int(stage.get("stage_count", 0)),
 		"stage_inventory": [{"stage_id": i, "node_id": n} for i, n in enumerate(stage.get("stage_nodes", []))],
 		"layer_ranges": normalize_layer_ranges(stage.get("layer_ranges")),
@@ -131,10 +135,12 @@ def build_export_from_handoff(args: argparse.Namespace) -> dict[str, Any]:
 		"boundary_after_layers": [int(r[1]) - 1 for r in stage.get("layer_ranges", [])[:-1] if isinstance(r, list) and len(r) == 2],
 		"optimized_kernel_flags": flags,
 		"command_sha256": sha256_obj(command),
+		"command_hash": sha256_obj(command),
 		"source_artifact": args.stage_handoff,
 		"source_artifact_sha256": sha256_file(Path(args.stage_handoff)),
 	}
 	export["artifact_sha256"] = artifact_sha256(export)
+	export["artifact_hash"] = export["artifact_sha256"]
 	return export
 
 
@@ -152,6 +158,7 @@ def build_export_from_hash(args: argparse.Namespace) -> dict[str, Any]:
 		"input_sha256": args.input_sha256 or sha256_text(args.input_text),
 		"output_hash": output_hash,
 		"optimized_kernel_flags": flags,
+		"source_command": args.source_command,
 	}
 	export = {
 		"format": EXPORT_FORMAT,
@@ -161,8 +168,15 @@ def build_export_from_hash(args: argparse.Namespace) -> dict[str, Any]:
 		"quantization_id": args.quantization_id,
 		"comparison_kind": args.comparison_kind,
 		"input_sha256": args.input_sha256 or sha256_text(args.input_text),
+		"input_tokens_sha256": args.input_sha256 or sha256_text(args.input_text),
 		"output_hash": output_hash,
 		"output_sha256": output_sha,
+		"final_logits_hash": output_hash if args.comparison_kind == "logits" else "",
+		"token_hash": output_hash if args.comparison_kind == "tokens" else "",
+		"output_head_hash": args.output_head_hash,
+		"finite_output": bool(args.finite_output),
+		"best_ms": args.best_ms,
+		"rows_per_s": args.rows_per_s,
 		"stage_count": args.stage_count,
 		"stage_inventory": stage_inventory,
 		"layer_ranges": layer_ranges,
@@ -175,10 +189,13 @@ def build_export_from_hash(args: argparse.Namespace) -> dict[str, Any]:
 		"boundary_after_layers": json.loads(args.boundary_after_layers),
 		"optimized_kernel_flags": flags,
 		"command_sha256": sha256_obj(command),
-		"source_artifact": "",
-		"source_artifact_sha256": "",
+		"command_hash": sha256_obj(command),
+		"source_command": args.source_command,
+		"source_artifact": args.source_artifact,
+		"source_artifact_sha256": args.source_artifact_sha256,
 	}
 	export["artifact_sha256"] = artifact_sha256(export)
+	export["artifact_hash"] = export["artifact_sha256"]
 	return export
 
 
@@ -186,13 +203,21 @@ def validate_export(obj: dict[str, Any]) -> list[str]:
 	errors: list[str] = []
 	if obj.get("format") != EXPORT_FORMAT:
 		errors.append(f"format must be {EXPORT_FORMAT}")
-	for key in ("export_role", "model_id", "runtime_id", "quantization_id", "comparison_kind", "input_sha256", "output_hash", "output_sha256", "command_sha256", "artifact_sha256"):
+	for key in ("export_role", "model_id", "runtime_id", "quantization_id", "comparison_kind", "input_sha256", "input_tokens_sha256", "output_hash", "output_sha256", "command_sha256", "command_hash", "artifact_sha256", "artifact_hash"):
 		if not isinstance(obj.get(key), str) or obj.get(key, "").strip() == "":
 			errors.append(f"{key} must be a non-empty string")
 	if obj.get("artifact_sha256") != artifact_sha256(obj):
 		errors.append("artifact_sha256 does not match canonical export body")
+	if obj.get("artifact_hash") != obj.get("artifact_sha256"):
+		errors.append("artifact_hash must match artifact_sha256")
+	if obj.get("command_hash") != obj.get("command_sha256"):
+		errors.append("command_hash must match command_sha256")
+	if obj.get("input_tokens_sha256") != obj.get("input_sha256"):
+		errors.append("input_tokens_sha256 must match input_sha256")
 	if obj.get("comparison_kind") not in parity.QUALITY_COMPARISON_KINDS:
 		errors.append("comparison_kind must be logits, tokens, or hidden_state")
+	if obj.get("comparison_kind") == "logits" and obj.get("final_logits_hash") != obj.get("output_hash"):
+		errors.append("logits export final_logits_hash must match output_hash")
 	if not isinstance(obj.get("optimized_kernel_flags"), dict):
 		errors.append("optimized_kernel_flags must be an object")
 	return errors
@@ -342,6 +367,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 	p_hash.add_argument("--quantization-id", default=QUANT_ID)
 	p_hash.add_argument("--output-hash", default="")
 	p_hash.add_argument("--output-sha256", default="")
+	p_hash.add_argument("--output-head-hash", default="")
+	p_hash.add_argument("--finite-output", action="store_true")
+	p_hash.add_argument("--best-ms", type=float, default=None)
+	p_hash.add_argument("--rows-per-s", type=float, default=None)
 	p_hash.add_argument("--stage-count", type=int, default=1)
 	p_hash.add_argument("--layer-ranges", default='[{"stage_id":0,"start":0,"end":43,"include_head":true}]')
 	p_hash.add_argument("--boundary-status", default="not_observed")
@@ -349,6 +378,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 	p_hash.add_argument("--boundary-layout", default="unknown")
 	p_hash.add_argument("--boundary-shape", default='"unknown"')
 	p_hash.add_argument("--boundary-after-layers", default="[]")
+	p_hash.add_argument("--source-command", default="")
+	p_hash.add_argument("--source-artifact", default="")
+	p_hash.add_argument("--source-artifact-sha256", default="")
 	p_cmp = sub.add_parser("compare")
 	p_cmp.add_argument("--pp1-export", default="")
 	p_cmp.add_argument("--ppn-export", default="")

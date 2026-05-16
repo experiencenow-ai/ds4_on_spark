@@ -79,12 +79,17 @@ This is the first point where DS4 layer-pipeline tok/sec claims are allowed.
 
 Current optimized path under gate: `DS4_CUDA_MOE_SLICE_TILE8=1` with the
 default split `[0,15), [15,29), [29,43)+head`. The latest stage-handoff run is
-finite and deterministic by repeated `fnv64` final-logits hash, but it is not
-production eligible. The parity artifact
-`fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_blocked_20260516.example.json`
-records `parity_status: not_run`, `quality_parity_eligible: false`, and the
-exact blocker: the PPN export hook now exists, but the matching PP=1
-logits/token export has not been produced yet for the same prompt/model/context.
+finite and deterministic by repeated `fnv64` final-logits hash. A Spark0
+PP=1 full-stack probe with `DS4_CUDA_STACK_PROBE_EMBED_INPUT=1` now matches the
+PP=N slice-tile8 logits hash exactly:
+`fnv64:5c9c39e9a1665737`. The parity artifact
+`fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_passed_20260516.example.json`
+records `parity_status: passed`, `parity_scope: cross_spark_ppn`, and
+`quality_parity_eligible: true`.
+
+Production generation remains disabled in the prompt-decode smoke artifact
+because the current DS4 batch stack probe emits finite logits/output-head hashes
+but does not yet emit an argmax or sampled committed token id.
 
 ## Comparison Kinds
 
@@ -195,8 +200,8 @@ python3 scripts/compare_ds4_pp1_ppn_outputs.py export-ppn-from-stage-handoff \
   --out fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json
 
 python3 scripts/compare_ds4_pp1_ppn_outputs.py compare \
-  --pp1-export /path/to/pp1_final_output_export.json \
+  --pp1-export fixtures/pipeline_outputs/dsv4_slice_tile8_pp1_output_export_20260516.example.json \
   --ppn-export fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json \
   --quality-parity-eligible \
-  --out /path/to/parity.json
+  --out fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_passed_20260516.example.json
 ```

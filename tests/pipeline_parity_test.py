@@ -188,6 +188,17 @@ class PipelineParityTest(unittest.TestCase):
         self.assertFalse(artifact["quality_parity_eligible"])
         self.assertIn("PP=1 final-output export is missing", artifact["blocker_detail"])
 
+    def test_slice_tile8_pp1_ppn_exports_match(self) -> None:
+        pp1 = output_compare.load_json(Path("fixtures/pipeline_outputs/dsv4_slice_tile8_pp1_output_export_20260516.example.json"))
+        ppn = output_compare.load_json(Path("fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json"))
+        self.assertEqual(output_compare.validate_export(pp1), [])
+        self.assertEqual(output_compare.validate_export(ppn), [])
+        self.assertEqual(pp1["final_logits_hash"], "fnv64:5c9c39e9a1665737")
+        self.assertEqual(pp1["output_sha256"], ppn["output_sha256"])
+        obj = parity.load_json(FIX / "dsv4_slice_tile8_cross_spark_ppn_passed_20260516.example.json")
+        self.assertEqual(obj["parity_status"], "passed")
+        self.assertTrue(parity.is_quality_parity_pass(obj))
+
     def test_telemetry_not_run_remains_valid_without_parity_artifact(self) -> None:
         obj = telemetry.load_json(TEL / "spark_layer_pipeline_run_not_run.example.json")
         self.assertEqual(telemetry.validate_run(obj, TEL), [])

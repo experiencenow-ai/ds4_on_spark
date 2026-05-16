@@ -3,8 +3,11 @@
 Status as of the 2026-05-15 base-pipeline ceiling window:
 DS4 has finite three-stage TCP binary handoff with real boundary activations.
 Each stage preloads its owned layer range, stage2 includes the output head, and
-successful runs emit finite logits hashes. This is still not production
-generation: PP=1 parity is not run and `production_generation_eligible=false`.
+successful runs emit finite logits hashes. The slice-tile8 PP=N final logits now
+match a Spark0 PP=1 full-stack probe for the same model/input identity, but
+this is still not production generation: token commit is blocked because the
+current DS4 batch stack probe does not emit an argmax/sampled token id, so
+`production_generation_eligible=false`.
 
 ## Current Best
 
@@ -15,7 +18,7 @@ generation: PP=1 parity is not run and `production_generation_eligible=false`.
 | Best B=512 corrected steady-state bound | 741.444 rows/s |
 | Exceeds 15 rows/s | true |
 | Exceeds 250 rows/s | true |
-| PP=1 parity | not run |
+| PP=1 parity | passed on logits for B=512 slice-tile8 |
 | Current primary bottleneck | stage compute, not transfer or pipeline bubble |
 
 ## B/Depth Probe
@@ -180,21 +183,40 @@ the existing P2 slices down path.
 | Slice-tile8 gate/up | 631.672 | 741.444 | stage0 | 690.545 | `fnv64:5c9c39e9a1665737` | current best |
 | Slice-tile8 + direct-sum6 down | 408.047 | 467.907 | stage0 | 1,094.234 | `fnv64:5c9c39e9a1665737` | rejected, down got much slower |
 
+## Prompt-Decode Smoke
+
+The B=512/mb16 slice-tile8 handoff now has matching PP=1 and PP=N logits:
+
+| Evidence | Value |
+| --- | --- |
+| PP=1 export | `fixtures/pipeline_outputs/dsv4_slice_tile8_pp1_output_export_20260516.example.json` |
+| PP=N export | `fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json` |
+| Parity artifact | `fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_passed_20260516.example.json` |
+| PP=1 logits hash | `fnv64:5c9c39e9a1665737` |
+| PP=N logits hash | `fnv64:5c9c39e9a1665737` |
+| PP=1 output-head hash | `fnv64:6cf5f3c6e011e527` |
+| Prompt-decode smoke | `fixtures/prompt_decode_smoke/dsv4_b512_slice_tile8_prompt_decode_smoke_20260516.example.json` |
+
+The smoke preserves the measured B=512 rows/s (`631.672`) and corrected
+steady-state bound (`741.444`). It deliberately keeps
+`production_generation_eligible=false`: finite logits and output-head hashes are
+present, but committed token ids and `token_hash` are not, because the runtime
+probe has no repo-owned argmax/sampling token-commit export yet.
+
 ## Current Blocker
 
-The base pipeline now exceeds 250 rows/s. Pipeline bubble is effectively gone
-at B=512/mb16 and transfer is not material. The slice-tile8 gate/up path cut
-stage0 service time from about 2,151 ms to about 691 ms. The first slice-down
-tile attempt did not help: it raised layer 2 down from about 16.8 ms to about
-21.2 ms and dropped the full pipeline from 631.672 to 559.396 rows/s. The
-direct-sum6 attempt is worse: it serializes six down projections per row,
-raises layer 2 down to about 63.4 ms, and drops the full pipeline to
-408.047 rows/s.
+The base pipeline now exceeds 250 rows/s and has PP=1/PP=N logits parity.
+Pipeline bubble is effectively gone at B=512/mb16 and transfer is not material.
+The slice-tile8 gate/up path cut stage0 service time from about 2,151 ms to
+about 691 ms. The first slice-down tile attempt did not help: it raised layer 2
+down from about 16.8 ms to about 21.2 ms and dropped the full pipeline from
+631.672 to 559.396 rows/s. The direct-sum6 attempt is worse: it serializes six
+down projections per row, raises layer 2 down to about 63.4 ms, and drops the
+full pipeline to 408.047 rows/s.
 
-Exact next code change: keep the slice-tile8 gate/up path, do not enable
-slice-down-tile8 or direct-sum6 down, and target the existing P2 slices down
-kernel directly: reduce its q2 dot/register pressure or add a lower-register
-tile that preserves parallelism across top-6 slots instead of serializing them.
+Exact next correctness code change: add a repo-owned argmax/sampling export to
+the DS4 batch stack probe after final logits/output head so the prompt-decode
+smoke can emit `committed_token_ids` and `token_hash`.
 
 Latest handoff artifacts:
 
