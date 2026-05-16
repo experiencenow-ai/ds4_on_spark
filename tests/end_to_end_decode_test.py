@@ -1,0 +1,55 @@
+import copy
+import unittest
+from pathlib import Path
+
+from scripts import validate_ds4_end_to_end_decode as decode
+
+
+FIX = Path("fixtures/end_to_end_decode")
+
+
+class EndToEndDecodeTest(unittest.TestCase):
+	def test_end_to_end_decode_fixtures_validate(self) -> None:
+		for path in sorted(FIX.glob("*.json")):
+			with self.subTest(path=path.name):
+				obj = decode.load_json(path)
+				self.assertEqual(decode.validate_artifact(obj), [])
+
+	def test_success_requires_committed_token_hash(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_20260516.example.json")
+		obj = copy.deepcopy(obj)
+		obj["token_hash"] = ""
+		obj["artifact_sha256"] = decode.artifact_sha256(obj)
+		obj["artifact_hash"] = obj["artifact_sha256"]
+		errors = decode.validate_artifact(obj)
+		self.assertTrue(any("token_hash" in item for item in errors))
+
+	def test_blocked_shared_prefix_case_cannot_claim_production(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json")
+		obj = copy.deepcopy(obj)
+		obj["production_generation_eligible"] = True
+		obj["artifact_sha256"] = decode.artifact_sha256(obj)
+		obj["artifact_hash"] = obj["artifact_sha256"]
+		errors = decode.validate_artifact(obj)
+		self.assertTrue(any("production_generation_eligible" in item for item in errors))
+
+	def test_decode_only_success_keeps_prefix_suffix_separate(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_20260516.example.json")
+		self.assertEqual(obj["prompt_pattern"], "decode_only")
+		self.assertEqual(obj["prefix_mode"], "no_prefix")
+		self.assertEqual(obj["prefix_prepare_ms"], 0.0)
+		self.assertEqual(obj["suffix_prefill_ms"], 0.0)
+		self.assertGreater(obj["decode_only_rows_per_s"], 15.0)
+
+	def test_batch_and_microbatch_are_fixed_for_this_artifact(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_20260516.example.json")
+		obj = copy.deepcopy(obj)
+		obj["batch_size"] = 1
+		obj["artifact_sha256"] = decode.artifact_sha256(obj)
+		obj["artifact_hash"] = obj["artifact_sha256"]
+		errors = decode.validate_artifact(obj)
+		self.assertTrue(any("batch_size" in item for item in errors))
+
+
+if __name__ == "__main__":
+	unittest.main()

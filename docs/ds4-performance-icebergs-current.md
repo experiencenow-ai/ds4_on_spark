@@ -4,16 +4,18 @@ Status as of the 2026-05-15 base-pipeline ceiling window:
 DS4 has finite three-stage TCP binary handoff with real boundary activations.
 Each stage preloads its owned layer range, stage2 includes the output head, and
 successful runs emit finite logits hashes. The slice-tile8 PP=N final logits now
-match a Spark0 PP=1 full-stack probe for the same model/input identity, but
-this is still not production generation in the committed B=512 smoke: token
-commit is blocked because the current DS4 batch stack probe does not emit an
-argmax/sampled token id, so `production_generation_eligible=false`.
+match a Spark0 PP=1 full-stack probe for the same model/input identity. The
+batch-stack probe can now emit top-1 committed token ids for all 512 rows in
+batch-head mode, but this is still not production generation: shared-prefix and
+suffix prefill plus the multi-step decode/KV loop are not wired into the staged
+benchmark yet, so `production_generation_eligible=false`.
 
 ## Current Best
 
 | Metric | Value |
 | --- | ---: |
 | Best achieved streaming rows/s | 631.672 at B=512, microbatches=16 with slice-tile8 gate/up |
+| Best B=512 committed-token decode-only output tok/s | 260.973 at B=512, microbatches=16 with batch-head token commit |
 | Best corrected steady-state bound | 741.444 rows/s at B=512, microbatches=16 with slice-tile8 gate/up |
 | Best B=512 corrected steady-state bound | 741.444 rows/s |
 | Exceeds 15 rows/s | true |
@@ -206,6 +208,30 @@ probe does not yet print an argmax/sampling token id. The repo-owned
 prompt-decode smoke must reference that export and have matching optimized
 kernel flags with the parity artifact.
 
+## B=512 End-To-End Decode
+
+The batch-stack probe now has a minimal top-1 token commit path behind
+`DS4_CUDA_STACK_PROBE_BATCH_HEAD=1`. This is not a kernel optimization: it runs
+the full batch output head for all 512 rows, reads back committed token ids, and
+emits `token_hash`. The real decode-only short-output path is therefore lower
+than the finite-logits proof because stage2 becomes the batch-head/top-1
+bottleneck.
+
+| Case | Output target | Result | End-to-end output tok/s | Decode-only rows/s | Token hash | Blocker |
+| --- | ---: | --- | ---: | ---: | --- | --- |
+| Decode only, B=512/mb16 | 1 | finite committed tokens | 260.973 | 261.082 | `fnv64:c73fd75838d4c57f` | none |
+| Shared prefix + compact suffix | 1 | blocked | 0.000 | 0.000 |  | missing B=512 prefix-fork/suffix-prefill hook |
+| Shared prefix + compact suffix | 4 | blocked | 0.000 | 0.000 |  | missing multi-step token commit/KV loop |
+| Unique prefix control | 1 | blocked | 0.000 | 0.000 |  | missing B=512 unique-prefix prefill runner |
+
+Artifacts:
+
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_batch_head_token_commit.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_decode_only_1_token_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_4_token_blocked_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_unique_prefix_control_blocked_20260516.example.json`
+
 ## Current Blocker
 
 The base pipeline now exceeds 250 rows/s and has PP=1/PP=N logits parity.
@@ -217,10 +243,11 @@ down from about 16.8 ms to about 21.2 ms and dropped the full pipeline from
 down projections per row, raises layer 2 down to about 63.4 ms, and drops the
 full pipeline to 408.047 rows/s.
 
-Exact next correctness code change: update `ds4_engine_cuda_batch_stack_probe()`
-after `ds4_gpu_tensor_read(g.logits, ...)` to compute argmax over
-`weights->output->dim[1]`, print `committed_token_ids` and `token_hash` in the
-probe JSON, then build a `ds4-token-commit-export-v1` artifact from that output.
+Exact next correctness code change: add the B=512 prefix-fork/suffix-prefill
+and repeated decode/KV update loop so the shared-prefix 1-token and 4/8-token
+workload shapes can run with committed token ids instead of blocker artifacts.
+The prompt-decode smoke path should then reference a `ds4-token-commit-export-v1`
+artifact from the committed-token output instead of staying blocked.
 
 Latest handoff artifacts:
 

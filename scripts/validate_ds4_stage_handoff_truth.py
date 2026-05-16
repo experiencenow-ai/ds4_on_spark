@@ -55,6 +55,7 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 	stage_count = obj.get("stage_count")
 	stage_ms = obj.get("stage_ms")
 	layer_ranges = obj.get("layer_ranges")
+	batch = obj.get("batch_size")
 	if not isinstance(stage_count, int) or stage_count <= 0:
 		errors.append("stage_count must be a positive integer")
 	if not isinstance(stage_ms, list) or not isinstance(stage_count, int) or len(stage_ms) != stage_count:
@@ -86,7 +87,6 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		if obj.get("blocker_kind") in (None, "", "none"):
 			errors.append("failed handoff requires a blocker_kind")
 	if obj.get("streaming_pipeline") is not True and isinstance(stage_ms, list) and all(isinstance(v, (int, float)) and v > 0 for v in stage_ms):
-		batch = obj.get("batch_size")
 		bound = obj.get("pipeline_rows_per_s_bound")
 		if isinstance(batch, int) and batch > 0 and isinstance(bound, (int, float)):
 			expected = batch * 1000.0 / max(float(v) for v in stage_ms)
@@ -147,6 +147,27 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			errors.append("final_logits_hashes length must match microbatch_count")
 		elif obj.get("final_output_finite") is True and not all(isinstance(v, str) and v.startswith("fnv64:") and not v.endswith("0000000000000000") for v in hashes):
 			errors.append("final_logits_hashes must contain non-zero fnv64 hashes")
+		if "committed_token_ids_present" in obj:
+			ids_present = obj.get("committed_token_ids_present")
+			ids_obj = obj.get("committed_token_ids")
+			if not isinstance(ids_present, bool):
+				errors.append("committed_token_ids_present must be boolean")
+			elif ids_present != (isinstance(ids_obj, list) and len(ids_obj) > 0):
+				errors.append("committed_token_ids_present must match committed_token_ids list presence")
+			if obj.get("committed_token_ids_present") is True:
+				ids = obj.get("committed_token_ids")
+				if not isinstance(ids, list) or not isinstance(batch, int) or len(ids) != batch:
+					errors.append("committed_token_ids length must match batch_size when present")
+				elif not all(isinstance(v, int) and v >= 0 for v in ids):
+					errors.append("committed_token_ids must contain non-negative integers")
+				token_hash = obj.get("token_hash")
+				if not isinstance(token_hash, str) or not token_hash.startswith("fnv64:") or token_hash.endswith("0000000000000000"):
+					errors.append("token_hash must be a non-zero fnv64 hash when committed tokens are present")
+				commit_ms = obj.get("token_commit_ms_by_microbatch")
+				if not isinstance(commit_ms, list) or not isinstance(microbatches, int) or len(commit_ms) != microbatches:
+					errors.append("token_commit_ms_by_microbatch length must match microbatch_count when committed tokens are present")
+				elif not all(isinstance(v, (int, float)) and v >= 0 for v in commit_ms):
+					errors.append("token_commit_ms_by_microbatch must contain non-negative numbers")
 		if obj.get("parity_scope") not in (None, "stage_handoff_finite_logits"):
 			errors.append("streaming handoff parity_scope must be stage_handoff_finite_logits when present")
 		if obj.get("parity_status") not in (None, "not_run"):

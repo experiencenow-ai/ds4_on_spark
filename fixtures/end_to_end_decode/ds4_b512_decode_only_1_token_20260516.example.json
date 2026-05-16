@@ -1,0 +1,52 @@
+{
+  "artifact_hash": "sha256:d49bf574be1585f10b050f08ccc68c79e933149ea1f4619f1987111f663f5f15",
+  "artifact_refs": [
+    {
+      "name": "stage_handoff",
+      "path": "fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_batch_head_token_commit.example.json"
+    },
+    {
+      "name": "parity_artifact",
+      "path": "fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_passed_20260516.example.json",
+      "sha256": "sha256:52308fa2a2d6ea52eef29e4efe43da56f5488e66608c783ee544059f2344fc4b"
+    }
+  ],
+  "artifact_sha256": "sha256:d49bf574be1585f10b050f08ccc68c79e933149ea1f4619f1987111f663f5f15",
+  "batch_size": 512,
+  "blocker_detail": "",
+  "blocker_kind": "none",
+  "committed_token_ids_present": true,
+  "decode_ms": 31377.077080780025,
+  "decode_only_rows_per_s": 261.0823174800433,
+  "decode_steps": 1,
+  "end_to_end_output_tokens_per_s": 260.97291156980026,
+  "end_to_end_wall_ms": 31390.231080780024,
+  "final_logits_hash": "fnv64:6108cf10b8b90d6d",
+  "finite_output": true,
+  "format": "ds4-b512-end-to-end-decode-v1",
+  "microbatch_count": 16,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "optimized_kernel_flags": {
+    "DS4_CUDA_MOE_SLICE_TILE8": "1",
+    "DS4_CUDA_STACK_PROBE_BATCH_HEAD": "1"
+  },
+  "output_head_ms": 1138.088,
+  "output_token_target": 1,
+  "parity_artifact_sha256": "sha256:52308fa2a2d6ea52eef29e4efe43da56f5488e66608c783ee544059f2344fc4b",
+  "per_row_avg_token_s": 0.00383181531747803,
+  "prefix_load_or_fork_ms": 0.0,
+  "prefix_mode": "no_prefix",
+  "prefix_prepare_ms": 0.0,
+  "production_generation_eligible": false,
+  "prompt_pattern": "decode_only",
+  "provider_id": "spark012-dsv4-layer-pipeline",
+  "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
+  "result_collection_ms": 13.154,
+  "run_id": "ds4-b512-decode-only-1-token-slice-tile8-token-commit-20260516",
+  "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp",
+  "suffix_prefill_ms": 0.0,
+  "suffix_prefill_tokens_per_s": 0.0,
+  "suffix_tokens_per_row": 0,
+  "token_commit_ms": 13.154,
+  "token_hash": "fnv64:c73fd75838d4c57f"
+}

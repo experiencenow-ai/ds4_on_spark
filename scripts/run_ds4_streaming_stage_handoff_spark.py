@@ -563,6 +563,13 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 	hashes = [f"fnv64:{h}" for h in final.get("logits_fnv64s", [])]
 	if not hashes and final.get("logits_fnv64"):
 		hashes = [f"fnv64:{final['logits_fnv64']}"]
+	committed_hashes = [f"fnv64:{h}" for h in final.get("committed_token_hashes", []) if str(h) != "0000000000000000"]
+	committed_ids = final.get("committed_token_ids", [])
+	if not isinstance(committed_ids, list):
+		committed_ids = []
+	token_commit_ms = final.get("token_commit_ms", [])
+	if not isinstance(token_commit_ms, list):
+		token_commit_ms = []
 	nonfinites = final.get("logits_nonfinites", [final.get("logits_nonfinite", 0)])
 	finite = all(int(v) == 0 for v in nonfinites) and all(h != "fnv64:0000000000000000" for h in hashes)
 	stage_compute_ms = sum(sum(values) for values in schedule["stage_ms_by_microbatch"])
@@ -628,6 +635,12 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"final_logits_hash": hashes[-1] if hashes else "",
 		"final_logits_hashes": hashes,
 		"final_output_finite": finite,
+		"committed_token_ids_present": bool(committed_ids),
+		"committed_token_ids": committed_ids,
+		"committed_token_hashes": committed_hashes,
+		"token_hash": committed_hashes[-1] if committed_hashes else "",
+		"token_commit_ms_by_microbatch": [float(v) for v in token_commit_ms],
+		"token_commit_ms": max((float(v) for v in token_commit_ms), default=0.0),
 		"parity_status": "not_run",
 		"parity_scope": "stage_handoff_finite_logits",
 		"parity_blocker": "missing_repo_owned_split_forward_runtime_hook",

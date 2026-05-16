@@ -1,0 +1,182 @@
+--- /private/tmp/ds4-b512-e2e-ds4.c.before	2026-05-16 06:00:26
++++ /private/tmp/ds4-b512-e2e-ds4.c.after	2026-05-16 06:03:32
+@@ -8736,11 +8736,14 @@
+     g->output_embd = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+     g->output_norm = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+     g->logits = ds4_gpu_tensor_alloc(vocab_dim * sizeof(float));
++    const bool batch_head_probe = getenv("DS4_CUDA_STACK_PROBE_BATCH_HEAD") != NULL;
+     /*
+      * MTP is deliberately outside the normal graph footprint.  A session that
+      * does not opt in with --mtp must allocate and execute exactly the same
+      * buffers as the plain decoder: no support-model mapping, no draft logits,
+-     * and no MTP scratch hidden behind otherwise unused tensors.
++     * and no MTP scratch hidden behind otherwise unused tensors.  The batch
++     * stack probe may still opt into spec_logits alone to test top-1 token
++     * commit for every row without enabling MTP weights or scratch.
+      */
+     if (enable_mtp) {
+         g->mtp_embed = ds4_gpu_tensor_alloc((uint64_t)DS4_N_EMBD * sizeof(float));
+@@ -8753,8 +8756,11 @@
+         g->mtp_state_hc = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+         g->mtp_next_hc = ds4_gpu_tensor_alloc(hc_dim * sizeof(float));
+         g->mtp_raw_cache = ds4_gpu_tensor_alloc((uint64_t)raw_cap * DS4_N_HEAD_DIM * sizeof(float));
+-        g->spec_logits = ds4_gpu_tensor_alloc((uint64_t)16 * DS4_N_VOCAB * sizeof(float));
+         g->mtp_n_raw = 0;
++    }
++    if (enable_mtp || batch_head_probe) {
++        const uint32_t spec_rows = batch_head_probe && pc > 16 ? pc : 16u;
++        g->spec_logits = ds4_gpu_tensor_alloc((uint64_t)spec_rows * DS4_N_VOCAB * sizeof(float));
+     }
+ 
+     g->prefill_tokens = ds4_gpu_tensor_alloc(pc * sizeof(int32_t));
+@@ -8840,6 +8846,7 @@
+                     g->after_ffn_hc &&
+                     g->output_pre && g->output_weights && g->output_embd &&
+                     g->output_norm && g->logits &&
++                    (!batch_head_probe || g->spec_logits) &&
+                     (!enable_mtp ||
+                      (g->mtp_embed && g->mtp_enorm && g->mtp_eproj &&
+                       g->mtp_eproj_hc && g->mtp_hnorm_hc && g->mtp_hproj_hc &&
+@@ -16791,6 +16798,10 @@
+ 
+ static bool cuda_stack_probe_include_head(void) {
+     return getenv("DS4_CUDA_STACK_PROBE_NO_HEAD") == NULL;
++}
++
++static bool cuda_stack_probe_batch_head(void) {
++    return getenv("DS4_CUDA_STACK_PROBE_BATCH_HEAD") != NULL;
+ }
+ 
+ static uint32_t cuda_stack_probe_layer_bound(const char *name, uint32_t fallback) {
+@@ -17023,15 +17034,25 @@
+     }
+     ds4_gpu_tensor *last_hc = NULL;
+     ds4_gpu_tensor *saved_cur = g->cur_hc;
+-    if (ok && cuda_stack_probe_stage_has_head()) {
++    const bool batch_head = cuda_stack_probe_batch_head();
++    if (ok && cuda_stack_probe_stage_has_head() && batch_head) {
++        ok = metal_graph_encode_output_head_batch(g, model, weights, n_tokens, weights->output->dim[1]);
++        if (ok) {
++            ok = ds4_gpu_indexer_topk_tensor(g->comp_selected,
++                                             g->spec_logits,
++                                             DS4_N_VOCAB,
++                                             1,
++                                             n_tokens) != 0;
++        }
++    } else if (ok && cuda_stack_probe_stage_has_head()) {
+         const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
+         last_hc = metal_graph_tensor_row_view(g->batch_cur_hc, n_tokens - 1u, hc_dim);
+         ok = last_hc != NULL;
+-    }
+-    if (ok && cuda_stack_probe_stage_has_head()) {
+-        g->cur_hc = last_hc;
+-        ok = metal_graph_encode_output_head(g, model, weights, weights->output->dim[1]);
+-        g->cur_hc = saved_cur;
++        if (ok) {
++            g->cur_hc = last_hc;
++            ok = metal_graph_encode_output_head(g, model, weights, weights->output->dim[1]);
++            g->cur_hc = saved_cur;
++        }
+     }
+     if (ok) {
+         ok = ds4_gpu_end_commands() != 0;
+@@ -17377,19 +17398,25 @@
+     const char *output_file = cuda_stack_probe_boundary_output_file();
+     float *host_hc = xmalloc((size_t)hc_bytes);
+     int32_t *host_tokens = xmalloc((size_t)n_tokens * sizeof(host_tokens[0]));
++    int32_t *host_committed = xmalloc((size_t)n_tokens * sizeof(host_committed[0]));
+     uint8_t *host_out = xmalloc((size_t)hc_bytes);
+     uint8_t *host_logits = xmalloc((size_t)logits_bytes);
+     cuda_moe_probe_fill(host_hc, host_tokens, n_tokens, (uint32_t)hc_dim);
+     double *iter_ms = xmalloc((size_t)iterations * sizeof(iter_ms[0]));
++    double *token_commit_ms = xmalloc((size_t)iterations * sizeof(token_commit_ms[0]));
+     uint64_t *out_hashes = xmalloc((size_t)iterations * sizeof(out_hashes[0]));
+     uint64_t *out_nonfinites = xmalloc((size_t)iterations * sizeof(out_nonfinites[0]));
+     uint64_t *logits_hashes = xmalloc((size_t)iterations * sizeof(logits_hashes[0]));
+     uint64_t *logits_nonfinites = xmalloc((size_t)iterations * sizeof(logits_nonfinites[0]));
++    uint64_t *token_hashes = xmalloc((size_t)iterations * sizeof(token_hashes[0]));
+     memset(iter_ms, 0, (size_t)iterations * sizeof(iter_ms[0]));
++    memset(token_commit_ms, 0, (size_t)iterations * sizeof(token_commit_ms[0]));
+     memset(out_hashes, 0, (size_t)iterations * sizeof(out_hashes[0]));
+     memset(out_nonfinites, 0, (size_t)iterations * sizeof(out_nonfinites[0]));
+     memset(logits_hashes, 0, (size_t)iterations * sizeof(logits_hashes[0]));
+     memset(logits_nonfinites, 0, (size_t)iterations * sizeof(logits_nonfinites[0]));
++    memset(token_hashes, 0, (size_t)iterations * sizeof(token_hashes[0]));
++    memset(host_committed, 0, (size_t)n_tokens * sizeof(host_committed[0]));
+     ds4_gpu_graph g;
+     memset(&g, 0, sizeof(g));
+     bool ok = true;
+@@ -17402,6 +17429,7 @@
+     double total_ms = 0.0;
+     double best_ms = 0.0;
+     const bool include_head = cuda_stack_probe_stage_has_head();
++    const bool batch_head = include_head && cuda_stack_probe_batch_head();
+     for (uint32_t it = 0; ok && it < iterations; it++) {
+         if (ok) ok = cuda_stack_probe_reset_compressor_state(&g);
+         if (ok) ok = cuda_batch_stack_probe_seed_input(&g, model, weights, host_tokens, host_hc, n_tokens, hc_dim, input_file, it);
+@@ -17410,6 +17438,7 @@
+         ok = cuda_batch_stack_probe_run(&g, model, weights, n_tokens);
+         const double t1 = now_sec();
+         const double ms = (t1 - t0) * 1000.0;
++        const double tc0 = now_sec();
+         if (ok) {
+             total_ms += ms;
+             iter_ms[it] = ms;
+@@ -17417,13 +17446,27 @@
+             fprintf(stderr, "ds4: CUDA batch stack probe iter=%u ms=%.3f\n", it, ms);
+         }
+         if (ok) ok = ds4_gpu_tensor_read(g.batch_cur_hc, 0, host_out, hc_bytes) != 0;
+-        if (ok && include_head) ok = ds4_gpu_tensor_read(g.logits, 0, host_logits, logits_bytes) != 0;
++        if (ok && include_head && batch_head) {
++            ok = ds4_gpu_tensor_read(g.comp_selected, 0, host_committed, (uint64_t)n_tokens * sizeof(host_committed[0])) != 0;
++            if (ok) ok = ds4_gpu_tensor_read(g.spec_logits,
++                                             (uint64_t)(n_tokens - 1u) * logits_bytes,
++                                             host_logits,
++                                             logits_bytes) != 0;
++        } else if (ok && include_head) {
++            ok = ds4_gpu_tensor_read(g.logits, 0, host_logits, logits_bytes) != 0;
++        }
++        const double tc1 = now_sec();
++        if (ok && include_head) {
++            token_commit_ms[it] = (tc1 - tc0) * 1000.0;
++        }
+         if (ok) {
+             out_hashes[it] = hash_bytes(host_out, hc_bytes);
+             out_nonfinites[it] = cuda_probe_nonfinite_count(host_out, hc_bytes);
+             if (include_head) {
+                 logits_hashes[it] = hash_bytes(host_logits, logits_bytes);
+                 logits_nonfinites[it] = cuda_probe_nonfinite_count(host_logits, logits_bytes);
++                token_hashes[it] = batch_head ? hash_bytes((const uint8_t *)host_committed,
++                                                            (uint64_t)n_tokens * sizeof(host_committed[0])) : 0;
+             }
+         }
+         if (ok && output_file) {
+@@ -17470,17 +17513,28 @@
+         for (uint32_t i = 0; i < iterations; i++) printf("%s\"%016" PRIx64 "\"", i ? "," : "", logits_hashes[i]);
+         printf("],\"logits_nonfinites\":[");
+         for (uint32_t i = 0; i < iterations; i++) printf("%s%" PRIu64, i ? "," : "", logits_nonfinites[i]);
++        printf("],\"token_commit_ms\":[");
++        for (uint32_t i = 0; i < iterations; i++) printf("%s%.3f", i ? "," : "", token_commit_ms[i]);
++        printf("],\"committed_token_hashes\":[");
++        for (uint32_t i = 0; i < iterations; i++) printf("%s\"%016" PRIx64 "\"", i ? "," : "", token_hashes[i]);
++        printf("],\"committed_token_ids\":[");
++        if (batch_head) {
++            for (uint32_t i = 0; i < n_tokens; i++) printf("%s%d", i ? "," : "", host_committed[i]);
++        }
+         printf("]}\n");
+     }
+     metal_graph_free(&g);
++    free(token_hashes);
+     free(host_logits);
+     free(host_out);
++    free(host_committed);
+     free(host_tokens);
+     free(host_hc);
+     free(logits_nonfinites);
+     free(logits_hashes);
+     free(out_nonfinites);
+     free(out_hashes);
++    free(token_commit_ms);
+     free(iter_ms);
+     if (!ok) {
+         fprintf(stderr, "ds4: CUDA batch stack probe failed\n");
