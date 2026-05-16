@@ -91,8 +91,12 @@ def build_report_from_lines(
 	if mtp_tps is None:
 		mtp_tps = _float_or_none(speed.get("generation_tps"))
 	speedup = (float(mtp_tps) / float(baseline_tps)) if mtp_tps is not None and baseline_tps > 0.0 else None
-	invocations = _int(timing.get("events"))
-	target_positions = _int(counts.get("target_eval_call_count"))
+	invocations = _int(counts.get("target_verifier_invocation_count"))
+	if invocations <= 0:
+		invocations = _int(timing.get("events"))
+	target_positions = _int(counts.get("target_positions_verified"))
+	if target_positions <= 0:
+		target_positions = _int(counts.get("target_eval_call_count"))
 	output_head_calls = _int(counts.get("output_head_call_count"))
 	output_head_rows = _int(counts.get("output_head_rows"))
 	full_vocab_rows = _int(counts.get("full_vocab_logits_rows"))

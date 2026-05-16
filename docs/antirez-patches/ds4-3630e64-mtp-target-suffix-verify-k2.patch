@@ -6,9 +6,24 @@ diff --git a/ds4.c b/ds4.c
      int target_eval_call_count;
      int draft_eval_call_count;
      int output_head_call_count;
++    int target_verifier_invocation_count;
++    int target_positions_verified;
+     int cuda_sync_count;
+     int output_head_rows;
+     int full_vocab_logits_rows;
 @@
+     double output_head_ms;
      double token_commit_ms;
  } ds4_mtp_decode2_stats;
++
++typedef struct
++{
++    uint32_t start_pos;
++    ds4_gpu_tensor *saved_cur_hc;
++    ds4_gpu_tensor *saved_after_ffn_hc;
++    bool saved_capture_prefix1;
++    bool active;
++} ds4_mtp_kv_checkpoint;
 +
 +typedef struct
 +{
@@ -18,17 +33,104 @@ diff --git a/ds4.c b/ds4.c
 +    int32_t accepted_count;
 +    bool has_continuation_logits;
 +    bool staged_kv_ready;
++    ds4_mtp_kv_checkpoint checkpoint;
 +} ds4_mtp_suffix2_result;
 @@
 -/* Exact N=2 target verifier for MTP.
++static bool mtp_kv_checkpoint_begin(ds4_gpu_graph *g,uint32_t start_pos,ds4_mtp_kv_checkpoint *cp)
++{
++    if ( g == NULL || cp == NULL )
++        return false;
++    memset(cp,0,sizeof(*cp));
++    cp->start_pos = start_pos;
++    cp->saved_cur_hc = g->cur_hc;
++    cp->saved_after_ffn_hc = g->after_ffn_hc;
++    cp->saved_capture_prefix1 = g->spec_capture_prefix1;
++    cp->active = true;
++    g->spec_capture_prefix1 = true;
++    return true;
++}
++
++static void mtp_kv_checkpoint_restore(ds4_gpu_graph *g,ds4_mtp_kv_checkpoint *cp)
++{
++    if ( g == NULL || cp == NULL || cp->active == false )
++        return;
++    g->cur_hc = cp->saved_cur_hc;
++    g->after_ffn_hc = cp->saved_after_ffn_hc;
++    g->spec_capture_prefix1 = cp->saved_capture_prefix1;
++    cp->active = false;
++}
++
++static bool mtp_kv_checkpoint_commit_suffix2(ds4_gpu_graph *g,ds4_mtp_kv_checkpoint *cp,uint32_t accepted_count)
++{
++    if ( g == NULL || cp == NULL || cp->active == false )
++        return false;
++    if ( accepted_count == 0 || accepted_count > 2 )
++        return false;
++    /*
++     * The suffix graph writes staged KV for pos=start and pos=start+1 while
++     * leaving the live session frontier untouched.  Commit only the accepted
++     * prefix; failed suffix rows are discarded by restoring graph pointers.
++     */
++    g->spec_kv_commit_start = cp->start_pos;
++    g->spec_kv_commit_count = accepted_count;
++    if ( metal_graph_commit_staged_kv(g) == false )
++        return false;
++    mtp_kv_checkpoint_restore(g,cp);
++    return true;
++}
++
++static bool metal_graph_eval_target_suffix_k2_staged(
++        ds4_gpu_graph     *g,
++        const ds4_model   *model,
++        const ds4_weights *weights,
++        int32_t            draft0,
++        int32_t            draft1,
++        uint32_t           start_pos,
++        ds4_gpu_tensor   **cur0_out,
++        ds4_gpu_tensor   **cur1_out)
++{
++    ds4_gpu_tensor *cur0,*cur1,*next0,*next1,*tmp;
++    bool ok = true;
++    if ( g == NULL || model == NULL || weights == NULL || cur0_out == NULL || cur1_out == NULL )
++        return false;
++    cur0 = metal_graph_staged_suffix_hc_row(g,0);
++    cur1 = metal_graph_staged_suffix_hc_row(g,1);
++    next0 = metal_graph_staged_suffix_next_row(g,0);
++    next1 = metal_graph_staged_suffix_next_row(g,1);
++    if ( cur0 == NULL || cur1 == NULL || next0 == NULL || next1 == NULL )
++        return false;
++    ok = ds4_gpu_begin_commands() != 0;
++    if ( ok )
++        ok = metal_graph_embed_token_hc(g,model,weights,draft0,start_pos,cur0);
++    if ( ok )
++        ok = metal_graph_embed_token_hc(g,model,weights,draft1,start_pos + 1,cur1);
++    for (uint32_t il=0; ok && il<DS4_N_LAYER; il++)
++    {
++        ok = metal_graph_encode_decode_layer(g,model,weights,il,start_pos,cur0,next0);
++        if ( ok )
++            ok = metal_graph_encode_decode_layer(g,model,weights,il,start_pos + 1,cur1,next1);
++        tmp = cur0; cur0 = next0; next0 = tmp;
++        tmp = cur1; cur1 = next1; next1 = tmp;
++    }
++    if ( ok )
++        ok = ds4_gpu_end_commands() != 0;
++    else
++        (void)ds4_gpu_synchronize();
++    if ( ok == false )
++        return false;
++    *cur0_out = cur0;
++    *cur1_out = cur1;
++    return true;
++}
++
 +/* Exact K=2 target suffix verifier for MTP.
 + *
-+ * This is the architecture reset hook: callers ask for one strict suffix
-+ * verification over two draft positions, and the implementation owns target
-+ * state staging, top1 comparison, continuation logits, and KV commit/restore
-+ * semantics.  The first implementation deliberately delegates to the existing
-+ * decode2 verifier, so invocation accounting proves whether the path is still
-+ * serial.  A real speed path must replace this body with one target suffix pass.
++ * This is the DeepSeek-style economics reset: one verifier invocation owns two
++ * target positions, row0 only materializes top1 for the accept check, row1
++ * materializes continuation logits, and KV/cache writes stay staged until the
++ * caller commits the accepted prefix.  It must not call the serial decode2
++ * verifier; doing that recreates target-only decode cost token-for-token.
 + */
 +static bool target_suffix_verify_k2(
 +        ds4_gpu_graph          *g,
@@ -41,19 +143,42 @@ diff --git a/ds4.c b/ds4.c
 +        float                  *continuation_logits,
 +        ds4_mtp_decode2_stats  *stats)
 +{
++    ds4_gpu_tensor *cur0,*cur1;
++    double target_t0;
 +    int32_t row0_top;
-+    if (g == NULL || model == NULL || weights == NULL || out == NULL || continuation_logits == NULL)
++    bool ok;
++    if ( g == NULL || model == NULL || weights == NULL || out == NULL || continuation_logits == NULL )
 +        return false;
 +    memset(out,0,sizeof(*out));
 +    out->draft_tokens[0] = draft0;
 +    out->draft_tokens[1] = draft1;
-+    if (!metal_graph_verify_decode2_exact(g,model,weights,draft0,draft1,start_pos,&row0_top,NULL,continuation_logits,stats))
++    if ( mtp_kv_checkpoint_begin(g,start_pos,&out->checkpoint) == false )
 +        return false;
++    target_t0 = stats != NULL ? now_sec() : 0.0;
++    ok = metal_graph_eval_target_suffix_k2_staged(g,model,weights,draft0,draft1,start_pos,&cur0,&cur1);
++    if ( stats != NULL )
++    {
++        stats->target_verifier_invocation_count++;
++        stats->target_eval_call_count++;
++        stats->target_positions_verified += 2;
++        stats->target_eval_ms += (now_sec() - target_t0) * 1000.0;
++    }
++    if ( ok == false )
++    {
++        mtp_kv_checkpoint_restore(g,&out->checkpoint);
++        return false;
++    }
++    ok = metal_graph_decode2_fused_output_head(g,model,weights,cur0,cur1,&row0_top,continuation_logits,stats);
++    if ( ok == false )
++    {
++        mtp_kv_checkpoint_restore(g,&out->checkpoint);
++        return false;
++    }
 +    out->target_top1_pos1 = row0_top;
 +    out->target_top1_pos2 = -1;
 +    out->accepted_count = (row0_top == draft1) ? 2 : 1;
 +    out->has_continuation_logits = true;
-+    out->staged_kv_ready = false;
++    out->staged_kv_ready = true;
 +    return true;
 +}
 +
@@ -87,12 +212,19 @@ diff --git a/ds4.c b/ds4.c
          }
 @@
 -        if (ok && row0_top == drafts[1]) {
-+        if (ok && suffix2.accepted_count == 2) {
++        if (ok && suffix2.accepted_count == 2 && suffix2.staged_kv_ready) {
++            ok = mtp_kv_checkpoint_commit_suffix2(&s->graph,&suffix2.checkpoint,2);
+@@
+-            memcpy(s->logits, row_logits, (size_t)DS4_N_VOCAB * sizeof(s->logits[0]));
++            if ( ok )
++                memcpy(s->logits, row_logits, (size_t)DS4_N_VOCAB * sizeof(s->logits[0]));
 @@
 -            ok = spec_frontier_commit_prefix1(s);
-+            ok = spec_frontier_commit_prefix1(s);
++            ok = mtp_kv_checkpoint_commit_suffix2(&s->graph,&suffix2.checkpoint,1);
          }
 @@
-                         "ds4: mtp timing decode2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",
+-                        "ds4: mtp timing decode2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",
++                        "ds4: mtp timing suffix2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=%.3f ms verifier_calls=%d target_positions=%d target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",
 @@
-                         "ds4: mtp timing decode2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",
+-                        "ds4: mtp timing decode2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=%.3f ms target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",
++                        "ds4: mtp timing suffix2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=%.3f ms verifier_calls=%d target_positions=%d target_calls=%d head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d replay_calls=%d rewind_calls=%d cache_sync_calls=%d cuda_sync_calls=%d emitted=%d total=%.3f ms\n",

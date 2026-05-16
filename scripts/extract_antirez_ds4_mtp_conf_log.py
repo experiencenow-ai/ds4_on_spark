@@ -63,6 +63,8 @@ TIMING_COMPONENT_KEYS = {
 }
 
 TIMING_COUNT_KEYS = {
+	"verifier_calls": "target_verifier_invocation_count",
+	"target_positions": "target_positions_verified",
 	"target_calls": "target_eval_call_count",
 	"draft_calls": "draft_eval_call_count",
 	"head_calls": "output_head_call_count",
@@ -146,6 +148,8 @@ def _zero_components() -> dict[str, float]:
 
 def _zero_counts() -> dict[str, int]:
 	return {
+		"target_verifier_invocation_count": 0,
+		"target_positions_verified": 0,
 		"target_eval_call_count": 0,
 		"draft_eval_call_count": 0,
 		"output_head_call_count": 0,

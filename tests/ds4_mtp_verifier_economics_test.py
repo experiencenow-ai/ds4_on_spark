@@ -73,6 +73,29 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["blocker_kind"], "target_suffix_verifier_still_serial")
 		self.assertTrue(validate.validate_report(report)["ok"])
 
+	def test_true_suffix_log_tracks_invocations_vs_positions(self) -> None:
+		lines = [
+			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
+			"ds4: mtp timing suffix2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=9.000 ms target=6.000 ms head=2.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=13.000 ms\n",
+			"ds4: prefill: 2.18 t/s, generation: 16.00 t/s\n",
+		]
+		report = build.build_report_from_lines(
+			lines,
+			run_id="r",
+			model_id="m",
+			runtime_id="rt",
+			prompt="p",
+			prompt_hash="",
+			baseline_tps=14.65,
+			mtp_tps=None,
+		)
+		self.assertEqual(report["target_verifier_invocation_count"], 1)
+		self.assertEqual(report["target_positions_verified"], 2)
+		self.assertAlmostEqual(float(report["target_positions_per_invocation"]), 2.0)
+		self.assertEqual(report["output_head_invocation_count"], 1)
+		self.assertEqual(report["blocker_kind"], "none")
+		self.assertTrue(validate.validate_report(report)["ok"])
+
 	def test_target_suffix_blocker_requires_explicit_staging_fields(self) -> None:
 		report = {
 			"format": "ds4-mtp-verifier-economics-v1",
