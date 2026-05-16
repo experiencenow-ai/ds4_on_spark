@@ -74,6 +74,32 @@ class EndToEndDecodeTest(unittest.TestCase):
 		errors = decode.validate_artifact(obj)
 		self.assertTrue(any("kv_update_mode=present" in item for item in errors))
 
+	def test_multi_step_success_requires_step_hashes_and_kv_success(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_shared_prefix_short_suffix_4_token_kv_loop_20260516.example.json")
+		obj = copy.deepcopy(obj)
+		obj["kv_update_success"] = False
+		obj["per_step_token_hashes"] = []
+		obj["artifact_sha256"] = decode.artifact_sha256(obj)
+		obj["artifact_hash"] = obj["artifact_sha256"]
+		errors = decode.validate_artifact(obj)
+		self.assertTrue(any("kv_update_success=true" in item for item in errors))
+		self.assertTrue(any("per_step_token_hashes" in item for item in errors))
+
+	def test_multi_step_steady_state_is_reported(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_shared_prefix_short_suffix_4_token_kv_loop_20260516.example.json")
+		self.assertEqual(obj["prompt_pattern"], "shared_prefix_compact_suffix")
+		self.assertEqual(obj["prefix_mode"], "hit_fork")
+		self.assertEqual(obj["output_token_target"], 4)
+		self.assertEqual(obj["kv_update_mode"], "present")
+		self.assertTrue(obj["kv_update_success"])
+		self.assertFalse(obj["row_replacement_used"])
+		self.assertEqual(len(obj["per_step_decode_ms"]), 4)
+		self.assertEqual(len(obj["per_step_output_head_ms"]), 4)
+		self.assertEqual(len(obj["per_step_token_commit_ms"]), 4)
+		self.assertEqual(len(obj["per_step_token_hashes"]), 4)
+		self.assertEqual(obj["token_hash"], obj["aggregate_token_hash"])
+		self.assertGreater(obj["steady_state_output_tokens_per_s_after_step1"], 0.0)
+
 	def test_blocked_short_output_targets_name_exact_missing_loop(self) -> None:
 		for name, target in (
 			("ds4_b512_shared_prefix_short_suffix_4_token_blocked_20260516.example.json", 4),

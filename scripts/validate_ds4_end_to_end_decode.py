@@ -148,10 +148,15 @@ def base_artifact(args: argparse.Namespace) -> dict[str, Any]:
 		"suffix_prefill_tokens_per_s": 0.0,
 		"decode_steps": int(args.output_token_target),
 		"per_step_decode_ms": [],
+		"per_step_output_head_ms": [],
+		"per_step_token_commit_ms": [],
 		"kv_update_mode": "none",
 		"kv_update_ms": 0.0,
+		"kv_update_success": False,
 		"committed_token_ids_by_step": [],
 		"token_hashes_by_step": [],
+		"per_step_token_hashes": [],
+		"aggregate_token_hash": "",
 		"decode_ms": 0.0,
 		"decode_only_rows_per_s": 0.0,
 		"output_head_ms": 0.0,
@@ -167,6 +172,10 @@ def base_artifact(args: argparse.Namespace) -> dict[str, Any]:
 		"per_row_avg_token_s": 0.0,
 		"final_logits_hash": "",
 		"finite_output": False,
+		"completed_rows": 0,
+		"eos_rows": 0,
+		"row_replacement_used": False,
+		"steady_state_output_tokens_per_s_after_step1": 0.0,
 		"parity_artifact_sha256": getattr(args, "parity_artifact_sha256", ""),
 		"production_generation_eligible": False,
 		"blocker_kind": getattr(args, "blocker_kind", "none"),
@@ -214,8 +223,10 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		errors.append("prefix_mode is invalid")
 	if obj.get("output_token_target") not in OUTPUT_TARGETS:
 		errors.append("output_token_target must be 1, 4, 8, or 16")
-	for key in ("prefix_prepare_ms", "prefix_load_or_fork_ms", "suffix_prefill_ms", "suffix_prefill_tokens_per_s", "decode_ms", "decode_only_rows_per_s", "output_head_ms", "token_commit_ms", "result_collection_ms", "end_to_end_wall_ms", "end_to_end_output_tokens_per_s", "per_row_avg_token_s"):
+	for key in ("prefix_prepare_ms", "prefix_load_or_fork_ms", "suffix_prefill_ms", "suffix_prefill_tokens_per_s", "decode_ms", "decode_only_rows_per_s", "output_head_ms", "token_commit_ms", "result_collection_ms", "end_to_end_wall_ms", "end_to_end_output_tokens_per_s", "per_row_avg_token_s", "kv_update_ms"):
 		expect_number(errors, obj, key)
+	if "steady_state_output_tokens_per_s_after_step1" in obj:
+		expect_number(errors, obj, "steady_state_output_tokens_per_s_after_step1")
 	if not isinstance(obj.get("suffix_tokens_per_row"), int) or obj.get("suffix_tokens_per_row", -1) < 0:
 		errors.append("suffix_tokens_per_row must be a non-negative integer")
 	if not isinstance(obj.get("decode_steps"), int) or obj.get("decode_steps", 0) <= 0:
@@ -238,7 +249,26 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		errors.append("token_hashes_by_step must be a list")
 	if not isinstance(token_ids_by_step, list):
 		errors.append("committed_token_ids_by_step must be a list")
-	expect_number(errors, obj, "kv_update_ms")
+	for key in ("per_step_output_head_ms", "per_step_token_commit_ms", "per_step_token_hashes"):
+		if key not in obj and (int(obj.get("decode_steps", 0)) <= 1 or obj.get("blocker_kind") != "none"):
+			continue
+		if not isinstance(obj.get(key), list):
+			errors.append(f"{key} must be a list")
+		elif obj.get("blocker_kind") == "none":
+			if len(obj.get(key, [])) != obj.get("decode_steps"):
+				errors.append(f"{key} length must match decode_steps")
+			elif key != "per_step_token_hashes" and not all(isinstance(v, (int, float)) and v >= 0.0 for v in obj.get(key, [])):
+				errors.append(f"{key} must contain non-negative numbers")
+			elif key == "per_step_token_hashes" and not all(isinstance(v, str) and v.startswith("fnv64:") for v in obj.get(key, [])):
+				errors.append("per_step_token_hashes must contain fnv64 hashes")
+	if "row_replacement_used" in obj and obj.get("row_replacement_used") is not False:
+		errors.append("row_replacement_used must be false until row replacement is implemented")
+	if "completed_rows" in obj and (not isinstance(obj.get("completed_rows"), int) or int(obj.get("completed_rows", -1)) < 0):
+		errors.append("completed_rows must be a non-negative integer")
+	if "eos_rows" in obj and (not isinstance(obj.get("eos_rows"), int) or int(obj.get("eos_rows", -1)) < 0):
+		errors.append("eos_rows must be a non-negative integer")
+	if int(obj.get("eos_rows", 0)) > int(obj.get("completed_rows", 0)):
+		errors.append("eos_rows must be <= completed_rows")
 	if not isinstance(obj.get("optimized_kernel_flags"), dict):
 		errors.append("optimized_kernel_flags must be an object")
 	success = obj.get("blocker_kind") == "none"
@@ -257,10 +287,22 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			errors.append("successful decode benchmark requires committed token ids")
 		if obj.get("decode_steps", 0) > 1 and obj.get("kv_update_mode") != "present":
 			errors.append("multi-step decode benchmark requires kv_update_mode=present")
+		if obj.get("decode_steps", 0) > 1 and obj.get("kv_update_success") is not True:
+			errors.append("multi-step decode benchmark requires kv_update_success=true")
+		if obj.get("decode_steps", 0) > 1 and int(obj.get("completed_rows", 0)) <= 0:
+			errors.append("multi-step decode benchmark requires completed_rows > 0")
 		if isinstance(token_hashes, list) and len(token_hashes) != obj.get("decode_steps"):
 			errors.append("token_hashes_by_step length must match decode_steps")
+		if isinstance(token_hashes, list) and isinstance(obj.get("per_step_token_hashes"), list) and obj.get("per_step_token_hashes") != token_hashes:
+			errors.append("per_step_token_hashes must match token_hashes_by_step")
 		if isinstance(token_ids_by_step, list) and len(token_ids_by_step) != obj.get("decode_steps"):
 			errors.append("committed_token_ids_by_step length must match decode_steps")
+		if obj.get("decode_steps", 0) > 1 and not str(obj.get("aggregate_token_hash", "")).startswith("fnv64:"):
+			errors.append("multi-step decode benchmark requires aggregate_token_hash")
+		if obj.get("decode_steps", 0) > 1 and obj.get("token_hash") != obj.get("aggregate_token_hash"):
+			errors.append("token_hash must equal aggregate_token_hash for multi-step decode")
+		if obj.get("decode_steps", 0) > 1 and float(obj.get("steady_state_output_tokens_per_s_after_step1", 0.0)) <= 0.0:
+			errors.append("multi-step decode benchmark requires positive steady_state_output_tokens_per_s_after_step1")
 		if float(obj.get("end_to_end_output_tokens_per_s", 0.0)) <= 0.0:
 			errors.append("successful decode benchmark requires positive end_to_end_output_tokens_per_s")
 		if "token_commit_mode" in obj and obj.get("token_commit_mode") not in ("", "full_vocab_batch_head", "constrained_vocab_cpu_top1", "single_row_head"):
