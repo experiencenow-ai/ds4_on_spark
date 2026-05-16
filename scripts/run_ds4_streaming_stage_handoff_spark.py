@@ -570,6 +570,9 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 	token_commit_ms = final.get("token_commit_ms", [])
 	if not isinstance(token_commit_ms, list):
 		token_commit_ms = []
+	token_commit_profile = final.get("token_commit_profile", {})
+	if not isinstance(token_commit_profile, dict):
+		token_commit_profile = {}
 	nonfinites = final.get("logits_nonfinites", [final.get("logits_nonfinite", 0)])
 	finite = all(int(v) == 0 for v in nonfinites) and all(h != "fnv64:0000000000000000" for h in hashes)
 	stage_compute_ms = sum(sum(values) for values in schedule["stage_ms_by_microbatch"])
@@ -641,6 +644,9 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"token_hash": committed_hashes[-1] if committed_hashes else "",
 		"token_commit_ms_by_microbatch": [float(v) for v in token_commit_ms],
 		"token_commit_ms": max((float(v) for v in token_commit_ms), default=0.0),
+		"token_commit_mode": str(final.get("token_commit_mode", "")),
+		"constrained_token_ids": final.get("constrained_token_ids", []),
+		"token_commit_profile": token_commit_profile,
 		"parity_status": "not_run",
 		"parity_scope": "stage_handoff_finite_logits",
 		"parity_blocker": "missing_repo_owned_split_forward_runtime_hook",

@@ -220,15 +220,28 @@ bottleneck.
 | Case | Output target | Result | End-to-end output tok/s | Decode-only rows/s | Token hash | Blocker |
 | --- | ---: | --- | ---: | ---: | --- | --- |
 | Decode only, B=512/mb16 | 1 | finite committed tokens | 260.973 | 261.082 | `fnv64:c73fd75838d4c57f` | none |
+| Decode only, constrained candidate commit, B=512/mb16 | 1 | finite committed tokens | 629.183 | 630.453 | `fnv64:7b018999c9d460f7` | none |
 | Shared prefix + compact suffix | 1 | blocked | 0.000 | 0.000 |  | `cuda_batch_stack_probe_seed_input()` lacks B=512 prefix-fork/suffix-prefill hook |
 | Shared prefix + compact suffix | 4 | blocked | 0.000 | 0.000 |  | `cuda_batch_stack_probe_run()` lacks repeated committed-token KV update loop |
 | Shared prefix + compact suffix | 8 | blocked | 0.000 | 0.000 |  | same repeated committed-token KV update loop missing |
 | Unique prefix control | 1 | blocked | 0.000 | 0.000 |  | missing B=512 unique-prefix prefill runner |
 
+Token-commit profile:
+
+| Mode | Stage2 hidden ms | Output head ms | Top1/argmax ms | Result collection ms | Bottleneck |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Full-vocab batch head | 632.808 | 1125.538 | 0.189 | 28.297 | full batch output projection |
+| Constrained candidate commit | not instrumented | not instrumented | 3.868 | 32.614 | stage compute after full-vocab head removal |
+
 Artifacts:
 
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_batch_head_token_commit.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_full_vocab_token_profile.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_constrained_token_commit.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_decode_only_1_token_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_decode_only_1_token_constrained_commit_20260516.example.json`
+- `fixtures/token_commit_profile/ds4_b512_full_vocab_token_commit_profile_20260516.example.json`
+- `fixtures/token_commit_profile/ds4_b512_constrained_token_commit_profile_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_4_token_blocked_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_8_token_blocked_20260516.example.json`
@@ -245,15 +258,18 @@ down from about 16.8 ms to about 21.2 ms and dropped the full pipeline from
 down projections per row, raises layer 2 down to about 63.4 ms, and drops the
 full pipeline to 408.047 rows/s.
 
-Exact next correctness code change: add a repo-owned B=512 shared-prefix
-prefix-cache fork plus compact per-row suffix-prefill hook before decode, then
-extend `cuda_batch_stack_probe_run()` so committed batch-head token ids update
-the KV/session state and become the next step input without reseeding the probe.
-The 1-token shared-prefix target is blocked by the missing prefix/suffix hook;
-the 4/8-token targets are additionally blocked by the missing repeated
-decode/KV loop. The prompt-decode smoke path should then reference a
-`ds4-token-commit-export-v1` artifact from the committed-token output instead
-of staying blocked.
+Committed-token decode-only now catches the finite-logits path when the task can
+declare an exact constrained candidate set: 629.183 tok/s end-to-end versus
+631.672 finite-logits rows/s. The full-vocab token commit profile shows the
+old 260.973 tok/s path was capped by the 512-row output projection
+(~1.12 s/microbatch), not readback or top-1.
+
+Exact next correctness code change: add the B=512 prefix-fork/suffix-prefill
+and repeated decode/KV update loop so the shared-prefix 1-token and 4/8-token
+workload shapes can run with committed token ids instead of blocker artifacts.
+For unconstrained natural-language commit, the next kernel target is the
+full-vocab batch output projection; for structured short outputs, the
+constrained candidate commit path is the current fast lane.
 
 Latest handoff artifacts:
 

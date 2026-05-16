@@ -112,6 +112,14 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - emits `iter_ms`, `out_fnv64s`, `out_nonfinites`, `logits_fnv64s`, and `logits_nonfinites` arrays for streaming schedule reconstruction
     - keeps PP=1 parity separate; the streaming handoff proof is finite-logits evidence, not provider eligibility
 
+- `ds4-3630e64-cuda-token-commit-profile-constrained.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the B=512 batch-head token-commit patch
+  - Purpose:
+    - emits `ds4-token-commit-profile-v1` timing for final hidden output, output head, top-1/argmax, readback, token hash, result collection, and sync wait
+    - adds `DS4_CUDA_STACK_PROBE_CONSTRAINED_TOKEN_IDS=...` for exact top-1 commit over a declared candidate-token set
+    - avoids the full 512-row vocabulary projection for constrained short-output tasks while preserving a final-row full-logits hash
+    - keeps `production_generation_eligible=false`; this is a decode-only committed-token benchmark path, not the shared-prefix/suffix/KV production loop
+
 Apply (example):
 
 ```bash

@@ -45,6 +45,12 @@ class EndToEndDecodeTest(unittest.TestCase):
 		self.assertEqual(len(obj["token_hashes_by_step"]), 1)
 		self.assertGreater(obj["decode_only_rows_per_s"], 15.0)
 
+	def test_constrained_commit_exceeds_600_tok_s(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_constrained_commit_20260516.example.json")
+		self.assertEqual(obj["token_commit_mode"], "constrained_vocab_cpu_top1")
+		self.assertGreater(obj["end_to_end_output_tokens_per_s"], 600.0)
+		self.assertEqual(obj["production_generation_eligible"], False)
+
 	def test_batch_and_microbatch_are_fixed_for_this_artifact(self) -> None:
 		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_20260516.example.json")
 		obj = copy.deepcopy(obj)
