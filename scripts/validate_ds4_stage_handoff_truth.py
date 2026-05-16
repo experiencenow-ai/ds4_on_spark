@@ -168,6 +168,19 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 					errors.append("token_commit_ms_by_microbatch length must match microbatch_count when committed tokens are present")
 				elif not all(isinstance(v, (int, float)) and v >= 0 for v in commit_ms):
 					errors.append("token_commit_ms_by_microbatch must contain non-negative numbers")
+				if "token_commit_profile" in obj:
+					profile = obj.get("token_commit_profile")
+					if not isinstance(profile, dict):
+						errors.append("token_commit_profile must be an object when present")
+					elif profile.get("format") != "ds4-token-commit-profile-v1":
+						errors.append("token_commit_profile format must be ds4-token-commit-profile-v1")
+					else:
+						for key in ("stage2_final_hidden_output_ms", "output_head_ms", "top1_argmax_ms", "logits_readback_ms", "token_id_readback_ms", "token_hash_ms", "result_collection_ms", "synchronization_wait_ms"):
+							values = profile.get(key)
+							if not isinstance(values, list) or not isinstance(microbatches, int) or len(values) != microbatches:
+								errors.append(f"token_commit_profile {key} length must match microbatch_count")
+							elif not all(isinstance(v, (int, float)) and v >= 0 for v in values):
+								errors.append(f"token_commit_profile {key} must contain non-negative numbers")
 		if obj.get("parity_scope") not in (None, "stage_handoff_finite_logits"):
 			errors.append("streaming handoff parity_scope must be stage_handoff_finite_logits when present")
 		if obj.get("parity_status") not in (None, "not_run"):

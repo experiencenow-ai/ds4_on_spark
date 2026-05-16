@@ -8,6 +8,7 @@ import copy
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,9 @@ def build_from_stage(args: argparse.Namespace) -> dict[str, Any]:
 		"decode_only_rows_per_s": float(stage.get("achieved_streaming_rows_per_s", 0.0)),
 		"output_head_ms": float(args.output_head_ms),
 		"token_commit_ms": token_commit_ms,
+		"token_commit_mode": str(stage.get("token_commit_mode", "")),
+		"token_commit_profile_artifact": str(getattr(args, "token_commit_profile_artifact", "")),
+		"token_commit_profile_artifact_sha256": str(getattr(args, "token_commit_profile_artifact_sha256", "")),
 		"committed_token_ids_present": bool(stage.get("committed_token_ids_present")),
 		"token_hash": str(stage.get("token_hash", "")),
 		"result_collection_ms": result_collection_ms,
@@ -152,6 +156,9 @@ def base_artifact(args: argparse.Namespace) -> dict[str, Any]:
 		"decode_only_rows_per_s": 0.0,
 		"output_head_ms": 0.0,
 		"token_commit_ms": 0.0,
+		"token_commit_mode": "",
+		"token_commit_profile_artifact": "",
+		"token_commit_profile_artifact_sha256": "",
 		"committed_token_ids_present": False,
 		"token_hash": "",
 		"result_collection_ms": 0.0,
@@ -256,6 +263,10 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			errors.append("committed_token_ids_by_step length must match decode_steps")
 		if float(obj.get("end_to_end_output_tokens_per_s", 0.0)) <= 0.0:
 			errors.append("successful decode benchmark requires positive end_to_end_output_tokens_per_s")
+		if "token_commit_mode" in obj and obj.get("token_commit_mode") not in ("", "full_vocab_batch_head", "constrained_vocab_cpu_top1", "single_row_head"):
+			errors.append("token_commit_mode is invalid")
+		if obj.get("token_commit_profile_artifact_sha256") not in ("", None) and not str(obj.get("token_commit_profile_artifact_sha256", "")).startswith("sha256:"):
+			errors.append("token_commit_profile_artifact_sha256 must be sha256 when present")
 	else:
 		if obj.get("production_generation_eligible") is True:
 			errors.append("blocked decode benchmark must not claim production_generation_eligible")
@@ -282,6 +293,22 @@ def add_common(p: argparse.ArgumentParser) -> None:
 
 
 def main() -> int:
+	if len(sys.argv) > 1 and sys.argv[1] not in ("build-from-stage", "build-blocked", "validate", "-h", "--help"):
+		failed = False
+		for raw in sys.argv[1:]:
+			path = Path(raw)
+			try:
+				errors = validate_artifact(load_json(path))
+			except (OSError, ValueError, json.JSONDecodeError) as exc:
+				print(str(exc))
+				return 1
+			if errors:
+				failed = True
+				for error in errors:
+					print(f"error: {path}: {error}")
+			else:
+				print(f"ok: {path}")
+		return 2 if failed else 0
 	ap = argparse.ArgumentParser()
 	sub = ap.add_subparsers(dest="cmd", required=True)
 	build = sub.add_parser("build-from-stage")
@@ -293,6 +320,8 @@ def main() -> int:
 	build.add_argument("--suffix-tokens-per-row", type=int, default=0)
 	build.add_argument("--suffix-prefill-ms", type=float, default=0.0)
 	build.add_argument("--output-head-ms", type=float, default=0.0)
+	build.add_argument("--token-commit-profile-artifact", default="")
+	build.add_argument("--token-commit-profile-artifact-sha256", default="")
 	build.add_argument("--production-generation-eligible", action="store_true")
 	blocked = sub.add_parser("build-blocked")
 	add_common(blocked)
