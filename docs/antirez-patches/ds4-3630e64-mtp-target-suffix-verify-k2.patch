@@ -1,10 +1,151 @@
 diff --git a/ds4.c b/ds4.c
-index f0f8cc1..2b1cb0d 100644
+index f0f8cc1..bd58a8e 100644
 --- a/ds4.c
 +++ b/ds4.c
-@@ -17291,12 +17291,92 @@ int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,
-     }
+@@ -9956,2 +9956,118 @@ static bool metal_graph_encode_output_head_batch(
 
++static bool metal_graph_encode_output_head_suffix2_top1(
++        ds4_gpu_graph *g,
++        const ds4_model       *model,
++        const ds4_weights     *weights,
++        uint64_t               vocab_dim) {
++    if (!g->spec_logits) return false;
++
++    const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
++    ds4_gpu_tensor *output_pre = NULL;
++    ds4_gpu_tensor *output_weights = NULL;
++    ds4_gpu_tensor *output_embd = NULL;
++    ds4_gpu_tensor *output_norm = NULL;
++    ds4_gpu_tensor *row0_norm = NULL;
++    ds4_gpu_tensor *row1_norm = NULL;
++    ds4_gpu_tensor *row1_logits = NULL;
++
++    bool ok = true;
++    output_pre = ds4_gpu_tensor_view(g->batch_hc_mix, 0, 2ull * DS4_N_HC * sizeof(float));
++    output_weights = ds4_gpu_tensor_view(g->batch_hc_split, 0, 2ull * DS4_N_HC * sizeof(float));
++    output_embd = ds4_gpu_tensor_view(g->batch_ffn_cur, 0, 2ull * DS4_N_EMBD * sizeof(float));
++    output_norm = ds4_gpu_tensor_view(g->batch_ffn_norm, 0, 2ull * DS4_N_EMBD * sizeof(float));
++    row0_norm = ds4_gpu_tensor_view(g->batch_ffn_norm, 0, (uint64_t)DS4_N_EMBD * sizeof(float));
++    row1_norm = ds4_gpu_tensor_view(g->batch_ffn_norm, (uint64_t)DS4_N_EMBD * sizeof(float), (uint64_t)DS4_N_EMBD * sizeof(float));
++    row1_logits = ds4_gpu_tensor_view(g->spec_logits, vocab_dim * sizeof(float), vocab_dim * sizeof(float));
++    ok = output_pre && output_weights && output_embd && output_norm && row0_norm && row1_norm && row1_logits;
++
++    if (ok) ok = ds4_gpu_rms_norm_plain_rows_tensor(g->batch_flat_hc,
++                                                      g->batch_cur_hc,
++                                                      (uint32_t)hc_dim,
++                                                      2,
++                                                      DS4_RMS_EPS) != 0;
++    if (ok) ok = ds4_gpu_matmul_f16_tensor(output_pre,
++                                             model->map,
++                                             model->size,
++                                             weights->output_hc_fn->abs_offset,
++                                             hc_dim,
++                                             DS4_N_HC,
++                                             g->batch_flat_hc,
++                                             2) != 0;
++    if (ok) ok = ds4_gpu_output_hc_weights_tensor(output_weights,
++                                                    output_pre,
++                                                    model->map,
++                                                    model->size,
++                                                    weights->output_hc_scale->abs_offset,
++                                                    weights->output_hc_base->abs_offset,
++                                                    DS4_N_HC,
++                                                    DS4_HC_EPS) != 0;
++    if (ok) ok = ds4_gpu_hc_weighted_sum_tensor(output_embd,
++                                                  g->batch_cur_hc,
++                                                  output_weights,
++                                                  DS4_N_EMBD,
++                                                  DS4_N_HC) != 0;
++    if (ok) ok = ds4_gpu_rms_norm_weight_rows_tensor(output_norm,
++                                                       output_embd,
++                                                       model->map,
++                                                       model->size,
++                                                       weights->output_norm->abs_offset,
++                                                       DS4_N_EMBD,
++                                                       2,
++                                                       DS4_RMS_EPS) != 0;
++    if (ok) ok = ds4_gpu_matmul_q8_0_top1_tensor(g->comp_selected,
++                                                   model->map,
++                                                   model->size,
++                                                   weights->output->abs_offset,
++                                                   DS4_N_EMBD,
++                                                   vocab_dim,
++                                                   row0_norm) != 0;
++    if (ok) ok = ds4_gpu_matmul_q8_0_tensor(row1_logits,
++                                              model->map,
++                                              model->size,
++                                              weights->output->abs_offset,
++                                              DS4_N_EMBD,
++                                              vocab_dim,
++                                              row1_norm,
++                                              1) != 0;
++
++    ds4_gpu_tensor_free(row1_logits);
++    ds4_gpu_tensor_free(row1_norm);
++    ds4_gpu_tensor_free(row0_norm);
++    ds4_gpu_tensor_free(output_norm);
++    ds4_gpu_tensor_free(output_embd);
++    ds4_gpu_tensor_free(output_weights);
++    ds4_gpu_tensor_free(output_pre);
++    return ok;
++}
++
++static bool metal_graph_materialize_suffix_logits_row(
++        ds4_gpu_graph *g,
++        const ds4_model       *model,
++        const ds4_weights     *weights,
++        uint32_t               row,
++        uint64_t               vocab_dim) {
++    if (!g->spec_logits || row >= g->prefill_cap) return false;
++    ds4_gpu_tensor *row_norm = ds4_gpu_tensor_view(g->batch_ffn_norm,
++                                                     (uint64_t)row * DS4_N_EMBD * sizeof(float),
++                                                     (uint64_t)DS4_N_EMBD * sizeof(float));
++    ds4_gpu_tensor *row_logits = ds4_gpu_tensor_view(g->spec_logits,
++                                                       (uint64_t)row * vocab_dim * sizeof(float),
++                                                       vocab_dim * sizeof(float));
++    bool ok = row_norm && row_logits;
++    if (ok) ok = ds4_gpu_begin_commands() != 0;
++    if (ok) ok = ds4_gpu_matmul_q8_0_tensor(row_logits,
++                                              model->map,
++                                              model->size,
++                                              weights->output->abs_offset,
++                                              DS4_N_EMBD,
++                                              vocab_dim,
++                                              row_norm,
++                                              1) != 0;
++    if (ok) ok = ds4_gpu_end_commands() != 0;
++    else (void)ds4_gpu_synchronize();
++    ds4_gpu_tensor_free(row_logits);
++    ds4_gpu_tensor_free(row_norm);
++    return ok;
++}
++
+ static bool metal_graph_matmul_plain_tensor(
+@@ -13323,8 +13439,17 @@ static bool metal_graph_verify_suffix_tops(
+     ok = ds4_gpu_begin_commands() != 0;
+-    if (ok) ok = metal_graph_encode_output_head_batch(g,
+-                                                      model,
+-                                                      weights,
+-                                                      n_tokens,
+-                                                      weights->output->dim[1]);
+-    if (ok) {
++    const bool suffix2_top1_head =
++        n_tokens == 2 && top_rows == 1 && getenv("DS4_MTP_ROW0_TOP1_HEAD") != NULL;
++    if (ok && suffix2_top1_head) {
++        ok = metal_graph_encode_output_head_suffix2_top1(g,
++                                                         model,
++                                                         weights,
++                                                         weights->output->dim[1]);
++    } else if (ok) {
++        ok = metal_graph_encode_output_head_batch(g,
++                                                  model,
++                                                  weights,
++                                                  n_tokens,
++                                                  weights->output->dim[1]);
++    }
++    if (ok && !suffix2_top1_head) {
+         if (top_rows) {
+@@ -17293,8 +17418,101 @@ int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,
      /*
 -     * The useful N=2 verifier is the tiny batch path: it verifies two target
 -     * positions in one layer-major pass and commits prefix-1 directly on a
@@ -23,6 +164,7 @@ index f0f8cc1..2b1cb0d 100644
 +        int row_tops[2] = {-1,-1};
 +        float *row_logits = xmalloc((size_t)DS4_N_VOCAB * sizeof(row_logits[0]));
 +        const int start = s->checkpoint.len;
++        const bool row0_top1_head = getenv("DS4_MTP_ROW0_TOP1_HEAD") != NULL;
 +        const double snapshot_t0 = mtp_timing ? now_sec() : 0.0;
 +        const double snapshot_done = snapshot_t0;
 +        const double target_t0 = mtp_timing ? now_sec() : 0.0;
@@ -51,11 +193,13 @@ index f0f8cc1..2b1cb0d 100644
 +                DS4_MTP_KEEP_ACCEPTED(2);
 +                if (mtp_timing) {
 +                    fprintf(stderr,
-+                            "ds4: mtp timing suffix2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=2 top1_rows=0 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=%.3f ms\n",
++                            "ds4: mtp timing suffix2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=%d top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=%.3f ms\n",
 +                            (mtp_t_after_draft - mtp_t0) * 1000.0,
 +                            (snapshot_done - snapshot_t0) * 1000.0,
 +                            (verify_done - snapshot_done) * 1000.0,
 +                            target_ms,
++                            row0_top1_head ? 1 : 2,
++                            row0_top1_head ? 1 : 0,
 +                            (now_sec() - mtp_t0) * 1000.0);
 +                }
 +                free(row_logits);
@@ -65,6 +209,13 @@ index f0f8cc1..2b1cb0d 100644
 +        if (ok) {
 +            s->checkpoint.len = start;
 +            ok = spec_frontier_commit_prefix1(s);
++        }
++        if (ok && row0_top1_head) {
++            ok = metal_graph_materialize_suffix_logits_row(&s->graph,
++                                                           &e->model,
++                                                           &e->weights,
++                                                           0,
++                                                           e->weights.output->dim[1]);
 +        }
 +        if (ok) ok = metal_graph_read_spec_logits_row(&s->graph, 0, row_logits);
 +        if (ok) {
@@ -77,12 +228,15 @@ index f0f8cc1..2b1cb0d 100644
 +            if (mtp_timing) {
 +                const double done = now_sec();
 +                fprintf(stderr,
-+                        "ds4: mtp timing suffix2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=2 top1_rows=0 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
++                        "ds4: mtp timing suffix2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=%d head_rows=%d full_vocab_rows=2 top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
 +                        (mtp_t_after_draft - mtp_t0) * 1000.0,
 +                        (snapshot_done - snapshot_t0) * 1000.0,
 +                        (verify_done - snapshot_done) * 1000.0,
 +                        (done - verify_done) * 1000.0,
 +                        target_ms,
++                        row0_top1_head ? 2 : 1,
++                        row0_top1_head ? 3 : 2,
++                        row0_top1_head ? 1 : 0,
 +                        (done - mtp_t0) * 1000.0);
 +            }
 +            free(row_logits);
@@ -99,5 +253,148 @@ index f0f8cc1..2b1cb0d 100644
 +     * Diagnostic serial verifier. It preserves the one-token target stream but
 +     * should not be selected for speed-path MTP.
       */
-     const bool use_decode2_exact =
-         draft_n == 2 && strict_mtp && getenv("DS4_MTP_BATCH_VERIFY") == NULL;
+diff --git a/ds4_cuda.cu b/ds4_cuda.cu
+index 34c68c7..fc3e42f 100644
+--- a/ds4_cuda.cu
++++ b/ds4_cuda.cu
+@@ -1750,2 +1750,70 @@ __global__ static void matmul_q8_0_preq_warp8_kernel(
+
++__global__ static void matmul_q8_0_top1_candidates_kernel(
++        float *candidate_vals,
++        uint32_t *candidate_idxs,
++        const unsigned char *w,
++        const int8_t *xq,
++        const float *xscale,
++        uint64_t in_dim,
++        uint64_t out_dim,
++        uint64_t blocks,
++        int use_dp4a) {
++    uint32_t warp = threadIdx.x >> 5u;
++    uint32_t lane = threadIdx.x & 31u;
++    uint64_t row = (uint64_t)blockIdx.x * 8u + warp;
++    float acc = -INFINITY;
++    if (warp < 8u && row < out_dim) {
++        const unsigned char *wr = w + row * blocks * 34;
++        acc = 0.0f;
++        for (uint64_t b = lane; b < blocks; b += 32u) {
++            uint64_t i0 = b * 32;
++            uint64_t bn = in_dim - i0 < 32 ? in_dim - i0 : 32;
++            const __half *scale_h = (const __half *)(wr + b * 34);
++            const int8_t *qs = (const int8_t *)(wr + b * 34 + 2);
++            const int8_t *xqb = xq + b * 32;
++            int dot = dot_i8_block(qs, xqb, bn, use_dp4a);
++            acc += __half2float(*scale_h) * xscale[b] * (float)dot;
++        }
++        acc = warp_sum_f32(acc);
++    }
++    __shared__ float vals[8];
++    __shared__ uint32_t idxs[8];
++    if (lane == 0 && warp < 8u) {
++        vals[warp] = acc;
++        idxs[warp] = row < out_dim ? (uint32_t)row : UINT32_MAX;
++    }
++    __syncthreads();
++    if (threadIdx.x == 0) {
++        float best = vals[0];
++        uint32_t best_idx = idxs[0];
++        for (uint32_t i = 1; i < 8u; i++) {
++            if (vals[i] > best || (vals[i] == best && idxs[i] < best_idx)) {
++                best = vals[i];
++                best_idx = idxs[i];
++            }
++        }
++        candidate_vals[blockIdx.x] = best;
++        candidate_idxs[blockIdx.x] = best_idx;
++    }
++}
++
++__global__ static void matmul_q8_0_top1_reduce_kernel(
++        uint32_t *selected,
++        const float *candidate_vals,
++        const uint32_t *candidate_idxs,
++        uint32_t candidate_count) {
++    if (threadIdx.x != 0 || blockIdx.x != 0 || candidate_count == 0) return;
++    float best = candidate_vals[0];
++    uint32_t best_idx = candidate_idxs[0];
++    for (uint32_t i = 1; i < candidate_count; i++) {
++        uint32_t idx = candidate_idxs[i];
++        float v = candidate_vals[i];
++        if (v > best || (v == best && idx < best_idx)) {
++            best = v;
++            best_idx = idx;
++        }
++    }
++    selected[0] = best_idx;
++}
++
+ __global__ static void matmul_q8_0_pair_preq_warp8_kernel(
+@@ -5098,2 +5166,53 @@ extern "C" int ds4_gpu_matmul_q8_0_tensor(ds4_gpu_tensor *out, const void *model
+
++extern "C" int ds4_gpu_matmul_q8_0_top1_tensor(
++        ds4_gpu_tensor *selected,
++        const void *model_map,
++        uint64_t model_size,
++        uint64_t weight_offset,
++        uint64_t in_dim,
++        uint64_t out_dim,
++        const ds4_gpu_tensor *x) {
++    if (!selected || !x || !model_map || in_dim == 0 || out_dim == 0) return 0;
++    uint64_t blocks = (in_dim + 31) / 32;
++    if (weight_offset > model_size || out_dim > UINT64_MAX / (blocks * 34)) return 0;
++    uint64_t weight_bytes = out_dim * blocks * 34;
++    if (weight_bytes > model_size - weight_offset ||
++        x->bytes < in_dim * sizeof(float) ||
++        selected->bytes < sizeof(uint32_t)) return 0;
++    const char *wptr = cuda_model_range_ptr(model_map, weight_offset, weight_bytes, "q8_0_top1");
++    if (!wptr) return 0;
++    const uint64_t xq_bytes = blocks * 32u;
++    const uint64_t scale_offset = (xq_bytes + 15u) & ~15ull;
++    const uint64_t candidate_count = (out_dim + 7u) / 8u;
++    if (candidate_count > UINT64_MAX / (sizeof(float) + sizeof(uint32_t))) return 0;
++    const uint64_t vals_offset = scale_offset + blocks * sizeof(float);
++    const uint64_t idxs_offset = vals_offset + candidate_count * sizeof(float);
++    const uint64_t tmp_bytes = idxs_offset + candidate_count * sizeof(uint32_t);
++    void *tmp = cuda_tmp_alloc(tmp_bytes, "q8_0 top1");
++    if (!tmp) return 0;
++    int8_t *xq = (int8_t *)tmp;
++    float *xscale = (float *)((char *)tmp + scale_offset);
++    float *candidate_vals = (float *)((char *)tmp + vals_offset);
++    uint32_t *candidate_idxs = (uint32_t *)((char *)tmp + idxs_offset);
++    const int use_dp4a = cuda_q8_use_dp4a();
++    quantize_q8_0_f32_kernel<<<(unsigned)blocks, 32>>>(xq, xscale, (const float *)x->ptr, in_dim, blocks);
++    if (!cuda_ok(cudaGetLastError(), "matmul_q8_0 top1 quantize launch")) return 0;
++    matmul_q8_0_top1_candidates_kernel<<<(unsigned)candidate_count, 256>>>(
++            candidate_vals,
++            candidate_idxs,
++            reinterpret_cast<const unsigned char *>(wptr),
++            xq,
++            xscale,
++            in_dim,
++            out_dim,
++            blocks,
++            use_dp4a);
++    if (!cuda_ok(cudaGetLastError(), "matmul_q8_0 top1 candidates launch")) return 0;
++    matmul_q8_0_top1_reduce_kernel<<<1, 1>>>((uint32_t *)selected->ptr,
++                                             candidate_vals,
++                                             candidate_idxs,
++                                             (uint32_t)candidate_count);
++    return cuda_ok(cudaGetLastError(), "matmul_q8_0 top1 reduce launch");
++}
++
+ extern "C" int ds4_gpu_matmul_q8_0_pair_tensor(
+diff --git a/ds4_gpu.h b/ds4_gpu.h
+index 799065a..55c778b 100644
+--- a/ds4_gpu.h
++++ b/ds4_gpu.h
+@@ -140,2 +140,11 @@ int ds4_gpu_matmul_q8_0_tensor(
+
++int ds4_gpu_matmul_q8_0_top1_tensor(
++        ds4_gpu_tensor       *selected,
++        const void             *model_map,
++        uint64_t                model_size,
++        uint64_t                weight_offset,
++        uint64_t                in_dim,
++        uint64_t                out_dim,
++        const ds4_gpu_tensor *x);
++
+ int ds4_gpu_shared_gate_up_swiglu_q8_0_tensor(

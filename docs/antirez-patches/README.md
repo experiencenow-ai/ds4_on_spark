@@ -135,6 +135,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - introduces the target-suffix verifier API shape required for economical MTP verification:
       `target_suffix_verify(checkpoint_state, draft_tokens[2])`
     - makes the K=2 target suffix verifier the default path: append `draft_tokens[2]`, run the target graph over both suffix positions as one verifier job, compare row0 top-1, and commit the staged target KV for full or prefix-1 accept
+    - adds an opt-in CUDA Q8 output-head top1 primitive (`DS4_MTP_ROW0_TOP1_HEAD=1`) so the verifier can test row0 accept checking without materializing row0 full-vocab logits; row1 remains full logits for continuation
     - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
     - emits verifier invocation/position/head-row accounting so the Spark run proves whether the target suffix verifier is economically cheaper than target-only decode
 
