@@ -1,8 +1,10 @@
 diff --git a/ds4.c b/ds4.c
-index f0f8cc1..bd58a8e 100644
+index f0f8cc1..381f93e 100644
 --- a/ds4.c
 +++ b/ds4.c
-@@ -9956,2 +9956,118 @@ static bool metal_graph_encode_output_head_batch(
+@@ -9954,6 +9954,122 @@ static bool metal_graph_encode_output_head_batch(
+     return ok;
+ }
 
 +static bool metal_graph_encode_output_head_suffix2_top1(
 +        ds4_gpu_graph *g,
@@ -121,7 +123,11 @@ index f0f8cc1..bd58a8e 100644
 +}
 +
  static bool metal_graph_matmul_plain_tensor(
-@@ -13323,8 +13439,17 @@ static bool metal_graph_verify_suffix_tops(
+         ds4_gpu_tensor       *out,
+         const ds4_model        *model,
+@@ -13321,12 +13437,21 @@ static bool metal_graph_verify_suffix_tops(
+     if (!ok) return false;
+
      ok = ds4_gpu_begin_commands() != 0;
 -    if (ok) ok = metal_graph_encode_output_head_batch(g,
 -                                                      model,
@@ -145,7 +151,36 @@ index f0f8cc1..bd58a8e 100644
 +    }
 +    if (ok && !suffix2_top1_head) {
          if (top_rows) {
-@@ -17293,8 +17418,101 @@ int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,
+             ok = ds4_gpu_indexer_topk_tensor(g->comp_selected,
+                                                g->spec_logits,
+@@ -17154,7 +17279,10 @@ int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,
+      * several proposed positions together; running ordinary decode once per
+      * draft token is correctness-safe but cannot be faster than baseline.
+      */
++    const bool mtp_timing = getenv("DS4_MTP_TIMING") != NULL;
++    const double mtp_entry_t0 = mtp_timing ? now_sec() : 0.0;
+     if (ds4_session_eval(s, first_token, err, errlen) != 0) return -1;
++    const double mtp_after_first_eval = mtp_timing ? now_sec() : 0.0;
+     int n_accept = 0;
+     accepted[n_accept++] = first_token;
+     if (first_token == eos_token || max_tokens == 1 || n_accept >= accepted_cap) return n_accept;
+@@ -17180,12 +17308,11 @@ int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,
+         float v = strtof(mtp_margin_env, &end);
+         if (end != mtp_margin_env && v >= 0.0f) mtp_margin_threshold = v;
+     }
+-    const bool mtp_timing = getenv("DS4_MTP_TIMING") != NULL;
+     const bool mtp_conf_log = getenv("DS4_MTP_CONF_LOG") != NULL;
+     const bool mtp_need_logits = mtp_conf_log ||
+         getenv("DS4_MTP_FULL_LOGITS") != NULL ||
+         (!strict_mtp && mtp_margin_threshold > 0.0f);
+-    const double mtp_t0 = mtp_timing ? now_sec() : 0.0;
++    const double mtp_t0 = mtp_after_first_eval;
+     double mtp_t_after_draft = mtp_t0;
+     float mtp_last_margin = 0.0f;
+     int mtp_last_top0 = -1, mtp_last_top1 = -1;
+@@ -17291,12 +17418,108 @@ int ds4_session_eval_speculative_argmax(ds4_session *s, int first_token,
+     }
+
      /*
 -     * The useful N=2 verifier is the tiny batch path: it verifies two target
 -     * positions in one layer-major pass and commits prefix-1 directly on a
@@ -193,14 +228,15 @@ index f0f8cc1..bd58a8e 100644
 +                DS4_MTP_KEEP_ACCEPTED(2);
 +                if (mtp_timing) {
 +                    fprintf(stderr,
-+                            "ds4: mtp timing suffix2 drafted=2 committed=2 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=%d top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=%.3f ms\n",
++                            "ds4: mtp timing suffix2 drafted=2 committed=2 first_eval=%.3f ms draft=%.3f ms snapshot=%.3f ms verify=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=2 target_positions=3 target_calls=2 head_calls=2 head_rows=3 full_vocab_rows=%d top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=%.3f ms\n",
++                            (mtp_after_first_eval - mtp_entry_t0) * 1000.0,
 +                            (mtp_t_after_draft - mtp_t0) * 1000.0,
 +                            (snapshot_done - snapshot_t0) * 1000.0,
 +                            (verify_done - snapshot_done) * 1000.0,
 +                            target_ms,
-+                            row0_top1_head ? 1 : 2,
++                            row0_top1_head ? 2 : 3,
 +                            row0_top1_head ? 1 : 0,
-+                            (now_sec() - mtp_t0) * 1000.0);
++                            (now_sec() - mtp_entry_t0) * 1000.0);
 +                }
 +                free(row_logits);
 +                return n_accept;
@@ -228,16 +264,18 @@ index f0f8cc1..bd58a8e 100644
 +            if (mtp_timing) {
 +                const double done = now_sec();
 +                fprintf(stderr,
-+                        "ds4: mtp timing suffix2 drafted=2 committed=1 draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=%d head_rows=%d full_vocab_rows=2 top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
++                        "ds4: mtp timing suffix2 drafted=2 committed=1 first_eval=%.3f ms draft=%.3f ms snapshot=%.3f ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=2 target_positions=3 target_calls=2 head_calls=%d head_rows=%d full_vocab_rows=%d top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
++                        (mtp_after_first_eval - mtp_entry_t0) * 1000.0,
 +                        (mtp_t_after_draft - mtp_t0) * 1000.0,
 +                        (snapshot_done - snapshot_t0) * 1000.0,
 +                        (verify_done - snapshot_done) * 1000.0,
 +                        (done - verify_done) * 1000.0,
 +                        target_ms,
-+                        row0_top1_head ? 2 : 1,
 +                        row0_top1_head ? 3 : 2,
++                        row0_top1_head ? 4 : 3,
++                        3,
 +                        row0_top1_head ? 1 : 0,
-+                        (done - mtp_t0) * 1000.0);
++                        (done - mtp_entry_t0) * 1000.0);
 +            }
 +            free(row_logits);
 +            return n_accept;
@@ -253,11 +291,15 @@ index f0f8cc1..bd58a8e 100644
 +     * Diagnostic serial verifier. It preserves the one-token target stream but
 +     * should not be selected for speed-path MTP.
       */
+     const bool use_decode2_exact =
+         draft_n == 2 && strict_mtp && getenv("DS4_MTP_BATCH_VERIFY") == NULL;
 diff --git a/ds4_cuda.cu b/ds4_cuda.cu
 index 34c68c7..fc3e42f 100644
 --- a/ds4_cuda.cu
 +++ b/ds4_cuda.cu
-@@ -1750,2 +1750,70 @@ __global__ static void matmul_q8_0_preq_warp8_kernel(
+@@ -1748,6 +1748,74 @@ __global__ static void matmul_q8_0_preq_warp8_kernel(
+     if (lane == 0) out[row] = acc;
+ }
 
 +__global__ static void matmul_q8_0_top1_candidates_kernel(
 +        float *candidate_vals,
@@ -328,7 +370,11 @@ index 34c68c7..fc3e42f 100644
 +}
 +
  __global__ static void matmul_q8_0_pair_preq_warp8_kernel(
-@@ -5098,2 +5166,53 @@ extern "C" int ds4_gpu_matmul_q8_0_tensor(ds4_gpu_tensor *out, const void *model
+         float *out0,
+         float *out1,
+@@ -5096,6 +5164,57 @@ extern "C" int ds4_gpu_matmul_q8_0_tensor(ds4_gpu_tensor *out, const void *model
+                                            in_dim, out_dim, x, n_tok, "q8_0");
+ }
 
 +extern "C" int ds4_gpu_matmul_q8_0_top1_tensor(
 +        ds4_gpu_tensor *selected,
@@ -382,11 +428,15 @@ index 34c68c7..fc3e42f 100644
 +}
 +
  extern "C" int ds4_gpu_matmul_q8_0_pair_tensor(
+         ds4_gpu_tensor *out0,
+         ds4_gpu_tensor *out1,
 diff --git a/ds4_gpu.h b/ds4_gpu.h
 index 799065a..55c778b 100644
 --- a/ds4_gpu.h
 +++ b/ds4_gpu.h
-@@ -140,2 +140,11 @@ int ds4_gpu_matmul_q8_0_tensor(
+@@ -138,6 +138,15 @@ int ds4_gpu_matmul_q8_0_tensor(
+         const ds4_gpu_tensor *x,
+         uint64_t                n_tok);
 
 +int ds4_gpu_matmul_q8_0_top1_tensor(
 +        ds4_gpu_tensor       *selected,
@@ -398,3 +448,5 @@ index 799065a..55c778b 100644
 +        const ds4_gpu_tensor *x);
 +
  int ds4_gpu_shared_gate_up_swiglu_q8_0_tensor(
+         ds4_gpu_tensor       *gate,
+         ds4_gpu_tensor       *up,

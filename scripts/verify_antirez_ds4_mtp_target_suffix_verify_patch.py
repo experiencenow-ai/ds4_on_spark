@@ -18,6 +18,8 @@ def validate_patch_text(text: str) -> list[str]:
 	required = [
 		"const bool use_target_suffix2 =",
 		"draft_n == 2 && getenv(\"DS4_MTP_SERIAL_SUFFIX\") == NULL;",
+		"const double mtp_entry_t0 = mtp_timing ? now_sec() : 0.0;",
+		"const double mtp_after_first_eval = mtp_timing ? now_sec() : 0.0;",
 		"token_vec_push(&s->checkpoint, drafts[0]);",
 		"token_vec_push(&s->checkpoint, drafts[1]);",
 		"metal_graph_verify_suffix_tops(&s->graph",
@@ -28,8 +30,9 @@ def validate_patch_text(text: str) -> list[str]:
 		"DS4_MTP_ROW0_TOP1_HEAD",
 		"metal_graph_materialize_suffix_logits_row(&s->graph",
 		"metal_graph_read_spec_logits_row(&s->graph, 0, row_logits)",
-		"verifier_calls=1 target_positions=2 target_calls=1 head_calls=1",
-		"row0_top1_head ? 1 : 2",
+		"first_eval=%.3f ms",
+		"verifier_calls=2 target_positions=3 target_calls=2 head_calls=2",
+		"row0_top1_head ? 2 : 3",
 		"row0_top1_head ? 1 : 0",
 	]
 	for needle in required:

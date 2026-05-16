@@ -340,20 +340,33 @@ service floor for one output token.
 MTP remains paused as a speed path. The latest accepted-token run is not an
 acceptance failure: baseline greedy is 14.65 t/s, the K=2 target suffix verifier
 measured 2.01 t/s, and acceptance is 21/21. The updated verifier-economics
-artifact blocks the next claim earlier: reported MTP timing covers only about
-10% of the generation wall implied by emitted tokens and measured t/s, so the
-current target/head timings are insufficient to explain the speed loss.
+artifact blocks the next claim earlier: reported MTP timing covered only about
+10% of the generation wall implied by emitted tokens and measured t/s. Source
+inspection found the missing denominator: `--mtp` selects the session/sample
+CLI path, while the no-MTP greedy baseline selects the direct argmax path; the
+MTP per-event timing also started after the mandatory first-token
+`ds4_session_eval()`, so it omitted the dominant target pass paid once per MTP
+group.
 
 The row0 top1-only verifier head was measured as an opt-in experiment
 (`DS4_MTP_ROW0_TOP1_HEAD=1`) and did not improve the speed path: it reduced
 full-vocab rows but dropped MTP draft=2 to 1.59 t/s with 20/22 acceptance.
 
-Exact next MTP code change: add wall-time instrumentation around the full
-speculative generation loop and the CUDA command submission/synchronization
-boundary that is not covered by per-verifier timing. Once coverage is near
-complete, replace the generic tiny-suffix target pass with a specialized K=2
-attention/MoE verifier graph that amortizes two target positions better than
-serial target decode.
+Exact next MTP code change: benchmark against a same-session control
+(`--mtp` loaded, `DS4_MTP_SPEC_DISABLE=1`) and include `first_eval` in suffix2
+timing/accounting. Only after MTP beats that session baseline should the
+comparison return to the faster direct argmax baseline; otherwise the next
+runtime fix is moving speculation onto the direct argmax path or making the
+session path equivalently fast.
+
+The first same-session control confirms the benchmark issue. With the same
+prompt/model/context/seed and `--mtp` loaded, `DS4_MTP_SPEC_DISABLE=1` measured
+1.97 generation t/s. MTP draft=2 measured 1.57 generation t/s with 20/22
+accepted tokens, or 0.797x versus the session baseline and 0.107x versus the
+prior direct-argmax baseline. With `first_eval` accounted, timing coverage is
+near complete and the slowest component is target eval: the current MTP path
+pays two target invocations for roughly three verified/emitted positions, plus
+MTP draft overhead, while starting from a slower session runtime.
 
 The base pipeline now exceeds 250 rows/s and has PP=1/PP=N logits parity.
 Pipeline bubble is effectively gone at B=512/mb16 and transfer is not material.
