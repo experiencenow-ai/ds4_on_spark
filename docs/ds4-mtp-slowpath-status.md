@@ -1,5 +1,24 @@
 # DS4 MTP Slowpath Status
 
+## K=2 direct verifier status
+
+- PR #1125 changes K=2 materially: matched-runtime baseline greedy is 11.02 t/s and MTP draft=2 is 20.55 t/s, a 1.865x speedup, with 84/84 accepted draft tokens and 0 target-next mismatches.
+- The K=2 direct verifier is now a real speed path for the measured group-boundary case (`n_predict=126`, `n_predict % 3 == 0`).
+- Production eligibility is still false until the controlled matrix covers `n_predict={32,64,126,127,128}`, at least short/code/long prompt shapes, and both stdout-style and `DS4_SUPPRESS_OUTPUT=1` runs.
+- Tail cases `n_predict % 3 == 1` and `n_predict % 3 == 2` must produce explicit `ds4-mtp-k2-production-benchmark-v1` artifacts with `tail_acceptance_status=passed`; they must not be inferred from the group-boundary run.
+- Current production artifact validator: `scripts/validate_ds4_mtp_k2_production_benchmark.py`.
+- Current PR #1125 evidence fixture: `fixtures/mtp_k2_production/pr1125_n126_short_instruction_stdout.example.json`.
+
+Production-eligible K=2 requires:
+
+- `target_next_mismatch_events == 0`;
+- `tail_acceptance_status == passed`;
+- no accepted/attempted accounting regression;
+- `benchmark_matrix_status == passed`;
+- `production_eligible == true` only when all of the above gates pass.
+
+## Prior slow verifier status
+
 - accept rate: 21/21 = 1.000000
 - baseline t/s: 14.650000
 - MTP t/s: 2.000000
