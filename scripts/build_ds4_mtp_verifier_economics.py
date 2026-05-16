@@ -57,6 +57,33 @@ def _component(components: dict[str, Any], key: str) -> float:
 	return float(_float_or_none(components.get(key)) or 0.0)
 
 
+def _accounted_timing_ms(timing: dict[str, Any], components: dict[str, Any]) -> float:
+	total = _float_or_none(timing.get("total_reported_ms"))
+	if total is not None and total > 0.0:
+		return float(total)
+	return sum(
+		_component(components, key)
+		for key in (
+			"verifier_replay_ms",
+			"draft_eval_ms",
+			"target_eval_ms",
+			"output_head_ms",
+			"cache_sync_ms",
+			"cuda_sync_ms",
+			"logging_ms",
+			"capture_ms",
+			"token_commit_ms",
+			"scheduler_overhead_ms",
+		)
+	)
+
+
+def _generation_wall_ms(emitted_tokens: int, mtp_tps: Optional[float]) -> Optional[float]:
+	if emitted_tokens <= 0 or mtp_tps is None or float(mtp_tps) <= 0.0:
+		return None
+	return (float(emitted_tokens) / float(mtp_tps)) * 1000.0
+
+
 def _decode2_row_economics(kinds: dict[str, Any], invocations: int, output_head_calls: int) -> tuple[int, int, int]:
 	decode2_events = _int(kinds.get("decode2"))
 	if decode2_events <= 0:
@@ -105,6 +132,14 @@ def build_report_from_lines(
 		output_head_rows, full_vocab_rows, top1_rows = _decode2_row_economics(kinds, invocations, output_head_calls)
 	target_eval_ms = _component(components, "target_eval_ms")
 	output_head_ms = _component(components, "output_head_ms")
+	emitted_tokens = _int(timing.get("emitted_tokens"))
+	generation_wall_ms_est = _generation_wall_ms(emitted_tokens, mtp_tps)
+	accounted_timing_ms = _accounted_timing_ms(timing, components)
+	unaccounted_wall_ms = None
+	timing_coverage_rate = None
+	if generation_wall_ms_est is not None and generation_wall_ms_est > 0.0:
+		unaccounted_wall_ms = max(0.0, float(generation_wall_ms_est) - accounted_timing_ms)
+		timing_coverage_rate = accounted_timing_ms / float(generation_wall_ms_est)
 	slowest = str(timing.get("slowest_component") or "")
 	if slowest == "":
 		slowest = max(((k, _component(components, k)) for k in components), key=lambda kv: kv[1])[0] if components else ""
@@ -114,16 +149,38 @@ def build_report_from_lines(
 		blocker = "missing_measurement"
 		blocker_detail = "baseline_tps and mtp_tps are required to judge verifier economics"
 	elif mtp_tps <= baseline_tps:
-		if invocations > 0 and target_positions > invocations and output_head_calls < target_positions and slowest == "target_eval_ms":
+		if timing_coverage_rate is not None and timing_coverage_rate < 0.5:
+			blocker = "unaccounted_generation_wall_time"
+			blocker_detail = (
+				"MTP %.6f t/s <= baseline %.6f t/s; timing coverage=%.6f accounted_ms=%.3f "
+				"generation_wall_ms_est=%.3f unaccounted_ms=%.3f"
+				% (
+					float(mtp_tps),
+					float(baseline_tps),
+					float(timing_coverage_rate),
+					float(accounted_timing_ms),
+					float(generation_wall_ms_est),
+					float(unaccounted_wall_ms or 0.0),
+				)
+			)
+		elif invocations > 0 and target_positions > invocations and output_head_calls < target_positions and slowest == "target_eval_ms":
 			blocker = "target_verifier_overhead"
+			blocker_detail = (
+				"MTP %.6f t/s <= baseline %.6f t/s; verifier invocations=%d target_positions=%d output_head_invocations=%d"
+				% (float(mtp_tps), float(baseline_tps), invocations, target_positions, output_head_calls)
+			)
 		elif output_head_calls > 0 and output_head_calls < target_positions and slowest == "target_eval_ms":
 			blocker = "target_suffix_verifier_still_serial"
+			blocker_detail = (
+				"MTP %.6f t/s <= baseline %.6f t/s; verifier invocations=%d target_positions=%d output_head_invocations=%d"
+				% (float(mtp_tps), float(baseline_tps), invocations, target_positions, output_head_calls)
+			)
 		else:
 			blocker = "target_output_head_token_for_token"
-		blocker_detail = (
-			"MTP %.6f t/s <= baseline %.6f t/s; verifier invocations=%d target_positions=%d output_head_invocations=%d"
-			% (float(mtp_tps), float(baseline_tps), invocations, target_positions, output_head_calls)
-		)
+			blocker_detail = (
+				"MTP %.6f t/s <= baseline %.6f t/s; verifier invocations=%d target_positions=%d output_head_invocations=%d"
+				% (float(mtp_tps), float(baseline_tps), invocations, target_positions, output_head_calls)
+			)
 	return {
 		"format": FORMAT,
 		"run_id": run_id,
@@ -136,7 +193,11 @@ def build_report_from_lines(
 		"accepted_draft_tokens": accepted,
 		"attempted_draft_tokens": attempted,
 		"accept_rate": accept_rate,
-		"emitted_tokens": _int(timing.get("emitted_tokens")),
+		"emitted_tokens": emitted_tokens,
+		"generation_wall_ms_est": generation_wall_ms_est,
+		"accounted_timing_ms": accounted_timing_ms,
+		"unaccounted_generation_wall_ms": unaccounted_wall_ms,
+		"timing_coverage_rate": timing_coverage_rate,
 		"target_verifier_invocation_count": invocations,
 		"target_positions_verified": target_positions,
 		"target_positions_per_invocation": (float(target_positions) / float(invocations)) if invocations > 0 else None,

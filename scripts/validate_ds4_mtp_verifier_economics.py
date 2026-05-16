@@ -20,6 +20,10 @@ REQUIRED_FIELDS = (
 	"attempted_draft_tokens",
 	"accept_rate",
 	"emitted_tokens",
+	"generation_wall_ms_est",
+	"accounted_timing_ms",
+	"unaccounted_generation_wall_ms",
+	"timing_coverage_rate",
 	"target_verifier_invocation_count",
 	"target_positions_verified",
 	"target_positions_per_invocation",
@@ -92,9 +96,25 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 	output_head_rows = _num(obj.get("output_head_rows"))
 	full_rows = _num(obj.get("full_vocab_logits_rows"))
 	top1_rows = _num(obj.get("top1_only_rows"))
+	emitted_tokens = _num(obj.get("emitted_tokens"))
+	generation_wall_ms = _num(obj.get("generation_wall_ms_est"))
+	accounted_ms = _num(obj.get("accounted_timing_ms"))
+	unaccounted_ms = _num(obj.get("unaccounted_generation_wall_ms"))
+	coverage = _num(obj.get("timing_coverage_rate"))
 	if baseline is not None and mtp is not None and speedup is not None and baseline > 0.0:
 		if abs(speedup - (mtp / baseline)) > 0.000001:
 			errors.append("speedup_vs_baseline must equal mtp_tps / baseline_tps")
+	if emitted_tokens is not None and mtp is not None and generation_wall_ms is not None and mtp > 0.0:
+		expected_wall = (emitted_tokens / mtp) * 1000.0
+		if abs(generation_wall_ms - expected_wall) > 0.001:
+			errors.append("generation_wall_ms_est must equal emitted_tokens / mtp_tps * 1000")
+	if generation_wall_ms is not None and accounted_ms is not None and unaccounted_ms is not None:
+		expected_unaccounted = max(0.0, generation_wall_ms - accounted_ms)
+		if abs(unaccounted_ms - expected_unaccounted) > 0.001:
+			errors.append("unaccounted_generation_wall_ms must equal max(0, generation_wall_ms_est - accounted_timing_ms)")
+	if generation_wall_ms is not None and accounted_ms is not None and coverage is not None and generation_wall_ms > 0.0:
+		if abs(coverage - (accounted_ms / generation_wall_ms)) > 0.000001:
+			errors.append("timing_coverage_rate must equal accounted_timing_ms / generation_wall_ms_est")
 	if accept_rate is not None and accepted is not None and attempted is not None:
 		if attempted <= 0.0:
 			errors.append("accept_rate requires attempted_draft_tokens > 0")
@@ -124,6 +144,8 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		detail = str(obj.get("blocker_detail", "") or "").strip()
 		if blocker == "" or blocker == "none" or detail == "":
 			errors.append("MTP not faster than baseline requires blocker_kind and blocker_detail")
+		if coverage is not None and coverage < 0.5 and blocker != "unaccounted_generation_wall_time":
+			errors.append("MTP not faster with timing_coverage_rate < 0.5 requires blocker_kind=unaccounted_generation_wall_time")
 		if blocker in {"target_suffix_verifier_still_serial", "target_suffix_verifier_not_implemented"}:
 			for field in TARGET_SUFFIX_BLOCKER_FIELDS:
 				if field not in obj:
