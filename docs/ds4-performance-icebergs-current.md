@@ -23,6 +23,27 @@ benchmark yet, so `production_generation_eligible=false`.
 | PP=1 parity | passed on logits for B=512 slice-tile8 |
 | Current primary bottleneck | stage compute, not transfer or pipeline bubble |
 
+## MTP Verifier Economics
+
+The MTP speed path is now on the direct argmax graph route instead of the slower
+session sampling route. The K=2 verifier preloads the MTP sidecar before the
+decode timer, verifies two drafted suffix positions in one target suffix job,
+and uses row0 top1-only output-head work by default.
+
+| Run | n_predict | Baseline t/s | MTP t/s | Speedup | Acceptance | Full-vocab rows | Top1 rows | Slowest component | Artifact |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| Direct K=2 top1 | 32 | 13.65 | 12.90 | 0.945x | 21/22 | 23 | 11 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_direct_k2/20260516T130217Z/mtp_verifier_economics.json` |
+| Direct K=2 top1 | 128 | 6.99 | 7.87 | 1.126x | 74/88 | 102 | 44 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_direct_k2/20260516T130640Z/mtp_verifier_economics.json` |
+
+MTP is no longer an order-of-magnitude slow path: the controlled 128-token run
+is faster than the direct baseline for the same prompt/model/context. It is not
+yet the DeepSeek-style 1.8x path because `target_eval_ms` is still dominant and
+the verifier accounting is `target_positions_per_invocation=1.5`: each K=2
+cycle still pays one ordinary target decode for the committed first token plus
+one suffix verifier job for the two drafted positions. The next exact code
+change is to fuse that mandatory first target decode with the suffix verifier so
+one target invocation verifies/emits the whole K=2+continuation window.
+
 ## B/Depth Probe
 
 The legacy `pipeline_rows_per_s_bound` field is preserved for compatibility.

@@ -130,12 +130,14 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - keeps row replacement disabled for this PR
 
 - `ds4-3630e64-mtp-target-suffix-verify-k2.patch`
-  - Target: `antirez/ds4@3630e64`, applied after the decode2 head-fusion MTP patch
+  - Target: `antirez/ds4@3630e64`, applied after the Q4K sidecar and multi-model cache patches
   - Purpose:
     - introduces the target-suffix verifier API shape required for economical MTP verification:
       `target_suffix_verify(checkpoint_state, draft_tokens[2])`
+    - routes greedy `--mtp` through the direct argmax graph path by default; `DS4_MTP_SESSION=1` keeps the older session verifier path available for diagnostics
     - makes the K=2 target suffix verifier the default path: append `draft_tokens[2]`, run the target graph over both suffix positions as one verifier job, compare row0 top-1, and commit the staged target KV for full or prefix-1 accept
-    - adds an opt-in CUDA Q8 output-head top1 primitive (`DS4_MTP_ROW0_TOP1_HEAD=1`) so the verifier can test row0 accept checking without materializing row0 full-vocab logits; row1 remains full logits for continuation
+    - preloads the MTP sidecar before the decode timer so first-draft lazy tensor caching does not poison generation TPS
+    - uses the CUDA Q8 output-head top1 primitive by default for row0 accept checking; row1 remains full logits for continuation, and `DS4_MTP_ROW0_FULL_LOGITS=1` restores row0 full-vocab logits for A/B testing
     - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
     - emits `first_eval` plus verifier invocation/position/head-row accounting so the Spark run includes the mandatory session target pass paid before suffix verification
 
