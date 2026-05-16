@@ -49,6 +49,15 @@ handling for output lengths that are not divisible by the 3-token
 target/draft/draft group; the first attempted 2-token tail verifier damaged
 acceptance and was not kept.
 
+K selection is not power-of-two constrained. The verifier group needs one
+normal target row plus `K` extra drafted rows, so the scheduler should only
+promote larger K when those extra rows would otherwise be idle. The repo-owned
+`ds4-mtp-k-sweep-v1` fixture classifies `K=3,4,5` against the measured K=2
+reference: `K=3` first fits at 3 idle extra rows, `K=4` first fits at 4, and
+`K=5` first fits at 5. Current runtime support remains K=2 only; the next
+runtime implementation target is `target_suffix_verify_kN` for the smallest
+idle-row bucket that appears frequently in real batch traces.
+
 ## B/Depth Probe
 
 The legacy `pipeline_rows_per_s_bound` field is preserved for compatibility.
