@@ -49,9 +49,14 @@ class StageKernelProfileTest(unittest.TestCase):
 				for record in obj["records"]:
 					self.assertEqual(record["batch_size"], 512)
 					self.assertEqual(record["microbatch_count"], 16)
-					self.assertEqual(record["bottleneck_component"], "gate_up")
-					self.assertGreater(record["gate_up_ms"], record["down_ms"])
-					self.assertGreater(record["total_routed_moe_ms"], 100.0)
+					self.assertIn(record["bottleneck_component"], {"gate_up", "down"})
+					if "slice_tile8" not in path.name:
+						self.assertEqual(record["bottleneck_component"], "gate_up")
+						self.assertGreater(record["gate_up_ms"], record["down_ms"])
+						self.assertGreater(record["total_routed_moe_ms"], 100.0)
+					else:
+						self.assertLess(record["total_routed_moe_ms"], 40.0)
+						self.assertLess(record["gate_up_ms"], 20.0)
 
 
 if __name__ == "__main__":

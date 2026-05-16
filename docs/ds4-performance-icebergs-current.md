@@ -10,11 +10,11 @@ generation: PP=1 parity is not run and `production_generation_eligible=false`.
 
 | Metric | Value |
 | --- | ---: |
-| Best achieved streaming rows/s | 210.999 at B=512, microbatches=16 |
-| Best corrected steady-state bound | 244.270 rows/s at B=1024, microbatches=4 |
-| Best B=512 corrected steady-state bound | 237.492 rows/s |
+| Best achieved streaming rows/s | 631.672 at B=512, microbatches=16 with slice-tile8 gate/up |
+| Best corrected steady-state bound | 741.444 rows/s at B=512, microbatches=16 with slice-tile8 gate/up |
+| Best B=512 corrected steady-state bound | 741.444 rows/s |
 | Exceeds 15 rows/s | true |
-| Exceeds 250 rows/s | false |
+| Exceeds 250 rows/s | true |
 | PP=1 parity | not run |
 | Current primary bottleneck | stage compute, not transfer or pipeline bubble |
 
@@ -27,7 +27,8 @@ which treats stage compute and TCP transfers as separate overlapped resources.
 | Batch | Microbatches | Achieved rows/s | Legacy bound | Corrected steady bound | Bubble | Slowest stage | Stage balance | Max transfer ms | Final logits hash | Status |
 | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | --- |
 | 512 | 8 | 188.506 | 189.717 | 237.966 | 0.006 | stage0, 2,151.565 ms | 1.124 | 64.023 | `fnv64:5c9c39e9a1665737` | finite |
-| 512 | 16 | 209.036 | 191.615 | 237.492 | 0.000 | stage0, 2,155.858 ms | 1.100 | 241.836 | `fnv64:5c9c39e9a1665737` | finite, current best |
+| 512 | 16 | 209.036 | 191.615 | 237.492 | 0.000 | stage0, 2,155.858 ms | 1.100 | 241.836 | `fnv64:5c9c39e9a1665737` | finite, old baseline |
+| 512 | 16 | 631.672 | 452.208 | 741.444 | 0.000 | stage0, 690.545 ms | 1.108 | 354.814 | `fnv64:5c9c39e9a1665737` | finite, slice-tile8 gate/up |
 | 1024 | 4 | 156.443 | 198.484 | 244.270 | 0.269 | stage0, 4,192.088 ms | 1.084 | 120.796 | `fnv64:c5078c09143550f8` | finite, does not improve |
 
 B=1024 did not hit a memory or residency failure, but it did not improve over
@@ -112,25 +113,49 @@ does improve.
 | --- | ---: | ---: | --- | ---: | --- | --- |
 | Default | 209.036 | 237.492 | stage0 | 2,155.858 | `fnv64:5c9c39e9a1665737` | baseline |
 | TILE4 | 209.950 | 237.812 | stage0 | 2,152.962 | `fnv64:5c9c39e9a1665737` | tiny env-only gain |
-| P2 skip aux writes | 210.999 | 237.992 | stage0 | 2,151.329 | `fnv64:5c9c39e9a1665737` | current best |
+| P2 skip aux writes | 210.999 | 237.992 | stage0 | 2,151.329 | `fnv64:5c9c39e9a1665737` | previous best |
+
+## Slice-Tile8 Gate/Up
+
+The P2 inner profile showed the expert queue itself is not the bottleneck:
+layer 2 queue build was 0.020 ms and pointer/descriptor setup was 0.034 ms,
+while gate/up was 117.682 ms. The next bounded patch therefore adds a
+slice-aware tile8 gate/up path, enabled with `DS4_CUDA_MOE_SLICE_TILE8=1`, so
+batched expert slices can reuse one expert row across up to eight queued pairs.
+Down projection remains on the existing P2 slices path.
+
+| Layer | Queue ms | Pointer ms | Gate/up ms | Quantize ms | Down ms | Accum ms | Total ms | Bottleneck |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 0.043 | 0.037 | 18.784 | 0.248 | 16.738 | 0.321 | 36.171 | gate/up |
+| 1 | 0.043 | 0.036 | 18.592 | 0.256 | 16.777 | 0.323 | 36.026 | gate/up |
+| 2 | 0.043 | 0.038 | 18.738 | 0.247 | 16.744 | 0.322 | 36.132 | gate/up |
+| 3 | 0.043 | 0.015 | 14.144 | 0.251 | 14.531 | 0.331 | 29.314 | down |
+| 14 | 0.043 | 0.020 | 14.186 | 0.252 | 14.664 | 0.330 | 29.495 | down |
+
+| Run | Achieved rows/s | Corrected steady bound | Slowest stage | Slowest service ms | Hash | Read |
+| --- | ---: | ---: | --- | ---: | --- | --- |
+| Default | 209.036 | 237.492 | stage0 | 2,155.858 | `fnv64:5c9c39e9a1665737` | baseline |
+| P2 skip aux writes | 210.999 | 237.992 | stage0 | 2,151.329 | `fnv64:5c9c39e9a1665737` | previous best |
+| Slice-tile8 gate/up | 631.672 | 741.444 | stage0 | 690.545 | `fnv64:5c9c39e9a1665737` | current best |
 
 ## Current Blocker
 
-The base pipeline still did not reach 250 rows/s. Pipeline bubble is
-effectively gone at B=512/mb16 and transfer is not material. The current
-bottleneck is stage0 P2 routed MoE gate/up compute, with layer 2 gate/up at
-roughly 117.7 ms of 135.1 ms total routed MoE.
+The base pipeline now exceeds 250 rows/s. Pipeline bubble is effectively gone
+at B=512/mb16 and transfer is not material. The slice-tile8 gate/up path cut
+stage0 service time from about 2,151 ms to about 691 ms, shifting the next
+kernel target from gate/up alone to the remaining routed-MoE projection work:
+down projection is now comparable to gate/up on the clumpier profiled layers.
 
-Exact next code change: optimize the P2 gate/up dot kernel itself, or replace
-the P2 gate/up path with a correctly slice-aware expert-tile gate/up kernel.
-Queue build, pointer-table setup, down, and accumulation are not the primary
-limit.
+Exact next code change: add a slice-aware down-tile/direct-accumulate path to
+pair with slice-tile8 gate/up, then decide whether to make slice-tile8 the
+default after PP=1 parity or a stronger local parity check covers the new path.
 
 Latest handoff artifacts:
 
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_tile4.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_skipaux.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8.example.json`
 - `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4.example.json`
 - `fixtures/stage_handoff/spark012_split_014_028_043_b512_mb8.example.json`
 - `fixtures/stage_handoff/spark012_split_014_029_043_b512_mb8.example.json`
@@ -144,3 +169,4 @@ Latest kernel-profile artifacts:
 - `fixtures/stage_kernel_profile/spark0_moe_variant_sweep_b512.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_before.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_skipaux.example.json`
+- `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_slice_tile8.example.json`

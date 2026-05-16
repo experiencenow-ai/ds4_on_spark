@@ -26,6 +26,7 @@ VARIANTS = {
 	"tile4": {"DS4_CUDA_MOE_TILE4": "1"},
 	"down_block16": {"DS4_CUDA_MOE_DOWN_BLOCK16": "1"},
 	"no_p2": {"DS4_CUDA_MOE_NO_P2": "1"},
+	"slice_tile8": {"DS4_CUDA_MOE_SLICE_TILE8": "1"},
 }
 
 
@@ -109,6 +110,18 @@ def env_prefix(extra: dict[str, str]) -> str:
 	items = dict(BASE_ENV)
 	items.update(extra)
 	return " ".join(f"{k}={q(v)}" for k, v in items.items())
+
+
+def parse_extra_env(items: list[str]) -> dict[str, str]:
+	env: dict[str, str] = {}
+	for item in items:
+		if "=" not in item:
+			raise SystemExit(f"error: --extra-env requires KEY=VALUE, got {item!r}")
+		key, value = item.split("=", 1)
+		if not key or any(not (c.isalnum() or c == "_") for c in key):
+			raise SystemExit(f"error: invalid --extra-env key {key!r}")
+		env[key] = value
+	return env
 
 
 def run_probe(stage: Stage, args: argparse.Namespace, layer: int, part: str, variant: str, extra: dict[str, str], outdir: Path) -> dict[str, Any]:
@@ -252,7 +265,10 @@ def main() -> int:
 	ap.add_argument("--batch", type=int, default=512)
 	ap.add_argument("--iterations", type=int, default=3)
 	ap.add_argument("--known-hosts", default="/private/tmp/ds4_spark_known_hosts")
+	ap.add_argument("--extra-env", action="append", default=[], help="Extra KEY=VALUE environment for every probe.")
+	ap.add_argument("--variant-name", default="", help="Variant label for moe-p2-inner-profile with --extra-env.")
 	args = ap.parse_args()
+	args.extra_env = parse_extra_env(args.extra_env)
 	outdir = Path(args.out_dir or f"/private/tmp/{args.run_id}")
 	outdir.mkdir(parents=True, exist_ok=True)
 	stages = select_stages(args)
@@ -268,8 +284,11 @@ def main() -> int:
 				for layer in layers:
 					rows.append(run_probe(stage, args, layer, "moe", variant, extra, outdir))
 		else:
+			p2_extra = {"DS4_CUDA_MOE_P2_INNER_PROFILE": "1"}
+			p2_extra.update(args.extra_env)
+			variant = args.variant_name or "p2_inner"
 			for layer in layers:
-				rows.append(run_probe(stage, args, layer, "moe", "p2_inner", {"DS4_CUDA_MOE_P2_INNER_PROFILE": "1"}, outdir))
+				rows.append(run_probe(stage, args, layer, "moe", variant, p2_extra, outdir))
 	if args.mode == "moe-p2-inner-profile":
 		artifact = build_inner_profile_artifact(args, stages, rows)
 	else:
