@@ -290,10 +290,18 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 		if CUDA_LOADING_RE.search(line) is not None:
 			cuda_loading_lines += 1
 
+	timing_acceptance = [
+		ev for ev in timing_events
+		if str(ev.kind) == "suffix2" and "drafted" in ev.values and "committed" in ev.values
+	]
 	committed_hist = Counter(int(ev.committed) for ev in conf_events if int(ev.committed) >= 0)
+	for ev in timing_acceptance:
+		committed_hist[_timing_int(ev.values, "committed")] += 1
 
 	accepted = sum(int(ev.committed) for ev in conf_events if int(ev.committed) >= 0)
+	accepted += sum(_timing_int(ev.values, "committed") for ev in timing_acceptance)
 	attempted = sum(int(ev.drafted) for ev in conf_events if int(ev.drafted) >= 0) + int(len(miss_first_events))
+	attempted += sum(_timing_int(ev.values, "drafted") for ev in timing_acceptance)
 	accept_rate = (float(accepted) / float(attempted)) if attempted > 0 else None
 
 	target_next_mismatch = 0
@@ -310,6 +318,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 		"counts": {
 			"conf_events": int(len(conf_events)),
 			"miss_first_events": int(len(miss_first_events)),
+			"timing_acceptance_events": int(len(timing_acceptance)),
 		},
 		"totals": {
 			"draft_tokens_attempted_est": int(attempted),
@@ -335,7 +344,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 	}
 
 	# If we didn't find any acceptance-related records, treat this as not-ok.
-	if len(conf_events) == 0 and len(miss_first_events) == 0:
+	if len(conf_events) == 0 and len(miss_first_events) == 0 and len(timing_acceptance) == 0:
 		out["ok"] = False
 		out["errors"] = [
 			"no mtp conf or mtp spec miss first events found; enable DS4_MTP_CONF_LOG=1 and capture stderr",

@@ -114,7 +114,9 @@ def build_report_from_lines(
 		blocker = "missing_measurement"
 		blocker_detail = "baseline_tps and mtp_tps are required to judge verifier economics"
 	elif mtp_tps <= baseline_tps:
-		if output_head_calls > 0 and output_head_calls < target_positions and slowest == "target_eval_ms":
+		if invocations > 0 and target_positions > invocations and output_head_calls < target_positions and slowest == "target_eval_ms":
+			blocker = "target_verifier_overhead"
+		elif output_head_calls > 0 and output_head_calls < target_positions and slowest == "target_eval_ms":
 			blocker = "target_suffix_verifier_still_serial"
 		else:
 			blocker = "target_output_head_token_for_token"
