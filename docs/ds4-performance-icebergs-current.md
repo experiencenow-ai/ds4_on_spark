@@ -159,18 +159,42 @@ finite and hash-stable, but it regresses the down projection and full pipeline.
 | Slice-tile8 gate/up | 631.672 | 741.444 | stage0 | 690.545 | `fnv64:5c9c39e9a1665737` | current best |
 | Slice-tile8 + slice-down-tile8 | 559.396 | 659.235 | stage0 | 776.658 | `fnv64:5c9c39e9a1665737` | rejected, down got slower |
 
+## Direct Sum6 Down Attempt
+
+A narrower direct top-6 accumulation path was tested with
+`DS4_CUDA_MOE_SLICE_TILE8=1` and `DS4_CUDA_MOE_DIRECT_SUM6_DOWN=1`. The intent
+was to skip materializing six separate down rows and the follow-up sum kernel.
+The sum step disappeared, but the slot-serial down kernel was much slower than
+the existing P2 slices down path.
+
+| Layer | Gate/up ms | Down ms before | Down ms direct-sum6 | Accum ms direct-sum6 | Total ms direct-sum6 | Bottleneck |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0 | 18.774 | 16.436 | 62.954 | 0.001 | 82.038 | down |
+| 1 | 18.641 | 16.786 | 63.396 | 0.001 | 82.351 | down |
+| 2 | 18.795 | 16.809 | 63.362 | 0.001 | 82.468 | down |
+| 3 | 14.041 | 14.563 | 57.148 | 0.001 | 71.478 | down |
+| 14 | 14.117 | 14.653 | 62.919 | 0.001 | 77.325 | down |
+
+| Run | Achieved rows/s | Corrected steady bound | Slowest stage | Slowest service ms | Hash | Read |
+| --- | ---: | ---: | --- | ---: | --- | --- |
+| Slice-tile8 gate/up | 631.672 | 741.444 | stage0 | 690.545 | `fnv64:5c9c39e9a1665737` | current best |
+| Slice-tile8 + direct-sum6 down | 408.047 | 467.907 | stage0 | 1,094.234 | `fnv64:5c9c39e9a1665737` | rejected, down got much slower |
+
 ## Current Blocker
 
 The base pipeline now exceeds 250 rows/s. Pipeline bubble is effectively gone
 at B=512/mb16 and transfer is not material. The slice-tile8 gate/up path cut
 stage0 service time from about 2,151 ms to about 691 ms. The first slice-down
 tile attempt did not help: it raised layer 2 down from about 16.8 ms to about
-21.2 ms and dropped the full pipeline from 631.672 to 559.396 rows/s.
+21.2 ms and dropped the full pipeline from 631.672 to 559.396 rows/s. The
+direct-sum6 attempt is worse: it serializes six down projections per row,
+raises layer 2 down to about 63.4 ms, and drops the full pipeline to
+408.047 rows/s.
 
 Exact next code change: keep the slice-tile8 gate/up path, do not enable
-slice-down-tile8, and target either a direct sum6-style down accumulation for
-batched top-6 rows or a lower-register-pressure down tile that beats the
-existing P2 slices down kernel before retesting full pipeline speed.
+slice-down-tile8 or direct-sum6 down, and target the existing P2 slices down
+kernel directly: reduce its q2 dot/register pressure or add a lower-register
+tile that preserves parallelism across top-6 slots instead of serializing them.
 
 Latest handoff artifacts:
 
@@ -179,6 +203,7 @@ Latest handoff artifacts:
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_skipaux.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8.example.json`
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_down_tile8.example.json`
+- `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_direct_sum6_down.example.json`
 - `fixtures/stage_handoff/spark012_b1024_tcp_resident_mb4.example.json`
 - `fixtures/stage_handoff/spark012_split_014_028_043_b512_mb8.example.json`
 - `fixtures/stage_handoff/spark012_split_014_029_043_b512_mb8.example.json`
@@ -193,4 +218,6 @@ Latest kernel-profile artifacts:
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_before.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_skipaux.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_slice_tile8.example.json`
+- `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_slice_tile8_presum6.example.json`
 - `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_slice_down_tile8.example.json`
+- `fixtures/moe_p2_inner_profile/spark0_p2_inner_b512_mb16_direct_sum6_down.example.json`

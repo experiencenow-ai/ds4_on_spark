@@ -50,7 +50,11 @@ class StageKernelProfileTest(unittest.TestCase):
 					self.assertEqual(record["batch_size"], 512)
 					self.assertEqual(record["microbatch_count"], 16)
 					self.assertIn(record["bottleneck_component"], {"gate_up", "down"})
-					if "slice_down_tile8" in path.name:
+					if "direct_sum6_down" in path.name:
+						self.assertEqual(record["bottleneck_component"], "down")
+						self.assertGreater(record["down_ms"], 50.0)
+						self.assertLess(record["accumulate_or_scatter_ms"], 0.01)
+					elif "slice_down_tile8" in path.name:
 						self.assertLess(record["total_routed_moe_ms"], 45.0)
 						self.assertGreater(record["down_ms"], 17.0)
 					elif "slice_tile8" not in path.name:
