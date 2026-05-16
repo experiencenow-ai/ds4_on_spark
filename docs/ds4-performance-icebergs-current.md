@@ -313,6 +313,28 @@ Artifacts:
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_8_token_kv_loop_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_unique_prefix_control_blocked_20260516.example.json`
 
+## Interactive Small-B Full-Vocab
+
+Small-B full-vocab independent rows do not inherit the B=512 constrained lane.
+The current 3-stage batch-stack hook fails at B=1/B=2, then produces finite
+full-vocab committed IDs at B=4/B=8/B=16 but stays far below the single-stream
+class because the full model body dominates the one-token request.
+
+| Case | Prompt shape | Aggregate tok/s | Per-row tok/s | Token hash | Blocker |
+| --- | --- | ---: | ---: | --- | --- |
+| B=1 | independent rows | 0.000 | 0.000 | not_available | stage_or_transfer_failure |
+| B=2 | independent rows | 0.000 | 0.000 | not_available | stage_or_transfer_failure |
+| B=4 | independent rows | 2.893 | 0.723 | fnv64:912e1ddd1cf6ec2b | none |
+| B=8 | independent rows | 5.696 | 0.712 | fnv64:cd4efbe9701bf84b | none |
+| B=16 | independent rows | 10.420 | 0.651 | fnv64:b576f4c271327b97 | none |
+| B=4 control | single combined prompt, B=1 shape | 0.000 | 0.000 | not_available | stage_or_transfer_failure |
+
+B=4 independent rows do not approach 4x the ~14-15 tok/s single-stream class;
+they reach only 2.893 aggregate tok/s in this full-vocab batch-stack path. The
+next exact runtime target for interactive free-form work is a resident small-B
+decode path that supports B=1/B=2 and avoids paying a roughly 0.45-0.64 s stage
+service floor for one output token.
+
 ## Current Blocker
 
 MTP remains paused as a speed path. The latest accepted-token run is not an
