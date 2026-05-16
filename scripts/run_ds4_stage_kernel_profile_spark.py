@@ -27,6 +27,7 @@ VARIANTS = {
 	"down_block16": {"DS4_CUDA_MOE_DOWN_BLOCK16": "1"},
 	"no_p2": {"DS4_CUDA_MOE_NO_P2": "1"},
 	"slice_tile8": {"DS4_CUDA_MOE_SLICE_TILE8": "1"},
+	"slice_down_tile8": {"DS4_CUDA_MOE_SLICE_TILE8": "1", "DS4_CUDA_MOE_SLICE_DOWN_TILE8": "1"},
 }
 
 
