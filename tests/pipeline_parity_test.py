@@ -1,9 +1,12 @@
 import copy
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from scripts import ds4_local_ppn_parity_probe as local_ppn
+from scripts import compare_ds4_pp1_ppn_outputs as output_compare
 from scripts import ds4_pipeline_telemetry as telemetry
 from scripts import validate_ds4_pipeline_parity as parity
 
@@ -128,6 +131,62 @@ class PipelineParityTest(unittest.TestCase):
         errors = parity.validate_artifact(artifact)
         self.assertTrue(any("quality_parity_eligible requires" in item for item in errors))
         self.assertFalse(parity.is_quality_parity_pass(artifact))
+
+    def test_output_compare_passes_matching_hash_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            pp1_path = root / "pp1.json"
+            ppn_path = root / "ppn.json"
+            common = [
+                "--comparison-kind",
+                "logits",
+                "--input-text",
+                "fixture:unit",
+                "--optimized-kernel-flag",
+                "DS4_CUDA_MOE_SLICE_TILE8=1",
+                "--output-hash",
+                "fnv64:1234567890abcdef",
+            ]
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(output_compare.main(["export-from-hash", "--export-role", "pp1", "--out", str(pp1_path), *common]), 0)
+                self.assertEqual(output_compare.main(["export-from-hash", "--export-role", "ppn", "--out", str(ppn_path), "--stage-count", "3", "--layer-ranges", '[{"stage_id":0,"start":0,"end":15},{"stage_id":1,"start":15,"end":29},{"stage_id":2,"start":29,"end":43,"include_head":true}]', "--boundary-after-layers", "[14,28]", *common]), 0)
+            args = type("Args", (), {})()
+            args.pp1_export = str(pp1_path)
+            args.ppn_export = str(ppn_path)
+            args.parity_run_id = "unit-pp1-ppn-match"
+            args.parity_scope = "cross_spark_ppn"
+            args.comparison_kind = "logits"
+            args.quality_parity_eligible = True
+            args.provider_id = "spark-ring-dsv4-layer-pipeline"
+            args.pipeline_id = "unit-compare"
+            args.tokenizer_sha256 = ""
+            args.tokenizer_id = "deepseek-v4-flash-tokenizer"
+            args.tokenizer_hash_status = "not_available"
+            artifact = output_compare.build_parity(args)
+            self.assertEqual(parity.validate_artifact(artifact), [])
+            self.assertEqual(artifact["parity_status"], "passed")
+            self.assertTrue(parity.is_quality_parity_pass(artifact))
+
+    def test_output_compare_blocks_without_pp1_export(self) -> None:
+        ppn = output_compare.load_json(Path("fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json"))
+        self.assertEqual(output_compare.validate_export(ppn), [])
+        args = type("Args", (), {})()
+        args.pp1_export = ""
+        args.ppn_export = "fixtures/pipeline_outputs/dsv4_slice_tile8_ppn_output_export_20260516.example.json"
+        args.parity_run_id = "unit-missing-pp1"
+        args.parity_scope = "cross_spark_ppn"
+        args.comparison_kind = "logits"
+        args.quality_parity_eligible = True
+        args.provider_id = "spark-ring-dsv4-layer-pipeline"
+        args.pipeline_id = "unit-compare"
+        args.tokenizer_sha256 = ""
+        args.tokenizer_id = "deepseek-v4-flash-tokenizer"
+        args.tokenizer_hash_status = "not_available"
+        artifact = output_compare.build_parity(args)
+        self.assertEqual(parity.validate_artifact(artifact), [])
+        self.assertEqual(artifact["parity_status"], "not_run")
+        self.assertFalse(artifact["quality_parity_eligible"])
+        self.assertIn("PP=1 final-output export is missing", artifact["blocker_detail"])
 
     def test_telemetry_not_run_remains_valid_without_parity_artifact(self) -> None:
         obj = telemetry.load_json(TEL / "spark_layer_pipeline_run_not_run.example.json")
