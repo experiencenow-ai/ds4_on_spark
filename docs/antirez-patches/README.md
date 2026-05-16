@@ -134,10 +134,9 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
   - Purpose:
     - introduces the target-suffix verifier API shape required for economical MTP verification:
       `target_suffix_verify(checkpoint_state, draft_tokens[2])`
-    - routes the current exact decode2 verifier through `target_suffix_verify_k2(...)`
-    - preserves strict K=2 correctness while making target/top1/logits/KV staging ownership explicit
-    - batches the verifier output head into one call, reads row0 logits only on partial accept, and avoids the full-frontier snapshot on the full-accept path
-    - still leaves MTP paused as a speed path until the target trunk verifier itself becomes a true batched suffix pass
+    - makes the K=2 target suffix verifier the default path: append `draft_tokens[2]`, run the target graph over both suffix positions as one verifier job, compare row0 top-1, and commit the staged target KV for full or prefix-1 accept
+    - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
+    - emits verifier invocation/position/head-row accounting so the Spark run proves whether the target suffix verifier is economically cheaper than target-only decode
 
 - `ds4-3630e64-cuda-b512-row-token-input.patch`
   - Target: `antirez/ds4@3630e64`, applied after the token-commit profile/constrained patch

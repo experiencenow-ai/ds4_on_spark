@@ -13,7 +13,7 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 
 	def test_rejects_missing_suffix_api(self) -> None:
 		errors = verify.validate_patch_text("+draft_n == 4\n")
-		self.assertTrue(any("ds4_mtp_decode2_stats" in item for item in errors))
+		self.assertTrue(any("use_target_suffix2" in item for item in errors))
 		self.assertTrue(any("forbidden" in item for item in errors))
 
 
