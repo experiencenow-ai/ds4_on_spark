@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 FIX = Path("fixtures/stage_kernel_profile")
+P2_FIX = Path("fixtures/moe_p2_inner_profile")
 
 
 class StageKernelProfileTest(unittest.TestCase):
@@ -36,6 +37,21 @@ class StageKernelProfileTest(unittest.TestCase):
 		default_best = min(float(row["best_ms"]) for row in by_variant["default"])
 		no_p2_best = min(float(row["best_ms"]) for row in by_variant["no_p2"])
 		self.assertGreater(no_p2_best, default_best * 1.5)
+
+	def test_p2_inner_profile_fixtures_identify_gate_up(self) -> None:
+		for path in sorted(P2_FIX.glob("*.json")):
+			with self.subTest(path=path.name):
+				obj = json.loads(path.read_text(encoding="utf-8"))
+				self.assertEqual(obj["format"], "ds4-moe-p2-inner-profile-v1")
+				self.assertFalse(obj["production_generation_eligible"])
+				self.assertEqual(obj["parity_status"], "not_run")
+				self.assertGreaterEqual(len(obj["records"]), 5)
+				for record in obj["records"]:
+					self.assertEqual(record["batch_size"], 512)
+					self.assertEqual(record["microbatch_count"], 16)
+					self.assertEqual(record["bottleneck_component"], "gate_up")
+					self.assertGreater(record["gate_up_ms"], record["down_ms"])
+					self.assertGreater(record["total_routed_moe_ms"], 100.0)
 
 
 if __name__ == "__main__":

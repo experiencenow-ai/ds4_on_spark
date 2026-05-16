@@ -69,6 +69,32 @@ def parse_last_json(text: str) -> dict[str, Any]:
 	raise ValueError("no JSON object found")
 
 
+def parse_inner_events(text: str) -> list[dict[str, Any]]:
+	events: list[dict[str, Any]] = []
+	prefix = "ds4: CUDA MoE P2 inner profile "
+	for line in text.splitlines():
+		line = line.strip()
+		if not line.startswith(prefix):
+			continue
+		raw = line[len(prefix):]
+		events.append(json.loads(raw))
+	return events
+
+
+def bottleneck_component(row: dict[str, Any]) -> str:
+	items = [
+		("queue_build", float(row.get("queue_build_ms", 0.0) or 0.0)),
+		("pointer_table_or_descriptor", float(row.get("pointer_table_or_descriptor_ms", 0.0) or 0.0)),
+		("gate_up", float(row.get("gate_up_ms", 0.0) or 0.0)),
+		("activation_or_quantize", float(row.get("activation_or_quantize_ms", 0.0) or 0.0)),
+		("down", float(row.get("down_ms", 0.0) or 0.0)),
+		("accumulate_or_scatter", float(row.get("accumulate_or_scatter_ms", 0.0) or 0.0)),
+		("layout_copy", float(row.get("layout_copy_ms", 0.0) or 0.0)),
+		("cuda_sync", float(row.get("cuda_sync_ms", 0.0) or 0.0)),
+	]
+	return max(items, key=lambda item: item[1])[0]
+
+
 def part_flag(part: str) -> str:
 	if part == "layer":
 		return "--cuda-layer-probe"
@@ -116,6 +142,12 @@ def run_probe(stage: Stage, args: argparse.Namespace, layer: int, part: str, var
 	except Exception as e:
 		item["parse_error"] = str(e)
 		item["stderr_tail"] = "\n".join((rc.stderr or "").splitlines()[-8:])
+	try:
+		events = parse_inner_events(rc.stderr or "")
+		if events:
+			item["p2_inner_events"] = events
+	except Exception as e:
+		item["p2_inner_parse_error"] = str(e)
 	return item
 
 
@@ -164,13 +196,59 @@ def selected_layers(stage: Stage, args: argparse.Namespace) -> list[int]:
 	return list(range(stage.layer_begin, stage.layer_end))
 
 
+def build_inner_profile_artifact(args: argparse.Namespace, stages: list[Stage], rows: list[dict[str, Any]]) -> dict[str, Any]:
+	records: list[dict[str, Any]] = []
+	for row in rows:
+		events = row.get("p2_inner_events")
+		if not isinstance(events, list) or not events:
+			continue
+		best = min(events, key=lambda item: float(item.get("total_routed_moe_ms", 1.0e30) or 1.0e30))
+		record = {
+			"stage_id": row["stage"],
+			"layer_id": row["layer"],
+			"batch_size": args.batch,
+			"microbatch_count": args.iterations,
+			"active_expert_count": row.get("active_experts", 0),
+			"pair_count": row.get("pairs", best.get("pair_count", 0)),
+			"mean_queue_depth": row.get("mean_queue_depth", 0.0),
+			"max_queue_depth": row.get("max_queue_depth", 0),
+			"queue_build_ms": best.get("queue_build_ms", 0.0),
+			"pointer_table_or_descriptor_ms": best.get("pointer_table_or_descriptor_ms", 0.0),
+			"gate_up_ms": best.get("gate_up_ms", 0.0),
+			"activation_or_quantize_ms": best.get("activation_or_quantize_ms", 0.0),
+			"down_ms": best.get("down_ms", 0.0),
+			"accumulate_or_scatter_ms": best.get("accumulate_or_scatter_ms", 0.0),
+			"layout_copy_ms": best.get("layout_copy_ms", 0.0),
+			"cuda_sync_ms": best.get("cuda_sync_ms", 0.0),
+			"total_routed_moe_ms": best.get("total_routed_moe_ms", 0.0),
+			"bottleneck_component": bottleneck_component(best),
+			"event_count": len(events),
+			"events": events,
+			"out_fnv64": row.get("out_fnv64", ""),
+			"out_nonfinite": row.get("out_nonfinite", 0),
+		}
+		records.append(record)
+	return {
+		"format": "ds4-moe-p2-inner-profile-v1",
+		"run_id": args.run_id,
+		"stage_count": len(stages),
+		"stages": [{"stage": s.name, "layer_range": [s.layer_begin, s.layer_end]} for s in stages],
+		"batch_size": args.batch,
+		"microbatch_count": args.iterations,
+		"production_generation_eligible": False,
+		"parity_status": "not_run",
+		"records": records,
+		"raw_rows": rows,
+	}
+
+
 def main() -> int:
 	ap = argparse.ArgumentParser()
 	ap.add_argument("--run-id", default=f"ds4-stage-kernel-profile-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}")
 	ap.add_argument("--out-dir", default="")
 	ap.add_argument("--stage", choices=["all", "spark0", "spark1", "spark2"], default="all")
 	ap.add_argument("--layers", default="", help="Comma-separated layer override for every selected stage.")
-	ap.add_argument("--mode", choices=["stage-profile", "moe-variant-sweep"], default="stage-profile")
+	ap.add_argument("--mode", choices=["stage-profile", "moe-variant-sweep", "moe-p2-inner-profile"], default="stage-profile")
 	ap.add_argument("--batch", type=int, default=512)
 	ap.add_argument("--iterations", type=int, default=3)
 	ap.add_argument("--known-hosts", default="/private/tmp/ds4_spark_known_hosts")
@@ -185,24 +263,30 @@ def main() -> int:
 			for layer in layers:
 				for part in ["layer", "ffn", "moe"]:
 					rows.append(run_probe(stage, args, layer, part, "default", {}, outdir))
-		else:
+		elif args.mode == "moe-variant-sweep":
 			for variant, extra in VARIANTS.items():
 				for layer in layers:
 					rows.append(run_probe(stage, args, layer, "moe", variant, extra, outdir))
-	summaries = [summarize_stage(stage, rows, args.batch) for stage in stages] if args.mode == "stage-profile" else []
-	artifact = {
-		"format": "ds4-stage-kernel-profile-v1",
-		"run_id": args.run_id,
-		"mode": args.mode,
-		"batch_size": args.batch,
-		"iterations": args.iterations,
-		"stage_count": len(stages),
-		"stages": [{"stage": s.name, "layer_range": [s.layer_begin, s.layer_end]} for s in stages],
-		"production_generation_eligible": False,
-		"parity_status": "not_run",
-		"rows": rows,
-		"stage_summaries": summaries,
-	}
+		else:
+			for layer in layers:
+				rows.append(run_probe(stage, args, layer, "moe", "p2_inner", {"DS4_CUDA_MOE_P2_INNER_PROFILE": "1"}, outdir))
+	if args.mode == "moe-p2-inner-profile":
+		artifact = build_inner_profile_artifact(args, stages, rows)
+	else:
+		summaries = [summarize_stage(stage, rows, args.batch) for stage in stages] if args.mode == "stage-profile" else []
+		artifact = {
+			"format": "ds4-stage-kernel-profile-v1",
+			"run_id": args.run_id,
+			"mode": args.mode,
+			"batch_size": args.batch,
+			"iterations": args.iterations,
+			"stage_count": len(stages),
+			"stages": [{"stage": s.name, "layer_range": [s.layer_begin, s.layer_end]} for s in stages],
+			"production_generation_eligible": False,
+			"parity_status": "not_run",
+			"rows": rows,
+			"stage_summaries": summaries,
+		}
 	(outdir / "summary.json").write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 	print(json.dumps(artifact, indent=2, sort_keys=True))
 	return 0 if all(int(r.get("returncode", 1)) == 0 and "parse_error" not in r for r in rows) else 2
