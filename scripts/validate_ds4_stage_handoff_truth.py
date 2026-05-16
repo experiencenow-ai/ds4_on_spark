@@ -181,6 +181,17 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 								errors.append(f"token_commit_profile {key} length must match microbatch_count")
 							elif not all(isinstance(v, (int, float)) and v >= 0 for v in values):
 								errors.append(f"token_commit_profile {key} must contain non-negative numbers")
+		if "row_token_input" in obj:
+			if not isinstance(obj.get("row_token_input"), bool):
+				errors.append("row_token_input must be boolean when present")
+			if obj.get("row_token_input") is True:
+				if obj.get("row_token_count") != batch:
+					errors.append("row_token_count must match batch_size when row_token_input=true")
+				if not isinstance(obj.get("row_token_ids_sha256"), str) or not obj.get("row_token_ids_sha256", "").startswith("sha256:"):
+					errors.append("row_token_ids_sha256 must be sha256 when row_token_input=true")
+				compact = obj.get("compact_suffix_token_ids")
+				if not isinstance(compact, list) or not compact or not all(isinstance(v, int) and v >= 0 for v in compact):
+					errors.append("compact_suffix_token_ids must be a non-empty list when row_token_input=true")
 		if obj.get("parity_scope") not in (None, "stage_handoff_finite_logits"):
 			errors.append("streaming handoff parity_scope must be stage_handoff_finite_logits when present")
 		if obj.get("parity_status") not in (None, "not_run"):

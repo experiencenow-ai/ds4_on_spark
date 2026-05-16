@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import queue
@@ -273,6 +274,26 @@ def parse_stage_env(items: list[str]) -> dict[str, str]:
 			raise SystemExit(f"error: invalid --stage-env key {key!r}")
 		out[key] = value
 	return out
+
+
+def parse_i32_csv(text: str) -> list[int]:
+	if text.strip() == "":
+		return []
+	out: list[int] = []
+	for raw in text.split(","):
+		item = raw.strip()
+		if item == "":
+			continue
+		value = int(item)
+		if value < 0:
+			raise SystemExit("error: token ids must be non-negative")
+		out.append(value)
+	return out
+
+
+def sha256_json(obj: Any) -> str:
+	data = json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
+	return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def stage_dir(run_root: str, stage_index: int) -> str:
@@ -598,6 +619,10 @@ def build_artifact(args: argparse.Namespace, stages: list[Stage], results: list[
 		"streaming_pipeline": True,
 		"resident_worker_mode": True,
 		"stage_env": args.stage_env,
+		"row_token_input": bool(args.row_token_ids),
+		"row_token_count": len(args.row_token_ids),
+		"row_token_ids_sha256": sha256_json(args.row_token_ids) if args.row_token_ids else "",
+		"compact_suffix_token_ids": args.compact_suffix_token_ids,
 		"microbatch_count": args.microbatches,
 		"pipeline_depth": min(args.pipeline_depth, args.microbatches),
 		"transfer_ms": max((item["transfer_ms"] for link in transfers for item in link), default=0.0),
@@ -726,6 +751,7 @@ def parse_args() -> argparse.Namespace:
 	ap.add_argument("--base-port", type=int, default=19100)
 	ap.add_argument("--known-hosts", default="/private/tmp/ds4_spark_known_hosts")
 	ap.add_argument("--stage-env", action="append", default=[], help="Extra KEY=VALUE environment variable for every DS4 stage worker.")
+	ap.add_argument("--compact-suffix-token-ids", default="", help="Comma-separated compact suffix token ids repeated across B rows for stage0 embedding input.")
 	ap.add_argument("--cleanup-stale-stage-locks", action="store_true", help="Terminate stale --cuda-batch-stack-probe ds4 workers before the run.")
 	ap.add_argument("--stale-lock-min-age-s", type=float, default=120.0)
 	args = ap.parse_args()
@@ -735,6 +761,11 @@ def parse_args() -> argparse.Namespace:
 		args.local_out_dir = f"/private/tmp/{args.run_id}"
 	args.boundary_bytes = args.batch * 4 * 4096 * 4
 	args.stage_env = parse_stage_env(args.stage_env)
+	args.compact_suffix_token_ids = parse_i32_csv(args.compact_suffix_token_ids)
+	args.row_token_ids = []
+	if args.compact_suffix_token_ids:
+		args.row_token_ids = [args.compact_suffix_token_ids[i % len(args.compact_suffix_token_ids)] for i in range(args.batch)]
+		args.stage_env.setdefault("DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS", ",".join(str(v) for v in args.row_token_ids))
 	return args
 
 
