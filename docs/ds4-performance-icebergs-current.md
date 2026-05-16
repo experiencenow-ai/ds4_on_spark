@@ -246,14 +246,21 @@ down projections per row, raises layer 2 down to about 63.4 ms, and drops the
 full pipeline to 408.047 rows/s.
 
 Exact next correctness code change: add a repo-owned B=512 shared-prefix
-prefix-cache fork plus compact per-row suffix-prefill hook before decode, then
-extend `cuda_batch_stack_probe_run()` so committed batch-head token ids update
-the KV/session state and become the next step input without reseeding the probe.
-The 1-token shared-prefix target is blocked by the missing prefix/suffix hook;
-the 4/8-token targets are additionally blocked by the missing repeated
-decode/KV loop. The prompt-decode smoke path should then reference a
-`ds4-token-commit-export-v1` artifact from the committed-token output instead
-of staying blocked.
+prefix-cache fork plus compact per-row suffix-prefill hook before decode. This
+must allocate row-strided per-layer KV storage so B=512 means 512 independent
+request rows, not 512 positions of one long sequence. After that,
+`cuda_batch_stack_probe_run()` can update each row's KV/session state with
+committed batch-head token ids and feed those ids into the next decode step
+without reseeding the probe. The 1-token shared-prefix target is blocked by the
+missing prefix/suffix hook; the 4/8-token targets are additionally blocked by
+the missing repeated decode/KV loop. The prompt-decode smoke path should then
+reference a `ds4-token-commit-export-v1` artifact from the committed-token
+output instead of staying blocked.
+
+Patch status: `docs/antirez-patches/ds4-3630e64-cuda-b512-row-session-kv-loop.patch`
+captures the required row-session runtime shape and telemetry. It should not be
+treated as measured speed evidence until the antirez patch stack applies and the
+row-session probe compiles/runs on Spark0.
 
 Latest handoff artifacts:
 

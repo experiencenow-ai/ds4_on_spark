@@ -112,6 +112,14 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - emits `iter_ms`, `out_fnv64s`, `out_nonfinites`, `logits_fnv64s`, and `logits_nonfinites` arrays for streaming schedule reconstruction
     - keeps PP=1 parity separate; the streaming handoff proof is finite-logits evidence, not provider eligibility
 
+- `ds4-3630e64-cuda-b512-row-session-kv-loop.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the B=512 batch-head token commit patch
+  - Purpose:
+    - sketches the minimum runtime hook for correct short-output prompt decode with `DS4_CUDA_STACK_PROBE_ROW_SESSIONS=1`
+    - requires row-strided per-layer KV storage, `batch_layer_raw_cache`, so B=512 means 512 independent request rows rather than one long sequence
+    - adds prefix/suffix token-file knobs plus repeated committed-token decode-step telemetry
+    - is not a kernel optimization; the first row-session loop may be slow, but it gives the correct workload shape to profile
+
 Apply (example):
 
 ```bash
@@ -128,6 +136,8 @@ git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stack-stag
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-explicit-stage-preload.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-files.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-streaming.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-b512-batch-head-token-commit.patch
+git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-b512-row-session-kv-loop.patch
 git apply /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 
@@ -154,6 +164,7 @@ python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stack_stage_preloa
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_explicit_stage_preload_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-explicit-stage-preload.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stage_handoff_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-files.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_stage_handoff_streaming_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-stage-handoff-streaming.patch
+python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_cuda_b512_row_session_kv_loop_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-cuda-b512-row-session-kv-loop.patch
 python3 /path/to/ds4_on_spark/scripts/verify_antirez_ds4_mtp_one_token_oracle_patch.py --patch /path/to/ds4_on_spark/docs/antirez-patches/ds4-3630e64-mtp-one-token-json-probe.patch
 ```
 

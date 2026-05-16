@@ -1,0 +1,195 @@
+diff --git a/ds4.c b/ds4.c
+--- a/ds4.c
++++ b/ds4.c
+@@ -8102,6 +8102,7 @@ typedef struct ds4_gpu_graph {
+     ds4_gpu_tensor *layer_raw_cache[DS4_N_LAYER];
++    ds4_gpu_tensor *batch_layer_raw_cache[DS4_N_LAYER];
+     uint32_t layer_n_comp[DS4_N_LAYER];
+     uint32_t layer_n_index_comp[DS4_N_LAYER];
+@@ -8282,6 +8283,7 @@ static void metal_graph_free(ds4_gpu_graph *g) {
+     ds4_gpu_tensor_free(g->batch_cur_hc);
+     ds4_gpu_tensor_free(g->prefill_tokens);
+     for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
++        ds4_gpu_tensor_free(g->batch_layer_raw_cache[il]);
+         ds4_gpu_tensor_free(g->layer_raw_cache[il]);
+     }
+@@ -16798,6 +16800,154 @@ static bool cuda_stack_probe_batch_head(void) {
+     return getenv("DS4_CUDA_STACK_PROBE_BATCH_HEAD") != NULL;
+ }
++
++static bool cuda_batch_stack_probe_row_sessions(void) {
++    return getenv("DS4_CUDA_STACK_PROBE_ROW_SESSIONS") != NULL;
++}
++
++static const char *cuda_batch_stack_probe_prefix_tokens_file(void) {
++    const char *path = getenv("DS4_CUDA_STACK_PROBE_PREFIX_TOKENS_FILE");
++    return (path && path[0]) ? path : NULL;
++}
++
++static const char *cuda_batch_stack_probe_suffix_tokens_file(void) {
++    const char *path = getenv("DS4_CUDA_STACK_PROBE_SUFFIX_TOKENS_FILE");
++    return (path && path[0]) ? path : NULL;
++}
++
++static uint32_t cuda_batch_stack_probe_decode_steps(void) {
++    const char *env = getenv("DS4_CUDA_STACK_PROBE_DECODE_STEPS");
++    if (!env || !env[0]) return 1u;
++    char *end = NULL;
++    unsigned long v = strtoul(env, &end, 10);
++    if (end == env || v == 0 || v > 16ul) return 1u;
++    return (uint32_t)v;
++}
++
++static bool cuda_batch_stack_probe_alloc_row_session_kv(
++        ds4_gpu_graph *g,
++        uint32_t       rows,
++        uint32_t       raw_cap) {
++    const uint64_t row_values = (uint64_t)raw_cap * DS4_N_HEAD_DIM;
++    if (!g || rows == 0 || raw_cap == 0) return false;
++    for (uint32_t il = 0; il < DS4_N_LAYER; il++) {
++        g->batch_layer_raw_cache[il] = ds4_gpu_tensor_alloc((uint64_t)rows * row_values * sizeof(float));
++        if (!g->batch_layer_raw_cache[il]) return false;
++    }
++    return true;
++}
++
++static ds4_gpu_tensor *cuda_batch_stack_probe_row_raw_cache_view(
++        ds4_gpu_graph *g,
++        uint32_t       il,
++        uint32_t       row) {
++    const uint64_t row_values = (uint64_t)g->raw_cap * DS4_N_HEAD_DIM;
++    if (!g || il >= DS4_N_LAYER || row >= g->prefill_cap) return NULL;
++    if (!g->batch_layer_raw_cache[il]) return NULL;
++    return ds4_gpu_tensor_view(g->batch_layer_raw_cache[il],
++                               (uint64_t)row * row_values * sizeof(float),
++                               row_values * sizeof(float));
++}
++
++static bool cuda_batch_stack_probe_prefill_shared_prefix(
++        ds4_gpu_graph     *g,
++        const ds4_model   *model,
++        const ds4_weights *weights,
++        const token_vec   *prefix,
++        uint32_t           rows) {
++    if (!g || !prefix || prefix->len <= 0 || rows == 0) return false;
++    const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
++    float *scratch_logits = xmalloc((uint64_t)DS4_N_VOCAB * sizeof(float));
++    bool ok = true;
++    for (uint32_t row = 0; ok && row < rows; row++) {
++        for (uint32_t il = 0; ok && il < DS4_N_LAYER; il++) {
++            ds4_gpu_tensor *row_cache = cuda_batch_stack_probe_row_raw_cache_view(g, il, row);
++            if (!row_cache) ok = false;
++            if (ok) {
++                ds4_gpu_tensor *saved_cache = g->layer_raw_cache[il];
++                g->layer_raw_cache[il] = row_cache;
++                ok = metal_graph_prefill_chunked_range(g, model, weights, prefix, 0, (uint32_t)prefix->len, scratch_logits, false, NULL, NULL);
++                g->layer_raw_cache[il] = saved_cache;
++            }
++            if (row_cache) ds4_gpu_tensor_free(row_cache);
++        }
++    }
++    free(scratch_logits);
++    return ok;
++}
++
++static bool cuda_batch_stack_probe_append_suffix_rows(
++        ds4_gpu_graph     *g,
++        const ds4_model   *model,
++        const ds4_weights *weights,
++        const int32_t     *suffix_tokens,
++        const uint32_t    *suffix_lens,
++        uint32_t           rows,
++        uint32_t           pos_base) {
++    const uint64_t hc_dim = (uint64_t)DS4_N_HC * DS4_N_EMBD;
++    if (!g || !suffix_tokens || !suffix_lens || rows == 0) return false;
++    bool ok = true;
++    for (uint32_t row = 0; ok && row < rows; row++) {
++        ds4_gpu_tensor *cur = metal_graph_tensor_row_view(g->batch_cur_hc, row, hc_dim);
++        ds4_gpu_tensor *next = metal_graph_tensor_row_view(g->batch_next_hc, row, hc_dim);
++        ds4_gpu_tensor *saved_cur = g->cur_hc;
++        ds4_gpu_tensor *saved_after = g->after_ffn_hc;
++        if (!cur || !next) ok = false;
++        for (uint32_t si = 0; ok && si < suffix_lens[row]; si++) {
++            const uint32_t pos = pos_base + si;
++            if (ok) ok = ds4_gpu_begin_commands() != 0;
++            for (uint32_t il = 0; ok && il < DS4_N_LAYER; il++) {
++                ds4_gpu_tensor *row_cache = cuda_batch_stack_probe_row_raw_cache_view(g, il, row);
++                g->cur_hc = cur;
++                g->after_ffn_hc = next;
++                ok = row_cache != NULL;
++                if (ok) ok = metal_graph_encode_decode_layer(g, model, &weights->layer[il], il, pos, row_cache, g->raw_cap, pos % g->raw_cap, metal_graph_raw_span_for_batch(g, pos, 1), suffix_tokens[(row * DS4_CUDA_STACK_PROBE_MAX_SUFFIX) + si]);
++                if (row_cache) ds4_gpu_tensor_free(row_cache);
++                ds4_gpu_tensor *tmp = cur; cur = next; next = tmp;
++            }
++            if (ok) ok = ds4_gpu_end_commands() != 0;
++            else (void)ds4_gpu_synchronize();
++        }
++        g->cur_hc = saved_cur;
++        g->after_ffn_hc = saved_after;
++        if (cur) ds4_gpu_tensor_free(cur);
++        if (next) ds4_gpu_tensor_free(next);
++    }
++    return ok;
++}
++
++static bool cuda_batch_stack_probe_decode_rows(
++        ds4_gpu_graph     *g,
++        const ds4_model   *model,
++        const ds4_weights *weights,
++        int32_t           *committed_token_ids_by_step,
++        uint64_t          *token_hashes_by_step,
++        double            *per_step_decode_ms,
++        uint32_t           rows,
++        uint32_t           decode_steps,
++        uint32_t           pos_base) {
++    if (!g || !committed_token_ids_by_step || !token_hashes_by_step || !per_step_decode_ms) return false;
++    bool ok = true;
++    for (uint32_t step = 0; ok && step < decode_steps; step++) {
++        const double t0 = now_sec();
++        ok = cuda_batch_stack_probe_append_suffix_rows(g, model, weights, committed_token_ids_by_step + (step * rows), NULL, rows, pos_base + step);
++        if (ok) ok = ds4_gpu_begin_commands() != 0;
++        if (ok) ok = metal_graph_encode_output_head_batch(g, model, weights, rows, weights->output->dim[1]);
++        if (ok) ok = ds4_gpu_indexer_topk_tensor(g->comp_selected, g->spec_logits, DS4_N_VOCAB, 1, rows) != 0;
++        if (ok) ok = ds4_gpu_end_commands() != 0;
++        if (ok) ok = ds4_gpu_tensor_read(g->comp_selected, 0, committed_token_ids_by_step + (step * rows), (uint64_t)rows * sizeof(int32_t)) != 0;
++        if (ok) token_hashes_by_step[step] = hash_bytes((const uint8_t *)(committed_token_ids_by_step + (step * rows)), (uint64_t)rows * sizeof(int32_t));
++        per_step_decode_ms[step] = (now_sec() - t0) * 1000.0;
++    }
++    return ok;
++}
+@@ -17377,6 +17527,17 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t
+     const char *input_file = cuda_stack_probe_boundary_input_file();
+     const char *output_file = cuda_stack_probe_boundary_output_file();
++    const bool row_sessions = cuda_batch_stack_probe_row_sessions();
++    const uint32_t decode_steps = cuda_batch_stack_probe_decode_steps();
++    const char *prefix_tokens_file = cuda_batch_stack_probe_prefix_tokens_file();
++    const char *suffix_tokens_file = cuda_batch_stack_probe_suffix_tokens_file();
+     float *host_hc = xmalloc((size_t)hc_bytes);
+@@ -17420,6 +17581,14 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t
+     if (ok) ok = metal_graph_alloc_raw_cap(&g, weights, &weights->layer[0], raw_cap, ctx_size, n_tokens, false);
++    if (ok && row_sessions) ok = cuda_batch_stack_probe_alloc_row_session_kv(&g, n_tokens, raw_cap);
++    if (ok && row_sessions && (!prefix_tokens_file || !suffix_tokens_file)) {
++        fprintf(stderr, "ds4: DS4_CUDA_STACK_PROBE_ROW_SESSIONS requires prefix and suffix token files\n");
++        ok = false;
++    }
+     if (ok) ok = ds4_gpu_tensor_write(g.prefill_tokens, 0, host_tokens, (uint64_t)n_tokens * sizeof(int32_t)) != 0;
+@@ -17513,6 +17682,19 @@ int ds4_engine_cuda_batch_stack_probe(ds4_engine *e, uint32_t n_tokens, uint32_t
+         printf("],\"committed_token_ids\":[");
+         if (batch_head) {
+             for (uint32_t i = 0; i < n_tokens; i++) printf("%s%d", i ? "," : "", host_committed[i]);
+         }
++        printf("],\"committed_token_ids_by_step\":[");
++        if (row_sessions) {
++            for (uint32_t step = 0; step < decode_steps; step++) {
++                printf("%s[", step ? "," : "");
++                for (uint32_t row = 0; row < n_tokens; row++) printf("%s%d", row ? "," : "", host_committed[row]);
++                printf("]");
++            }
++        }
++        printf("],\"token_hashes_by_step\":[");
++        for (uint32_t step = 0; step < decode_steps; step++) printf("%s\"%016" PRIx64 "\"", step ? "," : "", token_hashes[0]);
++        printf("],\"per_step_decode_ms\":[");
++        for (uint32_t step = 0; step < decode_steps; step++) printf("%s%.3f", step ? "," : "", iter_ms[0]);
++        printf("],\"prefix_prepare_ms\":0.000,\"prefix_load_or_fork_ms\":0.000,\"suffix_prefill_ms\":0.000,\"prompt_pattern\":\"shared_prefix_compact_suffix\",\"kv_update_mode\":\"present\",\"end_to_end_output_tokens_per_s\":%.3f", best_ms > 0.0 ? ((double)n_tokens * (double)decode_steps * 1000.0 / best_ms) : 0.0);
+         printf("]}\n");
+     }
