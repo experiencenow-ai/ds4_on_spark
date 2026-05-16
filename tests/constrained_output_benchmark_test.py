@@ -19,6 +19,8 @@ class ConstrainedOutputBenchmarkTest(unittest.TestCase):
 		obj = bench.load_json(FIX / "ds4_b512_constrained_numeric_hit_1_token_20260516.example.json")
 		self.assertEqual(obj["candidate_vocabulary_kind"], "numeric_ids")
 		self.assertEqual(obj["candidate_token_count"], 15)
+		self.assertEqual(obj["commit_lane"], "constrained_candidate_commit")
+		self.assertEqual(obj["request_shape"], "b512_separate_rows")
 		self.assertGreater(obj["end_to_end_output_tokens_per_s"], 600.0)
 		self.assertEqual(obj["token_commit_mode"], "constrained_vocab_cpu_top1")
 		self.assertTrue(obj["candidate_token_ids_sha256"].startswith("sha256:"))
@@ -27,6 +29,7 @@ class ConstrainedOutputBenchmarkTest(unittest.TestCase):
 		obj = bench.load_json(FIX / "ds4_b512_full_vocab_control_hit_1_token_20260516.example.json")
 		self.assertEqual(obj["candidate_vocabulary_kind"], "full_vocab")
 		self.assertEqual(obj["candidate_token_count"], 0)
+		self.assertEqual(obj["commit_lane"], "full_vocab_output_projection_control")
 		self.assertEqual(obj["token_commit_mode"], "full_vocab_batch_head")
 		self.assertLess(obj["end_to_end_output_tokens_per_s"], 300.0)
 
@@ -50,11 +53,24 @@ class ConstrainedOutputBenchmarkTest(unittest.TestCase):
 		errors = bench.validate_artifact(obj)
 		self.assertTrue(any("full-vocab control" in item for item in errors))
 
-	def test_production_gate_accepts_real_shared_prefix_hook_shape(self) -> None:
+	def test_production_gate_rejects_row_token_suffix_probe(self) -> None:
 		obj = bench.load_json(FIX / "ds4_b512_constrained_numeric_hit_1_token_20260516.example.json")
 		obj = copy.deepcopy(obj)
 		obj["runtime_hook_status"] = "shared_prefix_hit_fork_runtime"
 		obj["production_generation_eligible"] = True
+		obj["artifact_sha256"] = bench.artifact_sha256(obj)
+		obj["artifact_hash"] = obj["artifact_sha256"]
+		errors = bench.validate_artifact(obj)
+		self.assertTrue(any("row-token suffix probe" in item for item in errors))
+		self.assertTrue(any("input_provenance=shared_prefix_hit_fork_runtime" in item for item in errors))
+
+	def test_production_gate_accepts_real_shared_prefix_hook_shape(self) -> None:
+		obj = bench.load_json(FIX / "ds4_b512_constrained_numeric_hit_1_token_20260516.example.json")
+		obj = copy.deepcopy(obj)
+		obj["runtime_hook_status"] = "shared_prefix_hit_fork_runtime"
+		obj["input_provenance"] = "shared_prefix_hit_fork_runtime"
+		obj["production_generation_eligible"] = True
+		obj["optimized_kernel_flags"].pop("DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS", None)
 		obj["artifact_sha256"] = bench.artifact_sha256(obj)
 		obj["artifact_hash"] = obj["artifact_sha256"]
 		self.assertEqual(bench.validate_artifact(obj), [])

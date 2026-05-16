@@ -247,12 +247,12 @@ Token-commit profile:
 
 Constrained-output benchmark:
 
-| Case | Candidate kind | Output target | End-to-end output tok/s | Commit mode | Production eligible |
-| --- | --- | ---: | ---: | --- | --- |
-| Shared-prefix hit, numeric IDs | `numeric_ids` | 1 | 648.332 | `constrained_vocab_cpu_top1` | false |
-| Shared-prefix hit, numeric IDs | `numeric_ids` | 4 | 619.840 | `constrained_vocab_cpu_top1` | false |
-| Shared-prefix hit, numeric IDs | `numeric_ids` | 8 | 624.381 | `constrained_vocab_cpu_top1` | false |
-| Shared-prefix hit, full-vocab control | `full_vocab` | 1 | 264.586 | `full_vocab_batch_head` | false |
+| Case | Candidate kind | Commit lane | Input provenance | Output target | End-to-end output tok/s | Production eligible |
+| --- | --- | --- | --- | ---: | ---: | --- |
+| Shared-prefix hit, numeric IDs | `numeric_ids` | `constrained_candidate_commit` | `row_token_suffix_probe` | 1 | 648.332 | false |
+| Shared-prefix hit, numeric IDs | `numeric_ids` | `constrained_candidate_commit` | `derived_multistep_kv_loop` | 4 | 619.840 | false |
+| Shared-prefix hit, numeric IDs | `numeric_ids` | `constrained_candidate_commit` | `derived_multistep_kv_loop` | 8 | 624.381 | false |
+| Shared-prefix hit, full-vocab control | `full_vocab` | `full_vocab_output_projection_control` | `row_token_suffix_probe` | 1 | 264.586 | false |
 
 The constrained 1-token row is a live Spark0->Spark1->Spark2 row-token suffix
 probe with committed IDs. The 4/8-token rows are KV-loop artifacts derived from
@@ -260,7 +260,10 @@ the one-step constrained lane until Spark0 reruns the production shared-prefix
 hit/fork runtime hook. The constrained-output validator requires an explicit
 candidate set, passed parity artifact, token hash, committed IDs, and matching
 optimized kernel flags before any artifact can be considered for production
-eligibility.
+eligibility. It now also records `request_shape=b512_separate_rows`,
+`commit_lane`, and `input_provenance`; production eligibility is rejected for
+full-vocab controls, row-token suffix probes, derived KV-loop artifacts, and any
+one-giant-prompt/B=1 shape.
 
 Artifacts:
 
@@ -329,7 +332,9 @@ Spark0 reruns the new runtime hook with real shared-prefix hit/fork inputs and
 measured per-step timings/token hashes. For unconstrained natural-language
 commit, the next kernel target remains the full-vocab batch output projection;
 for structured short outputs, the constrained candidate commit path is the
-current fast lane.
+current fast lane. Exact remaining blocker for production eligibility:
+`input_provenance=shared_prefix_hit_fork_runtime` from the real runtime hook,
+not `row_token_suffix_probe` or `derived_multistep_kv_loop`.
 
 Latest handoff artifacts:
 
