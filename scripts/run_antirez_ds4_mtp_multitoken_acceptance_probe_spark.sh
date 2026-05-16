@@ -37,6 +37,8 @@ PATCH_VERIFY_LOCAL="${PATCH_VERIFY_LOCAL:-$repo_root/docs/antirez-patches/ds4-36
 EXTRACTOR_LOCAL="$repo_root/scripts/extract_antirez_ds4_mtp_conf_log.py"
 SLOWPATH_LOCAL="$repo_root/scripts/build_ds4_mtp_slowpath_report.py"
 SLOWPATH_VALIDATOR_LOCAL="$repo_root/scripts/validate_ds4_mtp_slowpath.py"
+ECONOMICS_LOCAL="$repo_root/scripts/build_ds4_mtp_verifier_economics.py"
+ECONOMICS_VALIDATOR_LOCAL="$repo_root/scripts/validate_ds4_mtp_verifier_economics.py"
 
 REPORT_MD="$OUT_DIR/antirez_ds4_mtp_multitoken_acceptance_probe_spark.md"
 
@@ -86,8 +88,8 @@ if [ ! -r "$HELPER_LOCAL" ]; then
 	echo "helper not readable: $HELPER_LOCAL"
 	exit 2
 fi
-if [ ! -r "$PATCH_Q4K_LOCAL" ] || [ ! -r "$PATCH_CACHE_LOCAL" ] || [ ! -r "$PATCH_VERIFY_LOCAL" ] || [ ! -r "$EXTRACTOR_LOCAL" ] || [ ! -r "$SLOWPATH_LOCAL" ] || [ ! -r "$SLOWPATH_VALIDATOR_LOCAL" ]; then
-	echo "missing local file(s): helper/patches/extractor/slowpath"
+if [ ! -r "$PATCH_Q4K_LOCAL" ] || [ ! -r "$PATCH_CACHE_LOCAL" ] || [ ! -r "$PATCH_VERIFY_LOCAL" ] || [ ! -r "$EXTRACTOR_LOCAL" ] || [ ! -r "$SLOWPATH_LOCAL" ] || [ ! -r "$SLOWPATH_VALIDATOR_LOCAL" ] || [ ! -r "$ECONOMICS_LOCAL" ] || [ ! -r "$ECONOMICS_VALIDATOR_LOCAL" ]; then
+	echo "missing local file(s): helper/patches/extractor/slowpath/economics"
 	exit 3
 fi
 
@@ -156,6 +158,23 @@ fi
 python3 "$SLOWPATH_VALIDATOR_LOCAL" "$OUT_DIR/mtp_slowpath.json" \
 	>"$OUT_DIR/mtp_slowpath_validate.json" 2>"$OUT_DIR/mtp_slowpath_validate_stderr.txt" || true
 
+if [ "$BASELINE_GENERATION_TPS" != "" ]; then
+	echo "== building verifier economics telemetry (local) =="
+	python3 "$ECONOMICS_LOCAL" \
+		--mtp-log "$OUT_DIR/remote_probe_stdout.txt" \
+		--mtp-log "$OUT_DIR/remote_probe_stderr.txt" \
+		--baseline-tps "$BASELINE_GENERATION_TPS" \
+		--run-id "$RUN_ID" \
+		--model-id "$MODEL_ID" \
+		--runtime-id "$RUNTIME_ID" \
+		--prompt "$PROMPT" \
+		--prompt-hash "$PROMPT_HASH" \
+		--out-json "$OUT_DIR/mtp_verifier_economics.json" \
+		>"$OUT_DIR/mtp_verifier_economics_stdout.txt" 2>"$OUT_DIR/mtp_verifier_economics_stderr.txt" || true
+	python3 "$ECONOMICS_VALIDATOR_LOCAL" "$OUT_DIR/mtp_verifier_economics.json" \
+		>"$OUT_DIR/mtp_verifier_economics_validate.json" 2>"$OUT_DIR/mtp_verifier_economics_validate_stderr.txt" || true
+fi
+
 {
 	echo "## Results"
 	echo
@@ -169,6 +188,10 @@ python3 "$SLOWPATH_VALIDATOR_LOCAL" "$OUT_DIR/mtp_slowpath.json" \
 	echo "- acceptance events JSONL: $OUT_DIR/acceptance_events.jsonl"
 	echo "- slow-path telemetry: $OUT_DIR/mtp_slowpath.json"
 	echo "- slow-path validator: $OUT_DIR/mtp_slowpath_validate.json"
+	if [ "$BASELINE_GENERATION_TPS" != "" ]; then
+		echo "- verifier economics: $OUT_DIR/mtp_verifier_economics.json"
+		echo "- verifier economics validator: $OUT_DIR/mtp_verifier_economics_validate.json"
+	fi
 	echo "- extractor stderr: $OUT_DIR/acceptance_summary_stderr.txt"
 	echo
 	echo "Acceptance summary (prefix):"
@@ -182,6 +205,14 @@ python3 "$SLOWPATH_VALIDATOR_LOCAL" "$OUT_DIR/mtp_slowpath.json" \
 	echo '```'
 	sed -n '1,200p' "$OUT_DIR/mtp_slowpath.json" 2>/dev/null || true
 	echo '```'
+	if [ "$BASELINE_GENERATION_TPS" != "" ]; then
+		echo
+		echo "Verifier economics (prefix):"
+		echo
+		echo '```'
+		sed -n '1,200p' "$OUT_DIR/mtp_verifier_economics.json" 2>/dev/null || true
+		echo '```'
+	fi
 	echo
 } >>"$REPORT_MD"
 
@@ -200,19 +231,22 @@ def read_json(p: Path):
 		return None
 
 summary = read_json(out_dir / "acceptance_summary.json") or {}
+artifact_paths = {
+	"report_md": report_md,
+	"stdout": out_dir / "remote_probe_stdout.txt",
+	"stderr": out_dir / "remote_probe_stderr.txt",
+	"log": out_dir / "remote_probe_log.txt",
+	"acceptance_summary_json": out_dir / "acceptance_summary.json",
+	"acceptance_events_jsonl": out_dir / "acceptance_events.jsonl",
+	"mtp_slowpath_json": out_dir / "mtp_slowpath.json",
+	"mtp_slowpath_validate_json": out_dir / "mtp_slowpath_validate.json",
+	"mtp_verifier_economics_json": out_dir / "mtp_verifier_economics.json",
+	"mtp_verifier_economics_validate_json": out_dir / "mtp_verifier_economics_validate.json",
+}
 
 doc = {
 	"ok": bool(summary.get("ok", False)),
-	"artifacts": {
-		"report_md": str(report_md),
-		"stdout": str(out_dir / "remote_probe_stdout.txt"),
-		"stderr": str(out_dir / "remote_probe_stderr.txt"),
-		"log": str(out_dir / "remote_probe_log.txt"),
-		"acceptance_summary_json": str(out_dir / "acceptance_summary.json"),
-		"acceptance_events_jsonl": str(out_dir / "acceptance_events.jsonl"),
-		"mtp_slowpath_json": str(out_dir / "mtp_slowpath.json"),
-		"mtp_slowpath_validate_json": str(out_dir / "mtp_slowpath_validate.json"),
-	},
+	"artifacts": {k: str(v) for k, v in artifact_paths.items() if v.exists()},
 	"summary": summary,
 }
 (out_dir / "summary.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")

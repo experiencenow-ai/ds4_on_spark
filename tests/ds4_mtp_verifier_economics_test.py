@@ -18,8 +18,8 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 	def test_builds_decode2_economics(self) -> None:
 		lines = [
 			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
-			"ds4: mtp timing decode2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=20.000 ms target=12.000 ms head=6.000 ms target_calls=2 head_calls=2 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=25.000 ms\n",
-			"ds4: prefill: 2.18 t/s, generation: 2.00 t/s\n",
+			"ds4: mtp timing decode2 drafted=2 committed=2 draft=30.000 ms snapshot=10.000 ms verify=200.000 ms target=120.000 ms head=60.000 ms target_calls=2 head_calls=2 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=250.000 ms\n",
+			"ds4: prefill: 2.18 t/s, generation: 10.00 t/s\n",
 		]
 		report = build.build_report_from_lines(
 			lines,
@@ -42,14 +42,17 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["output_head_rows"], 2)
 		self.assertEqual(report["full_vocab_logits_rows"], 1)
 		self.assertEqual(report["top1_only_rows"], 1)
+		self.assertAlmostEqual(float(report["generation_wall_ms_est"]), 300.0)
+		self.assertAlmostEqual(float(report["accounted_timing_ms"]), 250.0)
+		self.assertAlmostEqual(float(report["timing_coverage_rate"]), 250.0 / 300.0)
 		self.assertEqual(report["blocker_kind"], "target_output_head_token_for_token")
 		self.assertTrue(validate.validate_report(report)["ok"])
 
 	def test_fused_head_economics_reduce_output_head_invocations(self) -> None:
 		lines = [
 			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
-			"ds4: mtp timing decode2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=19.000 ms target=12.000 ms head=3.000 ms target_calls=2 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=22.000 ms\n",
-			"ds4: prefill: 2.18 t/s, generation: 2.30 t/s\n",
+			"ds4: mtp timing decode2 drafted=2 committed=2 draft=30.000 ms snapshot=10.000 ms verify=200.000 ms target=120.000 ms head=30.000 ms target_calls=2 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=250.000 ms\n",
+			"ds4: prefill: 2.18 t/s, generation: 10.00 t/s\n",
 		]
 		report = build.build_report_from_lines(
 			lines,
@@ -71,6 +74,28 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["full_vocab_logits_rows"], 1)
 		self.assertEqual(report["top1_only_rows"], 1)
 		self.assertEqual(report["blocker_kind"], "target_verifier_overhead")
+		self.assertTrue(validate.validate_report(report)["ok"])
+
+	def test_low_timing_coverage_blocks_economics_claim(self) -> None:
+		lines = [
+			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
+			"ds4: mtp timing decode2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=20.000 ms target=12.000 ms head=6.000 ms target_calls=2 head_calls=2 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=25.000 ms\n",
+			"ds4: prefill: 2.18 t/s, generation: 2.00 t/s\n",
+		]
+		report = build.build_report_from_lines(
+			lines,
+			run_id="r",
+			model_id="m",
+			runtime_id="rt",
+			prompt="p",
+			prompt_hash="",
+			baseline_tps=14.65,
+			mtp_tps=None,
+		)
+		self.assertEqual(report["blocker_kind"], "unaccounted_generation_wall_time")
+		self.assertAlmostEqual(float(report["generation_wall_ms_est"]), 1500.0)
+		self.assertAlmostEqual(float(report["accounted_timing_ms"]), 25.0)
+		self.assertAlmostEqual(float(report["unaccounted_generation_wall_ms"]), 1475.0)
 		self.assertTrue(validate.validate_report(report)["ok"])
 
 	def test_true_suffix_log_tracks_invocations_vs_positions(self) -> None:
@@ -106,6 +131,10 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 			"attempted_draft_tokens": 2,
 			"accept_rate": 1.0,
 			"emitted_tokens": 3,
+			"generation_wall_ms_est": 600.0,
+			"accounted_timing_ms": 500.0,
+			"unaccounted_generation_wall_ms": 100.0,
+			"timing_coverage_rate": 500.0 / 600.0,
 			"target_verifier_invocation_count": 1,
 			"target_positions_verified": 2,
 			"target_positions_per_invocation": 2.0,
@@ -140,6 +169,10 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 			"attempted_draft_tokens": 2,
 			"accept_rate": 0.5,
 			"emitted_tokens": 1,
+			"generation_wall_ms_est": 200.0,
+			"accounted_timing_ms": 160.0,
+			"unaccounted_generation_wall_ms": 40.0,
+			"timing_coverage_rate": 0.8,
 			"target_verifier_invocation_count": 1,
 			"target_positions_verified": 1,
 			"target_positions_per_invocation": 1.0,
