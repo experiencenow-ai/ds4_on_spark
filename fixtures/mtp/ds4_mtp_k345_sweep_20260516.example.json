@@ -1,6 +1,6 @@
 {
   "accept_prob_used_for_projection": 1.0,
-  "artifact_sha256": "sha256:72ba640b98cd86cc6b8cea15be8ef759dddb6d0398f5a796f9a2409b3fbfd72b",
+  "artifact_sha256": "sha256:32eaffdfa73d2a3748399696e077478ad7e931320738b71c68b1074e79d4038e",
   "best_projected_k_by_idle_rows": [
     {
       "best_k": null,
@@ -85,58 +85,58 @@
       "reason": "no K fits"
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 3,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 3
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 4,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 4
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 5,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 5
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 6,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 6
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 8,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 8
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 16,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 16
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 64,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 64
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 128,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 128
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 256,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 256
     },
     {
-      "best_k": null,
-      "idle_extra_rows": 511,
-      "reason": "no K fits"
+      "best_k_for_idle_row_efficiency": 3,
+      "best_k_for_sequence_latency": 3,
+      "idle_extra_rows": 511
     }
   ],
-  "blocker_detail": "candidate K values [3, 4, 5] are projected/classified only; measured reference K values are [2]",
-  "blocker_kind": "candidate_k_runtime_not_implemented",
+  "blocker_detail": "",
+  "blocker_kind": "none",
   "format": "ds4-mtp-k-sweep-v1",
   "idle_extra_rows_swept": [
     0,
@@ -157,8 +157,13 @@
   "k_power_of_two_required": false,
   "k_results": [
     {
-      "blocker_detail": "K=3 needs target_suffix_verify over 4 positions plus staged KV prefix commit; current runtime support set is [2]",
-      "blocker_kind": "runtime_suffix_k_not_implemented",
+      "accept_rate": 0.28160919540229884,
+      "accepted_draft_tokens": 49,
+      "attempted_draft_tokens": 174,
+      "baseline_tps": 11.01,
+      "blocker_detail": "MTP 7.420000 t/s <= baseline 11.010000 t/s; verifier invocations=58 target_positions=232 output_head_invocations=114",
+      "blocker_kind": "target_verifier_overhead",
+      "emitted_tokens": 107,
       "expected_accept_prob_per_draft_token": 1.0,
       "expected_bonus_tokens_per_extra_idle_row": 1.0,
       "expected_draft_calls_per_output_token": 0.75,
@@ -180,14 +185,25 @@
         "64": true,
         "8": true
       },
+      "full_vocab_logits_rows": 114,
       "k": 3,
       "k_power_of_two": false,
-      "measurement_status": "projected_unsupported_runtime",
-      "runtime_supported": false,
+      "measurement_status": "measured",
+      "mtp_tps": 7.42,
+      "output_head_invocation_count": 114,
+      "runtime_supported": true,
+      "slowest_component": "target_eval_ms",
+      "source_artifact": "fixtures/mtp/ds4_mtp_verifier_economics_k3_prototype_20260516.example.json",
+      "speedup_vs_baseline": 0.6739327883742052,
+      "target_positions_per_invocation": 4.0,
+      "target_positions_verified": 232,
+      "target_verifier_invocation_count": 58,
+      "timing_coverage_rate": 1.004050822429907,
+      "top1_only_rows": 174,
       "total_target_verifier_rows_per_group": 4
     },
     {
-      "blocker_detail": "K=4 needs target_suffix_verify over 5 positions plus staged KV prefix commit; current runtime support set is [2]",
+      "blocker_detail": "K=4 needs target_suffix_verify over 5 positions plus staged KV prefix commit; current runtime support set is [2, 3]",
       "blocker_kind": "runtime_suffix_k_not_implemented",
       "expected_accept_prob_per_draft_token": 1.0,
       "expected_bonus_tokens_per_extra_idle_row": 1.0,
@@ -217,7 +233,7 @@
       "total_target_verifier_rows_per_group": 5
     },
     {
-      "blocker_detail": "K=5 needs target_suffix_verify over 6 positions plus staged KV prefix commit; current runtime support set is [2]",
+      "blocker_detail": "K=5 needs target_suffix_verify over 6 positions plus staged KV prefix commit; current runtime support set is [2, 3]",
       "blocker_kind": "runtime_suffix_k_not_implemented",
       "expected_accept_prob_per_draft_token": 1.0,
       "expected_bonus_tokens_per_extra_idle_row": 1.0,
@@ -275,8 +291,9 @@
     }
   ],
   "run_id": "ds4-mtp-k345-sweep-20260516",
-  "runtime_id": "antirez/ds4@3630e64+cuda-mtp-true-suffix-k2-reference",
+  "runtime_id": "antirez/ds4@3630e64+cuda-mtp-true-suffix-k3-prototype",
   "runtime_supported_k": [
-    2
+    2,
+    3
   ]
 }

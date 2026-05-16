@@ -322,7 +322,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 
 	timing_acceptance = [
 		ev for ev in timing_events
-		if str(ev.kind) == "suffix2" and "drafted" in ev.values and "committed" in ev.values
+		if str(ev.kind).startswith("suffix") and "drafted" in ev.values and "committed" in ev.values
 	]
 	committed_hist = Counter(int(ev.committed) for ev in conf_events if int(ev.committed) >= 0)
 	for ev in timing_acceptance:

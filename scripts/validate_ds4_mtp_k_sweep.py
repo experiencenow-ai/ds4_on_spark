@@ -248,6 +248,9 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		validate_measured(errors, ref, f"reference_measurements[{index}]")
 	if obj.get("blocker_kind") == "candidate_k_runtime_not_implemented" and not refs:
 		errors.append("candidate_k_runtime_not_implemented requires reference_measurements")
+	if obj.get("blocker_kind") == "candidate_k_needs_spark_measurement":
+		if not any(isinstance(row, dict) and row.get("measurement_status") == "supported_unmeasured" for row in rows):
+			errors.append("candidate_k_needs_spark_measurement requires a supported_unmeasured K row")
 	if obj.get("artifact_sha256") != artifact_sha256(obj):
 		errors.append("artifact_sha256 does not match canonical artifact body")
 	return {"ok": len(errors) == 0, "errors": errors}
