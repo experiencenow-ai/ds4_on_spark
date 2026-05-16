@@ -101,6 +101,15 @@ def reported_candidate_ids(stage: dict[str, Any]) -> list[int]:
 	return []
 
 
+def stage_uint(stage: dict[str, Any], key: str, default: int) -> int:
+	value = stage.get(key, default)
+	try:
+		value_int = int(value)
+	except (TypeError, ValueError):
+		return default
+	return value_int if value_int >= 0 else default
+
+
 def committed_ids(stage: dict[str, Any]) -> list[int]:
 	items = stage.get("committed_token_ids")
 	if not isinstance(items, list):
@@ -140,9 +149,20 @@ def build_result_from_stage(path: Path, kind: str, count: int, suffix_tokens: in
 	candidate_set = set(candidate_ids)
 	blocker_kind = str(stage.get("blocker_kind", "none"))
 	blocker_detail = str(stage.get("blocker_detail", ""))
+	runtime_requested_count = stage_uint(stage, "constrained_token_count_requested", len(candidate_ids))
+	runtime_enforced_count = stage_uint(stage, "constrained_token_count_enforced", len(reported_ids) if reported_ids else 0)
+	if blocker_kind == "none" and runtime_enforced_count == 0 and reported_ids:
+		runtime_enforced_count = len(reported_ids)
+	if blocker_kind == "none" and runtime_requested_count != len(candidate_ids):
+		blocker_kind = "runtime_candidate_set_mismatch"
+		blocker_detail = f"requested {len(candidate_ids)} candidate tokens, but runtime recorded requested count {runtime_requested_count}"
 	if reported_ids and len(reported_ids) != len(candidate_ids) and blocker_kind == "none":
 		blocker_kind = "runtime_candidate_set_truncated"
 		blocker_detail = f"requested {len(candidate_ids)} candidate tokens, but stage artifact reported {len(reported_ids)} active constrained_token_ids; do not count this as a validated {len(candidate_ids)}-candidate runtime-enforced set"
+	if blocker_kind == "none" and runtime_enforced_count != len(candidate_ids):
+		blocker_kind = "runtime_candidate_set_truncated"
+		blocker_detail = f"requested {len(candidate_ids)} candidate tokens, but runtime enforced {runtime_enforced_count}"
+	success = blocker_kind == "none"
 	row = {
 		"candidate_vocabulary_kind": kind,
 		"candidate_token_count": count,
@@ -151,23 +171,25 @@ def build_result_from_stage(path: Path, kind: str, count: int, suffix_tokens: in
 		"prefix_mode": "hit_fork",
 		"suffix_tokens_per_row": suffix_tokens,
 		"decode_ms": 0.0,
-		"constrained_commit_ms": commit_ms,
-		"result_collection_ms": commit_ms,
-		"end_to_end_output_tokens_per_s": (output_tokens * 1000.0 / total_ms) if total_ms > 0.0 else 0.0,
-		"committed_token_ids_present": bool(stage.get("committed_token_ids_present")),
-		"token_hash": str(stage.get("token_hash", "")),
-		"all_committed_tokens_in_candidate_set": bool(tokens) and all(v in candidate_set for v in tokens),
+		"constrained_commit_ms": commit_ms if success else 0.0,
+		"result_collection_ms": commit_ms if success else 0.0,
+		"end_to_end_output_tokens_per_s": (output_tokens * 1000.0 / total_ms) if success and total_ms > 0.0 else 0.0,
+		"committed_token_ids_present": bool(stage.get("committed_token_ids_present")) if success else False,
+		"token_hash": str(stage.get("token_hash", "")) if success else "not_available",
+		"all_committed_tokens_in_candidate_set": bool(tokens) and all(v in candidate_set for v in tokens) if success else False,
 		"fallback_full_vocab_used": False,
-		"finite_output": bool(stage.get("final_output_finite")),
+		"finite_output": bool(stage.get("final_output_finite")) if success else False,
 		"parity_artifact_sha256": "",
 		"production_generation_eligible": False,
 		"blocker_kind": blocker_kind,
 		"blocker_detail": blocker_detail,
 		"source_artifact": str(path),
 		"source_artifact_sha256": str(stage.get("artifact_sha256", "")) or sha256_file(path),
-		"runtime_reported_candidate_token_count": len(reported_ids) if reported_ids else count,
-		"runtime_reported_candidate_token_ids_hash": sha256_obj(reported_ids) if reported_ids else sha256_obj(candidate_ids),
-		"candidate_set_fully_reported": (not reported_ids) or len(reported_ids) == len(candidate_ids),
+		"runtime_requested_candidate_token_count": runtime_requested_count,
+		"runtime_enforced_candidate_token_count": runtime_enforced_count,
+		"runtime_reported_candidate_token_count": len(reported_ids),
+		"runtime_reported_candidate_token_ids_hash": sha256_obj(reported_ids) if reported_ids else "",
+		"candidate_set_fully_reported": len(reported_ids) == len(candidate_ids),
 	}
 	row["candidate_token_ids"] = candidate_ids
 	return row
@@ -356,8 +378,12 @@ def validate_row(row: dict[str, Any], index: int) -> list[str]:
 		if not str(row.get("candidate_token_ids_hash", "")).startswith("sha256:"):
 			errors.append(f"{prefix}.candidate_token_ids_hash must be sha256")
 		if "runtime_reported_candidate_token_count" in row:
-			if not isinstance(row.get("runtime_reported_candidate_token_count"), int) or int(row.get("runtime_reported_candidate_token_count", 0)) <= 0:
-				errors.append(f"{prefix}.runtime_reported_candidate_token_count must be positive integer")
+			if not isinstance(row.get("runtime_reported_candidate_token_count"), int) or int(row.get("runtime_reported_candidate_token_count", -1)) < 0:
+				errors.append(f"{prefix}.runtime_reported_candidate_token_count must be non-negative integer")
+		for runtime_key in ("runtime_requested_candidate_token_count", "runtime_enforced_candidate_token_count"):
+			if runtime_key in row:
+				if not isinstance(row.get(runtime_key), int) or int(row.get(runtime_key, -1)) < 0:
+					errors.append(f"{prefix}.{runtime_key} must be non-negative integer")
 		if row.get("blocker_kind") == "runtime_candidate_set_truncated" and row.get("candidate_set_fully_reported") is not False:
 			errors.append(f"{prefix}.runtime_candidate_set_truncated requires candidate_set_fully_reported=false")
 		if row.get("fallback_full_vocab_used") is not False:
@@ -367,6 +393,14 @@ def validate_row(row: dict[str, Any], index: int) -> list[str]:
 				errors.append(f"{prefix}.constrained row must keep all committed tokens in candidate set")
 			if float(row.get("constrained_commit_ms", 0.0)) <= 0.0:
 				errors.append(f"{prefix}.constrained row requires constrained_commit_ms")
+			if row.get("candidate_set_fully_reported") is not True:
+				errors.append(f"{prefix}.successful constrained row must fully report the runtime candidate set")
+			if row.get("runtime_reported_candidate_token_count") != count:
+				errors.append(f"{prefix}.successful constrained row must report all {count} runtime candidate tokens")
+			if row.get("runtime_requested_candidate_token_count") != count:
+				errors.append(f"{prefix}.successful constrained row must record requested candidate count {count}")
+			if row.get("runtime_enforced_candidate_token_count") != count:
+				errors.append(f"{prefix}.successful constrained row must enforce candidate count {count}")
 	if row.get("blocker_kind") == "none":
 		if row.get("finite_output") is not True:
 			errors.append(f"{prefix}.successful row requires finite_output")
