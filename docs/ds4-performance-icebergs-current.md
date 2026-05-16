@@ -5,9 +5,9 @@ DS4 has finite three-stage TCP binary handoff with real boundary activations.
 Each stage preloads its owned layer range, stage2 includes the output head, and
 successful runs emit finite logits hashes. The slice-tile8 PP=N final logits now
 match a Spark0 PP=1 full-stack probe for the same model/input identity, but
-this is still not production generation: token commit is blocked because the
-current DS4 batch stack probe does not emit an argmax/sampled token id, so
-`production_generation_eligible=false`.
+this is still not production generation in the committed B=512 smoke: token
+commit is blocked because the current DS4 batch stack probe does not emit an
+argmax/sampled token id, so `production_generation_eligible=false`.
 
 ## Current Best
 
@@ -201,7 +201,10 @@ The smoke preserves the measured B=512 rows/s (`631.672`) and corrected
 steady-state bound (`741.444`). It deliberately keeps
 `production_generation_eligible=false`: finite logits and output-head hashes are
 present, but committed token ids and `token_hash` are not, because the runtime
-probe has no repo-owned argmax/sampling token-commit export yet.
+probe does not yet print an argmax/sampling token id. The repo-owned
+`ds4-token-commit-export-v1` contract and validator are ready; an eligible
+prompt-decode smoke must reference that export and have matching optimized
+kernel flags with the parity artifact.
 
 ## Current Blocker
 
@@ -214,9 +217,10 @@ down from about 16.8 ms to about 21.2 ms and dropped the full pipeline from
 down projections per row, raises layer 2 down to about 63.4 ms, and drops the
 full pipeline to 408.047 rows/s.
 
-Exact next correctness code change: add a repo-owned argmax/sampling export to
-the DS4 batch stack probe after final logits/output head so the prompt-decode
-smoke can emit `committed_token_ids` and `token_hash`.
+Exact next correctness code change: update `ds4_engine_cuda_batch_stack_probe()`
+after `ds4_gpu_tensor_read(g.logits, ...)` to compute argmax over
+`weights->output->dim[1]`, print `committed_token_ids` and `token_hash` in the
+probe JSON, then build a `ds4-token-commit-export-v1` artifact from that output.
 
 Latest handoff artifacts:
 

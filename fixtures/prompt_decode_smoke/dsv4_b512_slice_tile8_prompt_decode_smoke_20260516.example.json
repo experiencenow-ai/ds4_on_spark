@@ -1,6 +1,6 @@
 {
   "achieved_streaming_rows_per_s": 631.6720652969875,
-  "artifact_hash": "sha256:0f98b284dc41adde856cdbf75c1752976226510c46c8535d8e3152eaf1b556cf",
+  "artifact_hash": "sha256:5df91f4248d2f9990fe086cc5f745106cbb4088bdd9e56891bda00b37085f417",
   "artifact_refs": [
     {
       "name": "stage_handoff",
@@ -22,11 +22,12 @@
       "sha256": "sha256:52308fa2a2d6ea52eef29e4efe43da56f5488e66608c783ee544059f2344fc4b"
     }
   ],
-  "artifact_sha256": "sha256:0f98b284dc41adde856cdbf75c1752976226510c46c8535d8e3152eaf1b556cf",
+  "artifact_sha256": "sha256:5df91f4248d2f9990fe086cc5f745106cbb4088bdd9e56891bda00b37085f417",
   "batch_size": 512,
   "blocker_detail": "The DS4 batch stack probe emitted finite logits/output-head hashes but no argmax or sampled committed token id.",
   "blocker_kind": "missing_argmax_token_commit_hook",
   "command_hash": "sha256:2ffcde42d9b7bf20a42cdb946ec22301f2a59d9fb5860a5373cb369b0086a215",
+  "commit_policy": "",
   "committed_token_ids": [],
   "comparison_kind": "logits",
   "final_output_finite": true,
@@ -40,6 +41,10 @@
   "output_head_hash": "fnv64:6cf5f3c6e011e527",
   "parity_artifact": "fixtures/pipeline_parity/dsv4_slice_tile8_cross_spark_ppn_passed_20260516.example.json",
   "parity_artifact_sha256": "sha256:52308fa2a2d6ea52eef29e4efe43da56f5488e66608c783ee544059f2344fc4b",
+  "parity_optimized_kernel_flags": {
+    "DS4_CUDA_MOE_SLICE_TILE8": "1"
+  },
+  "parity_scope": "cross_spark_ppn",
   "parity_status": "passed",
   "pp1_final_logits_hash": "fnv64:5c9c39e9a1665737",
   "pp1_output_sha256": "sha256:5c02cd813b087c8177063e78bddaf98e623bc2b1cd0d786f1928cd4c499762b1",
@@ -49,7 +54,11 @@
   "quantization_id": "DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf",
   "run_id": "ds4-b512-mb16-slice-tile8-prompt-decode-smoke-20260516",
   "runtime_id": "antirez-ds4-3630e64+explicit-preload+stage-handoff+tcp",
+  "sampling_params": {},
   "steady_state_pipeline_bound_rows_per_s": 741.4435178999681,
+  "synthetic_evidence": false,
+  "token_commit_artifact": "",
+  "token_commit_artifact_sha256": "",
   "token_commit_status": "blocked",
   "token_hash": ""
 }
