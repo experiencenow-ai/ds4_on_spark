@@ -54,11 +54,22 @@ TIMING_KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_-]*)=(?P<value>-?[0-9]+(
 
 TIMING_COMPONENT_KEYS = {
 	"draft": "draft_eval_ms",
-	"verify": "target_eval_ms",
+	"target": "target_eval_ms",
+	"head": "output_head_ms",
 	"snapshot": "capture_ms",
 	"prefix": "token_commit_ms",
 	"replay": "verifier_replay_ms",
 	"exact_replay": "verifier_replay_ms",
+}
+
+TIMING_COUNT_KEYS = {
+	"target_calls": "target_eval_call_count",
+	"draft_calls": "draft_eval_call_count",
+	"head_calls": "output_head_call_count",
+	"replay_calls": "verifier_replay_count",
+	"rewind_calls": "cache_rewind_count",
+	"cache_sync_calls": "cache_sync_count",
+	"cuda_sync_calls": "cuda_sync_count",
 }
 
 
@@ -120,6 +131,7 @@ def _zero_components() -> dict[str, float]:
 		"verifier_replay_ms": 0.0,
 		"draft_eval_ms": 0.0,
 		"target_eval_ms": 0.0,
+		"output_head_ms": 0.0,
 		"cache_sync_ms": 0.0,
 		"cuda_sync_ms": 0.0,
 		"logging_ms": 0.0,
@@ -129,17 +141,69 @@ def _zero_components() -> dict[str, float]:
 	}
 
 
+def _zero_counts() -> dict[str, int]:
+	return {
+		"target_eval_call_count": 0,
+		"draft_eval_call_count": 0,
+		"output_head_call_count": 0,
+		"verifier_replay_count": 0,
+		"cache_rewind_count": 0,
+		"cache_sync_count": 0,
+		"cuda_sync_count": 0,
+	}
+
+
+def _timing_int(values: dict[str, float], key: str, default: int = 0) -> int:
+	if key not in values:
+		return int(default)
+	return int(values.get(key, default))
+
+
 def summarize_timing_events(events: list[TimingEvent]) -> dict[str, Any]:
 	components = _zero_components()
+	counts = _zero_counts()
 	total_ms = 0.0
+	verifier_ms = 0.0
+	emitted_tokens = 0
 	kinds: Counter[str] = Counter()
 	for ev in events:
 		kinds[str(ev.kind)] += 1
 		event_component_ms = 0.0
+		verify_ms = float(ev.values.get("verify", 0.0))
+		verifier_ms += verify_ms
+		if "target" not in ev.values and "head" not in ev.values:
+			components["target_eval_ms"] += verify_ms
 		for key, component in TIMING_COMPONENT_KEYS.items():
 			component_ms = float(ev.values.get(key, 0.0))
 			components[component] += component_ms
-			event_component_ms += component_ms
+			if verify_ms == 0.0 or key not in ("target", "head"):
+				event_component_ms += component_ms
+		event_component_ms += verify_ms
+		for key, count_field in TIMING_COUNT_KEYS.items():
+			if key in ev.values:
+				counts[count_field] += _timing_int(ev.values, key)
+		drafted = _timing_int(ev.values, "drafted")
+		committed = _timing_int(ev.values, "committed")
+		if "draft_calls" not in ev.values and drafted > 1 and float(ev.values.get("draft", 0.0)) > 0.0:
+			counts["draft_eval_call_count"] += (drafted - 1)
+		if "target_calls" not in ev.values and verify_ms > 0.0:
+			if str(ev.kind) == "decode2":
+				counts["target_eval_call_count"] += 2
+			else:
+				counts["target_eval_call_count"] += 1
+		if "head_calls" not in ev.values and verify_ms > 0.0:
+			if str(ev.kind) == "decode2":
+				counts["output_head_call_count"] += 2
+			else:
+				counts["output_head_call_count"] += 1
+		if "replay_calls" not in ev.values and (float(ev.values.get("replay", 0.0)) > 0.0 or float(ev.values.get("exact_replay", 0.0)) > 0.0):
+			counts["verifier_replay_count"] += 1
+		if "rewind_calls" not in ev.values and (float(ev.values.get("replay", 0.0)) > 0.0 or float(ev.values.get("exact_replay", 0.0)) > 0.0):
+			counts["cache_rewind_count"] += 1
+		if "emitted" in ev.values:
+			emitted_tokens += _timing_int(ev.values, "emitted")
+		elif "committed" in ev.values:
+			emitted_tokens += (committed + 1)
 		event_total_ms = float(ev.values.get("total", 0.0))
 		if event_total_ms > event_component_ms:
 			components["scheduler_overhead_ms"] += (event_total_ms - event_component_ms)
@@ -153,6 +217,9 @@ def summarize_timing_events(events: list[TimingEvent]) -> dict[str, Any]:
 		"events": int(len(events)),
 		"kinds": {str(k): int(v) for k, v in sorted(kinds.items(), key=lambda kv: kv[0])},
 		"per_component_ms": components,
+		"call_counts": counts,
+		"verifier_ms": float(verifier_ms),
+		"emitted_tokens": int(emitted_tokens),
 		"total_reported_ms": float(total_ms),
 		"slowest_component": slowest_component,
 	}

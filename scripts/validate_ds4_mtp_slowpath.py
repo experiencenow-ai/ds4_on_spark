@@ -33,6 +33,7 @@ REQUIRED_FIELDS = (
 	"verifier_ms",
 	"draft_eval_ms",
 	"target_eval_ms",
+	"output_head_ms",
 	"cache_sync_ms",
 	"cuda_sync_ms",
 	"logging_ms",
@@ -40,6 +41,16 @@ REQUIRED_FIELDS = (
 	"logging_capture_ms",
 	"token_commit_ms",
 	"scheduler_overhead_ms",
+	"target_eval_call_count",
+	"draft_eval_call_count",
+	"output_head_call_count",
+	"verifier_replay_count",
+	"cache_rewind_count",
+	"cache_sync_count",
+	"cuda_sync_count",
+	"emitted_tokens",
+	"target_eval_ms_per_emitted_token",
+	"target_eval_ms_per_accepted_draft_token",
 	"blocker_kind",
 	"blocker_detail",
 )
@@ -48,6 +59,7 @@ COMPONENT_FIELDS = (
 	"verifier_replay_ms",
 	"draft_eval_ms",
 	"target_eval_ms",
+	"output_head_ms",
 	"cache_sync_ms",
 	"cuda_sync_ms",
 	"logging_ms",
@@ -116,10 +128,6 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		errors.append("draft_tokens_attempted must match attempted_draft_tokens")
 	if mismatch_count is not None and mismatch_events is not None and abs(mismatch_count - mismatch_events) > 0.000001:
 		errors.append("target_next_mismatch_events must match target_next_mismatch_count")
-	verifier = _num_or_none(obj.get("verifier_ms"))
-	replay = _num_or_none(obj.get("verifier_replay_ms"))
-	if verifier is not None and replay is not None and abs(verifier - replay) > 0.000001:
-		errors.append("verifier_ms must match verifier_replay_ms")
 	logging_capture = _num_or_none(obj.get("logging_capture_ms"))
 	logging_ms = _num_or_none(obj.get("logging_ms"))
 	capture_ms = _num_or_none(obj.get("capture_ms"))
@@ -130,6 +138,16 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 		blocker = str(obj.get("blocker_kind", "") or "").strip()
 		if blocker == "" or blocker == "none":
 			errors.append("MTP slower than baseline requires blocker_kind")
+	emitted = _num_or_none(obj.get("emitted_tokens"))
+	target_eval = _num_or_none(obj.get("target_eval_ms"))
+	target_per_emitted = _num_or_none(obj.get("target_eval_ms_per_emitted_token"))
+	target_per_accepted = _num_or_none(obj.get("target_eval_ms_per_accepted_draft_token"))
+	if emitted is not None and emitted > 0.0 and target_eval is not None and target_per_emitted is not None:
+		if abs(target_per_emitted - (target_eval / emitted)) > 0.000001:
+			errors.append("target_eval_ms_per_emitted_token must equal target_eval_ms / emitted_tokens")
+	if draft_accepted is not None and draft_accepted > 0.0 and target_eval is not None and target_per_accepted is not None:
+		if abs(target_per_accepted - (target_eval / draft_accepted)) > 0.000001:
+			errors.append("target_eval_ms_per_accepted_draft_token must equal target_eval_ms / draft_tokens_accepted")
 	return {
 		"ok": len(errors) == 0,
 		"errors": errors,

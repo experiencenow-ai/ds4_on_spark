@@ -17,14 +17,37 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertEqual(int(timing.get("events")), 2)
 		self.assertAlmostEqual(float(components.get("draft_eval_ms")), 5.0)
 		self.assertAlmostEqual(float(components.get("target_eval_ms")), 28.0)
+		self.assertAlmostEqual(float(components.get("output_head_ms")), 0.0)
 		self.assertAlmostEqual(float(components.get("verifier_replay_ms")), 30.0)
 		self.assertAlmostEqual(float(components.get("scheduler_overhead_ms")), 1.5)
 		self.assertEqual(timing.get("slowest_component"), "verifier_replay_ms")
+		counts = timing.get("call_counts") or {}
+		self.assertEqual(counts.get("target_eval_call_count"), 2)
+		self.assertEqual(counts.get("output_head_call_count"), 2)
+		self.assertEqual(counts.get("verifier_replay_count"), 1)
+		self.assertEqual(timing.get("emitted_tokens"), 5)
+
+	def test_extracts_decode2_decomposition(self) -> None:
+		lines = [
+			"ds4: mtp timing decode2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=20.000 ms target=12.000 ms head=6.000 ms target_calls=2 head_calls=2 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=25.000 ms\n",
+		]
+		res = extract.extract_events(lines)
+		timing = res.get("timing") or {}
+		components = timing.get("per_component_ms") or {}
+		counts = timing.get("call_counts") or {}
+		self.assertAlmostEqual(float(timing.get("verifier_ms")), 20.0)
+		self.assertAlmostEqual(float(components.get("target_eval_ms")), 12.0)
+		self.assertAlmostEqual(float(components.get("output_head_ms")), 6.0)
+		self.assertEqual(counts.get("target_eval_call_count"), 2)
+		self.assertEqual(counts.get("draft_eval_call_count"), 1)
+		self.assertEqual(counts.get("output_head_call_count"), 2)
+		self.assertEqual(counts.get("cuda_sync_count"), 0)
+		self.assertEqual(timing.get("emitted_tokens"), 3)
 
 	def test_builds_and_validates_slowpath_report(self) -> None:
 		lines = [
 			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
-			"ds4: mtp timing micro drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=20.000 ms total=25.000 ms\n",
+			"ds4: mtp timing decode2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=20.000 ms target=12.000 ms head=6.000 ms target_calls=2 head_calls=2 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=25.000 ms\n",
 			"ds4: prefill: 2.18 t/s, generation: 1.38 t/s\n",
 		]
 		report = build.build_report_from_lines(
@@ -47,9 +70,20 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertAlmostEqual(float(report.get("speedup_vs_baseline")), 1.38 / 15.07)
 		self.assertEqual(report.get("target_next_mismatch_count"), 0)
 		self.assertEqual(report.get("target_next_mismatch_events"), 0)
-		self.assertEqual(report.get("verifier_ms"), report.get("verifier_replay_ms"))
+		self.assertAlmostEqual(float(report.get("verifier_ms")), 20.0)
+		self.assertAlmostEqual(float(report.get("output_head_ms")), 6.0)
 		self.assertAlmostEqual(float(report.get("logging_capture_ms")), 1.0)
 		self.assertAlmostEqual(float(report.get("scheduler_overhead_ms")), 1.0)
+		self.assertEqual(report.get("target_eval_call_count"), 2)
+		self.assertEqual(report.get("draft_eval_call_count"), 1)
+		self.assertEqual(report.get("output_head_call_count"), 2)
+		self.assertEqual(report.get("verifier_replay_count"), 0)
+		self.assertEqual(report.get("cache_rewind_count"), 0)
+		self.assertEqual(report.get("cache_sync_count"), 0)
+		self.assertEqual(report.get("cuda_sync_count"), 0)
+		self.assertEqual(report.get("emitted_tokens"), 3)
+		self.assertAlmostEqual(float(report.get("target_eval_ms_per_emitted_token")), 4.0)
+		self.assertAlmostEqual(float(report.get("target_eval_ms_per_accepted_draft_token")), 6.0)
 		self.assertEqual(report.get("slowest_component"), "target_eval_ms")
 		self.assertEqual(report.get("blocker_kind"), "target_verifier_overhead")
 		self.assertTrue(validate.validate_report(report).get("ok"))
@@ -77,6 +111,16 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 			"per_component_ms": {k: 0.0 for k in validate.COMPONENT_FIELDS},
 			"verifier_ms": 0.0,
 			"logging_capture_ms": 0.0,
+			"target_eval_call_count": 1,
+			"draft_eval_call_count": 1,
+			"output_head_call_count": 1,
+			"verifier_replay_count": 0,
+			"cache_rewind_count": 0,
+			"cache_sync_count": 0,
+			"cuda_sync_count": 0,
+			"emitted_tokens": 1,
+			"target_eval_ms_per_emitted_token": 0.0,
+			"target_eval_ms_per_accepted_draft_token": 0.0,
 			"blocker_kind": "target_verifier_overhead",
 			"blocker_detail": "slow",
 		}
