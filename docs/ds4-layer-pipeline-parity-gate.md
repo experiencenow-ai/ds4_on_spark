@@ -87,9 +87,12 @@ PP=N slice-tile8 logits hash exactly:
 records `parity_status: passed`, `parity_scope: cross_spark_ppn`, and
 `quality_parity_eligible: true`.
 
-Production generation remains disabled in the prompt-decode smoke artifact
-because the current DS4 batch stack probe emits finite logits/output-head hashes
-but does not yet emit an argmax or sampled committed token id.
+Production generation remains disabled in the committed fixture because the
+current DS4 batch stack probe emits finite logits/output-head hashes but does
+not yet emit an argmax or sampled committed token id. The repo now has a
+`ds4-token-commit-export-v1` contract and prompt-decode validator; once the
+runtime prints the argmax id, the smoke can reference that token-commit export
+and set `production_generation_eligible=true`.
 
 ## Comparison Kinds
 
@@ -160,8 +163,10 @@ validator prevent it from satisfying DS4 quality parity.
 Real provider eligibility requires all of the following: `parity_status:
 passed`, `parity_scope` of `cross_spark_ppn` or
 `parity_passed_prefill_decode`, `comparison_kind` of `logits`, `tokens`, or
-`hidden_state`, a non-synthetic artifact, and explicit
-`optimized_kernel_flags`. Local split/reassembly evidence is useful
+`hidden_state`, a non-synthetic artifact, explicit `optimized_kernel_flags`,
+finite final output, `committed_token_ids`, `token_hash`, and a
+`ds4-token-commit-export-v1` reference whose optimized kernel flags match the
+parity artifact. Local split/reassembly evidence is useful
 implementation evidence, but it is not enough for production routing.
 
 ## Probe Commands
