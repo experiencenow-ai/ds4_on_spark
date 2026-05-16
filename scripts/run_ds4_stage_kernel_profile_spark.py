@@ -28,6 +28,7 @@ VARIANTS = {
 	"no_p2": {"DS4_CUDA_MOE_NO_P2": "1"},
 	"slice_tile8": {"DS4_CUDA_MOE_SLICE_TILE8": "1"},
 	"slice_down_tile8": {"DS4_CUDA_MOE_SLICE_TILE8": "1", "DS4_CUDA_MOE_SLICE_DOWN_TILE8": "1"},
+	"direct_sum6_down": {"DS4_CUDA_MOE_SLICE_TILE8": "1", "DS4_CUDA_MOE_DIRECT_SUM6_DOWN": "1"},
 }
 
 
