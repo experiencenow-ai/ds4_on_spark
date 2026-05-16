@@ -61,12 +61,51 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 			baseline_tps=14.65,
 			mtp_tps=None,
 		)
+		report["target_suffix_verifier_implemented"] = True
+		report["target_suffix_verifier_delegates_to_serial_decode"] = True
+		report["staged_kv_ready"] = False
+		report["true_suffix_blocker"] = "target_suffix_verify_k2 delegates to serial target decode"
+		report["exact_next_code_change"] = "replace delegate with one batched K=2 target suffix graph"
 		self.assertEqual(report["output_head_invocation_count"], 1)
 		self.assertEqual(report["output_head_rows"], 2)
 		self.assertEqual(report["full_vocab_logits_rows"], 1)
 		self.assertEqual(report["top1_only_rows"], 1)
 		self.assertEqual(report["blocker_kind"], "target_suffix_verifier_still_serial")
 		self.assertTrue(validate.validate_report(report)["ok"])
+
+	def test_target_suffix_blocker_requires_explicit_staging_fields(self) -> None:
+		report = {
+			"format": "ds4-mtp-verifier-economics-v1",
+			"baseline_tps": 10.0,
+			"mtp_tps": 5.0,
+			"speedup_vs_baseline": 0.5,
+			"accepted_draft_tokens": 2,
+			"attempted_draft_tokens": 2,
+			"accept_rate": 1.0,
+			"emitted_tokens": 3,
+			"target_verifier_invocation_count": 1,
+			"target_positions_verified": 2,
+			"target_positions_per_invocation": 2.0,
+			"target_eval_ms": 10.0,
+			"target_eval_ms_per_invocation": 10.0,
+			"target_eval_ms_per_verified_position": 5.0,
+			"output_head_invocation_count": 1,
+			"output_head_rows": 2,
+			"full_vocab_logits_rows": 1,
+			"top1_only_rows": 1,
+			"draft_eval_ms": 1.0,
+			"snapshot_ms": 0.0,
+			"kv_commit_ms": 0.0,
+			"kv_restore_ms": 0.0,
+			"logits_readback_ms": 0.0,
+			"token_commit_ms": 0.0,
+			"slowest_component": "target_eval_ms",
+			"blocker_kind": "target_suffix_verifier_still_serial",
+			"blocker_detail": "slow",
+		}
+		res = validate.validate_report(report)
+		self.assertFalse(res["ok"])
+		self.assertTrue(any("staged_kv_ready" in e for e in res["errors"]))
 
 	def test_validator_rejects_bad_speedup(self) -> None:
 		report = {
