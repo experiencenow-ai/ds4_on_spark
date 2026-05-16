@@ -129,6 +129,13 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - emits per-step decode, commit, KV-update, and token-hash arrays for `ds4-b512-end-to-end-decode-v1`
     - keeps row replacement disabled for this PR
 
+- `ds4-3630e64-cuda-b512-row-token-input.patch`
+  - Target: `antirez/ds4@3630e64`, applied after the token-commit profile/constrained patch
+  - Purpose:
+    - adds `DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS=...` so B=512 stage0 embedding input can use explicit per-row compact suffix token IDs
+    - emits `row_token_input`, `row_token_count`, and suffix-token metadata through the stage-handoff artifact path
+    - enables the shared-prefix compact-suffix 1-token prompt benchmark without changing MoE kernels or claiming production eligibility
+
 Apply (example):
 
 ```bash

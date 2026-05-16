@@ -71,11 +71,14 @@ def build_from_stage(args: argparse.Namespace) -> dict[str, Any]:
 	parity = load_json(Path(args.parity_artifact))
 	batch = int(stage.get("batch_size", 0))
 	mb = int(stage.get("microbatch_count", 0))
-	decode_ms = nested_last_ms(stage)
+	stage_ms = nested_last_ms(stage)
+	decode_ms = 0.0 if args.first_token_from_suffix_prefill else stage_ms
 	token_commit_ms = float(stage.get("token_commit_ms", max_number(stage.get("token_commit_ms_by_microbatch"))))
 	prefix_prepare_ms = float(args.prefix_prepare_ms)
 	prefix_load_ms = float(args.prefix_load_or_fork_ms)
 	suffix_prefill_ms = float(args.suffix_prefill_ms)
+	if args.first_token_from_suffix_prefill and suffix_prefill_ms == 0.0:
+		suffix_prefill_ms = stage_ms
 	result_collection_ms = token_commit_ms
 	end_to_end_ms = prefix_prepare_ms + prefix_load_ms + suffix_prefill_ms + decode_ms + result_collection_ms
 	output_tokens = batch * mb * int(args.output_token_target)
@@ -91,7 +94,7 @@ def build_from_stage(args: argparse.Namespace) -> dict[str, Any]:
 		"prefix_load_or_fork_ms": prefix_load_ms,
 		"suffix_tokens_per_row": int(args.suffix_tokens_per_row),
 		"suffix_prefill_ms": suffix_prefill_ms,
-		"suffix_prefill_tokens_per_s": (batch * int(args.suffix_tokens_per_row) * 1000.0 / suffix_prefill_ms) if suffix_prefill_ms > 0.0 else 0.0,
+		"suffix_prefill_tokens_per_s": (batch * mb * int(args.suffix_tokens_per_row) * 1000.0 / suffix_prefill_ms) if suffix_prefill_ms > 0.0 else 0.0,
 		"decode_steps": int(args.output_token_target),
 		"per_step_decode_ms": [decode_ms] if int(args.output_token_target) == 1 else [],
 		"kv_update_mode": "none" if int(args.output_token_target) == 1 else "blocked",
@@ -361,6 +364,7 @@ def main() -> int:
 	build.add_argument("--prefix-load-or-fork-ms", type=float, default=0.0)
 	build.add_argument("--suffix-tokens-per-row", type=int, default=0)
 	build.add_argument("--suffix-prefill-ms", type=float, default=0.0)
+	build.add_argument("--first-token-from-suffix-prefill", action="store_true")
 	build.add_argument("--output-head-ms", type=float, default=0.0)
 	build.add_argument("--token-commit-profile-artifact", default="")
 	build.add_argument("--token-commit-profile-artifact-sha256", default="")

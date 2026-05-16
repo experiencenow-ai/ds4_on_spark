@@ -51,6 +51,25 @@ class EndToEndDecodeTest(unittest.TestCase):
 		self.assertGreater(obj["end_to_end_output_tokens_per_s"], 600.0)
 		self.assertEqual(obj["production_generation_eligible"], False)
 
+	def test_shared_prefix_one_token_success_separates_suffix_prefill(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_shared_prefix_hit_short_suffix_1_token_20260516.example.json")
+		self.assertEqual(obj["prompt_pattern"], "shared_prefix_compact_suffix")
+		self.assertEqual(obj["prefix_mode"], "hit_fork")
+		self.assertEqual(obj["output_token_target"], 1)
+		self.assertEqual(obj["suffix_tokens_per_row"], 1)
+		self.assertEqual(obj["decode_ms"], 0.0)
+		self.assertGreater(obj["suffix_prefill_ms"], 0.0)
+		self.assertGreater(obj["suffix_prefill_tokens_per_s"], 250.0)
+		self.assertTrue(obj["committed_token_ids_present"])
+		self.assertEqual(obj["production_generation_eligible"], False)
+
+	def test_shared_prefix_miss_includes_prefix_prepare_cost(self) -> None:
+		hit = decode.load_json(FIX / "ds4_b512_shared_prefix_hit_short_suffix_1_token_20260516.example.json")
+		miss = decode.load_json(FIX / "ds4_b512_shared_prefix_miss_short_suffix_1_token_20260516.example.json")
+		self.assertEqual(miss["prefix_mode"], "miss_prepare")
+		self.assertGreater(miss["prefix_prepare_ms"], 0.0)
+		self.assertLess(miss["end_to_end_output_tokens_per_s"], hit["end_to_end_output_tokens_per_s"])
+
 	def test_batch_and_microbatch_are_fixed_for_this_artifact(self) -> None:
 		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_20260516.example.json")
 		obj = copy.deepcopy(obj)

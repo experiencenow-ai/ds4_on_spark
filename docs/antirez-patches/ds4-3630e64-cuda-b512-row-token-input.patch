@@ -1,0 +1,67 @@
+--- a/ds4.c
++++ b/ds4.c
+@@ -16887,6 +16887,24 @@
+         int32_t *ids,
+         uint32_t cap) {
+     const char *env = getenv("DS4_CUDA_STACK_PROBE_CONSTRAINED_TOKEN_IDS");
++    uint32_t n = 0;
++    if (!env || !env[0] || !ids || cap == 0) return 0;
++    while (*env && n < cap) {
++        while (*env == ',' || *env == ' ' || *env == '\t') env++;
++        if (!*env) break;
++        char *end = NULL;
++        long v = strtol(env, &end, 10);
++        if (end == env || v < 0 || v > INT32_MAX) break;
++        ids[n++] = (int32_t)v;
++        env = end;
++    }
++    return n;
++}
++
++static uint32_t cuda_stack_probe_parse_row_token_ids(
++        int32_t *ids,
++        uint32_t cap) {
++    const char *env = getenv("DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS");
+     uint32_t n = 0;
+     if (!env || !env[0] || !ids || cap == 0) return 0;
+     while (*env && n < cap) {
+@@ -17603,6 +17621,7 @@
+     const uint64_t q8_blocks = (DS4_N_EMBD + 31u) / 32u;
+     const char *input_file = cuda_stack_probe_boundary_input_file();
+     const char *output_file = cuda_stack_probe_boundary_output_file();
++    bool ok = true;
+     float *host_hc = xmalloc((size_t)hc_bytes);
+     int32_t *host_tokens = xmalloc((size_t)n_tokens * sizeof(host_tokens[0]));
+     int32_t *host_committed = xmalloc((size_t)n_tokens * sizeof(host_committed[0]));
+@@ -17626,6 +17645,15 @@
+     uint64_t *logits_hashes = xmalloc((size_t)iterations * sizeof(logits_hashes[0]));
+     uint64_t *logits_nonfinites = xmalloc((size_t)iterations * sizeof(logits_nonfinites[0]));
+     uint64_t *token_hashes = xmalloc((size_t)iterations * sizeof(token_hashes[0]));
++    const uint32_t row_token_count = cuda_stack_probe_parse_row_token_ids(host_tokens, n_tokens);
++    const bool row_token_input = row_token_count != 0;
++    if (row_token_input && row_token_count != n_tokens) {
++        fprintf(stderr,
++                "ds4: DS4_CUDA_STACK_PROBE_ROW_TOKEN_IDS parsed %u row tokens, expected %u\n",
++                row_token_count,
++                n_tokens);
++        ok = false;
++    }
+     memset(iter_ms, 0, (size_t)iterations * sizeof(iter_ms[0]));
+     memset(token_commit_ms, 0, (size_t)iterations * sizeof(token_commit_ms[0]));
+     memset(logits_readback_ms, 0, (size_t)iterations * sizeof(logits_readback_ms[0]));
+@@ -17641,7 +17669,6 @@
+     memset(host_committed, 0, (size_t)n_tokens * sizeof(host_committed[0]));
+     ds4_gpu_graph g;
+     memset(&g, 0, sizeof(g));
+-    bool ok = true;
+     if (cuda_stack_probe_preload_stage_enabled()) {
+         ok = cuda_stack_probe_preload_stage(model, weights);
+     }
+@@ -17778,6 +17805,7 @@
+         printf("],\"token_commit_ms\":[");
+         for (uint32_t i = 0; i < iterations; i++) printf("%s%.3f", i ? "," : "", token_commit_ms[i]);
+         printf("],\"token_commit_mode\":\"%s\"", constrained_commit ? "constrained_vocab_cpu_top1" : (batch_head ? "full_vocab_batch_head" : "single_row_head"));
++        printf(",\"row_token_input\":%s,\"row_token_count\":%u", row_token_input ? "true" : "false", row_token_count);
+         printf(",\"constrained_token_ids\":[");
+         if (constrained_commit) {
+             for (uint32_t i = 0; i < constrained_count; i++) printf("%s%d", i ? "," : "", constrained_ids[i]);
