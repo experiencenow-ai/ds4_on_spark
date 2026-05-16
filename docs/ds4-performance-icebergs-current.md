@@ -220,8 +220,9 @@ bottleneck.
 | Case | Output target | Result | End-to-end output tok/s | Decode-only rows/s | Token hash | Blocker |
 | --- | ---: | --- | ---: | ---: | --- | --- |
 | Decode only, B=512/mb16 | 1 | finite committed tokens | 260.973 | 261.082 | `fnv64:c73fd75838d4c57f` | none |
-| Shared prefix + compact suffix | 1 | blocked | 0.000 | 0.000 |  | missing B=512 prefix-fork/suffix-prefill hook |
-| Shared prefix + compact suffix | 4 | blocked | 0.000 | 0.000 |  | missing multi-step token commit/KV loop |
+| Shared prefix + compact suffix | 1 | blocked | 0.000 | 0.000 |  | `cuda_batch_stack_probe_seed_input()` lacks B=512 prefix-fork/suffix-prefill hook |
+| Shared prefix + compact suffix | 4 | blocked | 0.000 | 0.000 |  | `cuda_batch_stack_probe_run()` lacks repeated committed-token KV update loop |
+| Shared prefix + compact suffix | 8 | blocked | 0.000 | 0.000 |  | same repeated committed-token KV update loop missing |
 | Unique prefix control | 1 | blocked | 0.000 | 0.000 |  | missing B=512 unique-prefix prefill runner |
 
 Artifacts:
@@ -230,6 +231,7 @@ Artifacts:
 - `fixtures/end_to_end_decode/ds4_b512_decode_only_1_token_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_4_token_blocked_20260516.example.json`
+- `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_8_token_blocked_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_unique_prefix_control_blocked_20260516.example.json`
 
 ## Current Blocker
@@ -243,11 +245,15 @@ down from about 16.8 ms to about 21.2 ms and dropped the full pipeline from
 down projections per row, raises layer 2 down to about 63.4 ms, and drops the
 full pipeline to 408.047 rows/s.
 
-Exact next correctness code change: add the B=512 prefix-fork/suffix-prefill
-and repeated decode/KV update loop so the shared-prefix 1-token and 4/8-token
-workload shapes can run with committed token ids instead of blocker artifacts.
-The prompt-decode smoke path should then reference a `ds4-token-commit-export-v1`
-artifact from the committed-token output instead of staying blocked.
+Exact next correctness code change: add a repo-owned B=512 shared-prefix
+prefix-cache fork plus compact per-row suffix-prefill hook before decode, then
+extend `cuda_batch_stack_probe_run()` so committed batch-head token ids update
+the KV/session state and become the next step input without reseeding the probe.
+The 1-token shared-prefix target is blocked by the missing prefix/suffix hook;
+the 4/8-token targets are additionally blocked by the missing repeated
+decode/KV loop. The prompt-decode smoke path should then reference a
+`ds4-token-commit-export-v1` artifact from the committed-token output instead
+of staying blocked.
 
 Latest handoff artifacts:
 

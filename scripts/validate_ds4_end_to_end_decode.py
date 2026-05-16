@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ FORMAT = "ds4-b512-end-to-end-decode-v1"
 PROMPT_PATTERNS = {"shared_prefix_compact_suffix", "unique_prefix", "decode_only"}
 PREFIX_MODES = {"miss_prepare", "hit_fork", "no_prefix"}
 OUTPUT_TARGETS = {1, 4, 8, 16}
+KV_UPDATE_MODES = {"none", "present", "blocked"}
 
 
 def canonical_bytes(obj: Any) -> bytes:
@@ -90,6 +92,11 @@ def build_from_stage(args: argparse.Namespace) -> dict[str, Any]:
 		"suffix_prefill_ms": suffix_prefill_ms,
 		"suffix_prefill_tokens_per_s": (batch * int(args.suffix_tokens_per_row) * 1000.0 / suffix_prefill_ms) if suffix_prefill_ms > 0.0 else 0.0,
 		"decode_steps": int(args.output_token_target),
+		"per_step_decode_ms": [decode_ms] if int(args.output_token_target) == 1 else [],
+		"kv_update_mode": "none" if int(args.output_token_target) == 1 else "blocked",
+		"kv_update_ms": 0.0,
+		"committed_token_ids_by_step": [stage.get("committed_token_ids", [])] if int(args.output_token_target) == 1 and stage.get("committed_token_ids_present") else [],
+		"token_hashes_by_step": [str(stage.get("token_hash", ""))] if int(args.output_token_target) == 1 and stage.get("token_hash") else [],
 		"decode_ms": decode_ms,
 		"decode_only_rows_per_s": float(stage.get("achieved_streaming_rows_per_s", 0.0)),
 		"output_head_ms": float(args.output_head_ms),
@@ -136,6 +143,11 @@ def base_artifact(args: argparse.Namespace) -> dict[str, Any]:
 		"suffix_prefill_ms": 0.0,
 		"suffix_prefill_tokens_per_s": 0.0,
 		"decode_steps": int(args.output_token_target),
+		"per_step_decode_ms": [],
+		"kv_update_mode": "none",
+		"kv_update_ms": 0.0,
+		"committed_token_ids_by_step": [],
+		"token_hashes_by_step": [],
 		"decode_ms": 0.0,
 		"decode_only_rows_per_s": 0.0,
 		"output_head_ms": 0.0,
@@ -158,6 +170,8 @@ def base_artifact(args: argparse.Namespace) -> dict[str, Any]:
 
 def build_blocked(args: argparse.Namespace) -> dict[str, Any]:
 	obj = base_artifact(args)
+	if int(args.output_token_target) > 1 or "kv" in str(args.blocker_kind).lower():
+		obj["kv_update_mode"] = "blocked"
 	obj["artifact_sha256"] = artifact_sha256(obj)
 	obj["artifact_hash"] = obj["artifact_sha256"]
 	return obj
@@ -199,6 +213,25 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 		errors.append("suffix_tokens_per_row must be a non-negative integer")
 	if not isinstance(obj.get("decode_steps"), int) or obj.get("decode_steps", 0) <= 0:
 		errors.append("decode_steps must be a positive integer")
+	if obj.get("kv_update_mode") not in KV_UPDATE_MODES:
+		errors.append("kv_update_mode must be none, present, or blocked")
+	per_step = obj.get("per_step_decode_ms")
+	if not isinstance(per_step, list):
+		errors.append("per_step_decode_ms must be a list")
+	elif obj.get("blocker_kind") == "none":
+		if len(per_step) != obj.get("decode_steps"):
+			errors.append("per_step_decode_ms length must match decode_steps")
+		elif not all(isinstance(v, (int, float)) and v >= 0.0 for v in per_step):
+			errors.append("per_step_decode_ms must contain non-negative numbers")
+		elif not math.isclose(float(obj.get("decode_ms", 0.0)), sum(float(v) for v in per_step), rel_tol=0.05, abs_tol=1.0):
+			errors.append("decode_ms must approximately equal sum(per_step_decode_ms)")
+	token_hashes = obj.get("token_hashes_by_step")
+	token_ids_by_step = obj.get("committed_token_ids_by_step")
+	if not isinstance(token_hashes, list):
+		errors.append("token_hashes_by_step must be a list")
+	if not isinstance(token_ids_by_step, list):
+		errors.append("committed_token_ids_by_step must be a list")
+	expect_number(errors, obj, "kv_update_ms")
 	if not isinstance(obj.get("optimized_kernel_flags"), dict):
 		errors.append("optimized_kernel_flags must be an object")
 	success = obj.get("blocker_kind") == "none"
@@ -215,6 +248,12 @@ def validate_artifact(obj: dict[str, Any]) -> list[str]:
 			errors.append("parity_artifact_sha256 must be sha256")
 		if obj.get("committed_token_ids_present") is not True:
 			errors.append("successful decode benchmark requires committed token ids")
+		if obj.get("decode_steps", 0) > 1 and obj.get("kv_update_mode") != "present":
+			errors.append("multi-step decode benchmark requires kv_update_mode=present")
+		if isinstance(token_hashes, list) and len(token_hashes) != obj.get("decode_steps"):
+			errors.append("token_hashes_by_step length must match decode_steps")
+		if isinstance(token_ids_by_step, list) and len(token_ids_by_step) != obj.get("decode_steps"):
+			errors.append("committed_token_ids_by_step length must match decode_steps")
 		if float(obj.get("end_to_end_output_tokens_per_s", 0.0)) <= 0.0:
 			errors.append("successful decode benchmark requires positive end_to_end_output_tokens_per_s")
 	else:

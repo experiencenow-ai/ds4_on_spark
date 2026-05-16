@@ -39,6 +39,10 @@ class EndToEndDecodeTest(unittest.TestCase):
 		self.assertEqual(obj["prefix_mode"], "no_prefix")
 		self.assertEqual(obj["prefix_prepare_ms"], 0.0)
 		self.assertEqual(obj["suffix_prefill_ms"], 0.0)
+		self.assertEqual(obj["kv_update_mode"], "none")
+		self.assertEqual(len(obj["per_step_decode_ms"]), 1)
+		self.assertEqual(len(obj["committed_token_ids_by_step"]), 1)
+		self.assertEqual(len(obj["token_hashes_by_step"]), 1)
 		self.assertGreater(obj["decode_only_rows_per_s"], 15.0)
 
 	def test_batch_and_microbatch_are_fixed_for_this_artifact(self) -> None:
@@ -49,6 +53,31 @@ class EndToEndDecodeTest(unittest.TestCase):
 		obj["artifact_hash"] = obj["artifact_sha256"]
 		errors = decode.validate_artifact(obj)
 		self.assertTrue(any("batch_size" in item for item in errors))
+
+	def test_multi_step_success_requires_kv_update_loop(self) -> None:
+		obj = decode.load_json(FIX / "ds4_b512_decode_only_1_token_20260516.example.json")
+		obj = copy.deepcopy(obj)
+		obj["output_token_target"] = 4
+		obj["decode_steps"] = 4
+		obj["per_step_decode_ms"] = [obj["decode_ms"] / 4.0] * 4
+		obj["committed_token_ids_by_step"] = [obj["committed_token_ids_by_step"][0]] * 4
+		obj["token_hashes_by_step"] = [obj["token_hash"]] * 4
+		obj["kv_update_mode"] = "none"
+		obj["artifact_sha256"] = decode.artifact_sha256(obj)
+		obj["artifact_hash"] = obj["artifact_sha256"]
+		errors = decode.validate_artifact(obj)
+		self.assertTrue(any("kv_update_mode=present" in item for item in errors))
+
+	def test_blocked_short_output_targets_name_exact_missing_loop(self) -> None:
+		for name, target in (
+			("ds4_b512_shared_prefix_short_suffix_4_token_blocked_20260516.example.json", 4),
+			("ds4_b512_shared_prefix_short_suffix_8_token_blocked_20260516.example.json", 8),
+		):
+			with self.subTest(name=name):
+				obj = decode.load_json(FIX / name)
+				self.assertEqual(obj["output_token_target"], target)
+				self.assertEqual(obj["kv_update_mode"], "blocked")
+				self.assertEqual(obj["blocker_kind"], "missing_multi_step_token_commit_kv_loop")
 
 
 if __name__ == "__main__":
