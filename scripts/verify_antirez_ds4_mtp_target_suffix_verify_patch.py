@@ -16,20 +16,15 @@ def validate_patch_text(text: str) -> list[str]:
 		if line.startswith("+") and not line.startswith("+++ ")
 	)
 	required = [
-		"typedef struct",
-		"ds4_mtp_decode2_stats",
-		"target_verifier_invocation_count",
-		"target_positions_verified",
-		"static bool metal_graph_decode2_fused_output_head(",
-		"metal_graph_encode_output_head_batch(g, model, weights, 2, weights->output->dim[1])",
-		"stats->target_verifier_invocation_count++;",
-		"stats->target_eval_call_count++;",
-		"stats->target_positions_verified += 2;",
-		"metal_graph_decode2_fused_output_head(g, model, weights, cur0, cur1, top0, logits1, stats)",
-		"NULL,\n                                                  row_logits,\n                                                  &decode2_stats);",
+		"const bool use_target_suffix2 =",
+		"draft_n == 2 && getenv(\"DS4_MTP_SERIAL_SUFFIX\") == NULL;",
+		"token_vec_push(&s->checkpoint, drafts[0]);",
+		"token_vec_push(&s->checkpoint, drafts[1]);",
+		"metal_graph_verify_suffix_tops(&s->graph",
 		"const double snapshot_done = snapshot_t0;",
+		"metal_graph_read_spec_logits_row(&s->graph, 1, row_logits)",
 		"metal_graph_read_spec_logits_row(&s->graph, 0, row_logits)",
-		"verifier_calls=%d target_positions=%d target_calls=%d",
+		"verifier_calls=1 target_positions=2 target_calls=1 head_calls=1",
 	]
 	for needle in required:
 		if needle not in added:
