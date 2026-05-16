@@ -23,8 +23,14 @@ def validate_patch_text(text: str) -> list[str]:
 		"metal_graph_verify_suffix_tops(&s->graph",
 		"const double snapshot_done = snapshot_t0;",
 		"metal_graph_read_spec_logits_row(&s->graph, 1, row_logits)",
+		"ds4_gpu_matmul_q8_0_top1_tensor",
+		"metal_graph_encode_output_head_suffix2_top1",
+		"DS4_MTP_ROW0_TOP1_HEAD",
+		"metal_graph_materialize_suffix_logits_row(&s->graph",
 		"metal_graph_read_spec_logits_row(&s->graph, 0, row_logits)",
 		"verifier_calls=1 target_positions=2 target_calls=1 head_calls=1",
+		"row0_top1_head ? 1 : 2",
+		"row0_top1_head ? 1 : 0",
 	]
 	for needle in required:
 		if needle not in added:
