@@ -265,6 +265,29 @@ eligibility. It now also records `request_shape=b512_separate_rows`,
 full-vocab controls, row-token suffix probes, derived KV-loop artifacts, and any
 one-giant-prompt/B=1 shape.
 
+Constrained candidate-set sweep:
+
+| Candidate tokens | Kind | Output tok/s | Commit ms | Runtime-enforced set | Token hash | Status |
+| ---: | --- | ---: | ---: | --- | --- | --- |
+| 15 | `numeric_ids` | 665.660 | 33.411 | yes | `fnv64:0f3476a5eb4356b4` | validated |
+| 32 | `synthetic_candidate_set` | 648.727 | 37.526 | yes | `fnv64:ae6016264c78bc95` | validated |
+| 64 | `synthetic_candidate_set` | 660.921 | 38.430 | yes | `fnv64:fa7b9ce2062f2e6f` | validated |
+| 128 | `synthetic_candidate_set` | 666.892 | 42.943 | yes | `fnv64:39893c9f6d3939d5` | validated |
+| 256 | `synthetic_candidate_set` | 655.235 | 56.594 | yes | `fnv64:472c95dbdf2fe27e` | validated |
+| 512 | `synthetic_candidate_set` | 646.712 | 55.482 | reported 256 | `fnv64:472c95dbdf2fe27e` | blocked: runtime candidate set truncated |
+| 1024 | `synthetic_candidate_set` | 653.886 | 55.407 | reported 256 | `fnv64:472c95dbdf2fe27e` | blocked: runtime candidate set truncated |
+| 2048 | `synthetic_candidate_set` | 659.867 | 52.046 | reported 256 | `fnv64:472c95dbdf2fe27e` | blocked: runtime candidate set truncated |
+| full vocab | control | 264.586 | n/a | n/a | `fnv64:4dbeb5a7e01d8828` | full-vocab control |
+
+Largest validated candidate set above 600 tok/s: 256 tokens. Largest validated
+candidate set above 500 tok/s: 256 tokens. The first unproven size is 512
+tokens because the runtime reported only 256 active constrained token IDs, so
+512/1024/2048 cannot be counted as runtime-enforced larger candidate sets even
+though their measured rows stayed fast. Numeric file IDs should use a
+digit/space/newline grammar where possible: the logical answer space can be very
+large while the next-token candidate set remains tiny. One-token-per-file-ID is
+not the preferred design for huge file lists.
+
 Artifacts:
 
 - `fixtures/stage_handoff/spark012_b512_tcp_resident_mb16_p2_slice_tile8_batch_head_token_commit.example.json`
@@ -281,6 +304,7 @@ Artifacts:
 - `fixtures/constrained_output/ds4_b512_constrained_numeric_hit_4_token_20260516.example.json`
 - `fixtures/constrained_output/ds4_b512_constrained_numeric_hit_8_token_20260516.example.json`
 - `fixtures/constrained_output/ds4_b512_full_vocab_control_hit_1_token_20260516.example.json`
+- `fixtures/constrained_candidate_sweep/ds4_constrained_candidate_sweep_20260516.example.json`
 - `fixtures/token_commit_profile/ds4_b512_full_vocab_token_commit_profile_20260516.example.json`
 - `fixtures/token_commit_profile/ds4_b512_constrained_token_commit_profile_20260516.example.json`
 - `fixtures/end_to_end_decode/ds4_b512_shared_prefix_short_suffix_1_token_blocked_20260516.example.json`
