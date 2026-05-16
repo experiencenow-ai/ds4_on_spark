@@ -160,6 +160,15 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertFalse(bool(res.get("ok")))
 		self.assertTrue(any("target_next_mismatch_events" in e for e in res.get("errors", [])))
 
+	def test_validator_rejects_missing_verifier_call_counts(self) -> None:
+		for field in ("target_eval_call_count", "output_head_call_count"):
+			with self.subTest(field=field):
+				report = self._valid_report()
+				report.pop(field)
+				res = validate.validate_report(report)
+				self.assertFalse(bool(res.get("ok")))
+				self.assertTrue(any(field in e for e in res.get("errors", [])))
+
 
 if __name__ == "__main__":
 	unittest.main()
