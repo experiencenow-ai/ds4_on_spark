@@ -1,5 +1,6 @@
 {
-  "artifact_sha256": "sha256:e17ef16f3fa84764fdc5058c061ec85d6643f7c3fc7f85e0e26922f4a23031a3",
+  "artifact_hash": "sha256:66fad203adff52dd16aa328f9d286e5bedd475b52a0a5d2e655bdee83c68475f",
+  "artifact_sha256": "sha256:66fad203adff52dd16aa328f9d286e5bedd475b52a0a5d2e655bdee83c68475f",
   "boundary_after_layers": [
     14,
     28
@@ -14,11 +15,14 @@
     ],
     "status": "observed_stage_handoff"
   },
+  "command_hash": "sha256:102f744b59d42c4d6c2db3c8e4552289c3d757399bcbcd311cfc508eace8d934",
   "command_sha256": "sha256:102f744b59d42c4d6c2db3c8e4552289c3d757399bcbcd311cfc508eace8d934",
   "comparison_kind": "logits",
   "export_role": "ppn",
+  "final_logits_hash": "fnv64:5c9c39e9a1665737",
   "format": "ds4-final-output-export-v1",
   "input_sha256": "sha256:3899c55820fbdaabfd712ddb65f6947080372bf626d3818cfd39133965ebd860",
+  "input_tokens_sha256": "sha256:3899c55820fbdaabfd712ddb65f6947080372bf626d3818cfd39133965ebd860",
   "layer_ranges": [
     {
       "end": 15,
@@ -60,5 +64,6 @@
       "node_id": "spark2",
       "stage_id": 2
     }
-  ]
+  ],
+  "token_hash": ""
 }
