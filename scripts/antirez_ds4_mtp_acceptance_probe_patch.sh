@@ -203,6 +203,32 @@ import subprocess
 import sys
 import time
 
+PERF_ENV_KEYS = (
+	"DS4_CUDA_MODEL_COPY_CHUNK_MB",
+	"DS4_CUDA_WEIGHT_ARENA_CHUNK_MB",
+	"DS4_CUDA_WEIGHT_CACHE_BEST_EFFORT",
+	"DS4_CUDA_WEIGHT_CACHE_LIMIT_GB",
+	"DS4_CUDA_WEIGHT_CACHE_SYNC",
+	"DS4_MTP_CONF_LOG",
+	"DS4_MTP_DIRECT_DISABLE",
+	"DS4_MTP_FULL_LOGITS",
+	"DS4_MTP_ROW0_FULL_LOGITS",
+	"DS4_MTP_ROW2_FULL_LOGITS",
+	"DS4_MTP_ROW2_SKIP_LOGITS_READBACK",
+	"DS4_MTP_ROW2_TOP1_CONT",
+	"DS4_MTP_SESSION",
+	"DS4_MTP_TIMING",
+	"DS4_SUPPRESS_OUTPUT",
+)
+
+
+def perf_env_hash():
+	parts = []
+	for key in PERF_ENV_KEYS:
+		parts.append("%s=%s" % (key, os.environ.get(key, "")))
+	return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
+
+
 cmd = [
 	os.environ["DS4_BIN"],
 	"--cuda",
@@ -227,14 +253,18 @@ cmd = [
 ]
 prompt_hash = hashlib.sha256(os.environ["PROMPT"].encode("utf-8")).hexdigest()
 cmd_hash = hashlib.sha256("\0".join(cmd).encode("utf-8")).hexdigest()
+perf_hash = perf_env_hash()
+perf_keys = ",".join(PERF_ENV_KEYS)
 spec_disabled = 1 if os.environ.get("DS4_MTP_SPEC_DISABLE", "") != "" else 0
 phase = os.environ.get("RUN_LABEL", "mtp")
 print(
-	"ds4: mtp bench phase=%s command_sha256=%s prompt_sha256=%s n_predict=%s mtp_draft=%s ctx=%s seed=%s spec_disabled=%d"
+	"ds4: mtp bench phase=%s command_sha256=%s prompt_sha256=%s perf_env_sha256=%s perf_env_keys=%s n_predict=%s mtp_draft=%s ctx=%s seed=%s spec_disabled=%d"
 	% (
 		phase,
 		cmd_hash,
 		prompt_hash,
+		perf_hash,
+		perf_keys,
 		os.environ["N_PREDICT"],
 		os.environ["MTP_DRAFT"],
 		os.environ["CTX"],
@@ -248,9 +278,10 @@ t0 = time.monotonic()
 rc = subprocess.call(cmd)
 wall = time.monotonic() - t0
 print(
-	"ds4: mtp bench phase=%s external_wall_s=%.6f exit_code=%d n_predict=%s mtp_draft=%s ctx=%s seed=%s spec_disabled=%d"
+	"ds4: mtp bench phase=%s perf_env_sha256=%s external_wall_s=%.6f exit_code=%d n_predict=%s mtp_draft=%s ctx=%s seed=%s spec_disabled=%d"
 	% (
 		phase,
+		perf_hash,
 		wall,
 		rc,
 		os.environ["N_PREDICT"],
