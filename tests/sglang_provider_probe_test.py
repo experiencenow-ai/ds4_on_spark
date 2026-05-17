@@ -18,7 +18,7 @@ class SglangProviderProbeTest(unittest.TestCase):
     def test_probe_records_checkpoint_source_and_api_health(self) -> None:
         probe = validator.load_json(SPARK_FIXTURE)
         self.assertEqual(probe["checkpoint_source"]["status"], "blocked")
-        self.assertIn("SSH is unreachable", probe["checkpoint_source"]["detail"])
+        self.assertIn("reachability is blocked", probe["checkpoint_source"]["detail"])
         self.assertEqual(probe["api_health_status"]["status"], "blocked")
         self.assertIn("No route to host", probe["api_health_status"]["error"])
         self.assertEqual(probe["hardware"]["status"], "unreachable")
