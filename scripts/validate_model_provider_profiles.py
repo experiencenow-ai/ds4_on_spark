@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 
-FORMAT = "ds4-model-provider-profile-v1"
+FORMATS = {"ds4-model-provider-profile-v1", "centaur-model-provider-profile-v1"}
 TIERS = {"deterministic", "local_small", "local_coder", "near_frontier_local", "frontier_api"}
-RUNTIMES = {"deterministic", "vllm", "sglang", "llama_cpp", "ds4_custom_runtime", "ds4_layer_pipeline", "simulator", "frontier_api"}
+RUNTIMES = {"deterministic", "vllm", "sglang", "llama_cpp", "local_openai_compatible", "ds4_custom_runtime", "ds4_layer_pipeline", "simulator", "frontier_api"}
 PROVIDER_KINDS = {"deterministic_tool", "independent_lane", "layer_pipeline", "openai_compatible_endpoint", "simulator", "external_placeholder"}
 SECRET_KEY_RE = re.compile(r"(^|[_\-.])(api[_\-.]?key|apikey|password|secret|access[_\-.]?token|auth[_\-.]?token|bearer)($|[_\-.])")
 FIXED_SPARK_COUNT_FIELDS = {"spark_count", "num_sparks", "world_size"}
@@ -114,8 +114,8 @@ def validate_profile(obj: dict[str, Any], path: Path) -> list[str]:
 	for field in FIXED_SPARK_COUNT_FIELDS:
 		if field in obj:
 			errors.append(err(path, f"fixed Spark count field is not allowed: {field}"))
-	if obj.get("format") != FORMAT:
-		errors.append(err(path, f"format must be {FORMAT}"))
+	if obj.get("format") not in FORMATS:
+		errors.append(err(path, f"format must be one of {sorted(FORMATS)}"))
 	tier = as_str(obj, "tier", path, errors)
 	runtime = as_str(obj, "runtime", path, errors)
 	provider_kind = as_str(obj, "provider_kind", path, errors)

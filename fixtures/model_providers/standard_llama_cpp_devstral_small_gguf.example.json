@@ -1,0 +1,38 @@
+{
+  "benchmark_refs": [
+    "fixtures/standard_runtime_benchmarks/llama_cpp_devstral_small_gguf_blocked.example.json"
+  ],
+  "blocked_reason": "No live Devstral llama.cpp benchmark artifact is available.",
+  "endpoint": {
+    "binary": "",
+    "kind": "local_binary",
+    "status": "blocked"
+  },
+  "format": "centaur-model-provider-profile-v1",
+  "last_probe_artifact": "fixtures/standard_runtime_benchmarks/llama_cpp_devstral_small_gguf_blocked.example.json",
+  "maximum_wait_ms": 0,
+  "measured_input_tps": null,
+  "measured_output_tps": null,
+  "minimum_batch_tokens": 1,
+  "model_id": "devstral-small-gguf-candidate",
+  "node_ids": [],
+  "preferred_batch_tokens": 1,
+  "production_eligible": false,
+  "provider_id": "standard-llama-cpp-devstral-small-gguf",
+  "provider_kind": "independent_lane",
+  "quality_scores": {
+    "dry_route_id": null,
+    "free_form_chat": null,
+    "judge_reviewer_decision": null,
+    "routine_code_explanation": null,
+    "small_code_patch_plan": null,
+    "structured_classification": null
+  },
+  "runtime": "llama_cpp",
+  "supported_lanes": [
+    "routine_code_explanation",
+    "small_code_patch_plan",
+    "judge_reviewer_decision"
+  ],
+  "tier": "local_coder"
+}
