@@ -7,12 +7,22 @@ from scripts import validate_ds4_sglang_provider_probe as validator
 
 
 FIXTURE = Path("fixtures/sglang_provider_probe/sglang_provider_probe_local_blocked.example.json")
+SPARK_FIXTURE = Path("fixtures/sglang_provider_probe/sglang_provider_probe_spark0_acquisition_blocked_20260517.example.json")
 
 
 class SglangProviderProbeTest(unittest.TestCase):
     def test_fixture_validates(self) -> None:
-        result = validator.validate_paths([FIXTURE])
+        result = validator.validate_paths([FIXTURE, SPARK_FIXTURE])
         self.assertTrue(result["ok"], result["errors"])
+
+    def test_probe_records_checkpoint_source_and_api_health(self) -> None:
+        probe = validator.load_json(SPARK_FIXTURE)
+        self.assertEqual(probe["checkpoint_source"]["status"], "blocked")
+        self.assertIn("SSH is unreachable", probe["checkpoint_source"]["detail"])
+        self.assertEqual(probe["api_health_status"]["status"], "blocked")
+        self.assertIn("No route to host", probe["api_health_status"]["error"])
+        self.assertEqual(probe["hardware"]["status"], "unreachable")
+        self.assertGreaterEqual(len(probe["acquisition_attempts"]), 1)
 
     def test_required_benchmark_cases_are_present(self) -> None:
         probe = validator.load_json(FIXTURE)
@@ -59,12 +69,24 @@ class SglangProviderProbeTest(unittest.TestCase):
         errors = validator.validate_probe(probe)
         self.assertTrue(any("fixed Spark count" in item for item in errors))
 
+    def test_rejects_missing_acquisition_fields(self) -> None:
+        probe = validator.load_json(FIXTURE)
+        for key in ("checkpoint_source", "api_health_status"):
+            bad = copy.deepcopy(probe)
+            bad.pop(key)
+            errors = validator.validate_probe(bad)
+            self.assertTrue(any(f"missing required field: {key}" in item for item in errors))
+
     def test_runner_builds_not_installed_blocker_without_live_launch(self) -> None:
         class Args:
             run_id = "unit"
             provider_id = "sglang-ds4-local"
             model_id = "deepseek-ai/DeepSeek-V4-Flash"
             checkpoint_format = "huggingface"
+            checkpoint_source_kind = "huggingface"
+            checkpoint_source_repo_id = ""
+            checkpoint_source_status = "auto"
+            checkpoint_source_detail = ""
             runtime_id = "sglang-local-probe"
             model_path = "/path/that/does/not/exist"
             recipe = "custom"
@@ -75,9 +97,21 @@ class SglangProviderProbeTest(unittest.TestCase):
             pp_size = 1
             dp_size = 1
             allow_launch = False
+            hf_token_present = False
+            target_host = "local"
+            sglang_version_override = ""
+            hardware_json = ""
+            blocker_kind_override = ""
+            blocker_detail_override = ""
+            api_health_status_override = ""
+            api_health_error_override = ""
+            api_health_endpoint = "http://127.0.0.1:30000/v1/chat/completions"
+            acquisition_attempt_json: list[str] = []
 
         probe = runner.build_probe(Args())
         self.assertIn(probe["blocker_kind"], {"sglang_not_installed", "model_checkpoint_missing"})
+        self.assertIn("checkpoint_source", probe)
+        self.assertIn("api_health_status", probe)
         self.assertEqual(validator.validate_probe(probe), [])
 
 

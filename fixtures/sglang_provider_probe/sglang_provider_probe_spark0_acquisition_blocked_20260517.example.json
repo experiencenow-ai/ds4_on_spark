@@ -1,0 +1,223 @@
+{
+  "acquisition_attempts": [
+    {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "spark0@aitopatom-9ab9.local",
+        "hostname"
+      ],
+      "error": "ssh: connect to host aitopatom-9ab9.local port 22: No route to host",
+      "status": "blocked",
+      "step": "ssh_spark0_aitopatom"
+    },
+    {
+      "command": [
+        "ssh",
+        "spark0@spark0.local",
+        "hostname"
+      ],
+      "error": "spark0.local, spark1.local, and spark2.local did not resolve from this environment",
+      "status": "blocked",
+      "step": "ssh_spark_local_inventory"
+    }
+  ],
+  "api_health_status": {
+    "endpoint": "http://127.0.0.1:30000/v1/chat/completions",
+    "error": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+    "http_status": null,
+    "latency_ms": null,
+    "output_token_count": null,
+    "status": "blocked"
+  },
+  "artifact_hash": "sha256:75a3f98ed6ad5da402e6a7fe4ff3ac0a7d2271330ab7cbeed84eda63dac83568",
+  "artifact_sha256": "sha256:75a3f98ed6ad5da402e6a7fe4ff3ac0a7d2271330ab7cbeed84eda63dac83568",
+  "benchmark_results": [
+    {
+      "batch_size": 1,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "b1_full_vocab_chat",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": false,
+      "output_mode": "full_vocab",
+      "recipe": "balanced",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 4,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "b4_q_numbered_full_vocab_rows",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": false,
+      "output_mode": "full_vocab",
+      "recipe": "balanced",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 16,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "b16_full_vocab_rows",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": false,
+      "output_mode": "full_vocab",
+      "recipe": "balanced",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 512,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "b512_full_vocab_one_token",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": false,
+      "output_mode": "full_vocab",
+      "recipe": "max_throughput",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 512,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "b512_constrained_structured_output",
+      "constrained_scoring": "unknown",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": false,
+      "output_mode": "constrained_structured",
+      "recipe": "max_throughput",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 1,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "mtp_low_latency",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": true,
+      "output_mode": "full_vocab",
+      "recipe": "low_latency",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 4,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "mtp_balanced",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": true,
+      "output_mode": "full_vocab",
+      "recipe": "balanced",
+      "status": "blocked",
+      "tokens_per_second": null
+    },
+    {
+      "batch_size": 512,
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_kind": "other",
+      "case_id": "max_throughput_mtp_disabled",
+      "constrained_scoring": "unsupported",
+      "custom_ds4_speedup_inferred": false,
+      "latency_ms": null,
+      "mtp_enabled": false,
+      "output_mode": "full_vocab",
+      "recipe": "max_throughput",
+      "status": "blocked",
+      "tokens_per_second": null
+    }
+  ],
+  "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+  "blocker_kind": "other",
+  "checkpoint_format": "huggingface",
+  "checkpoint_source": {
+    "detail": "Spark0 SSH is unreachable, so SGLang package state, Hugging Face checkpoint presence, and model acquisition could not be checked on hardware.",
+    "hf_token_present": false,
+    "kind": "huggingface",
+    "local_path": "/home/spark0/models/sglang/DeepSeek-V4-Flash",
+    "repo_id": "deepseek-ai/DeepSeek-V4-Flash",
+    "status": "blocked"
+  },
+  "custom_ds4_comparison": {
+    "custom_constrained_b512_tok_s_class": "620-650",
+    "custom_full_vocab_b512_tok_s_class": "260",
+    "custom_mtp_k2_direct_path": "measured separately; compare only after SGLang MTP artifact exists"
+  },
+  "dp_size": 1,
+  "format": "ds4-sglang-provider-probe-v1",
+  "hardware": {
+    "observed_errors": [
+      "ssh: connect to host aitopatom-9ab9.local port 22: No route to host",
+      "ssh: Could not resolve hostname spark0.local: nodename nor servname provided, or not known",
+      "ssh: Could not resolve hostname spark1.local: nodename nor servname provided, or not known",
+      "ssh: Could not resolve hostname spark2.local: nodename nor servname provided, or not known"
+    ],
+    "status": "unreachable",
+    "target_host": "spark0@aitopatom-9ab9.local"
+  },
+  "launch_command": [
+    "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "-m",
+    "sglang.launch_server",
+    "--model-path",
+    "/home/spark0/models/sglang/DeepSeek-V4-Flash",
+    "--served-model-name",
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "--tp-size",
+    "1",
+    "--pp-size",
+    "1",
+    "--dp-size",
+    "1",
+    "--max-running-requests",
+    "512"
+  ],
+  "launch_environment": {
+    "env_keys_checked": [
+      "HF_TOKEN",
+      "HUGGING_FACE_HUB_TOKEN"
+    ],
+    "hf_token_present": false,
+    "python_executable": "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "target_host": "spark0@aitopatom-9ab9.local"
+  },
+  "load_success": false,
+  "max_running_requests": 512,
+  "memory_used_gib": null,
+  "model_id": "deepseek-ai/DeepSeek-V4-Flash",
+  "mtp_enabled": false,
+  "mtp_settings": {
+    "draft_tokens": 0,
+    "mode": "disabled"
+  },
+  "pp_size": 1,
+  "provider_id": "sglang-ds4-spark0",
+  "recipe": "balanced",
+  "recommendation": "blocked",
+  "run_id": "sglang-provider-probe-spark0-20260517",
+  "runtime_id": "sglang-v0.5.12-spark0-probe",
+  "sglang_version": "not_checked",
+  "tp_size": 1
+}
