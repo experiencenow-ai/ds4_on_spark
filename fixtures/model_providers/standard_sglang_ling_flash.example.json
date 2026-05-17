@@ -1,0 +1,38 @@
+{
+  "benchmark_refs": [
+    "fixtures/standard_runtime_benchmarks/sglang_ling_flash_standard_blocked.example.json"
+  ],
+  "blocked_reason": "No live SGLang launch or benchmark artifact is available.",
+  "endpoint": {
+    "kind": "openai_compatible_endpoint",
+    "status": "blocked",
+    "url": "http://127.0.0.1:<port>/v1"
+  },
+  "format": "centaur-model-provider-profile-v1",
+  "last_probe_artifact": "fixtures/standard_runtime_benchmarks/sglang_ling_flash_standard_blocked.example.json",
+  "maximum_wait_ms": 50,
+  "measured_input_tps": null,
+  "measured_output_tps": null,
+  "minimum_batch_tokens": 1,
+  "model_id": "ling-2.6-flash-candidate",
+  "node_ids": [],
+  "preferred_batch_tokens": 4,
+  "production_eligible": false,
+  "provider_id": "standard-sglang-ling-flash",
+  "provider_kind": "openai_compatible_endpoint",
+  "quality_scores": {
+    "dry_route_id": null,
+    "free_form_chat": null,
+    "judge_reviewer_decision": null,
+    "routine_code_explanation": null,
+    "small_code_patch_plan": null,
+    "structured_classification": null
+  },
+  "runtime": "sglang",
+  "supported_lanes": [
+    "free_form_chat",
+    "routine_code_explanation",
+    "small_code_patch_plan"
+  ],
+  "tier": "near_frontier_local"
+}

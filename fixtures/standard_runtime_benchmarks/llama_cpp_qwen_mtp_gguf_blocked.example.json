@@ -1,0 +1,48 @@
+{
+  "api_endpoint": "",
+  "artifact_sha256": "8cc4c4283fbd7b9bc0bd14d2f064b6b6f8ad757531ca27cf2886f84c7bd1c825",
+  "batch_size": 1,
+  "benchmark_id": "llama-cpp-qwen-mtp-gguf-blocked",
+  "benchmark_status": "blocked",
+  "blocker_detail": "llama-cli and llama-server were not found on PATH; no standard-runtime GGUF benchmark was run.",
+  "blocker_kind": "runtime_install_blocked",
+  "context_length": 0,
+  "format": "centaur-standard-runtime-model-benchmark-v1",
+  "hardware": {
+    "machine": "arm64",
+    "note": "Fixture builder records host class only; no live benchmark was run.",
+    "processor": "arm",
+    "system": "Darwin"
+  },
+  "launch_command": "llama-cli --model <mtp-model.gguf> --spec-type draft-mtp --draft-max 2",
+  "live_routing_eligible": false,
+  "memory_used_gib": null,
+  "model_family": "qwen_mtp",
+  "model_format": "gguf",
+  "model_id": "qwen-mtp-gguf-candidate",
+  "mtp_enabled": false,
+  "mtp_supported": false,
+  "ngram_spec_enabled": false,
+  "notes": [],
+  "output_mode": "full_vocab",
+  "parse_valid": false,
+  "prompt_processing_tokens_per_second": null,
+  "prompt_shape": "b1_free_form_chat_mtp_probe",
+  "provider_id": "standard-llama-cpp-qwen-mtp-gguf",
+  "quantization": "unknown",
+  "runtime": "llama_cpp",
+  "runtime_version": "",
+  "speculative_config": {
+    "draft_max": [
+      2,
+      3
+    ],
+    "requested": "draft-mtp",
+    "status": "not_run"
+  },
+  "structured_output_semantics": "not_applicable",
+  "task_class": "free_form_chat",
+  "task_quality_score": null,
+  "time_to_first_token_ms": null,
+  "tokens_per_second": null
+}
