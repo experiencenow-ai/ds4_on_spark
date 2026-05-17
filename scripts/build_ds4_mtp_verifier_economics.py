@@ -217,6 +217,7 @@ def build_report_from_lines(
 		"output_head_ms": output_head_ms,
 		"cache_sync_count": _int(counts.get("cache_sync_count")),
 		"target_next_mismatch_events": _int((extracted.get("mismatches") or {}).get("target_next_mismatch_events")),
+		"row2_top1_mismatch_count": _int(counts.get("row2_top1_mismatch_count")),
 		"slowest_component": slowest,
 		"blocker_kind": blocker,
 		"blocker_detail": blocker_detail,
