@@ -73,6 +73,8 @@ def _phase_report(paths: list[Path]) -> dict[str, Any]:
 		"exit_code": _int(_bench_value(obj, "exit_code")),
 		"phase": _bench_value(obj, "phase"),
 		"command_sha256": _bench_value(obj, "command_sha256"),
+		"perf_env_sha256": _bench_value(obj, "perf_env_sha256"),
+		"perf_env_keys": _bench_value(obj, "perf_env_keys"),
 		"prompt_sha256": _bench_value(obj, "prompt_sha256"),
 		"n_predict": _int(_bench_value(obj, "n_predict")),
 		"mtp_draft": _int(_bench_value(obj, "mtp_draft")),
@@ -103,6 +105,7 @@ def build_report(
 	same_n_predict = base.get("n_predict") is not None and base.get("n_predict") == mtp.get("n_predict")
 	same_mtp_draft = base.get("mtp_draft") is not None and base.get("mtp_draft") == mtp.get("mtp_draft")
 	same_command_shape = base.get("command_sha256") is not None and base.get("command_sha256") == mtp.get("command_sha256")
+	same_perf_env = base.get("perf_env_sha256") is not None and base.get("perf_env_sha256") == mtp.get("perf_env_sha256")
 	baseline_spec_disabled = base.get("spec_disabled") == 1
 	mtp_spec_enabled = mtp.get("spec_disabled") == 0
 	same_cli_path = bool(same_prompt and same_ctx and same_seed and same_n_predict and same_mtp_draft and same_command_shape)
@@ -125,6 +128,9 @@ def build_report(
 	elif not same_cli_path:
 		status = "blocked"
 		blocker = "baseline and MTP phases must share prompt/context/seed/n_predict/mtp_draft/command shape"
+	elif not same_perf_env:
+		status = "blocked"
+		blocker = "baseline and MTP phases must share performance-affecting environment shape"
 	elif base_tps is None or mtp_tps is None:
 		status = "blocked"
 		blocker = "both phases must emit ds4 reported generation t/s"
@@ -143,8 +149,12 @@ def build_report(
 		"same_n_predict": same_n_predict,
 		"same_mtp_draft": same_mtp_draft,
 		"same_command_shape": same_command_shape,
+		"same_perf_env": same_perf_env,
 		"baseline_phase": base.get("phase"),
 		"mtp_phase": mtp.get("phase"),
+		"baseline_perf_env_sha256": base.get("perf_env_sha256"),
+		"mtp_perf_env_sha256": mtp.get("perf_env_sha256"),
+		"perf_env_keys": base.get("perf_env_keys") or mtp.get("perf_env_keys"),
 		"baseline_spec_disabled": baseline_spec_disabled,
 		"mtp_spec_enabled": mtp_spec_enabled,
 		"baseline_reported_generation_tps": base_tps,

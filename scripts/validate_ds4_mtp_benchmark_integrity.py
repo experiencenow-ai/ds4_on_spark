@@ -15,8 +15,11 @@ FORMAT = "ds4-mtp-benchmark-integrity-v1"
 REQUIRED_FIELDS = (
 	"benchmark_status",
 	"same_cli_path",
+	"same_perf_env",
 	"baseline_spec_disabled",
 	"mtp_spec_enabled",
+	"baseline_perf_env_sha256",
+	"mtp_perf_env_sha256",
 	"baseline_reported_generation_tps",
 	"mtp_reported_generation_tps",
 	"speedup_vs_session_baseline",
@@ -68,6 +71,8 @@ def validate_report(obj: dict[str, Any]) -> dict[str, Any]:
 	if status == "comparable":
 		if obj.get("same_cli_path") is not True:
 			errors.append("comparable benchmark requires same_cli_path=true")
+		if obj.get("same_perf_env") is not True:
+			errors.append("comparable benchmark requires same_perf_env=true")
 		if obj.get("baseline_spec_disabled") is not True:
 			errors.append("comparable benchmark requires baseline_spec_disabled=true")
 		if obj.get("mtp_spec_enabled") is not True:
