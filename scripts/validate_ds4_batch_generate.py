@@ -97,6 +97,12 @@ def validate_request(obj: dict[str, Any]) -> list[str]:
 		_expect_int(errors, policy, "target_active_rows", 1)
 		for key in ("allow_row_replacement", "group_by_output_mode", "prefer_group_by_prefix_handle"):
 			_expect_bool(errors, policy, key)
+	if "runtime_requirements" in obj:
+		reqs = obj.get("runtime_requirements")
+		if not isinstance(reqs, dict):
+			errors.append("runtime_requirements must be an object when present")
+		elif "prefix_kv_required" in reqs:
+			_expect_bool(errors, reqs, "prefix_kv_required")
 	rows = obj.get("rows")
 	if not isinstance(rows, list) or len(rows) == 0:
 		errors.append("rows must be a non-empty list")
@@ -175,6 +181,26 @@ def _validate_output_mode_groups(errors: list[str], telemetry: dict[str, Any], r
 		errors.append("mixed output modes must be split into compatible internal sub-batches")
 
 
+def _validate_prefix_handle_groups(errors: list[str], telemetry: dict[str, Any], result_rows: list[dict[str, Any]]) -> None:
+	groups = telemetry.get("prefix_handle_groups")
+	if groups is None:
+		return
+	if not isinstance(groups, list) or len(groups) == 0:
+		errors.append("telemetry.prefix_handle_groups must be a non-empty list when present")
+		return
+	total = 0
+	for idx, group in enumerate(groups):
+		if not isinstance(group, dict):
+			errors.append(f"telemetry.prefix_handle_groups[{idx}] must be an object")
+			continue
+		_expect_string(errors, group, "prefix_handle")
+		_expect_int(errors, group, "row_count", 1)
+		if isinstance(group.get("row_count"), int):
+			total += int(group["row_count"])
+	if total != len(result_rows):
+		errors.append("telemetry.prefix_handle_groups row_count total must match result rows")
+
+
 def validate_result(obj: dict[str, Any], request: dict[str, Any] | None = None) -> list[str]:
 	errors: list[str] = []
 	if obj.get("format") != RESULT_FORMAT:
@@ -243,9 +269,12 @@ def validate_result(obj: dict[str, Any], request: dict[str, Any] | None = None) 
 	_validate_output_mode_groups(errors, telemetry, rows)
 	modes = {group.get("output_mode") for group in telemetry.get("output_mode_groups", []) if isinstance(group, dict)}
 	if "full_vocab" in modes and float(telemetry.get("full_vocab_commit_ms", 0.0)) <= 0.0:
-		errors.append("full_vocab results must report full_vocab_commit_ms")
+		if obj.get("status") == "success":
+			errors.append("full_vocab results must report full_vocab_commit_ms")
 	if "constrained_candidate" in modes and float(telemetry.get("constrained_commit_ms", 0.0)) <= 0.0:
-		errors.append("constrained_candidate results must report constrained_commit_ms")
+		if obj.get("status") == "success":
+			errors.append("constrained_candidate results must report constrained_commit_ms")
+	_validate_prefix_handle_groups(errors, telemetry, rows)
 	if "finite_logits_only" in modes and telemetry.get("production_generation_eligible") is True:
 		errors.append("finite_logits_only cannot be production_generation_eligible")
 	if telemetry.get("production_generation_eligible") is True:
@@ -259,8 +288,8 @@ def validate_result(obj: dict[str, Any], request: dict[str, Any] | None = None) 
 			errors.append("production_generation_eligible requires parity_status=passed")
 		if not str(telemetry.get("parity_artifact_sha256", "")).startswith("sha256:"):
 			errors.append("production_generation_eligible requires parity_artifact_sha256")
-		if telemetry.get("shared_prefix_suffix_runtime_used") is not True:
-			errors.append("production_generation_eligible requires real shared-prefix/suffix runtime path")
+		if telemetry.get("shared_prefix_suffix_runtime_used") is not True and telemetry.get("prefix_kv_runtime_path") != "not_required":
+			errors.append("production_generation_eligible requires real shared-prefix/suffix runtime path or prefix_kv_runtime_path=not_required")
 		if not all(isinstance(row, dict) and row.get("committed_token_ids") and row.get("token_hash") for row in rows):
 			errors.append("production_generation_eligible requires committed token IDs and token_hash for every row")
 	else:
@@ -311,6 +340,8 @@ def build_result_from_request(request: dict[str, Any]) -> dict[str, Any]:
 	errors = validate_request(request)
 	if errors:
 		raise Ds4BatchGenerateError("; ".join(errors))
+	if (request.get("runtime_requirements") or {}).get("prefix_kv_required") is True:
+		return _build_missing_prefix_kv_runtime_result(request)
 	rows = request["rows"]
 	result_rows: list[dict[str, Any]] = []
 	mode_counts: dict[str, int] = defaultdict(int)
@@ -390,6 +421,84 @@ def build_result_from_request(request: dict[str, Any]) -> dict[str, Any]:
 		"status": "success",
 		"rows": result_rows,
 		"telemetry": telemetry,
+	}
+
+
+def _prefix_handle_groups(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	counts: dict[str, int] = defaultdict(int)
+	for row in rows:
+		counts[str(row.get("prefix_handle", ""))] += 1
+	return [
+		{"prefix_handle": key, "row_count": counts[key]}
+		for key in sorted(counts)
+		if key != ""
+	]
+
+
+def _build_missing_prefix_kv_runtime_result(request: dict[str, Any]) -> dict[str, Any]:
+	rows = request["rows"]
+	result_rows = [
+		{
+			"row_id": row["row_id"],
+			"status": "blocked",
+			"committed_token_ids": [],
+			"token_hash": "",
+			"output_text_hash": "",
+			"finish_reason": "blocked",
+			"error": "missing_prefix_kv_runtime_hook",
+		}
+		for row in rows
+	]
+	mode_counts: dict[str, int] = defaultdict(int)
+	for row in rows:
+		mode_counts[str(row["output_mode"])] += 1
+	groups = [
+		{
+			"internal_sub_batch_id": f"{request['request_id']}:{mode}",
+			"output_mode": mode,
+			"row_count": mode_counts[mode],
+			"selected_rate_source": _selected_rate_source(mode),
+			"fallback_full_vocab_used": False,
+		}
+		for mode in sorted(mode_counts)
+	]
+	prefix_groups = _prefix_handle_groups(rows)
+	return {
+		"format": RESULT_FORMAT,
+		"request_id": request["request_id"],
+		"status": "blocked",
+		"rows": result_rows,
+		"telemetry": {
+			"batch_size": len(rows),
+			"active_rows": min(len(rows), int(request["batch_policy"]["target_active_rows"])),
+			"output_mode_groups": groups,
+			"prefix_handle_groups": prefix_groups,
+			"prefix_hit_count": 0,
+			"prefix_miss_count": len(rows),
+			"prefix_load_ms": 0.0,
+			"suffix_prefill_ms": 0.0,
+			"decode_ms": 0.0,
+			"output_head_ms": 0.0,
+			"constrained_commit_ms": 0.0,
+			"full_vocab_commit_ms": 0.0,
+			"token_commit_ms": 0.0,
+			"result_collection_ms": 0.0,
+			"end_to_end_output_tokens_per_s": 0.0,
+			"row_replacement_implemented": False,
+			"production_generation_eligible": False,
+			"parity_status": "passed",
+			"parity_artifact_sha256": "sha256:placeholder-b512-slice-tile8-pp1-logits-parity-passed",
+			"derived_artifact": True,
+			"shared_prefix_suffix_runtime_used": False,
+			"prefix_kv_runtime_path": "missing",
+			"prefix_kv_required": True,
+			"blocker_kind": "missing_prefix_kv_runtime_hook",
+			"blocker_detail": (
+				"repo-owned callable runtime hook is missing for prefix_prepare, prefix_pin, "
+				"prefix_fork, session_append, session_decode, session_release, and prefix_release; "
+				"scripts/ds4_batch_generate remains fixture-backed"
+			),
+		},
 	}
 
 

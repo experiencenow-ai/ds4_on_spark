@@ -98,6 +98,26 @@ class BatchGenerateTest(unittest.TestCase):
 		errors = batch.validate_request(request)
 		self.assertTrue(any("fixed Spark count" in error for error in errors))
 
+	def test_live_smoke_prefix_kv_required_blocks_with_exact_hook(self) -> None:
+		request = batch.load_json(FIX / "live_smoke_b512_constrained_1tok_request.example.json")
+		result = batch.load_json(FIX / "live_smoke_b512_constrained_1tok_result.example.json")
+		self.assertEqual(batch.validate_result(result, request), [])
+		self.assertEqual(result["status"], "blocked")
+		self.assertEqual(result["telemetry"]["blocker_kind"], "missing_prefix_kv_runtime_hook")
+		self.assertFalse(result["telemetry"]["production_generation_eligible"])
+
+	def test_live_smoke_mixed_modes_split_when_blocked(self) -> None:
+		result = batch.load_json(FIX / "live_smoke_mixed_output_modes_result.example.json")
+		groups = {group["output_mode"]: group for group in result["telemetry"]["output_mode_groups"]}
+		self.assertEqual(groups["constrained_candidate"]["row_count"], 384)
+		self.assertEqual(groups["full_vocab"]["row_count"], 128)
+
+	def test_live_smoke_multi_prefix_groups_are_not_rejected(self) -> None:
+		result = batch.load_json(FIX / "live_smoke_multi_prefix_constrained_result.example.json")
+		groups = {group["prefix_handle"]: group["row_count"] for group in result["telemetry"]["prefix_handle_groups"]}
+		self.assertEqual(groups["prefix:repo-skeleton:v1"], 256)
+		self.assertEqual(groups["prefix:repo-skeleton-alt:v1"], 256)
+
 
 if __name__ == "__main__":
 	unittest.main()
