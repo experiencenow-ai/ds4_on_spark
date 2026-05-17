@@ -101,7 +101,7 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 	def test_true_suffix_log_tracks_invocations_vs_positions(self) -> None:
 		lines = [
 			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
-			"ds4: mtp timing suffix2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=9.000 ms target=6.000 ms head=2.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=13.000 ms\n",
+			"ds4: mtp timing suffix2 drafted=2 committed=2 draft=3.000 ms snapshot=1.000 ms verify=9.000 ms target=6.000 ms head=2.000 ms readback=0.500 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=13.500 ms\n",
 			"ds4: prefill: 2.18 t/s, generation: 16.00 t/s\n",
 		]
 		report = build.build_report_from_lines(
@@ -118,6 +118,7 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["target_positions_verified"], 2)
 		self.assertAlmostEqual(float(report["target_positions_per_invocation"]), 2.0)
 		self.assertEqual(report["output_head_invocation_count"], 1)
+		self.assertAlmostEqual(report["logits_readback_ms"], 0.5)
 		self.assertEqual(report["blocker_kind"], "none")
 		self.assertTrue(validate.validate_report(report)["ok"])
 
@@ -169,6 +170,29 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(obj["full_vocab_logits_rows"], 42)
 		self.assertEqual(obj["top1_only_rows"], 84)
 		self.assertGreater(obj["speedup_vs_baseline"], 1.8)
+		self.assertTrue(validate.validate_report(obj)["ok"])
+
+	def test_k2_exact_readback_no_rematerialize_preserves_acceptance(self) -> None:
+		import json
+		path = FIX / "ds4_mtp_verifier_economics_k2_exact_readback_no_rematerialize_20260517.example.json"
+		obj = json.loads(path.read_text(encoding="utf-8"))
+		self.assertAlmostEqual(obj["accept_rate"], 1.0)
+		self.assertEqual(obj["accepted_draft_tokens"], 84)
+		self.assertEqual(obj["attempted_draft_tokens"], 84)
+		self.assertEqual(obj["full_vocab_logits_rows"], 42)
+		self.assertEqual(obj["top1_only_rows"], 84)
+		self.assertGreater(obj["speedup_vs_baseline"], 1.8)
+		self.assertGreater(obj["logits_readback_ms"], 0.0)
+		self.assertTrue(validate.validate_report(obj)["ok"])
+
+	def test_k2_row2_no_readback_experiment_records_acceptance_drop(self) -> None:
+		import json
+		path = FIX / "ds4_mtp_verifier_economics_k2_row2_no_readback_experiment_20260517.example.json"
+		obj = json.loads(path.read_text(encoding="utf-8"))
+		self.assertAlmostEqual(obj["accept_rate"], 70.0 / 108.0)
+		self.assertEqual(obj["full_vocab_logits_rows"], 83)
+		self.assertEqual(obj["top1_only_rows"], 108)
+		self.assertEqual(obj["blocker_kind"], "row2_logits_readback_not_optional")
 		self.assertTrue(validate.validate_report(obj)["ok"])
 
 	def test_target_suffix_blocker_requires_explicit_staging_fields(self) -> None:

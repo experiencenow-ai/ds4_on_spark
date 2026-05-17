@@ -61,6 +61,7 @@ TIMING_COMPONENT_KEYS = {
 	"draft": "draft_eval_ms",
 	"target": "target_eval_ms",
 	"head": "output_head_ms",
+	"readback": "logging_ms",
 	"snapshot": "capture_ms",
 	"prefix": "token_commit_ms",
 	"replay": "verifier_replay_ms",
