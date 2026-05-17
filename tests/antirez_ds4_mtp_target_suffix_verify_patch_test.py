@@ -57,6 +57,11 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("metal_graph_read_selected_token" in item for item in errors))
 
+	def test_rejects_k2_without_two_token_tail_path(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace("suffix2_tail drafted=1 committed=1", "")
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("suffix2_tail" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()

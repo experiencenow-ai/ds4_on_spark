@@ -713,7 +713,7 @@ index 9871775..72da52f 100644
          ok = ds4_gpu_indexer_topk_tensor(g->comp_selected,
                                             g->logits,
                                             DS4_N_VOCAB,
-@@ -12797,6 +13364,481 @@ static bool metal_graph_eval_mtp_draft(
+@@ -12797,6 +13364,556 @@ static bool metal_graph_eval_mtp_draft(
                                                top_id);
  }
 
@@ -791,7 +791,7 @@ index 9871775..72da52f 100644
 +        getenv("DS4_MTP_ROW2_FULL_LOGITS") == NULL;
 +    const double t0 = mtp_timing ? now_sec() : 0.0;
 +    const int start = checkpoint->len;
-+    if (max_extra < 3 || accepted_cap < 3)
++    if (max_extra < 2 || accepted_cap < 2)
 +        return 0;
 +    const uint32_t mtp_base_raw = g->mtp_n_raw;
 +    int drafts[2] = {-1,-1};
@@ -803,6 +803,81 @@ index 9871775..72da52f 100644
 +    if (drafts[0] == eos_id) {
 +        g->mtp_n_raw = mtp_base_raw;
 +        return 0;
++    }
++    if (max_extra < 3 || accepted_cap < 3) {
++        const double t_after_draft = mtp_timing ? now_sec() : 0.0;
++        if (stats) stats->draft_ms += (t_after_draft - t_draft0) * 1000.0;
++        token_vec_push(checkpoint, first_token);
++        token_vec_push(checkpoint, drafts[0]);
++        int row_tops[1] = {-1};
++        const double t_suffix0 = mtp_timing ? now_sec() : 0.0;
++        bool ok = metal_graph_verify_suffix_tops(g, model, weights, checkpoint,
++                                                 (uint32_t)start, 2, true,
++                                                 row_tops, NULL);
++        const double t_suffix1 = mtp_timing ? now_sec() : 0.0;
++        if (stats) {
++            stats->suffix_target_calls++;
++            stats->target_positions += 2;
++            stats->head_calls++;
++            stats->head_rows += 2;
++            stats->full_vocab_rows += row0_top1_head ? 1 : 2;
++            stats->top1_rows += row0_top1_head ? 1 : 0;
++            stats->suffix_ms += (t_suffix1 - t_suffix0) * 1000.0;
++        }
++        if (!ok) {
++            checkpoint->len = start;
++            g->mtp_n_raw = mtp_base_raw;
++            return -1;
++        }
++        if (row_tops[0] == drafts[0]) {
++            if (!metal_graph_commit_batch_hc_row_to_current(g, 1)) {
++                checkpoint->len = start;
++                g->mtp_n_raw = mtp_base_raw;
++                return -1;
++            }
++            accepted[0] = first_token;
++            accepted[1] = drafts[0];
++            if (stats) stats->emitted += 2;
++            if (mtp_timing) {
++                fprintf(stderr,
++                        "ds4: mtp timing suffix2_tail drafted=1 committed=1 first_eval=0.000 ms draft=%.3f ms snapshot=0.000 ms verify=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=%d top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=%.3f ms\n",
++                        (t_after_draft - t_draft0) * 1000.0,
++                        (t_suffix1 - t_suffix0) * 1000.0,
++                        (t_suffix1 - t_suffix0) * 1000.0,
++                        row0_top1_head ? 1 : 2,
++                        row0_top1_head ? 1 : 0,
++                        (now_sec() - t0) * 1000.0);
++            }
++            uint32_t keep = mtp_base_raw + 1u;
++            if (keep > g->raw_window) keep = g->raw_window;
++            g->mtp_n_raw = keep;
++            return 2;
++        }
++        const double t_prefix0 = mtp_timing ? now_sec() : 0.0;
++        ok = spec_frontier_commit_prefix1_graph(g);
++        const double t_prefix1 = mtp_timing ? now_sec() : 0.0;
++        checkpoint->len = start;
++        if (stats) stats->prefix_ms += (t_prefix1 - t_prefix0) * 1000.0;
++        if (!ok)
++            return -1;
++        if (next_token_out)
++            *next_token_out = row_tops[0];
++        token_vec_push(checkpoint, first_token);
++        accepted[0] = first_token;
++        if (stats) stats->emitted += 1;
++        if (mtp_timing) {
++            fprintf(stderr,
++                    "ds4: mtp timing suffix2_tail drafted=1 committed=0 first_eval=0.000 ms draft=%.3f ms snapshot=0.000 ms verify=%.3f ms prefix=%.3f ms target=%.3f ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=%d top1_rows=%d draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=1 total=%.3f ms\n",
++                    (t_after_draft - t_draft0) * 1000.0,
++                    (t_suffix1 - t_suffix0) * 1000.0,
++                    (t_prefix1 - t_prefix0) * 1000.0,
++                    (t_suffix1 - t_suffix0) * 1000.0,
++                    row0_top1_head ? 1 : 2,
++                    row0_top1_head ? 1 : 0,
++                    (now_sec() - t0) * 1000.0);
++        }
++        g->mtp_n_raw = mtp_base_raw;
++        return 1;
 +    }
 +    if (!metal_graph_eval_mtp_draft_from_hc(g, model, weights, mtp_model, mtp_weights,
 +                                            g->mtp_state_hc, g->mtp_next_hc,
@@ -1334,7 +1409,11 @@ index 9871775..72da52f 100644
  /* Exact N=2 target verifier for MTP.
   *
   * The generic batch prefill path is fast, but it is not a safe substitute for
-@@ -15015,6 +16135,9 @@ static int generate_metal_graph_raw_swa(
+@@ -15010,10 +16130,13 @@
+ #ifndef DS4_NO_GPU
+ /* Metal generation entry point.  The model runs as one local whole-graph
+  * pipeline: chunked/layer-major prefill followed by graph decode steps. */
+ static int generate_metal_graph_raw_swa(
          const ds4_model   * model,
          const ds4_vocab   * vocab,
          const ds4_weights * weights,
@@ -1428,7 +1507,7 @@ index 9871775..72da52f 100644
 +            }
 +        }
 +
-+        if (mtp_direct && mtp_draft_tokens == 2 && n_predict - n_generated >= 3) {
++        if (mtp_direct && mtp_draft_tokens == 2 && n_predict - n_generated >= 2) {
 +            int toks[3] = {-1,-1,-1};
 +            const int ntok = metal_graph_try_mtp_suffix2_direct(&g,
 +                                                                model,

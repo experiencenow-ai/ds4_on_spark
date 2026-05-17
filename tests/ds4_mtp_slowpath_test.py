@@ -57,6 +57,20 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertAlmostEqual(float(res.get("totals", {}).get("draft_accept_rate_est")), 4.0 / 6.0)
 		self.assertEqual(res.get("timing", {}).get("call_counts", {}).get("target_positions_verified"), 8)
 
+	def test_extracts_suffix2_tail_timing_acceptance(self) -> None:
+		lines = [
+			"ds4: mtp timing suffix2_tail drafted=1 committed=1 draft=2.000 ms snapshot=0.000 ms verify=7.000 ms target=7.000 ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=2 total=9.000 ms\n",
+			"ds4: mtp timing suffix2_tail drafted=1 committed=0 draft=2.000 ms snapshot=0.000 ms verify=7.000 ms prefix=1.000 ms target=7.000 ms head=0.000 ms verifier_calls=1 target_positions=2 target_calls=1 head_calls=1 head_rows=2 full_vocab_rows=1 top1_rows=1 draft_calls=1 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=1 total=10.000 ms\n",
+		]
+		res = extract.extract_events(lines)
+		self.assertTrue(bool(res.get("ok")))
+		self.assertEqual(res.get("counts", {}).get("timing_acceptance_events"), 2)
+		self.assertEqual(res.get("totals", {}).get("draft_tokens_attempted_est"), 2)
+		self.assertEqual(res.get("totals", {}).get("draft_tokens_accepted_est"), 1)
+		self.assertEqual(res.get("hist", {}).get("committed", {}).get("0"), 1)
+		self.assertEqual(res.get("hist", {}).get("committed", {}).get("1"), 1)
+		self.assertEqual(res.get("timing", {}).get("call_counts", {}).get("target_positions_verified"), 4)
+
 	def test_builds_and_validates_slowpath_report(self) -> None:
 		lines = [
 			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
