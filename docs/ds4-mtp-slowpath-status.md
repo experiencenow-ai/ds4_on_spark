@@ -4,11 +4,12 @@
 
 - PR #1125 changed K=2 materially: the original controlled run used baseline greedy 11.02 t/s and MTP draft=2 20.55 t/s, a 1.865x speedup, with 84/84 accepted draft tokens and 0 target-next mismatches.
 - 2026-05-17 matched-rebuild baseline check: greedy baseline is 13.40 t/s on the same rebuilt binary and exact K=2 is 20.54 t/s, so the matched-source speedup is 1.53x; the prior 1.86x number used the earlier 11.02 t/s denominator.
+- 2026-05-17 lazy host-logits follow-up: greedy baseline is 13.75 t/s and exact K=2 measured-mode MTP is 20.34 t/s for `N_PREDICT=126`; the diagnostic timing run reports 84/84 accepted draft tokens and `target_next_mismatch_events=0`.
 - The K=2 direct verifier is now a real speed path for the measured group-boundary case (`n_predict=126`, `n_predict % 3 == 0`).
 - Production eligibility is still false until the controlled matrix covers `n_predict={32,64,126,127,128}`, at least short/code/long prompt shapes, and both stdout-style and `DS4_SUPPRESS_OUTPUT=1` runs.
 - Tail cases `n_predict % 3 == 1` and `n_predict % 3 == 2` must produce explicit `ds4-mtp-k2-production-benchmark-v1` artifacts with `tail_acceptance_status=passed`; they must not be inferred from the group-boundary run.
 - The row2 continuation must remain exact full-logits/indexer-derived by default. A measured `DS4_MTP_ROW2_TOP1_CONT=1` experiment removed the full-vocab continuation row but dropped acceptance to 70/112 and MTP throughput to 11.59 t/s, so it stays opt-in until the top1 primitive is proven to match the full-logits argmax.
-- The next K=2 optimization keeps that exact GPU full-logits/indexer continuation and reads the already-materialized row2 logits instead of rematerializing them. A no-readback experiment changed acceptance, so the `DS4_MTP_ROW2_SKIP_LOGITS_READBACK` escape hatch has been removed from the patch contract.
+- The K=2 continuation path now keeps the GPU-selected row2 continuation token as `pending_argmax` and makes host logits readback lazy: trace/debug reads row2 logits, measured argmax continuation does not. The unsafe `DS4_MTP_ROW2_SKIP_LOGITS_READBACK` escape hatch remains absent from the patch contract.
 - `DS4_SUPPRESS_OUTPUT=1` measured 20.48 t/s with 84/84 acceptance, so token printing is not the current K=2 limiter.
 - Current production artifact validator: `scripts/validate_ds4_mtp_k2_production_benchmark.py`.
 - Current PR #1125 evidence fixture: `fixtures/mtp_k2_production/pr1125_n126_short_instruction_stdout.example.json`.
