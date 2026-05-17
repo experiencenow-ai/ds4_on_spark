@@ -51,12 +51,14 @@ def _sample(idx: int, generation_tps: float) -> dict[str, object]:
 
 
 class Ds4MtpTimingSamplesTest(unittest.TestCase):
-	def _write_samples(self, root: Path, count: int, *, mismatch_env: bool = False) -> list[Path]:
+	def _write_samples(self, root: Path, count: int, *, mismatch_env: bool = False, mismatch_prompt: bool = False) -> list[Path]:
 		paths = []
 		for idx in range(count):
 			obj = _sample(idx, 10.0 + float(idx))
 			if mismatch_env and idx == (count - 1):
 				obj["benchmark"]["events"][0]["perf_env_sha256"] = "sha256:other"  # type: ignore[index]
+			if mismatch_prompt and idx == (count - 1):
+				obj["benchmark"]["events"][0]["prompt_sha256"] = "sha256:other-prompt"  # type: ignore[index]
 			path = root / f"sample-{idx}.json"
 			path.write_text(json.dumps(obj), encoding="utf-8")
 			paths.append(path)
@@ -142,6 +144,25 @@ class Ds4MtpTimingSamplesTest(unittest.TestCase):
 		res = validate.validate_report(report)
 		self.assertFalse(res["ok"])
 		self.assertTrue(any("perf_env_sha256" in err for err in res["errors"]))
+
+	def test_builder_blocks_mismatched_prompt(self) -> None:
+		with tempfile.TemporaryDirectory() as tmp:
+			paths = self._write_samples(Path(tmp), 10, mismatch_prompt=True)
+			report = build.build_report(
+				paths,
+				run_id="r",
+				label="k2",
+				min_sample_count=10,
+				baseline_tps=10.0,
+			)
+		self.assertEqual(report["sample_status"], "blocked")
+		self.assertIn("prompt_sha256", str(report["blocker_detail"]))
+		self.assertTrue(validate.validate_report(report)["ok"])
+		report["sample_status"] = "passed"
+		report["blocker_detail"] = ""
+		res = validate.validate_report(report)
+		self.assertFalse(res["ok"])
+		self.assertTrue(any("prompt_sha256" in err for err in res["errors"]))
 
 	def test_validator_rejects_passed_report_with_too_few_samples(self) -> None:
 		with tempfile.TemporaryDirectory() as tmp:

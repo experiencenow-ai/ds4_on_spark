@@ -89,7 +89,7 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 	def test_extracts_measured_mode_sample_diag(self) -> None:
 		lines = [
 			"ds4: prefill: 4.00 t/s, generation: 20.00 t/s\n",
-			"ds4: mtp sample_diag direct=1 draft=2 generated=126 emitted=126 serial_steps=0 pending_argmax_hits=41 pending_argmax_misses=1 suffix2_attempts=42 suffix2_full_accepts=42 suffix2_partial_accepts=0 suffix2_rejects=0 suffix2_tail_attempts=0 suffix2_tail_accepts=0 suffix2_tail_rejects=0 suffix2_fallbacks=0 suffix2_first_nonfull_seen=0 suffix2_first_nonfull_pos=0 suffix2_first_nonfull_kind=0 suffix2_first_nonfull_draft0=0 suffix2_first_nonfull_draft1=0 suffix2_first_nonfull_top0=0 suffix2_first_nonfull_top1=0 first_target_calls=0 suffix_target_calls=42 target_positions=126 head_calls=42 full_vocab_rows=42 top1_rows=84 draft_calls=84\n",
+			"ds4: mtp sample_diag direct=1 draft=2 generated=126 emitted=126 serial_steps=0 pending_argmax_hits=41 pending_argmax_misses=1 suffix2_attempts=42 suffix2_full_accepts=42 suffix2_partial_accepts=0 suffix2_rejects=0 suffix2_tail_attempts=0 suffix2_tail_accepts=0 suffix2_tail_rejects=0 suffix2_fallbacks=0 suffix2_first_nonfull_seen=0 suffix2_first_nonfull_pos=0 suffix2_first_nonfull_kind=0 suffix2_first_nonfull_draft0=0 suffix2_first_nonfull_draft1=0 suffix2_first_nonfull_top0=0 suffix2_first_nonfull_top1=0 mtp_cache_advance_calls=42 first_target_calls=0 suffix_target_calls=42 target_positions=126 head_calls=42 full_vocab_rows=42 top1_rows=84 draft_calls=84\n",
 		]
 		res = extract.extract_events(lines)
 		diag = res.get("sample_diag") or {}
@@ -99,6 +99,7 @@ class Ds4MtpSlowpathTest(unittest.TestCase):
 		self.assertEqual(diag.get("serial_steps"), 0.0)
 		self.assertEqual(diag.get("target_positions"), 126.0)
 		self.assertEqual(diag.get("suffix2_first_nonfull_seen"), 0.0)
+		self.assertEqual(diag.get("mtp_cache_advance_calls"), 42.0)
 
 	def test_builds_and_validates_slowpath_report(self) -> None:
 		lines = [
