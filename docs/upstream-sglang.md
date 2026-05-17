@@ -38,6 +38,15 @@ Current local fixture:
 - blocker: `sglang_not_installed`
 - recommendation: `blocked`
 
+Current Spark acquisition fixture:
+
+- `fixtures/sglang_provider_probe/sglang_provider_probe_spark0_acquisition_blocked_20260517.example.json`
+- result: `blocked`
+- blocker: `other`
+- blocker detail: `ssh spark0@aitopatom-9ab9.local` failed with `No route to host`; `spark0.local`,
+  `spark1.local`, and `spark2.local` did not resolve from this environment
+- recommendation: `blocked`
+
 No SGLang throughput or constrained-output speedup should be inferred from this fixture. Structured output remains
 `constrained_scoring: unknown` until SGLang proves candidate-only scoring or an equivalent measured artifact.
 

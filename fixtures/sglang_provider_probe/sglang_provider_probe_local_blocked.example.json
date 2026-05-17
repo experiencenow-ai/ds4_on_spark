@@ -1,6 +1,15 @@
 {
-  "artifact_hash": "sha256:c3f5d0972a26118f48c4dd7193cbce15c0c4cc81686174e3fc6522451e45ea58",
-  "artifact_sha256": "sha256:c3f5d0972a26118f48c4dd7193cbce15c0c4cc81686174e3fc6522451e45ea58",
+  "acquisition_attempts": [],
+  "api_health_status": {
+    "endpoint": "http://127.0.0.1:30000/v1/chat/completions",
+    "error": "Python package 'sglang' is not installed in this environment.",
+    "http_status": null,
+    "latency_ms": null,
+    "output_token_count": null,
+    "status": "blocked"
+  },
+  "artifact_hash": "sha256:e0bfe009dc2a151427cc8b960f6575394970a582ff748a1be0efbb4974ecf347",
+  "artifact_sha256": "sha256:e0bfe009dc2a151427cc8b960f6575394970a582ff748a1be0efbb4974ecf347",
   "benchmark_results": [
     {
       "batch_size": 1,
@@ -118,6 +127,14 @@
   "blocker_detail": "Python package 'sglang' is not installed in this environment.",
   "blocker_kind": "sglang_not_installed",
   "checkpoint_format": "huggingface",
+  "checkpoint_source": {
+    "detail": "checkpoint path does not exist: /models/deepseek-v4-flash",
+    "hf_token_present": false,
+    "kind": "huggingface",
+    "local_path": "/models/deepseek-v4-flash",
+    "repo_id": "deepseek-ai/DeepSeek-V4-Flash",
+    "status": "missing"
+  },
   "custom_ds4_comparison": {
     "custom_constrained_b512_tok_s_class": "620-650",
     "custom_full_vocab_b512_tok_s_class": "260",
@@ -148,6 +165,15 @@
     "--max-running-requests",
     "512"
   ],
+  "launch_environment": {
+    "env_keys_checked": [
+      "HF_TOKEN",
+      "HUGGING_FACE_HUB_TOKEN"
+    ],
+    "hf_token_present": false,
+    "python_executable": "/Library/Developer/CommandLineTools/usr/bin/python3",
+    "target_host": "local"
+  },
   "load_success": false,
   "max_running_requests": 512,
   "memory_used_gib": null,
