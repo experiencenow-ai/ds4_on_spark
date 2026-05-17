@@ -62,6 +62,11 @@ class AntirezDs4MtpTargetSuffixVerifyPatchTest(unittest.TestCase):
 		errors = verify.validate_patch_text(text)
 		self.assertTrue(any("suffix2_tail" in item for item in errors))
 
+	def test_rejects_k2_partial_without_pending_argmax_continuation(self) -> None:
+		text = PATCH.read_text(encoding="utf-8").replace("*next_token_out = row_tops[1];", "")
+		errors = verify.validate_patch_text(text)
+		self.assertTrue(any("row_tops[1]" in item for item in errors))
+
 
 if __name__ == "__main__":
 	unittest.main()

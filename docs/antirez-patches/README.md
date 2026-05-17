@@ -142,6 +142,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - carries the GPU-selected row2 continuation argmax into the next loop iteration, avoiding a CPU full-vocab argmax scan per accepted group
     - reads the already-materialized row2 logits only when trace/debug output needs host logits; the unsafe row2 no-readback escape hatch is intentionally absent because lazy readback is now tied to the valid pending continuation token instead of a free env knob
     - keeps the experimental row2 top1-only continuation path behind `DS4_MTP_ROW2_TOP1_CONT=1`; the measured experiment lowered acceptance, so it is not the default exact path
+    - keeps partial-accept top1-only continuation behind `DS4_MTP_PARTIAL_TOP1_CONT=1`; the default still materializes exact continuation logits on partial accepts
     - stops the direct generation loop once `n_generated >= n_predict`, so multi-token commits do not run extra serial iterations after the requested output budget
     - uses top1-only MTP draft heads when draft logits are not requested; `DS4_MTP_DRAFT_FULL_LOGITS=1` restores full-vocab draft logits for diagnostics
     - adds `DS4_SUPPRESS_OUTPUT=1` for model-throughput benchmarks that still commit tokens but skip per-token CLI text rendering and stdout flush
