@@ -58,8 +58,9 @@ exposed `logits_readback_ms=0.463` total. A K=2 row2 top1-only continuation
 experiment removed the full-vocab continuation row but changed the continuation
 path enough to drop acceptance to 70/112 and 11.59 t/s, so it remains opt-in
 only via `DS4_MTP_ROW2_TOP1_CONT=1`. A no-readback experiment also changed the
-trajectory, dropping acceptance to 70/108 and 11.34 t/s, so
-`DS4_MTP_ROW2_SKIP_LOGITS_READBACK=1` is diagnostic-only. The exact next K=2
+trajectory, dropping acceptance to 70/108 and 11.34 t/s, so the
+`DS4_MTP_ROW2_SKIP_LOGITS_READBACK` escape hatch has been removed from the patch
+contract. The exact next K=2
 performance change is an exact top1 continuation primitive that matches the
 full-logits/indexer argmax before removing row2 full logits from the default
 path. Tail handling for output lengths outside the 3-token target/draft/draft

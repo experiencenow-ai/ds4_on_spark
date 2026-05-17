@@ -849,11 +849,8 @@ index 9871775..72da52f 100644
 +            g->mtp_n_raw = mtp_base_raw;
 +            return -1;
 +        }
-+        const bool skip_continuation_logits =
-+            next_token_out != NULL && getenv("DS4_MTP_ROW2_SKIP_LOGITS_READBACK") != NULL;
-+        const bool need_continuation_logits = !skip_continuation_logits;
 +        double readback_ms = 0.0;
-+        if (need_continuation_logits) {
++        {
 +            const double t_read0 = mtp_timing ? now_sec() : 0.0;
 +            const bool read_ok = continuation_top1_head
 +                ? metal_graph_read_suffix_logits_or_top1(g, model, weights, 2, logits)
@@ -1440,7 +1437,7 @@ index 9871775..72da52f 100644
 +                                                                toks,
 +                                                                3,
 +                                                                logits,
-+                                                                trace_top ? NULL : &pending_argmax,
++                                                                &pending_argmax,
 +                                                                &mtp_stats);
 +            if (ntok < 0) {
 +                ok = false;
