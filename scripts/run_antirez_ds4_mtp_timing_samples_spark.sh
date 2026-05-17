@@ -3,6 +3,7 @@ set -eu
 
 target="${1:-spark0@172.16.11.228}"
 SAMPLE_COUNT="${SAMPLE_COUNT:-10}"
+WARMUP_COUNT="${WARMUP_COUNT:-1}"
 OUT_ROOT="${OUT_ROOT:-/private/tmp/ds4_on_spark_antirez_ds4_mtp_timing_samples}"
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-mtp-k2-timing-samples}"
 MTP_DRAFT="${MTP_DRAFT:-2}"
@@ -46,8 +47,8 @@ run_phase_repeated()
 	combined_root="$phase_root/_combined"
 	rm -rf "$combined_root"
 	mkdir -p "$combined_root"
-	remote_env="$gate_env $REMOTE_COMMON_ENV $phase_extra DS4_MTP_BENCH_REPEATS=$SAMPLE_COUNT N_PREDICT=$N_PREDICT MTP_DRAFT=$MTP_DRAFT CTX=$CTX SEED=$SEED PROMPT=$(printf "%s" "$PROMPT" | python3 -c 'import shlex,sys; print(shlex.quote(sys.stdin.read()))')"
-	echo "== $phase repeated sample run 1x setup + $SAMPLE_COUNT generations =="
+	remote_env="$gate_env $REMOTE_COMMON_ENV $phase_extra DS4_MTP_BENCH_WARMUP_REPEATS=$WARMUP_COUNT DS4_MTP_BENCH_REPEATS=$SAMPLE_COUNT N_PREDICT=$N_PREDICT MTP_DRAFT=$MTP_DRAFT CTX=$CTX SEED=$SEED PROMPT=$(printf "%s" "$PROMPT" | python3 -c 'import shlex,sys; print(shlex.quote(sys.stdin.read()))')"
+	echo "== $phase repeated sample run 1x setup + $WARMUP_COUNT warmup + $SAMPLE_COUNT measured generations =="
 	OUT_ROOT="$combined_root" \
 	RUN_ID="$RUN_ID-$phase-combined" \
 	MTP_DRAFT="$MTP_DRAFT" \

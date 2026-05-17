@@ -8,7 +8,10 @@ from scripts import split_ds4_mtp_repeat_samples as split
 
 def _lines() -> list[str]:
 	return [
-		"ds4: mtp bench phase=mtp command_sha256=sha256:cmd prompt_sha256=sha256:prompt perf_env_sha256=sha256:env perf_env_keys=DS4_MTP_BENCH_REPEATS n_predict=126 mtp_draft=2 ctx=2048 seed=1234 spec_disabled=0",
+		"ds4: mtp bench phase=mtp command_sha256=sha256:cmd prompt_sha256=sha256:prompt perf_env_sha256=sha256:env perf_env_keys=DS4_MTP_BENCH_REPEATS,DS4_MTP_BENCH_WARMUP_REPEATS n_predict=126 mtp_draft=2 ctx=2048 seed=1234 spec_disabled=0",
+		"ds4: mtp repeat warmup_begin index=1 count=1",
+		"ds4: prefill: 0.50 t/s, generation: 9.00 t/s",
+		"ds4: mtp repeat warmup_end index=1 count=1 exit_code=0",
 		"ds4: mtp repeat sample_begin index=1 count=2",
 		"ds4: prefill: 1.00 t/s, generation: 20.00 t/s",
 		"ds4: mtp timing suffix2 drafted=2 committed=2 verify=1.0 target=1.0 verifier_calls=1 target_positions=3 target_calls=1 head_calls=1 head_rows=3 full_vocab_rows=1 top1_rows=2 draft_calls=2 emitted=3 total=2.0",

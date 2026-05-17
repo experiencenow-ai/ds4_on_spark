@@ -2106,10 +2106,10 @@ index 9871775..759eab1 100644
      const bool use_decode2_exact =
          draft_n == 2 && strict_mtp && getenv("DS4_MTP_BATCH_VERIFY") == NULL;
 diff --git a/ds4_cli.c b/ds4_cli.c
-index 838a394..7a243b6 100644
+index 838a394..f681dd7 100644
 --- a/ds4_cli.c
 +++ b/ds4_cli.c
-@@ -265,6 +265,18 @@ static double cli_now_sec(void) {
+@@ -265,6 +265,30 @@ static double cli_now_sec(void) {
      return (double)ts.tv_sec + (double)ts.tv_nsec * 1.0e-9;
  }
 
@@ -2125,10 +2125,22 @@ index 838a394..7a243b6 100644
 +    return (int)v;
 +}
 +
++static int cli_bench_warmup_repeats(void) {
++    const char *raw = getenv("DS4_MTP_BENCH_WARMUP_REPEATS");
++    if (!raw || !raw[0]) return 0;
++    char *end = NULL;
++    long v = strtol(raw, &end, 10);
++    if (raw[0] == '\0' || *end != '\0' || v < 0 || v > 1000) {
++        fprintf(stderr, "ds4: invalid DS4_MTP_BENCH_WARMUP_REPEATS: %s\n", raw);
++        return -1;
++    }
++    return (int)v;
++}
++
  static char *read_prompt_file(const char *path, bool fatal);
 
  typedef struct {
-@@ -435,6 +447,15 @@ static void print_generated_token(void *ud, int token) {
+@@ -435,6 +459,15 @@ static void print_generated_token(void *ud, int token) {
      free(text);
  }
 
@@ -2144,7 +2156,7 @@ index 838a394..7a243b6 100644
  static void build_prompt(ds4_engine *engine, const cli_generation_options *gen, ds4_tokens *out) {
      if (is_rendered_chat_prompt(gen->prompt)) {
          ds4_tokenize_rendered_chat(engine, gen->prompt, out);
-@@ -742,9 +763,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
+@@ -742,9 +775,11 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
              fprintf(stderr, "ds4: diagnostic run completed on the native %s path.\n",
                      ds4_backend_name(cfg->engine.backend));
          }
@@ -2157,7 +2169,7 @@ index 838a394..7a243b6 100644
          token_printer printer = {
              .engine = engine,
              .fp = stdout,
-@@ -760,8 +783,8 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
+@@ -760,8 +795,8 @@ static int run_generation(ds4_engine *engine, const cli_config *cfg) {
          };
          rc = ds4_engine_generate_argmax(engine, &prompt, cfg->gen.n_predict,
                                          cfg->gen.ctx_size,
@@ -2168,16 +2180,30 @@ index 838a394..7a243b6 100644
                                          &printer,
                                          cli_prefill_progress_cb,
                                          &progress);
-@@ -1328,7 +1351,28 @@ int main(int argc, char **argv) {
+@@ -1328,7 +1363,42 @@ int main(int argc, char **argv) {
      } else if (cfg.gen.prompt == NULL) {
          rc = run_repl(engine, &cfg);
      } else {
 -        rc = run_generation(engine, &cfg);
 +        int repeats = cli_bench_repeats();
-+        if (repeats < 0) {
++        int warmups = cli_bench_warmup_repeats();
++        if (repeats < 0 || warmups < 0) {
 +            rc = 2;
 +        } else {
-+            for (int i = 1; i <= repeats; i++) {
++            for (int i = 1; i <= warmups; i++) {
++                fprintf(stderr,
++                        "ds4: mtp repeat warmup_begin index=%d count=%d\n",
++                        i,
++                        warmups);
++                rc = run_generation(engine, &cfg);
++                fprintf(stderr,
++                        "ds4: mtp repeat warmup_end index=%d count=%d exit_code=%d\n",
++                        i,
++                        warmups,
++                        rc);
++                if (rc != 0) break;
++            }
++            for (int i = 1; rc == 0 && i <= repeats; i++) {
 +                if (repeats > 1) {
 +                    fprintf(stderr,
 +                            "ds4: mtp repeat sample_begin index=%d count=%d\n",

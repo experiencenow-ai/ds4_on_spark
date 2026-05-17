@@ -150,7 +150,7 @@ This directory contains **narrow, reviewable patch files** meant to be applied t
     - keeps `DS4_MTP_SERIAL_SUFFIX=1` only as a diagnostic escape hatch for comparing against the older serial decode verifier
     - emits verifier invocation/position/head-row accounting; the intended fast path reports `verifier_calls=1`, `target_positions=3`, and `first_eval=0.000 ms` for full K=2 accepts
     - requires repeated timing evidence for direction-setting claims: build `ds4-mtp-timing-samples-v1` from at least 10 same-command samples before treating a K=2 t/s delta as stable
-    - provides `DS4_MTP_BENCH_REPEATS=N` plus `scripts/run_antirez_ds4_mtp_timing_samples_spark.sh` so timing samples use one loaded-engine setup per phase and then repeat generation in-process; the summary marks high-CV timing as `unstable` rather than treating a noisy median as a clean decision
+    - provides `DS4_MTP_BENCH_REPEATS=N` and `DS4_MTP_BENCH_WARMUP_REPEATS=N` plus `scripts/run_antirez_ds4_mtp_timing_samples_spark.sh` so timing samples use one loaded-engine setup per phase, run uncounted warmups, and then repeat measured generation in-process; the summary marks high-CV timing as `unstable` rather than treating a noisy median as a clean decision
     - prototypes the next K=3 direct verifier first: `--mtp-draft 3` drafts three tokens, verifies `[target_token,draft0,draft1,draft2]` in one 4-row target suffix job, uses top1 rows 0-2 plus full continuation logits on row3, and reports `target_positions=4` on full accepts
     - adds a prefix-3 verifier frontier, so a row0+row1 K=3 partial accept can commit `[target_token,draft0,draft1]` and materialize row2 continuation logits without serial target replay
 
