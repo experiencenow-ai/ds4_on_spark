@@ -145,6 +145,7 @@ def _api_health_status(args: argparse.Namespace, blocker_kind: str, blocker_deta
         "http_status": None,
         "latency_ms": None,
         "output_token_count": None,
+        "response_hash": None,
         "error": error,
     }
 
@@ -224,9 +225,20 @@ def build_probe(args: argparse.Namespace) -> dict[str, Any]:
         "blocker_kind": blocker_kind,
         "blocker_detail": blocker_detail,
         "custom_ds4_comparison": {
-            "custom_constrained_b512_tok_s_class": "620-650",
-            "custom_full_vocab_b512_tok_s_class": "260",
-            "custom_mtp_k2_direct_path": "measured separately; compare only after SGLang MTP artifact exists",
+            "custom_ds4_constrained_b512": {
+                "summary": "custom DS4 constrained B512 class",
+                "reference_tok_s_class": "620-650",
+                "scope": "custom DS4 constrained output only; not transferable to SGLang",
+            },
+            "custom_ds4_full_vocab_b512": {
+                "summary": "custom DS4 full-vocab B512 class",
+                "reference_tok_s_class": "260",
+                "scope": "custom DS4 full-vocab output only; compare after SGLang full-vocab artifact exists",
+            },
+            "custom_ds4_mtp_k2": {
+                "summary": "custom DS4 MTP K=2 direct path",
+                "scope": "measured separately; compare after SGLang MTP artifact exists",
+            },
         },
         "recommendation": "blocked" if blocker_kind != "none" else "retest",
     }
@@ -260,7 +272,7 @@ def main() -> int:
     parser.add_argument("--target-host", default="local")
     parser.add_argument("--sglang-version-override", default="")
     parser.add_argument("--hardware-json", default="")
-    parser.add_argument("--blocker-kind-override", choices=("none", "sglang_not_installed", "model_checkpoint_missing", "missing_hf_token", "checkpoint_unavailable", "insufficient_disk", "insufficient_memory", "unsupported_gpu", "runtime_install_failed", "launch_not_run_requires_explicit_allow_launch", "launch_failed", "api_health_failed", "benchmark_not_run", "unsupported_constrained_output", "other", "unknown"), default="")
+    parser.add_argument("--blocker-kind-override", choices=("none", "sglang_not_installed", "model_checkpoint_missing", "missing_hf_token", "checkpoint_unavailable", "insufficient_disk", "insufficient_memory", "unsupported_gpu", "runtime_install_failed", "dependency_conflict", "launch_not_run_requires_explicit_allow_launch", "launch_failed", "api_health_failed", "benchmark_not_run", "unsupported_constrained_output", "other", "unknown"), default="")
     parser.add_argument("--blocker-detail-override", default="")
     parser.add_argument("--api-health-status-override", choices=("success", "failed", "blocked", "not_run"), default="")
     parser.add_argument("--api-health-error-override", default="")
