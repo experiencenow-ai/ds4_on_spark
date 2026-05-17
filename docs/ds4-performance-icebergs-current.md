@@ -40,6 +40,8 @@ not pay a CPU full-vocab argmax scan.
 | K=2 guarded exact continuation rerun | 126 | 11.02 | 20.08 | 1.822x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_guarded_default/20260516T235321Z/mtp_verifier_economics.json` |
 | K=2 row2 top1-only continuation experiment | 126 | 11.02 | 11.59 | 1.052x | 70/112 | 62 | 137 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_top1_cont_pendingtop/20260516T234714Z/mtp_verifier_economics.json` |
 | K=2 exact row2 readback without rematerialize | 126 | 11.00 | 20.26 | 1.842x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_samebinary_no_oldenv/20260517T021332Z/mtp_verifier_economics.json` |
+| K=2 exact row2 readback, matched rebuilt baseline | 126 | 13.40 | 20.54 | 1.533x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_oldsource_rebuild/20260517T024836Z/mtp_verifier_economics_matched_baseline.json` |
+| K=2 exact row2 readback, suppressed output | 126 | 13.40 | 20.48 | 1.528x | 84/84 | 42 | 84 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_suppress_output/20260517T025222Z/mtp_verifier_economics.json` |
 | K=2 row2 no-readback experiment | 126 | 11.00 | 11.34 | 1.031x | 70/108 | 83 | 108 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k2_exact_no_readback/20260517T015728Z/mtp_verifier_economics.json` |
 | K=3 suffix prototype | 128 | 11.01 | 7.42 | 0.674x | 49/174 | 114 | 174 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k3_prototype/20260516T154041Z/mtp_verifier_economics.json` |
 | K=3 suffix + prefix-3 frontier | 128 | 11.01 | 11.19 | 1.016x | 75/153 | 97 | 153 | target_eval_ms | `/private/tmp/ds4_on_spark_antirez_ds4_mtp_k3_prefix3/20260516T232454Z/mtp_verifier_economics.json` |
@@ -62,6 +64,14 @@ performance change is an exact top1 continuation primitive that matches the
 full-logits/indexer argmax before removing row2 full logits from the default
 path. Tail handling for output lengths outside the 3-token target/draft/draft
 group remains a separate production-completeness blocker.
+
+The 2026-05-17 matched-rebuild check puts the same-source greedy baseline at
+13.40 t/s and the exact K=2 path at 20.54 t/s, so the same-binary speedup is
+1.53x. `DS4_SUPPRESS_OUTPUT=1` measured 20.48 t/s, which means token printing is
+not the K=2 limiter. The remaining gap to a 1.8x matched-baseline result is the
+row2 continuation full-vocab row: removing it is only valid after a cheap top1
+continuation path is proven identical to the full-logits/indexer result without
+perturbing the verifier trajectory.
 
 K selection is not power-of-two constrained. The verifier group needs one
 normal target row plus `K` extra drafted rows, so the scheduler should only

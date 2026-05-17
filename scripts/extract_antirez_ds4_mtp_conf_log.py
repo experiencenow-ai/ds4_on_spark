@@ -81,6 +81,7 @@ TIMING_COUNT_KEYS = {
 	"head_rows": "output_head_rows",
 	"full_vocab_rows": "full_vocab_logits_rows",
 	"top1_rows": "top1_only_rows",
+	"row2_top1_mismatch": "row2_top1_mismatch_count",
 }
 
 
@@ -185,6 +186,7 @@ def _zero_counts() -> dict[str, int]:
 		"output_head_rows": 0,
 		"full_vocab_logits_rows": 0,
 		"top1_only_rows": 0,
+		"row2_top1_mismatch_count": 0,
 	}
 
 

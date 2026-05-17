@@ -122,6 +122,28 @@ class Ds4MtpVerifierEconomicsTest(unittest.TestCase):
 		self.assertEqual(report["blocker_kind"], "none")
 		self.assertTrue(validate.validate_report(report)["ok"])
 
+	def test_row2_top1_compare_mismatch_count_is_reported(self) -> None:
+		lines = [
+			"ds4: mtp conf drafted=2 committed=2 mtp_top=7 runner=8 margin=1.000000 target_next=7 draft_next=7\n",
+			"ds4: mtp timing suffix2 drafted=2 committed=2 draft=3.000 ms snapshot=0.000 ms verify=9.000 ms target=6.000 ms head=0.000 ms readback=0.500 ms row2_top1_mismatch=1 verifier_calls=1 target_positions=3 target_calls=1 head_calls=1 head_rows=3 full_vocab_rows=1 top1_rows=2 draft_calls=2 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=13.500 ms\n",
+			"ds4: mtp timing suffix2 drafted=2 committed=2 draft=3.000 ms snapshot=0.000 ms verify=9.000 ms target=6.000 ms head=0.000 ms readback=0.500 ms row2_top1_mismatch=0 verifier_calls=1 target_positions=3 target_calls=1 head_calls=1 head_rows=3 full_vocab_rows=1 top1_rows=2 draft_calls=2 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=3 total=13.500 ms\n",
+			"ds4: prefill: 2.18 t/s, generation: 16.00 t/s\n",
+		]
+		report = build.build_report_from_lines(
+			lines,
+			run_id="r",
+			model_id="m",
+			runtime_id="rt",
+			prompt="p",
+			prompt_hash="",
+			baseline_tps=14.65,
+			mtp_tps=None,
+		)
+		self.assertEqual(report["row2_top1_mismatch_count"], 1)
+		self.assertEqual(report["full_vocab_logits_rows"], 2)
+		self.assertEqual(report["top1_only_rows"], 4)
+		self.assertTrue(validate.validate_report(report)["ok"])
+
 	def test_suffix3_log_tracks_four_positions_per_invocation(self) -> None:
 		lines = [
 			"ds4: mtp timing suffix3 drafted=3 committed=3 draft=4.000 ms snapshot=0.000 ms verify=11.000 ms target=8.000 ms head=0.000 ms verifier_calls=1 target_positions=4 target_calls=1 head_calls=1 head_rows=4 full_vocab_rows=1 top1_rows=3 draft_calls=3 replay_calls=0 rewind_calls=0 cache_sync_calls=0 cuda_sync_calls=0 emitted=4 total=16.000 ms\n",
