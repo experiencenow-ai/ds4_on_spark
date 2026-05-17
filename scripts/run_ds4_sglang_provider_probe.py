@@ -71,8 +71,9 @@ def _hardware() -> dict[str, Any]:
 
 
 def _launch_command(args: argparse.Namespace) -> list[str]:
+    python_executable = _python_executable(args)
     command = [
-        sys.executable,
+        python_executable,
         "-m",
         "sglang.launch_server",
         "--model-path",
@@ -95,9 +96,26 @@ def _launch_command(args: argparse.Namespace) -> list[str]:
     return command
 
 
-def _blocker(args: argparse.Namespace, version_blocker: str | None) -> tuple[str, str]:
+def _python_executable(args: argparse.Namespace) -> str:
+    if args.python_executable:
+        return args.python_executable
+    if args.target_host and args.target_host != "local":
+        return "python3"
+    return sys.executable
+
+
+def _reachability_report(path_text: str) -> dict[str, Any] | None:
+    if not path_text:
+        return None
+    path = Path(path_text)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _blocker(args: argparse.Namespace, version_blocker: str | None, reachability: dict[str, Any] | None) -> tuple[str, str]:
     if args.blocker_kind_override:
         return args.blocker_kind_override, args.blocker_detail_override
+    if reachability is not None and reachability.get("blocker_kind") != "none":
+        return "host_unreachable", "Spark reachability report blocked SGLang launch: " + str(reachability.get("blocker_detail") or "")
     if version_blocker:
         return version_blocker, "Python package 'sglang' is not installed in this environment."
     if not Path(args.model_path).exists():
@@ -160,8 +178,8 @@ def _acquisition_attempts(args: argparse.Namespace) -> list[dict[str, Any]]:
 def _reachability_report_ref(path_text: str) -> dict[str, str] | None:
     if not path_text:
         return None
+    obj = _reachability_report(path_text)
     path = Path(path_text)
-    obj = json.loads(path.read_text(encoding="utf-8"))
     return {
         "path": path_text,
         "sha256": str(obj.get("artifact_sha256", "")),
@@ -201,7 +219,8 @@ def _benchmark_results(blocker_kind: str, blocker_detail: str) -> list[dict[str,
 
 def build_probe(args: argparse.Namespace) -> dict[str, Any]:
     sglang_version, version_blocker = _sglang_version(args.sglang_version_override)
-    blocker_kind, blocker_detail = _blocker(args, version_blocker)
+    reachability = _reachability_report(args.reachability_report_path)
+    blocker_kind, blocker_detail = _blocker(args, version_blocker, reachability)
     hf_token_present = bool(os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN"))
     if not args.hf_token_present:
         args.hf_token_present = hf_token_present
@@ -217,7 +236,7 @@ def build_probe(args: argparse.Namespace) -> dict[str, Any]:
         "hardware": json.loads(args.hardware_json) if args.hardware_json else _hardware(),
         "launch_command": _launch_command(args),
         "launch_environment": {
-            "python_executable": sys.executable,
+            "python_executable": _python_executable(args),
             "env_keys_checked": ["HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"],
             "hf_token_present": bool(args.hf_token_present),
             "target_host": args.target_host,
@@ -281,11 +300,12 @@ def main() -> int:
     parser.add_argument("--pp-size", type=int, default=1)
     parser.add_argument("--dp-size", type=int, default=1)
     parser.add_argument("--allow-launch", action="store_true")
+    parser.add_argument("--python-executable", default="")
     parser.add_argument("--hf-token-present", action="store_true")
     parser.add_argument("--target-host", default="local")
     parser.add_argument("--sglang-version-override", default="")
     parser.add_argument("--hardware-json", default="")
-    parser.add_argument("--blocker-kind-override", choices=("none", "sglang_not_installed", "model_checkpoint_missing", "missing_hf_token", "checkpoint_unavailable", "insufficient_disk", "insufficient_memory", "unsupported_gpu", "runtime_install_failed", "dependency_conflict", "launch_not_run_requires_explicit_allow_launch", "launch_failed", "api_health_failed", "benchmark_not_run", "unsupported_constrained_output", "other", "unknown"), default="")
+    parser.add_argument("--blocker-kind-override", choices=("none", "sglang_not_installed", "model_checkpoint_missing", "missing_hf_token", "checkpoint_unavailable", "insufficient_disk", "insufficient_memory", "unsupported_gpu", "host_unreachable", "spark_reachability_blocked", "runtime_install_failed", "dependency_conflict", "launch_not_run_requires_explicit_allow_launch", "launch_failed", "api_health_failed", "benchmark_not_run", "unsupported_constrained_output", "other", "unknown"), default="")
     parser.add_argument("--blocker-detail-override", default="")
     parser.add_argument("--api-health-status-override", choices=("success", "failed", "blocked", "not_run"), default="")
     parser.add_argument("--api-health-error-override", default="")

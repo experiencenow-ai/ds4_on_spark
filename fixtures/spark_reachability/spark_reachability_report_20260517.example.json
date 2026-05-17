@@ -1,9 +1,30 @@
 {
-  "artifact_hash": "sha256:53de12065a91fd5a82714e088fa0d547b5c8444544baea2cfda4a261ec6b378b",
-  "artifact_sha256": "sha256:53de12065a91fd5a82714e088fa0d547b5c8444544baea2cfda4a261ec6b378b",
-  "blocker_detail": "Spark hostnames did not resolve through DNS/mDNS; inventory direct IPs were checked but SSH did not reach any Spark host.",
-  "blocker_kind": "ssh_unreachable",
-  "checked_at": "2026-05-17T06:04:57Z",
+  "artifact_hash": "sha256:0d18d21e7ac1747c29552eccc71b7212f3a97cfb227aec1e9fc9bbae0090d886",
+  "artifact_sha256": "sha256:0d18d21e7ac1747c29552eccc71b7212f3a97cfb227aec1e9fc9bbae0090d886",
+  "blocker_detail": "At least one Spark host accepted SSH.",
+  "blocker_kind": "none",
+  "checked_at": "2026-05-17T06:47:02Z",
+  "configured_inventory_hosts": [
+    "spark0@spark0.local",
+    "spark1@192.0.2.11",
+    "spark1@spark1.local",
+    "spark2@192.0.2.12",
+    "spark2@spark2.local"
+  ],
+  "direct_ip_results": {
+    "192.0.2.11": {
+      "error": "ping=failed; ssh=failed",
+      "ping_status": "failed",
+      "ssh_status": "failed",
+      "status": "failed"
+    },
+    "192.0.2.12": {
+      "error": "ping=failed; ssh=failed",
+      "ping_status": "failed",
+      "ssh_status": "failed",
+      "status": "failed"
+    }
+  },
   "dns_results": {
     "192.0.2.11": {
       "addresses": [
@@ -17,7 +38,7 @@
         "name",
         "192.0.2.11"
       ],
-      "elapsed_ms": 5.71,
+      "elapsed_ms": 72.581,
       "error": "",
       "returncode": 0,
       "status": "success",
@@ -36,7 +57,7 @@
         "name",
         "192.0.2.12"
       ],
-      "elapsed_ms": 4.672,
+      "elapsed_ms": 80.104,
       "error": "",
       "returncode": 0,
       "status": "success",
@@ -44,7 +65,11 @@
       "stdout": "name: 192.0.2.12\nip_address: 192.0.2.12"
     },
     "aitopatom-9ab9.local": {
-      "addresses": [],
+      "addresses": [
+        "<link-local-ipv6>",
+        "<private-ipv4>",
+        "<private-ipv4>"
+      ],
       "command": [
         "dscacheutil",
         "-q",
@@ -53,12 +78,12 @@
         "name",
         "aitopatom-9ab9.local"
       ],
-      "elapsed_ms": 4.288,
-      "error": "no host record returned",
+      "elapsed_ms": 501.197,
+      "error": "",
       "returncode": 0,
-      "status": "not_found",
+      "status": "success",
       "stderr": "",
-      "stdout": ""
+      "stdout": "name: aitopatom-9ab9.local\nipv6_address: <link-local-ipv6>\n\nname: aitopatom-9ab9.local\nip_address: <private-ipv4>\nip_address: <private-ipv4>"
     },
     "spark0.local": {
       "addresses": [],
@@ -70,12 +95,13 @@
         "name",
         "spark0.local"
       ],
-      "elapsed_ms": 4.394,
+      "elapsed_ms": 3005.191,
       "error": "no host record returned",
-      "returncode": 0,
-      "status": "not_found",
+      "returncode": null,
+      "status": "timeout",
       "stderr": "",
-      "stdout": ""
+      "stdout": "",
+      "timeout": true
     },
     "spark1.local": {
       "addresses": [],
@@ -87,12 +113,13 @@
         "name",
         "spark1.local"
       ],
-      "elapsed_ms": 4.778,
+      "elapsed_ms": 3006.483,
       "error": "no host record returned",
-      "returncode": 0,
-      "status": "not_found",
+      "returncode": null,
+      "status": "timeout",
       "stderr": "",
-      "stdout": ""
+      "stdout": "",
+      "timeout": true
     },
     "spark2.local": {
       "addresses": [],
@@ -104,12 +131,13 @@
         "name",
         "spark2.local"
       ],
-      "elapsed_ms": 4.26,
+      "elapsed_ms": 3004.027,
       "error": "no host record returned",
-      "returncode": 0,
-      "status": "not_found",
+      "returncode": null,
+      "status": "timeout",
       "stderr": "",
-      "stdout": ""
+      "stdout": "",
+      "timeout": true
     }
   },
   "expected_hosts": [
@@ -128,7 +156,7 @@
         "-F",
         "192.0.2.11"
       ],
-      "elapsed_ms": 6.274,
+      "elapsed_ms": 10.602,
       "error": "",
       "returncode": 1,
       "status": "missing",
@@ -141,7 +169,7 @@
         "-F",
         "192.0.2.12"
       ],
-      "elapsed_ms": 6.827,
+      "elapsed_ms": 7.357,
       "error": "",
       "returncode": 1,
       "status": "missing",
@@ -154,12 +182,12 @@
         "-F",
         "aitopatom-9ab9.local"
       ],
-      "elapsed_ms": 6.233,
+      "elapsed_ms": 6.923,
       "error": "",
-      "returncode": 1,
-      "status": "missing",
+      "returncode": 0,
+      "status": "present",
       "stderr": "",
-      "stdout": ""
+      "stdout": "# Host aitopatom-9ab9.local found: line 366 \naitopatom-9ab9.local ssh-ed25519 <known-host-key-redacted>\n# Host aitopatom-9ab9.local found: line 367 \naitopatom-9ab9.local ssh-rsa <known-host-key-redacted>\n# Host aitopatom-9ab9.local found: line 368 \naitopatom-9ab9.local ecdsa-sha2-nistp256 <known-host-key-redacted>"
     },
     "spark0.local": {
       "command": [
@@ -167,7 +195,7 @@
         "-F",
         "spark0.local"
       ],
-      "elapsed_ms": 6.665,
+      "elapsed_ms": 6.251,
       "error": "",
       "returncode": 1,
       "status": "missing",
@@ -180,7 +208,7 @@
         "-F",
         "spark1.local"
       ],
-      "elapsed_ms": 6.986,
+      "elapsed_ms": 6.708,
       "error": "",
       "returncode": 1,
       "status": "missing",
@@ -193,7 +221,7 @@
         "-F",
         "spark2.local"
       ],
-      "elapsed_ms": 5.481,
+      "elapsed_ms": 4.708,
       "error": "",
       "returncode": 1,
       "status": "missing",
@@ -202,8 +230,8 @@
     }
   },
   "local_host": {
-    "hostname": "cems-MacBook-Air.local",
-    "platform": "macOS-26.2-arm64-arm-64bit"
+    "hostname": "Mac-Studio.local",
+    "platform": "macOS-14.6-arm64-arm-64bit-Mach-O"
   },
   "mdns_results": {
     "192.0.2.11": {
@@ -213,12 +241,13 @@
         "v4v6",
         "192.0.2.11"
       ],
-      "elapsed_ms": 3.071,
-      "error": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "stdout": ""
+      "elapsed_ms": 3003.19,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "192.0.2.12": {
       "command": [
@@ -227,12 +256,13 @@
         "v4v6",
         "192.0.2.12"
       ],
-      "elapsed_ms": 2.914,
-      "error": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "stdout": ""
+      "elapsed_ms": 3003.902,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "aitopatom-9ab9.local": {
       "command": [
@@ -241,12 +271,13 @@
         "v4v6",
         "aitopatom-9ab9.local"
       ],
-      "elapsed_ms": 3.07,
-      "error": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "stdout": ""
+      "elapsed_ms": 3005.813,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "spark0.local": {
       "command": [
@@ -255,12 +286,13 @@
         "v4v6",
         "spark0.local"
       ],
-      "elapsed_ms": 3.377,
-      "error": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "stdout": ""
+      "elapsed_ms": 3003.878,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "spark1.local": {
       "command": [
@@ -269,12 +301,13 @@
         "v4v6",
         "spark1.local"
       ],
-      "elapsed_ms": 2.973,
-      "error": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "stdout": ""
+      "elapsed_ms": 3005.011,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "spark2.local": {
       "command": [
@@ -283,29 +316,31 @@
         "v4v6",
         "spark2.local"
       ],
-      "elapsed_ms": 2.97,
-      "error": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "DNSServiceGetAddrInfo failed -65563 (Service Not Running)",
-      "stdout": ""
+      "elapsed_ms": 3004.406,
+      "error": "mDNS lookup did not return a usable host record",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     }
   },
   "network_interface_summary": {
     "active_interfaces": [
       "awdl0",
-      "en0"
+      "en0",
+      "en1"
     ],
     "error": "",
-    "hostname": "cems-MacBook-Air.local",
+    "hostname": "Mac-Studio.local",
     "ifconfig_status": "success",
     "mdnsresponder_process_status": "not_observed",
     "networksetup_error": "AuthorizationCreate() failed: -60008",
     "networksetup_status": "failed",
-    "platform": "macOS-26.2-arm64-arm-64bit",
+    "platform": "macOS-14.6-arm64-arm-64bit-Mach-O",
     "process_check_status": "failed",
-    "scutil_dns_error": "No DNS configuration available",
-    "scutil_dns_status": "failed"
+    "scutil_dns_error": "DNS configuration\n\nresolver #1\n  nameserver[0] : 8.8.8.8\n  flags    : Request A records\n  reach    : 0x00000002 (Reachable)\n\nresolver #2\n  domain   : local\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300000\n\nresolver #3\n  domain   : 254.169.in-addr.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300200\n\nresolver #4\n  domain   : 8.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300400\n\nresolver #5\n  domain   : 9.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300600\n\nresolver #6\n  domain   : a.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 300800\n\nresolver #7\n  domain   : b.e.f.ip6.arpa\n  options  : mdns\n  timeout  : 5\n  flags    : Request A records\n  reach    : 0x00000000 (Not Reachable)\n  order    : 301000\n\nDNS configuration (for scoped queries)\n\nresolver #1\n  nameserver[0] : 8.8.8.8\n  if_index : 26 (en1)\n  flags    : Scoped, Request A records\n  reach    : 0x00000002 (Reachable)",
+    "scutil_dns_status": "success"
   },
   "ping_results": {
     "192.0.2.11": {
@@ -317,11 +352,11 @@
         "1000",
         "192.0.2.11"
       ],
-      "elapsed_ms": 2009.944,
-      "error": "ping: sendto: Operation not permitted",
+      "elapsed_ms": 2014.279,
+      "error": "PING 192.0.2.11 (192.0.2.11): 56 data bytes\n\n--- 192.0.2.11 ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss",
       "returncode": 2,
       "status": "failed",
-      "stderr": "ping: sendto: Operation not permitted",
+      "stderr": "",
       "stdout": "PING 192.0.2.11 (192.0.2.11): 56 data bytes\n\n--- 192.0.2.11 ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss"
     },
     "192.0.2.12": {
@@ -333,11 +368,11 @@
         "1000",
         "192.0.2.12"
       ],
-      "elapsed_ms": 2015.927,
-      "error": "ping: sendto: Operation not permitted",
+      "elapsed_ms": 2015.833,
+      "error": "PING 192.0.2.12 (192.0.2.12): 56 data bytes\n\n--- 192.0.2.12 ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss",
       "returncode": 2,
       "status": "failed",
-      "stderr": "ping: sendto: Operation not permitted",
+      "stderr": "",
       "stdout": "PING 192.0.2.12 (192.0.2.12): 56 data bytes\n\n--- 192.0.2.12 ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss"
     },
     "aitopatom-9ab9.local": {
@@ -349,12 +384,12 @@
         "1000",
         "aitopatom-9ab9.local"
       ],
-      "elapsed_ms": 8.467,
-      "error": "ping: cannot resolve aitopatom-9ab9.local: Unknown host",
-      "returncode": 68,
+      "elapsed_ms": 2015.183,
+      "error": "PING aitopatom-9ab9.local (<private-ipv4>): 56 data bytes\n\n--- aitopatom-9ab9.local ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss",
+      "returncode": 2,
       "status": "failed",
-      "stderr": "ping: cannot resolve aitopatom-9ab9.local: Unknown host",
-      "stdout": ""
+      "stderr": "",
+      "stdout": "PING aitopatom-9ab9.local (<private-ipv4>): 56 data bytes\n\n--- aitopatom-9ab9.local ping statistics ---\n1 packets transmitted, 0 packets received, 100.0% packet loss"
     },
     "spark0.local": {
       "command": [
@@ -365,12 +400,13 @@
         "1000",
         "spark0.local"
       ],
-      "elapsed_ms": 8.065,
-      "error": "ping: cannot resolve spark0.local: Unknown host",
-      "returncode": 68,
-      "status": "failed",
-      "stderr": "ping: cannot resolve spark0.local: Unknown host",
-      "stdout": ""
+      "elapsed_ms": 3005.603,
+      "error": "",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "spark1.local": {
       "command": [
@@ -381,12 +417,13 @@
         "1000",
         "spark1.local"
       ],
-      "elapsed_ms": 6.306,
-      "error": "ping: cannot resolve spark1.local: Unknown host",
-      "returncode": 68,
-      "status": "failed",
-      "stderr": "ping: cannot resolve spark1.local: Unknown host",
-      "stdout": ""
+      "elapsed_ms": 3005.374,
+      "error": "",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     },
     "spark2.local": {
       "command": [
@@ -397,16 +434,17 @@
         "1000",
         "spark2.local"
       ],
-      "elapsed_ms": 4.42,
-      "error": "ping: cannot resolve spark2.local: Unknown host",
-      "returncode": 68,
-      "status": "failed",
-      "stderr": "ping: cannot resolve spark2.local: Unknown host",
-      "stdout": ""
+      "elapsed_ms": 3004.707,
+      "error": "",
+      "returncode": null,
+      "status": "timeout",
+      "stderr": "",
+      "stdout": "",
+      "timeout": true
     }
   },
-  "recommended_fix": "Restore local network/VPN/mDNS visibility to the Spark nodes or provide direct reachable Spark IPs; rerun this report before retrying SGLang acquisition.",
-  "run_id": "spark-reachability-20260517-sglang-unblock",
+  "recommended_fix": "Rerun SGLang acquisition against the reachable Spark host.",
+  "run_id": "spark-reachability-20260517-sglang-launch-probe",
   "ssh_results": {
     "192.0.2.11": {
       "command": [
@@ -420,11 +458,11 @@
         "spark1@192.0.2.11",
         "hostname"
       ],
-      "elapsed_ms": 8.561,
-      "error": "ssh: connect to host 192.0.2.11 port 22: Operation not permitted",
+      "elapsed_ms": 5010.108,
+      "error": "ssh: connect to host 192.0.2.11 port 22: Operation timed out",
       "returncode": 255,
       "status": "failed",
-      "stderr": "ssh: connect to host 192.0.2.11 port 22: Operation not permitted",
+      "stderr": "ssh: connect to host 192.0.2.11 port 22: Operation timed out",
       "stdout": "",
       "target": "spark1@192.0.2.11"
     },
@@ -440,11 +478,11 @@
         "spark2@192.0.2.12",
         "hostname"
       ],
-      "elapsed_ms": 6.672,
-      "error": "ssh: connect to host 192.0.2.12 port 22: Operation not permitted",
+      "elapsed_ms": 5011.022,
+      "error": "ssh: connect to host 192.0.2.12 port 22: Operation timed out",
       "returncode": 255,
       "status": "failed",
-      "stderr": "ssh: connect to host 192.0.2.12 port 22: Operation not permitted",
+      "stderr": "ssh: connect to host 192.0.2.12 port 22: Operation timed out",
       "stdout": "",
       "target": "spark2@192.0.2.12"
     },
@@ -460,12 +498,12 @@
         "spark0@aitopatom-9ab9.local",
         "hostname"
       ],
-      "elapsed_ms": 7.666,
-      "error": "ssh: Could not resolve hostname aitopatom-9ab9.local: nodename nor servname provided, or not known",
-      "returncode": 255,
-      "status": "failed",
-      "stderr": "ssh: Could not resolve hostname aitopatom-9ab9.local: nodename nor servname provided, or not known",
-      "stdout": "",
+      "elapsed_ms": 531.257,
+      "error": "",
+      "returncode": 0,
+      "status": "success",
+      "stderr": "",
+      "stdout": "aitopatom-9ab9",
       "target": "spark0@aitopatom-9ab9.local"
     },
     "spark0.local": {
@@ -480,7 +518,7 @@
         "spark0@spark0.local",
         "hostname"
       ],
-      "elapsed_ms": 7.061,
+      "elapsed_ms": 5008.903,
       "error": "ssh: Could not resolve hostname spark0.local: nodename nor servname provided, or not known",
       "returncode": 255,
       "status": "failed",
@@ -500,7 +538,7 @@
         "spark1@spark1.local",
         "hostname"
       ],
-      "elapsed_ms": 7.373,
+      "elapsed_ms": 5010.232,
       "error": "ssh: Could not resolve hostname spark1.local: nodename nor servname provided, or not known",
       "returncode": 255,
       "status": "failed",
@@ -520,7 +558,7 @@
         "spark2@spark2.local",
         "hostname"
       ],
-      "elapsed_ms": 7.096,
+      "elapsed_ms": 5008.314,
       "error": "ssh: Could not resolve hostname spark2.local: nodename nor servname provided, or not known",
       "returncode": 255,
       "status": "failed",
