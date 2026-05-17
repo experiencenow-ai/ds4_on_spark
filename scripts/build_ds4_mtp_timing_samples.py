@@ -40,15 +40,43 @@ def _bench_value(obj: dict[str, Any], key: str) -> Any:
 	return None
 
 
+def _diag_draft_counts(diag: Any) -> tuple[Optional[int], Optional[int]]:
+	if not isinstance(diag, dict):
+		return None, None
+	attempts = _int(diag.get("suffix2_attempts"))
+	tail_attempts = _int(diag.get("suffix2_tail_attempts")) or 0
+	full_accepts = _int(diag.get("suffix2_full_accepts")) or 0
+	partial_accepts = _int(diag.get("suffix2_partial_accepts")) or 0
+	tail_accepts = _int(diag.get("suffix2_tail_accepts")) or 0
+	if attempts is None:
+		return None, None
+	if tail_attempts > attempts:
+		return None, None
+	non_tail_attempts = attempts - tail_attempts
+	attempted = (2 * non_tail_attempts) + tail_attempts
+	accepted = (2 * full_accepts) + partial_accepts + tail_accepts
+	return accepted, attempted
+
+
 def _sample_from_json(path: Path) -> dict[str, Any]:
 	obj = json.loads(path.read_text(encoding="utf-8"))
 	speed = obj.get("speed") or {}
 	totals = obj.get("totals") or {}
 	mismatches = obj.get("mismatches") or {}
 	timing = obj.get("timing") or {}
+	sample_diag = obj.get("sample_diag")
 	generation_tps = speed.get("generation_tps")
 	if generation_tps is None:
 		generation_tps = obj.get("mtp_tps") or obj.get("mtp_generation_tps")
+	accepted_draft_tokens = _int(totals.get("draft_tokens_accepted_est") if totals else obj.get("accepted_draft_tokens"))
+	attempted_draft_tokens = _int(totals.get("draft_tokens_attempted_est") if totals else obj.get("attempted_draft_tokens"))
+	diag_accepted, diag_attempted = _diag_draft_counts(sample_diag)
+	if (attempted_draft_tokens is None or attempted_draft_tokens == 0) and diag_attempted is not None and diag_attempted > 0:
+		accepted_draft_tokens = diag_accepted
+		attempted_draft_tokens = diag_attempted
+	accept_rate = _num(totals.get("draft_accept_rate_est") if totals else obj.get("accept_rate"))
+	if (accept_rate is None or (attempted_draft_tokens is not None and attempted_draft_tokens > 0 and accept_rate == 0.0)) and attempted_draft_tokens is not None and attempted_draft_tokens > 0 and accepted_draft_tokens is not None:
+		accept_rate = accepted_draft_tokens / attempted_draft_tokens
 	return {
 		"path": str(path),
 		"generation_tps": _num(generation_tps),
@@ -65,11 +93,12 @@ def _sample_from_json(path: Path) -> dict[str, Any]:
 		"seed": _int(_bench_value(obj, "seed")),
 		"spec_disabled": _int(_bench_value(obj, "spec_disabled")),
 		"exit_code": _int(_bench_value(obj, "exit_code")),
-		"accept_rate": _num(totals.get("draft_accept_rate_est") if totals else obj.get("accept_rate")),
-		"accepted_draft_tokens": _int(totals.get("draft_tokens_accepted_est") if totals else obj.get("accepted_draft_tokens")),
-		"attempted_draft_tokens": _int(totals.get("draft_tokens_attempted_est") if totals else obj.get("attempted_draft_tokens")),
+		"accept_rate": accept_rate,
+		"accepted_draft_tokens": accepted_draft_tokens,
+		"attempted_draft_tokens": attempted_draft_tokens,
 		"target_next_mismatch_events": _int(mismatches.get("target_next_mismatch_events") if mismatches else obj.get("target_next_mismatch_events")),
 		"timing_event_count": _int((timing or {}).get("events")),
+		"sample_diag": sample_diag,
 	}
 
 

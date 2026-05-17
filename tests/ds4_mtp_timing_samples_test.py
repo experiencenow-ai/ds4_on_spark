@@ -24,6 +24,11 @@ def _sample(idx: int, generation_tps: float) -> dict[str, object]:
 		"timing": {
 			"events": 1,
 		},
+		"sample_diag": {
+			"direct": 1,
+			"suffix2_attempts": 1,
+			"suffix2_full_accepts": 1,
+		},
 		"benchmark": {
 			"events": [
 				{
@@ -73,7 +78,37 @@ class Ds4MtpTimingSamplesTest(unittest.TestCase):
 		self.assertAlmostEqual(float(report["generation_tps_median"]), 14.5)
 		self.assertGreater(float(report["generation_tps_stdev"]), 0.0)
 		self.assertAlmostEqual(float(report["speedup_vs_baseline_median"]), 1.45)
+		self.assertEqual(report["sample_records"][0]["sample_diag"]["suffix2_full_accepts"], 1)
 		self.assertTrue(validate.validate_report(report)["ok"])
+
+	def test_builder_derives_measured_mode_acceptance_from_sample_diag(self) -> None:
+		obj = _sample(0, 20.0)
+		obj["totals"] = {
+			"draft_tokens_accepted_est": 0,
+			"draft_tokens_attempted_est": 0,
+			"draft_accept_rate_est": None,
+		}
+		obj["sample_diag"] = {
+			"direct": 1,
+			"suffix2_attempts": 3,
+			"suffix2_full_accepts": 1,
+			"suffix2_partial_accepts": 1,
+			"suffix2_rejects": 1,
+		}
+		with tempfile.TemporaryDirectory() as tmp:
+			path = Path(tmp) / "sample.json"
+			path.write_text(json.dumps(obj), encoding="utf-8")
+			report = build.build_report(
+				[path],
+				run_id="r",
+				label="k2",
+				min_sample_count=1,
+				baseline_tps=None,
+			)
+		record = report["sample_records"][0]
+		self.assertEqual(record["accepted_draft_tokens"], 3)
+		self.assertEqual(record["attempted_draft_tokens"], 6)
+		self.assertEqual(record["accept_rate"], 0.5)
 
 	def test_builder_marks_nine_samples_insufficient(self) -> None:
 		with tempfile.TemporaryDirectory() as tmp:

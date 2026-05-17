@@ -713,7 +713,7 @@ index 9871775..72da52f 100644
          ok = ds4_gpu_indexer_topk_tensor(g->comp_selected,
                                             g->logits,
                                             DS4_N_VOCAB,
-@@ -12797,6 +13364,584 @@ static bool metal_graph_eval_mtp_draft(
+@@ -12797,6 +13364,620 @@ static bool metal_graph_eval_mtp_draft(
                                                top_id);
  }
 
@@ -749,6 +749,24 @@ index 9871775..72da52f 100644
 +    double draft_ms;
 +    double suffix_ms;
 +    double prefix_ms;
++    int serial_decode_steps;
++    int pending_argmax_hits;
++    int pending_argmax_misses;
++    int suffix2_attempts;
++    int suffix2_full_accepts;
++    int suffix2_partial_accepts;
++    int suffix2_rejects;
++    int suffix2_tail_attempts;
++    int suffix2_tail_accepts;
++    int suffix2_tail_rejects;
++    int suffix2_fallbacks;
++    int suffix2_first_nonfull_seen;
++    int suffix2_first_nonfull_pos;
++    int suffix2_first_nonfull_kind;
++    int suffix2_first_nonfull_draft0;
++    int suffix2_first_nonfull_draft1;
++    int suffix2_first_nonfull_top0;
++    int suffix2_first_nonfull_top1;
 +} ds4_direct_mtp_stats;
 +
 +static bool metal_graph_read_suffix_logits_or_top1(
@@ -856,6 +874,15 @@ index 9871775..72da52f 100644
 +            if (keep > g->raw_window) keep = g->raw_window;
 +            g->mtp_n_raw = keep;
 +            return 2;
++        }
++        if (stats && !stats->suffix2_first_nonfull_seen) {
++            stats->suffix2_first_nonfull_seen = 1;
++            stats->suffix2_first_nonfull_pos = start;
++            stats->suffix2_first_nonfull_kind = 2;
++            stats->suffix2_first_nonfull_draft0 = drafts[0];
++            stats->suffix2_first_nonfull_draft1 = -1;
++            stats->suffix2_first_nonfull_top0 = row_tops[0];
++            stats->suffix2_first_nonfull_top1 = -1;
 +        }
 +        const double t_prefix0 = mtp_timing ? now_sec() : 0.0;
 +        ok = spec_frontier_commit_prefix1_graph(g);
@@ -971,6 +998,15 @@ index 9871775..72da52f 100644
 +        if (keep > g->raw_window) keep = g->raw_window;
 +        g->mtp_n_raw = keep;
 +        return 3;
++    }
++    if (stats && !stats->suffix2_first_nonfull_seen) {
++        stats->suffix2_first_nonfull_seen = 1;
++        stats->suffix2_first_nonfull_pos = start;
++        stats->suffix2_first_nonfull_kind = row_tops[0] == drafts[0] ? 1 : 2;
++        stats->suffix2_first_nonfull_draft0 = drafts[0];
++        stats->suffix2_first_nonfull_draft1 = drafts[1];
++        stats->suffix2_first_nonfull_top0 = row_tops[0];
++        stats->suffix2_first_nonfull_top1 = row_tops[1];
 +    }
 +    if (row_tops[0] == drafts[0]) {
 +        const double t_prefix0 = mtp_timing ? now_sec() : 0.0;
@@ -1482,12 +1518,17 @@ index 9871775..72da52f 100644
      const double t_decode0 = now_sec();
      for (int i = 0; i < n_predict && pos < ctx_size; i++) {
          if (trace_top) {
-@@ -15099,17 +16230,87 @@ static int generate_metal_graph_raw_swa(
+@@ -15099,17 +16255,103 @@ static int generate_metal_graph_raw_swa(
              print_top_logits(stderr, label, vocab, logits, DS4_N_VOCAB, 10);
          }
 
 -        int token = sample_argmax(logits, DS4_N_VOCAB);
-+        int token = pending_argmax >= 0 ? pending_argmax : sample_argmax(logits, DS4_N_VOCAB);
++        const bool used_pending_argmax = pending_argmax >= 0;
++        int token = used_pending_argmax ? pending_argmax : sample_argmax(logits, DS4_N_VOCAB);
++        if (mtp_direct) {
++            if (used_pending_argmax) mtp_stats.pending_argmax_hits++;
++            else mtp_stats.pending_argmax_misses++;
++        }
 +        pending_argmax = -1;
          if (token == vocab->eos_id) break;
 
@@ -1537,6 +1578,9 @@ index 9871775..72da52f 100644
 +
 +        if (mtp_direct && mtp_draft_tokens == 2 && n_predict - n_generated >= 2) {
 +            int toks[3] = {-1,-1,-1};
++            const bool suffix2_tail = (n_predict - n_generated) < 3;
++            mtp_stats.suffix2_attempts++;
++            if (suffix2_tail) mtp_stats.suffix2_tail_attempts++;
 +            const int ntok = metal_graph_try_mtp_suffix2_direct(&g,
 +                                                                model,
 +                                                                weights,
@@ -1557,6 +1601,12 @@ index 9871775..72da52f 100644
 +                break;
 +            }
 +            if (ntok > 0) {
++                if (suffix2_tail) {
++                    if (ntok == 2) mtp_stats.suffix2_tail_accepts++;
++                    else mtp_stats.suffix2_tail_rejects++;
++                } else if (ntok == 3) mtp_stats.suffix2_full_accepts++;
++                else if (ntok == 2) mtp_stats.suffix2_partial_accepts++;
++                else mtp_stats.suffix2_rejects++;
 +                for (int j = 0; j < ntok; j++) {
 +                    if (toks[j] == vocab->eos_id) break;
 +                    if (emit) emit(emit_ud, toks[j]);
@@ -1567,10 +1617,12 @@ index 9871775..72da52f 100644
 +                if (n_generated >= n_predict) break;
 +                continue;
 +            }
++            mtp_stats.suffix2_fallbacks++;
 +        }
 +
 +        if (emit) emit(emit_ud, token);
 +        n_generated++;
++        if (mtp_direct) mtp_stats.serial_decode_steps++;
          const double t_eval0 = token_timing ? now_sec() : 0.0;
          ok = metal_graph_eval_token_raw_swa(&g,
                                              model,
@@ -1582,9 +1634,42 @@ index 9871775..72da52f 100644
          pos++;
      }
      const double t_decode1 = now_sec();
-@@ -15137,6 +16338,7 @@ static int generate_metal_graph_raw_swa(
+@@ -15137,6 +16363,40 @@ static int generate_metal_graph_raw_swa(
              decode_s > 0.0 ? (double)n_generated / decode_s : 0.0);
 
++    if (mtp_direct && getenv("DS4_MTP_SAMPLE_DIAG") != NULL) {
++        fprintf(stderr,
++                "ds4: mtp sample_diag direct=1 draft=%d generated=%d emitted=%d serial_steps=%d pending_argmax_hits=%d pending_argmax_misses=%d suffix2_attempts=%d suffix2_full_accepts=%d suffix2_partial_accepts=%d suffix2_rejects=%d suffix2_tail_attempts=%d suffix2_tail_accepts=%d suffix2_tail_rejects=%d suffix2_fallbacks=%d suffix2_first_nonfull_seen=%d suffix2_first_nonfull_pos=%d suffix2_first_nonfull_kind=%d suffix2_first_nonfull_draft0=%d suffix2_first_nonfull_draft1=%d suffix2_first_nonfull_top0=%d suffix2_first_nonfull_top1=%d first_target_calls=%d suffix_target_calls=%d target_positions=%d head_calls=%d full_vocab_rows=%d top1_rows=%d draft_calls=%d\n",
++                mtp_draft_tokens,
++                n_generated,
++                mtp_stats.emitted,
++                mtp_stats.serial_decode_steps,
++                mtp_stats.pending_argmax_hits,
++                mtp_stats.pending_argmax_misses,
++                mtp_stats.suffix2_attempts,
++                mtp_stats.suffix2_full_accepts,
++                mtp_stats.suffix2_partial_accepts,
++                mtp_stats.suffix2_rejects,
++                mtp_stats.suffix2_tail_attempts,
++                mtp_stats.suffix2_tail_accepts,
++                mtp_stats.suffix2_tail_rejects,
++                mtp_stats.suffix2_fallbacks,
++                mtp_stats.suffix2_first_nonfull_seen,
++                mtp_stats.suffix2_first_nonfull_pos,
++                mtp_stats.suffix2_first_nonfull_kind,
++                mtp_stats.suffix2_first_nonfull_draft0,
++                mtp_stats.suffix2_first_nonfull_draft1,
++                mtp_stats.suffix2_first_nonfull_top0,
++                mtp_stats.suffix2_first_nonfull_top1,
++                mtp_stats.first_target_calls,
++                mtp_stats.suffix_target_calls,
++                mtp_stats.target_positions,
++                mtp_stats.head_calls,
++                mtp_stats.full_vocab_rows,
++                mtp_stats.top1_rows,
++                mtp_stats.draft_calls);
++    }
++
      if (memory_report) ds4_gpu_print_memory_report("before graph free");
 +    token_vec_free(&checkpoint);
      free(logits);

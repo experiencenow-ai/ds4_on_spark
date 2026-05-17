@@ -52,6 +52,8 @@ TIMING_RE = re.compile(r"ds4: mtp timing (?P<kind>[a-z0-9_-]+)\s+(?P<body>.*)")
 
 TIMING_KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_-]*)=(?P<value>-?[0-9]+(?:\.[0-9]+)?)")
 
+SAMPLE_DIAG_RE = re.compile(r"ds4: mtp sample_diag (?P<body>.*)")
+
 BENCH_RE = re.compile(r"ds4: mtp bench (?P<body>.*)")
 
 BENCH_KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_-]*)=(?P<value>[^\s]+)")
@@ -266,6 +268,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 	conf_events: list[ConfEvent] = []
 	miss_first_events: list[MissFirstEvent] = []
 	timing_events: list[TimingEvent] = []
+	sample_diag_events: list[dict[str, float]] = []
 	bench_events: list[BenchEvent] = []
 	cuda_loading_lines = 0
 	prefill_tps: Optional[float] = None
@@ -307,6 +310,11 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 		m = TIMING_RE.search(line)
 		if m is not None:
 			timing_events.append(TimingEvent(kind=str(m.group("kind")), values=_parse_timing_values(str(m.group("body")))))
+			continue
+
+		m = SAMPLE_DIAG_RE.search(line)
+		if m is not None:
+			sample_diag_events.append(_parse_timing_values(str(m.group("body"))))
 			continue
 
 		m = BENCH_RE.search(line)
@@ -374,6 +382,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 			"startup_cache_s": startup_cache_s,
 		},
 		"timing": summarize_timing_events(timing_events),
+		"sample_diag": sample_diag_events[-1] if sample_diag_events else None,
 		"benchmark": {
 			"events": [ev.values for ev in bench_events],
 			"external_wall_s": next(
@@ -396,7 +405,7 @@ def extract_events(lines: Iterable[str]) -> dict[str, Any]:
 	}
 
 	# If we didn't find any acceptance-related records, treat this as not-ok.
-	if len(conf_events) == 0 and len(miss_first_events) == 0 and len(timing_acceptance) == 0:
+	if len(conf_events) == 0 and len(miss_first_events) == 0 and len(timing_acceptance) == 0 and len(sample_diag_events) == 0:
 		out["ok"] = False
 		out["errors"] = [
 			"no mtp conf or mtp spec miss first events found; enable DS4_MTP_CONF_LOG=1 and capture stderr",
@@ -409,6 +418,7 @@ def write_events_jsonl(
 	conf_events: list[ConfEvent],
 	miss_first_events: list[MissFirstEvent],
 	timing_events: list[TimingEvent],
+	sample_diag_events: list[dict[str, float]],
 	bench_events: list[BenchEvent],
 	dst: Path,
 ) -> None:
@@ -434,6 +444,8 @@ def write_events_jsonl(
 			f.write(json.dumps({"type": "mtp_miss_first", "draft": ev.draft}, sort_keys=True) + "\n")
 		for ev in timing_events:
 			f.write(json.dumps({"type": "mtp_timing", "kind": ev.kind, "values": ev.values}, sort_keys=True) + "\n")
+		for ev in sample_diag_events:
+			f.write(json.dumps({"type": "mtp_sample_diag", "values": ev}, sort_keys=True) + "\n")
 		for ev in bench_events:
 			f.write(json.dumps({"type": "mtp_bench", "values": ev.values}, sort_keys=True) + "\n")
 
@@ -469,6 +481,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 		conf_events: list[ConfEvent] = []
 		miss_first_events: list[MissFirstEvent] = []
 		timing_events: list[TimingEvent] = []
+		sample_diag_events: list[dict[str, float]] = []
 		bench_events: list[BenchEvent] = []
 		for line in all_lines:
 			m = CONF_RE.search(line)
@@ -494,11 +507,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 			if m is not None:
 				timing_events.append(TimingEvent(kind=str(m.group("kind")), values=_parse_timing_values(str(m.group("body")))))
 				continue
+			m = SAMPLE_DIAG_RE.search(line)
+			if m is not None:
+				sample_diag_events.append(_parse_timing_values(str(m.group("body"))))
+				continue
 			m = BENCH_RE.search(line)
 			if m is not None:
 				bench_events.append(BenchEvent(values=_parse_bench_values(str(m.group("body")))))
 				continue
-		write_events_jsonl(conf_events, miss_first_events, timing_events, bench_events, Path(out_jsonl_path))
+		write_events_jsonl(conf_events, miss_first_events, timing_events, sample_diag_events, bench_events, Path(out_jsonl_path))
 
 	print(json.dumps(res, indent=2, sort_keys=True))
 	return 0 if bool(res.get("ok", False)) else 1
