@@ -16,6 +16,32 @@
     },
     {
       "command": [
+        "dscacheutil",
+        "-q",
+        "host",
+        "-a",
+        "name",
+        "aitopatom-9ab9.local"
+      ],
+      "error": "no host record returned",
+      "status": "blocked",
+      "step": "dns_spark0_aitopatom"
+    },
+    {
+      "command": [
+        "ping",
+        "-c",
+        "1",
+        "-W",
+        "1000",
+        "aitopatom-9ab9.local"
+      ],
+      "error": "ping: cannot resolve aitopatom-9ab9.local: Unknown host",
+      "status": "blocked",
+      "step": "ping_spark0_aitopatom"
+    },
+    {
+      "command": [
         "ssh",
         "spark0@spark0.local",
         "hostname"
@@ -27,19 +53,19 @@
   ],
   "api_health_status": {
     "endpoint": "http://127.0.0.1:30000/v1/chat/completions",
-    "error": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+    "error": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
     "http_status": null,
     "latency_ms": null,
     "output_token_count": null,
     "response_hash": null,
     "status": "blocked"
   },
-  "artifact_hash": "sha256:fb60e88f1116216b9c85180354a66a59059421bfb2e432a7f78459ac88621416",
-  "artifact_sha256": "sha256:fb60e88f1116216b9c85180354a66a59059421bfb2e432a7f78459ac88621416",
+  "artifact_hash": "sha256:6b5000557480ce57248f322451637095d356e28dca58a0e2456dccb5be6311c5",
+  "artifact_sha256": "sha256:6b5000557480ce57248f322451637095d356e28dca58a0e2456dccb5be6311c5",
   "benchmark_results": [
     {
       "batch_size": 1,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "b1_full_vocab_chat",
       "constrained_scoring": "unsupported",
@@ -53,7 +79,7 @@
     },
     {
       "batch_size": 4,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "b4_q_numbered_full_vocab_rows",
       "constrained_scoring": "unsupported",
@@ -67,7 +93,7 @@
     },
     {
       "batch_size": 16,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "b16_full_vocab_rows",
       "constrained_scoring": "unsupported",
@@ -81,7 +107,7 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "b512_full_vocab_one_token",
       "constrained_scoring": "unsupported",
@@ -95,7 +121,7 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "b512_constrained_structured_output",
       "constrained_scoring": "unknown",
@@ -109,7 +135,7 @@
     },
     {
       "batch_size": 1,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "mtp_low_latency",
       "constrained_scoring": "unsupported",
@@ -123,7 +149,7 @@
     },
     {
       "batch_size": 4,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "mtp_balanced",
       "constrained_scoring": "unsupported",
@@ -137,7 +163,7 @@
     },
     {
       "batch_size": 512,
-      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+      "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
       "blocker_kind": "other",
       "case_id": "max_throughput_mtp_disabled",
       "constrained_scoring": "unsupported",
@@ -150,11 +176,11 @@
       "tokens_per_second": null
     }
   ],
-  "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
+  "blocker_detail": "Spark0 acquisition probe blocked before install/acquire: ssh spark0@aitopatom-9ab9.local failed with \"No route to host\"; dscacheutil returned no host record for aitopatom-9ab9.local; ping reported \"cannot resolve aitopatom-9ab9.local: Unknown host\"; spark0.local/spark1.local/spark2.local did not resolve from this environment.",
   "blocker_kind": "other",
   "checkpoint_format": "huggingface",
   "checkpoint_source": {
-    "detail": "Spark0 SSH is unreachable, so SGLang package state, Hugging Face checkpoint presence, and model acquisition could not be checked on hardware.",
+    "detail": "Spark0 host resolution/reachability is blocked, so SGLang package state, Hugging Face checkpoint presence, and model acquisition could not be checked on hardware.",
     "hf_token_present": false,
     "kind": "huggingface",
     "local_path": "/home/spark0/models/sglang/DeepSeek-V4-Flash",
@@ -182,6 +208,8 @@
   "hardware": {
     "observed_errors": [
       "ssh: connect to host aitopatom-9ab9.local port 22: No route to host",
+      "dscacheutil returned no host record for aitopatom-9ab9.local",
+      "ping: cannot resolve aitopatom-9ab9.local: Unknown host",
       "ssh: Could not resolve hostname spark0.local: nodename nor servname provided, or not known",
       "ssh: Could not resolve hostname spark1.local: nodename nor servname provided, or not known",
       "ssh: Could not resolve hostname spark2.local: nodename nor servname provided, or not known"
@@ -228,7 +256,7 @@
   "provider_id": "sglang-ds4-spark0",
   "recipe": "balanced",
   "recommendation": "blocked",
-  "run_id": "sglang-provider-probe-spark0-20260517-retry",
+  "run_id": "sglang-provider-probe-spark0-20260517-acquire-retry2",
   "runtime_id": "sglang-v0.5.12-spark0-probe",
   "sglang_version": "not_checked",
   "tp_size": 1
